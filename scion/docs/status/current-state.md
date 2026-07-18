@@ -977,13 +977,17 @@ Excluded and preserved:
 
 The non-generative problem lanes have advanced. CVRP B0 passed independent
 code and science review with P0=0/P1=0 and is pushed at `90a109b2`; its accepted
-dry manifest is `0151e2be...882b1`. Formal B1 is now running under user unit
-`scion-cvrp-b1-20260718T074653Z.service` at the fresh root ending
-`20260718T074653Z-claw`; F1 stays locked until all 256 raw results, the integrity
-check, closed receipt, and comparison report are accepted. The earlier root
-ending `20260718T074602Z-claw` stopped before manifest publication and is
-superseded non-evidence. The exact live/superseded identities are in
-`scion/docs/experiments/v0.4/v04-cvrp-b1-mechanism-matrix-inflight-20260718.md`.
+dry manifest is `0151e2be...882b1`. Formal B1 completed 256/256 valid rows at
+the fresh root ending `20260718T074653Z-claw` and is accepted as
+`accepted_conservative_scope`. Report/receipt SHAs are `833335bb...851b` and
+`03d1c466...5d43`; byte replay passes and both final reviews report
+P0=0/P1=0/P2=0. Canonical is better than pure ALNS and
+embedded-VNS-disabled across the full, boundary-excluded, and conservative
+clean views. Initial VNS is descriptive and heterogeneous; host-overlap
+throughput remains caveated. F1 is unlocked for a separately frozen ancestry
+decomposition. The earlier root ending `20260718T074602Z-claw` is superseded
+non-evidence. Full closure is in
+`scion/docs/experiments/v0.4/v04-cvrp-b1-mechanism-matrix-postrun-20260718.md`.
 
 Warehouse W1 is complete at `0599fc29`, and W2 is accepted at pushed commit
 `d4d44689`. Its final design SHA is `c0d85d60...671fc7a`, preservation manifest
@@ -991,13 +995,19 @@ SHA is `0ee66091...dfc9`, accepted aggregate is `ae6a0b32...6fd9e5`, report raw
 SHA is `0ba8f9ee...7fe8f`, and receipt raw SHA is `68eb68a1...15eb0c`.
 The 17 directed fixtures, native-HiGHS fail-closed classification, exact replay,
 W1 31-case feasibility, and R3 preservation all pass; independent code and
-science reviews both report P0=0/P1=0/P2=0. W3 is unlocked but has not launched;
-its exact manifest must freeze the four treatment bundles and it must not
-contend with the live B1 process.
+science reviews both report P0=0/P1=0/P2=0. W3's exact 43-cell x 4-arm design
+is frozen at pushed commit `024ae1e3`, SHA `5538a81b...bb35`. Its manifest,
+materializer, preflight, runner, and closer are next; B1 no longer occupies the
+host.
 
 The fresh activation execution seam is design-frozen at SHA
 `25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
-durability reviews reported P0=0/P1=0/P2=0. E1 is next and remains dormant.
+durability reviews reported P0=0/P1=0/P2=0. The first dormant E1 candidate is
+rejected rather than patched forward: independent final reviews reproduced
+same-inode/same-directory FD reuse, finalizer/public cleanup leakage,
+open-return-before-assignment ownership loss, and inherited-RLock fork
+deadlock. Its cancellation-safe close-once/fork correction is a separate design
+candidate; no E1 implementation is accepted.
 The addendum explicitly narrows any journal/WAL/SHM observation to read-only
 hold; production cannot unlock until a separate controlled-VFS or equivalent
 actual-journal-handle design is frozen and accepted.
@@ -1007,13 +1017,13 @@ actual-journal-handle design is frozen and accepted.
 1. The fresh-only boundary is fixed-hash reviewed and the rejected executable-
    classifier/DSL prototype is removed. Keep historical roots read-only and
    non-authoritative.
-2. Low-frequency monitor and accept B1 before F1. Its acceptance must audit the
-   recorded W2 slow-test overlap rather than silently claiming an interference-
-   free host. W2 is accepted; freeze W3's exact manifest next, but do not run a
-   formal Warehouse matrix on the B1 host while B1 is live.
-3. Keep Checkpoints A and B dormant and implement only fresh activation E1:
-   deterministic staging capability to sealed `OfflineStagingFile`, with no
-   SQLite import, receipt writer, publication permit, or production caller.
+2. B1 is accepted with explicit W2-overlap sensitivity and F1 is unlocked.
+   Implement and review the frozen W3 manifest/preflight, then launch one fresh
+   serial W3 root; independently freeze F1 before its own run.
+3. Keep Checkpoints A and B dormant. Review and freeze the E1 cancellation-
+   safety correction before replacing the rejected implementation; retain the
+   deterministic staging capability boundary and add no SQLite import, receipt
+   writer, publication permit, or production caller.
 4. Complete D2b.1-D2e, D3-D4, and L1-L3 for the fresh path.
 5. On that same exact commit, freeze the final writer/composition manifest and
    pass D2b.0b.C/V, reopen/crash goldens, the full no-LLM end-to-end control,

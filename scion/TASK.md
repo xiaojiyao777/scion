@@ -857,22 +857,25 @@ scientific and lineage-owning artifacts remain in place.
    - [Complete] CVRP B0: the Protocol-resolved mechanism-matrix contract passed
      independent code and science review with P0=0/P1=0 and was pushed as
      `90a109b2`. The accepted dry manifest is `0151e2be...882b1`.
-   - [Running] CVRP B1: the serial 16-case x 4-seed x 4-profile matrix is owned
-     by user unit `scion-cvrp-b1-20260718T074653Z.service` at the fresh root
-     ending `20260718T074653Z-claw`. Accept only its complete 256 raw results,
-     integrity check, closed receipt, and comparison report; the earlier root
-     ending `20260718T074602Z-claw` is a superseded pre-manifest shell-handoff
-     fragment, not evidence.
-   - CVRP F1: run H1-only, SWAP-family-only, and cumulative ancestry arms only
-     after B1 acceptance.
+   - [Complete] CVRP B1: the serial 16-case x 4-seed x 4-profile matrix at the
+     root ending `20260718T074653Z-claw` completed 256/256 valid rows. The
+     accepted verdict is `accepted_conservative_scope`; report/receipt SHAs are
+     `833335bb...851b` / `03d1c466...5d43`, byte replay passes, and independent
+     integrity and science reviews both close P0=0/P1=0/P2=0. Canonical beats
+     pure ALNS and embedded-VNS-disabled in the full, boundary-excluded, and
+     conservative-clean views; overlap throughput remains caveated. The earlier
+     root ending `20260718T074602Z-claw` is superseded non-evidence.
+   - [Unlocked] CVRP F1: freeze and run H1-only, SWAP-family-only, and cumulative
+     ancestry arms. B1 does not select a production profile or authorize
+     promotion.
    - [Complete] Warehouse W1 reconciles the exact 31-case Protocol population
      at `0599fc29`. W2 is accepted at pushed commit `d4d44689`: final design
      SHA `c0d85d60...671fc7a`, preservation manifest `0ee66091...90dfc9`,
      aggregate `ae6a0b32...6fd9e5`, and independent code/science reviews both
-     P0=0/P1=0/P2=0. W3 is unlocked; freeze its exact W1 cases, common seeds,
-     solver limit, balanced serial order, greedy-initial hashes, and four
-     manifest-derived treatment bundles before launch. Do not share formal B1
-     CPU while B1 remains live.
+     P0=0/P1=0/P2=0. W3's 43-cell x 4-arm contract is frozen at pushed commit
+     `024ae1e3`, design SHA `5538a81b...bb35`; implement and independently
+     accept its manifest/preflight before one fresh serial launch. B1 no longer
+     occupies the host.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-
@@ -881,9 +884,13 @@ scientific and lineage-owning artifacts remain in place.
    phase receipts, and explicit cutover recovery/reopen reconcile.
    This step cannot make production runnable and does not yet claim final all-
    writer closure. Any present target is a hold and historical roots stay read-
-   only. E1 is next. In E1-E6 any journal/WAL/SHM is a read-only hold; production
-   stays blocked until a separately frozen controlled-VFS or equivalent design
-   closes actual journal-handle recovery.
+   only. The first E1 implementation candidate is rejected: two final reviews
+   reproduced close/reuse, cleanup-convergence, open-assignment, and fork-lock
+   defects. A separate cancellation-safe descriptor-ownership correction is
+   under design review; no E1 code is accepted yet. In E1-E6 any
+   journal/WAL/SHM is a read-only hold; production stays blocked until a
+   separately frozen controlled-VFS or equivalent design closes actual
+   journal-handle recovery.
 4. Complete D2b.1-D2b.4 snapshot/slot, dispatch capability, Protocol receipt,
    and uncertain/infra classification; then D2c exact DecisionOutcome transport,
    D2d isolated candidate snapshot handoff, and D2e exact completion, stage
