@@ -989,14 +989,19 @@ direction over embedded-VNS-disabled and pure ALNS persists. B1 is therefore
 support-only: it cannot select a profile or authorize promotion, and its single-
 file materializer must not be reused. The independently accepted correction is
 `scion/docs/experiments/v0.4/v04-cvrp-b1-r11c-input-authority-caveat-20260718.md`.
-F1 remains unlocked for a separately frozen ancestry decomposition that seals
-and reparses every exact `.vrp + .sol` pair; B1 is not automatically rerun. F1
-is now design-frozen at
+F1 remains a separately frozen ancestry decomposition that seals and reparses
+every exact `.vrp + .sol` pair; B1 is not automatically rerun. F1 is
+design-frozen at
 `scion/docs/planning/v0.4/v0.4-cvrp-f1-ancestry-matrix-20260718.md`, raw SHA
 `a8167117...07faa`, after two independent fixed-hash reviews reported
-P0=0/P1=0/P2=0. Its exact 4-arm, 64-cell/256-job Williams-balanced
-materializer/preflight is next; no formal F1 root exists yet. The earlier B1
-root ending `20260718T074602Z-claw` is superseded non-evidence.
+P0=0/P1=0/P2=0. Its exact 4-arm, 64-cell/256-job Williams-balanced dormant
+materializer/preflight/closer is now accepted: two final source-hash reviews
+reported P0=0/P1=0 and each passed 28 focused tests. Exact hashes and the two
+non-blocking audit follow-ups are recorded in
+`v04-cvrp-f1-materializer-acceptance-20260718.md`. No new dry or formal F1 root
+exists. Formal execution remains locked by external expected authority,
+hash-to-exec closure and durable guardian ownership; old r6 cannot be reused.
+The earlier B1 root ending `20260718T074602Z-claw` is superseded non-evidence.
 
 Warehouse W1 is complete at `0599fc29`, and W2 is accepted at pushed commit
 `d4d44689`. Its final design SHA is `c0d85d60...671fc7a`, preservation manifest
@@ -1005,9 +1010,11 @@ SHA is `0ba8f9ee...7fe8f`, and receipt raw SHA is `68eb68a1...15eb0c`.
 The 17 directed fixtures, native-HiGHS fail-closed classification, exact replay,
 W1 31-case feasibility, and R3 preservation all pass; independent code and
 science reviews both report P0=0/P1=0/P2=0. W3's exact 43-cell x 4-arm design
-is frozen at pushed commit `024ae1e3`, SHA `5538a81b...bb35`. Its manifest,
-materializer, preflight, runner, and closer are next; B1 no longer occupies the
-host.
+is frozen at pushed commit `024ae1e3`, SHA `5538a81b...bb35`. The first W3
+implementation and r6 dry root are rejected without formal jobs. A corrected
+generic execution-integrity envelope plus problem-owned W3 replay/analysis is
+under fixed-hash design review; implementation and a new root remain locked.
+B1 no longer occupies the host.
 
 The fresh activation execution seam is design-frozen at SHA
 `25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
@@ -1030,8 +1037,9 @@ actual-journal-handle design is frozen and accepted.
    W2-overlap caveats; it cannot select a profile or authorize promotion. F1 is
    design-frozen at `a8167117...07faa` and must seal/reparse exact
    `.vrp + .sol` pairs.
-   Implement and review the frozen W3 manifest/preflight, then launch one fresh
-   serial W3 root; implement and independently accept F1 before its own run.
+   Freeze and implement the generic execution-integrity envelope required by
+   W3/F1, then independently accept fresh manifests/roots. F1's dormant
+   materializer is accepted, but neither W3 nor F1 has formal launch authority.
 3. Keep Checkpoints A and B dormant. Review and freeze the E1 cancellation-
    safety correction before replacing the rejected implementation; retain the
    deterministic staging capability boundary and add no SQLite import, receipt
