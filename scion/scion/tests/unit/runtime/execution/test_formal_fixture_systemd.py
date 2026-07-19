@@ -5027,6 +5027,26 @@ def _root_c2a_session_model(
     ready_path = scenario_root / "PERMIT_READY.json"
     harness_reference = _root_c2a_full_reference(manifest_path)
     armed_reference = _root_c2a_full_reference(armed_path)
+    present_outputs: list[dict[str, str]] = []
+    output_by_role = {
+        item["role"]: Path(item["path"])
+        for item in manifest["outputs"]
+    }
+    for role in ("h0", "run-main-properties"):
+        output_path = output_by_role[role]
+        output_path.parent.chmod(0o755)
+        _write(
+            output_path,
+            {
+                "schema": "scion.test.h11-present-output.v1",
+                "role": role,
+            },
+        )
+        output_path.chmod(0o444)
+        output_path.parent.chmod(0o555)
+        present_outputs.append(
+            {"role": role, **_root_c2a_full_reference(output_path)}
+        )
     ready = {
         "schema": installer.H11_PERMIT_READY_SCHEMA,
         "scenario": "H11",
@@ -5036,7 +5056,7 @@ def _root_c2a_session_model(
         "harness_manifest": harness_reference,
         "run_armed": armed_reference,
         "permit_authority": manifest["permit_authority"],
-        "present_outputs": [],
+        "present_outputs": present_outputs,
         "absent_paths": manifest["permit_authority"]["future_absence_inventory"],
         "phase": "h11-permit-ready",
     }
@@ -5060,6 +5080,8 @@ def _root_c2a_session_model(
         "request": request_path,
         "run_plan": run_plan,
         "run_program": run_program,
+        "h0": output_by_role["h0"],
+        "run_main_properties": output_by_role["run-main-properties"],
         "ready_fifo": Path(acquisition["ready_fifo"]["path"]),
         "release_fifo": Path(acquisition["release_fifo"]["path"]),
     }
@@ -5855,6 +5877,687 @@ def test_root_c2a_ast_closes_mutation_fifo_and_directory_repin_escape() -> None:
             "stat",
         }
         for node in attribute_calls
+    )
+
+
+def _root_c2b_ready_fifo(
+    session: installer.H11RootAuthorizerSession,
+) -> installer.RetainedH11RootFifo:
+    matches = tuple(
+        item
+        for item in session.authority.commit_fifos
+        if item.role == "h11-ready-commit"
+    )
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _root_c2b_write_ready_frame(
+    fifo: installer.RetainedH11RootFifo,
+    payload: bytes,
+    entered: threading.Event,
+    errors: list[BaseException],
+) -> None:
+    entered.set()
+    descriptor = -1
+    try:
+        descriptor = os.open(
+            f"/proc/self/fd/{fifo.descriptor}",
+            os.O_WRONLY | os.O_CLOEXEC,
+        )
+        fifo.reference.prove(
+            os.fstat(descriptor),
+            require_root=False,
+            label="test H11 READY commit writer",
+        )
+        if payload and os.write(descriptor, payload) != len(payload):
+            raise AssertionError("test READY frame write was incomplete")
+    except BaseException as exc:
+        errors.append(exc)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _root_c2b_consume_with_writer(
+    paths: dict[str, Path],
+    *,
+    payload: bytes = installer.H11_READY_COMMITTED_BYTES,
+) -> installer.H11RootAuthorizerReadyClosure:
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    entered = threading.Event()
+    errors: list[BaseException] = []
+    writer = threading.Thread(
+        target=_root_c2b_write_ready_frame,
+        args=(_root_c2b_ready_fifo(session), payload, entered, errors),
+    )
+    writer.start()
+    entered.wait()
+    try:
+        result = installer.H11RootAuthorizerReadyClosure.consume(session)
+    finally:
+        writer.join()
+    assert errors == []
+    return result
+
+
+@pytest.mark.parametrize("first_endpoint", ("reader", "writer"))
+def test_root_c2b_consumes_ready_commit_in_either_blocking_schedule(
+    tmp_path: Path,
+    first_endpoint: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    fifo = _root_c2b_ready_fifo(session)
+    entered = threading.Event()
+    errors: list[BaseException] = []
+    result: dict[str, Any] = {}
+
+    def consume() -> None:
+        entered.set()
+        try:
+            result["closure"] = installer.H11RootAuthorizerReadyClosure.consume(
+                session
+            )
+        except BaseException as exc:
+            errors.append(exc)
+
+    if first_endpoint == "reader":
+        worker = threading.Thread(target=consume)
+        worker.start()
+        entered.wait()
+        _root_c2b_write_ready_frame(
+            fifo,
+            installer.H11_READY_COMMITTED_BYTES,
+            threading.Event(),
+            errors,
+        )
+        worker.join()
+        closure = result["closure"]
+    else:
+        worker = threading.Thread(
+            target=_root_c2b_write_ready_frame,
+            args=(
+                fifo,
+                installer.H11_READY_COMMITTED_BYTES,
+                entered,
+                errors,
+            ),
+        )
+        worker.start()
+        entered.wait()
+        closure = installer.H11RootAuthorizerReadyClosure.consume(session)
+        worker.join()
+    assert errors == []
+    try:
+        assert closure.ready_commit.reference == {
+            "schema": "scion.generic_backend.h11_commit_fifo_receipt.v1",
+            "phase": "ready-committed",
+            "fifo": fifo.reference.reference,
+            "payload_sha256": hashlib.sha256(
+                b"SCION_H11_READY_COMMITTED_V1\n"
+            ).hexdigest(),
+            "byte_count": str(len(b"SCION_H11_READY_COMMITTED_V1\n")),
+        }
+        assert [item["role"] for item in closure.present_outputs] == [
+            "h0",
+            "run-main-properties",
+        ]
+        assert [
+            item["role"] for item in closure.future_absence_inventory
+        ] == [
+            "closer-properties",
+            "exec-stop-post-properties",
+            "final",
+            "final-closer-properties",
+            "final-run-properties",
+            "frozen-root",
+            "h12-absence",
+            "journal",
+            "manager-events",
+            "signals",
+            "source-selector",
+        ]
+        literal_present = (
+            json.dumps(
+                closure.present_outputs,
+                ensure_ascii=True,
+                allow_nan=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("ascii")
+        literal_future = (
+            json.dumps(
+                closure.future_absence_inventory,
+                ensure_ascii=True,
+                allow_nan=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("ascii")
+        assert closure.present_outputs_sha256 == hashlib.sha256(
+            literal_present
+        ).hexdigest()
+        assert closure.future_absence_sha256 == hashlib.sha256(
+            literal_future
+        ).hexdigest()
+        exposed_present = closure.present_outputs
+        exposed_present[0]["role"] = "caller-mutated-copy"
+        exposed_commit = closure.ready_commit.reference
+        exposed_commit["fifo"]["inode"] = "1"
+        assert closure.present_outputs[0]["role"] == "h0"
+        assert closure.ready_commit.reference["fifo"] == fifo.reference.reference
+        closure.revalidate()
+    finally:
+        descriptors = [
+            *(item.descriptor for item in closure.present_sources),
+            closure.session.authorization.descriptor,
+            closure.session.permit_ready.descriptor,
+            closure.session.run_armed.descriptor,
+        ]
+        closure.close()
+    assert closure.closed is True
+    assert all(item.descriptor == -1 for item in closure.present_sources)
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        b"",
+        b"SCION_H11_READY_COMMITTED_V1",
+        b"SCION_H11_READY_COMMITTED_V1\nX",
+        b"SCION_H11_READY_COMMITTED_V1\nSCION_H11_READY_COMMITTED_V1\n",
+    ),
+)
+def test_root_c2b_rejects_missing_wrong_or_duplicate_ready_frame(
+    tmp_path: Path,
+    payload: bytes,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    entered = threading.Event()
+    errors: list[BaseException] = []
+    writer = threading.Thread(
+        target=_root_c2b_write_ready_frame,
+        args=(_root_c2b_ready_fifo(session), payload, entered, errors),
+    )
+    writer.start()
+    entered.wait()
+    with pytest.raises(installer.InstallerError, match="frame differs"):
+        installer.H11RootAuthorizerReadyClosure.consume(session)
+    writer.join()
+    assert errors == []
+    assert session.authorization.descriptor == -1
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "present-missing",
+        "present-extra",
+        "present-reordered",
+        "present-duplicate",
+        "present-wrong-role",
+        "future-missing",
+        "future-extra",
+        "future-reordered",
+        "future-duplicate",
+        "future-wrong-path",
+    ),
+)
+def test_root_c2b_rejects_ready_partition_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    ready = json.loads(paths["ready"].read_text())
+    present = ready["present_outputs"]
+    future = ready["absent_paths"]
+    if mutation == "present-missing":
+        present.pop()
+    elif mutation == "present-extra":
+        present.append(dict(present[-1]))
+    elif mutation == "present-reordered":
+        present.reverse()
+    elif mutation == "present-duplicate":
+        present[1] = dict(present[0])
+    elif mutation == "present-wrong-role":
+        present[0]["role"] = "signals"
+    elif mutation == "future-missing":
+        future.pop()
+    elif mutation == "future-extra":
+        future.append({"role": "extra", "path": str(tmp_path / "extra")})
+    elif mutation == "future-reordered":
+        future.reverse()
+    elif mutation == "future-duplicate":
+        future[1] = dict(future[0])
+    else:
+        future[0]["path"] = str(tmp_path / "wrong-future")
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="partition|2-present"):
+        _root_c2b_consume_with_writer(paths)
+
+
+def test_root_c2b_rejects_omitted_future_role_even_when_it_exists(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    ready = json.loads(paths["ready"].read_text())
+    omitted = ready["absent_paths"].pop(0)
+    omitted_path = Path(omitted["path"])
+    omitted_path.parent.chmod(0o755)
+    _write(omitted_path, {"schema": "scion.test.unexpected-future.v1"})
+    omitted_path.chmod(0o444)
+    omitted_path.parent.chmod(0o555)
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="2-present/11-future"):
+        _root_c2b_consume_with_writer(paths)
+
+
+@pytest.mark.parametrize(
+    ("role", "mutation"),
+    (
+        ("h0", "missing"),
+        ("run-main-properties", "missing"),
+        ("h0", "mode"),
+        ("run-main-properties", "owner-reference"),
+        ("h0", "same-byte-replacement"),
+        ("h0", "missing-key"),
+        ("run-main-properties", "extra-key"),
+        ("h0", "symlink"),
+    ),
+)
+def test_root_c2b_rejects_present_source_absence_metadata_or_replacement(
+    tmp_path: Path,
+    role: str,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    ready = json.loads(paths["ready"].read_text())
+    reference = next(
+        item for item in ready["present_outputs"] if item["role"] == role
+    )
+    path = Path(reference["path"])
+    if mutation == "missing":
+        path.parent.chmod(0o755)
+        path.unlink()
+        path.parent.chmod(0o555)
+    elif mutation == "mode":
+        path.chmod(0o644)
+    elif mutation == "owner-reference":
+        reference["uid"] = str(int(reference["uid"]) + 1)
+        _root_c2a_write_json(paths["ready"], ready)
+        _root_c2a_rebind_sources(paths)
+    elif mutation == "missing-key":
+        reference.pop("sha256")
+        _root_c2a_write_json(paths["ready"], ready)
+        _root_c2a_rebind_sources(paths)
+    elif mutation == "extra-key":
+        reference["extra"] = True
+        _root_c2a_write_json(paths["ready"], ready)
+        _root_c2a_rebind_sources(paths)
+    elif mutation == "symlink":
+        raw = path.read_bytes()
+        target = path.with_name(path.name + ".symlink-target")
+        path.parent.chmod(0o755)
+        path.rename(target)
+        path.symlink_to(target.name)
+        target.chmod(0o444)
+        path.parent.chmod(0o555)
+        assert target.read_bytes() == raw
+    else:
+        raw = path.read_bytes()
+        displaced = path.with_name(path.name + ".displaced")
+        path.parent.chmod(0o755)
+        path.rename(displaced)
+        path.write_bytes(raw)
+        path.chmod(0o444)
+        path.parent.chmod(0o555)
+    with pytest.raises(installer.InstallerError):
+        _root_c2b_consume_with_writer(paths)
+
+
+@pytest.mark.parametrize("source_name", ("authorization", "ready"))
+def test_root_c2b_binds_same_byte_transaction_leaf_to_retained_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source_name: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    retained = (
+        session.authorization
+        if source_name == "authorization"
+        else session.permit_ready
+    )
+    raw = retained.path.read_bytes()
+    displaced = retained.path.with_name(retained.path.name + ".bound-displaced")
+    retained.path.rename(displaced)
+    retained.path.write_bytes(raw)
+    retained.path.chmod(0o444)
+    monkeypatch.setattr(retained, "revalidate", lambda: None)
+    entered = threading.Event()
+    errors: list[BaseException] = []
+    writer = threading.Thread(
+        target=_root_c2b_write_ready_frame,
+        args=(
+            _root_c2b_ready_fifo(session),
+            installer.H11_READY_COMMITTED_BYTES,
+            entered,
+            errors,
+        ),
+    )
+    writer.start()
+    entered.wait()
+    with pytest.raises(installer.InstallerError, match="leaf identity"):
+        installer.H11RootAuthorizerReadyClosure.consume(session)
+    writer.join()
+    assert errors == []
+
+
+def test_root_c2b_revalidate_rejects_same_byte_present_replacement(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    source = closure.present_sources[0]
+    raw = source.path.read_bytes()
+    displaced = source.path.with_name(source.path.name + ".after-commit")
+    source.path.parent.chmod(0o755)
+    source.path.rename(displaced)
+    source.path.write_bytes(raw)
+    source.path.chmod(0o444)
+    source.path.parent.chmod(0o555)
+    try:
+        with pytest.raises(installer.InstallerError, match="drifted"):
+            closure.revalidate()
+    finally:
+        closure.poison()
+    assert closure.poisoned is True
+    assert closure.closed is True
+
+
+def test_root_c2b_rejects_present_output_inode_alias(tmp_path: Path) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    ready = json.loads(paths["ready"].read_text())
+    h0 = next(item for item in ready["present_outputs"] if item["role"] == "h0")
+    run = next(
+        item
+        for item in ready["present_outputs"]
+        if item["role"] == "run-main-properties"
+    )
+    run_path = Path(run["path"])
+    run_path.parent.chmod(0o755)
+    run_path.unlink()
+    os.link(Path(h0["path"]), run_path)
+    run_path.parent.chmod(0o555)
+    run.update(
+        {
+            "sha256": _sha(run_path),
+            "device": str(run_path.lstat().st_dev),
+            "inode": str(run_path.lstat().st_ino),
+        }
+    )
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="identities alias"):
+        _root_c2b_consume_with_writer(paths)
+
+
+def test_root_c2b_rejects_present_output_hardlink_to_retained_source(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    ready = json.loads(paths["ready"].read_text())
+    h0_index = next(
+        index
+        for index, item in enumerate(ready["present_outputs"])
+        if item["role"] == "h0"
+    )
+    h0_path = Path(ready["present_outputs"][h0_index]["path"])
+    h0_path.parent.chmod(0o755)
+    h0_path.unlink()
+    os.link(paths["manifest"], h0_path)
+    h0_path.parent.chmod(0o555)
+    ready["present_outputs"][h0_index] = {
+        "role": "h0",
+        **_root_c2a_full_reference(h0_path),
+    }
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(
+        installer.InstallerError,
+        match="identities alias retained authority",
+    ):
+        _root_c2b_consume_with_writer(paths)
+
+
+@pytest.mark.parametrize(
+    "role",
+    (
+        "permit-ready-staging",
+        "permit-staging",
+        "permit",
+        "permit-ledger-staging",
+        "permit-ledger",
+    ),
+)
+def test_root_c2b_rejects_each_wrong_absent_authorizer_phase_bit(
+    tmp_path: Path,
+    role: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    scenario = paths["authorization"].parent
+    leaf = dict(_ROOT_C1B2_LAYOUT)[role]
+    path = scenario / leaf
+    _root_c2a_write_json(path, {"schema": "scion.test.wrong-phase.v1"})
+    with pytest.raises(installer.InstallerError, match="state differs"):
+        _root_c2b_consume_with_writer(paths)
+
+
+def test_root_c2b_partial_present_pin_failure_closes_every_owner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    session_descriptors = [
+        session.authorization.descriptor,
+        session.permit_ready.descriptor,
+        session.run_armed.descriptor,
+        session.authority.manifest_descriptor,
+    ]
+    original_open = os.open
+    pinned_present: list[int] = []
+
+    def failing_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        leaf = os.fsdecode(path)
+        if leaf == paths["run_main_properties"].name and dir_fd is not None:
+            raise OSError("injected C2b second present pin failure")
+        descriptor = (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+        if leaf == paths["h0"].name and dir_fd is not None:
+            pinned_present.append(descriptor)
+        return descriptor
+
+    monkeypatch.setattr(os, "open", failing_open)
+    entered = threading.Event()
+    errors: list[BaseException] = []
+    writer = threading.Thread(
+        target=_root_c2b_write_ready_frame,
+        args=(
+            _root_c2b_ready_fifo(session),
+            installer.H11_READY_COMMITTED_BYTES,
+            entered,
+            errors,
+        ),
+    )
+    writer.start()
+    entered.wait()
+    with pytest.raises(installer.InstallerError, match="cannot pin") as caught:
+        installer.H11RootAuthorizerReadyClosure.consume(session)
+    writer.join()
+    assert errors == []
+    assert isinstance(caught.value.__cause__, OSError)
+    assert "injected C2b" in str(caught.value.__cause__)
+    assert pinned_present
+    for descriptor in (*session_descriptors, *pinned_present):
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+def test_root_c2b_ast_closes_mutation_publication_and_wait_escape() -> None:
+    fifo_source = inspect.getsource(installer.RetainedH11RootFifo)
+    fifo_tree = ast.parse(fifo_source)
+    assert "O_NONBLOCK" not in fifo_source
+    assert "timeout" not in fifo_source
+    assert "poll" not in fifo_source
+    assert "sleep" not in fifo_source
+    open_calls = [
+        node
+        for node in ast.walk(fifo_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "os"
+        and node.func.attr == "open"
+    ]
+    assert len(open_calls) == 1
+    open_call = open_calls[0]
+    assert len(open_call.args) == 2
+    assert open_call.keywords == []
+    expected_descriptor_path = ast.parse(
+        'f"/proc/self/fd/{self.descriptor}"', mode="eval"
+    ).body
+    assert ast.dump(open_call.args[0]) == ast.dump(expected_descriptor_path)
+    assert [
+        ast.unparse(node.value)
+        for node in ast.walk(open_call.args[0])
+        if isinstance(node, ast.FormattedValue)
+    ] == ["self.descriptor"]
+    flags = ast.unparse(open_call.args[1])
+    assert flags == "os.O_RDONLY | os.O_CLOEXEC"
+
+    sources = "\n".join(
+        (
+            fifo_source,
+            *(
+                inspect.getsource(item)
+                for item in (
+                    installer.H11RootCommitReceipt,
+                    installer.RetainedH11RootPresentOutput,
+                    installer._bind_h11_authorizer_transaction_sources,
+                    installer.H11RootAuthorizerReadyClosure,
+                )
+            ),
+        )
+    )
+    tree = ast.parse(sources)
+    assert not any(
+        token in sources
+        for token in (
+            "O_NONBLOCK",
+            "timeout",
+            "deadline",
+            "retry",
+            "callback",
+            "budget",
+            "cap",
+            "truncate",
+            "truncation",
+            "cleanup",
+            "watchdog",
+            "poll",
+            "sleep",
+            "authorize_h11_release",
+            "_publish_h11",
+            "write_commit",
+            "H11_RELEASE_BYTES",
+        )
+    )
+    direct_name_calls = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert direct_name_calls == {
+        "InstallerError",
+        "_bind_h11_authorizer_transaction_sources",
+        "_canonical",
+        "_exact",
+        "_fail",
+        "_path",
+        "_text",
+        "_uint",
+        "any",
+        "cls",
+        "dataclass",
+        "dict",
+        "enumerate",
+        "format",
+        "len",
+        "reversed",
+        "set",
+        "sorted",
+        "str",
+        "tuple",
+        "type",
+        "zip",
+    }
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr
+        in {
+            "write",
+            "write_bytes",
+            "write_text",
+            "retry",
+            "fsync",
+            "fdatasync",
+            "ftruncate",
+            "truncate",
+            "fchmod",
+            "fchown",
+            "mkdir",
+            "unlink",
+            "rename",
+            "replace",
+            "remove",
+            "rmdir",
+            "chmod",
+            "chown",
+            "link",
+            "symlink",
+        }
+        for node in ast.walk(tree)
     )
 
 
