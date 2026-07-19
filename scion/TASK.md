@@ -897,13 +897,19 @@ scientific and lineage-owning artifacts remain in place.
      prebuild and final postrun reviews report P0=0/P1=0/P2=0; the sole formal
      delegated-cgroup transaction passed 64/64, both builds were byte-identical,
      and both 2074-file/22-alias rehashes passed. Exact evidence is recorded in
-     `v04-w3-native-spawn-build-acceptance-20260718.md`. Next implement and
-     independently accept only the generic `SpawnBackend`/cgroup/systemd layer,
-     including the systemd-255 GC/handoff fixture and failed-close
-     `CollectMode=inactive` behavior. Then implement the generic guardian/
+     `v04-w3-native-spawn-build-acceptance-20260718.md`. The next generic
+     `SpawnBackend`/cgroup/systemd implementation contract is now frozen at raw
+     SHA `d40e75a3...5911f50`; two independent full reviews and one systemd-255
+     specialist review each report P0=0/P1=0/P2=0. It freezes one consumed
+     backend/cgroup owner, complete binary capture without timeout/cap/retry,
+     exact failure/fail-stop semantics, retained durable cleanup authority and
+     explicit `CollectMode=inactive` GC handoff. Implement and independently
+     accept only this generic slice next. Then design the generic guardian/
      terminal layer and problem-owned W3 manifest/replay/analysis without a
-     Warehouse helper fork. No W3 dry root or formal launch is authorized yet.
-     B1 no longer occupies the host.
+     Warehouse helper fork. No W3 dry root or formal launch is authorized yet;
+     the dirty-worktree rejected W3 files are not accepted source and must not
+     be modified or staged as part of this slice. B1 no longer occupies the
+     host.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-

@@ -12,7 +12,10 @@ spawn/build root is terminal and read-only in intent at
 `/home/clawd/research/scion-experiments/v04-w3-native-acceptance-20260718T221215Z-r6-claw`.
 Its external acceptance record SHA is `51948ccd...00de7`; two final independent
 reviews report P0=0/P1=0/P2=0 and `NATIVE_ACCEPT`. This unlocks only the next
-generic `SpawnBackend`/cgroup/systemd implementation slice.
+generic `SpawnBackend`/cgroup/systemd implementation slice. Its exact design is
+now accepted at raw SHA `d40e75a3...5911f50` after two independent full reviews
+and one systemd-255 specialist review each reported P0=0/P1=0/P2=0. No generic
+implementation or systemd acceptance fixture has run yet.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -1029,11 +1032,16 @@ contract SHA `afaa0b7e...24f27`, and the fresh acceptance root ending
 2074-file/22-alias rehashes passed, and independent prebuild/final reviews each
 reported P0=0/P1=0/P2=0. The accepted record is
 `v04-w3-native-spawn-build-acceptance-20260718.md`. This accepts only the native
-slice. The generic `SpawnBackend`/cgroup/systemd layer is next and must still
-pass the systemd-255 GC/handoff fixture and explicit failed-close
-`CollectMode=inactive` behavior; guardian/terminal, Warehouse W3, dry-root and
-formal launch remain locked. There is no sandbox, retry, budget, truncation or
-new research gate.
+slice. The generic `SpawnBackend`/cgroup/systemd contract is accepted at exact
+raw SHA `d40e75a3...5911f50`; its acceptance record is
+`v0.4-w3-generic-spawn-backend-systemd-design-acceptance-20260718.md`. It now
+authorizes implementation of only `runtime/execution` and focused
+pure/delegated/systemd-255 fixtures. The implementation must still pass the
+complete no-timeout/no-cap matrix, systemd GC/handoff and failed-close
+`CollectMode=inactive` behavior. Guardian/terminal, Warehouse W3, dry-root and
+formal launch remain locked. The untracked rejected W3 lifecycle is excluded
+from clean accepted source and is not to be modified or staged here. There is
+no sandbox, retry, budget, truncation or new research gate.
 B1 no longer occupies the host.
 
 The fresh activation execution seam is design-frozen at SHA
