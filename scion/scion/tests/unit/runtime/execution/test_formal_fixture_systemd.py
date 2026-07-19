@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import errno
 import hashlib
+import io
 import importlib.util
 import inspect
 import json
@@ -16,6 +17,7 @@ import stat
 import subprocess
 import sys
 import threading
+import tokenize
 from dataclasses import replace
 from types import ModuleType, SimpleNamespace
 from typing import Any, Callable
@@ -4766,8 +4768,8 @@ def test_root_c1c_syscall_order_and_same_fd_authority(
 
 
 def test_root_c1c_publication_ast_closes_path_retry_and_callback_escape() -> None:
-    source = inspect.getsource(installer._publish_h11_named_staging)
-    tree = ast.parse(source)
+    wrapper_source = inspect.getsource(installer._publish_h11_named_staging)
+    wrapper_tree = ast.parse(wrapper_source)
     signature = inspect.signature(installer._publish_h11_named_staging)
     assert tuple(signature.parameters) == (
         "parent",
@@ -4779,9 +4781,29 @@ def test_root_c1c_publication_ast_closes_path_retry_and_callback_escape() -> Non
     )
     assert signature.parameters["require_root"].kind is inspect.Parameter.KEYWORD_ONLY
     assert signature.parameters["_test_failure"].kind is inspect.Parameter.KEYWORD_ONLY
+    wrapper_calls = [
+        node.func.id
+        for node in ast.walk(wrapper_tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    ]
+    assert wrapper_calls == [
+        "_prepare_h11_named_staging",
+        "_open_h11_named_staging",
+        "_complete_h11_named_staging",
+    ]
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "os"
+        for node in ast.walk(wrapper_tree)
+    )
+
+    open_source = inspect.getsource(installer._open_h11_named_staging)
+    open_tree = ast.parse(open_source)
     open_calls = [
         node
-        for node in ast.walk(tree)
+        for node in ast.walk(open_tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and isinstance(node.func.value, ast.Name)
@@ -4790,16 +4812,28 @@ def test_root_c1c_publication_ast_closes_path_retry_and_callback_escape() -> Non
     ]
     assert len(open_calls) == 1
     open_call = open_calls[0]
-    assert isinstance(open_call.args[0], ast.Name)
-    assert open_call.args[0].id == "staging_name"
+    assert isinstance(open_call.args[0], ast.Attribute)
+    assert ast.unparse(open_call.args[0]) == "plan.staging_name"
+    assert ast.unparse(open_call.args[1]) == (
+        "os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC"
+    )
     assert isinstance(open_call.args[2], ast.Constant)
     assert open_call.args[2].value == 0o444
     open_keywords = {item.arg: item.value for item in open_call.keywords}
     assert isinstance(open_keywords.get("dir_fd"), ast.Attribute)
     assert open_keywords["dir_fd"].attr == "descriptor"
+    assert ast.unparse(open_keywords["dir_fd"]) == "plan.parent.descriptor"
+    assert [
+        ast.unparse(node.func)
+        for node in ast.walk(open_tree)
+        if isinstance(node, ast.Call)
+    ] == ["os.open"]
+
+    core_source = inspect.getsource(installer._complete_h11_named_staging)
+    core_tree = ast.parse(core_source)
     rename_calls = [
         node
-        for node in ast.walk(tree)
+        for node in ast.walk(core_tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
         and node.func.id == "renameat2"
@@ -4812,7 +4846,7 @@ def test_root_c1c_publication_ast_closes_path_retry_and_callback_escape() -> Non
     assert rename_call.args[4].value == 1
     parents = {
         child: parent
-        for parent in ast.walk(tree)
+        for parent in ast.walk(core_tree)
         for child in ast.iter_child_nodes(parent)
     }
     ancestor = parents.get(rename_call)
@@ -4823,7 +4857,7 @@ def test_root_c1c_publication_ast_closes_path_retry_and_callback_escape() -> Non
         isinstance(node, ast.Call)
         and isinstance(node.func, ast.Name)
         and node.func.id == "_publish_h11_named_staging"
-        for node in ast.walk(tree)
+        for node in ast.walk(core_tree)
     )
     assert not any(
         isinstance(node, ast.Call)
@@ -4831,7 +4865,6 @@ def test_root_c1c_publication_ast_closes_path_retry_and_callback_escape() -> Non
             (isinstance(node.func, ast.Name) and node.func.id == "open")
             or (
                 isinstance(node.func, ast.Attribute)
-                and node is not open_call
                 and node.func.attr
                 in {
                     "open",
@@ -4850,12 +4883,12 @@ def test_root_c1c_publication_ast_closes_path_retry_and_callback_escape() -> Non
                 }
             )
         )
-        for node in ast.walk(tree)
+        for node in ast.walk(core_tree)
     )
     assert not any(
         isinstance(node, ast.keyword)
         and node.arg in {"callback", "timeout", "deadline", "retry"}
-        for node in ast.walk(tree)
+        for node in ast.walk(core_tree)
     )
 
 
@@ -6559,6 +6592,972 @@ def test_root_c2b_ast_closes_mutation_publication_and_wait_escape() -> None:
         }
         for node in ast.walk(tree)
     )
+
+
+def test_root_c2c_publishes_exact_permit_and_retains_owner_lifecycle(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    retained_ready = json.loads(closure.session.permit_ready.raw.decode("ascii"))
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    publication_descriptor = permit.publication.descriptor
+    try:
+        payload = json.loads(permit.publication.raw.decode("ascii"))
+        assert set(payload) == {
+            "schema",
+            "scenario",
+            "run_unit",
+            "boot_id",
+            "invocation_id",
+            "authorization_manifest",
+            "harness_manifest",
+            "permit_ready",
+            "run_armed",
+            "ready_commit",
+            "present_outputs_sha256",
+            "future_absence_sha256",
+            "phase",
+        }
+        expected_payload = {
+            "schema": installer.H11_PERMIT_SCHEMA,
+            "scenario": "H11",
+            "run_unit": retained_ready["run_unit"],
+            "boot_id": retained_ready["boot_id"],
+            "invocation_id": retained_ready["invocation_id"],
+            "authorization_manifest": closure.session.authorization.source,
+            "harness_manifest": closure.session.authority.manifest_source,
+            "permit_ready": closure.session.permit_ready.source,
+            "run_armed": closure.session.run_armed.source,
+            "ready_commit": closure.ready_commit.reference,
+            "present_outputs_sha256": closure.present_outputs_sha256,
+            "future_absence_sha256": closure.future_absence_sha256,
+            "phase": "operator-release-authorized",
+        }
+        assert payload == expected_payload
+        expected_raw = (
+            json.dumps(
+                expected_payload,
+                ensure_ascii=True,
+                allow_nan=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("ascii")
+        assert permit.publication.raw == expected_raw
+        assert permit.publication.reference["path"] == str(
+            paths["authorization"].parent / "PERMIT.json"
+        )
+        assert permit.publication.descriptor >= 0
+        assert permit.barrier.directory_chain == tuple(
+            item.reference for item in closure.session.authority.directories
+        )
+        assert permit.barrier.transaction_state == closure.transaction_state
+        assert permit.barrier.present_outputs_sha256 == (
+            closure.present_outputs_sha256
+        )
+        assert permit.barrier.future_absence_sha256 == (
+            closure.future_absence_sha256
+        )
+        assert [item.state for item in permit.transaction_state] == [
+            "present",
+            "absent",
+            "present",
+            "absent",
+            "present",
+            "absent",
+            "absent",
+        ]
+        permit.revalidate()
+    finally:
+        permit.close()
+    assert permit.closed is True
+    assert permit.publication.descriptor == -1
+    assert closure.closed is True
+    with pytest.raises(OSError):
+        os.fstat(publication_descriptor)
+
+
+@pytest.mark.parametrize(
+    ("field", "cache_only_value"),
+    (
+        ("run_unit", "scion-w3-cache-only.service"),
+        ("boot_id", "22222222-2222-2222-2222-222222222222"),
+        ("invocation_id", "b" * 32),
+    ),
+)
+def test_root_c2c_uses_retained_ready_not_mutable_decoded_cache(
+    tmp_path: Path,
+    field: str,
+    cache_only_value: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    retained_ready = json.loads(closure.session.permit_ready.raw.decode("ascii"))
+    assert cache_only_value != retained_ready[field]
+    closure.session.ready_receipt[field] = cache_only_value
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    try:
+        payload = json.loads(permit.publication.raw.decode("ascii"))
+        expected_payload = {
+            "schema": installer.H11_PERMIT_SCHEMA,
+            "scenario": "H11",
+            "run_unit": retained_ready["run_unit"],
+            "boot_id": retained_ready["boot_id"],
+            "invocation_id": retained_ready["invocation_id"],
+            "authorization_manifest": closure.session.authorization.source,
+            "harness_manifest": closure.session.authority.manifest_source,
+            "permit_ready": closure.session.permit_ready.source,
+            "run_armed": closure.session.run_armed.source,
+            "ready_commit": closure.ready_commit.reference,
+            "present_outputs_sha256": closure.present_outputs_sha256,
+            "future_absence_sha256": closure.future_absence_sha256,
+            "phase": "operator-release-authorized",
+        }
+        expected_raw = (
+            json.dumps(
+                expected_payload,
+                ensure_ascii=True,
+                allow_nan=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("ascii")
+        assert payload[field] == retained_ready[field]
+        assert payload[field] != cache_only_value
+        assert permit.publication.raw == expected_raw
+    finally:
+        permit.close()
+
+
+def _root_c2c_owned_descriptors(
+    permit: installer.H11RootAuthorizedPermit,
+) -> tuple[int, ...]:
+    closure = permit.closure
+    session = closure.session
+    authority = session.authority
+    return (
+        permit.publication.descriptor,
+        *(item.descriptor for item in closure.present_sources),
+        session.authorization.descriptor,
+        session.permit_ready.descriptor,
+        session.run_armed.descriptor,
+        authority.manifest_descriptor,
+        *(item.descriptor for item in authority.bound_sources),
+        *(item.descriptor for item in authority.directories),
+        *(item.descriptor for item in authority.commit_fifos),
+    )
+
+
+def _assert_root_c2c_poisoned_owner_closed(
+    permit: installer.H11RootAuthorizedPermit,
+    descriptors: tuple[int, ...],
+) -> None:
+    closure = permit.closure
+    session = closure.session
+    authority = session.authority
+    assert permit.poisoned is True
+    assert permit.closed is True
+    assert permit.publication.descriptor == -1
+    assert closure.closed is True
+    assert all(item.descriptor == -1 for item in closure.present_sources)
+    assert session.authorization.descriptor == -1
+    assert session.permit_ready.descriptor == -1
+    assert session.run_armed.descriptor == -1
+    assert authority.manifest_descriptor == -1
+    assert all(item.descriptor == -1 for item in authority.bound_sources)
+    assert all(item.descriptor == -1 for item in authority.directories)
+    assert all(item.descriptor == -1 for item in authority.commit_fifos)
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+def test_root_c2c_same_byte_final_replacement_auto_poisons_all_owners(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    descriptors = _root_c2c_owned_descriptors(permit)
+    scenario = paths["authorization"].parent
+    final = scenario / "PERMIT.json"
+    final_raw = final.read_bytes()
+    displaced = scenario / "PERMIT.same-byte-displaced.json"
+    final.rename(displaced)
+    final.write_bytes(final_raw)
+    final.chmod(0o444)
+    with pytest.raises(installer.InstallerError, match="publication drifted"):
+        permit.revalidate()
+    _assert_root_c2c_poisoned_owner_closed(permit, descriptors)
+    assert final.read_bytes() == final_raw
+    assert displaced.read_bytes() == final_raw
+    assert not (scenario / "PERMIT.pending").exists()
+    assert not (scenario / "PERMIT-LEDGER.pending").exists()
+    assert not (scenario / "PERMIT-LEDGER.json").exists()
+
+
+@pytest.mark.parametrize(
+    "role",
+    ("permit-ledger-staging", "permit-ledger"),
+)
+def test_root_c2c_transaction_phase_drift_auto_poisons_all_owners(
+    tmp_path: Path,
+    role: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    descriptors = _root_c2c_owned_descriptors(permit)
+    scenario = paths["authorization"].parent
+    final = scenario / "PERMIT.json"
+    final_raw = final.read_bytes()
+    drift_path = scenario / dict(_ROOT_C1B2_LAYOUT)[role]
+    _root_c2a_write_json(
+        drift_path,
+        {"schema": "scion.test.post-permit-transaction-drift.v1"},
+    )
+    with pytest.raises(installer.InstallerError, match="state differs"):
+        permit.revalidate()
+    _assert_root_c2c_poisoned_owner_closed(permit, descriptors)
+    assert final.read_bytes() == final_raw
+    assert drift_path.is_file()
+    assert not (scenario / "PERMIT.pending").exists()
+    other_role = (
+        "permit-ledger"
+        if role == "permit-ledger-staging"
+        else "permit-ledger-staging"
+    )
+    assert not (scenario / dict(_ROOT_C1B2_LAYOUT)[other_role]).exists()
+
+
+def test_root_c2c_post_success_drift_poison_closes_but_retains_final(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    final = paths["authorization"].parent / "PERMIT.json"
+    final_raw = final.read_bytes()
+    publication_descriptor = permit.publication.descriptor
+    present_descriptor = closure.present_sources[0].descriptor
+    h0 = paths["h0"]
+    h0_raw = h0.read_bytes()
+    displaced = h0.with_name(h0.name + ".post-permit-displaced")
+    h0.parent.chmod(0o755)
+    h0.rename(displaced)
+    h0.write_bytes(h0_raw)
+    h0.chmod(0o444)
+    h0.parent.chmod(0o555)
+    with pytest.raises(installer.InstallerError, match="drifted"):
+        permit.revalidate()
+    assert permit.poisoned is True
+    assert permit.closed is True
+    assert permit.publication.descriptor == -1
+    assert closure.closed is True
+    assert final.read_bytes() == final_raw
+    assert not (final.parent / "PERMIT.pending").exists()
+    for descriptor in (publication_descriptor, present_descriptor):
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+@pytest.mark.parametrize(
+    "role",
+    (
+        "closer-properties",
+        "exec-stop-post-properties",
+        "final",
+        "final-closer-properties",
+        "final-run-properties",
+        "frozen-root",
+        "h12-absence",
+        "journal",
+        "manager-events",
+        "signals",
+        "source-selector",
+    ),
+)
+def test_root_c2c_final_barrier_rejects_each_future_output(
+    tmp_path: Path,
+    role: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    item = next(
+        item
+        for item in closure.partition.future_absence_inventory
+        if item.role == role
+    )
+    if role == "frozen-root":
+        item.path.mkdir(mode=0o700)
+    else:
+        item.path.parent.chmod(0o755)
+        _root_c2a_write_json(
+            item.path,
+            {"schema": "scion.test.unexpected-future.v1", "role": role},
+        )
+        item.path.parent.chmod(0o555)
+    with pytest.raises(installer.InstallerError, match="exists before permit"):
+        installer.H11RootAuthorizedPermit.publish(closure)
+    assert closure.poisoned is True
+    assert not (paths["authorization"].parent / "PERMIT.pending").exists()
+    assert not (paths["authorization"].parent / "PERMIT.json").exists()
+
+
+@pytest.mark.parametrize(
+    "role",
+    (
+        "permit-ready-staging",
+        "permit-staging",
+        "permit",
+        "permit-ledger-staging",
+        "permit-ledger",
+    ),
+)
+def test_root_c2c_rejects_each_absent_authorizer_transaction_bit(
+    tmp_path: Path,
+    role: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    leaf = dict(_ROOT_C1B2_LAYOUT)[role]
+    _root_c2a_write_json(
+        paths["authorization"].parent / leaf,
+        {"schema": "scion.test.unexpected-transaction.v1", "role": role},
+    )
+    with pytest.raises(installer.InstallerError, match="state differs"):
+        installer.H11RootAuthorizedPermit.publish(closure)
+    assert closure.poisoned is True
+
+
+@pytest.mark.parametrize(
+    "drift",
+    (
+        "authorization",
+        "ready",
+        "manifest",
+        "present",
+        "directory",
+        "fifo",
+    ),
+)
+def test_root_c2c_rejects_retained_authority_drift_before_open(
+    tmp_path: Path,
+    drift: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    if drift in {"authorization", "ready", "manifest", "present"}:
+        target = (
+            paths["h0"] if drift == "present" else paths[drift]
+        )
+        raw = target.read_bytes()
+        displaced = target.with_name(target.name + ".c2c-displaced")
+        if drift == "present":
+            target.parent.chmod(0o755)
+        target.rename(displaced)
+        target.write_bytes(raw)
+        target.chmod(0o444)
+        if drift == "present":
+            target.parent.chmod(0o555)
+    elif drift == "directory":
+        target = closure.session.authority.directories[5].reference.path
+        displaced = target.with_name("receipts-c2c-displaced")
+        target.rename(displaced)
+        target.mkdir(mode=0o555)
+        target.chmod(0o555)
+    else:
+        target = closure.session.authority.commit_fifos[0].reference.path
+        displaced = target.with_name("ready-commit-c2c-displaced.fifo")
+        target.rename(displaced)
+        os.mkfifo(target, 0o600)
+        target.chmod(0o600)
+    with pytest.raises(installer.InstallerError):
+        installer.H11RootAuthorizedPermit.publish(closure)
+    assert closure.poisoned is True
+    assert not (paths["authorization"].parent / "PERMIT.pending").exists()
+    assert not (paths["authorization"].parent / "PERMIT.json").exists()
+
+
+def test_root_c2c_pending_sentinel_fails_before_staging_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    pending = paths["authorization"].parent / "PERMIT.pending"
+    sentinel = b"preexisting-c2c-pending\n"
+    pending.write_bytes(sentinel)
+    pending.chmod(0o444)
+    opens: list[object] = []
+    monkeypatch.setattr(
+        installer,
+        "_open_h11_named_staging",
+        lambda plan: opens.append(plan),
+    )
+    with pytest.raises(installer.InstallerError, match="state differs"):
+        installer.H11RootAuthorizedPermit.publish(closure)
+    assert opens == []
+    assert pending.read_bytes() == sentinel
+    assert closure.poisoned is True
+
+
+def test_root_c2c_final_race_remains_no_replace_and_poisoned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    scenario = paths["authorization"].parent
+    final = scenario / "PERMIT.json"
+    pending = scenario / "PERMIT.pending"
+    sentinel = b"racing-final-sentinel\n"
+    original_open = os.open
+
+    def racing_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        if os.fsdecode(path) == "PERMIT.pending" and dir_fd == (
+            closure.session.authority.directories[3].descriptor
+        ):
+            final.write_bytes(sentinel)
+            final.chmod(0o444)
+        return (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+
+    monkeypatch.setattr(os, "open", racing_open)
+    with pytest.raises(installer.InstallerError, match="no-replace"):
+        installer.H11RootAuthorizedPermit.publish(closure)
+    assert final.read_bytes() == sentinel
+    assert pending.is_file()
+    assert closure.poisoned is True
+
+
+def test_root_c2c_syscall_pre_rename_failure_poison_pending_and_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    parent = closure.session.authority.directories[3]
+    opened = _capture_root_c1c_staging_descriptor(
+        monkeypatch,
+        parent_descriptor=parent.descriptor,
+        staging_name="PERMIT.pending",
+    )
+
+    class FailingRenameAt2:
+        argtypes: Any = None
+        restype: Any = None
+
+        def __call__(self, *args: Any) -> int:
+            installer.ctypes.set_errno(errno.EIO)
+            return -1
+
+    class FailingLibc:
+        renameat2 = FailingRenameAt2()
+
+    monkeypatch.setattr(
+        installer.ctypes,
+        "CDLL",
+        lambda *args, **kwargs: FailingLibc(),
+    )
+    with pytest.raises(installer.InstallerError, match="no-replace"):
+        installer.H11RootAuthorizedPermit.publish(closure)
+    assert (parent.reference.path / "PERMIT.pending").is_file()
+    assert not (parent.reference.path / "PERMIT.json").exists()
+    _assert_root_c1c_descriptors_closed(opened)
+    assert closure.poisoned is True
+
+
+def test_root_c2c_syscall_post_rename_failure_poison_final_and_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    parent = closure.session.authority.directories[3]
+    opened = _capture_root_c1c_staging_descriptor(
+        monkeypatch,
+        parent_descriptor=parent.descriptor,
+        staging_name="PERMIT.pending",
+    )
+    original_fsync = os.fsync
+    injected = OSError(errno.EIO, "injected C2c parent fsync failure")
+
+    def faulting_fsync(descriptor: int) -> None:
+        if descriptor == parent.descriptor:
+            raise injected
+        original_fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", faulting_fsync)
+    with pytest.raises(OSError) as caught:
+        installer.H11RootAuthorizedPermit.publish(closure)
+    assert caught.value is injected
+    assert not (parent.reference.path / "PERMIT.pending").exists()
+    assert (parent.reference.path / "PERMIT.json").is_file()
+    _assert_root_c1c_descriptors_closed(opened)
+    assert closure.poisoned is True
+
+
+def test_root_c2c_final_pending_probe_catches_second_lookup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    scenario_fd = closure.session.authority.directories[3].descriptor
+    original_stat = os.stat
+    pending_lookups = 0
+    opens: list[object] = []
+
+    def second_lookup_present(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *args: object,
+        **kwargs: object,
+    ) -> os.stat_result | SimpleNamespace:
+        nonlocal pending_lookups
+        if (
+            os.fsdecode(path) == "PERMIT.pending"
+            and kwargs.get("dir_fd") == scenario_fd
+            and kwargs.get("follow_symlinks") is False
+        ):
+            pending_lookups += 1
+            if pending_lookups == 2:
+                return SimpleNamespace()
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", second_lookup_present)
+    monkeypatch.setattr(
+        installer,
+        "_open_h11_named_staging",
+        lambda plan: opens.append(plan),
+    )
+    with pytest.raises(installer.InstallerError, match="final pre-publication"):
+        installer.H11RootAuthorizedPermit.publish(closure)
+    assert pending_lookups == 2
+    assert opens == []
+    assert closure.poisoned is True
+
+
+def test_root_c2c_ast_freezes_barrier_open_and_phase_call_graph() -> None:
+    prepare_source = inspect.getsource(installer._prepare_h11_named_staging)
+    prepare_tree = ast.parse(prepare_source)
+    opener_source = inspect.getsource(installer._open_h11_named_staging)
+    opener_tree = ast.parse(opener_source)
+    opener_calls = [
+        node
+        for node in ast.walk(opener_tree)
+        if isinstance(node, ast.Call)
+    ]
+    assert [ast.unparse(node.func) for node in opener_calls] == ["os.open"]
+    open_call = opener_calls[0]
+    assert ast.unparse(open_call.args[0]) == "plan.staging_name"
+    assert ast.unparse(open_call.args[1]) == (
+        "os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC"
+    )
+    assert isinstance(open_call.args[2], ast.Constant)
+    assert open_call.args[2].value == 0o444
+    assert {
+        keyword.arg: ast.unparse(keyword.value)
+        for keyword in open_call.keywords
+    } == {"dir_fd": "plan.parent.descriptor"}
+
+    core_source = inspect.getsource(installer._complete_h11_named_staging)
+    core_tree = ast.parse(core_source)
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "open"
+        for node in ast.walk(core_tree)
+    )
+    assert not any(
+        token in core_source
+        for token in (
+            "callback",
+            "retry",
+            "cleanup",
+            "timeout",
+            "poll",
+            "sleep",
+        )
+    )
+    helper_trees = {
+        "prepare": prepare_tree,
+        "open": opener_tree,
+        "complete": core_tree,
+    }
+    assert {
+        name: {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+        }
+        for name, tree in helper_trees.items()
+    } == {
+        "prepare": {
+            "H11RootNamedStagingPlan",
+            "_canonical",
+            "_fail",
+            "type",
+        },
+        "open": set(),
+        "complete": {
+            "InstallerError",
+            "RetainedH11RootPublication",
+            "_fail",
+            "len",
+            "memoryview",
+            "renameat2",
+            "str",
+        },
+    }
+    mutation_attrs = {
+        "open",
+        "write",
+        "write_bytes",
+        "write_text",
+        "fsync",
+        "fdatasync",
+        "ftruncate",
+        "truncate",
+        "fchmod",
+        "fchown",
+        "mkdir",
+        "unlink",
+        "rename",
+        "replace",
+        "remove",
+        "rmdir",
+        "chmod",
+        "chown",
+        "link",
+        "symlink",
+        "close",
+    }
+    assert {
+        name: {
+            node.func.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in mutation_attrs
+        }
+        for name, tree in helper_trees.items()
+    } == {
+        "prepare": set(),
+        "open": {"open"},
+        "complete": {"write", "fsync", "fchmod", "close"},
+    }
+    complete_os_calls = {
+        node.func.attr
+        for node in ast.walk(core_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "os"
+    }
+    assert complete_os_calls == {
+        "close",
+        "fchmod",
+        "fstat",
+        "fsync",
+        "lseek",
+        "read",
+        "stat",
+        "strerror",
+        "write",
+    }
+    assert sum(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "renameat2"
+        for node in ast.walk(core_tree)
+    ) == 1
+
+    permit_source = inspect.getsource(installer.H11RootAuthorizedPermit)
+    permit_tree = ast.parse(permit_source)
+    publish = next(
+        node
+        for node in ast.walk(permit_tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "publish"
+    )
+    try_body = next(
+        node.body
+        for node in publish.body
+        if isinstance(node, ast.Try)
+    )
+    barrier_index = next(
+        index
+        for index, node in enumerate(try_body)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "barrier"
+            for target in node.targets
+        )
+    )
+    retained_ready_index = next(
+        index
+        for index, node in enumerate(try_body)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "retained_ready"
+            for target in node.targets
+        )
+    )
+    retained_ready_assignment = try_body[retained_ready_index]
+    assert isinstance(retained_ready_assignment, ast.Assign)
+    assert isinstance(retained_ready_assignment.value, ast.Call)
+    assert ast.unparse(retained_ready_assignment.value.func) == (
+        "_decode_canonical_object"
+    )
+    assert ast.unparse(retained_ready_assignment.value.args[0]) == (
+        "session.permit_ready.raw"
+    )
+    assert retained_ready_index < barrier_index
+    assert "ready_receipt" not in ast.unparse(publish)
+    assert isinstance(try_body[barrier_index + 1], ast.Assign)
+    assert [
+        target.id
+        for target in try_body[barrier_index + 1].targets
+        if isinstance(target, ast.Name)
+    ] == ["descriptor"]
+    assert isinstance(try_body[barrier_index + 1].value, ast.Call)
+    assert ast.unparse(try_body[barrier_index + 1].value.func) == (
+        "_open_h11_named_staging"
+    )
+    publish_signature = inspect.signature(
+        installer.H11RootAuthorizedPermit.publish
+    )
+    assert tuple(publish_signature.parameters) == ("closure",)
+    expected_state_assignment = next(
+        node
+        for node in try_body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "expected_transaction_state"
+            for target in node.targets
+        )
+    )
+    expected_state_source = ast.unparse(expected_state_assignment.value)
+    assert "closure.transaction_state" in expected_state_source
+    assert "permit-committed" in expected_state_source
+    assert ".manifest" not in expected_state_source
+
+    barrier_source = inspect.getsource(installer.H11RootPrePermitBarrier)
+    barrier_tree = ast.parse(barrier_source)
+    stat_calls = [
+        node
+        for node in ast.walk(barrier_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and ast.unparse(node.func) == "os.stat"
+    ]
+    assert len(stat_calls) == 2
+    pending_stat = next(
+        node
+        for node in stat_calls
+        if isinstance(node.args[0], ast.Constant)
+        and node.args[0].value == "PERMIT.pending"
+    )
+    assert {
+        item.arg: ast.unparse(item.value)
+        for item in pending_stat.keywords
+    } == {
+        "dir_fd": "plan.parent.descriptor",
+        "follow_symlinks": "False",
+    }
+    filesystem_calls = [
+        node
+        for node in ast.walk(barrier_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr
+        in {"open", "stat", "lstat", "fstat", "access", "readlink"}
+    ]
+    assert max(filesystem_calls, key=lambda node: node.lineno) is pending_stat
+    assert "watch_events" not in barrier_source
+    assert "absence_barrier" not in barrier_source
+    assert {
+        name: {
+            node.func.id
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+        }
+        for name, tree in {
+            "permit": permit_tree,
+            "barrier": barrier_tree,
+        }.items()
+    } == {
+        "permit": {
+            "H11RootTransactionState",
+            "_complete_h11_named_staging",
+            "_decode_canonical_object",
+            "_fail",
+            "_open_h11_named_staging",
+            "_prepare_h11_named_staging",
+            "cls",
+            "dict",
+            "tuple",
+            "zip",
+        },
+        "barrier": {
+            "InstallerError",
+            "_fail",
+            "cls",
+            "dataclass",
+            "len",
+            "tuple",
+        },
+    }
+
+    revalidate = next(
+        node
+        for node in ast.walk(permit_tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "revalidate"
+    )
+    revalidate_calls = [
+        ast.unparse(node.func)
+        for node in ast.walk(revalidate)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+    ]
+    assert "self.closure.revalidate" not in revalidate_calls
+    assert {
+        "self.closure._revalidate_retained_common",
+        "self.closure._validate_exact_transaction_phase",
+        "self.publication.revalidate",
+        "self.poison",
+    }.issubset(revalidate_calls)
+    close_method = next(
+        node
+        for node in ast.walk(permit_tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "close"
+    )
+    close_calls = [
+        ast.unparse(node.value.func)
+        for node in close_method.body
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+    ]
+    assert close_calls == [
+        "self.publication.close",
+        "self.closure.close",
+    ]
+
+    module_tree = ast.parse(
+        Path(installer.__file__).read_text(encoding="utf-8")
+    )
+    parents = {
+        child: parent
+        for parent in ast.walk(module_tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+    helper_callsites = {
+        name: []
+        for name in (
+            "_prepare_h11_named_staging",
+            "_open_h11_named_staging",
+            "_complete_h11_named_staging",
+        )
+    }
+    for node in ast.walk(module_tree):
+        if (
+            not isinstance(node, ast.Call)
+            or not isinstance(node.func, ast.Name)
+            or node.func.id not in helper_callsites
+        ):
+            continue
+        owner = parents[node]
+        while not isinstance(owner, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            owner = parents[owner]
+        scope = parents[owner]
+        while not isinstance(scope, (ast.ClassDef, ast.Module)):
+            scope = parents[scope]
+        qualified_owner = (
+            f"{scope.name}.{owner.name}"
+            if isinstance(scope, ast.ClassDef)
+            else owner.name
+        )
+        helper_callsites[node.func.id].append(qualified_owner)
+    assert helper_callsites == {
+        "_prepare_h11_named_staging": [
+            "_publish_h11_named_staging",
+            "H11RootAuthorizedPermit.publish",
+        ],
+        "_open_h11_named_staging": [
+            "_publish_h11_named_staging",
+            "H11RootAuthorizedPermit.publish",
+        ],
+        "_complete_h11_named_staging": [
+            "_publish_h11_named_staging",
+            "H11RootAuthorizedPermit.publish",
+        ],
+    }
+
+    helper_source = "\n".join(
+        (prepare_source, opener_source, core_source)
+    )
+    combined = "\n".join(
+        (
+            inspect.getsource(installer.H11RootAuthorizerReadyClosure),
+            permit_source,
+            barrier_source,
+            helper_source,
+        )
+    )
+    combined_tree = ast.parse(combined)
+    phase_calls = [
+        node
+        for node in ast.walk(combined_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "_validate_exact_transaction_phase"
+    ]
+    assert [ast.literal_eval(node.args[0]) for node in phase_calls] == [
+        "authorizer-input",
+        "permit-committed",
+    ]
+    forbidden_seam_tokens = {
+        "authorize_h11_release",
+        "_publish_h11_permit",
+        "read_ready_commit",
+        "write_commit",
+        "commit_fifos",
+        "governance",
+        "callback",
+        "hook",
+        "timeout",
+        "deadline",
+        "poll",
+        "sleep",
+        "retry",
+        "budget",
+        "cap",
+        "truncate",
+        "truncation",
+        "watchdog",
+        "cleanup",
+    }
+    seam_source = "\n".join((permit_source, barrier_source, helper_source))
+    seam_name_tokens = {
+        item.string
+        for item in tokenize.generate_tokens(io.StringIO(seam_source).readline)
+        if item.type == tokenize.NAME
+    }
+    assert forbidden_seam_tokens.isdisjoint(seam_name_tokens)
 
 
 def test_real_formal_producer_crosses_exact_harness_consumer_and_release(

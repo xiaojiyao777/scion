@@ -3291,7 +3291,7 @@ class H11RootAuthorizerReadyClosure:
                 session.close()
             raise
 
-    def revalidate(self) -> None:
+    def _revalidate_retained_common(self) -> None:
         if self.poisoned or self.closed:
             _fail("H11 READY closure is poisoned or closed before last use")
         self.session.revalidate()
@@ -3300,12 +3300,6 @@ class H11RootAuthorizerReadyClosure:
             _fail("H11 retained partition drifted after READY commit")
         for source in self.present_sources:
             source.revalidate()
-        transaction_state = self.session.authority.validate_transaction_phase(
-            "authorizer-input"
-        )
-        if transaction_state != self.transaction_state:
-            _fail("H11 authorizer-input transaction state drifted")
-        _bind_h11_authorizer_transaction_sources(self.session, transaction_state)
         if (
             hashlib.sha256(_canonical(self.present_outputs)).hexdigest()
             != self.present_outputs_sha256
@@ -3315,6 +3309,25 @@ class H11RootAuthorizerReadyClosure:
             != self.future_absence_sha256
         ):
             _fail("H11 READY closure canonical inventory digest drifted")
+
+    def _validate_exact_transaction_phase(
+        self, phase: str
+    ) -> tuple[H11RootTransactionState, ...]:
+        if phase not in {"authorizer-input", "permit-committed"}:
+            _fail("H11 C2 transaction phase is outside the fixed literal pair")
+        transaction_state = self.session.authority.validate_transaction_phase(
+            phase
+        )
+        _bind_h11_authorizer_transaction_sources(self.session, transaction_state)
+        return transaction_state
+
+    def revalidate(self) -> None:
+        self._revalidate_retained_common()
+        transaction_state = self._validate_exact_transaction_phase(
+            "authorizer-input"
+        )
+        if transaction_state != self.transaction_state:
+            _fail("H11 authorizer-input transaction state drifted")
 
     def poison(self) -> None:
         self.poisoned = True
@@ -3386,7 +3399,18 @@ class RetainedH11RootPublication:
             self.descriptor = -1
 
 
-def _publish_h11_named_staging(
+@dataclass(frozen=True, slots=True)
+class H11RootNamedStagingPlan:
+    parent: RetainedH11RootDirectory
+    staging_name: str
+    final_name: str
+    raw: bytes
+    expected_owner: tuple[int, int]
+    require_root: bool
+    test_failure: str | None
+
+
+def _prepare_h11_named_staging(
     parent: RetainedH11RootDirectory,
     staging_name: str,
     final_name: str,
@@ -3394,7 +3418,7 @@ def _publish_h11_named_staging(
     *,
     require_root: bool,
     _test_failure: str | None = None,
-) -> RetainedH11RootPublication:
+) -> H11RootNamedStagingPlan:
     if _test_failure is not None:
         if require_root:
             _fail("privileged H11 publication forbids test failure injection")
@@ -3414,20 +3438,41 @@ def _publish_h11_named_staging(
     if parent.reference.role != "scenario-root":
         _fail("H11 publication parent must be the retained scenario-root")
     parent.revalidate(require_root=require_root)
-    descriptor = -1
+    return H11RootNamedStagingPlan(
+        parent,
+        staging_name,
+        final_name,
+        _canonical(payload),
+        (
+            (0, 0)
+            if require_root
+            else (parent.reference.uid, parent.reference.gid)
+        ),
+        require_root,
+        _test_failure,
+    )
+
+
+def _open_h11_named_staging(plan: H11RootNamedStagingPlan) -> int:
+    return os.open(
+        plan.staging_name,
+        os.O_RDWR
+        | os.O_CREAT
+        | os.O_EXCL
+        | os.O_NOFOLLOW
+        | os.O_CLOEXEC,
+        0o444,
+        dir_fd=plan.parent.descriptor,
+    )
+
+
+def _complete_h11_named_staging(
+    plan: H11RootNamedStagingPlan,
+    descriptor: int,
+) -> RetainedH11RootPublication:
+    parent = plan.parent
     try:
-        descriptor = os.open(
-            staging_name,
-            os.O_RDWR
-            | os.O_CREAT
-            | os.O_EXCL
-            | os.O_NOFOLLOW
-            | os.O_CLOEXEC,
-            0o444,
-            dir_fd=parent.descriptor,
-        )
-        raw = _canonical(payload)
-        view = memoryview(raw)
+        view = memoryview(plan.raw)
         while view:
             written = os.write(descriptor, view)
             if written <= 0:
@@ -3444,21 +3489,16 @@ def _publish_h11_named_staging(
         reread = b"".join(chunks)
         os.lseek(descriptor, 0, os.SEEK_SET)
         opened = os.fstat(descriptor)
-        expected_owner = (
-            (0, 0)
-            if require_root
-            else (parent.reference.uid, parent.reference.gid)
-        )
         if (
-            reread != raw
-            or opened.st_size != len(raw)
+            reread != plan.raw
+            or opened.st_size != len(plan.raw)
             or not stat.S_ISREG(opened.st_mode)
             or stat.S_IMODE(opened.st_mode) != 0o444
-            or (opened.st_uid, opened.st_gid) != expected_owner
+            or (opened.st_uid, opened.st_gid) != plan.expected_owner
         ):
             _fail("H11 staged publication readback or metadata is invalid")
         os.fsync(descriptor)
-        if _test_failure == "pre-rename":
+        if plan.test_failure == "pre-rename":
             _fail("injected H11 publication failure before rename")
 
         libc = ctypes.CDLL(None, use_errno=True)
@@ -3475,9 +3515,9 @@ def _publish_h11_named_staging(
         if (
             renameat2(
                 parent.descriptor,
-                staging_name.encode("ascii"),
+                plan.staging_name.encode("ascii"),
                 parent.descriptor,
-                final_name.encode("ascii"),
+                plan.final_name.encode("ascii"),
                 1,
             )
             != 0
@@ -3488,7 +3528,7 @@ def _publish_h11_named_staging(
             )
         os.fsync(parent.descriptor)
         final_info = os.stat(
-            final_name,
+            plan.final_name,
             dir_fd=parent.descriptor,
             follow_symlinks=False,
         )
@@ -3498,12 +3538,12 @@ def _publish_h11_named_staging(
             or (final_info.st_dev, final_info.st_ino)
             != (retained_info.st_dev, retained_info.st_ino)
             or stat.S_IMODE(final_info.st_mode) != 0o444
-            or (final_info.st_uid, final_info.st_gid) != expected_owner
+            or (final_info.st_uid, final_info.st_gid) != plan.expected_owner
         ):
             _fail("H11 publication final name differs from its retained inode")
         reference = {
-            "path": str(parent.reference.path / final_name),
-            "sha256": hashlib.sha256(raw).hexdigest(),
+            "path": str(parent.reference.path / plan.final_name),
+            "sha256": hashlib.sha256(plan.raw).hexdigest(),
             "device": str(retained_info.st_dev),
             "inode": str(retained_info.st_ino),
             "mode": "0444",
@@ -3512,11 +3552,11 @@ def _publish_h11_named_staging(
         }
         result = RetainedH11RootPublication(
             parent,
-            final_name,
+            plan.final_name,
             descriptor,
-            raw,
+            plan.raw,
             reference,
-            require_root,
+            plan.require_root,
         )
         result.revalidate()
         return result
@@ -3524,6 +3564,194 @@ def _publish_h11_named_staging(
         if descriptor >= 0:
             os.close(descriptor)
         raise
+
+
+def _publish_h11_named_staging(
+    parent: RetainedH11RootDirectory,
+    staging_name: str,
+    final_name: str,
+    payload: dict[str, Any],
+    *,
+    require_root: bool,
+    _test_failure: str | None = None,
+) -> RetainedH11RootPublication:
+    plan = _prepare_h11_named_staging(
+        parent,
+        staging_name,
+        final_name,
+        payload,
+        require_root=require_root,
+        _test_failure=_test_failure,
+    )
+    descriptor = _open_h11_named_staging(plan)
+    return _complete_h11_named_staging(plan, descriptor)
+
+
+@dataclass(frozen=True, slots=True)
+class H11RootPrePermitBarrier:
+    directory_chain: tuple[H11RootDirectoryReference, ...]
+    present_outputs_sha256: str
+    future_absence_sha256: str
+    transaction_state: tuple[H11RootTransactionState, ...]
+    future_absence_inventory: tuple[H11RootRolePath, ...]
+
+    @classmethod
+    def capture(
+        cls,
+        closure: H11RootAuthorizerReadyClosure,
+        plan: H11RootNamedStagingPlan,
+    ) -> "H11RootPrePermitBarrier":
+        if (
+            plan.parent is not closure.session.authority.directories[3]
+            or plan.staging_name != "PERMIT.pending"
+            or plan.final_name != "PERMIT.json"
+            or plan.test_failure is not None
+        ):
+            _fail("H11 pre-permit barrier plan is not the exact permit transaction")
+        closure.revalidate()
+        authority = closure.session.authority
+        if len(closure.partition.future_absence_inventory) != 11:
+            _fail("H11 pre-permit barrier lacks the exact future inventory")
+        formal_parent = authority.directories[0]
+        input_parent = authority.directories[4]
+        receipt_parent = authority.directories[5]
+        for item in closure.partition.future_absence_inventory:
+            if item.role == "frozen-root":
+                parent = formal_parent
+            elif item.path.parent == input_parent.reference.path:
+                parent = input_parent
+            elif item.path.parent == receipt_parent.reference.path:
+                parent = receipt_parent
+            else:
+                _fail("H11 future absence is outside its retained parent")
+            try:
+                os.stat(
+                    item.path.name,
+                    dir_fd=parent.descriptor,
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                raise InstallerError(
+                    f"cannot prove H11 future absence {item.role}"
+                ) from exc
+            else:
+                _fail(f"H11 future output {item.role} exists before permit")
+        result = cls(
+            tuple(item.reference for item in authority.directories),
+            closure.present_outputs_sha256,
+            closure.future_absence_sha256,
+            closure.transaction_state,
+            closure.partition.future_absence_inventory,
+        )
+        try:
+            os.stat(
+                "PERMIT.pending",
+                dir_fd=plan.parent.descriptor,
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            return result
+        except OSError as exc:
+            raise InstallerError(
+                "cannot prove final H11 permit staging absence"
+            ) from exc
+        _fail("H11 permit staging exists at the final pre-publication barrier")
+
+
+@dataclass
+class H11RootAuthorizedPermit:
+    closure: H11RootAuthorizerReadyClosure
+    barrier: H11RootPrePermitBarrier
+    publication: RetainedH11RootPublication
+    transaction_state: tuple[H11RootTransactionState, ...]
+    closed: bool = False
+    poisoned: bool = False
+
+    @classmethod
+    def publish(
+        cls,
+        closure: H11RootAuthorizerReadyClosure,
+    ) -> "H11RootAuthorizedPermit":
+        publication: RetainedH11RootPublication | None = None
+        try:
+            session = closure.session
+            retained_ready = _decode_canonical_object(
+                session.permit_ready.raw,
+                label="retained H11 PERMIT_READY for permit publication",
+            )
+            payload = {
+                "schema": H11_PERMIT_SCHEMA,
+                "scenario": "H11",
+                "run_unit": retained_ready["run_unit"],
+                "boot_id": retained_ready["boot_id"],
+                "invocation_id": retained_ready["invocation_id"],
+                "authorization_manifest": dict(session.authorization.source),
+                "harness_manifest": dict(session.authority.manifest_source),
+                "permit_ready": dict(session.permit_ready.source),
+                "run_armed": dict(session.run_armed.source),
+                "ready_commit": closure.ready_commit.reference,
+                "present_outputs_sha256": closure.present_outputs_sha256,
+                "future_absence_sha256": closure.future_absence_sha256,
+                "phase": "operator-release-authorized",
+            }
+            plan = _prepare_h11_named_staging(
+                session.authority.directories[3],
+                "PERMIT.pending",
+                "PERMIT.json",
+                payload,
+                require_root=session.authority.require_root,
+            )
+            expected_transaction_state = tuple(
+                H11RootTransactionState(item.role, item.path, state)
+                for item, state in zip(
+                    closure.transaction_state,
+                    _H11_TRANSACTION_PHASES["permit-committed"],
+                )
+            )
+            barrier = H11RootPrePermitBarrier.capture(closure, plan)
+            descriptor = _open_h11_named_staging(plan)
+            publication = _complete_h11_named_staging(plan, descriptor)
+            result = cls(
+                closure,
+                barrier,
+                publication,
+                expected_transaction_state,
+            )
+            result.revalidate()
+            return result
+        except BaseException:
+            if publication is not None:
+                publication.close()
+            closure.poison()
+            raise
+
+    def revalidate(self) -> None:
+        try:
+            if self.closed or self.poisoned:
+                _fail("H11 authorized permit is poisoned or closed before last use")
+            self.closure._revalidate_retained_common()
+            transaction_state = self.closure._validate_exact_transaction_phase(
+                "permit-committed"
+            )
+            if transaction_state != self.transaction_state:
+                _fail("H11 permit-committed transaction state drifted")
+            self.publication.revalidate()
+        except BaseException:
+            self.poison()
+            raise
+
+    def poison(self) -> None:
+        self.poisoned = True
+        self.close()
+
+    def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self.publication.close()
+        self.closure.close()
 
 
 def _publish_h11_permit(
