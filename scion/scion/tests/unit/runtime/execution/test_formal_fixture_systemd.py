@@ -16,6 +16,7 @@ import signal
 import stat
 import subprocess
 import sys
+import textwrap
 import threading
 import tokenize
 from dataclasses import replace
@@ -5827,6 +5828,7 @@ def test_root_c2a_ast_closes_mutation_fifo_and_directory_repin_escape() -> None:
     tree = ast.parse(source)
     allowed_direct_name_calls = {
         "RetainedH11RootJsonSource",
+        "_close_h11_ownership",
         "_decode_canonical_object",
         "_decode_h11_full_source_reference",
         "_decode_h11_hashed_path",
@@ -5844,6 +5846,7 @@ def test_root_c2a_ast_closes_mutation_fifo_and_directory_repin_escape() -> None:
         "len",
         "set",
         "str",
+        "tuple",
         "type",
         "zip",
     }
@@ -6101,6 +6104,168 @@ def test_root_c2b_consumes_ready_commit_in_either_blocking_schedule(
     for descriptor in descriptors:
         with pytest.raises(OSError):
             os.fstat(descriptor)
+
+
+@pytest.mark.parametrize("primary_site", ("fstat", "read"))
+def test_root_c2b_reader_primary_survives_endpoint_close_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    primary_site: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    fifo = _root_c2b_ready_fifo(session)
+    peer_entered = threading.Event()
+    release_peer = threading.Event()
+    peer_errors: list[BaseException] = []
+    real_open = os.open
+    real_close = os.close
+    real_fstat = os.fstat
+    real_read = os.read
+
+    def hold_writer() -> None:
+        descriptor = -1
+        peer_entered.set()
+        try:
+            descriptor = real_open(
+                f"/proc/self/fd/{fifo.descriptor}",
+                os.O_WRONLY | os.O_CLOEXEC,
+            )
+            release_peer.wait()
+        except BaseException as exc:
+            peer_errors.append(exc)
+        finally:
+            if descriptor >= 0:
+                real_close(descriptor)
+
+    peer = threading.Thread(target=hold_writer)
+    peer.start()
+    peer_entered.wait()
+    reader_descriptor = -1
+    close_counts: dict[int, int] = {}
+    primary_error = OSError(
+        errno.EIO,
+        f"injected READY reader {primary_site} failure",
+    )
+    close_error = OSError(errno.EBADF, "injected READY reader close failure")
+
+    def capture_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+        nonlocal reader_descriptor
+        descriptor = real_open(path, flags, *args, **kwargs)
+        if (
+            os.fsdecode(path) == f"/proc/self/fd/{fifo.descriptor}"
+            and flags == os.O_RDONLY | os.O_CLOEXEC
+        ):
+            reader_descriptor = descriptor
+        return descriptor
+
+    def failing_fstat(descriptor: int) -> os.stat_result:
+        if primary_site == "fstat" and descriptor == reader_descriptor:
+            raise primary_error
+        return real_fstat(descriptor)
+
+    def failing_read(descriptor: int, size: int) -> bytes:
+        if primary_site == "read" and descriptor == reader_descriptor:
+            raise primary_error
+        return real_read(descriptor, size)
+
+    def close_then_fail(descriptor: int) -> None:
+        close_counts[descriptor] = close_counts.get(descriptor, 0) + 1
+        real_close(descriptor)
+        if descriptor == reader_descriptor:
+            raise close_error
+
+    monkeypatch.setattr(os, "open", capture_open)
+    monkeypatch.setattr(os, "fstat", failing_fstat)
+    monkeypatch.setattr(os, "read", failing_read)
+    monkeypatch.setattr(os, "close", close_then_fail)
+    result: dict[str, installer.H11RootCommitReceipt] = {}
+    try:
+        with pytest.raises(OSError) as caught:
+            result["receipt"] = fifo.read_ready_commit(require_root=False)
+    finally:
+        release_peer.set()
+        peer.join()
+    assert caught.value is primary_error
+    assert result == {}
+    assert peer_errors == []
+    assert primary_error.__notes__ == [
+        "H11 ownership teardown secondary: "
+        f"{type(close_error).__name__}: {close_error}"
+    ]
+    assert close_counts[reader_descriptor] == 1
+    with pytest.raises(OSError):
+        real_fstat(reader_descriptor)
+    session.close()
+
+
+def test_root_c2b_reader_eof_close_failure_is_primary_without_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    fifo = _root_c2b_ready_fifo(session)
+    entered = threading.Event()
+    peer_errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2b_write_ready_frame,
+        args=(fifo, installer.H11_READY_COMMITTED_BYTES, entered, peer_errors),
+    )
+    peer.start()
+    entered.wait()
+    real_open = os.open
+    real_close = os.close
+    real_fstat = os.fstat
+    real_read = os.read
+    reader_descriptor = -1
+    close_counts: dict[int, int] = {}
+    reads: list[bytes] = []
+    close_error = OSError(errno.EIO, "injected READY reader EOF close failure")
+
+    def capture_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+        nonlocal reader_descriptor
+        descriptor = real_open(path, flags, *args, **kwargs)
+        if (
+            os.fsdecode(path) == f"/proc/self/fd/{fifo.descriptor}"
+            and flags == os.O_RDONLY | os.O_CLOEXEC
+        ):
+            reader_descriptor = descriptor
+        return descriptor
+
+    def recording_read(descriptor: int, size: int) -> bytes:
+        chunk = real_read(descriptor, size)
+        if descriptor == reader_descriptor:
+            reads.append(chunk)
+        return chunk
+
+    def close_then_fail(descriptor: int) -> None:
+        close_counts[descriptor] = close_counts.get(descriptor, 0) + 1
+        real_close(descriptor)
+        if descriptor == reader_descriptor:
+            raise close_error
+
+    monkeypatch.setattr(os, "open", capture_open)
+    monkeypatch.setattr(os, "read", recording_read)
+    monkeypatch.setattr(os, "close", close_then_fail)
+    result: dict[str, installer.H11RootCommitReceipt] = {}
+    with pytest.raises(OSError) as caught:
+        result["receipt"] = fifo.read_ready_commit(require_root=False)
+    peer.join()
+    assert caught.value is close_error
+    assert result == {}
+    assert peer_errors == []
+    assert reads[-1] == b""
+    assert b"".join(reads[:-1]) == installer.H11_READY_COMMITTED_BYTES
+    assert getattr(close_error, "__notes__", []) == []
+    assert close_counts[reader_descriptor] == 1
+    with pytest.raises(OSError):
+        real_fstat(reader_descriptor)
+    session.close()
 
 
 @pytest.mark.parametrize(
@@ -6473,17 +6638,39 @@ def test_root_c2b_ast_closes_mutation_publication_and_wait_escape() -> None:
     assert "timeout" not in fifo_source
     assert "poll" not in fifo_source
     assert "sleep" not in fifo_source
-    open_calls = [
+    fifo_class = next(
+        node for node in fifo_tree.body if isinstance(node, ast.ClassDef)
+    )
+    fifo_methods = {
+        node.name: node
+        for node in fifo_class.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    reader = fifo_methods["read_ready_commit"]
+    writer = fifo_methods["open_permit_commit_writer"]
+    for endpoint in (reader, writer):
+        assert not any(
+            isinstance(node, ast.Try)
+            and any(
+                isinstance(child, ast.Call)
+                and isinstance(child.func, ast.Attribute)
+                and ast.unparse(child.func) == "os.close"
+                for statement in node.finalbody
+                for child in ast.walk(statement)
+            )
+            for node in ast.walk(endpoint)
+        )
+    reader_open_calls = [
         node
-        for node in ast.walk(fifo_tree)
+        for node in ast.walk(reader)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
         and isinstance(node.func.value, ast.Name)
         and node.func.value.id == "os"
         and node.func.attr == "open"
     ]
-    assert len(open_calls) == 1
-    open_call = open_calls[0]
+    assert len(reader_open_calls) == 1
+    open_call = reader_open_calls[0]
     assert len(open_call.args) == 2
     assert open_call.keywords == []
     expected_descriptor_path = ast.parse(
@@ -6497,6 +6684,45 @@ def test_root_c2b_ast_closes_mutation_publication_and_wait_escape() -> None:
     ] == ["self.descriptor"]
     flags = ast.unparse(open_call.args[1])
     assert flags == "os.O_RDONLY | os.O_CLOEXEC"
+    reader_try = next(
+        node for node in reader.body if isinstance(node, ast.Try)
+    )
+    reader_close_index = next(
+        index
+        for index, node in enumerate(reader_try.body)
+        if isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and ast.unparse(node.value.func) == "os.close"
+    )
+    assert [
+        ast.unparse(node)
+        for node in reader_try.body[reader_close_index - 2 : reader_close_index + 1]
+    ] == [
+        "closing_descriptor = descriptor",
+        "descriptor = -1",
+        "os.close(closing_descriptor)",
+    ]
+    writer_calls = [
+        node
+        for node in ast.walk(writer)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "os"
+    ]
+    assert [node.func.attr for node in writer_calls] == ["open", "fstat"]
+    writer_open = writer_calls[0]
+    assert ast.dump(writer_open.args[0]) == ast.dump(expected_descriptor_path)
+    assert ast.unparse(writer_open.args[1]) == (
+        "os.O_WRONLY | os.O_CLOEXEC"
+    )
+    assert writer_open.keywords == []
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"read", "write", "writev"}
+        for node in ast.walk(writer)
+    )
 
     sources = "\n".join(
         (
@@ -6544,6 +6770,7 @@ def test_root_c2b_ast_closes_mutation_publication_and_wait_escape() -> None:
         "InstallerError",
         "_bind_h11_authorizer_transaction_sources",
         "_canonical",
+        "_close_h11_ownership",
         "_exact",
         "_fail",
         "_path",
@@ -7216,6 +7443,7 @@ def test_root_c2c_ast_freezes_barrier_open_and_phase_call_graph() -> None:
         "complete": {
             "InstallerError",
             "RetainedH11RootPublication",
+            "_close_h11_ownership",
             "_fail",
             "len",
             "memoryview",
@@ -7258,7 +7486,7 @@ def test_root_c2c_ast_freezes_barrier_open_and_phase_call_graph() -> None:
     } == {
         "prepare": set(),
         "open": {"open"},
-        "complete": {"write", "fsync", "fchmod", "close"},
+        "complete": {"write", "fsync", "fchmod"},
     }
     complete_os_calls = {
         node.func.attr
@@ -7269,7 +7497,6 @@ def test_root_c2c_ast_freezes_barrier_open_and_phase_call_graph() -> None:
         and node.func.value.id == "os"
     }
     assert complete_os_calls == {
-        "close",
         "fchmod",
         "fstat",
         "fsync",
@@ -7405,6 +7632,7 @@ def test_root_c2c_ast_freezes_barrier_open_and_phase_call_graph() -> None:
         "permit": {
             "H11RootTransactionState",
             "_complete_h11_named_staging",
+            "_close_h11_ownership",
             "_decode_canonical_object",
             "_fail",
             "_open_h11_named_staging",
@@ -7440,7 +7668,6 @@ def test_root_c2c_ast_freezes_barrier_open_and_phase_call_graph() -> None:
         "self.closure._revalidate_retained_common",
         "self.closure._validate_exact_transaction_phase",
         "self.publication.revalidate",
-        "self.poison",
     }.issubset(revalidate_calls)
     close_method = next(
         node
@@ -7452,10 +7679,15 @@ def test_root_c2c_ast_freezes_barrier_open_and_phase_call_graph() -> None:
         for node in close_method.body
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
     ]
-    assert close_calls == [
-        "self.publication.close",
-        "self.closure.close",
-    ]
+    assert close_calls == ["_close_h11_ownership"]
+    close_call = next(
+        node.value
+        for node in close_method.body
+        if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+    )
+    assert ast.unparse(close_call.args[0]) == (
+        "(self.publication, self.closure)"
+    )
 
     module_tree = ast.parse(
         Path(installer.__file__).read_text(encoding="utf-8")
@@ -7558,6 +7790,1455 @@ def test_root_c2c_ast_freezes_barrier_open_and_phase_call_graph() -> None:
         if item.type == tokenize.NAME
     }
     assert forbidden_seam_tokens.isdisjoint(seam_name_tokens)
+
+
+def _root_c2d_permit_fifo(
+    permit: installer.H11RootAuthorizedPermit,
+) -> installer.RetainedH11RootFifo:
+    matches = tuple(
+        item
+        for item in permit.closure.session.authority.commit_fifos
+        if item.role == "h11-permit-commit"
+    )
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _root_c2d_read_permit_frame(
+    fifo: installer.RetainedH11RootFifo,
+    entered: threading.Event,
+    payloads: list[bytes],
+    errors: list[BaseException],
+) -> None:
+    descriptor = -1
+    entered.set()
+    try:
+        descriptor = os.open(
+            f"/proc/self/fd/{fifo.descriptor}",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        fifo.reference.prove(
+            os.fstat(descriptor),
+            require_root=False,
+            label="test H11 PERMIT commit reader",
+        )
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, select.PIPE_BUF)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        payloads.append(b"".join(chunks))
+    except BaseException as exc:
+        errors.append(exc)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def test_root_c2d_permit_commit_receipt_is_exact(tmp_path: Path) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    try:
+        fifo = next(
+            item
+            for item in session.authority.commit_fifos
+            if item.role == "h11-permit-commit"
+        )
+        receipt = installer.H11RootCommitReceipt.permit_committed(
+            fifo,
+            installer.H11_PERMIT_COMMITTED_BYTES,
+        )
+        assert len(installer.H11_PERMIT_COMMITTED_BYTES) == 30
+        assert receipt.reference == {
+            "schema": installer.H11_COMMIT_FIFO_RECEIPT_SCHEMA,
+            "phase": "permit-committed",
+            "fifo": fifo.reference.reference,
+            "payload_sha256": hashlib.sha256(
+                b"SCION_H11_PERMIT_COMMITTED_V1\n"
+            ).hexdigest(),
+            "byte_count": "30",
+        }
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize(
+    ("role", "payload"),
+    (
+        ("h11-ready-commit", b"SCION_H11_PERMIT_COMMITTED_V1\n"),
+        ("h11-permit-commit", b"SCION_H11_PERMIT_COMMITTED_V1"),
+        ("h11-permit-commit", b"SCION_H11_PERMIT_COMMITTED_V1\nX"),
+        (
+            "h11-permit-commit",
+            b"SCION_H11_PERMIT_COMMITTED_V1\n" * 2,
+        ),
+    ),
+)
+def test_root_c2d_permit_commit_receipt_rejects_nonexact_source(
+    tmp_path: Path,
+    role: str,
+    payload: bytes,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    try:
+        fifo = next(
+            item
+            for item in session.authority.commit_fifos
+            if item.role == role
+        )
+        with pytest.raises(installer.InstallerError, match="exact committed"):
+            installer.H11RootCommitReceipt.permit_committed(fifo, payload)
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("invalid", ("wrong-role", "closed"))
+def test_root_c2d_writer_rejects_wrong_role_or_closed_before_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    invalid: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    fifo = next(
+        item
+        for item in session.authority.commit_fifos
+        if item.role
+        == (
+            "h11-ready-commit"
+            if invalid == "wrong-role"
+            else "h11-permit-commit"
+        )
+    )
+    if invalid == "closed":
+        fifo.close()
+    opens: list[object] = []
+    monkeypatch.setattr(os, "open", lambda *args, **kwargs: opens.append(args))
+    try:
+        with pytest.raises(installer.InstallerError):
+            fifo.open_permit_commit_writer(require_root=False)
+        assert opens == []
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("first_direction", ("writer", "reader"))
+def test_root_c2d_writer_accepts_both_blocking_endpoint_schedules(
+    tmp_path: Path,
+    first_direction: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    entered = threading.Event()
+    result: dict[str, int | BaseException] = {}
+
+    def first_endpoint() -> None:
+        entered.set()
+        try:
+            if first_direction == "writer":
+                result["descriptor"] = fifo.open_permit_commit_writer(
+                    require_root=False
+                )
+            else:
+                result["descriptor"] = os.open(
+                    f"/proc/self/fd/{fifo.descriptor}",
+                    os.O_RDONLY | os.O_CLOEXEC,
+                )
+        except BaseException as exc:
+            result["error"] = exc
+
+    thread = threading.Thread(target=first_endpoint)
+    thread.start()
+    entered.wait()
+    second = -1
+    try:
+        if first_direction == "writer":
+            second = os.open(
+                f"/proc/self/fd/{fifo.descriptor}",
+                os.O_RDONLY | os.O_CLOEXEC,
+            )
+        else:
+            second = fifo.open_permit_commit_writer(require_root=False)
+        thread.join()
+        assert "error" not in result
+        assert isinstance(result["descriptor"], int)
+    finally:
+        if second >= 0:
+            os.close(second)
+        if isinstance(result.get("descriptor"), int):
+            os.close(result["descriptor"])
+        permit.close()
+
+
+def test_root_c2d_writer_endpoint_uses_exact_path_flags_and_fstat(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    reader_entered = threading.Event()
+    payloads: list[bytes] = []
+    errors: list[BaseException] = []
+    reader = threading.Thread(
+        target=_root_c2d_read_permit_frame,
+        args=(fifo, reader_entered, payloads, errors),
+    )
+    reader.start()
+    reader_entered.wait()
+    original_open = os.open
+    original_fstat = os.fstat
+    expected_path = f"/proc/self/fd/{fifo.descriptor}"
+    opened: list[tuple[str, int]] = []
+    proven: list[int] = []
+
+    def recording_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+        descriptor = original_open(path, flags, *args, **kwargs)
+        if os.fsdecode(path) == expected_path:
+            opened.append((os.fsdecode(path), flags))
+        return descriptor
+
+    def recording_fstat(descriptor: int) -> os.stat_result:
+        proven.append(descriptor)
+        return original_fstat(descriptor)
+
+    monkeypatch.setattr(os, "open", recording_open)
+    monkeypatch.setattr(os, "fstat", recording_fstat)
+    descriptor = fifo.open_permit_commit_writer(require_root=False)
+    os.close(descriptor)
+    reader.join()
+    permit.close()
+    assert opened == [
+        (
+            expected_path,
+            os.O_WRONLY | os.O_CLOEXEC,
+        )
+    ]
+    assert descriptor in proven
+    assert payloads == [b""]
+    assert errors == []
+
+
+@pytest.mark.parametrize("primary_site", ("fstat", "prove"))
+def test_root_c2d_writer_primary_survives_endpoint_close_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    primary_site: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    fifo = next(
+        item
+        for item in session.authority.commit_fifos
+        if item.role == "h11-permit-commit"
+    )
+    entered = threading.Event()
+    payloads: list[bytes] = []
+    peer_errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2d_read_permit_frame,
+        args=(fifo, entered, payloads, peer_errors),
+    )
+    peer.start()
+    entered.wait()
+    real_open = os.open
+    real_close = os.close
+    real_fstat = os.fstat
+    original_prove = installer.H11RootFifoReference.prove
+    writer_descriptor = -1
+    close_counts: dict[int, int] = {}
+    primary_error: BaseException = (
+        OSError(errno.EIO, "injected PERMIT writer fstat failure")
+        if primary_site == "fstat"
+        else RuntimeError("injected PERMIT writer prove failure")
+    )
+    close_error = OSError(errno.EBADF, "injected PERMIT writer close failure")
+
+    def capture_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+        nonlocal writer_descriptor
+        descriptor = real_open(path, flags, *args, **kwargs)
+        if (
+            os.fsdecode(path) == f"/proc/self/fd/{fifo.descriptor}"
+            and flags == os.O_WRONLY | os.O_CLOEXEC
+        ):
+            writer_descriptor = descriptor
+        return descriptor
+
+    def failing_fstat(descriptor: int) -> os.stat_result:
+        if primary_site == "fstat" and descriptor == writer_descriptor:
+            raise primary_error
+        return real_fstat(descriptor)
+
+    def failing_prove(
+        self: installer.H11RootFifoReference,
+        info: os.stat_result,
+        *,
+        require_root: bool,
+        label: str,
+    ) -> None:
+        if primary_site == "prove" and label == "H11 permit-commit writer":
+            raise primary_error
+        original_prove(
+            self,
+            info,
+            require_root=require_root,
+            label=label,
+        )
+
+    def close_then_fail(descriptor: int) -> None:
+        close_counts[descriptor] = close_counts.get(descriptor, 0) + 1
+        real_close(descriptor)
+        if descriptor == writer_descriptor:
+            raise close_error
+
+    monkeypatch.setattr(os, "open", capture_open)
+    monkeypatch.setattr(os, "fstat", failing_fstat)
+    monkeypatch.setattr(installer.H11RootFifoReference, "prove", failing_prove)
+    monkeypatch.setattr(os, "close", close_then_fail)
+    result: dict[str, int] = {}
+    with pytest.raises(BaseException) as caught:
+        result["descriptor"] = fifo.open_permit_commit_writer(
+            require_root=False
+        )
+    peer.join()
+    if primary_site == "fstat":
+        assert isinstance(caught.value, installer.InstallerError)
+        assert caught.value.__cause__ is primary_error
+        final_error = caught.value
+    else:
+        assert caught.value is primary_error
+        final_error = primary_error
+    assert result == {}
+    assert peer_errors == []
+    assert payloads == [b""]
+    assert final_error.__notes__ == [
+        "H11 ownership teardown secondary: "
+        f"{type(close_error).__name__}: {close_error}"
+    ]
+    assert close_counts[writer_descriptor] == 1
+    with pytest.raises(OSError):
+        real_fstat(writer_descriptor)
+    session.close()
+
+
+@pytest.mark.parametrize("first_direction", ("reader", "writer"))
+def test_root_c2d_commit_single_write_eof_and_live_publication(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    first_direction: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    descriptors = _root_c2c_owned_descriptors(permit)
+    publication_descriptor = permit.publication.descriptor
+    payloads: list[bytes] = []
+    errors: list[BaseException] = []
+    entered = threading.Event()
+    writes: list[tuple[int, bytes]] = []
+    original_write = os.write
+
+    def recording_write(descriptor: int, payload: bytes) -> int:
+        if payload == installer.H11_PERMIT_COMMITTED_BYTES:
+            os.fstat(publication_descriptor)
+            assert permit.closed is False
+            writes.append((descriptor, payload))
+        return original_write(descriptor, payload)
+
+    monkeypatch.setattr(os, "write", recording_write)
+    result: dict[str, Any] = {}
+    if first_direction == "reader":
+        peer = threading.Thread(
+            target=_root_c2d_read_permit_frame,
+            args=(fifo, entered, payloads, errors),
+        )
+        peer.start()
+        entered.wait()
+        result["receipt"] = installer._commit_h11_authorized_permit(permit)
+    else:
+        original_endpoint = fifo.open_permit_commit_writer
+
+        def entered_endpoint(*, require_root: bool) -> int:
+            entered.set()
+            return original_endpoint(require_root=require_root)
+
+        monkeypatch.setattr(
+            fifo,
+            "open_permit_commit_writer",
+            entered_endpoint,
+        )
+
+        def commit_actor() -> None:
+            try:
+                result["receipt"] = (
+                    installer._commit_h11_authorized_permit(permit)
+                )
+            except BaseException as exc:
+                errors.append(exc)
+
+        peer = threading.Thread(target=commit_actor)
+        peer.start()
+        entered.wait()
+        _root_c2d_read_permit_frame(
+            fifo,
+            threading.Event(),
+            payloads,
+            errors,
+        )
+    peer.join()
+    assert errors == []
+    assert payloads == [installer.H11_PERMIT_COMMITTED_BYTES]
+    assert len(writes) == 1
+    assert writes[0][1] == installer.H11_PERMIT_COMMITTED_BYTES
+    receipt = result["receipt"]
+    assert isinstance(receipt, installer.H11RootCommitReceipt)
+    assert receipt.phase == "permit-committed"
+    assert receipt.byte_count == "30"
+    assert permit.commit_started is True
+    assert permit.closed is True
+    assert permit.poisoned is False
+    assert permit.publication.descriptor == -1
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+@pytest.mark.parametrize(
+    "drift",
+    ("fifo", "permit", "source", "transaction"),
+)
+def test_root_c2d_blocked_open_drift_revalidates_before_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    drift: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    descriptors = _root_c2c_owned_descriptors(permit)
+    final = paths["authorization"].parent / "PERMIT.json"
+    final_raw = final.read_bytes()
+    entered = threading.Event()
+    errors: list[BaseException] = []
+    writes: list[bytes] = []
+    original_endpoint = fifo.open_permit_commit_writer
+
+    def entered_endpoint(*, require_root: bool) -> int:
+        entered.set()
+        return original_endpoint(require_root=require_root)
+
+    monkeypatch.setattr(fifo, "open_permit_commit_writer", entered_endpoint)
+    original_write = os.write
+
+    def recording_write(descriptor: int, payload: bytes) -> int:
+        if payload == installer.H11_PERMIT_COMMITTED_BYTES:
+            writes.append(payload)
+        return original_write(descriptor, payload)
+
+    monkeypatch.setattr(os, "write", recording_write)
+
+    def commit_actor() -> None:
+        try:
+            installer._commit_h11_authorized_permit(permit)
+        except BaseException as exc:
+            errors.append(exc)
+
+    actor = threading.Thread(target=commit_actor)
+    actor.start()
+    entered.wait()
+    reader_path = fifo.reference.path
+    if drift == "fifo":
+        displaced = reader_path.with_name("permit-commit-displaced.fifo")
+        reader_path.rename(displaced)
+        os.mkfifo(reader_path, 0o600)
+        reader_path.chmod(0o600)
+        reader_path = displaced
+    elif drift == "permit":
+        displaced = final.with_name("PERMIT.c2d-displaced.json")
+        final.rename(displaced)
+        final.write_bytes(final_raw)
+        final.chmod(0o444)
+    elif drift == "source":
+        source = paths["h0"]
+        raw = source.read_bytes()
+        displaced = source.with_name("h0.c2d-displaced.json")
+        source.parent.chmod(0o755)
+        source.rename(displaced)
+        source.write_bytes(raw)
+        source.chmod(0o444)
+        source.parent.chmod(0o555)
+    else:
+        _root_c2a_write_json(
+            final.with_name("PERMIT-LEDGER.pending"),
+            {"schema": "scion.test.c2d-transaction-drift.v1"},
+        )
+    reader = os.open(reader_path, os.O_RDONLY | os.O_CLOEXEC)
+    os.close(reader)
+    actor.join()
+    assert len(errors) == 1
+    assert writes == []
+    _assert_root_c2c_poisoned_owner_closed(permit, descriptors)
+    assert final.read_bytes() == final_raw
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ("open", "fstat", "epipe", "short-write", "close"),
+)
+def test_root_c2d_handoff_failure_poisons_all_owners_and_retains_final(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    descriptors = _root_c2c_owned_descriptors(permit)
+    final = paths["authorization"].parent / "PERMIT.json"
+    final_raw = final.read_bytes()
+    payloads: list[bytes] = []
+    peer_errors: list[BaseException] = []
+    opened_endpoints: list[int] = []
+    real_fstat = os.fstat
+    real_open = os.open
+    real_close = os.close
+    entered = threading.Event()
+    peer = threading.Thread(
+        target=_root_c2d_read_permit_frame,
+        args=(fifo, entered, payloads, peer_errors),
+    )
+    peer.start()
+    entered.wait()
+
+    if failure == "open":
+        monkeypatch.setattr(
+            fifo,
+            "open_permit_commit_writer",
+            lambda *, require_root: (_ for _ in ()).throw(
+                OSError(errno.EIO, "injected C2d open failure")
+            ),
+        )
+    elif failure == "fstat":
+        endpoint = -1
+
+        def endpoint_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+            nonlocal endpoint
+            if (
+                os.fsdecode(path) == f"/proc/self/fd/{fifo.descriptor}"
+                and flags == os.O_WRONLY | os.O_CLOEXEC
+            ):
+                endpoint = os.dup(fifo.descriptor)
+                opened_endpoints.append(endpoint)
+                return endpoint
+            return real_open(path, flags, *args, **kwargs)
+
+        def failing_fstat(descriptor: int) -> os.stat_result:
+            if descriptor == endpoint:
+                raise OSError(errno.EIO, "injected C2d fstat failure")
+            return real_fstat(descriptor)
+
+        monkeypatch.setattr(os, "open", endpoint_open)
+        monkeypatch.setattr(os, "fstat", failing_fstat)
+    else:
+        def recording_open(path: Any, flags: int, *args: Any, **kwargs: Any) -> int:
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if (
+                os.fsdecode(path) == f"/proc/self/fd/{fifo.descriptor}"
+                and flags == os.O_WRONLY | os.O_CLOEXEC
+            ):
+                opened_endpoints.append(descriptor)
+            return descriptor
+
+        monkeypatch.setattr(os, "open", recording_open)
+        if failure in {"epipe", "short-write"}:
+            original_write = os.write
+
+            def failing_write(descriptor: int, payload: bytes) -> int:
+                if payload == installer.H11_PERMIT_COMMITTED_BYTES:
+                    if failure == "epipe":
+                        raise BrokenPipeError(errno.EPIPE, "injected C2d EPIPE")
+                    return len(payload) - 1
+                return original_write(descriptor, payload)
+
+            monkeypatch.setattr(os, "write", failing_write)
+        else:
+            original_endpoint = fifo.open_permit_commit_writer
+            writer_descriptor = -1
+
+            def capture_endpoint(*, require_root: bool) -> int:
+                nonlocal writer_descriptor
+                writer_descriptor = original_endpoint(
+                    require_root=require_root
+                )
+                return writer_descriptor
+
+            def failing_close(descriptor: int) -> None:
+                real_close(descriptor)
+                if descriptor == writer_descriptor:
+                    raise OSError(errno.EIO, "injected C2d close failure")
+
+            monkeypatch.setattr(
+                fifo,
+                "open_permit_commit_writer",
+                capture_endpoint,
+            )
+            monkeypatch.setattr(os, "close", failing_close)
+
+    with pytest.raises(BaseException):
+        installer._commit_h11_authorized_permit(permit)
+    if failure in {"open", "fstat"}:
+        writer = real_open(
+            fifo.reference.path,
+            os.O_WRONLY | os.O_CLOEXEC,
+        )
+        real_close(writer)
+    peer.join()
+    assert peer_errors == []
+    assert payloads == [
+        (
+            installer.H11_PERMIT_COMMITTED_BYTES
+            if failure == "close"
+            else b""
+        )
+    ]
+    for descriptor in opened_endpoints:
+        with pytest.raises(OSError):
+            real_fstat(descriptor)
+    _assert_root_c2c_poisoned_owner_closed(permit, descriptors)
+    assert final.read_bytes() == final_raw
+    assert permit.commit_started is True
+
+
+@pytest.mark.parametrize(
+    "failure_owner",
+    ("publication", "present-source", "authority"),
+)
+def test_root_c2d_teardown_rethrows_first_error_after_closing_full_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_owner: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    descriptors = _root_c2c_owned_descriptors(permit)
+    final = paths["authorization"].parent / "PERMIT.json"
+    final_raw = final.read_bytes()
+    targets = {
+        "publication": permit.publication.descriptor,
+        "present-source": closure.present_sources[1].descriptor,
+        "authority": closure.session.authority.directories[3].descriptor,
+    }
+    target = targets[failure_owner]
+    payloads: list[bytes] = []
+    peer_errors: list[BaseException] = []
+    entered = threading.Event()
+    peer = threading.Thread(
+        target=_root_c2d_read_permit_frame,
+        args=(fifo, entered, payloads, peer_errors),
+    )
+    peer.start()
+    entered.wait()
+    real_close = os.close
+    injected = OSError(errno.EIO, f"injected {failure_owner} close failure")
+    raised = False
+
+    def close_then_fail(descriptor: int) -> None:
+        nonlocal raised
+        real_close(descriptor)
+        if descriptor == target and not raised:
+            raised = True
+            raise injected
+
+    monkeypatch.setattr(os, "close", close_then_fail)
+    with pytest.raises(OSError) as caught:
+        installer._commit_h11_authorized_permit(permit)
+    peer.join()
+    assert caught.value is injected
+    assert raised is True
+    assert peer_errors == []
+    assert payloads == [installer.H11_PERMIT_COMMITTED_BYTES]
+    _assert_root_c2c_poisoned_owner_closed(permit, descriptors)
+    assert final.read_bytes() == final_raw
+    assert permit.poisoned is True
+
+
+def test_root_c2d_teardown_preserves_first_error_and_visits_later_owners() -> None:
+    events: list[str] = []
+    first = RuntimeError("first teardown failure")
+    second = OSError(errno.EIO, "second teardown failure")
+
+    class Owner:
+        def __init__(self, name: str, failure: BaseException | None) -> None:
+            self.name = name
+            self.failure = failure
+
+        def close(self) -> None:
+            events.append(self.name)
+            if self.failure is not None:
+                raise self.failure
+
+    with pytest.raises(RuntimeError) as caught:
+        installer._close_h11_ownership(
+            (
+                Owner("first", first),
+                Owner("second", second),
+                Owner("third", None),
+            )
+        )
+    assert caught.value is first
+    assert events == ["first", "second", "third"]
+
+
+def test_root_c2d_commit_double_close_failure_preserves_writer_primary(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    descriptors = _root_c2c_owned_descriptors(permit)
+    publication_descriptor = permit.publication.descriptor
+    payloads: list[bytes] = []
+    peer_errors: list[BaseException] = []
+    entered = threading.Event()
+    peer = threading.Thread(
+        target=_root_c2d_read_permit_frame,
+        args=(fifo, entered, payloads, peer_errors),
+    )
+    peer.start()
+    entered.wait()
+    real_close = os.close
+    original_endpoint = fifo.open_permit_commit_writer
+    writer_descriptor = -1
+    close_counts: dict[int, int] = {}
+    writer_error = OSError(errno.EIO, "injected writer close failure")
+    publication_error = OSError(
+        errno.EIO,
+        "injected publication close failure",
+    )
+
+    def capture_endpoint(*, require_root: bool) -> int:
+        nonlocal writer_descriptor
+        writer_descriptor = original_endpoint(require_root=require_root)
+        return writer_descriptor
+
+    def close_then_fail(descriptor: int) -> None:
+        close_counts[descriptor] = close_counts.get(descriptor, 0) + 1
+        real_close(descriptor)
+        if descriptor == writer_descriptor:
+            raise writer_error
+        if descriptor == publication_descriptor:
+            raise publication_error
+
+    monkeypatch.setattr(fifo, "open_permit_commit_writer", capture_endpoint)
+    monkeypatch.setattr(os, "close", close_then_fail)
+    result: dict[str, installer.H11RootCommitReceipt] = {}
+    with pytest.raises(OSError) as caught:
+        result["receipt"] = installer._commit_h11_authorized_permit(permit)
+    peer.join()
+    assert caught.value is writer_error
+    assert result == {}
+    assert peer_errors == []
+    assert payloads == [installer.H11_PERMIT_COMMITTED_BYTES]
+    assert writer_error.__notes__ == [
+        "H11 ownership teardown secondary: "
+        f"{type(publication_error).__name__}: {publication_error}"
+    ]
+    assert len(set(descriptors)) == len(descriptors)
+    assert close_counts[writer_descriptor] == 1
+    assert all(close_counts[descriptor] == 1 for descriptor in descriptors)
+    _assert_root_c2c_poisoned_owner_closed(permit, descriptors)
+
+
+def test_root_c2d_prewrite_primary_survives_writer_close_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    descriptors = _root_c2c_owned_descriptors(permit)
+    payloads: list[bytes] = []
+    peer_errors: list[BaseException] = []
+    entered = threading.Event()
+    peer = threading.Thread(
+        target=_root_c2d_read_permit_frame,
+        args=(fifo, entered, payloads, peer_errors),
+    )
+    peer.start()
+    entered.wait()
+    real_close = os.close
+    original_endpoint = fifo.open_permit_commit_writer
+    original_write = os.write
+    writer_descriptor = -1
+    close_counts: dict[int, int] = {}
+    primary_error = RuntimeError("injected pre-linearization write failure")
+    writer_error = OSError(errno.EIO, "injected writer close failure")
+
+    def capture_endpoint(*, require_root: bool) -> int:
+        nonlocal writer_descriptor
+        writer_descriptor = original_endpoint(require_root=require_root)
+        return writer_descriptor
+
+    def fail_before_write(descriptor: int, payload: bytes) -> int:
+        if payload == installer.H11_PERMIT_COMMITTED_BYTES:
+            raise primary_error
+        return original_write(descriptor, payload)
+
+    def close_then_fail(descriptor: int) -> None:
+        close_counts[descriptor] = close_counts.get(descriptor, 0) + 1
+        real_close(descriptor)
+        if descriptor == writer_descriptor:
+            raise writer_error
+
+    monkeypatch.setattr(fifo, "open_permit_commit_writer", capture_endpoint)
+    monkeypatch.setattr(os, "write", fail_before_write)
+    monkeypatch.setattr(os, "close", close_then_fail)
+    result: dict[str, installer.H11RootCommitReceipt] = {}
+    with pytest.raises(RuntimeError) as caught:
+        result["receipt"] = installer._commit_h11_authorized_permit(permit)
+    peer.join()
+    assert caught.value is primary_error
+    assert result == {}
+    assert peer_errors == []
+    assert payloads == [b""]
+    assert primary_error.__notes__ == [
+        "H11 ownership teardown secondary: "
+        f"{type(writer_error).__name__}: {writer_error}"
+    ]
+    assert len(set(descriptors)) == len(descriptors)
+    assert close_counts[writer_descriptor] == 1
+    assert all(close_counts[descriptor] == 1 for descriptor in descriptors)
+    _assert_root_c2c_poisoned_owner_closed(permit, descriptors)
+
+
+def test_root_c2d_duplicate_commit_rejects_before_endpoint_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    closure = _root_c2b_consume_with_writer(paths)
+    permit = installer.H11RootAuthorizedPermit.publish(closure)
+    fifo = _root_c2d_permit_fifo(permit)
+    entered = threading.Event()
+    payloads: list[bytes] = []
+    errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2d_read_permit_frame,
+        args=(fifo, entered, payloads, errors),
+    )
+    peer.start()
+    entered.wait()
+    installer._commit_h11_authorized_permit(permit)
+    peer.join()
+    assert errors == []
+    opens: list[bool] = []
+    monkeypatch.setattr(
+        installer.RetainedH11RootFifo,
+        "open_permit_commit_writer",
+        lambda self, *, require_root: opens.append(require_root),
+    )
+    with pytest.raises(installer.InstallerError, match="another commit"):
+        installer._commit_h11_authorized_permit(permit)
+    assert opens == []
+    assert permit.poisoned is True
+
+
+def _root_c2d_public_fifo_peer(
+    paths: dict[str, Path],
+    frames: list[bytes],
+    errors: list[BaseException],
+) -> None:
+    root = paths["authorization"].parents[3]
+    ready_path = root / "fifo" / "h11-ready-committed.fifo"
+    permit_path = root / "fifo" / "h11-permit-committed.fifo"
+    descriptor = -1
+    try:
+        descriptor = os.open(ready_path, os.O_WRONLY | os.O_CLOEXEC)
+        if os.write(descriptor, installer.H11_READY_COMMITTED_BYTES) != len(
+            installer.H11_READY_COMMITTED_BYTES
+        ):
+            raise AssertionError("public READY peer write was incomplete")
+        os.close(descriptor)
+        descriptor = os.open(permit_path, os.O_RDONLY | os.O_CLOEXEC)
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(descriptor, select.PIPE_BUF)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        frames.append(b"".join(chunks))
+    except BaseException as exc:
+        errors.append(exc)
+    finally:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
+
+
+def test_root_c2d_public_chain_returns_exact_receipt_and_closes_all(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    sessions: list[installer.H11RootAuthorizerSession] = []
+    closures: list[installer.H11RootAuthorizerReadyClosure] = []
+    permits: list[installer.H11RootAuthorizedPermit] = []
+    original_open = installer.H11RootAuthorizerSession.open.__func__
+    original_consume = installer.H11RootAuthorizerReadyClosure.consume.__func__
+    original_publish = installer.H11RootAuthorizedPermit.publish.__func__
+
+    def capturing_open(
+        cls: type[installer.H11RootAuthorizerSession],
+        manifest_path: Path,
+        *,
+        require_root: bool = True,
+    ) -> installer.H11RootAuthorizerSession:
+        session = original_open(
+            cls,
+            manifest_path,
+            require_root=require_root,
+        )
+        sessions.append(session)
+        return session
+
+    def capturing_consume(
+        cls: type[installer.H11RootAuthorizerReadyClosure],
+        session: installer.H11RootAuthorizerSession,
+    ) -> installer.H11RootAuthorizerReadyClosure:
+        closure = original_consume(cls, session)
+        closures.append(closure)
+        return closure
+
+    def capturing_publish(
+        cls: type[installer.H11RootAuthorizedPermit],
+        closure: installer.H11RootAuthorizerReadyClosure,
+    ) -> installer.H11RootAuthorizedPermit:
+        permit = original_publish(cls, closure)
+        permits.append(permit)
+        return permit
+
+    monkeypatch.setattr(
+        installer.H11RootAuthorizerSession,
+        "open",
+        classmethod(capturing_open),
+    )
+    monkeypatch.setattr(
+        installer.H11RootAuthorizerReadyClosure,
+        "consume",
+        classmethod(capturing_consume),
+    )
+    monkeypatch.setattr(
+        installer.H11RootAuthorizedPermit,
+        "publish",
+        classmethod(capturing_publish),
+    )
+    frames: list[bytes] = []
+    errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2d_public_fifo_peer,
+        args=(paths, frames, errors),
+    )
+    peer.start()
+    receipt = installer.authorize_h11_release(
+        paths["authorization"],
+        require_root=False,
+    )
+    peer.join()
+    assert errors == []
+    assert frames == [installer.H11_PERMIT_COMMITTED_BYTES]
+    assert receipt == {
+        "schema": installer.H11_COMMIT_FIFO_RECEIPT_SCHEMA,
+        "phase": "permit-committed",
+        "fifo": next(
+            item.reference.reference
+            for item in sessions[0].authority.commit_fifos
+            if item.role == "h11-permit-commit"
+        ),
+        "payload_sha256": hashlib.sha256(
+            installer.H11_PERMIT_COMMITTED_BYTES
+        ).hexdigest(),
+        "byte_count": "30",
+    }
+    assert capsys.readouterr() == ("", "")
+    assert len(sessions) == len(closures) == len(permits) == 1
+    permit = permits[0]
+    assert permit.closed is True
+    assert permit.poisoned is False
+    assert permit.publication.descriptor == -1
+    assert closures[0].closed is True
+    assert sessions[0].authorization.descriptor == -1
+    assert sessions[0].permit_ready.descriptor == -1
+    assert sessions[0].run_armed.descriptor == -1
+    assert sessions[0].authority.manifest_descriptor == -1
+    assert all(
+        item.descriptor == -1
+        for item in sessions[0].authority.bound_sources
+    )
+    assert all(
+        item.descriptor == -1
+        for item in sessions[0].authority.directories
+    )
+    assert all(
+        item.descriptor == -1
+        for item in sessions[0].authority.commit_fifos
+    )
+
+
+@pytest.mark.parametrize("failure", ("consume", "publish", "commit"))
+def test_root_c2d_public_handoff_failure_closes_only_current_owner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    class FakeOwner:
+        def __init__(self) -> None:
+            self.close_count = 0
+
+        def close(self) -> None:
+            self.close_count += 1
+
+    session = FakeOwner()
+    closure = FakeOwner()
+    permit = FakeOwner()
+    monkeypatch.setattr(
+        installer.H11RootAuthorizerSession,
+        "open",
+        classmethod(lambda cls, path, *, require_root=True: session),
+    )
+
+    def consume_owner(cls: Any, owner: Any) -> FakeOwner:
+        assert owner is session
+        if failure == "consume":
+            raise RuntimeError("injected consume handoff failure")
+        return closure
+
+    def publish_owner(cls: Any, owner: Any) -> FakeOwner:
+        assert owner is closure
+        if failure == "publish":
+            raise RuntimeError("injected publish handoff failure")
+        return permit
+
+    def commit_owner(owner: Any) -> installer.H11RootCommitReceipt:
+        assert owner is permit
+        raise RuntimeError("injected commit handoff failure")
+
+    monkeypatch.setattr(
+        installer.H11RootAuthorizerReadyClosure,
+        "consume",
+        classmethod(consume_owner),
+    )
+    monkeypatch.setattr(
+        installer.H11RootAuthorizedPermit,
+        "publish",
+        classmethod(publish_owner),
+    )
+    monkeypatch.setattr(installer, "_commit_h11_authorized_permit", commit_owner)
+    with pytest.raises(RuntimeError, match="handoff failure"):
+        installer.authorize_h11_release(
+            tmp_path / "AUTHORIZE-RELEASE.json",
+            require_root=False,
+        )
+    expected = {
+        "consume": (1, 0, 0),
+        "publish": (0, 1, 0),
+        "commit": (0, 0, 1),
+    }[failure]
+    assert (
+        session.close_count,
+        closure.close_count,
+        permit.close_count,
+    ) == expected
+
+
+def test_root_c2d_ast_freezes_commit_and_public_ownership_seams() -> None:
+    module_source = Path(installer.__file__).read_text(encoding="utf-8")
+    module_tree = ast.parse(module_source)
+    assert "_publish_h11_permit" not in module_source
+    assert "absent_paths_sha256" not in module_source
+
+    writer_source = inspect.getsource(
+        installer.RetainedH11RootFifo.open_permit_commit_writer
+    )
+    writer_tree = ast.parse(textwrap.dedent(writer_source))
+    writer_function = next(
+        node
+        for node in ast.walk(writer_tree)
+        if isinstance(node, ast.FunctionDef)
+    )
+    writer_try = next(
+        node for node in writer_function.body if isinstance(node, ast.Try)
+    )
+    assert isinstance(writer_try.body[0], ast.Assign)
+    writer_open = writer_try.body[0].value
+    assert isinstance(writer_open, ast.Call)
+    assert ast.unparse(writer_open.func) == "os.open"
+    assert ast.unparse(writer_open.args[0]) == (
+        "f'/proc/self/fd/{self.descriptor}'"
+    )
+    assert ast.unparse(writer_open.args[1]) == (
+        "os.O_WRONLY | os.O_CLOEXEC"
+    )
+    assert writer_open.keywords == []
+    assert isinstance(writer_try.body[1], ast.Expr)
+    assert "os.fstat(descriptor)" in ast.unparse(writer_try.body[1])
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"read", "write", "writev"}
+        for node in ast.walk(writer_tree)
+    )
+
+    helper_source = inspect.getsource(installer._commit_h11_authorized_permit)
+    helper_tree = ast.parse(helper_source)
+    helper_function = next(
+        node
+        for node in ast.walk(helper_tree)
+        if isinstance(node, ast.FunctionDef)
+    )
+    helper_try = next(
+        node for node in helper_function.body if isinstance(node, ast.Try)
+    )
+    write_calls = [
+        node
+        for node in ast.walk(helper_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and ast.unparse(node.func) == "os.write"
+    ]
+    assert len(write_calls) == 1
+    assert [ast.unparse(item) for item in write_calls[0].args] == [
+        "descriptor",
+        "H11_PERMIT_COMMITTED_BYTES",
+    ]
+    assert not any(
+        isinstance(node, (ast.For, ast.AsyncFor, ast.While))
+        for node in ast.walk(helper_tree)
+    )
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "writev"
+        for node in ast.walk(helper_tree)
+    )
+    endpoint_index = next(
+        index
+        for index, node in enumerate(helper_try.body)
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Call)
+        and ast.unparse(node.value.func) == "fifo.open_permit_commit_writer"
+    )
+    receipt_index = next(
+        index
+        for index, node in enumerate(helper_try.body)
+        if isinstance(node, ast.Assign)
+        and ast.unparse(node.targets[0]) == "receipt"
+    )
+    assert receipt_index == endpoint_index - 1
+    assert ast.unparse(helper_try.body[receipt_index].value) == (
+        "H11RootCommitReceipt.permit_committed(fifo, "
+        "H11_PERMIT_COMMITTED_BYTES)"
+    )
+    assert ast.unparse(helper_try.body[endpoint_index + 1]) == (
+        "permit.revalidate()"
+    )
+    assert isinstance(helper_try.body[endpoint_index + 2], ast.Assign)
+    assert helper_try.body[endpoint_index + 2].value is write_calls[0]
+    assert ast.unparse(helper_try.body[1]) == "permit.commit_started = True"
+    assert ast.unparse(helper_try.body[2]) == "permit.revalidate()"
+    assert len(helper_try.handlers) == 1
+    unwind = helper_try.handlers[0]
+    assert ast.unparse(unwind.type) == "BaseException"
+    assert unwind.name == "exc"
+    assert [ast.unparse(node) for node in unwind.body] == [
+        "closing_descriptor = descriptor",
+        "descriptor = -1",
+        "permit.poisoned = True",
+        "_close_h11_ownership((permit,), active_error=exc, "
+        "initial_descriptor=closing_descriptor)",
+        "raise",
+    ]
+    assert {
+        node.func.id
+        for node in ast.walk(helper_tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    } == {"_close_h11_ownership", "_fail", "len", "tuple"}
+
+    public_source = inspect.getsource(installer.authorize_h11_release)
+    public_tree = ast.parse(public_source)
+    public_function = next(
+        node
+        for node in ast.walk(public_tree)
+        if isinstance(node, ast.FunctionDef)
+    )
+    public_try = next(
+        node for node in public_function.body if isinstance(node, ast.Try)
+    )
+    public_calls = [
+        ast.unparse(node.value.func)
+        for node in public_try.body
+        if isinstance(node, ast.Assign)
+        and isinstance(node.value, ast.Call)
+    ]
+    assert public_calls == [
+        "H11RootAuthorizerSession.open",
+        "H11RootAuthorizerReadyClosure.consume",
+        "H11RootAuthorizedPermit.publish",
+        "_commit_h11_authorized_permit",
+    ]
+    assert len(public_try.finalbody) == 1
+    assert ast.unparse(public_try.finalbody[0]) == (
+        "if owner is not None:\n    owner.close()"
+    )
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id in {"os", "Path"}
+        for node in ast.walk(public_tree)
+    )
+
+    parents = {
+        child: parent
+        for parent in ast.walk(module_tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+
+    def qualified_owner(call: ast.Call) -> str:
+        owner = parents[call]
+        while not isinstance(owner, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            owner = parents[owner]
+        scope = parents[owner]
+        while not isinstance(scope, (ast.ClassDef, ast.Module)):
+            scope = parents[scope]
+        if isinstance(scope, ast.ClassDef):
+            return f"{scope.name}.{owner.name}"
+        return owner.name
+
+    endpoint_callsites = [
+        qualified_owner(node)
+        for node in ast.walk(module_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "open_permit_commit_writer"
+    ]
+    commit_callsites = [
+        qualified_owner(node)
+        for node in ast.walk(module_tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_commit_h11_authorized_permit"
+    ]
+    assert endpoint_callsites == ["_commit_h11_authorized_permit"]
+    assert commit_callsites == ["authorize_h11_release"]
+
+    seam_source = "\n".join((writer_source, helper_source, public_source))
+    seam_tokens = {
+        item.string
+        for item in tokenize.generate_tokens(io.StringIO(seam_source).readline)
+        if item.type == tokenize.NAME
+    }
+    assert {
+        "O_NONBLOCK",
+        "timeout",
+        "deadline",
+        "poll",
+        "sleep",
+        "retry",
+        "budget",
+        "cap",
+        "truncate",
+        "truncation",
+        "watchdog",
+        "cleanup",
+        "watch",
+        "ledger",
+        "release",
+        "H11_RELEASE_BYTES",
+    }.isdisjoint(seam_tokens)
+
+
+def test_root_c2d_ast_freezes_exhaustive_nonretrying_teardown() -> None:
+    teardown_source = inspect.getsource(installer._close_h11_ownership)
+    teardown_tree = ast.parse(teardown_source)
+    teardown_function = next(
+        node
+        for node in ast.walk(teardown_tree)
+        if isinstance(node, ast.FunctionDef)
+    )
+    assert [item.arg for item in teardown_function.args.args] == ["owners"]
+    assert [item.arg for item in teardown_function.args.kwonlyargs] == [
+        "active_error",
+        "initial_descriptor",
+        "final_descriptor",
+    ]
+    loops = [
+        node for node in ast.walk(teardown_tree) if isinstance(node, ast.For)
+    ]
+    assert len(loops) == 1
+    assert ast.unparse(loops[0].target) == "owner"
+    assert ast.unparse(loops[0].iter) == "owners"
+    assert not any(
+        isinstance(node, (ast.Break, ast.Continue, ast.Return))
+        for node in ast.walk(loops[0])
+    )
+    teardown_calls = [
+        ast.unparse(node.func)
+        for node in ast.walk(teardown_tree)
+        if isinstance(node, ast.Call)
+    ]
+    assert teardown_calls.count("os.close") == 2
+    assert teardown_calls.count("owner.close") == 1
+    assert teardown_calls.count("active_error.add_note") == 1
+    assert teardown_calls.count("type") == 1
+    raises = [
+        node for node in ast.walk(teardown_tree) if isinstance(node, ast.Raise)
+    ]
+    assert len(raises) == 1
+    assert ast.unparse(raises[0].exc) == "first_error"
+    final_branch = teardown_function.body[-1]
+    assert isinstance(final_branch, ast.If)
+    assert ast.unparse(final_branch.test) == "first_error is not None"
+    assert isinstance(final_branch.body[0], ast.If)
+    assert ast.unparse(final_branch.body[0].test) == "active_error is None"
+    assert ast.unparse(final_branch.body[1].value.func) == (
+        "active_error.add_note"
+    )
+    assert not any(
+        isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign))
+        and any(
+            isinstance(target, ast.Name) and target.id == "active_error"
+            for target in (
+                node.targets
+                if isinstance(node, ast.Assign)
+                else (node.target,)
+            )
+        )
+        for node in ast.walk(teardown_tree)
+    )
+
+    expected_composite_calls = {
+        installer.H11RootRetainedAuthority: (
+            "(*reversed(self.commit_fifos), *reversed(self.directories), "
+            "*reversed(self.bound_sources))",
+            "descriptor",
+        ),
+        installer.H11RootAuthorizerSession: (
+            "(self.run_armed, self.permit_ready, self.authority, "
+            "self.authorization)",
+            None,
+        ),
+        installer.H11RootAuthorizerReadyClosure: (
+            "(*reversed(self.present_sources), self.session)",
+            None,
+        ),
+        installer.H11RootAuthorizedPermit: (
+            "(self.publication, self.closure)",
+            None,
+        ),
+    }
+    for owner_type, (expected_owners, expected_descriptor) in (
+        expected_composite_calls.items()
+    ):
+        close_source = inspect.getsource(owner_type.close)
+        close_tree = ast.parse(textwrap.dedent(close_source))
+        calls = [
+            node
+            for node in ast.walk(close_tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_close_h11_ownership"
+        ]
+        assert len(calls) == 1
+        call = calls[0]
+        assert ast.unparse(call.args[0]) == expected_owners
+        keywords = {
+            item.arg: ast.unparse(item.value) for item in call.keywords
+        }
+        assert keywords == (
+            {"final_descriptor": expected_descriptor}
+            if expected_descriptor is not None
+            else {}
+        )
+
+    for leaf_type in (
+        installer.RetainedH11RootDirectory,
+        installer.RetainedH11RootFifo,
+        installer.RetainedH11RootJsonSource,
+        installer.RetainedH11RootPresentOutput,
+        installer.RetainedH11RootPublication,
+    ):
+        close_source = inspect.getsource(leaf_type.close)
+        close_tree = ast.parse(textwrap.dedent(close_source))
+        guard = next(
+            node for node in ast.walk(close_tree) if isinstance(node, ast.If)
+        )
+        assert [ast.unparse(node) for node in guard.body] == [
+            "descriptor = self.descriptor",
+            "self.descriptor = -1",
+            "os.close(descriptor)",
+        ]
+        assert "os.close(self.descriptor)" not in close_source
+
+    rollback_targets = (
+        (installer._pin_h11_json_source, 1),
+        (installer.RetainedH11RootFifo.read_ready_commit, 1),
+        (installer.RetainedH11RootFifo.open_permit_commit_writer, 2),
+        (installer.H11RootRetainedAuthority.open, 1),
+        (installer.H11RootAuthorizerSession.open, 1),
+        (installer.RetainedH11RootPresentOutput.pin, 3),
+        (installer.H11RootAuthorizerReadyClosure.consume, 1),
+        (installer._complete_h11_named_staging, 1),
+        (installer.H11RootAuthorizedPermit.publish, 1),
+        (installer.H11RootAuthorizedPermit.revalidate, 1),
+        (installer._commit_h11_authorized_permit, 1),
+    )
+    rollback_sources = [teardown_source]
+    for target, expected_count in rollback_targets:
+        source = inspect.getsource(target)
+        tree = ast.parse(textwrap.dedent(source))
+        active_calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id == "_close_h11_ownership"
+            and any(item.arg == "active_error" for item in node.keywords)
+        ]
+        assert len(active_calls) == expected_count
+        rollback_sources.append(source)
+
+    rollback_tokens = {
+        item.string
+        for item in tokenize.generate_tokens(
+            io.StringIO("\n".join(rollback_sources)).readline
+        )
+        if item.type == tokenize.NAME
+    }
+    assert {"callback", "cleanup", "retry"}.isdisjoint(rollback_tokens)
 
 
 def test_real_formal_producer_crosses_exact_harness_consumer_and_release(
