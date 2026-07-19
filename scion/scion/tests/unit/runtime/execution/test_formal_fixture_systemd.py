@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import ast
+import errno
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 from pathlib import Path
@@ -89,8 +91,34 @@ def _render_unit(name: str, values: dict[str, str]) -> str:
     return rendered
 
 
+def _prepare_fifo_rows(
+    root: Path,
+    *ordinary: tuple[str, str],
+) -> list[dict[str, str]]:
+    rows = [
+        {
+            "role": "h11-permit-commit",
+            "path": str(root / "fifo" / "h11-permit-committed.fifo"),
+            "owner": "root",
+        },
+        {
+            "role": "h11-ready-commit",
+            "path": str(root / "fifo" / "h11-ready-committed.fifo"),
+            "owner": "root",
+        },
+        *(
+            {"role": role, "path": str(root / "fifo" / name), "owner": "fixture"}
+            for role, name in ordinary
+        ),
+    ]
+    return sorted(rows, key=lambda item: item["role"])
+
+
 def _static_authority_chain(
-    tmp_path: Path, *, fragment_mutation: str | None = None
+    tmp_path: Path,
+    *,
+    fragment_mutation: str | None = None,
+    ordinary_fifos: tuple[tuple[str, str], ...] = (("run-ready", "run-ready"),),
 ) -> dict[str, Any]:
     user = pwd.getpwuid(os.getuid()).pw_name
     group = grp.getgrgid(os.getgid()).gr_name
@@ -104,12 +132,7 @@ def _static_authority_chain(
             "formal_root": str(root),
             "fixture_user": user,
             "fixture_group": group,
-            "fifos": [
-                {
-                    "role": "run-ready",
-                    "path": str(root / "fifo" / "run-ready"),
-                }
-            ],
+            "fifos": _prepare_fifo_rows(root, *ordinary_fifos),
             "receipt_path": str(tree_receipt),
         },
     )
@@ -295,13 +318,33 @@ def _static_authority_chain(
     }
 
 
-def _run_static_preflight(chain: dict[str, Any]) -> subprocess.CompletedProcess[str]:
+def _run_static_preflight(
+    chain: dict[str, Any],
+    *,
+    work_owner: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    tree = json.loads(chain["tree_receipt"].read_text(encoding="ascii"))
+    fixture_owner = f"{tree['fixture_uid']}:{tree['fixture_gid']}"
+    ownership_arguments = [
+        work_owner or fixture_owner,
+        str(chain["root"] / "work"),
+        *(
+            argument
+            for item in tree["fifos"]
+            for argument in (f"{item['uid']}:{item['gid']}", item["path"])
+        ),
+    ]
     result = subprocess.run(
         [
             "fakeroot",
             "sh",
+            "-c",
+            "while [ \"$1\" != -- ]; do chown \"$1\" \"$2\"; shift 2; done; "
+            "shift; exec sh \"$1\" preflight \"$2\" \"$3\"",
+            "fifo-preflight",
+            *ownership_arguments,
+            "--",
             str(FIXTURES / "generic-backend-formal-wrapper.sh"),
-            "preflight",
             str(chain["inventory"]),
             str(chain["seal_receipt"]),
         ],
@@ -316,6 +359,43 @@ def _run_static_preflight(chain: dict[str, Any]) -> subprocess.CompletedProcess[
         chain["destination"].chmod(0o500)
         (chain["destination"] / "PREFLIGHT.json").chmod(0o444)
     return result
+
+
+def _rewrite_tree_and_seal_bindings(
+    chain: dict[str, Any],
+    tree: dict[str, Any],
+) -> None:
+    tree_path = chain["tree_receipt"]
+    tree_path.chmod(0o644)
+    _write(tree_path, tree)
+    tree_path.chmod(0o444)
+    tree_binding = installer._asset_reference(tree_path)
+
+    inventory_path = chain["inventory"]
+    lines = inventory_path.read_text(encoding="ascii").splitlines(keepends=True)
+    assert lines[5].startswith("tree_receipt\t")
+    lines[5] = "tree_receipt\t" + "\t".join(
+        tree_binding[key]
+        for key in ("path", "sha256", "device", "inode", "mode")
+    ) + "\n"
+    inventory_path.chmod(0o644)
+    inventory_path.write_text("".join(lines), encoding="ascii")
+    inventory_path.chmod(0o444)
+    inventory_binding = installer._asset_reference(inventory_path)
+
+    seal_path = chain["seal_receipt"]
+    seal = json.loads(seal_path.read_text(encoding="ascii"))
+    seal["tree_receipt"] = installer._file_reference(tree_path)
+    inventory_rows = [
+        item
+        for item in seal["files"]
+        if item["role"] == "preflight-manifest"
+    ]
+    assert len(inventory_rows) == 1
+    inventory_rows[0].update(inventory_binding)
+    seal_path.chmod(0o644)
+    _write(seal_path, seal)
+    seal_path.chmod(0o444)
 
 
 def _publish_test_preflight(chain: dict[str, Any]) -> Path:
@@ -333,6 +413,9 @@ def _publish_test_preflight(chain: dict[str, Any]) -> Path:
             "schema": installer.PREFLIGHT_RECEIPT_SCHEMA,
             "asset_count": str(asset_count),
             "close_unit": chain["close_unit"],
+            "fifos": json.loads(
+                chain["tree_receipt"].read_text(encoding="ascii")
+            )["fifos"],
             "formal_root": str(chain["root"]),
             "inventory_manifest": installer._asset_reference(chain["inventory"]),
             "phase": "static-preflight-complete",
@@ -413,12 +496,38 @@ def test_installer_prepares_and_seals_the_new_authority_chain(tmp_path: Path) ->
             "formal_root": str(root),
             "fixture_user": user,
             "fixture_group": group,
-            "fifos": [{"role": "run-ready", "path": str(fifo)}],
+            "fifos": _prepare_fifo_rows(root, ("run-ready", fifo.name)),
             "receipt_path": str(tree_receipt),
         },
     )
     prepared = installer.prepare_tree(prepare, require_root=False)
-    assert prepared["fifos"][0] == {"role": "run-ready", **installer._identity(fifo)}
+    assert [item["role"] for item in prepared["fifos"]] == [
+        "h11-permit-commit",
+        "h11-ready-commit",
+        "run-ready",
+    ]
+    assert prepared["fifos"][-1] == {
+        "role": "run-ready",
+        "path": str(fifo),
+        "owner": "fixture",
+        "uid": str(os.getuid()),
+        "gid": str(os.getgid()),
+        "mode": "0600",
+        "device": str(fifo.lstat().st_dev),
+        "inode": str(fifo.lstat().st_ino),
+    }
+    for role, name in (
+        ("h11-permit-commit", "h11-permit-committed.fifo"),
+        ("h11-ready-commit", "h11-ready-committed.fifo"),
+    ):
+        row = next(item for item in prepared["fifos"] if item["role"] == role)
+        assert row["path"] == str(root / "fifo" / name)
+        assert (row["owner"], row["uid"], row["gid"], row["mode"]) == (
+            "root",
+            "0",
+            "0",
+            "0600",
+        )
     fragment = root / "sealed" / "scion-w3-test.service"
     fragment.write_text(
         "[Unit]\nDescription=test\n[Service]\n"
@@ -443,6 +552,131 @@ def test_installer_prepares_and_seals_the_new_authority_chain(tmp_path: Path) ->
     assert receipt["phase"] == "static-authority-sealed"
     assert stat.S_IMODE((root / "sealed").stat().st_mode) == 0o555
     assert stat.S_IMODE(fragment.stat().st_mode) == 0o444
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing-owner",
+        "extra-key",
+        "unknown-owner",
+        "ordinary-root-owner",
+        "reserved-fixture-owner",
+        "reserved-path-drift",
+        "missing-reserved-peer",
+        "unsorted",
+    ),
+)
+def test_prepare_tree_rejects_noncanonical_fifo_authority_before_root_creation(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    user = pwd.getpwuid(os.getuid()).pw_name
+    group = grp.getgrgid(os.getgid()).gr_name
+    root = tmp_path / "formal"
+    rows = _prepare_fifo_rows(root, ("run-ready", "run-ready"))
+    if mutation == "missing-owner":
+        rows[-1].pop("owner")
+    elif mutation == "extra-key":
+        rows[-1]["unexpected"] = "value"
+    elif mutation == "unknown-owner":
+        rows[-1]["owner"] = "operator"
+    elif mutation == "ordinary-root-owner":
+        rows[-1]["owner"] = "root"
+    elif mutation == "reserved-fixture-owner":
+        rows[0]["owner"] = "fixture"
+    elif mutation == "reserved-path-drift":
+        rows[0]["path"] = str(root / "fifo" / "wrong.fifo")
+    elif mutation == "missing-reserved-peer":
+        rows.pop(0)
+    else:
+        rows.reverse()
+    manifest = tmp_path / "prepare-invalid.json"
+    _write(
+        manifest,
+        {
+            "schema": installer.PREPARE_SCHEMA,
+            "formal_root": str(root),
+            "fixture_user": user,
+            "fixture_group": group,
+            "fifos": rows,
+            "receipt_path": str(root / "authority" / "tree.json"),
+        },
+    )
+    with pytest.raises(installer.InstallerError):
+        installer.prepare_tree(manifest, require_root=False)
+    assert not root.exists()
+
+
+def test_prepare_tree_rejects_root_as_fixture_identity(tmp_path: Path) -> None:
+    root = tmp_path / "formal"
+    manifest = tmp_path / "prepare-root-fixture.json"
+    _write(
+        manifest,
+        {
+            "schema": installer.PREPARE_SCHEMA,
+            "formal_root": str(root),
+            "fixture_user": pwd.getpwuid(0).pw_name,
+            "fixture_group": grp.getgrgid(0).gr_name,
+            "fifos": _prepare_fifo_rows(root, ("run-ready", "run-ready")),
+            "receipt_path": str(root / "authority" / "tree.json"),
+        },
+    )
+    with pytest.raises(installer.InstallerError, match="must not be root"):
+        installer.prepare_tree(manifest, require_root=False)
+    assert not root.exists()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("owner", "uid", "gid", "mode", "device", "inode", "order"),
+)
+def test_tree_receipt_rejects_fifo_full_reference_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    chain = _static_authority_chain(tmp_path)
+    receipt = json.loads(chain["tree_receipt"].read_text(encoding="ascii"))
+    if mutation == "order":
+        receipt["fifos"].reverse()
+    else:
+        row = receipt["fifos"][0]
+        row[mutation] = {
+            "owner": "fixture",
+            "uid": str(os.getuid()),
+            "gid": str(os.getgid()),
+            "mode": "0644",
+            "device": str(int(row["device"]) + 1),
+            "inode": str(int(row["inode"]) + 1),
+        }[mutation]
+    with pytest.raises(installer.InstallerError):
+        installer._validate_tree_receipt(
+            receipt,
+            root=chain["root"],
+            receipt_path=chain["tree_receipt"],
+            require_root=False,
+            sealed=True,
+        )
+
+
+def test_tree_receipt_rejects_prepare_fifo_inventory_mismatch(
+    tmp_path: Path,
+) -> None:
+    chain = _static_authority_chain(tmp_path)
+    receipt = json.loads(chain["tree_receipt"].read_text(encoding="ascii"))
+    prepare_path = Path(receipt["prepare_manifest"]["path"])
+    prepare = json.loads(prepare_path.read_text(encoding="ascii"))
+    prepare["fifos"][-1]["role"] = "renamed-ready"
+    _write(prepare_path, prepare)
+    receipt["prepare_manifest"] = installer._file_reference(prepare_path)
+    with pytest.raises(installer.InstallerError, match="prepare manifest"):
+        installer._validate_tree_receipt(
+            receipt,
+            root=chain["root"],
+            receipt_path=chain["tree_receipt"],
+            require_root=False,
+            sealed=True,
+        )
 
 
 def _installed_authority_chain(
@@ -586,6 +820,8 @@ def test_tree_seal_preflight_install_chain_and_manager_ledger(
     chain, unit_directory, manager, receipt = _installed_authority_chain(tmp_path)
     preflight_path = chain["destination"] / "PREFLIGHT.json"
     preflight = json.loads(preflight_path.read_text(encoding="ascii"))
+    tree = json.loads(chain["tree_receipt"].read_text(encoding="ascii"))
+    assert preflight["fifos"] == tree["fifos"]
     assert preflight["tree_receipt"] == installer._asset_reference(
         chain["tree_receipt"]
     )
@@ -709,6 +945,66 @@ def test_wrapper_rejects_symlinked_tree_directory_before_destination_creation(
     assert not chain["destination"].exists()
 
 
+@pytest.mark.parametrize("mutation", ("mode", "inode", "missing"))
+def test_wrapper_rejects_tree_bound_fifo_drift_before_preflight_receipt(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    chain = _static_authority_chain(tmp_path)
+    tree = json.loads(chain["tree_receipt"].read_text(encoding="ascii"))
+    fifo = Path(tree["fifos"][0]["path"])
+    if mutation == "mode":
+        fifo.chmod(0o644)
+    else:
+        if mutation == "inode":
+            replacement = fifo.with_name(f"{fifo.name}.replacement")
+            os.mkfifo(replacement, 0o600)
+            assert replacement.lstat().st_ino != fifo.lstat().st_ino
+            fifo.unlink()
+            replacement.rename(fifo)
+        else:
+            fifo.unlink()
+    result = _run_static_preflight(chain)
+    assert result.returncode != 0
+    assert "FIFO" in result.stderr
+    assert not chain["destination"].exists()
+    assert not (chain["destination"] / "PREFLIGHT.json").exists()
+
+
+def test_wrapper_rejects_root_fixture_fifo_forgery_with_rebound_tree_and_seal(
+    tmp_path: Path,
+) -> None:
+    chain = _static_authority_chain(tmp_path)
+    tree = json.loads(chain["tree_receipt"].read_text(encoding="ascii"))
+    tree["fixture_uid"] = "0"
+    tree["fixture_gid"] = "0"
+    for row in tree["fifos"]:
+        if row["owner"] == "fixture":
+            row["uid"] = "0"
+            row["gid"] = "0"
+    _rewrite_tree_and_seal_bindings(chain, tree)
+
+    result = _run_static_preflight(chain)
+
+    assert result.returncode != 0
+    assert "non-root authority" in result.stderr
+    assert not chain["destination"].exists()
+    assert not (chain["destination"] / "PREFLIGHT.json").exists()
+
+
+def test_wrapper_rejects_work_owner_drift_before_preflight_receipt(
+    tmp_path: Path,
+) -> None:
+    chain = _static_authority_chain(tmp_path)
+
+    result = _run_static_preflight(chain, work_owner="0:0")
+
+    assert result.returncode != 0
+    assert "work root" in result.stderr
+    assert not chain["destination"].exists()
+    assert not (chain["destination"] / "PREFLIGHT.json").exists()
+
+
 def test_wrapper_rejects_static_inventory_drift_before_destination_creation(
     tmp_path: Path,
 ) -> None:
@@ -767,6 +1063,60 @@ def test_install_rejects_each_input_reference_drift_before_mutation(
 
     assert list(unit_directory.iterdir()) == []
     assert manager.calls == []
+    assert not receipt_path.exists()
+    assert not (chain["root"] / "authority" / "INSTALL-STARTED.json").exists()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("missing", "extra", "order", "owner", "uid", "gid", "mode", "device", "inode"),
+)
+def test_install_rejects_preflight_fifo_authority_drift_before_mutation(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    chain = _static_authority_chain(tmp_path)
+    preflight_path = _publish_test_preflight(chain)
+    preflight = json.loads(preflight_path.read_text(encoding="ascii"))
+    if mutation == "missing":
+        preflight["fifos"].pop()
+    elif mutation == "extra":
+        extra = dict(preflight["fifos"][-1])
+        extra["role"] = "unexpected-ready"
+        preflight["fifos"].append(extra)
+    elif mutation == "order":
+        preflight["fifos"].reverse()
+    else:
+        row = preflight["fifos"][0]
+        row[mutation] = {
+            "owner": "fixture",
+            "uid": str(os.getuid()),
+            "gid": str(os.getgid()),
+            "mode": "0644",
+            "device": str(int(row["device"]) + 1),
+            "inode": str(int(row["inode"]) + 1),
+        }[mutation]
+    preflight_path.chmod(0o644)
+    _write(preflight_path, preflight)
+    preflight_path.chmod(0o444)
+    unit_directory = tmp_path / "units"
+    unit_directory.mkdir()
+    manifest, receipt_path = _install_plan(chain, tmp_path)
+    manager = FakeInstallerManager(unit_directory)
+    original_file = installer.__file__
+    installer.__file__ = str(chain["paths"]["installer-program"])
+    try:
+        with pytest.raises(installer.InstallerError, match="FIFO authority"):
+            installer.install_units(
+                manifest,
+                manager=manager,
+                require_root=False,
+                unit_directory=unit_directory,
+            )
+    finally:
+        installer.__file__ = original_file
+    assert manager.calls == []
+    assert list(unit_directory.iterdir()) == []
     assert not receipt_path.exists()
     assert not (chain["root"] / "authority" / "INSTALL-STARTED.json").exists()
 
@@ -921,6 +1271,7 @@ def test_tree_receipt_rejects_work_owner_different_from_fixture_identity(
         installer._validate_tree_receipt(
             receipt,
             root=chain["root"],
+            receipt_path=chain["tree_receipt"],
             require_root=False,
             sealed=True,
         )
@@ -1660,6 +2011,3851 @@ def test_scenario_policy_table_is_closed_and_orders_every_formal_variant() -> No
                 0,
             )
             assert policy.terminal.stop == ("core-dump", "dumped", "6")
+
+
+# H11 closed absence-authority manifest/prevalidation block.
+
+def _h11_manifest_authority_model(
+    tmp_path: Path,
+) -> tuple[
+    dict[str, Any],
+    harness.ExecutionManifestSource,
+    tuple[harness.OutputPath, ...],
+    dict[str, Any],
+]:
+    root = tmp_path / "h11-formal"
+    authority = root / "authority"
+    harness_root = authority / "harness"
+    scenario_root = harness_root / "H11"
+    input_root = root / "input"
+    receipt_root = scenario_root / "receipts"
+    fifo_root = root / "fifo"
+    for path, mode in (
+        (root, 0o711),
+        (authority, 0o700),
+        (harness_root, 0o700),
+        (scenario_root, 0o700),
+        (input_root, 0o555),
+        (receipt_root, 0o555),
+        (fifo_root, 0o711),
+    ):
+        path.mkdir(parents=True, exist_ok=True)
+        path.chmod(mode)
+    manifest_path = scenario_root / "MANIFEST.json"
+    _write(
+        manifest_path,
+        {"schema": harness.MANIFEST_SCHEMA, "scenario": "H11"},
+    )
+    manifest_path.chmod(0o444)
+    source, _raw = harness.ExecutionManifestSource.open_once(
+        manifest_path, require_root=False
+    )
+
+    def directory_reference(role: str, path: Path) -> dict[str, str]:
+        info = path.lstat()
+        return {
+            "role": role,
+            "path": str(path),
+            "device": str(info.st_dev),
+            "inode": str(info.st_ino),
+            "mode": format(stat.S_IMODE(info.st_mode), "04o"),
+            "uid": str(info.st_uid),
+            "gid": str(info.st_gid),
+        }
+
+    directory_chain = [
+        directory_reference(role, path)
+        for role, path in (
+            ("formal-root", root),
+            ("authority-root", authority),
+            ("harness-root", harness_root),
+            ("scenario-root", scenario_root),
+            ("input-root", input_root),
+            ("receipt-root", receipt_root),
+            ("fifo-root", fifo_root),
+        )
+    ]
+
+    def fifo_reference(name: str) -> dict[str, str]:
+        path = fifo_root / name
+        os.mkfifo(path, 0o600)
+        path.chmod(0o600)
+        info = path.lstat()
+        return {
+            "path": str(path),
+            "device": str(info.st_dev),
+            "inode": str(info.st_ino),
+            "mode": "0600",
+            "uid": str(info.st_uid),
+            "gid": str(info.st_gid),
+        }
+
+    ready_fifo = fifo_reference("h11-ready-committed.fifo")
+    permit_fifo = fifo_reference("h11-permit-committed.fifo")
+    policy = harness._SCENARIO_POLICIES["H11"]
+    outputs = tuple(
+        harness.OutputPath(
+            role,
+            (input_root if role == "run-main-properties" else receipt_root)
+            / f"{role}.json",
+        )
+        for role in sorted(policy.required_outputs)
+    )
+    present_roles = list(policy.pre_permit_present_roles)
+    future = [
+        {"role": item.role, "path": str(item.path)}
+        for item in outputs
+        if item.role not in present_roles
+    ]
+    future.append({"role": "frozen-root", "path": str(root / "frozen")})
+    future.sort(key=lambda item: item["role"])
+    payload = {
+        "schema": harness.H11_PERMIT_AUTHORITY_SCHEMA,
+        "scenario": "H11",
+        "run_unit": "scion-w3-h11-model.service",
+        "permit_path": str(scenario_root / "PERMIT.json"),
+        "permit_parent": {
+            key: value
+            for key, value in directory_chain[3].items()
+            if key != "role"
+        },
+        "permit_ready_path": str(scenario_root / "PERMIT_READY.json"),
+        "permit_ledger_path": str(scenario_root / "PERMIT-LEDGER.json"),
+        "permit_ready_staging_path": str(scenario_root / "PERMIT_READY.pending"),
+        "permit_staging_path": str(scenario_root / "PERMIT.pending"),
+        "permit_ledger_staging_path": str(
+            scenario_root / "PERMIT-LEDGER.pending"
+        ),
+        "directory_chain": directory_chain,
+        "ready_commit_fifo": ready_fifo,
+        "permit_commit_fifo": permit_fifo,
+        "present_prerequisite_roles": present_roles,
+        "future_absence_inventory": future,
+    }
+    fifo_rows = sorted(
+        (
+            {"role": "h11-ready-commit", "owner": "root", **ready_fifo},
+            {"role": "h11-permit-commit", "owner": "root", **permit_fifo},
+        ),
+        key=lambda item: item["role"],
+    )
+    installer_authority = {
+        "tree_receipt": {"fifos": json.loads(json.dumps(fifo_rows))},
+        "preflight_receipt": {"fifos": json.loads(json.dumps(fifo_rows))},
+    }
+    return payload, source, outputs, installer_authority
+
+
+def _decode_h11_authority_model(
+    payload: dict[str, Any],
+    source: harness.ExecutionManifestSource,
+    outputs: tuple[harness.OutputPath, ...],
+) -> harness.H11PermitAuthoritySpec:
+    return harness.H11PermitAuthoritySpec.decode(
+        payload,
+        source=source,
+        scenario="H11",
+        run_unit="scion-w3-h11-model.service",
+        input_root=source.path.parents[3] / "input",
+        receipt_root=source.path.parent / "receipts",
+        outputs=outputs,
+        policy=harness._SCENARIO_POLICIES["H11"],
+    )
+
+
+def test_h11_manifest_authority_validates_and_retains_the_closed_model(
+    tmp_path: Path,
+) -> None:
+    payload, source, outputs, installer_authority = (
+        _h11_manifest_authority_model(tmp_path)
+    )
+    try:
+        spec = _decode_h11_authority_model(payload, source, outputs)
+        retained = spec.retain_and_prevalidate(
+            source=source,
+            installer_authority=installer_authority,
+            outputs=outputs,
+            acquisitions=(),
+            require_root=False,
+        )
+        assert spec.present_prerequisite_roles == ("h0", "run-main-properties")
+        assert tuple(item.role for item in spec.future_absence_inventory) == tuple(
+            sorted(
+                (harness._SCENARIO_POLICIES["H11"].required_outputs - {"h0", "run-main-properties"})
+                | {"frozen-root"}
+            )
+        )
+        assert len(spec.transaction_paths) == 7
+        retained.revalidate(require_root=False)
+        retained.close()
+        assert all(item.descriptor == -1 for item in retained.owned_directories)
+        assert all(item.descriptor == -1 for item in retained.commit_fifos)
+        assert source.descriptor >= 0
+    finally:
+        source.close()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "extra-field",
+        "directory-order",
+        "directory-parent",
+        "directory-reference-field",
+        "present-order",
+        "future-order",
+        "future-omission",
+        "future-duplicate-path",
+        "transaction-layout",
+        "fifo-layout",
+        "fifo-duplicate-identity",
+    ),
+)
+def test_h11_manifest_authority_rejects_field_order_parent_and_duplicate_drift(
+    tmp_path: Path, mutation: str
+) -> None:
+    payload, source, outputs, _installer_authority = (
+        _h11_manifest_authority_model(tmp_path)
+    )
+    try:
+        if mutation == "extra-field":
+            payload["caller_inventory"] = []
+        elif mutation == "directory-order":
+            payload["directory_chain"][0], payload["directory_chain"][1] = (
+                payload["directory_chain"][1],
+                payload["directory_chain"][0],
+            )
+        elif mutation == "directory-parent":
+            payload["directory_chain"][5]["path"] = str(
+                source.path.parents[3] / "receipts"
+            )
+        elif mutation == "directory-reference-field":
+            payload["directory_chain"][4].pop("gid")
+        elif mutation == "present-order":
+            payload["present_prerequisite_roles"].reverse()
+        elif mutation == "future-order":
+            payload["future_absence_inventory"].reverse()
+        elif mutation == "future-omission":
+            payload["future_absence_inventory"].pop()
+        elif mutation == "future-duplicate-path":
+            payload["future_absence_inventory"][1]["path"] = payload[
+                "future_absence_inventory"
+            ][0]["path"]
+        elif mutation == "transaction-layout":
+            payload["permit_ledger_staging_path"] = str(
+                source.path.parent / "LEDGER.pending"
+            )
+        elif mutation == "fifo-layout":
+            payload["ready_commit_fifo"]["path"] = str(
+                source.path.parents[3] / "fifo" / "ready.fifo"
+            )
+        else:
+            payload["permit_commit_fifo"]["device"] = payload[
+                "ready_commit_fifo"
+            ]["device"]
+            payload["permit_commit_fifo"]["inode"] = payload[
+                "ready_commit_fifo"
+            ]["inode"]
+        with pytest.raises(harness.HarnessError):
+            _decode_h11_authority_model(payload, source, outputs)
+    finally:
+        source.close()
+
+
+def test_h11_manifest_authority_rejects_output_outside_exact_parent(
+    tmp_path: Path,
+) -> None:
+    payload, source, outputs, _installer_authority = (
+        _h11_manifest_authority_model(tmp_path)
+    )
+    mutated = tuple(
+        harness.OutputPath(item.role, tmp_path / "outside.json")
+        if item.role == "final"
+        else item
+        for item in outputs
+    )
+    for item in payload["future_absence_inventory"]:
+        if item["role"] == "final":
+            item["path"] = str(tmp_path / "outside.json")
+    try:
+        with pytest.raises(harness.HarnessError, match="outside its exact parent"):
+            _decode_h11_authority_model(payload, source, mutated)
+    finally:
+        source.close()
+
+
+@pytest.mark.parametrize("mutation", ("tree", "preflight", "directory", "fifo"))
+def test_h11_prevalidation_rejects_directory_or_fifo_authority_drift(
+    tmp_path: Path, mutation: str
+) -> None:
+    payload, source, outputs, installer_authority = (
+        _h11_manifest_authority_model(tmp_path)
+    )
+    try:
+        spec = _decode_h11_authority_model(payload, source, outputs)
+        if mutation == "tree":
+            installer_authority["tree_receipt"]["fifos"][0]["inode"] = "1"
+        elif mutation == "preflight":
+            installer_authority["preflight_receipt"] = {"fifos": []}
+        elif mutation == "directory":
+            source.path.parent.chmod(0o755)
+        else:
+            Path(payload["ready_commit_fifo"]["path"]).chmod(0o644)
+        with pytest.raises(harness.HarnessError):
+            spec.retain_and_prevalidate(
+                source=source,
+                installer_authority=installer_authority,
+                outputs=outputs,
+                acquisitions=(),
+                require_root=False,
+            )
+    finally:
+        source.close()
+
+
+@pytest.mark.parametrize("created", ("output", "transaction", "frozen"))
+def test_h11_prevalidation_rejects_every_initial_presence(
+    tmp_path: Path, created: str
+) -> None:
+    payload, source, outputs, installer_authority = (
+        _h11_manifest_authority_model(tmp_path)
+    )
+    try:
+        spec = _decode_h11_authority_model(payload, source, outputs)
+        if created == "output":
+            path = outputs[0].path
+        elif created == "transaction":
+            path = source.path.parent / "AUTHORIZE-RELEASE.json"
+        else:
+            path = source.path.parents[3] / "frozen"
+        if created == "frozen":
+            path.mkdir()
+        else:
+            parent_mode = stat.S_IMODE(path.parent.lstat().st_mode)
+            path.parent.chmod(0o755)
+            path.write_text("present\n", encoding="ascii")
+            path.parent.chmod(parent_mode)
+        with pytest.raises(harness.HarnessError, match="exists before StartUnit"):
+            spec.retain_and_prevalidate(
+                source=source,
+                installer_authority=installer_authority,
+                outputs=outputs,
+                acquisitions=(),
+                require_root=False,
+            )
+    finally:
+        source.close()
+
+
+def _post_open_decode_payload(scenario: str) -> dict[str, Any]:
+    keys = (harness._MANIFEST_KEYS - {"descriptor_path", "boot_id_path"}) | {
+        "descriptor",
+        "installer_receipt",
+        "harness_program",
+        "boot_id_file",
+    }
+    if scenario == "H11":
+        keys.add("permit_authority")
+    payload = {key: None for key in keys}
+    payload.update(
+        {
+            "schema": harness.MANIFEST_SCHEMA,
+            "scenario": scenario,
+            "run_unit": f"scion-w3-{scenario.lower()}-decode.service",
+            "closer_unit": None,
+            "input_root": "/sys",
+            "receipt_root": "/proc",
+            "acquisitions": [],
+            "outputs": [{"role": "final", "path": "/proc/scion-final.json"}],
+            "scenario_input": None,
+            "formal_actions": [],
+            "static_roles": [],
+        }
+    )
+    if scenario == "H11":
+        payload["permit_authority"] = {}
+    return payload
+
+
+@pytest.mark.parametrize(
+    ("failure", "message"),
+    (
+        ("canonical-json", "strict UTF-8 JSON"),
+        ("non-h11-extra", "unknown=.*permit_authority"),
+        ("h11-missing", "missing=.*permit_authority"),
+        ("h11-extra", "unknown=.*unexpected_h11_field"),
+        ("permit-inner", "H11 permit_authority keys mismatch"),
+    ),
+)
+def test_decode_manifest_closes_fake_source_for_every_post_open_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+    message: str,
+) -> None:
+    scenario = "H10" if failure == "non-h11-extra" else "H11"
+    payload = _post_open_decode_payload(scenario)
+    if failure == "canonical-json":
+        raw = b'{"schema":'
+    else:
+        if failure == "non-h11-extra":
+            payload["permit_authority"] = {}
+        elif failure == "h11-missing":
+            payload.pop("permit_authority")
+        elif failure == "h11-extra":
+            payload["unexpected_h11_field"] = None
+        else:
+            payload["permit_authority"] = {"unexpected": None}
+        raw = _canonical(payload)
+
+    class FakeSource:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    source = FakeSource()
+    monkeypatch.setattr(
+        harness.ExecutionManifestSource,
+        "open_once",
+        classmethod(lambda cls, path, require_root: (source, raw)),
+    )
+    with pytest.raises(harness.HarnessError, match=message):
+        harness.decode_manifest(tmp_path / "unused.json")
+    assert source.close_calls == 1
+
+
+def test_decode_manifest_closes_every_real_source_fd_after_post_open_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _payload, source, _outputs, _installer_authority = (
+        _h11_manifest_authority_model(tmp_path)
+    )
+    descriptors = [source.descriptor, *(item.descriptor for item in source.directories)]
+    monkeypatch.setattr(
+        harness.ExecutionManifestSource,
+        "open_once",
+        classmethod(lambda cls, path, require_root: (source, b'{"schema":')),
+    )
+    with pytest.raises(harness.HarnessError, match="strict UTF-8 JSON"):
+        harness.decode_manifest(tmp_path / "unused.json")
+    assert source.descriptor == -1
+    assert all(item.descriptor == -1 for item in source.directories)
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+def test_decode_manifest_transfers_source_only_on_success_and_reraises_original(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FakeSource:
+        def __init__(self) -> None:
+            self.close_calls = 0
+
+        def close(self) -> None:
+            self.close_calls += 1
+
+    source = FakeSource()
+    monkeypatch.setattr(
+        harness.ExecutionManifestSource,
+        "open_once",
+        classmethod(lambda cls, path, require_root: (source, b"opened")),
+    )
+    transferred = object()
+    monkeypatch.setattr(
+        harness,
+        "_decode_open_manifest",
+        lambda opened_source, raw: transferred,
+    )
+    assert harness.decode_manifest(tmp_path / "unused.json") is transferred
+    assert source.close_calls == 0
+
+    failure = RuntimeError("original post-open failure")
+
+    def reject(opened_source: Any, raw: bytes) -> Any:
+        raise failure
+
+    monkeypatch.setattr(harness, "_decode_open_manifest", reject)
+    with pytest.raises(RuntimeError) as caught:
+        harness.decode_manifest(tmp_path / "unused.json")
+    assert caught.value is failure
+    assert source.close_calls == 1
+
+
+@pytest.mark.parametrize("failure", ("receipt-child", "permit-commit-fifo"))
+def test_h11_retain_rolls_back_every_opened_child_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    payload, source, outputs, installer_authority = (
+        _h11_manifest_authority_model(tmp_path)
+    )
+    spec = _decode_h11_authority_model(payload, source, outputs)
+    original_open = os.open
+    opened: list[int] = []
+
+    def failing_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        leaf = os.fsdecode(path)
+        if (
+            (failure == "receipt-child" and leaf == "receipts")
+            or (
+                failure == "permit-commit-fifo"
+                and leaf == "h11-permit-committed.fifo"
+            )
+        ):
+            raise OSError("injected retained-child open failure")
+        descriptor = (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+        if leaf in {
+            "input",
+            "receipts",
+            "fifo",
+            "h11-ready-committed.fifo",
+        }:
+            opened.append(descriptor)
+        return descriptor
+
+    monkeypatch.setattr(os, "open", failing_open)
+    try:
+        with pytest.raises(OSError, match="injected retained-child open failure"):
+            spec.retain_and_prevalidate(
+                source=source,
+                installer_authority=installer_authority,
+                outputs=outputs,
+                acquisitions=(),
+                require_root=False,
+            )
+        assert opened
+        for descriptor in opened:
+            with pytest.raises(OSError):
+                os.fstat(descriptor)
+        assert source.descriptor >= 0
+    finally:
+        source.close()
+
+
+def _retained_h11_runtime_model(
+    tmp_path: Path,
+) -> tuple[harness.ExecutionManifestSource, harness.RetainedH11PermitAuthority]:
+    payload, source, outputs, installer_authority = (
+        _h11_manifest_authority_model(tmp_path)
+    )
+    spec = _decode_h11_authority_model(payload, source, outputs)
+    retained = spec.retain_and_prevalidate(
+        source=source,
+        installer_authority=installer_authority,
+        outputs=outputs,
+        acquisitions=(),
+        require_root=False,
+    )
+    return source, retained
+
+
+def _publish_watched_transaction(
+    watch: harness.AuthorityDirectoryWatch,
+    parent: Path,
+    pending_name: str,
+    final_name: str,
+    *,
+    retained_publisher: bool,
+) -> int:
+    pending = parent / pending_name
+    pending.write_bytes(b"{}\n")
+    pending.chmod(0o444)
+    descriptor = os.open(pending, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    if retained_publisher:
+        watch.bind_retained_publication(
+            pending_name=pending_name,
+            final_name=final_name,
+            descriptor=descriptor,
+        )
+    pending.rename(parent / final_name)
+    return descriptor
+
+
+def test_h11_runtime_watch_records_closed_real_event_chronology(
+    tmp_path: Path,
+) -> None:
+    source, retained = _retained_h11_runtime_model(tmp_path)
+    runtime = retained.open_runtime_authority()
+    scenario_root = source.path.parent
+    descriptors: list[int] = []
+    try:
+        h0 = next(item.path for item in retained.outputs if item.role == "h0")
+        receipt_mode = stat.S_IMODE(h0.parent.lstat().st_mode)
+        h0.parent.chmod(0o755)
+        h0.write_bytes(b"{}\n")
+        h0.chmod(0o444)
+        h0.parent.chmod(receipt_mode)
+        h0_rows = runtime.drain("receipt-root")
+        assert h0_rows == (
+            {
+                "ordinal": "1",
+                "parent_role": "receipt-root",
+                "name": h0.name,
+                "mask": "CREATE",
+                "cookie": "0",
+                "device": str(h0.lstat().st_dev),
+                "inode": str(h0.lstat().st_ino),
+            },
+        )
+
+        scenario_watch = runtime.watches["scenario-root"]
+        ready_descriptor = _publish_watched_transaction(
+            scenario_watch,
+            scenario_root,
+            "PERMIT_READY.pending",
+            "PERMIT_READY.json",
+            retained_publisher=True,
+        )
+        descriptors.append(ready_descriptor)
+        ready_rows = runtime.drain("scenario-root")
+        assert [item["ordinal"] for item in ready_rows] == ["2", "3", "4"]
+        assert [item["mask"] for item in ready_rows] == [
+            "CREATE",
+            "MOVED_FROM",
+            "MOVED_TO",
+        ]
+        assert ready_rows[0]["cookie"] == "0"
+        assert ready_rows[1]["cookie"] == ready_rows[2]["cookie"] != "0"
+        assert len({(item["device"], item["inode"]) for item in ready_rows}) == 1
+
+        authorization = scenario_root / "AUTHORIZE-RELEASE.json"
+        authorization.write_bytes(b"{}\n")
+        authorization.chmod(0o444)
+        assert runtime.drain("scenario-root")[0] == {
+            "ordinal": "5",
+            "parent_role": "scenario-root",
+            "name": authorization.name,
+            "mask": "CREATE",
+            "cookie": "0",
+            "device": str(authorization.lstat().st_dev),
+            "inode": str(authorization.lstat().st_ino),
+        }
+
+        permit_descriptor = _publish_watched_transaction(
+            scenario_watch,
+            scenario_root,
+            "PERMIT.pending",
+            "PERMIT.json",
+            retained_publisher=False,
+        )
+        descriptors.append(permit_descriptor)
+        permit_rows = runtime.drain(
+            "scenario-root", external_permit_descriptor=permit_descriptor
+        )
+        assert [item["ordinal"] for item in permit_rows] == ["6", "7", "8"]
+        assert [item["mask"] for item in permit_rows] == [
+            "CREATE",
+            "MOVED_FROM",
+            "MOVED_TO",
+        ]
+        assert permit_rows[1]["cookie"] == permit_rows[2]["cookie"] != "0"
+        assert len({(item["device"], item["inode"]) for item in permit_rows}) == 1
+
+        ledger_descriptor = _publish_watched_transaction(
+            scenario_watch,
+            scenario_root,
+            "PERMIT-LEDGER.pending",
+            "PERMIT-LEDGER.json",
+            retained_publisher=True,
+        )
+        descriptors.append(ledger_descriptor)
+        ledger_rows = runtime.drain("scenario-root")
+        assert [item["ordinal"] for item in ledger_rows] == ["9", "10", "11"]
+        assert [item["mask"] for item in ledger_rows] == [
+            "CREATE",
+            "MOVED_FROM",
+            "MOVED_TO",
+        ]
+        assert tuple(item["ordinal"] for item in runtime.events) == tuple(
+            str(index) for index in range(1, 12)
+        )
+    finally:
+        for descriptor in descriptors:
+            os.close(descriptor)
+        runtime.close()
+        retained.close()
+        source.close()
+
+
+@pytest.mark.parametrize(
+    "failure",
+    (
+        "fatal-delete",
+        "fatal-delete-self",
+        "fatal-move-self",
+        "fatal-overflow",
+        "fatal-ignored",
+        "fatal-unmount",
+        "unknown",
+        "mask",
+        "order",
+        "cookie",
+        "publisher-inode",
+    ),
+)
+def test_h11_runtime_watch_rejects_event_mask_order_cookie_and_inode_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    source, retained = _retained_h11_runtime_model(tmp_path)
+    runtime = retained.open_runtime_authority()
+    watch = runtime.watches["scenario-root"]
+    publisher = -1
+    try:
+        if failure.startswith("fatal-"):
+            fatal_mask = {
+                "fatal-delete": watch._DELETE,
+                "fatal-delete-self": watch._DELETE_SELF,
+                "fatal-move-self": watch._MOVE_SELF,
+                "fatal-overflow": watch._Q_OVERFLOW,
+                "fatal-ignored": watch._IGNORED,
+                "fatal-unmount": watch._UNMOUNT,
+            }[failure]
+            events = (
+                harness._AuthorityInotifyEvent(
+                    watch.watch,
+                    fatal_mask,
+                    0,
+                    "PERMIT_READY.json",
+                ),
+            )
+        elif failure == "unknown":
+            events = (
+                harness._AuthorityInotifyEvent(
+                    watch.watch, watch._CREATE, 0, "UNKNOWN.json"
+                ),
+            )
+        elif failure == "mask":
+            events = (
+                harness._AuthorityInotifyEvent(
+                    watch.watch,
+                    watch._CREATE | watch._MOVED_TO,
+                    0,
+                    "PERMIT_READY.pending",
+                ),
+            )
+        else:
+            pending = source.path.parent / "PERMIT_READY.pending"
+            pending.write_bytes(b"old\n")
+            pending.chmod(0o444)
+            publisher = os.open(
+                pending, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+            )
+            watch.bind_retained_publication(
+                pending_name="PERMIT_READY.pending",
+                final_name="PERMIT_READY.json",
+                descriptor=publisher,
+            )
+            pending.rename(source.path.parent / "PERMIT_READY.json")
+            if failure == "publisher-inode":
+                replacement = tmp_path / "replacement-ready.json"
+                replacement.write_bytes(b"old\n")
+                replacement.chmod(0o444)
+                os.replace(replacement, source.path.parent / "PERMIT_READY.json")
+            second_mask = (
+                watch._MOVED_TO if failure == "order" else watch._MOVED_FROM
+            )
+            third_mask = (
+                watch._MOVED_FROM if failure == "order" else watch._MOVED_TO
+            )
+            second_name = (
+                "PERMIT_READY.json"
+                if failure == "order"
+                else "PERMIT_READY.pending"
+            )
+            third_name = (
+                "PERMIT_READY.pending"
+                if failure == "order"
+                else "PERMIT_READY.json"
+            )
+            events = (
+                harness._AuthorityInotifyEvent(
+                    watch.watch, watch._CREATE, 0, "PERMIT_READY.pending"
+                ),
+                harness._AuthorityInotifyEvent(
+                    watch.watch, second_mask, 17, second_name
+                ),
+                harness._AuthorityInotifyEvent(
+                    watch.watch,
+                    third_mask,
+                    18 if failure == "cookie" else 17,
+                    third_name,
+                ),
+            )
+        monkeypatch.setattr(watch, "_read_raw_events", lambda: events)
+        with pytest.raises(harness.HarnessError):
+            runtime.drain("scenario-root")
+        assert runtime.events == ()
+    finally:
+        if publisher >= 0:
+            os.close(publisher)
+        runtime.close()
+        retained.close()
+        source.close()
+
+
+def test_h11_runtime_watch_rejects_external_permit_descriptor_inode_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source, retained = _retained_h11_runtime_model(tmp_path)
+    runtime = retained.open_runtime_authority()
+    watch = runtime.watches["scenario-root"]
+    permit = source.path.parent / "PERMIT.json"
+    permit.write_bytes(b"permit\n")
+    permit.chmod(0o444)
+    decoy = tmp_path / "permit-decoy.json"
+    decoy.write_bytes(permit.read_bytes())
+    decoy.chmod(0o444)
+    descriptor = os.open(decoy, os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW)
+    events = (
+        harness._AuthorityInotifyEvent(
+            watch.watch, watch._CREATE, 0, "PERMIT.pending"
+        ),
+        harness._AuthorityInotifyEvent(
+            watch.watch, watch._MOVED_FROM, 23, "PERMIT.pending"
+        ),
+        harness._AuthorityInotifyEvent(
+            watch.watch, watch._MOVED_TO, 23, "PERMIT.json"
+        ),
+    )
+    monkeypatch.setattr(watch, "_read_raw_events", lambda: events)
+    try:
+        with pytest.raises(harness.HarnessError, match="pinned publisher inode"):
+            runtime.drain(
+                "scenario-root", external_permit_descriptor=descriptor
+            )
+        assert runtime.events == ()
+    finally:
+        os.close(descriptor)
+        runtime.close()
+        retained.close()
+        source.close()
+
+
+@pytest.mark.parametrize(
+    ("fifo_name", "first_direction"),
+    (
+        ("ready", "reader"),
+        ("ready", "writer"),
+        ("permit", "reader"),
+        ("permit", "writer"),
+    ),
+)
+def test_h11_commit_fifo_accepts_both_blocking_endpoint_schedules(
+    tmp_path: Path,
+    fifo_name: str,
+    first_direction: str,
+) -> None:
+    source, retained = _retained_h11_runtime_model(tmp_path)
+    fifo = (
+        retained.commit_fifos[0]
+        if retained.commit_fifos[0].role == f"h11-{fifo_name}-commit"
+        else retained.commit_fifos[1]
+    )
+    reader_actor = "authorizer" if fifo_name == "ready" else "harness"
+    writer_actor = "harness" if fifo_name == "ready" else "authorizer"
+    result: dict[str, Any] = {}
+    entered = threading.Event()
+
+    def first_endpoint() -> None:
+        entered.set()
+        try:
+            if first_direction == "reader":
+                result["payload"] = fifo.read_commit(actor=reader_actor)
+            else:
+                fifo.write_commit(actor=writer_actor)
+                result["written"] = True
+        except BaseException as exc:
+            result["error"] = exc
+
+    thread = threading.Thread(target=first_endpoint)
+    thread.start()
+    entered.wait()
+    try:
+        if first_direction == "reader":
+            fifo.write_commit(actor=writer_actor)
+        else:
+            result["payload"] = fifo.read_commit(actor=reader_actor)
+        thread.join()
+        assert "error" not in result
+        assert result["payload"] == fifo.expected_payload
+    finally:
+        retained.close()
+        source.close()
+
+
+@pytest.mark.parametrize("mutation", ("prefix", "suffix", "duplicate"))
+def test_h11_commit_fifo_rejects_nonexact_frame_at_eof(
+    tmp_path: Path, mutation: str
+) -> None:
+    source, retained = _retained_h11_runtime_model(tmp_path)
+    fifo = next(
+        item for item in retained.commit_fifos if item.role == "h11-ready-commit"
+    )
+    writer_entered = threading.Event()
+    writer_error: list[BaseException] = []
+
+    def malformed_writer() -> None:
+        try:
+            descriptor, direction = fifo._open_endpoint("harness")
+            assert direction == "writer"
+            writer_entered.set()
+            try:
+                if mutation == "prefix":
+                    os.write(descriptor, fifo.expected_payload[:-1])
+                elif mutation == "suffix":
+                    os.write(descriptor, fifo.expected_payload + b"X")
+                else:
+                    os.write(descriptor, fifo.expected_payload)
+                    os.write(descriptor, fifo.expected_payload)
+            finally:
+                os.close(descriptor)
+        except BaseException as exc:
+            writer_error.append(exc)
+
+    thread = threading.Thread(target=malformed_writer)
+    thread.start()
+    try:
+        with pytest.raises(harness.HarnessError, match="differs before EOF"):
+            fifo.read_commit(actor="authorizer")
+        thread.join()
+        assert not writer_error
+        assert writer_entered.is_set()
+    finally:
+        retained.close()
+        source.close()
+
+
+def test_h11_commit_fifo_rejects_path_replacement_and_stage_b_ast_closes(
+    tmp_path: Path,
+) -> None:
+    source, retained = _retained_h11_runtime_model(tmp_path)
+    fifo = next(
+        item for item in retained.commit_fifos if item.role == "h11-ready-commit"
+    )
+    displaced = fifo.reference.path.with_name("displaced-ready-commit.fifo")
+    fifo.reference.path.rename(displaced)
+    os.mkfifo(fifo.reference.path, 0o600)
+    fifo.reference.path.chmod(0o600)
+    try:
+        with pytest.raises(harness.HarnessError, match="one writer"):
+            fifo.write_commit(actor="authorizer")
+        with pytest.raises(harness.HarnessError, match="drifted"):
+            fifo.revalidate(require_root=False)
+        for class_object in (
+            harness.AuthorityDirectoryWatch,
+            harness.PinnedCommitFifo,
+            harness.H11RuntimeOpenAuthority,
+        ):
+            source_text = inspect.getsource(class_object)
+            tree = ast.parse(source_text)
+            assert "O_NONBLOCK" not in source_text
+            assert not any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"poll", "sleep"}
+                for node in ast.walk(tree)
+            )
+            assert not any(
+                isinstance(node, ast.keyword) and node.arg == "timeout"
+                for node in ast.walk(tree)
+            )
+    finally:
+        retained.close()
+        source.close()
+
+
+def _root_c1a_authority_model(
+    tmp_path: Path,
+    *,
+    ordinary_fifos: tuple[tuple[str, str], ...] = (("run-ready", "run-ready"),),
+) -> tuple[Path, dict[str, Path]]:
+    chain = _static_authority_chain(tmp_path, ordinary_fifos=ordinary_fifos)
+    preflight_path = _publish_test_preflight(chain)
+    unit_directory = tmp_path / "c1a-units"
+    unit_directory.mkdir()
+    install_manifest_path, install_receipt_path = _install_plan(chain, tmp_path)
+    install_manifest_path.chmod(0o444)
+    manager = FakeInstallerManager(unit_directory)
+    original_file = installer.__file__
+    installer.__file__ = str(chain["paths"]["installer-program"])
+    try:
+        installer.install_units(
+            install_manifest_path,
+            manager=manager,
+            require_root=False,
+            unit_directory=unit_directory,
+        )
+    finally:
+        installer.__file__ = original_file
+
+    root = chain["root"]
+    harness_root = root / "authority" / "harness"
+    scenario_root = harness_root / "H11"
+    receipt_root = scenario_root / "receipts"
+    harness_root.mkdir(mode=0o700)
+    scenario_root.mkdir(mode=0o700)
+    receipt_root.mkdir(mode=0o555)
+    receipt_root.chmod(0o555)
+    input_root = root / "input"
+    fifo_root = root / "fifo"
+
+    def directory_reference(role: str, path: Path) -> dict[str, str]:
+        info = path.lstat()
+        return {
+            "role": role,
+            "path": str(path),
+            "device": str(info.st_dev),
+            "inode": str(info.st_ino),
+            "mode": format(stat.S_IMODE(info.st_mode), "04o"),
+            "uid": str(info.st_uid),
+            "gid": str(info.st_gid),
+        }
+
+    directory_chain = [
+        directory_reference(role, path)
+        for role, path in (
+            ("formal-root", root),
+            ("authority-root", root / "authority"),
+            ("harness-root", harness_root),
+            ("scenario-root", scenario_root),
+            ("input-root", input_root),
+            ("receipt-root", receipt_root),
+            ("fifo-root", fifo_root),
+        )
+    ]
+    tree_receipt = json.loads(chain["tree_receipt"].read_text(encoding="ascii"))
+
+    def fifo_reference(role: str) -> dict[str, str]:
+        row = next(item for item in tree_receipt["fifos"] if item["role"] == role)
+        return {
+            key: row[key]
+            for key in ("path", "device", "inode", "mode", "uid", "gid")
+        }
+
+    ready_fifo = fifo_reference("h11-ready-commit")
+    permit_fifo = fifo_reference("h11-permit-commit")
+    policy = harness._SCENARIO_POLICIES["H11"]
+    outputs = [
+        {
+            "role": role,
+            "path": str(
+                (input_root if role == "run-main-properties" else receipt_root)
+                / f"{role}.json"
+            ),
+        }
+        for role in sorted(policy.required_outputs)
+    ]
+    future = [
+        dict(item)
+        for item in outputs
+        if item["role"] not in policy.pre_permit_present_roles
+    ]
+    future.append({"role": "frozen-root", "path": str(root / "frozen")})
+    future.sort(key=lambda item: item["role"])
+    permit_authority = {
+        "schema": harness.H11_PERMIT_AUTHORITY_SCHEMA,
+        "scenario": "H11",
+        "run_unit": chain["run_unit"],
+        "permit_path": str(scenario_root / "PERMIT.json"),
+        "permit_parent": {
+            key: value
+            for key, value in directory_chain[3].items()
+            if key != "role"
+        },
+        "permit_ready_path": str(scenario_root / "PERMIT_READY.json"),
+        "permit_ledger_path": str(scenario_root / "PERMIT-LEDGER.json"),
+        "permit_ready_staging_path": str(scenario_root / "PERMIT_READY.pending"),
+        "permit_staging_path": str(scenario_root / "PERMIT.pending"),
+        "permit_ledger_staging_path": str(
+            scenario_root / "PERMIT-LEDGER.pending"
+        ),
+        "directory_chain": directory_chain,
+        "ready_commit_fifo": ready_fifo,
+        "permit_commit_fifo": permit_fifo,
+        "present_prerequisite_roles": list(policy.pre_permit_present_roles),
+        "future_absence_inventory": future,
+    }
+    manifest_path = scenario_root / "MANIFEST.json"
+    manifest = {
+        key: None for key in installer._H11_HARNESS_MANIFEST_KEYS
+    }
+    manifest.update(
+        {
+            "schema": "scion.generic_backend.systemd_harness_manifest.v1",
+            "scenario": "H11",
+            "run_unit": permit_authority["run_unit"],
+            "closer_unit": chain["close_unit"],
+            "input_root": str(input_root),
+            "receipt_root": str(receipt_root),
+            "acquisitions": [],
+            "outputs": outputs,
+            "scenario_input": None,
+            "formal_actions": [],
+            "static_roles": [],
+            "permit_authority": permit_authority,
+            "installer_receipt": {
+                "path": str(install_receipt_path),
+                "sha256": _sha(install_receipt_path),
+            },
+            "preflight_receipt": {
+                "path": str(preflight_path),
+                "sha256": _sha(preflight_path),
+            },
+        }
+    )
+    _write(manifest_path, manifest)
+    manifest_path.chmod(0o444)
+    return manifest_path, {
+        "install_receipt": install_receipt_path,
+        "install_manifest": install_manifest_path,
+        "tree_receipt": chain["tree_receipt"],
+        "seal_receipt": chain["seal_receipt"],
+        "preflight_receipt": preflight_path,
+    }
+
+
+def test_root_c1a_retains_exact_parent_fd_chain_and_commit_fifos(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path,
+        require_root=False,
+    )
+    descriptors = [
+        authority.manifest_descriptor,
+        *(item.descriptor for item in authority.bound_sources),
+        *(item.descriptor for item in authority.directories),
+        *(item.descriptor for item in authority.commit_fifos),
+    ]
+    try:
+        assert [item.reference.role for item in authority.directories] == [
+            "formal-root",
+            "authority-root",
+            "harness-root",
+            "scenario-root",
+            "input-root",
+            "receipt-root",
+            "fifo-root",
+        ]
+        assert [item.child_name for item in authority.directories] == [
+            None,
+            "authority",
+            "harness",
+            "H11",
+            "input",
+            "receipts",
+            "fifo",
+        ]
+        assert [item.role for item in authority.commit_fifos] == [
+            "h11-ready-commit",
+            "h11-permit-commit",
+        ]
+        authority.revalidate(require_root=False)
+    finally:
+        authority.close()
+    assert authority.manifest_descriptor == -1
+    assert all(item.descriptor == -1 for item in authority.bound_sources)
+    assert all(item.descriptor == -1 for item in authority.directories)
+    assert all(item.descriptor == -1 for item in authority.commit_fifos)
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+@pytest.mark.parametrize("replacement", ("receipt-directory", "ready-fifo"))
+def test_root_c1a_revalidate_rejects_chain_or_fifo_replacement(
+    tmp_path: Path, replacement: str
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path,
+        require_root=False,
+    )
+    try:
+        if replacement == "receipt-directory":
+            path = authority.directories[5].reference.path
+            displaced = path.with_name("receipts-displaced")
+            path.rename(displaced)
+            path.mkdir(mode=0o555)
+            path.chmod(0o555)
+        else:
+            path = authority.commit_fifos[0].reference.path
+            displaced = path.with_name("ready-fifo-displaced")
+            path.rename(displaced)
+            os.mkfifo(path, 0o600)
+            path.chmod(0o600)
+        with pytest.raises(installer.InstallerError, match="drifted"):
+            authority.revalidate(require_root=False)
+    finally:
+        authority.close()
+
+
+def test_root_c1a_rejects_tree_preflight_fifo_receipt_mismatch(
+    tmp_path: Path,
+) -> None:
+    manifest_path, sources = _root_c1a_authority_model(tmp_path)
+    preflight_path = sources["preflight_receipt"]
+    preflight_receipt = json.loads(preflight_path.read_text(encoding="ascii"))
+    preflight_receipt["fifos"][0]["inode"] = "1"
+    preflight_path.chmod(0o644)
+    _write(preflight_path, preflight_receipt)
+    preflight_path.chmod(0o444)
+
+    install_manifest_path = sources["install_manifest"]
+    install_manifest = json.loads(
+        install_manifest_path.read_text(encoding="ascii")
+    )
+    install_manifest["preflight_receipt"] = installer._file_reference(
+        preflight_path
+    )
+    install_manifest_path.chmod(0o644)
+    _write(install_manifest_path, install_manifest)
+    install_manifest_path.chmod(0o444)
+
+    install_receipt_path = sources["install_receipt"]
+    install_receipt = json.loads(install_receipt_path.read_text(encoding="ascii"))
+    install_receipt["preflight_receipt"] = installer._file_reference(
+        preflight_path
+    )
+    install_receipt["install_manifest"] = installer._asset_reference(
+        install_manifest_path
+    )
+    install_receipt_path.chmod(0o644)
+    _write(install_receipt_path, install_receipt)
+    install_receipt_path.chmod(0o444)
+
+    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    manifest["installer_receipt"] = {
+        "path": str(install_receipt_path),
+        "sha256": _sha(install_receipt_path),
+    }
+    manifest["preflight_receipt"] = {
+        "path": str(preflight_path),
+        "sha256": _sha(preflight_path),
+    }
+    manifest_path.chmod(0o644)
+    _write(manifest_path, manifest)
+    manifest_path.chmod(0o444)
+    with pytest.raises(
+        installer.InstallerError,
+        match="TREE/install authority|inventories differ",
+    ):
+        installer.H11RootRetainedAuthority.open(
+            manifest_path,
+            require_root=False,
+        )
+
+
+def test_root_c1a_rejects_manifest_preflight_split_brain(tmp_path: Path) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    manifest["preflight_receipt"] = {
+        "path": str(tmp_path / "wrong" / "PREFLIGHT.json"),
+        "sha256": "0" * 64,
+    }
+    manifest_path.chmod(0o644)
+    _write(manifest_path, manifest)
+    manifest_path.chmod(0o444)
+    with pytest.raises(installer.InstallerError, match="manifest preflight authority"):
+        installer.H11RootRetainedAuthority.open(
+            manifest_path,
+            require_root=False,
+        )
+
+
+@pytest.mark.parametrize("field", ("input_root", "receipt_root"))
+def test_root_c1a_rejects_manifest_output_root_split_brain(
+    tmp_path: Path, field: str
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    manifest[field] = str(tmp_path / f"wrong-{field}")
+    manifest_path.chmod(0o644)
+    _write(manifest_path, manifest)
+    manifest_path.chmod(0o444)
+    with pytest.raises(installer.InstallerError, match="output roots"):
+        installer.H11RootRetainedAuthority.open(
+            manifest_path,
+            require_root=False,
+        )
+
+
+def test_root_c1a_rejects_coherently_rebound_tree_outside_authority(
+    tmp_path: Path,
+) -> None:
+    manifest_path, sources = _root_c1a_authority_model(tmp_path)
+    original_tree_path = sources["tree_receipt"]
+    tree = json.loads(original_tree_path.read_text(encoding="ascii"))
+    prepare_path = Path(tree["prepare_manifest"]["path"])
+    prepare = json.loads(prepare_path.read_text(encoding="ascii"))
+    external_tree_path = tmp_path / "external-tree.json"
+    prepare["receipt_path"] = str(external_tree_path)
+    prepare_path.chmod(0o644)
+    _write(prepare_path, prepare)
+    prepare_path.chmod(0o444)
+    tree["prepare_manifest"] = installer._file_reference(prepare_path)
+    _write(external_tree_path, tree)
+    external_tree_path.chmod(0o444)
+
+    seal_path = sources["seal_receipt"]
+    seal = json.loads(seal_path.read_text(encoding="ascii"))
+    seal["tree_receipt"] = installer._file_reference(external_tree_path)
+    seal_path.chmod(0o644)
+    _write(seal_path, seal)
+    seal_path.chmod(0o444)
+
+    preflight_path = sources["preflight_receipt"]
+    preflight = json.loads(preflight_path.read_text(encoding="ascii"))
+    preflight["tree_receipt"] = installer._asset_reference(external_tree_path)
+    preflight["seal_receipt"] = installer._asset_reference(seal_path)
+    preflight_path.chmod(0o644)
+    _write(preflight_path, preflight)
+    preflight_path.chmod(0o444)
+
+    install_manifest_path = sources["install_manifest"]
+    install_manifest = json.loads(
+        install_manifest_path.read_text(encoding="ascii")
+    )
+    install_manifest["tree_receipt"] = installer._file_reference(
+        external_tree_path
+    )
+    install_manifest["seal_receipt"] = installer._file_reference(seal_path)
+    install_manifest["preflight_receipt"] = installer._file_reference(
+        preflight_path
+    )
+    install_manifest_path.chmod(0o644)
+    _write(install_manifest_path, install_manifest)
+    install_manifest_path.chmod(0o444)
+
+    install_receipt_path = sources["install_receipt"]
+    install_receipt = json.loads(install_receipt_path.read_text(encoding="ascii"))
+    install_receipt["tree_receipt"] = installer._file_reference(external_tree_path)
+    install_receipt["seal_receipt"] = installer._file_reference(seal_path)
+    install_receipt["preflight_receipt"] = installer._file_reference(
+        preflight_path
+    )
+    install_receipt["install_manifest"] = installer._asset_reference(
+        install_manifest_path
+    )
+    install_receipt_path.chmod(0o644)
+    _write(install_receipt_path, install_receipt)
+    install_receipt_path.chmod(0o444)
+
+    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    manifest["installer_receipt"] = {
+        "path": str(install_receipt_path),
+        "sha256": _sha(install_receipt_path),
+    }
+    manifest["preflight_receipt"] = {
+        "path": str(preflight_path),
+        "sha256": _sha(preflight_path),
+    }
+    manifest_path.chmod(0o644)
+    _write(manifest_path, manifest)
+    manifest_path.chmod(0o444)
+
+    with pytest.raises(installer.InstallerError, match="TREE receipt.*authority root"):
+        installer.H11RootRetainedAuthority.open(
+            manifest_path,
+            require_root=False,
+        )
+
+
+def test_root_c1a_revalidate_rejects_same_byte_seal_replacement(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path,
+        require_root=False,
+    )
+    seal = next(
+        item for item in authority.bound_sources if item.label == "H11 seal_receipt"
+    )
+    displaced = seal.path.with_name("seal-displaced.json")
+    raw = seal.path.read_bytes()
+    seal.path.rename(displaced)
+    seal.path.write_bytes(raw)
+    seal.path.chmod(0o444)
+    try:
+        with pytest.raises(installer.InstallerError, match="retained H11 seal_receipt"):
+            authority.revalidate(require_root=False)
+    finally:
+        authority.close()
+
+
+def test_root_c1a_rejects_coherently_rebound_preflight_seal_split(
+    tmp_path: Path,
+) -> None:
+    manifest_path, sources = _root_c1a_authority_model(tmp_path)
+    seal_path = sources["seal_receipt"]
+    decoy_seal_path = tmp_path / "decoy-seal.json"
+    decoy_seal_path.write_bytes(seal_path.read_bytes())
+    decoy_seal_path.chmod(0o444)
+
+    preflight_path = sources["preflight_receipt"]
+    preflight = json.loads(preflight_path.read_text(encoding="ascii"))
+    preflight["seal_receipt"] = installer._asset_reference(decoy_seal_path)
+    preflight_path.chmod(0o644)
+    _write(preflight_path, preflight)
+    preflight_path.chmod(0o444)
+
+    install_manifest_path = sources["install_manifest"]
+    install_manifest = json.loads(
+        install_manifest_path.read_text(encoding="ascii")
+    )
+    install_manifest["preflight_receipt"] = installer._file_reference(
+        preflight_path
+    )
+    install_manifest_path.chmod(0o644)
+    _write(install_manifest_path, install_manifest)
+    install_manifest_path.chmod(0o444)
+
+    install_receipt_path = sources["install_receipt"]
+    install_receipt = json.loads(install_receipt_path.read_text(encoding="ascii"))
+    install_receipt["preflight_receipt"] = installer._file_reference(
+        preflight_path
+    )
+    install_receipt["install_manifest"] = installer._asset_reference(
+        install_manifest_path
+    )
+    install_receipt_path.chmod(0o644)
+    _write(install_receipt_path, install_receipt)
+    install_receipt_path.chmod(0o444)
+
+    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    manifest["installer_receipt"] = {
+        "path": str(install_receipt_path),
+        "sha256": _sha(install_receipt_path),
+    }
+    manifest["preflight_receipt"] = {
+        "path": str(preflight_path),
+        "sha256": _sha(preflight_path),
+    }
+    manifest_path.chmod(0o644)
+    _write(manifest_path, manifest)
+    manifest_path.chmod(0o444)
+
+    with pytest.raises(installer.InstallerError, match="TREE/install authority"):
+        installer.H11RootRetainedAuthority.open(
+            manifest_path,
+            require_root=False,
+        )
+
+
+@pytest.mark.parametrize("failure", ("receipt-child", "permit-fifo"))
+def test_root_c1a_partial_open_failure_rolls_back_every_descriptor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    original_open = os.open
+    opened: list[int] = []
+
+    def failing_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        leaf = os.fsdecode(path)
+        if (
+            (failure == "receipt-child" and leaf == "receipts")
+            or (
+                failure == "permit-fifo"
+                and leaf == "h11-permit-committed.fifo"
+            )
+        ):
+            raise OSError("injected C1a retained open failure")
+        descriptor = (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+        opened.append(descriptor)
+        return descriptor
+
+    monkeypatch.setattr(os, "open", failing_open)
+    with pytest.raises(OSError, match="injected C1a retained open failure"):
+        installer.H11RootRetainedAuthority.open(
+            manifest_path,
+            require_root=False,
+        )
+    assert opened
+    for descriptor in opened:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+def _rewrite_root_h11_manifest(
+    manifest_path: Path, mutate: Callable[[dict[str, Any]], None]
+) -> None:
+    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    mutate(manifest)
+    manifest_path.chmod(0o644)
+    _write(manifest_path, manifest)
+    manifest_path.chmod(0o444)
+
+
+def test_root_c1b1_derives_canonical_partition_from_reordered_outputs(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    _rewrite_root_h11_manifest(
+        manifest_path, lambda manifest: manifest["outputs"].reverse()
+    )
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    try:
+        partition = authority.derive_closed_partition()
+        assert [item.role for item in partition.present_prerequisites] == [
+            "h0",
+            "run-main-properties",
+        ]
+        assert [item.role for item in partition.future_absence_inventory] == [
+            "closer-properties",
+            "exec-stop-post-properties",
+            "final",
+            "final-closer-properties",
+            "final-run-properties",
+            "frozen-root",
+            "h12-absence",
+            "journal",
+            "manager-events",
+            "signals",
+            "source-selector",
+        ]
+        assert len(
+            {
+                item.path
+                for item in (
+                    *partition.present_prerequisites,
+                    *partition.future_absence_inventory,
+                )
+            }
+        ) == 13
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "omitted-role",
+        "extra-role",
+        "duplicate-role",
+        "duplicate-path",
+        "wrong-role",
+        "wrong-parent",
+        "transaction-alias",
+    ),
+)
+def test_root_c1b1_rejects_nonclosed_manifest_output_inventory(
+    tmp_path: Path, mutation: str
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+
+    def mutate(manifest: dict[str, Any]) -> None:
+        outputs = manifest["outputs"]
+        if mutation == "omitted-role":
+            outputs.pop()
+        elif mutation == "extra-role":
+            outputs.append(
+                {"role": "extra-role", "path": outputs[-1]["path"] + ".extra"}
+            )
+        elif mutation == "duplicate-role":
+            outputs[1]["role"] = outputs[0]["role"]
+        elif mutation == "duplicate-path":
+            outputs[1]["path"] = outputs[0]["path"]
+        elif mutation == "wrong-role":
+            outputs[0]["role"] = "unknown-role"
+        elif mutation == "wrong-parent":
+            outputs[0]["path"] = str(tmp_path / "outside.json")
+        else:
+            outputs[0]["path"] = manifest["permit_authority"]["permit_path"]
+
+    _rewrite_root_h11_manifest(manifest_path, mutate)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    try:
+        with pytest.raises(installer.InstallerError, match="outputs|output"):
+            authority.derive_closed_partition()
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("present-missing", "present-extra", "present-reordered", "present-wrong"),
+)
+def test_root_c1b1_rejects_declared_present_partition_drift(
+    tmp_path: Path, mutation: str
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+
+    def mutate(manifest: dict[str, Any]) -> None:
+        present = manifest["permit_authority"]["present_prerequisite_roles"]
+        if mutation == "present-missing":
+            present.pop()
+        elif mutation == "present-extra":
+            present.append("signals")
+        elif mutation == "present-reordered":
+            present.reverse()
+        else:
+            present[0] = "signals"
+
+    _rewrite_root_h11_manifest(manifest_path, mutate)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    try:
+        with pytest.raises(installer.InstallerError, match="present prerequisites"):
+            authority.derive_closed_partition()
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("future-missing", "future-extra", "future-reordered", "future-duplicate", "future-wrong"),
+)
+def test_root_c1b1_rejects_declared_future_partition_drift(
+    tmp_path: Path, mutation: str
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+
+    def mutate(manifest: dict[str, Any]) -> None:
+        future = manifest["permit_authority"]["future_absence_inventory"]
+        if mutation == "future-missing":
+            future.pop()
+        elif mutation == "future-extra":
+            future.append({"role": "extra-role", "path": str(tmp_path / "extra")})
+        elif mutation == "future-reordered":
+            future.reverse()
+        elif mutation == "future-duplicate":
+            future[1] = dict(future[0])
+        else:
+            future[0]["path"] = str(tmp_path / "wrong-future")
+
+    _rewrite_root_h11_manifest(manifest_path, mutate)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    try:
+        with pytest.raises(installer.InstallerError, match="future absence"):
+            authority.derive_closed_partition()
+    finally:
+        authority.close()
+
+
+def test_root_c1b1_revalidates_retained_sources_before_derivation(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    seal = next(
+        item for item in authority.bound_sources if item.label == "H11 seal_receipt"
+    )
+    displaced = seal.path.with_name("derive-seal-displaced.json")
+    raw = seal.path.read_bytes()
+    seal.path.rename(displaced)
+    seal.path.write_bytes(raw)
+    seal.path.chmod(0o444)
+    try:
+        with pytest.raises(installer.InstallerError, match="retained H11 seal_receipt"):
+            authority.derive_closed_partition()
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize("mutation", ("path-alias", "source-inode-alias"))
+def test_root_c1b1_defensive_authority_alias_invariants(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    # C1a makes these states unreachable from a valid filesystem tree.  Mutate
+    # only the retained in-memory model to keep the C1b1 defensive branches live.
+    authority.revalidate = lambda *, require_root: None  # type: ignore[method-assign]
+    try:
+        if mutation == "path-alias":
+            authority.bound_sources[0].path = authority.manifest_path
+            expected = "path authority aliases"
+        else:
+            first = authority.bound_sources[0].source
+            second = authority.bound_sources[1].source
+            second["device"] = first["device"]
+            second["inode"] = first["inode"]
+            expected = "retained regular source aliases"
+        with pytest.raises(installer.InstallerError, match=expected):
+            authority.derive_closed_partition()
+    finally:
+        authority.close()
+
+
+def test_root_c1b1_rejects_declared_transaction_path_drift(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    _rewrite_root_h11_manifest(
+        manifest_path,
+        lambda manifest: manifest["permit_authority"].__setitem__(
+            "permit_path", str(tmp_path / "wrong-permit.json")
+        ),
+    )
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    try:
+        with pytest.raises(installer.InstallerError, match="seven-path layout"):
+            authority.derive_closed_partition()
+    finally:
+        authority.close()
+
+
+_ROOT_C1B2_LAYOUT = (
+    ("authorization", "AUTHORIZE-RELEASE.json"),
+    ("permit-ready-staging", "PERMIT_READY.pending"),
+    ("permit-ready", "PERMIT_READY.json"),
+    ("permit-staging", "PERMIT.pending"),
+    ("permit", "PERMIT.json"),
+    ("permit-ledger-staging", "PERMIT-LEDGER.pending"),
+    ("permit-ledger", "PERMIT-LEDGER.json"),
+)
+_ROOT_C1B2_PHASES = {
+    "pre-start": ("absent",) * 7,
+    "ready-visible": (
+        "absent", "absent", "present", "absent", "absent", "absent", "absent"
+    ),
+    "authorizer-input": (
+        "present", "absent", "present", "absent", "absent", "absent", "absent"
+    ),
+    "permit-committed": (
+        "present", "absent", "present", "absent", "present", "absent", "absent"
+    ),
+    "ledger-committed": (
+        "present", "absent", "present", "absent", "present", "absent", "present"
+    ),
+}
+
+
+def _materialize_root_c1b2_phase(
+    authority: installer.H11RootRetainedAuthority,
+    phase: str,
+) -> dict[str, Path]:
+    scenario_root = authority.directories[3].reference.path
+    paths = {
+        role: scenario_root / leaf
+        for role, leaf in _ROOT_C1B2_LAYOUT
+    }
+    for (role, _leaf), state in zip(
+        _ROOT_C1B2_LAYOUT,
+        _ROOT_C1B2_PHASES[phase],
+    ):
+        if state == "present":
+            paths[role].write_bytes(b"{}\n")
+            paths[role].chmod(0o444)
+    return paths
+
+
+@pytest.mark.parametrize("phase", tuple(_ROOT_C1B2_PHASES))
+def test_root_c1b2_accepts_each_exact_transaction_phase(
+    tmp_path: Path,
+    phase: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    try:
+        assert installer._H11_TRANSACTION_LAYOUT == _ROOT_C1B2_LAYOUT
+        assert installer._H11_TRANSACTION_PHASES == _ROOT_C1B2_PHASES
+        _materialize_root_c1b2_phase(authority, phase)
+        rows = authority.validate_transaction_phase(phase)
+        scenario_root = authority.directories[3].reference.path
+        assert [row.reference for row in rows] == [
+            {
+                "role": role,
+                "path": str(scenario_root / leaf),
+                "state": state,
+            }
+            for (role, leaf), state in zip(
+                _ROOT_C1B2_LAYOUT,
+                _ROOT_C1B2_PHASES[phase],
+            )
+        ]
+    finally:
+        authority.close()
+
+
+def test_root_c1b2_rejects_unknown_phase_before_leaf_lookup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    leaf_lookups: list[object] = []
+    revalidations: list[bool] = []
+
+    def unexpected_stat(*args: object, **kwargs: object) -> os.stat_result:
+        leaf_lookups.append((args, kwargs))
+        raise AssertionError("unknown phase reached a filesystem lookup")
+
+    monkeypatch.setattr(os, "stat", unexpected_stat)
+    monkeypatch.setattr(
+        authority,
+        "revalidate",
+        lambda *, require_root: revalidations.append(require_root),
+    )
+    try:
+        with pytest.raises(installer.InstallerError, match="outside the exact phase"):
+            authority.validate_transaction_phase("unknown-phase")
+        assert leaf_lookups == []
+        assert revalidations == []
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize("phase", tuple(_ROOT_C1B2_PHASES))
+def test_root_c1b2_rejects_each_wrong_transaction_state_bit(
+    tmp_path: Path,
+    phase: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    try:
+        paths = _materialize_root_c1b2_phase(authority, phase)
+        for (role, _leaf), expected_state in zip(
+            _ROOT_C1B2_LAYOUT,
+            _ROOT_C1B2_PHASES[phase],
+        ):
+            path = paths[role]
+            if expected_state == "absent":
+                path.write_bytes(b"{}\n")
+                path.chmod(0o444)
+            else:
+                path.unlink()
+            with pytest.raises(installer.InstallerError, match="state differs"):
+                authority.validate_transaction_phase(phase)
+            if expected_state == "absent":
+                path.unlink()
+            else:
+                path.write_bytes(b"{}\n")
+                path.chmod(0o444)
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "symlink",
+        "directory",
+        "fifo",
+        "mode",
+        "owner",
+        "transaction-inode-alias",
+        "retained-source-alias",
+    ),
+)
+def test_root_c1b2_rejects_invalid_present_transaction_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    paths = _materialize_root_c1b2_phase(authority, "authorizer-input")
+    target = paths["authorization"]
+    ready = paths["permit-ready"]
+    try:
+        if mutation != "owner":
+            target.unlink()
+        if mutation == "symlink":
+            target.symlink_to(manifest_path)
+        elif mutation == "directory":
+            target.mkdir(mode=0o700)
+        elif mutation == "fifo":
+            os.mkfifo(target, 0o600)
+        elif mutation == "mode":
+            target.write_bytes(b"{}\n")
+            target.chmod(0o644)
+        elif mutation == "transaction-inode-alias":
+            os.link(ready, target)
+        elif mutation == "retained-source-alias":
+            os.link(manifest_path, target)
+        else:
+            original_stat = os.stat
+
+            def wrong_owner_stat(
+                path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+                *args: object,
+                **kwargs: object,
+            ) -> os.stat_result | SimpleNamespace:
+                info = original_stat(path, *args, **kwargs)
+                if (
+                    os.fsdecode(path) == "AUTHORIZE-RELEASE.json"
+                    and kwargs.get("dir_fd")
+                    == authority.directories[3].descriptor
+                ):
+                    return SimpleNamespace(
+                        st_mode=info.st_mode,
+                        st_dev=info.st_dev,
+                        st_ino=info.st_ino,
+                        st_uid=info.st_uid + 1,
+                        st_gid=info.st_gid,
+                    )
+                return info
+
+            monkeypatch.setattr(os, "stat", wrong_owner_stat)
+        expected = (
+            "retained source"
+            if mutation == "retained-source-alias"
+            else "present transaction inodes alias"
+            if mutation == "transaction-inode-alias"
+            else "type/mode/owner"
+        )
+        with pytest.raises(installer.InstallerError, match=expected):
+            authority.validate_transaction_phase("authorizer-input")
+    finally:
+        authority.close()
+
+
+def test_root_c1b2_non_enoent_leaf_error_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    original_stat = os.stat
+
+    def denied_leaf_stat(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *args: object,
+        **kwargs: object,
+    ) -> os.stat_result:
+        if (
+            os.fsdecode(path) == "AUTHORIZE-RELEASE.json"
+            and kwargs.get("dir_fd") == authority.directories[3].descriptor
+        ):
+            raise PermissionError("injected transaction authority denial")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", denied_leaf_stat)
+    try:
+        with pytest.raises(
+            installer.InstallerError, match="cannot validate.*AUTHORIZE"
+        ) as caught:
+            authority.validate_transaction_phase("pre-start")
+        assert isinstance(caught.value.__cause__, PermissionError)
+    finally:
+        authority.close()
+
+
+def test_root_c1b2_uses_seven_ordered_relative_leaf_lookups(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    original_stat = os.stat
+    calls: list[tuple[str, int | None, bool | None]] = []
+
+    def recording_stat(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *args: object,
+        **kwargs: object,
+    ) -> os.stat_result:
+        if kwargs.get("dir_fd") == authority.directories[3].descriptor:
+            leaf = os.fsdecode(path)
+            if leaf in {item[1] for item in _ROOT_C1B2_LAYOUT}:
+                calls.append(
+                    (leaf, kwargs.get("dir_fd"), kwargs.get("follow_symlinks"))
+                )
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", recording_stat)
+    try:
+        authority.validate_transaction_phase("pre-start")
+        assert calls == [
+            (leaf, authority.directories[3].descriptor, False)
+            for _role, leaf in _ROOT_C1B2_LAYOUT
+        ]
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize("mutation", ("move-away-replacement", "closed"))
+def test_root_c1b2_rejects_replaced_or_closed_retained_scenario_directory(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    scenario = authority.directories[3]
+    try:
+        if mutation == "move-away-replacement":
+            displaced = scenario.reference.path.with_name("H11-displaced")
+            scenario.reference.path.rename(displaced)
+            scenario.reference.path.mkdir(mode=0o700)
+        else:
+            os.close(scenario.descriptor)
+            scenario.descriptor = -1
+        with pytest.raises(
+            installer.InstallerError, match="cannot revalidate|drifted|closed"
+        ):
+            authority.validate_transaction_phase("pre-start")
+    finally:
+        authority.close()
+
+
+def test_root_c1b2_validator_ast_uses_only_retained_dirfd_nofollow_stat() -> None:
+    source = inspect.getsource(installer.H11RootRetainedAuthority)
+    tree = ast.parse(source)
+    method = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and node.name == "validate_transaction_phase"
+    )
+    stat_calls = [
+        node
+        for node in ast.walk(method)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "os"
+        and node.func.attr == "stat"
+    ]
+    assert len(stat_calls) == 1
+    assert isinstance(stat_calls[0].args[0], ast.Name)
+    assert stat_calls[0].args[0].id == "leaf"
+    keywords = {item.arg: item.value for item in stat_calls[0].keywords}
+    assert "dir_fd" in keywords
+    assert isinstance(keywords["dir_fd"], ast.Attribute)
+    assert keywords["dir_fd"].attr == "descriptor"
+    assert isinstance(keywords["dir_fd"].value, ast.Name)
+    assert keywords["dir_fd"].value.id == "scenario_directory"
+    assert isinstance(keywords.get("follow_symlinks"), ast.Constant)
+    assert keywords["follow_symlinks"].value is False
+    assert not any(
+        isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Name) and node.func.id == "open")
+            or (
+                isinstance(node.func, ast.Attribute)
+                and node is not stat_calls[0]
+                and node.func.attr in {"open", "exists", "lstat", "stat", "access"}
+            )
+        )
+        for node in ast.walk(method)
+    )
+
+
+_ROOT_C1C_EXACT_PAIRS = {
+    "PERMIT_READY.pending": "PERMIT_READY.json",
+    "PERMIT.pending": "PERMIT.json",
+    "PERMIT-LEDGER.pending": "PERMIT-LEDGER.json",
+}
+
+
+@pytest.mark.parametrize(
+    ("staging_name", "final_name"),
+    tuple(_ROOT_C1C_EXACT_PAIRS.items()),
+)
+def test_root_c1c_publishes_each_exact_pair_and_retains_final_inode(
+    tmp_path: Path,
+    staging_name: str,
+    final_name: str,
+) -> None:
+    assert installer._H11_PUBLICATION_PAIRS == _ROOT_C1C_EXACT_PAIRS
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    publication = installer._publish_h11_named_staging(
+        parent,
+        staging_name,
+        final_name,
+        {"schema": "scion.test.h11-publication.v1", "name": final_name},
+        require_root=False,
+    )
+    descriptor = publication.descriptor
+    try:
+        assert not (parent.reference.path / staging_name).exists()
+        assert (parent.reference.path / final_name).read_bytes() == publication.raw
+        assert set(publication.reference) == {
+            "path",
+            "sha256",
+            "device",
+            "inode",
+            "mode",
+            "uid",
+            "gid",
+        }
+        assert publication.reference["path"] == str(
+            parent.reference.path / final_name
+        )
+        publication.revalidate()
+    finally:
+        publication.close()
+        authority.close()
+    with pytest.raises(OSError):
+        os.fstat(descriptor)
+
+
+def test_root_c1c_existing_pending_sentinel_is_unchanged_by_o_excl(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    pending = parent.reference.path / "PERMIT.pending"
+    sentinel = b"preexisting-poison\n"
+    pending.write_bytes(sentinel)
+    pending.chmod(0o444)
+    before = pending.lstat()
+    try:
+        with pytest.raises(FileExistsError) as error:
+            installer._publish_h11_named_staging(
+                parent,
+                "PERMIT.pending",
+                "PERMIT.json",
+                {"must": "not-write"},
+                require_root=False,
+            )
+        assert error.value.errno == errno.EEXIST
+        after = pending.lstat()
+        assert (after.st_dev, after.st_ino) == (before.st_dev, before.st_ino)
+        assert pending.read_bytes() == sentinel
+        assert not (parent.reference.path / "PERMIT.json").exists()
+    finally:
+        authority.close()
+
+
+def test_root_c1c_duplicate_publication_is_no_replace_and_poisoned(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    first = installer._publish_h11_named_staging(
+        parent,
+        "PERMIT.pending",
+        "PERMIT.json",
+        {"ordinal": "1"},
+        require_root=False,
+    )
+    try:
+        with pytest.raises(installer.InstallerError, match="no-replace"):
+            installer._publish_h11_named_staging(
+                parent,
+                "PERMIT.pending",
+                "PERMIT.json",
+                {"ordinal": "2"},
+                require_root=False,
+            )
+        assert (parent.reference.path / "PERMIT.json").read_bytes() == first.raw
+        assert (parent.reference.path / "PERMIT.pending").is_file()
+        first.revalidate()
+    finally:
+        first.close()
+        authority.close()
+
+
+def test_root_c1c_rename_failure_is_not_retried_or_cleaned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    opened = _capture_root_c1c_staging_descriptor(
+        monkeypatch,
+        parent_descriptor=parent.descriptor,
+        staging_name="PERMIT.pending",
+    )
+    calls = 0
+
+    class FailingRenameAt2:
+        argtypes: Any = None
+        restype: Any = None
+
+        def __call__(self, *args: Any) -> int:
+            nonlocal calls
+            calls += 1
+            installer.ctypes.set_errno(errno.EIO)
+            return -1
+
+    class FailingLibc:
+        renameat2 = FailingRenameAt2()
+
+    monkeypatch.setattr(installer.ctypes, "CDLL", lambda *args, **kwargs: FailingLibc())
+    try:
+        with pytest.raises(installer.InstallerError, match="cannot publish no-replace"):
+            installer._publish_h11_named_staging(
+                parent,
+                "PERMIT.pending",
+                "PERMIT.json",
+                {"failure": "rename"},
+                require_root=False,
+            )
+        assert calls == 1
+        assert (parent.reference.path / "PERMIT.pending").is_file()
+        assert not (parent.reference.path / "PERMIT.json").exists()
+        _assert_root_c1c_descriptors_closed(opened)
+    finally:
+        authority.close()
+
+
+def _capture_root_c1c_staging_descriptor(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    parent_descriptor: int,
+    staging_name: str,
+) -> list[int]:
+    original_open = os.open
+    opened: list[int] = []
+
+    def recording_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        descriptor = (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+        if os.fsdecode(path) == staging_name and dir_fd == parent_descriptor:
+            opened.append(descriptor)
+        return descriptor
+
+    monkeypatch.setattr(os, "open", recording_open)
+    return opened
+
+
+def _assert_root_c1c_descriptors_closed(opened: list[int]) -> None:
+    assert len(opened) == 1
+    with pytest.raises(OSError):
+        os.fstat(opened[0])
+
+
+def test_root_c1c_pre_rename_failure_poison_pending_and_closes_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    opened = _capture_root_c1c_staging_descriptor(
+        monkeypatch,
+        parent_descriptor=parent.descriptor,
+        staging_name="PERMIT.pending",
+    )
+    try:
+        with pytest.raises(
+            installer.InstallerError, match="failure before rename"
+        ):
+            installer._publish_h11_named_staging(
+                parent,
+                "PERMIT.pending",
+                "PERMIT.json",
+                {"failure": "pre-rename"},
+                require_root=False,
+                _test_failure="pre-rename",
+            )
+        assert (parent.reference.path / "PERMIT.pending").is_file()
+        assert not (parent.reference.path / "PERMIT.json").exists()
+        _assert_root_c1c_descriptors_closed(opened)
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize("failure", ("readback", "mode", "owner"))
+def test_root_c1c_real_readback_or_staging_metadata_failure_poison_pending(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    opened = _capture_root_c1c_staging_descriptor(
+        monkeypatch,
+        parent_descriptor=parent.descriptor,
+        staging_name="PERMIT_READY.pending",
+    )
+    original_read = os.read
+    original_fstat = os.fstat
+    corrupted = False
+
+    def faulting_read(descriptor: int, count: int) -> bytes:
+        nonlocal corrupted
+        data = original_read(descriptor, count)
+        if (
+            failure == "readback"
+            and opened
+            and descriptor == opened[0]
+            and data
+            and not corrupted
+        ):
+            corrupted = True
+            return bytes((data[0] ^ 1,)) + data[1:]
+        return data
+
+    def faulting_fstat(descriptor: int) -> os.stat_result | SimpleNamespace:
+        info = original_fstat(descriptor)
+        if opened and descriptor == opened[0] and failure in {"mode", "owner"}:
+            return SimpleNamespace(
+                st_mode=(
+                    (info.st_mode & ~0o777) | 0o644
+                    if failure == "mode"
+                    else info.st_mode
+                ),
+                st_size=info.st_size,
+                st_dev=info.st_dev,
+                st_ino=info.st_ino,
+                st_uid=info.st_uid + (1 if failure == "owner" else 0),
+                st_gid=info.st_gid,
+            )
+        return info
+
+    monkeypatch.setattr(os, "read", faulting_read)
+    monkeypatch.setattr(os, "fstat", faulting_fstat)
+    try:
+        with pytest.raises(installer.InstallerError, match="readback or metadata"):
+            installer._publish_h11_named_staging(
+                parent,
+                "PERMIT_READY.pending",
+                "PERMIT_READY.json",
+                {"failure": failure},
+                require_root=False,
+            )
+        assert (parent.reference.path / "PERMIT_READY.pending").is_file()
+        assert not (parent.reference.path / "PERMIT_READY.json").exists()
+        _assert_root_c1c_descriptors_closed(opened)
+    finally:
+        authority.close()
+
+
+def test_root_c1c_real_parent_fsync_failure_poison_final_and_closes_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    opened = _capture_root_c1c_staging_descriptor(
+        monkeypatch,
+        parent_descriptor=parent.descriptor,
+        staging_name="PERMIT.pending",
+    )
+    original_fsync = os.fsync
+    injected = OSError(errno.EIO, "injected parent fsync failure")
+
+    def faulting_fsync(descriptor: int) -> None:
+        if descriptor == parent.descriptor:
+            raise injected
+        original_fsync(descriptor)
+
+    monkeypatch.setattr(os, "fsync", faulting_fsync)
+    try:
+        with pytest.raises(OSError) as error:
+            installer._publish_h11_named_staging(
+                parent,
+                "PERMIT.pending",
+                "PERMIT.json",
+                {"failure": "parent-fsync"},
+                require_root=False,
+            )
+        assert error.value is injected
+        assert not (parent.reference.path / "PERMIT.pending").exists()
+        assert (parent.reference.path / "PERMIT.json").is_file()
+        _assert_root_c1c_descriptors_closed(opened)
+    finally:
+        authority.close()
+
+
+@pytest.mark.parametrize("failure", ("identity", "owner"))
+def test_root_c1c_real_final_proof_failure_poison_final_and_closes_fd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    opened = _capture_root_c1c_staging_descriptor(
+        monkeypatch,
+        parent_descriptor=parent.descriptor,
+        staging_name="PERMIT-LEDGER.pending",
+    )
+    original_stat = os.stat
+
+    def faulting_stat(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *args: object,
+        **kwargs: object,
+    ) -> os.stat_result | SimpleNamespace:
+        info = original_stat(path, *args, **kwargs)
+        if (
+            os.fsdecode(path) == "PERMIT-LEDGER.json"
+            and kwargs.get("dir_fd") == parent.descriptor
+            and kwargs.get("follow_symlinks") is False
+        ):
+            return SimpleNamespace(
+                st_mode=info.st_mode,
+                st_dev=info.st_dev,
+                st_ino=info.st_ino + (1 if failure == "identity" else 0),
+                st_uid=info.st_uid + (1 if failure == "owner" else 0),
+                st_gid=info.st_gid,
+            )
+        return info
+
+    monkeypatch.setattr(os, "stat", faulting_stat)
+    try:
+        with pytest.raises(installer.InstallerError, match="retained inode"):
+            installer._publish_h11_named_staging(
+                parent,
+                "PERMIT-LEDGER.pending",
+                "PERMIT-LEDGER.json",
+                {"failure": failure},
+                require_root=False,
+            )
+        assert not (parent.reference.path / "PERMIT-LEDGER.pending").exists()
+        assert (parent.reference.path / "PERMIT-LEDGER.json").is_file()
+        _assert_root_c1c_descriptors_closed(opened)
+    finally:
+        authority.close()
+
+
+def test_root_c1c_revalidate_rejects_same_byte_final_replacement(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    publication = installer._publish_h11_named_staging(
+        parent,
+        "PERMIT-LEDGER.pending",
+        "PERMIT-LEDGER.json",
+        {"ledger": "same-bytes"},
+        require_root=False,
+    )
+    final_path = parent.reference.path / "PERMIT-LEDGER.json"
+    displaced = final_path.with_name("PERMIT-LEDGER.displaced")
+    try:
+        final_path.rename(displaced)
+        final_path.write_bytes(publication.raw)
+        final_path.chmod(0o444)
+        with pytest.raises(installer.InstallerError, match="drifted"):
+            publication.revalidate()
+    finally:
+        publication.close()
+        authority.close()
+
+
+@pytest.mark.parametrize(
+    ("staging_name", "final_name"),
+    (
+        ("PERMIT.pending", "PERMIT_READY.json"),
+        ("UNKNOWN.pending", "PERMIT.json"),
+        ("PERMIT.pending/child", "PERMIT.json"),
+    ),
+)
+def test_root_c1c_rejects_nonexact_leaf_pair_before_mutation(
+    tmp_path: Path,
+    staging_name: str,
+    final_name: str,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    try:
+        with pytest.raises(installer.InstallerError, match="leaf pair"):
+            installer._publish_h11_named_staging(
+                parent,
+                staging_name,
+                final_name,
+                {"invalid": True},
+                require_root=False,
+            )
+        assert not any(
+            path.name.startswith(("PERMIT", "UNKNOWN"))
+            for path in parent.reference.path.iterdir()
+            if path.name != "MANIFEST.json"
+        )
+    finally:
+        authority.close()
+
+
+def test_root_c1c_privileged_mode_rejects_test_injection_before_mutation(
+    tmp_path: Path,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    try:
+        with pytest.raises(installer.InstallerError, match="forbids test"):
+            installer._publish_h11_named_staging(
+                parent,
+                "PERMIT.pending",
+                "PERMIT.json",
+                {"invalid": True},
+                require_root=True,
+                _test_failure="pre-rename",
+            )
+        assert not (parent.reference.path / "PERMIT.pending").exists()
+        assert not (parent.reference.path / "PERMIT.json").exists()
+    finally:
+        authority.close()
+
+
+def test_root_c1c_syscall_order_and_same_fd_authority(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        manifest_path, require_root=False
+    )
+    parent = authority.directories[3]
+    payload = {"schema": "scion.test.h11-order.v1"}
+    expected_raw = _canonical(payload)
+    events: list[tuple[Any, ...]] = []
+    staging_descriptor = -1
+    original_open = os.open
+    original_write = os.write
+    original_fchmod = os.fchmod
+    original_lseek = os.lseek
+    original_read = os.read
+    original_fstat = os.fstat
+    original_fsync = os.fsync
+    original_stat = os.stat
+    original_cdll = installer.ctypes.CDLL
+
+    def spy_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal staging_descriptor
+        descriptor = (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+        if os.fsdecode(path) == "PERMIT.pending":
+            staging_descriptor = descriptor
+            events.append(("open", descriptor, flags, mode, dir_fd))
+        return descriptor
+
+    def spy_write(descriptor: int, data: bytes | memoryview) -> int:
+        if descriptor == staging_descriptor:
+            events.append(("write", descriptor, bytes(data)))
+        return original_write(descriptor, data)
+
+    def spy_fchmod(descriptor: int, mode: int) -> None:
+        if descriptor == staging_descriptor:
+            events.append(("fchmod", descriptor, mode))
+        original_fchmod(descriptor, mode)
+
+    def spy_lseek(descriptor: int, offset: int, whence: int) -> int:
+        if descriptor == staging_descriptor:
+            events.append(("lseek", descriptor, offset, whence))
+        return original_lseek(descriptor, offset, whence)
+
+    def spy_read(descriptor: int, count: int) -> bytes:
+        data = original_read(descriptor, count)
+        if descriptor == staging_descriptor:
+            events.append(("read", descriptor, data))
+        return data
+
+    def spy_fstat(descriptor: int) -> os.stat_result:
+        if descriptor == staging_descriptor:
+            events.append(("fstat", descriptor))
+        return original_fstat(descriptor)
+
+    def spy_fsync(descriptor: int) -> None:
+        if descriptor == staging_descriptor:
+            events.append(("file-fsync", descriptor))
+        elif descriptor == parent.descriptor:
+            events.append(("parent-fsync", descriptor))
+        original_fsync(descriptor)
+
+    def spy_stat(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *args: object,
+        **kwargs: object,
+    ) -> os.stat_result:
+        if (
+            os.fsdecode(path) == "PERMIT.json"
+            and kwargs.get("dir_fd") == parent.descriptor
+        ):
+            events.append(
+                (
+                    "final-stat",
+                    kwargs.get("dir_fd"),
+                    kwargs.get("follow_symlinks"),
+                )
+            )
+        return original_stat(path, *args, **kwargs)
+
+    class RenameAt2Spy:
+        def __init__(self, function: Any) -> None:
+            self.function = function
+
+        @property
+        def argtypes(self) -> Any:
+            return self.function.argtypes
+
+        @argtypes.setter
+        def argtypes(self, value: Any) -> None:
+            self.function.argtypes = value
+
+        @property
+        def restype(self) -> Any:
+            return self.function.restype
+
+        @restype.setter
+        def restype(self, value: Any) -> None:
+            self.function.restype = value
+
+        def __call__(self, *args: Any) -> int:
+            events.append(("renameat2", *args))
+            return int(self.function(*args))
+
+    class LibcSpy:
+        def __init__(self, library: Any) -> None:
+            self.renameat2 = RenameAt2Spy(library.renameat2)
+
+    def spy_cdll(*args: Any, **kwargs: Any) -> LibcSpy:
+        return LibcSpy(original_cdll(*args, **kwargs))
+
+    monkeypatch.setattr(os, "open", spy_open)
+    monkeypatch.setattr(os, "write", spy_write)
+    monkeypatch.setattr(os, "fchmod", spy_fchmod)
+    monkeypatch.setattr(os, "lseek", spy_lseek)
+    monkeypatch.setattr(os, "read", spy_read)
+    monkeypatch.setattr(os, "fstat", spy_fstat)
+    monkeypatch.setattr(os, "fsync", spy_fsync)
+    monkeypatch.setattr(os, "stat", spy_stat)
+    monkeypatch.setattr(installer.ctypes, "CDLL", spy_cdll)
+    publication = installer._publish_h11_named_staging(
+        parent,
+        "PERMIT.pending",
+        "PERMIT.json",
+        payload,
+        require_root=False,
+    )
+    try:
+        names = [event[0] for event in events]
+        assert names[:13] == [
+            "open",
+            "write",
+            "fchmod",
+            "lseek",
+            "read",
+            "read",
+            "lseek",
+            "fstat",
+            "file-fsync",
+            "renameat2",
+            "parent-fsync",
+            "final-stat",
+            "fstat",
+        ]
+        opened = events[0]
+        expected_flags = (
+            os.O_RDWR
+            | os.O_CREAT
+            | os.O_EXCL
+            | os.O_NOFOLLOW
+            | os.O_CLOEXEC
+        )
+        assert opened[1:] == (
+            staging_descriptor,
+            expected_flags,
+            0o444,
+            parent.descriptor,
+        )
+        assert events[1] == ("write", staging_descriptor, expected_raw)
+        assert events[2] == ("fchmod", staging_descriptor, 0o444)
+        assert all(
+            event[1] == staging_descriptor
+            for event in events[:9]
+            if event[0] not in {"open"}
+        )
+        rename = events[9]
+        assert rename[1:] == (
+            parent.descriptor,
+            b"PERMIT.pending",
+            parent.descriptor,
+            b"PERMIT.json",
+            1,
+        )
+        assert events[10] == ("parent-fsync", parent.descriptor)
+        assert events[11] == ("final-stat", parent.descriptor, False)
+    finally:
+        publication.close()
+        authority.close()
+
+
+def test_root_c1c_publication_ast_closes_path_retry_and_callback_escape() -> None:
+    source = inspect.getsource(installer._publish_h11_named_staging)
+    tree = ast.parse(source)
+    signature = inspect.signature(installer._publish_h11_named_staging)
+    assert tuple(signature.parameters) == (
+        "parent",
+        "staging_name",
+        "final_name",
+        "payload",
+        "require_root",
+        "_test_failure",
+    )
+    assert signature.parameters["require_root"].kind is inspect.Parameter.KEYWORD_ONLY
+    assert signature.parameters["_test_failure"].kind is inspect.Parameter.KEYWORD_ONLY
+    open_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "os"
+        and node.func.attr == "open"
+    ]
+    assert len(open_calls) == 1
+    open_call = open_calls[0]
+    assert isinstance(open_call.args[0], ast.Name)
+    assert open_call.args[0].id == "staging_name"
+    assert isinstance(open_call.args[2], ast.Constant)
+    assert open_call.args[2].value == 0o444
+    open_keywords = {item.arg: item.value for item in open_call.keywords}
+    assert isinstance(open_keywords.get("dir_fd"), ast.Attribute)
+    assert open_keywords["dir_fd"].attr == "descriptor"
+    rename_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "renameat2"
+    ]
+    assert len(rename_calls) == 1
+    rename_call = rename_calls[0]
+    assert len(rename_call.args) == 5
+    assert ast.dump(rename_call.args[0]) == ast.dump(rename_call.args[2])
+    assert isinstance(rename_call.args[4], ast.Constant)
+    assert rename_call.args[4].value == 1
+    parents = {
+        child: parent
+        for parent in ast.walk(tree)
+        for child in ast.iter_child_nodes(parent)
+    }
+    ancestor = parents.get(rename_call)
+    while ancestor is not None:
+        assert not isinstance(ancestor, (ast.For, ast.AsyncFor, ast.While))
+        ancestor = parents.get(ancestor)
+    assert not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "_publish_h11_named_staging"
+        for node in ast.walk(tree)
+    )
+    assert not any(
+        isinstance(node, ast.Call)
+        and (
+            (isinstance(node.func, ast.Name) and node.func.id == "open")
+            or (
+                isinstance(node.func, ast.Attribute)
+                and node is not open_call
+                and node.func.attr
+                in {
+                    "open",
+                    "rename",
+                    "replace",
+                    "unlink",
+                    "remove",
+                    "removedirs",
+                    "rmdir",
+                    "rmtree",
+                    "sleep",
+                    "poll",
+                    "exists",
+                    "lstat",
+                    "retry",
+                }
+            )
+        )
+        for node in ast.walk(tree)
+    )
+    assert not any(
+        isinstance(node, ast.keyword)
+        and node.arg in {"callback", "timeout", "deadline", "retry"}
+        for node in ast.walk(tree)
+    )
+
+
+def _root_c2a_full_reference(path: Path) -> dict[str, str]:
+    info = path.lstat()
+    return {
+        "path": str(path),
+        "sha256": _sha(path),
+        "device": str(info.st_dev),
+        "inode": str(info.st_ino),
+        "mode": format(stat.S_IMODE(info.st_mode), "04o"),
+        "uid": str(info.st_uid),
+        "gid": str(info.st_gid),
+    }
+
+
+def _root_c2a_write_json(path: Path, value: dict[str, Any]) -> None:
+    if path.exists():
+        path.chmod(0o644)
+    _write(path, value)
+    path.chmod(0o444)
+
+
+def _root_c2a_session_model(
+    tmp_path: Path, *, extra_ordinary_fifo: bool = False
+) -> dict[str, Path]:
+    ordinary_fifos = tuple(
+        (f"{role}-{kind}", f"c2a-{role}-{kind}.fifo")
+        for role in ("run-main", "exec-stop-post", "closer")
+        for kind in ("ready", "release")
+    )
+    if extra_ordinary_fifo:
+        ordinary_fifos += (("unused-extra", "c2a-unused-extra.fifo"),)
+    manifest_path, sources = _root_c1a_authority_model(
+        tmp_path, ordinary_fifos=ordinary_fifos
+    )
+    root = manifest_path.parents[3]
+    scenario_root = manifest_path.parent
+    work_root = root / "work"
+    armed_path = work_root / "RUN-MAIN-ARMED.json"
+    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    tree_receipt = json.loads(
+        sources["tree_receipt"].read_text(encoding="ascii")
+    )
+
+    def acquisition_fifo(role: str, kind: str) -> dict[str, str]:
+        row = next(
+            item
+            for item in tree_receipt["fifos"]
+            if item["role"] == f"{role}-{kind}"
+        )
+        return {
+            key: row[key] for key in ("path", "device", "inode")
+        }
+
+    acquisitions: list[dict[str, Any]] = []
+    for role in ("run-main", "exec-stop-post", "closer"):
+        acquisitions.append(
+            {
+                "role": role,
+                "armed_receipt_path": str(
+                    armed_path
+                    if role == "run-main"
+                    else work_root / f"{role}-ARMED.json"
+                ),
+                "ready_fifo": acquisition_fifo(role, "ready"),
+                "release_fifo": acquisition_fifo(role, "release"),
+            }
+        )
+    acquisition = acquisitions[0]
+    manifest["acquisitions"] = acquisitions
+    static_specs = (
+        (
+            "run-main",
+            manifest["run_unit"],
+            "adversary",
+            "h11-unbounded-hold",
+            root / "sealed" / "run-plan.json",
+            root / "sealed" / "run-program.py",
+        ),
+        (
+            "exec-stop-post",
+            manifest["run_unit"],
+            "observer",
+            "exec-stop-post",
+            root / "sealed" / "stop-plan.json",
+            root / "sealed" / "stop-program.py",
+        ),
+        (
+            "closer",
+            manifest["closer_unit"],
+            "observer",
+            "closer",
+            root / "sealed" / "close-plan.json",
+            root / "sealed" / "close-program.py",
+        ),
+    )
+    manifest["static_roles"] = [
+        {
+            "role": role,
+            "unit": unit,
+            "owner": owner,
+            "mode": mode,
+            "plan": {"path": str(plan_path), "sha256": _sha(plan_path)},
+            "program": {
+                "path": str(program_path),
+                "sha256": _sha(program_path),
+            },
+        }
+        for role, unit, owner, mode, plan_path, program_path in static_specs
+    ]
+    _root_c2a_write_json(manifest_path, manifest)
+
+    boot_id = "11111111-1111-1111-1111-111111111111"
+    invocation_id = "a" * 32
+    request_path = work_root / "c2a-request.json"
+    _write(
+        request_path,
+        {
+            "schema": "scion.generic_backend.systemd_adversary_request.v1",
+            "scenario": "h11-unbounded-hold",
+            "unit": manifest["run_unit"],
+        },
+    )
+    request_path.chmod(0o600)
+    run_plan = Path(manifest["static_roles"][0]["plan"]["path"])
+    run_program = Path(manifest["static_roles"][0]["program"]["path"])
+    program_info = run_program.lstat()
+    armed = {
+        "schema": "scion.generic_backend.systemd_adversary_armed.v1",
+        "scenario": "h11-unbounded-hold",
+        "unit": manifest["run_unit"],
+        "actor": {
+            "boot_id": boot_id,
+            "invocation_id": invocation_id,
+            "pid": 101,
+            "proc_cgroup_raw": "0::/system.slice/c2a.scope\n",
+            "session_id": 101,
+            "starttime": 202,
+            "stop_selector_environment": {},
+            "unified_cgroup": "/system.slice/c2a.scope",
+        },
+        "plan_path": str(run_plan),
+        "plan_sha256": _sha(run_plan),
+        "program": {
+            "path": str(run_program),
+            "sha256": _sha(run_program),
+            "identity": {
+                "device": program_info.st_dev,
+                "inode": program_info.st_ino,
+                "mode": stat.S_IMODE(program_info.st_mode),
+            },
+        },
+        "request_path": str(request_path),
+        "request_sha256": _sha(request_path),
+        "receipt_path": str(work_root / "c2a-receipt.json"),
+        "ready_fifo": dict(acquisition["ready_fifo"]),
+        "release_fifo": dict(acquisition["release_fifo"]),
+        "ready_sha256": hashlib.sha256(
+            b"SCION_GENERIC_BACKEND_READY_V1\n"
+        ).hexdigest(),
+        "release_sha256": hashlib.sha256(
+            b"SCION_GENERIC_BACKEND_RELEASE_V1\n"
+        ).hexdigest(),
+    }
+    _write(armed_path, armed)
+    armed_path.chmod(0o600)
+
+    ready_path = scenario_root / "PERMIT_READY.json"
+    harness_reference = _root_c2a_full_reference(manifest_path)
+    armed_reference = _root_c2a_full_reference(armed_path)
+    ready = {
+        "schema": installer.H11_PERMIT_READY_SCHEMA,
+        "scenario": "H11",
+        "run_unit": manifest["run_unit"],
+        "boot_id": boot_id,
+        "invocation_id": invocation_id,
+        "harness_manifest": harness_reference,
+        "run_armed": armed_reference,
+        "permit_authority": manifest["permit_authority"],
+        "present_outputs": [],
+        "absent_paths": manifest["permit_authority"]["future_absence_inventory"],
+        "phase": "h11-permit-ready",
+    }
+    _root_c2a_write_json(ready_path, ready)
+
+    authorization_path = scenario_root / "AUTHORIZE-RELEASE.json"
+    authorization = {
+        "schema": installer.H11_AUTHORIZATION_SCHEMA,
+        "formal_root": str(root),
+        "harness_manifest": harness_reference,
+        "permit_ready": _root_c2a_full_reference(ready_path),
+        "run_armed": armed_reference,
+        "permit_path": str(scenario_root / "PERMIT.json"),
+    }
+    _root_c2a_write_json(authorization_path, authorization)
+    return {
+        "authorization": authorization_path,
+        "manifest": manifest_path,
+        "ready": ready_path,
+        "armed": armed_path,
+        "request": request_path,
+        "run_plan": run_plan,
+        "run_program": run_program,
+        "ready_fifo": Path(acquisition["ready_fifo"]["path"]),
+        "release_fifo": Path(acquisition["release_fifo"]["path"]),
+    }
+
+
+def _root_c2a_rebind_sources(paths: dict[str, Path]) -> None:
+    ready = json.loads(paths["ready"].read_text(encoding="ascii"))
+    ready["harness_manifest"] = _root_c2a_full_reference(paths["manifest"])
+    ready["run_armed"] = _root_c2a_full_reference(paths["armed"])
+    _root_c2a_write_json(paths["ready"], ready)
+    authorization = json.loads(
+        paths["authorization"].read_text(encoding="ascii")
+    )
+    authorization["harness_manifest"] = _root_c2a_full_reference(
+        paths["manifest"]
+    )
+    authorization["permit_ready"] = _root_c2a_full_reference(paths["ready"])
+    authorization["run_armed"] = _root_c2a_full_reference(paths["armed"])
+    _root_c2a_write_json(paths["authorization"], authorization)
+
+
+def test_root_c2a_opens_exact_read_only_authorizer_session(tmp_path: Path) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    descriptors = [
+        session.authorization.descriptor,
+        session.permit_ready.descriptor,
+        session.run_armed.descriptor,
+        session.authority.manifest_descriptor,
+        *(item.descriptor for item in session.authority.bound_sources),
+        *(item.descriptor for item in session.authority.directories),
+        *(item.descriptor for item in session.authority.commit_fifos),
+    ]
+    try:
+        assert set(session.authorization_manifest) == {
+            "schema",
+            "formal_root",
+            "harness_manifest",
+            "permit_ready",
+            "run_armed",
+            "permit_path",
+        }
+        assert set(session.ready_receipt) == {
+            "schema",
+            "scenario",
+            "run_unit",
+            "boot_id",
+            "invocation_id",
+            "harness_manifest",
+            "run_armed",
+            "permit_authority",
+            "present_outputs",
+            "absent_paths",
+            "phase",
+        }
+        assert set(session.armed_receipt) == {
+            "schema",
+            "scenario",
+            "unit",
+            "actor",
+            "plan_path",
+            "plan_sha256",
+            "program",
+            "request_path",
+            "request_sha256",
+            "receipt_path",
+            "ready_fifo",
+            "release_fifo",
+            "ready_sha256",
+            "release_sha256",
+        }
+        for key, mode in (
+            ("harness_manifest", "0444"),
+            ("permit_ready", "0444"),
+            ("run_armed", "0600"),
+        ):
+            assert set(session.authorization_manifest[key]) == {
+                "path",
+                "sha256",
+                "device",
+                "inode",
+                "mode",
+                "uid",
+                "gid",
+            }
+            assert session.authorization_manifest[key]["mode"] == mode
+        assert [
+            item["role"]
+            for item in json.loads(paths["manifest"].read_text())["acquisitions"]
+        ] == ["run-main", "exec-stop-post", "closer"]
+        assert tuple(
+            item.role for item in session.authority.validated_fifos
+        ) == tuple(sorted(item.role for item in session.authority.validated_fifos))
+        ordinary = tuple(
+            item
+            for item in session.authority.validated_fifos
+            if item.owner == "fixture"
+        )
+        assert len(ordinary) == 6
+        assert all(
+            (item.uid, item.gid, item.mode)
+            == (
+                session.authority.fixture_uid,
+                session.authority.fixture_gid,
+                0o600,
+            )
+            for item in ordinary
+        )
+        assert session.armed_receipt["plan_path"] == str(paths["run_plan"])
+        assert session.armed_receipt["program"]["path"] == str(paths["run_program"])
+        frozen_fifo_authority = session.authority.validated_fifos
+        fixture_owner = (
+            session.authority.fixture_uid,
+            session.authority.fixture_gid,
+        )
+        session.revalidate()
+        assert session.authority.validated_fifos is frozen_fifo_authority
+        assert (
+            session.authority.fixture_uid,
+            session.authority.fixture_gid,
+        ) == fixture_owner
+    finally:
+        session.close()
+    for descriptor in descriptors:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+
+
+def test_root_c2a_does_not_open_static_plan_program_or_request(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    authority = installer.H11RootRetainedAuthority.open(
+        paths["manifest"], require_root=False
+    )
+    monkeypatch.setattr(
+        installer.H11RootRetainedAuthority,
+        "open",
+        classmethod(
+            lambda cls, manifest_path, *, require_root=True: authority
+        ),
+    )
+    forbidden = {paths["run_plan"], paths["run_program"], paths["request"]}
+    original_open = os.open
+    forbidden_opens: list[Path] = []
+
+    def recording_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        decoded = Path(os.fsdecode(path))
+        if dir_fd is None and decoded in forbidden:
+            forbidden_opens.append(decoded)
+        return (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+
+    monkeypatch.setattr(os, "open", recording_open)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    session.close()
+    assert forbidden_opens == []
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing-key",
+        "extra-key",
+        "short-reference",
+        "wrong-root",
+        "wrong-permit-path",
+    ),
+)
+def test_root_c2a_rejects_authorization_schema_reference_or_layout_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    authorization = json.loads(paths["authorization"].read_text())
+    if mutation == "missing-key":
+        authorization.pop("permit_ready")
+    elif mutation == "extra-key":
+        authorization["extra"] = True
+    elif mutation == "short-reference":
+        authorization["harness_manifest"].pop("uid")
+        authorization["harness_manifest"].pop("gid")
+    elif mutation == "wrong-root":
+        authorization["formal_root"] = str(tmp_path / "wrong-root")
+    else:
+        authorization["permit_path"] = str(tmp_path / "wrong-permit.json")
+    _root_c2a_write_json(paths["authorization"], authorization)
+    with pytest.raises(installer.InstallerError):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+def test_root_c2a_rejects_authorization_outside_exact_scenario_layout(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    wrong = paths["authorization"].with_name("WRONG-AUTHORIZE.json")
+    wrong.write_bytes(paths["authorization"].read_bytes())
+    wrong.chmod(0o444)
+    with pytest.raises(installer.InstallerError, match="authorization path"):
+        installer.H11RootAuthorizerSession.open(wrong, require_root=False)
+
+
+def test_root_c2a_rejects_caller_selected_run_armed_source(tmp_path: Path) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    decoy = paths["armed"].with_name("CALLER-SELECTED-ARMED.json")
+    decoy.write_bytes(paths["armed"].read_bytes())
+    decoy.chmod(0o600)
+    decoy_reference = _root_c2a_full_reference(decoy)
+    ready = json.loads(paths["ready"].read_text())
+    ready["run_armed"] = decoy_reference
+    _root_c2a_write_json(paths["ready"], ready)
+    authorization = json.loads(paths["authorization"].read_text())
+    authorization["run_armed"] = decoy_reference
+    authorization["permit_ready"] = _root_c2a_full_reference(paths["ready"])
+    _root_c2a_write_json(paths["authorization"], authorization)
+    with pytest.raises(installer.InstallerError, match="cannot select"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+def test_root_c2a_rejects_decoy_ready_before_any_decoy_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    decoy = paths["ready"].with_name("DECOY-PERMIT_READY.json")
+    decoy.write_bytes(paths["ready"].read_bytes())
+    decoy.chmod(0o444)
+    authorization = json.loads(paths["authorization"].read_text())
+    authorization["permit_ready"] = _root_c2a_full_reference(decoy)
+    _root_c2a_write_json(paths["authorization"], authorization)
+    original_open = os.open
+    decoy_opens: list[tuple[Any, ...]] = []
+
+    def recording_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        if Path(os.fsdecode(path)) == decoy:
+            decoy_opens.append((path, flags, mode, dir_fd))
+        return (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+
+    monkeypatch.setattr(os, "open", recording_open)
+    with pytest.raises(installer.InstallerError, match="PERMIT_READY path"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+    assert decoy_opens == []
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing",
+        "reordered",
+        "extra-acquisition",
+        "duplicate-run-main",
+        "fifo-identity",
+        "extra-field",
+        "commit-fifo-alias",
+    ),
+)
+def test_root_c2a_rejects_wrong_acquisition_tuple_or_fifo_authority(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text())
+    acquisitions = manifest["acquisitions"]
+    if mutation == "missing":
+        acquisitions.pop()
+    elif mutation == "reordered":
+        acquisitions[0], acquisitions[1] = acquisitions[1], acquisitions[0]
+    elif mutation == "extra-acquisition":
+        acquisitions.append(dict(acquisitions[-1]))
+    elif mutation == "duplicate-run-main":
+        acquisitions[1]["role"] = "run-main"
+    elif mutation == "fifo-identity":
+        acquisitions[0]["ready_fifo"]["inode"] = "1"
+    elif mutation == "extra-field":
+        acquisitions[0]["extra"] = True
+    else:
+        acquisitions[0]["ready_fifo"] = {
+            key: manifest["permit_authority"]["ready_commit_fifo"][key]
+            for key in ("path", "device", "inode")
+        }
+    _root_c2a_write_json(paths["manifest"], manifest)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="acquisition"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+def test_root_c2a_rejects_extra_tree_fifo_outside_closed_acquisitions(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path, extra_ordinary_fifo=True)
+    with pytest.raises(installer.InstallerError, match="exact six acquisitions"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing",
+        "reordered",
+        "extra",
+        "program-none",
+        "program-nested-extra",
+        "wrong-plan-bind",
+        "wrong-program-bind",
+    ),
+)
+def test_root_c2a_rejects_static_role_or_run_binding_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text())
+    static_roles = manifest["static_roles"]
+    if mutation == "missing":
+        static_roles.pop()
+    elif mutation == "reordered":
+        static_roles[0], static_roles[1] = static_roles[1], static_roles[0]
+    elif mutation == "extra":
+        static_roles.append(dict(static_roles[-1]))
+    elif mutation == "program-none":
+        static_roles[0]["program"] = None
+    elif mutation == "program-nested-extra":
+        static_roles[0]["program"]["extra"] = True
+    elif mutation == "wrong-plan-bind":
+        static_roles[0]["plan"] = dict(static_roles[1]["plan"])
+    else:
+        static_roles[0]["program"] = dict(static_roles[1]["program"])
+    _root_c2a_write_json(paths["manifest"], manifest)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="static"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+@pytest.mark.parametrize(
+    ("index", "field", "value"),
+    (
+        (1, "unit", "scion-w3-wrong-stop.service"),
+        (1, "owner", "adversary"),
+        (1, "mode", "closer"),
+        (2, "unit", "scion-w3-wrong-closer.service"),
+        (2, "owner", "formal"),
+        (2, "mode", "exec-stop-post"),
+    ),
+)
+def test_root_c2a_rejects_literal_stop_and_closer_static_tuple_drift(
+    tmp_path: Path,
+    index: int,
+    field: str,
+    value: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text())
+    manifest["static_roles"][index][field] = value
+    _root_c2a_write_json(paths["manifest"], manifest)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="static role tuple"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+def test_root_c2a_rejects_coherent_closer_unit_rebind_from_preflight_authority(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text())
+    manifest["closer_unit"] = manifest["run_unit"]
+    manifest["static_roles"][2]["unit"] = manifest["run_unit"]
+    _root_c2a_write_json(paths["manifest"], manifest)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="preflight receipt"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing-present-outputs",
+        "extra-key",
+        "schema",
+        "scenario",
+        "unit",
+        "permit-authority-crossbind",
+    ),
+)
+def test_root_c2a_rejects_ready_schema_or_crossbind_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    ready = json.loads(paths["ready"].read_text())
+    if mutation == "missing-present-outputs":
+        ready.pop("present_outputs")
+    elif mutation == "extra-key":
+        ready["extra"] = True
+    elif mutation == "schema":
+        ready["schema"] = "scion.test.wrong.v1"
+    elif mutation == "scenario":
+        ready["scenario"] = "H10"
+    elif mutation == "unit":
+        ready["run_unit"] = "scion-w3-wrong.service"
+    else:
+        ready["permit_authority"] = {"wrong": True}
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing-key",
+        "schema",
+        "scenario",
+        "unit",
+        "actor-extra",
+        "actor-boot",
+        "stop-environment",
+        "cgroup-noncanonical",
+        "cgroup-raw",
+        "ready-fifo",
+        "release-fifo",
+        "program-none",
+        "program-extra",
+        "program-identity-extra",
+        "program-mode-text",
+        "program-path-bind",
+        "plan-path-bind",
+        "plan-sha",
+        "request-type",
+        "request-sha",
+        "ready-digest",
+        "release-digest",
+    ),
+)
+def test_root_c2a_rejects_armed_schema_actor_or_fifo_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    armed = json.loads(paths["armed"].read_text())
+    if mutation == "missing-key":
+        armed.pop("request_sha256")
+    elif mutation == "schema":
+        armed["schema"] = "scion.test.wrong-armed.v1"
+    elif mutation == "scenario":
+        armed["scenario"] = "h10-gc-negative"
+    elif mutation == "unit":
+        armed["unit"] = "scion-w3-wrong.service"
+    elif mutation == "actor-extra":
+        armed["actor"]["extra"] = True
+    elif mutation == "actor-boot":
+        armed["actor"]["boot_id"] = "22222222-2222-2222-2222-222222222222"
+    elif mutation == "stop-environment":
+        armed["actor"]["stop_selector_environment"] = {"INVOCATION_ID": "a" * 32}
+    elif mutation == "cgroup-noncanonical":
+        armed["actor"]["unified_cgroup"] = "/system.slice//c2a.scope"
+        armed["actor"]["proc_cgroup_raw"] = "0::/system.slice//c2a.scope\n"
+    elif mutation == "cgroup-raw":
+        armed["actor"]["proc_cgroup_raw"] = "0::/wrong.scope\n"
+    elif mutation in {"ready-fifo", "release-fifo"}:
+        armed[mutation.replace("-", "_")]["inode"] = "1"
+    elif mutation == "program-none":
+        armed["program"] = None
+    elif mutation == "program-extra":
+        armed["program"]["extra"] = True
+    elif mutation == "program-identity-extra":
+        armed["program"]["identity"]["extra"] = 1
+    elif mutation == "program-mode-text":
+        armed["program"]["identity"]["mode"] = "0444"
+    elif mutation == "program-path-bind":
+        armed["program"]["path"] = str(paths["run_plan"])
+    elif mutation == "plan-path-bind":
+        armed["plan_path"] = str(paths["run_program"])
+    elif mutation == "plan-sha":
+        armed["plan_sha256"] = "A" * 64
+    elif mutation == "request-type":
+        armed["request_path"] = 1
+    elif mutation == "request-sha":
+        armed["request_sha256"] = "f" * 63
+    elif mutation == "ready-digest":
+        armed["ready_sha256"] = "f" * 64
+    else:
+        armed["release_sha256"] = "e" * 64
+    paths["armed"].chmod(0o600)
+    _write(paths["armed"], armed)
+    paths["armed"].chmod(0o600)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+def test_root_c2a_rejects_pinned_armed_owner_outside_fixture_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    original_pin = installer._pin_h11_json_source
+
+    def wrong_owner_pin(*args: Any, **kwargs: Any) -> tuple[Any, ...]:
+        result = original_pin(*args, **kwargs)
+        if kwargs.get("label") == "H11 run ARMED":
+            source = dict(result[3])
+            source["uid"] = str(int(source["uid"]) + 1)
+            result = (*result[:3], source)
+        return result
+
+    monkeypatch.setattr(installer, "_pin_h11_json_source", wrong_owner_pin)
+    with pytest.raises(installer.InstallerError, match="ARMED owner"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+def test_root_c2a_rejects_authorizer_regular_source_inode_alias(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    original_pin = installer._pin_h11_json_source
+    authorization_identity: tuple[str, str] | None = None
+
+    def aliasing_pin(*args: Any, **kwargs: Any) -> tuple[Any, ...]:
+        nonlocal authorization_identity
+        result = original_pin(*args, **kwargs)
+        label = kwargs.get("label")
+        if label == "H11 authorization manifest":
+            authorization_identity = (result[3]["device"], result[3]["inode"])
+        elif label == "H11 PERMIT_READY":
+            assert authorization_identity is not None
+            source = dict(result[3])
+            source["device"], source["inode"] = authorization_identity
+            result = (*result[:3], source)
+        return result
+
+    monkeypatch.setattr(installer, "_pin_h11_json_source", aliasing_pin)
+    with pytest.raises(installer.InstallerError, match="regular source aliases"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("armed-output", "request-transaction", "static-plan-transaction"),
+)
+def test_root_c2a_rejects_global_path_authority_alias(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text())
+    armed = json.loads(paths["armed"].read_text())
+    if mutation == "armed-output":
+        manifest["acquisitions"][1]["armed_receipt_path"] = manifest["outputs"][0][
+            "path"
+        ]
+    elif mutation == "request-transaction":
+        armed["request_path"] = manifest["permit_authority"]["permit_staging_path"]
+    else:
+        manifest["static_roles"][1]["plan"] = {
+            "path": manifest["permit_authority"]["permit_ledger_staging_path"],
+            "sha256": "f" * 64,
+        }
+    _root_c2a_write_json(paths["manifest"], manifest)
+    paths["armed"].chmod(0o600)
+    _write(paths["armed"], armed)
+    paths["armed"].chmod(0o600)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="path authority aliases"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+@pytest.mark.parametrize("mutation", ("armed", "request"))
+def test_root_c2a_rejects_frozen_root_alias_from_runtime_authority(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text())
+    frozen_root = paths["manifest"].parents[3] / "frozen"
+    if mutation == "armed":
+        manifest["acquisitions"][1]["armed_receipt_path"] = str(frozen_root)
+        _root_c2a_write_json(paths["manifest"], manifest)
+    else:
+        armed = json.loads(paths["armed"].read_text())
+        armed["request_path"] = str(frozen_root)
+        paths["armed"].chmod(0o600)
+        _write(paths["armed"], armed)
+        paths["armed"].chmod(0o600)
+    _root_c2a_rebind_sources(paths)
+    with pytest.raises(installer.InstallerError, match="frozen-root"):
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+
+
+@pytest.mark.parametrize("source", ("authorization", "manifest", "ready", "armed"))
+def test_root_c2a_revalidate_rejects_same_byte_source_replacement(
+    tmp_path: Path,
+    source: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    session = installer.H11RootAuthorizerSession.open(
+        paths["authorization"], require_root=False
+    )
+    path = paths[source]
+    displaced = path.with_name(f"{path.name}.displaced")
+    raw = path.read_bytes()
+    mode = stat.S_IMODE(path.lstat().st_mode)
+    path.rename(displaced)
+    path.write_bytes(raw)
+    path.chmod(mode)
+    try:
+        with pytest.raises(installer.InstallerError, match="revalidate|drifted"):
+            session.revalidate()
+    finally:
+        session.close()
+
+
+@pytest.mark.parametrize("failure", ("manifest", "ready", "armed"))
+def test_root_c2a_partial_open_failure_rolls_back_every_descriptor(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    target = {
+        "manifest": "MANIFEST.json",
+        "ready": "PERMIT_READY.json",
+        "armed": "RUN-MAIN-ARMED.json",
+    }[failure]
+    original_open = os.open
+    opened: list[int] = []
+
+    def failing_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        if Path(os.fsdecode(path)).name == target:
+            raise OSError("injected C2a pin failure")
+        descriptor = (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+        opened.append(descriptor)
+        return descriptor
+
+    monkeypatch.setattr(os, "open", failing_open)
+    with pytest.raises(installer.InstallerError, match="cannot pin") as error:
+        installer.H11RootAuthorizerSession.open(
+            paths["authorization"], require_root=False
+        )
+    assert isinstance(error.value.__cause__, OSError)
+    assert "injected C2a" in str(error.value.__cause__)
+    assert opened
+    for descriptor in opened:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+    assert not (paths["authorization"].parent / "PERMIT.json").exists()
+
+
+def test_root_c2a_ast_closes_mutation_fifo_and_directory_repin_escape() -> None:
+    source = inspect.getsource(installer.H11RootAuthorizerSession)
+    tree = ast.parse(source)
+    allowed_direct_name_calls = {
+        "RetainedH11RootJsonSource",
+        "_decode_canonical_object",
+        "_decode_h11_full_source_reference",
+        "_decode_h11_hashed_path",
+        "_exact",
+        "_fail",
+        "_path",
+        "_pin_h11_json_source",
+        "_require_root",
+        "_text",
+        "_uint",
+        "any",
+        "cls",
+        "dict",
+        "enumerate",
+        "len",
+        "set",
+        "str",
+        "type",
+        "zip",
+    }
+    direct_name_calls = {
+        node.func.id
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+    assert direct_name_calls == allowed_direct_name_calls
+    assert not any(
+        token in source
+        for token in (
+            "_publish_h11",
+            "derive_closed_partition",
+            "_pin_canonical_directory",
+            "_require_absent",
+            "write_commit",
+            "read_commit",
+            "timeout",
+            "deadline",
+            "retry",
+            "callback",
+            "budget",
+            "cap",
+            "truncate",
+            "cleanup",
+            "poll",
+            "sleep",
+        )
+    )
+    attribute_calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+    ]
+    assert not any(
+        isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "os"
+        for node in attribute_calls
+    )
+    assert {
+        ast.unparse(node.func)
+        for node in attribute_calls
+        if node.func.attr == "open"
+    } == {"H11RootRetainedAuthority.open"}
+    assert not any(
+        node.func.attr
+        in {
+            "write",
+            "write_bytes",
+            "write_text",
+            "touch",
+            "mkdir",
+            "unlink",
+            "rename",
+            "replace",
+            "remove",
+            "rmdir",
+            "chmod",
+            "chown",
+            "link",
+            "symlink",
+            "lstat",
+            "stat",
+        }
+        for node in attribute_calls
+    )
 
 
 def test_real_formal_producer_crosses_exact_harness_consumer_and_release(

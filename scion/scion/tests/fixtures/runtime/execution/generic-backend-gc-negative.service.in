@@ -1,0 +1,23 @@
+# H10 NEGATIVE CONTROL ONLY. This unit can never satisfy formal acceptance.
+[Unit]
+Description=Scion H10 GC negative control (rejected) @CASE@
+X-Scion-Acceptance-Case=H10-negative-control-only
+X-Scion-Expected-Result=rejected-failed-identity-loss
+CollectMode=inactive-or-failed
+
+[Service]
+Type=exec
+User=@FIXTURE_USER@
+Group=@FIXTURE_GROUP@
+UMask=0077
+ExecStart=/usr/bin/python3.12 -I -B @RUN_PROGRAM@ --plan @RUN_PLAN@
+Restart=no
+KillMode=control-group
+SendSIGKILL=yes
+TimeoutStopSec=infinity
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadOnlyPaths=@SEALED_ROOT@ @INPUT_ROOT@
+ReadWritePaths=@WORK_ROOT@ @FIFO_ROOT@
