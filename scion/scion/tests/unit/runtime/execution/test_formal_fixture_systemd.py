@@ -3133,55 +3133,6 @@ def _root_c1a_authority_model(
     }
 
 
-def test_root_c1a_retains_exact_parent_fd_chain_and_commit_fifos(
-    tmp_path: Path,
-) -> None:
-    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
-    authority = installer.H11RootRetainedAuthority.open(
-        manifest_path,
-        require_root=False,
-    )
-    descriptors = [
-        authority.manifest_descriptor,
-        *(item.descriptor for item in authority.bound_sources),
-        *(item.descriptor for item in authority.directories),
-        *(item.descriptor for item in authority.commit_fifos),
-    ]
-    try:
-        assert [item.reference.role for item in authority.directories] == [
-            "formal-root",
-            "authority-root",
-            "harness-root",
-            "scenario-root",
-            "input-root",
-            "receipt-root",
-            "fifo-root",
-        ]
-        assert [item.child_name for item in authority.directories] == [
-            None,
-            "authority",
-            "harness",
-            "H11",
-            "input",
-            "receipts",
-            "fifo",
-        ]
-        assert [item.role for item in authority.commit_fifos] == [
-            "h11-ready-commit",
-            "h11-permit-commit",
-        ]
-        authority.revalidate(require_root=False)
-    finally:
-        authority.close()
-    assert authority.manifest_descriptor == -1
-    assert all(item.descriptor == -1 for item in authority.bound_sources)
-    assert all(item.descriptor == -1 for item in authority.directories)
-    assert all(item.descriptor == -1 for item in authority.commit_fifos)
-    for descriptor in descriptors:
-        with pytest.raises(OSError):
-            os.fstat(descriptor)
-
-
 @pytest.mark.parametrize("replacement", ("receipt-directory", "ready-fifo"))
 def test_root_c1a_revalidate_rejects_chain_or_fifo_replacement(
     tmp_path: Path, replacement: str
@@ -5137,113 +5088,59 @@ def _root_c2a_rebind_sources(paths: dict[str, Path]) -> None:
     _root_c2a_write_json(paths["authorization"], authorization)
 
 
-def test_root_c2a_opens_exact_read_only_authorizer_session(tmp_path: Path) -> None:
-    paths = _root_c2a_session_model(tmp_path)
-    session = installer.H11RootAuthorizerSession.open(
-        paths["authorization"], require_root=False
+def _root_c2a_run_public_authorization_flow(
+    paths: dict[str, Path],
+) -> tuple[
+    installer.H11RootAuthorizationFlow,
+    installer.H11RootCommitReceipt,
+    tuple[bytes, ...],
+]:
+    frames: list[bytes] = []
+    errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2d_public_fifo_peer,
+        args=(paths, frames, errors),
     )
-    descriptors = [
-        session.authorization.descriptor,
-        session.permit_ready.descriptor,
-        session.run_armed.descriptor,
-        session.authority.manifest_descriptor,
-        *(item.descriptor for item in session.authority.bound_sources),
-        *(item.descriptor for item in session.authority.directories),
-        *(item.descriptor for item in session.authority.commit_fifos),
-    ]
+    peer.start()
+    flow = installer.H11RootAuthorizationFlow(
+        paths["authorization"],
+        require_root=False,
+    )
     try:
-        assert set(session.authorization_manifest) == {
-            "schema",
-            "formal_root",
-            "harness_manifest",
-            "permit_ready",
-            "run_armed",
-            "permit_path",
-        }
-        assert set(session.ready_receipt) == {
-            "schema",
-            "scenario",
-            "run_unit",
-            "boot_id",
-            "invocation_id",
-            "harness_manifest",
-            "run_armed",
-            "permit_authority",
-            "present_outputs",
-            "absent_paths",
-            "phase",
-        }
-        assert set(session.armed_receipt) == {
-            "schema",
-            "scenario",
-            "unit",
-            "actor",
-            "plan_path",
-            "plan_sha256",
-            "program",
-            "request_path",
-            "request_sha256",
-            "receipt_path",
-            "ready_fifo",
-            "release_fifo",
-            "ready_sha256",
-            "release_sha256",
-        }
-        for key, mode in (
-            ("harness_manifest", "0444"),
-            ("permit_ready", "0444"),
-            ("run_armed", "0600"),
-        ):
-            assert set(session.authorization_manifest[key]) == {
-                "path",
-                "sha256",
-                "device",
-                "inode",
-                "mode",
-                "uid",
-                "gid",
-            }
-            assert session.authorization_manifest[key]["mode"] == mode
-        assert [
-            item["role"]
-            for item in json.loads(paths["manifest"].read_text())["acquisitions"]
-        ] == ["run-main", "exec-stop-post", "closer"]
-        assert tuple(
-            item.role for item in session.authority.validated_fifos
-        ) == tuple(sorted(item.role for item in session.authority.validated_fifos))
-        ordinary = tuple(
-            item
-            for item in session.authority.validated_fifos
-            if item.owner == "fixture"
-        )
-        assert len(ordinary) == 6
-        assert all(
-            (item.uid, item.gid, item.mode)
-            == (
-                session.authority.fixture_uid,
-                session.authority.fixture_gid,
-                0o600,
-            )
-            for item in ordinary
-        )
-        assert session.armed_receipt["plan_path"] == str(paths["run_plan"])
-        assert session.armed_receipt["program"]["path"] == str(paths["run_program"])
-        frozen_fifo_authority = session.authority.validated_fifos
-        fixture_owner = (
-            session.authority.fixture_uid,
-            session.authority.fixture_gid,
-        )
-        session.revalidate()
-        assert session.authority.validated_fifos is frozen_fifo_authority
-        assert (
-            session.authority.fixture_uid,
-            session.authority.fixture_gid,
-        ) == fixture_owner
+        receipt = flow.authorize_once()
     finally:
-        session.close()
-    for descriptor in descriptors:
-        with pytest.raises(OSError):
-            os.fstat(descriptor)
+        flow.close()
+    peer.join()
+    assert errors == []
+    return flow, receipt, tuple(frames)
+
+
+def test_root_c2a_public_flow_accepts_exact_read_only_authority(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    flow, receipt, frames = _root_c2a_run_public_authorization_flow(paths)
+    assert flow.state is installer.H11RootAuthorizationState.COMPLETE
+    assert frames == (installer.H11_PERMIT_COMMITTED_BYTES,)
+    assert receipt.phase == "permit-committed"
+    assert receipt.fifo.path == (
+        paths["authorization"].parents[3]
+        / "fifo"
+        / "h11-permit-committed.fifo"
+    )
+    assert receipt.payload_sha256 == hashlib.sha256(
+        installer.H11_PERMIT_COMMITTED_BYTES
+    ).hexdigest()
+    assert receipt.byte_count == str(len(installer.H11_PERMIT_COMMITTED_BYTES))
+    assert receipt.reference == {
+        "schema": installer.H11_COMMIT_FIFO_RECEIPT_SCHEMA,
+        "phase": "permit-committed",
+        "fifo": receipt.fifo.reference,
+        "payload_sha256": hashlib.sha256(
+            installer.H11_PERMIT_COMMITTED_BYTES
+        ).hexdigest(),
+        "byte_count": str(len(installer.H11_PERMIT_COMMITTED_BYTES)),
+    }
 
 
 def test_root_c2a_does_not_open_static_plan_program_or_request(
@@ -5821,99 +5718,6 @@ def test_root_c2a_partial_open_failure_rolls_back_every_descriptor(
         with pytest.raises(OSError):
             os.fstat(descriptor)
     assert not (paths["authorization"].parent / "PERMIT.json").exists()
-
-
-def test_root_c2a_ast_closes_mutation_fifo_and_directory_repin_escape() -> None:
-    source = inspect.getsource(installer.H11RootAuthorizerSession)
-    tree = ast.parse(source)
-    allowed_direct_name_calls = {
-        "RetainedH11RootJsonSource",
-        "_close_h11_ownership",
-        "_decode_canonical_object",
-        "_decode_h11_full_source_reference",
-        "_decode_h11_hashed_path",
-        "_exact",
-        "_fail",
-        "_path",
-        "_pin_h11_json_source",
-        "_require_root",
-        "_text",
-        "_uint",
-        "any",
-        "cls",
-        "dict",
-        "enumerate",
-        "len",
-        "set",
-        "str",
-        "tuple",
-        "type",
-        "zip",
-    }
-    direct_name_calls = {
-        node.func.id
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-    assert direct_name_calls == allowed_direct_name_calls
-    assert not any(
-        token in source
-        for token in (
-            "_publish_h11",
-            "derive_closed_partition",
-            "_pin_canonical_directory",
-            "_require_absent",
-            "write_commit",
-            "read_commit",
-            "timeout",
-            "deadline",
-            "retry",
-            "callback",
-            "budget",
-            "cap",
-            "truncate",
-            "cleanup",
-            "poll",
-            "sleep",
-        )
-    )
-    attribute_calls = [
-        node
-        for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
-    ]
-    assert not any(
-        isinstance(node.func.value, ast.Name)
-        and node.func.value.id == "os"
-        for node in attribute_calls
-    )
-    assert {
-        ast.unparse(node.func)
-        for node in attribute_calls
-        if node.func.attr == "open"
-    } == {"H11RootRetainedAuthority.open"}
-    assert not any(
-        node.func.attr
-        in {
-            "write",
-            "write_bytes",
-            "write_text",
-            "touch",
-            "mkdir",
-            "unlink",
-            "rename",
-            "replace",
-            "remove",
-            "rmdir",
-            "chmod",
-            "chown",
-            "link",
-            "symlink",
-            "lstat",
-            "stat",
-        }
-        for node in attribute_calls
-    )
 
 
 def _root_c2b_ready_fifo(
@@ -8696,6 +8500,604 @@ def _root_c2d_public_fifo_peer(
                 os.close(descriptor)
             except OSError:
                 pass
+
+
+def _root_c2e_atomic_flow_distribution_model(
+    tmp_path: Path,
+    *,
+    n_input: int,
+) -> tuple[dict[str, Path], tuple[str, ...]]:
+    assert n_input in range(11)
+    paths = _root_c2a_session_model(tmp_path)
+    future_roles = (
+        "closer-properties",
+        "exec-stop-post-properties",
+        "final",
+        "final-closer-properties",
+        "final-run-properties",
+        "h12-absence",
+        "journal",
+        "manager-events",
+        "signals",
+        "source-selector",
+    )
+    manifest = json.loads(paths["manifest"].read_text(encoding="ascii"))
+    input_root = Path(manifest["input_root"])
+    receipt_root = Path(manifest["receipt_root"])
+    for ordinal, role in enumerate(future_roles):
+        matches = tuple(
+            row for row in manifest["outputs"] if row["role"] == role
+        )
+        assert len(matches) == 1
+        matches[0]["path"] = str(
+            (input_root if ordinal < n_input else receipt_root)
+            / f"{role}.json"
+        )
+    future_inventory = [
+        {
+            "role": role,
+            "path": next(
+                row["path"]
+                for row in manifest["outputs"]
+                if row["role"] == role
+            ),
+        }
+        for role in future_roles
+    ]
+    future_inventory.append(
+        {
+            "role": "frozen-root",
+            "path": str(paths["authorization"].parents[3] / "frozen"),
+        }
+    )
+    future_inventory.sort(key=lambda row: row["role"])
+    manifest["permit_authority"]["future_absence_inventory"] = (
+        future_inventory
+    )
+    _root_c2a_write_json(paths["manifest"], manifest)
+
+    ready = json.loads(paths["ready"].read_text(encoding="ascii"))
+    ready["permit_authority"] = manifest["permit_authority"]
+    ready["absent_paths"] = future_inventory
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+
+    reparsed_manifest = json.loads(
+        paths["manifest"].read_text(encoding="ascii")
+    )
+    reparsed_ready = json.loads(paths["ready"].read_text(encoding="ascii"))
+    reparsed_authorization = json.loads(
+        paths["authorization"].read_text(encoding="ascii")
+    )
+    assert reparsed_manifest["permit_authority"] == reparsed_ready[
+        "permit_authority"
+    ]
+    assert reparsed_manifest["permit_authority"][
+        "future_absence_inventory"
+    ] == reparsed_ready["absent_paths"]
+    assert reparsed_ready["harness_manifest"] == _root_c2a_full_reference(
+        paths["manifest"]
+    )
+    assert reparsed_authorization[
+        "harness_manifest"
+    ] == _root_c2a_full_reference(paths["manifest"])
+    assert reparsed_authorization["permit_ready"] == _root_c2a_full_reference(
+        paths["ready"]
+    )
+    return paths, future_roles
+
+
+@pytest.mark.parametrize("n_input", range(11))
+def test_root_c2e_atomic_flow_future_parent_distribution_e2e(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    n_input: int,
+) -> None:
+    paths, future_roles = _root_c2e_atomic_flow_distribution_model(
+        tmp_path,
+        n_input=n_input,
+    )
+    manifest = json.loads(paths["manifest"].read_text(encoding="ascii"))
+    manifest_role_paths = tuple(
+        (row["role"], Path(row["path"])) for row in manifest["outputs"]
+    )
+    assert tuple(role for role, _path in manifest_role_paths) == (
+        "closer-properties",
+        "exec-stop-post-properties",
+        "final",
+        "final-closer-properties",
+        "final-run-properties",
+        "h0",
+        "h12-absence",
+        "journal",
+        "manager-events",
+        "run-main-properties",
+        "signals",
+        "source-selector",
+    )
+    future_role_paths = tuple(
+        (
+            role,
+            next(path for item_role, path in manifest_role_paths if item_role == role),
+        )
+        for role in future_roles
+    )
+    present_role_paths = tuple(
+        (
+            role,
+            next(path for item_role, path in manifest_role_paths if item_role == role),
+        )
+        for role in ("h0", "run-main-properties")
+    )
+    frames: list[bytes] = []
+    errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2d_public_fifo_peer,
+        args=(paths, frames, errors),
+    )
+    peer.start()
+    flow = installer.H11RootAuthorizationFlow(
+        paths["authorization"],
+        require_root=False,
+    )
+    future_leaf_roles = {
+        path.name: role for role, path in future_role_paths
+    }
+    future_stat_calls: list[
+        tuple[str, str, int | None, str, int | None]
+    ] = []
+    input_ordinal = 0
+    receipt_ordinal = 0
+    original_stat = os.stat
+
+    def recording_stat(
+        path: os.PathLike[str] | str | bytes,
+        *args: Any,
+        **kwargs: Any,
+    ) -> os.stat_result:
+        nonlocal input_ordinal, receipt_ordinal
+        path_text = os.fsdecode(path)
+        dir_fd = kwargs.get("dir_fd")
+        slot_index = next(
+            (
+                index
+                for index in (15, 11, 10)
+                if flow._slots[index]._descriptor >= 0
+                and dir_fd == flow._slots[index]._descriptor
+            ),
+            None,
+        )
+        if path_text == "frozen" or path_text in future_leaf_roles:
+            role = (
+                "frozen-root"
+                if path_text == "frozen"
+                else future_leaf_roles[path_text]
+            )
+            if slot_index == 15:
+                future_stat_calls.append(
+                    (role, path_text, slot_index, "frozen", None)
+                )
+            elif slot_index == 11:
+                future_stat_calls.append(
+                    (role, path_text, slot_index, "input", input_ordinal)
+                )
+                input_ordinal += 1
+            elif slot_index == 10:
+                future_stat_calls.append(
+                    (role, path_text, slot_index, "receipt", receipt_ordinal)
+                )
+                receipt_ordinal += 1
+            else:
+                future_stat_calls.append(
+                    (role, path_text, slot_index, "unexpected", None)
+                )
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", recording_stat)
+    receipt = flow.authorize_once()
+    peer.join()
+
+    assert errors == []
+    assert frames == [installer.H11_PERMIT_COMMITTED_BYTES]
+    assert type(receipt) is installer.H11RootCommitReceipt
+    assert receipt.phase == "permit-committed"
+    assert flow.state is installer.H11RootAuthorizationState.COMPLETE
+    assert type(flow._phase_data) is installer.H11RootPermitPhaseData
+    partition = flow._phase_data.ready_data.partition
+    assert type(partition) is installer.H11RootClosedPartition
+    assert tuple(partition.__dataclass_fields__) == (
+        "present_prerequisites",
+        "future_absence_inventory",
+        "frozen_root",
+        "input_future_absence",
+        "receipt_future_absence",
+    )
+    assert type(partition.present_prerequisites) is tuple
+    assert type(partition.future_absence_inventory) is tuple
+    assert type(partition.input_future_absence) is tuple
+    assert type(partition.receipt_future_absence) is tuple
+    assert tuple(item.role for item in partition.present_prerequisites) == (
+        "h0",
+        "run-main-properties",
+    )
+    assert tuple(
+        (item.role, item.path) for item in partition.present_prerequisites
+    ) == present_role_paths
+    assert tuple(item.role for item in partition.future_absence_inventory) == (
+        "closer-properties",
+        "exec-stop-post-properties",
+        "final",
+        "final-closer-properties",
+        "final-run-properties",
+        "frozen-root",
+        "h12-absence",
+        "journal",
+        "manager-events",
+        "signals",
+        "source-selector",
+    )
+    assert partition.frozen_root is partition.future_absence_inventory[5]
+    output_inventory = (
+        partition.future_absence_inventory[:5]
+        + partition.future_absence_inventory[6:]
+    )
+    assert tuple(
+        (item.role, item.path) for item in output_inventory
+    ) == future_role_paths
+    assert tuple(
+        (item.role, item.path) for item in partition.input_future_absence
+    ) == future_role_paths[:n_input]
+    assert tuple(
+        (item.role, item.path) for item in partition.receipt_future_absence
+    ) == future_role_paths[n_input:]
+    assert len(partition.input_future_absence) + len(
+        partition.receipt_future_absence
+    ) == 10
+    projected = (
+        partition.input_future_absence + partition.receipt_future_absence
+    )
+    assert all(
+        projected[ordinal] is output_inventory[ordinal]
+        for ordinal in range(10)
+    )
+    assert all(
+        item.path.parent == Path(manifest["input_root"])
+        for item in partition.input_future_absence
+    )
+    assert all(
+        item.path.parent == Path(manifest["receipt_root"])
+        for item in partition.receipt_future_absence
+    )
+    assert partition.frozen_root.path == (
+        paths["authorization"].parents[3] / "frozen"
+    )
+    expected_future_stat_calls = (
+        ("frozen-root", "frozen", 15, "frozen", None),
+        *(
+            (role, path.name, 11, "input", ordinal)
+            for ordinal, (role, path) in enumerate(
+                future_role_paths[:n_input]
+            )
+        ),
+        *(
+            (role, path.name, 10, "receipt", ordinal)
+            for ordinal, (role, path) in enumerate(
+                future_role_paths[n_input:]
+            )
+        ),
+    )
+    assert len(future_stat_calls) == 11
+    assert tuple(future_stat_calls) == expected_future_stat_calls
+    assert all(slot._descriptor == -1 for slot in flow._slots)
+
+
+def _root_c2e_atomic_flow_ready_only_peer(
+    paths: dict[str, Path],
+    errors: list[BaseException],
+) -> None:
+    ready_path = (
+        paths["authorization"].parents[3]
+        / "fifo"
+        / "h11-ready-committed.fifo"
+    )
+    descriptor = -1
+    try:
+        descriptor = os.open(ready_path, os.O_WRONLY | os.O_CLOEXEC)
+        if os.write(descriptor, installer.H11_READY_COMMITTED_BYTES) != len(
+            installer.H11_READY_COMMITTED_BYTES
+        ):
+            raise AssertionError("atomic Flow READY peer write was incomplete")
+    except BaseException as exc:
+        errors.append(exc)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def test_root_c2e_atomic_flow_rejects_same_parent_decoy_future_leaf(
+    tmp_path: Path,
+) -> None:
+    paths, _future_roles = _root_c2e_atomic_flow_distribution_model(
+        tmp_path,
+        n_input=0,
+    )
+    ready = json.loads(paths["ready"].read_text(encoding="ascii"))
+    original = Path(ready["absent_paths"][0]["path"])
+    decoy = original.with_name(f"decoy-{original.name}")
+    assert decoy.parent == original.parent
+    ready["absent_paths"][0]["path"] = str(decoy)
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+
+    peer_errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2e_atomic_flow_ready_only_peer,
+        args=(paths, peer_errors),
+    )
+    peer.start()
+    flow = installer.H11RootAuthorizationFlow(
+        paths["authorization"],
+        require_root=False,
+    )
+    with pytest.raises(
+        installer.InstallerError,
+        match="future inventory differs from sealed authority",
+    ):
+        flow.authorize_once()
+    peer.join()
+    assert peer_errors == []
+    assert flow.state is installer.H11RootAuthorizationState.FAILED_PREWRITE
+    assert all(slot._descriptor == -1 for slot in flow._slots)
+    assert not (paths["authorization"].parent / "PERMIT.json").exists()
+
+
+@pytest.mark.parametrize("failure_kind", ("missing", "exists", "oserror"))
+@pytest.mark.parametrize("target_index", range(11))
+@pytest.mark.parametrize("n_input", range(11))
+def test_root_c2e_atomic_flow_future_stat_focused_faults(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    n_input: int,
+    target_index: int,
+    failure_kind: str,
+) -> None:
+    paths, future_roles = _root_c2e_atomic_flow_distribution_model(
+        tmp_path,
+        n_input=n_input,
+    )
+    manifest = json.loads(paths["manifest"].read_text(encoding="ascii"))
+    future_role_paths = tuple(
+        (
+            role,
+            Path(
+                next(
+                    row["path"]
+                    for row in manifest["outputs"]
+                    if row["role"] == role
+                )
+            ),
+        )
+        for role in future_roles
+    )
+    global_ordinals = (0, 1, 2, 3, 4, 6, 7, 8, 9, 10)
+    expected_identities = (
+        (
+            "FUTURE_FROZEN_SLOT15",
+            "frozen-root",
+            15,
+            "frozen",
+            None,
+            5,
+        ),
+        *(
+            (
+                "FUTURE_INPUT_SLOT11",
+                role,
+                11,
+                "input",
+                ordinal,
+                global_ordinals[ordinal],
+            )
+            for ordinal, (role, _path) in enumerate(
+                future_role_paths[:n_input]
+            )
+        ),
+        *(
+            (
+                "FUTURE_RECEIPT_SLOT10",
+                role,
+                10,
+                "receipt",
+                ordinal,
+                global_ordinals[ordinal + n_input],
+            )
+            for ordinal, (role, _path) in enumerate(
+                future_role_paths[n_input:]
+            )
+        ),
+    )
+    expected_leaves = (
+        "frozen",
+        *(path.name for _role, path in future_role_paths[:n_input]),
+        *(path.name for _role, path in future_role_paths[n_input:]),
+    )
+    assert len(expected_identities) == len(expected_leaves) == 11
+    assert {row[5] for row in expected_identities} == set(range(11))
+
+    flow = installer.H11RootAuthorizationFlow(
+        paths["authorization"],
+        require_root=False,
+    )
+    expected_by_leaf = {
+        leaf: (identity[1], identity[5])
+        for identity, leaf in zip(expected_identities, expected_leaves)
+    }
+    actual_identities: list[
+        tuple[str, str, int | None, str, int | None, int]
+    ] = []
+    actual_leaves: list[str] = []
+    stat_after_target: list[tuple[str, int | None]] = []
+    target_state: installer.H11RootAuthorizationState | None = None
+    target_bitmap: tuple[bool, ...] | None = None
+    target_descriptors: tuple[int, ...] | None = None
+    target_fired = False
+    input_ordinal = 0
+    receipt_ordinal = 0
+    primary_error = OSError(errno.EIO, "focused future stat failure")
+    missing_error = FileNotFoundError(
+        errno.ENOENT,
+        "focused future stat expected absence",
+    )
+    original_stat = os.stat
+    close_counts: dict[int, int] = {}
+    original_close = os.close
+
+    def focused_stat(
+        path: os.PathLike[str] | str | bytes,
+        *args: Any,
+        **kwargs: Any,
+    ) -> os.stat_result:
+        nonlocal input_ordinal, receipt_ordinal
+        nonlocal target_bitmap, target_descriptors, target_fired, target_state
+        path_text = os.fsdecode(path)
+        dir_fd = kwargs.get("dir_fd")
+        if target_fired:
+            stat_after_target.append((path_text, dir_fd))
+        slot_index = next(
+            (
+                index
+                for index in (15, 11, 10)
+                if flow._slots[index]._descriptor >= 0
+                and dir_fd == flow._slots[index]._descriptor
+            ),
+            None,
+        )
+        if path_text in expected_by_leaf:
+            role, global_ordinal = expected_by_leaf[path_text]
+            if slot_index == 15:
+                static_site = "FUTURE_FROZEN_SLOT15"
+                partition_kind = "frozen"
+                partition_ordinal = None
+            elif slot_index == 11:
+                static_site = "FUTURE_INPUT_SLOT11"
+                partition_kind = "input"
+                partition_ordinal = input_ordinal
+                input_ordinal += 1
+            elif slot_index == 10:
+                static_site = "FUTURE_RECEIPT_SLOT10"
+                partition_kind = "receipt"
+                partition_ordinal = receipt_ordinal
+                receipt_ordinal += 1
+            else:
+                static_site = "UNEXPECTED"
+                partition_kind = "unexpected"
+                partition_ordinal = None
+            actual_identities.append(
+                (
+                    static_site,
+                    role,
+                    slot_index,
+                    partition_kind,
+                    partition_ordinal,
+                    global_ordinal,
+                )
+            )
+            actual_leaves.append(path_text)
+            if len(actual_identities) - 1 == target_index:
+                target_fired = True
+                target_state = flow.state
+                target_bitmap = tuple(
+                    slot._descriptor >= 0 for slot in flow._slots
+                )
+                target_descriptors = tuple(
+                    slot._descriptor
+                    for slot in flow._slots
+                    if slot._descriptor >= 0
+                )
+                close_counts.clear()
+                if failure_kind == "missing":
+                    raise missing_error
+                if failure_kind == "exists":
+                    return os.stat_result(
+                        (stat.S_IFREG | 0o444, 0, 0, 1, 0, 0, 0, 0, 0, 0)
+                    )
+                raise primary_error
+        return original_stat(path, *args, **kwargs)
+
+    def counting_close(descriptor: int) -> None:
+        close_counts[descriptor] = close_counts.get(descriptor, 0) + 1
+        original_close(descriptor)
+
+    monkeypatch.setattr(os, "stat", focused_stat)
+    monkeypatch.setattr(os, "close", counting_close)
+    frames: list[bytes] = []
+    peer_errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=(
+            _root_c2d_public_fifo_peer
+            if failure_kind == "missing"
+            else _root_c2e_atomic_flow_ready_only_peer
+        ),
+        args=(
+            (paths, frames, peer_errors)
+            if failure_kind == "missing"
+            else (paths, peer_errors)
+        ),
+    )
+    peer.start()
+    if failure_kind == "missing":
+        receipt = flow.authorize_once()
+        peer.join()
+        assert peer_errors == []
+        assert frames == [installer.H11_PERMIT_COMMITTED_BYTES]
+        assert type(receipt) is installer.H11RootCommitReceipt
+        assert receipt.phase == "permit-committed"
+        assert target_fired is True
+        assert target_state is installer.H11RootAuthorizationState.READY_CONSUMED
+        assert target_bitmap == (False, False, False, *(True for _index in range(20)))
+        assert target_descriptors is not None
+        assert len(target_descriptors) == len(set(target_descriptors)) == 20
+        assert tuple(actual_identities) == expected_identities
+        assert tuple(actual_leaves) == expected_leaves
+        assert flow.state is installer.H11RootAuthorizationState.COMPLETE
+        assert (paths["authorization"].parent / "PERMIT.json").is_file()
+        assert all(
+            close_counts[descriptor] == 1 for descriptor in target_descriptors
+        )
+    else:
+        if failure_kind == "exists":
+            with pytest.raises(installer.InstallerError) as propagated:
+                flow.authorize_once()
+            expected_role = expected_identities[target_index][1]
+            assert str(propagated.value) == (
+                f"H11 future output {expected_role} exists before permit"
+            )
+        else:
+            with pytest.raises(OSError) as propagated:
+                flow.authorize_once()
+            assert propagated.value is primary_error
+        peer.join()
+        assert peer_errors == []
+        assert target_fired is True
+        assert target_state is installer.H11RootAuthorizationState.READY_CONSUMED
+        assert target_bitmap == (False, False, False, *(True for _index in range(20)))
+        assert target_descriptors is not None
+        assert len(target_descriptors) == len(set(target_descriptors)) == 20
+        assert tuple(actual_identities) == expected_identities[: target_index + 1]
+        assert tuple(actual_leaves) == expected_leaves[: target_index + 1]
+        assert stat_after_target == []
+        assert flow.state is installer.H11RootAuthorizationState.FAILED_PREWRITE
+        assert all(
+            close_counts[descriptor] == 1 for descriptor in target_descriptors
+        )
+        for leaf in (
+            "PERMIT.pending",
+            "PERMIT.json",
+            "PERMIT-LEDGER.pending",
+            "PERMIT-LEDGER.json",
+        ):
+            assert not (paths["authorization"].parent / leaf).exists()
+    assert all(slot._descriptor == -1 for slot in flow._slots)
 
 
 def test_root_c2d_public_chain_returns_exact_receipt_and_closes_all(

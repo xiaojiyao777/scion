@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ctypes
 from dataclasses import dataclass
+from enum import Enum
 import grp
 import hashlib
 import json
@@ -23,7 +24,7 @@ import re
 import select
 import stat
 import sys
-from typing import Any, Callable, NoReturn, Protocol
+from typing import Any, Callable, NoReturn, Protocol, TypeAlias, Union
 
 
 PREPARE_SCHEMA = "scion.generic_backend.root_prepare.v1"
@@ -1075,145 +1076,118 @@ def _decode_canonical_object(raw: bytes, *, label: str) -> dict[str, Any]:
     return value
 
 
-def _pin_h11_json_source(
-    path: Path,
-    *,
-    label: str,
-    expected_reference: Any | None = None,
-    ownership_bound: bool = False,
-    required_mode: int | None = None,
-    require_root_owner: bool = False,
-) -> tuple[int, dict[str, Any], bytes, dict[str, str]]:
-    """Open one H11 authority once and retain the exact decoded source."""
+H11RootFrozenJsonValue: TypeAlias = Union[
+    None,
+    bool,
+    int,
+    str,
+    tuple["H11RootFrozenJsonValue", ...],
+    tuple[tuple[str, "H11RootFrozenJsonValue"], ...],
+]
+H11RootFrozenJsonObject = tuple[tuple[str, H11RootFrozenJsonValue], ...]
 
-    expected: dict[str, Any] | None = None
-    if expected_reference is not None:
-        if type(expected_reference) is not dict:
-            _fail(f"{label} reference must be one exact object")
-        expected_keys = {"path", "sha256", "device", "inode", "mode"}
-        if ownership_bound:
-            expected_keys |= {"uid", "gid"}
-        _exact(expected_reference, expected_keys, label=f"{label} reference")
-        expected = dict(expected_reference)
-        if _path(expected["path"], label=f"{label}.path") != path:
-            _fail(f"{label} path differs from its reference")
-        if _HEX_RE.fullmatch(_text(expected["sha256"], label=f"{label}.sha256")) is None:
-            _fail(f"{label}.sha256 is not canonical")
-        _uint(expected["device"], label=f"{label}.device")
-        _uint(expected["inode"], label=f"{label}.inode")
-        mode = _text(expected["mode"], label=f"{label}.mode")
-        if _MODE_RE.fullmatch(mode) is None:
-            _fail(f"{label}.mode is not canonical")
-        if ownership_bound:
-            _uint(expected["uid"], label=f"{label}.uid")
-            _uint(expected["gid"], label=f"{label}.gid")
-    try:
-        before = path.lstat()
-    except OSError as exc:
-        raise InstallerError(f"cannot stat {label}: {path}") from exc
-    if not stat.S_ISREG(before.st_mode):
-        _fail(f"{label} must be one non-symlink regular file")
-    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
-    try:
-        descriptor = os.open(path, flags)
-    except OSError as exc:
-        raise InstallerError(f"cannot pin {label}: {path}") from exc
-    try:
-        opened = os.fstat(descriptor)
-        if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
-            _fail(f"{label} identity changed while opening")
-        chunks: list[bytes] = []
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        raw = b"".join(chunks)
-        after = os.fstat(descriptor)
-        current = path.lstat()
-        source = {
-            "path": str(path),
-            "sha256": hashlib.sha256(raw).hexdigest(),
-            "device": str(after.st_dev),
-            "inode": str(after.st_ino),
-            "mode": format(stat.S_IMODE(after.st_mode), "04o"),
-            "uid": str(after.st_uid),
-            "gid": str(after.st_gid),
-        }
-        if (
-            not stat.S_ISREG(after.st_mode)
-            or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)
-            or (current.st_dev, current.st_ino) != (before.st_dev, before.st_ino)
-            or after.st_size != len(raw)
-            or after.st_mtime_ns != before.st_mtime_ns
-            or current.st_size != before.st_size
-            or current.st_mtime_ns != before.st_mtime_ns
-        ):
-            _fail(f"{label} bytes or identity drifted while pinning")
-        if required_mode is not None and stat.S_IMODE(after.st_mode) != required_mode:
-            _fail(f"{label} mode is not {required_mode:04o}")
-        if require_root_owner and (after.st_uid != 0 or after.st_gid != 0):
-            _fail(f"{label} must be root-owned")
-        if expected is not None:
-            actual_reference = {
-                key: source[key]
-                for key in expected
-            }
-            if actual_reference != expected:
-                _fail(f"{label} differs from its frozen full reference")
-        decoded = _decode_canonical_object(raw, label=label)
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        return descriptor, decoded, raw, source
-    except BaseException as exc:
-        closing_descriptor = descriptor
-        descriptor = -1
-        _close_h11_ownership(
-            (),
-            active_error=exc,
-            initial_descriptor=closing_descriptor,
+
+def _freeze_h11_json_value(value: Any) -> H11RootFrozenJsonValue:
+    if value is None or type(value) is bool or type(value) is int or type(value) is str:
+        return value
+    if type(value) is list:
+        return tuple(_freeze_h11_json_value(item) for item in value)
+    if type(value) is dict:
+        return tuple(
+            (key, _freeze_h11_json_value(item))
+            for key, item in dict.items(value)
+            if type(key) is str
         )
-        raise
+    _fail("H11 canonical JSON contains a non-JSON value")
 
 
-def _revalidate_h11_source(
-    descriptor: int,
-    path: Path,
+def _decode_h11_canonical_frozen_object(
     raw: bytes,
-    source: dict[str, str],
     *,
     label: str,
-) -> None:
-    """Revalidate one retained H11 source without reopening its path for bytes."""
-
+) -> H11RootFrozenJsonObject:
     try:
-        opened = os.fstat(descriptor)
-        current = path.lstat()
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        chunks: list[bytes] = []
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        reread = b"".join(chunks)
-        os.lseek(descriptor, 0, os.SEEK_SET)
-    except OSError as exc:
-        raise InstallerError(f"cannot revalidate retained {label}") from exc
-    if (
-        reread != raw
-        or hashlib.sha256(reread).hexdigest() != source["sha256"]
-        or (str(opened.st_dev), str(opened.st_ino))
-        != (source["device"], source["inode"])
-        or (str(current.st_dev), str(current.st_ino))
-        != (source["device"], source["inode"])
-        or format(stat.S_IMODE(opened.st_mode), "04o") != source["mode"]
-        or format(stat.S_IMODE(current.st_mode), "04o") != source["mode"]
-        or str(opened.st_uid) != source["uid"]
-        or str(opened.st_gid) != source["gid"]
-        or str(current.st_uid) != source["uid"]
-        or str(current.st_gid) != source["gid"]
+        text = bytes.decode(raw, "utf-8", "strict")
+        parsed = json.loads(text)
+        encoded = str.encode(
+            json.dumps(
+                parsed,
+                ensure_ascii=True,
+                allow_nan=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            )
+            + "\n",
+            "ascii",
+        )
+    except (UnicodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise InstallerError(f"{label} is not strict canonical JSON") from exc
+    if type(parsed) is not dict or encoded != raw:
+        _fail(f"{label} must be one exact canonical JSON object")
+    frozen = _freeze_h11_json_value(parsed)
+    if type(frozen) is not tuple or any(
+        type(row) is not tuple or len(row) != 2 or type(row[0]) is not str
+        for row in frozen
     ):
-        _fail(f"retained {label} drifted before permit publication")
+        _fail(f"{label} did not freeze to one exact object")
+    return frozen
+
+
+def _h11_exact_object_fields(
+    value: H11RootFrozenJsonValue,
+    expected_fields: tuple[str, ...],
+    *,
+    label: str,
+) -> H11RootFrozenJsonObject:
+    if type(value) is not tuple or tuple(key for key, _item in value) != expected_fields:
+        _fail(f"{label} fields differ from the exact closed set")
+    return value
+
+
+def _h11_object_member(
+    value: H11RootFrozenJsonObject,
+    field: str,
+    *,
+    label: str,
+) -> H11RootFrozenJsonValue:
+    matches = tuple(item for key, item in value if key == field)
+    if len(matches) != 1:
+        _fail(f"{label}.{field} is missing or duplicated")
+    return matches[0]
+
+
+def _h11_text(value: H11RootFrozenJsonValue, *, label: str) -> str:
+    if type(value) is not str:
+        _fail(f"{label} must be one string")
+    return value
+
+
+def _h11_uint(value: H11RootFrozenJsonValue, *, label: str) -> int:
+    if type(value) is not str or re.fullmatch(r"0|[1-9][0-9]*", value) is None:
+        _fail(f"{label} must be one canonical unsigned integer")
+    result = int(value, 10)
+    if result > (1 << 64) - 1:
+        _fail(f"{label} exceeds uint64")
+    return result
+
+
+def _h11_path(value: H11RootFrozenJsonValue, *, label: str) -> Path:
+    if type(value) is not str:
+        _fail(f"{label} must be one path string")
+    result = Path(value)
+    if (
+        not result.is_absolute()
+        or str(result) != value
+        or any(part in {".", ".."} for part in result.parts)
+    ):
+        _fail(f"{label} must be one normalized absolute path")
+    return result
+
+
+def _h11_sha256_text(value: H11RootFrozenJsonValue, *, label: str) -> str:
+    if type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+        _fail(f"{label} must be one canonical SHA-256 digest")
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -1227,25 +1201,51 @@ class H11RootDirectoryReference:
     gid: int
 
     @classmethod
-    def decode(cls, value: Any, *, label: str) -> "H11RootDirectoryReference":
-        if type(value) is not dict:
-            _fail(f"{label} must be one exact directory reference")
-        _exact(
-            value,
-            {"role", "path", "device", "inode", "mode", "uid", "gid"},
-            label=label,
-        )
-        mode_text = _text(value["mode"], label=f"{label}.mode")
-        if _MODE_RE.fullmatch(mode_text) is None:
-            _fail(f"{label}.mode is not canonical")
-        return cls(
-            _text(value["role"], label=f"{label}.role"),
-            _path(value["path"], label=f"{label}.path"),
-            _uint(value["device"], label=f"{label}.device"),
-            _uint(value["inode"], label=f"{label}.inode"),
-            int(mode_text, 8),
-            _uint(value["uid"], label=f"{label}.uid"),
-            _uint(value["gid"], label=f"{label}.gid"),
+    def decode(
+        cls,
+        value: H11RootFrozenJsonValue,
+        *,
+        label: str,
+    ) -> "H11RootDirectoryReference":
+        if type(value) is not tuple or tuple(key for key, _item in value) != (
+            "device", "gid", "inode", "mode", "path", "role", "uid"
+        ):
+            _fail(f"{label} fields differ from the exact closed set")
+        row = dict(value)
+        if (
+            type(row["role"]) is not str
+            or type(row["path"]) is not str
+            or type(row["mode"]) is not str
+            or re.fullmatch(r"0[0-7]{3}", row["mode"]) is None
+        ):
+            _fail(f"{label} role/path/mode is not canonical")
+        path = Path(row["path"])
+        if (
+            not path.is_absolute()
+            or str(path) != row["path"]
+            or any(part in {".", ".."} for part in path.parts)
+        ):
+            _fail(f"{label}.path is not canonical")
+        numbers: list[int] = []
+        for field in ("device", "inode", "uid", "gid"):
+            text = row[field]
+            if (
+                type(text) is not str
+                or re.fullmatch(r"0|[1-9][0-9]*", text) is None
+            ):
+                _fail(f"{label}.{field} is not canonical")
+            number = int(text, 10)
+            if number > (1 << 64) - 1:
+                _fail(f"{label}.{field} exceeds uint64")
+            numbers.append(number)
+        return H11RootDirectoryReference(
+            row["role"],
+            path,
+            numbers[0],
+            numbers[1],
+            int(row["mode"], 8),
+            numbers[2],
+            numbers[3],
         )
 
     @property
@@ -1278,26 +1278,65 @@ class H11RootFifoReference:
     mode: int
     uid: int
     gid: int
+    accepted_owners: tuple[tuple[int, int], ...]
 
     @classmethod
-    def decode(cls, value: Any, *, label: str) -> "H11RootFifoReference":
-        if type(value) is not dict:
-            _fail(f"{label} must be one exact FIFO reference")
-        _exact(
-            value,
-            {"path", "device", "inode", "mode", "uid", "gid"},
-            label=label,
+    def decode(
+        cls,
+        value: H11RootFrozenJsonValue,
+        *,
+        label: str,
+        require_root: bool,
+        process_euid: int,
+        process_egid: int,
+    ) -> "H11RootFifoReference":
+        if type(value) is not tuple or tuple(key for key, _item in value) != (
+            "device", "gid", "inode", "mode", "path", "uid"
+        ):
+            _fail(f"{label} fields differ from the exact closed set")
+        row = dict(value)
+        if (
+            type(row["path"]) is not str
+            or type(row["mode"]) is not str
+            or re.fullmatch(r"0[0-7]{3}", row["mode"]) is None
+        ):
+            _fail(f"{label} path/mode is not canonical")
+        path = Path(row["path"])
+        if (
+            not path.is_absolute()
+            or str(path) != row["path"]
+            or any(part in {".", ".."} for part in path.parts)
+        ):
+            _fail(f"{label}.path is not canonical")
+        numbers: list[int] = []
+        for field in ("device", "inode", "uid", "gid"):
+            text = row[field]
+            if (
+                type(text) is not str
+                or re.fullmatch(r"0|[1-9][0-9]*", text) is None
+            ):
+                _fail(f"{label}.{field} is not canonical")
+            number = int(text, 10)
+            if number > (1 << 64) - 1:
+                _fail(f"{label}.{field} exceeds uint64")
+            numbers.append(number)
+        uid = numbers[2]
+        gid = numbers[3]
+        if require_root and (uid, gid) != (0, 0):
+            _fail(f"{label} must declare root ownership")
+        accepted_owners = (
+            tuple(sorted({(0, 0), (process_euid, process_egid)}))
+            if not require_root and (uid, gid) == (0, 0)
+            else ((uid, gid),)
         )
-        mode_text = _text(value["mode"], label=f"{label}.mode")
-        if _MODE_RE.fullmatch(mode_text) is None:
-            _fail(f"{label}.mode is not canonical")
-        return cls(
-            _path(value["path"], label=f"{label}.path"),
-            _uint(value["device"], label=f"{label}.device"),
-            _uint(value["inode"], label=f"{label}.inode"),
-            int(mode_text, 8),
-            _uint(value["uid"], label=f"{label}.uid"),
-            _uint(value["gid"], label=f"{label}.gid"),
+        return H11RootFifoReference(
+            path,
+            numbers[0],
+            numbers[1],
+            int(row["mode"], 8),
+            uid,
+            gid,
+            accepted_owners,
         )
 
     @property
@@ -1311,58 +1350,15 @@ class H11RootFifoReference:
             "gid": str(self.gid),
         }
 
-    def prove(self, info: os.stat_result, *, require_root: bool, label: str) -> None:
-        test_root_owner = (
-            not require_root
-            and (self.uid, self.gid) == (0, 0)
-            and (info.st_uid, info.st_gid) == (os.geteuid(), os.getegid())
-        )
+    def prove(self, info: os.stat_result, *, label: str) -> None:
         if (
             not stat.S_ISFIFO(info.st_mode)
             or (info.st_dev, info.st_ino) != (self.device, self.inode)
             or stat.S_IMODE(info.st_mode) != self.mode
             or self.mode != 0o600
-            or (
-                (info.st_uid, info.st_gid) != (self.uid, self.gid)
-                and not test_root_owner
-            )
-            or (require_root and (self.uid != 0 or self.gid != 0))
+            or (info.st_uid, info.st_gid) not in self.accepted_owners
         ):
             _fail(f"{label} FIFO identity/mode/owner drifted")
-
-
-def _close_h11_ownership(
-    owners: tuple[Any, ...],
-    *,
-    active_error: BaseException | None = None,
-    initial_descriptor: int = -1,
-    final_descriptor: int = -1,
-) -> None:
-    first_error: BaseException | None = None
-    if initial_descriptor >= 0:
-        try:
-            os.close(initial_descriptor)
-        except BaseException as exc:
-            first_error = exc
-    for owner in owners:
-        try:
-            owner.close()
-        except BaseException as exc:
-            if first_error is None:
-                first_error = exc
-    if final_descriptor >= 0:
-        try:
-            os.close(final_descriptor)
-        except BaseException as exc:
-            if first_error is None:
-                first_error = exc
-    if first_error is not None:
-        if active_error is None:
-            raise first_error
-        active_error.add_note(
-            "H11 ownership teardown secondary: "
-            f"{type(first_error).__name__}: {first_error}"
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1375,12 +1371,12 @@ class H11RootCommitReceipt:
     @classmethod
     def ready_committed(
         cls,
-        fifo: "RetainedH11RootFifo",
+        fifo: "H11RootFifoView",
         payload: bytes,
     ) -> "H11RootCommitReceipt":
         if fifo.role != "h11-ready-commit" or payload != H11_READY_COMMITTED_BYTES:
             _fail("H11 READY commit receipt source is not the exact committed frame")
-        return cls(
+        return H11RootCommitReceipt(
             "ready-committed",
             fifo.reference,
             hashlib.sha256(payload).hexdigest(),
@@ -1390,7 +1386,7 @@ class H11RootCommitReceipt:
     @classmethod
     def permit_committed(
         cls,
-        fifo: "RetainedH11RootFifo",
+        fifo: "H11RootFifoView",
         payload: bytes,
     ) -> "H11RootCommitReceipt":
         if (
@@ -1398,7 +1394,7 @@ class H11RootCommitReceipt:
             or payload != H11_PERMIT_COMMITTED_BYTES
         ):
             _fail("H11 PERMIT commit receipt source is not the exact committed frame")
-        return cls(
+        return H11RootCommitReceipt(
             "permit-committed",
             fifo.reference,
             hashlib.sha256(payload).hexdigest(),
@@ -1414,189 +1410,6 @@ class H11RootCommitReceipt:
             "payload_sha256": self.payload_sha256,
             "byte_count": self.byte_count,
         }
-
-
-@dataclass
-class RetainedH11RootDirectory:
-    reference: H11RootDirectoryReference
-    descriptor: int
-    parent_descriptor: int | None
-    child_name: str | None
-
-    def revalidate(self, *, require_root: bool) -> None:
-        if self.descriptor < 0:
-            _fail(f"H11 {self.reference.role} descriptor closed before last use")
-        try:
-            opened = os.fstat(self.descriptor)
-            current = (
-                self.reference.path.lstat()
-                if self.parent_descriptor is None
-                else os.stat(
-                    self.child_name,
-                    dir_fd=self.parent_descriptor,
-                    follow_symlinks=False,
-                )
-            )
-        except OSError as exc:
-            raise InstallerError(
-                f"cannot revalidate H11 {self.reference.role}"
-            ) from exc
-        self.reference.prove(
-            opened, require_root=require_root, label=f"H11 {self.reference.role}"
-        )
-        self.reference.prove(
-            current, require_root=require_root, label=f"H11 {self.reference.role}"
-        )
-
-    def close(self) -> None:
-        if self.descriptor >= 0:
-            descriptor = self.descriptor
-            self.descriptor = -1
-            os.close(descriptor)
-
-
-@dataclass
-class RetainedH11RootFifo:
-    role: str
-    reference: H11RootFifoReference
-    descriptor: int
-    parent_descriptor: int
-
-    def revalidate(self, *, require_root: bool) -> None:
-        if self.descriptor < 0:
-            _fail(f"H11 {self.role} descriptor closed before last use")
-        try:
-            opened = os.fstat(self.descriptor)
-            current = os.stat(
-                self.reference.path.name,
-                dir_fd=self.parent_descriptor,
-                follow_symlinks=False,
-            )
-        except OSError as exc:
-            raise InstallerError(f"cannot revalidate H11 {self.role}") from exc
-        self.reference.prove(
-            opened, require_root=require_root, label=f"H11 {self.role}"
-        )
-        self.reference.prove(
-            current, require_root=require_root, label=f"H11 {self.role}"
-        )
-
-    def read_ready_commit(self, *, require_root: bool) -> H11RootCommitReceipt:
-        """Consume the one blocking descriptor-bound READY commit frame."""
-
-        if self.role != "h11-ready-commit":
-            _fail("only the retained READY commit FIFO authorizes a root reader")
-        if self.descriptor < 0:
-            _fail("H11 READY commit FIFO descriptor closed before endpoint open")
-        descriptor = -1
-        chunks: list[bytes] = []
-        try:
-            try:
-                descriptor = os.open(
-                    f"/proc/self/fd/{self.descriptor}",
-                    os.O_RDONLY | os.O_CLOEXEC,
-                )
-            except OSError as exc:
-                raise InstallerError(
-                    "cannot open H11 READY commit reader"
-                ) from exc
-            self.reference.prove(
-                os.fstat(descriptor),
-                require_root=require_root,
-                label="H11 ready-commit reader",
-            )
-            while True:
-                chunk = os.read(descriptor, select.PIPE_BUF)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            closing_descriptor = descriptor
-            descriptor = -1
-            os.close(closing_descriptor)
-            payload = b"".join(chunks)
-            if payload != H11_READY_COMMITTED_BYTES:
-                _fail("H11 READY commit FIFO frame differs before EOF")
-            return H11RootCommitReceipt.ready_committed(self, payload)
-        except BaseException as exc:
-            closing_descriptor = descriptor
-            descriptor = -1
-            _close_h11_ownership(
-                (),
-                active_error=exc,
-                initial_descriptor=closing_descriptor,
-            )
-            raise
-
-    def open_permit_commit_writer(self, *, require_root: bool) -> int:
-        """Open and prove the retained blocking PERMIT commit writer."""
-
-        if self.role != "h11-permit-commit":
-            _fail("only the retained PERMIT commit FIFO authorizes a root writer")
-        if self.descriptor < 0:
-            _fail("H11 PERMIT commit FIFO descriptor closed before endpoint open")
-        descriptor = -1
-        try:
-            descriptor = os.open(
-                f"/proc/self/fd/{self.descriptor}",
-                os.O_WRONLY | os.O_CLOEXEC,
-            )
-            self.reference.prove(
-                os.fstat(descriptor),
-                require_root=require_root,
-                label="H11 permit-commit writer",
-            )
-            return descriptor
-        except OSError as exc:
-            error = InstallerError("cannot open H11 PERMIT commit writer")
-            closing_descriptor = descriptor
-            descriptor = -1
-            _close_h11_ownership(
-                (),
-                active_error=error,
-                initial_descriptor=closing_descriptor,
-            )
-            raise error from exc
-        except BaseException as exc:
-            closing_descriptor = descriptor
-            descriptor = -1
-            _close_h11_ownership(
-                (),
-                active_error=exc,
-                initial_descriptor=closing_descriptor,
-            )
-            raise
-
-    def close(self) -> None:
-        if self.descriptor >= 0:
-            descriptor = self.descriptor
-            self.descriptor = -1
-            os.close(descriptor)
-
-
-@dataclass
-class RetainedH11RootJsonSource:
-    descriptor: int
-    path: Path
-    raw: bytes
-    source: dict[str, str]
-    label: str
-
-    def revalidate(self) -> None:
-        if self.descriptor < 0:
-            _fail(f"retained {self.label} descriptor closed before last use")
-        _revalidate_h11_source(
-            self.descriptor,
-            self.path,
-            self.raw,
-            self.source,
-            label=self.label,
-        )
-
-    def close(self) -> None:
-        if self.descriptor >= 0:
-            descriptor = self.descriptor
-            self.descriptor = -1
-            os.close(descriptor)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1623,6 +1436,9 @@ class H11RootRolePath:
 class H11RootClosedPartition:
     present_prerequisites: tuple[H11RootRolePath, ...]
     future_absence_inventory: tuple[H11RootRolePath, ...]
+    frozen_root: H11RootRolePath
+    input_future_absence: tuple[H11RootRolePath, ...]
+    receipt_future_absence: tuple[H11RootRolePath, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1646,24 +1462,7 @@ class H11RootValidatedFifo:
     mode: int
     device: int
     inode: int
-
-    @classmethod
-    def from_tree_row(
-        cls, value: dict[str, str], *, label: str
-    ) -> "H11RootValidatedFifo":
-        mode_text = _text(value["mode"], label=f"{label}.mode")
-        if _MODE_RE.fullmatch(mode_text) is None:
-            _fail(f"{label}.mode is not canonical")
-        return cls(
-            _text(value["role"], label=f"{label}.role"),
-            _path(value["path"], label=f"{label}.path"),
-            _text(value["owner"], label=f"{label}.owner"),
-            _uint(value["uid"], label=f"{label}.uid"),
-            _uint(value["gid"], label=f"{label}.gid"),
-            int(mode_text, 8),
-            _uint(value["device"], label=f"{label}.device"),
-            _uint(value["inode"], label=f"{label}.inode"),
-        )
+    accepted_owners: tuple[tuple[int, int], ...]
 
     @property
     def acquisition_reference(self) -> dict[str, str]:
@@ -1674,2069 +1473,15 @@ class H11RootValidatedFifo:
         }
 
 
-@dataclass
-class H11RootRetainedAuthority:
-    manifest_path: Path
-    manifest_descriptor: int
-    manifest: dict[str, Any]
-    manifest_raw: bytes
-    manifest_source: dict[str, str]
-    require_root: bool
-    bound_sources: tuple[RetainedH11RootJsonSource, ...]
-    directories: tuple[RetainedH11RootDirectory, ...]
-    commit_fifos: tuple[RetainedH11RootFifo, ...]
-    fixture_uid: int
-    fixture_gid: int
-    validated_fifos: tuple[H11RootValidatedFifo, ...]
-
-    @staticmethod
-    def _decode_fifo_rows(
-        tree_receipt: Any, preflight_receipt: Any
-    ) -> dict[str, dict[str, Any]]:
-        if type(tree_receipt) is not dict or type(preflight_receipt) is not dict:
-            _fail("H11 TREE/PREFLIGHT receipts must be exact objects")
-        tree_rows = tree_receipt.get("fifos")
-        preflight_rows = preflight_receipt.get("fifos")
-        if type(tree_rows) is not list or preflight_rows != tree_rows:
-            _fail("H11 TREE/PREFLIGHT FIFO inventories differ")
-        rows: dict[str, dict[str, Any]] = {}
-        for index, row in enumerate(tree_rows):
-            if type(row) is not dict:
-                _fail(f"H11 TREE FIFO row {index} is not an object")
-            _exact(
-                row,
-                {"role", "path", "owner", "uid", "gid", "mode", "device", "inode"},
-                label=f"H11 TREE FIFO row {index}",
-            )
-            role = _text(row["role"], label=f"H11 TREE FIFO row {index}.role")
-            if role in rows:
-                _fail("H11 TREE FIFO role is duplicated")
-            rows[role] = row
-        if list(rows) != sorted(rows):
-            _fail("H11 TREE FIFO inventory is not sorted by role")
-        return rows
-
-    @classmethod
-    def open(
-        cls,
-        manifest_path: Path,
-        *,
-        require_root: bool = True,
-    ) -> "H11RootRetainedAuthority":
-        manifest_descriptor = -1
-        bound_sources: list[RetainedH11RootJsonSource] = []
-        directories: list[RetainedH11RootDirectory] = []
-        fifos: list[RetainedH11RootFifo] = []
-        result: H11RootRetainedAuthority | None = None
-        try:
-            (
-                manifest_descriptor,
-                manifest,
-                manifest_raw,
-                manifest_source,
-            ) = _pin_h11_json_source(
-                manifest_path,
-                label="H11 harness manifest",
-                required_mode=0o444,
-                require_root_owner=require_root,
-            )
-            _exact(
-                manifest,
-                _H11_HARNESS_MANIFEST_KEYS,
-                label="H11 harness manifest",
-            )
-            if (
-                manifest["schema"]
-                != "scion.generic_backend.systemd_harness_manifest.v1"
-                or manifest["scenario"] != "H11"
-            ):
-                _fail("H11 harness manifest schema/scenario drifted")
-            permit_authority = manifest["permit_authority"]
-            if type(permit_authority) is not dict:
-                _fail("H11 permit_authority must be one exact object")
-            _exact(
-                permit_authority,
-                _H11_PERMIT_AUTHORITY_KEYS,
-                label="H11 permit_authority",
-            )
-            if (
-                permit_authority["schema"] != H11_PERMIT_AUTHORITY_SCHEMA
-                or permit_authority["scenario"] != "H11"
-                or permit_authority["run_unit"] != manifest["run_unit"]
-            ):
-                _fail("H11 permit_authority schema/scenario/run unit drifted")
-
-            root = manifest_path.parents[3]
-            scenario_root = root / "authority" / "harness" / "H11"
-            if manifest_path != scenario_root / "MANIFEST.json":
-                _fail("H11 harness manifest path is outside the exact root layout")
-            if (
-                _path(manifest["input_root"], label="H11 manifest input_root")
-                != root / "input"
-                or _path(
-                    manifest["receipt_root"], label="H11 manifest receipt_root"
-                )
-                != scenario_root / "receipts"
-            ):
-                _fail("H11 manifest output roots differ from the exact directory chain")
-
-            installer_binding = manifest["installer_receipt"]
-            if type(installer_binding) is not dict:
-                _fail("H11 installer_receipt must be one exact hashed reference")
-            _exact(
-                installer_binding,
-                {"path", "sha256"},
-                label="H11 installer_receipt",
-            )
-            install_receipt_path = _path(
-                installer_binding["path"], label="H11 installer_receipt.path"
-            )
-            if install_receipt_path.parent != root / "authority":
-                _fail("H11 install receipt is outside the exact authority root")
-            (
-                install_receipt_descriptor,
-                install_receipt,
-                install_receipt_raw,
-                install_receipt_source,
-            ) = _pin_h11_json_source(
-                install_receipt_path,
-                label="H11 install receipt",
-                required_mode=0o444,
-                require_root_owner=require_root,
-            )
-            install_receipt_retained = RetainedH11RootJsonSource(
-                install_receipt_descriptor,
-                install_receipt_path,
-                install_receipt_raw,
-                install_receipt_source,
-                "H11 install receipt",
-            )
-            bound_sources.append(install_receipt_retained)
-            if {
-                "path": install_receipt_source["path"],
-                "sha256": install_receipt_source["sha256"],
-            } != installer_binding:
-                _fail("H11 installer_receipt differs from its retained source")
-            _exact(
-                install_receipt,
-                {
-                    "schema",
-                    "formal_root",
-                    "installer",
-                    "install_manifest",
-                    "tree_receipt",
-                    "seal_receipt",
-                    "preflight_receipt",
-                    "manager_owner",
-                    "manager_ledger",
-                    "fixture_user",
-                    "fixture_group",
-                    "fixture_uid",
-                    "fixture_gid",
-                    "reload_call_count",
-                    "load_call_count",
-                    "units",
-                    "phase",
-                },
-                label="H11 install receipt",
-            )
-            formal_root = install_receipt["formal_root"]
-            if type(formal_root) is not dict:
-                _fail("H11 install receipt formal_root must be one exact object")
-            if (
-                install_receipt["schema"] != INSTALL_RECEIPT_SCHEMA
-                or install_receipt["phase"] != "installed-before-observation"
-                or install_receipt["reload_call_count"] != "1"
-            ):
-                _fail("H11 install receipt schema/phase drifted")
-            _validate_directory_identity(
-                formal_root,
-                expected_path=root,
-                expected_mode=0o711,
-                label="H11 install formal root",
-            )
-            _validate_install_receipt(
-                install_receipt,
-                root=root,
-                reference={"path": str(install_receipt_path)},
-                require_root=require_root,
-            )
-
-            install_manifest_binding = install_receipt["install_manifest"]
-            if type(install_manifest_binding) is not dict:
-                _fail("H11 install_manifest must be one exact full reference")
-            (
-                install_manifest_descriptor,
-                install_manifest,
-                install_manifest_raw,
-                install_manifest_source,
-            ) = _pin_h11_json_source(
-                _path(
-                    install_manifest_binding.get("path"),
-                    label="H11 install_manifest.path",
-                ),
-                label="H11 install manifest",
-                expected_reference=install_manifest_binding,
-                required_mode=0o444,
-                require_root_owner=require_root,
-            )
-            bound_sources.append(
-                RetainedH11RootJsonSource(
-                    install_manifest_descriptor,
-                    Path(install_manifest_source["path"]),
-                    install_manifest_raw,
-                    install_manifest_source,
-                    "H11 install manifest",
-                )
-            )
-            _exact(
-                install_manifest,
-                {
-                    "schema",
-                    "formal_root",
-                    "tree_receipt",
-                    "seal_receipt",
-                    "preflight_receipt",
-                    "units",
-                    "receipt_path",
-                },
-                label="H11 bound install manifest",
-            )
-            if (
-                install_manifest["schema"] != INSTALL_SCHEMA
-                or install_manifest["formal_root"] != str(root)
-                or install_manifest["receipt_path"] != str(install_receipt_path)
-                or any(
-                    install_manifest[key] != install_receipt[key]
-                    for key in ("tree_receipt", "seal_receipt", "preflight_receipt")
-                )
-            ):
-                _fail("H11 install receipt differs from its bound install manifest")
-
-            retained_receipts: dict[str, tuple[dict[str, Any], dict[str, str]]] = {}
-            for key, schema in (
-                ("tree_receipt", TREE_RECEIPT_SCHEMA),
-                ("seal_receipt", SEAL_RECEIPT_SCHEMA),
-                ("preflight_receipt", PREFLIGHT_RECEIPT_SCHEMA),
-            ):
-                binding = install_receipt[key]
-                if type(binding) is not dict:
-                    _fail(f"H11 {key} must be one exact full reference")
-                _exact(
-                    binding,
-                    {"path", "sha256", "device", "inode"},
-                    label=f"H11 {key}",
-                )
-                source_path = _path(binding["path"], label=f"H11 {key}.path")
-                descriptor, decoded, raw, source_reference = _pin_h11_json_source(
-                    source_path,
-                    label=f"H11 {key}",
-                    required_mode=0o444,
-                    require_root_owner=require_root,
-                )
-                retained = RetainedH11RootJsonSource(
-                    descriptor,
-                    source_path,
-                    raw,
-                    source_reference,
-                    f"H11 {key}",
-                )
-                bound_sources.append(retained)
-                if {
-                    field: source_reference[field]
-                    for field in ("path", "sha256", "device", "inode")
-                } != binding:
-                    _fail(f"H11 {key} differs from its retained full reference")
-                if decoded.get("schema") != schema:
-                    _fail(f"H11 {key} schema drifted")
-                retained_receipts[key] = (decoded, source_reference)
-
-            tree_receipt, tree_source = retained_receipts["tree_receipt"]
-            seal_receipt, _seal_source = retained_receipts["seal_receipt"]
-            preflight_receipt, _preflight_source = retained_receipts[
-                "preflight_receipt"
-            ]
-            preflight_path = Path(_preflight_source["path"])
-            if Path(tree_source["path"]).parent != root / "authority":
-                _fail("H11 TREE receipt is outside the exact authority root")
-            (
-                _fixture_user,
-                _fixture_group,
-                fixture_uid,
-                fixture_gid,
-                tree_fifos,
-            ) = _validate_tree_receipt(
-                tree_receipt,
-                root=root,
-                receipt_path=Path(tree_source["path"]),
-                require_root=require_root,
-                sealed=True,
-            )
-            _validate_seal_receipt(
-                seal_receipt,
-                root=root,
-                tree_reference=install_receipt["tree_receipt"],
-                require_root=require_root,
-            )
-            _exact(
-                preflight_receipt,
-                {
-                    "schema",
-                    "asset_count",
-                    "close_unit",
-                    "formal_root",
-                    "inventory_manifest",
-                    "fifos",
-                    "phase",
-                    "run_unit",
-                    "seal_receipt",
-                    "tree_receipt",
-                },
-                label="H11 preflight receipt",
-            )
-            if (
-                preflight_receipt["schema"] != PREFLIGHT_RECEIPT_SCHEMA
-                or preflight_receipt["phase"] != "static-preflight-complete"
-                or preflight_receipt["formal_root"] != str(root)
-                or preflight_path.parent.parent != root / "authority"
-                or preflight_path.name != "PREFLIGHT.json"
-                or preflight_receipt["run_unit"] != manifest["run_unit"]
-                or preflight_receipt["close_unit"] != manifest["closer_unit"]
-                or preflight_receipt["fifos"] != tree_fifos
-                or preflight_receipt["tree_receipt"]
-                != {**install_receipt["tree_receipt"], "mode": "0444"}
-                or preflight_receipt["seal_receipt"]
-                != {**install_receipt["seal_receipt"], "mode": "0444"}
-            ):
-                _fail("H11 preflight receipt differs from TREE/install authority")
-            manifest_preflight = manifest["preflight_receipt"]
-            if type(manifest_preflight) is not dict:
-                _fail("H11 manifest preflight_receipt must be one exact reference")
-            _exact(
-                manifest_preflight,
-                {"path", "sha256"},
-                label="H11 manifest preflight_receipt",
-            )
-            if manifest_preflight != {
-                "path": _preflight_source["path"],
-                "sha256": _preflight_source["sha256"],
-            }:
-                _fail("H11 manifest preflight authority differs from install authority")
-
-            expected_paths = (
-                root,
-                root / "authority",
-                root / "authority" / "harness",
-                scenario_root,
-                root / "input",
-                scenario_root / "receipts",
-                root / "fifo",
-            )
-            chain_values = permit_authority["directory_chain"]
-            if type(chain_values) is not list or len(chain_values) != 7:
-                _fail("H11 directory_chain must contain exactly seven objects")
-            references = tuple(
-                H11RootDirectoryReference.decode(
-                    value, label=f"H11 directory_chain[{index}]"
-                )
-                for index, value in enumerate(chain_values)
-            )
-            expected_layout = tuple(
-                (role, path, mode)
-                for (role, mode), path in zip(_H11_DIRECTORY_LAYOUT, expected_paths)
-            )
-            if tuple(
-                (item.role, item.path, item.mode) for item in references
-            ) != expected_layout:
-                _fail("H11 directory_chain order/path/mode drifted")
-            if len({(item.device, item.inode) for item in references}) != 7:
-                _fail("H11 directory_chain reuses one inode")
-            if permit_authority["permit_parent"] != references[3].parent_reference:
-                _fail("H11 permit_parent differs from retained scenario-root")
-
-            parent_topology = (
-                (None, None),
-                (0, "authority"),
-                (1, "harness"),
-                (2, "H11"),
-                (0, "input"),
-                (3, "receipts"),
-                (0, "fifo"),
-            )
-            flags = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
-            for reference, (parent_index, child_name) in zip(
-                references, parent_topology
-            ):
-                parent_descriptor = (
-                    None
-                    if parent_index is None
-                    else directories[parent_index].descriptor
-                )
-                before = (
-                    reference.path.lstat()
-                    if parent_descriptor is None
-                    else os.stat(
-                        child_name,
-                        dir_fd=parent_descriptor,
-                        follow_symlinks=False,
-                    )
-                )
-                descriptor = (
-                    os.open(reference.path, flags)
-                    if parent_descriptor is None
-                    else os.open(
-                        child_name,
-                        flags,
-                        dir_fd=parent_descriptor,
-                    )
-                )
-                retained = RetainedH11RootDirectory(
-                    reference, descriptor, parent_descriptor, child_name
-                )
-                directories.append(retained)
-                reference.prove(
-                    before,
-                    require_root=require_root,
-                    label=f"H11 {reference.role}",
-                )
-                retained.revalidate(require_root=require_root)
-
-            rows = cls._decode_fifo_rows(tree_receipt, preflight_receipt)
-            fifo_references = (
-                (
-                    "h11-ready-commit",
-                    H11RootFifoReference.decode(
-                        permit_authority["ready_commit_fifo"],
-                        label="H11 ready_commit_fifo",
-                    ),
-                ),
-                (
-                    "h11-permit-commit",
-                    H11RootFifoReference.decode(
-                        permit_authority["permit_commit_fifo"],
-                        label="H11 permit_commit_fifo",
-                    ),
-                ),
-            )
-            fifo_root = references[6].path
-            fifo_root_descriptor = directories[6].descriptor
-            for role, reference in fifo_references:
-                expected_name = _H11_COMMIT_FIFO_NAMES[role]
-                expected_row = {"role": role, "owner": "root", **reference.reference}
-                if (
-                    reference.path != fifo_root / expected_name
-                    or rows.get(role) != expected_row
-                ):
-                    _fail(f"H11 {role} differs from TREE/PREFLIGHT authority")
-                descriptor = os.open(
-                    expected_name,
-                    os.O_PATH | os.O_CLOEXEC | os.O_NOFOLLOW,
-                    dir_fd=fifo_root_descriptor,
-                )
-                retained_fifo = RetainedH11RootFifo(
-                    role, reference, descriptor, fifo_root_descriptor
-                )
-                fifos.append(retained_fifo)
-                retained_fifo.revalidate(require_root=require_root)
-            if len(
-                {(item.reference.device, item.reference.inode) for item in fifos}
-            ) != 2:
-                _fail("H11 commit FIFO identities alias")
-
-            validated_fifos = tuple(
-                H11RootValidatedFifo.from_tree_row(
-                    row, label=f"H11 validated TREE FIFO {index}"
-                )
-                for index, row in enumerate(tree_fifos)
-            )
-
-            result = cls(
-                manifest_path,
-                manifest_descriptor,
-                manifest,
-                manifest_raw,
-                manifest_source,
-                require_root,
-                tuple(bound_sources),
-                tuple(directories),
-                tuple(fifos),
-                fixture_uid,
-                fixture_gid,
-                validated_fifos,
-            )
-            result.revalidate(require_root=require_root)
-            return result
-        except BaseException as exc:
-            if result is not None:
-                owners: tuple[Any, ...] = (result,)
-                closing_descriptor = -1
-            else:
-                owners = (
-                    *reversed(fifos),
-                    *reversed(directories),
-                    *reversed(bound_sources),
-                )
-                closing_descriptor = manifest_descriptor
-                manifest_descriptor = -1
-            _close_h11_ownership(
-                owners,
-                active_error=exc,
-                final_descriptor=closing_descriptor,
-            )
-            raise
-
-    def _transaction_paths(self, permit_authority: dict[str, Any]) -> tuple[Path, ...]:
-        scenario_root = self.directories[3].reference.path
-        declared_by_role = {
-            "authorization": scenario_root / "AUTHORIZE-RELEASE.json",
-            "permit-ready-staging": _path(
-                permit_authority["permit_ready_staging_path"],
-                label="H11 permit_ready_staging_path",
-            ),
-            "permit-ready": _path(
-                permit_authority["permit_ready_path"],
-                label="H11 permit_ready_path",
-            ),
-            "permit-staging": _path(
-                permit_authority["permit_staging_path"],
-                label="H11 permit_staging_path",
-            ),
-            "permit": _path(
-                permit_authority["permit_path"],
-                label="H11 permit_path",
-            ),
-            "permit-ledger-staging": _path(
-                permit_authority["permit_ledger_staging_path"],
-                label="H11 permit_ledger_staging_path",
-            ),
-            "permit-ledger": _path(
-                permit_authority["permit_ledger_path"],
-                label="H11 permit_ledger_path",
-            ),
-        }
-        expected = tuple(
-            scenario_root / leaf for _role, leaf in _H11_TRANSACTION_LAYOUT
-        )
-        declared = tuple(
-            declared_by_role[role] for role, _leaf in _H11_TRANSACTION_LAYOUT
-        )
-        if declared != expected:
-            _fail("H11 transaction paths differ from the exact seven-path layout")
-        return expected
-
-    def derive_closed_partition(self) -> H11RootClosedPartition:
-        """Derive H11 coverage from retained manifest bytes, then check declarations."""
-
-        self.revalidate(require_root=self.require_root)
-        manifest = _decode_canonical_object(
-            self.manifest_raw, label="retained H11 harness manifest"
-        )
-        output_values = manifest["outputs"]
-        if type(output_values) is not list or len(output_values) != 12:
-            _fail("H11 manifest outputs must contain exactly twelve role/path objects")
-        output_by_role: dict[str, H11RootRolePath] = {}
-        output_paths: set[Path] = set()
-        input_root = self.directories[4].reference.path
-        receipt_root = self.directories[5].reference.path
-        for index, value in enumerate(output_values):
-            item = H11RootRolePath.decode(
-                value, label=f"H11 manifest outputs[{index}]"
-            )
-            if item.role in output_by_role:
-                _fail("H11 manifest output role is duplicated")
-            if item.path in output_paths:
-                _fail("H11 manifest output path is duplicated")
-            if item.path.parent not in {input_root, receipt_root}:
-                _fail("H11 manifest output is outside its exact parent")
-            output_by_role[item.role] = item
-            output_paths.add(item.path)
-        if set(output_by_role) != _H11_OUTPUT_ROLES:
-            _fail("H11 manifest output roles differ from the exact closed set")
-
-        present = tuple(output_by_role[role] for role in _H11_PRESENT_ROLES)
-        root = self.directories[0].reference.path
-        future = tuple(
-            sorted(
-                (
-                    *(
-                        item
-                        for role, item in output_by_role.items()
-                        if role not in _H11_PRESENT_ROLES
-                    ),
-                    H11RootRolePath("frozen-root", root / "frozen"),
-                ),
-                key=lambda item: item.role,
-            )
-        )
-        present_roles = {item.role for item in present}
-        future_roles = {item.role for item in future}
-        if (
-            len(present) != 2
-            or len(future) != 11
-            or present_roles & future_roles
-            or present_roles | future_roles
-            != _H11_OUTPUT_ROLES | {"frozen-root"}
-        ):
-            _fail("H11 present/future partition does not close the exact universe")
-
-        permit_authority = manifest["permit_authority"]
-        if type(permit_authority) is not dict:
-            _fail("H11 permit_authority must be one exact object")
-        declared_present = permit_authority["present_prerequisite_roles"]
-        if (
-            type(declared_present) is not list
-            or any(type(role) is not str for role in declared_present)
-            or declared_present != list(_H11_PRESENT_ROLES)
-        ):
-            _fail("H11 declared present prerequisites differ from the derived partition")
-        declared_future_values = permit_authority["future_absence_inventory"]
-        if type(declared_future_values) is not list:
-            _fail("H11 declared future absence inventory must be one exact array")
-        declared_future = tuple(
-            H11RootRolePath.decode(
-                value, label=f"H11 future_absence_inventory[{index}]"
-            )
-            for index, value in enumerate(declared_future_values)
-        )
-        if declared_future != future:
-            _fail("H11 declared future absence inventory differs from the derived partition")
-
-        transaction_paths = self._transaction_paths(permit_authority)
-        path_authorities = [
-            *((f"output:{item.role}", item.path) for item in output_by_role.values()),
-            ("frozen-root", root / "frozen"),
-            *(
-                (f"transaction:{role}", path)
-                for (role, _leaf), path in zip(
-                    _H11_TRANSACTION_LAYOUT, transaction_paths
-                )
-            ),
-            *(
-                (f"commit-fifo:{item.role}", item.reference.path)
-                for item in self.commit_fifos
-            ),
-            *(
-                (f"directory:{item.reference.role}", item.reference.path)
-                for item in self.directories
-            ),
-            ("source:harness-manifest", self.manifest_path),
-            *((f"source:{item.label}", item.path) for item in self.bound_sources),
-        ]
-        seen_paths: dict[Path, str] = {}
-        for label, path in path_authorities:
-            previous = seen_paths.get(path)
-            if previous is not None:
-                _fail(f"H11 path authority aliases {previous} and {label}")
-            seen_paths[path] = label
-
-        regular_sources = (
-            ("H11 harness manifest", self.manifest_source),
-            *((item.label, item.source) for item in self.bound_sources),
-        )
-        seen_source_inodes: dict[tuple[str, str], str] = {}
-        for label, source in regular_sources:
-            identity = (source["device"], source["inode"])
-            previous = seen_source_inodes.get(identity)
-            if previous is not None:
-                _fail(f"H11 retained regular source aliases {previous} and {label}")
-            seen_source_inodes[identity] = label
-
-        return H11RootClosedPartition(present, future)
-
-    def validate_transaction_phase(
-        self, phase: str
-    ) -> tuple[H11RootTransactionState, ...]:
-        if type(phase) is not str or phase not in _H11_TRANSACTION_PHASES:
-            _fail("H11 transaction phase is outside the exact phase table")
-        expected_states = _H11_TRANSACTION_PHASES[phase]
-        self.revalidate(require_root=self.require_root)
-        manifest = _decode_canonical_object(
-            self.manifest_raw, label="retained H11 harness manifest"
-        )
-        permit_authority = manifest["permit_authority"]
-        if type(permit_authority) is not dict:
-            _fail("H11 permit_authority must be one exact object")
-        paths = self._transaction_paths(permit_authority)
-        scenario_directory = self.directories[3]
-        source_identities = {
-            (self.manifest_source["device"], self.manifest_source["inode"]),
-            *(
-                (source.source["device"], source.source["inode"])
-                for source in self.bound_sources
-            ),
-        }
-        present_identities: set[tuple[str, str]] = set()
-        rows: list[H11RootTransactionState] = []
-        for (role, leaf), path, expected_state in zip(
-            _H11_TRANSACTION_LAYOUT, paths, expected_states
-        ):
-            try:
-                info = os.stat(
-                    leaf,
-                    dir_fd=scenario_directory.descriptor,
-                    follow_symlinks=False,
-                )
-            except FileNotFoundError:
-                actual_state = "absent"
-                info = None
-            except OSError as exc:
-                raise InstallerError(
-                    f"cannot validate H11 transaction leaf {leaf}"
-                ) from exc
-            else:
-                actual_state = "present"
-            if actual_state != expected_state:
-                _fail(
-                    f"H11 transaction {role} state differs in phase {phase}"
-                )
-            if info is not None:
-                expected_owner = (
-                    (0, 0)
-                    if self.require_root
-                    else (
-                        scenario_directory.reference.uid,
-                        scenario_directory.reference.gid,
-                    )
-                )
-                if (
-                    not stat.S_ISREG(info.st_mode)
-                    or stat.S_IMODE(info.st_mode) != 0o444
-                    or (info.st_uid, info.st_gid) != expected_owner
-                ):
-                    _fail(
-                        f"H11 transaction {role} type/mode/owner is invalid"
-                    )
-                identity = (str(info.st_dev), str(info.st_ino))
-                if identity in source_identities:
-                    _fail(f"H11 transaction {role} aliases a retained source")
-                if identity in present_identities:
-                    _fail("H11 present transaction inodes alias")
-                present_identities.add(identity)
-            rows.append(H11RootTransactionState(role, path, actual_state))
-        return tuple(rows)
-
-    def revalidate(self, *, require_root: bool) -> None:
-        _revalidate_h11_source(
-            self.manifest_descriptor,
-            self.manifest_path,
-            self.manifest_raw,
-            self.manifest_source,
-            label="H11 harness manifest",
-        )
-        for source in self.bound_sources:
-            source.revalidate()
-        for directory in self.directories:
-            directory.revalidate(require_root=require_root)
-        for fifo in self.commit_fifos:
-            fifo.revalidate(require_root=require_root)
-
-    def close(self) -> None:
-        descriptor = self.manifest_descriptor
-        self.manifest_descriptor = -1
-        _close_h11_ownership(
-            (
-                *reversed(self.commit_fifos),
-                *reversed(self.directories),
-                *reversed(self.bound_sources),
-            ),
-            final_descriptor=descriptor,
-        )
-
-
-def _decode_h11_full_source_reference(
-    value: Any, *, label: str, expected_mode: str
-) -> tuple[Path, dict[str, Any]]:
-    if type(value) is not dict:
-        _fail(f"{label} must be one exact full source reference")
-    _exact(
-        value,
-        {"path", "sha256", "device", "inode", "mode", "uid", "gid"},
-        label=label,
-    )
-    path = _path(value["path"], label=f"{label}.path")
-    if _HEX_RE.fullmatch(_text(value["sha256"], label=f"{label}.sha256")) is None:
-        _fail(f"{label}.sha256 is not canonical")
-    _uint(value["device"], label=f"{label}.device")
-    _uint(value["inode"], label=f"{label}.inode")
-    if value["mode"] != expected_mode:
-        _fail(f"{label}.mode must be {expected_mode}")
-    _uint(value["uid"], label=f"{label}.uid")
-    _uint(value["gid"], label=f"{label}.gid")
-    return path, value
-
-
-def _decode_h11_hashed_path(
-    value: Any, *, label: str
-) -> tuple[Path, str]:
-    if type(value) is not dict:
-        _fail(f"{label} must be one exact hashed path")
-    _exact(value, _H11_HASHED_PATH_KEYS, label=label)
-    path = _path(value["path"], label=f"{label}.path")
-    digest = _text(value["sha256"], label=f"{label}.sha256")
-    if _HEX_RE.fullmatch(digest) is None:
-        _fail(f"{label}.sha256 is not canonical")
-    return path, digest
-
-
-@dataclass
-class H11RootAuthorizerSession:
-    authorization: RetainedH11RootJsonSource
-    authority: H11RootRetainedAuthority
-    permit_ready: RetainedH11RootJsonSource
-    run_armed: RetainedH11RootJsonSource
-    authorization_manifest: dict[str, Any]
-    ready_receipt: dict[str, Any]
-    armed_receipt: dict[str, Any]
-
-    @classmethod
-    def open(
-        cls,
-        authorization_path: Path,
-        *,
-        require_root: bool = True,
-    ) -> "H11RootAuthorizerSession":
-        _require_root(require_root)
-        authorization: RetainedH11RootJsonSource | None = None
-        authority: H11RootRetainedAuthority | None = None
-        permit_ready: RetainedH11RootJsonSource | None = None
-        run_armed: RetainedH11RootJsonSource | None = None
-        try:
-            descriptor, plan, raw, source = _pin_h11_json_source(
-                authorization_path,
-                label="H11 authorization manifest",
-                required_mode=0o444,
-                require_root_owner=require_root,
-            )
-            authorization = RetainedH11RootJsonSource(
-                descriptor,
-                authorization_path,
-                raw,
-                source,
-                "H11 authorization manifest",
-            )
-            _exact(plan, _H11_AUTHORIZATION_KEYS, label="H11 authorization manifest")
-            if plan["schema"] != H11_AUTHORIZATION_SCHEMA:
-                _fail("unexpected H11 authorization manifest schema")
-            root = authorization_path.parents[3]
-            scenario_root = root / "authority" / "harness" / "H11"
-            if authorization_path != scenario_root / "AUTHORIZE-RELEASE.json":
-                _fail("H11 authorization path differs from the exact root layout")
-            if _path(plan["formal_root"], label="H11 formal_root") != root:
-                _fail("H11 authorization formal root differs from its path authority")
-            permit_path = _path(plan["permit_path"], label="H11 permit_path")
-            if permit_path != scenario_root / "PERMIT.json":
-                _fail("H11 authorization permit path differs from the exact layout")
-
-            harness_path, harness_reference = _decode_h11_full_source_reference(
-                plan["harness_manifest"],
-                label="H11 harness_manifest",
-                expected_mode="0444",
-            )
-            ready_path, ready_reference = _decode_h11_full_source_reference(
-                plan["permit_ready"],
-                label="H11 permit_ready",
-                expected_mode="0444",
-            )
-            armed_path, armed_reference = _decode_h11_full_source_reference(
-                plan["run_armed"],
-                label="H11 run_armed",
-                expected_mode="0600",
-            )
-            if harness_path != scenario_root / "MANIFEST.json":
-                _fail("H11 harness manifest path differs from the exact layout")
-            authority = H11RootRetainedAuthority.open(
-                harness_path, require_root=require_root
-            )
-            permit_authority = authority.manifest["permit_authority"]
-            authority_ready_path = _path(
-                permit_authority["permit_ready_path"],
-                label="H11 permit_authority.permit_ready_path",
-            )
-            if (
-                ready_path != scenario_root / "PERMIT_READY.json"
-                or ready_path != authority_ready_path
-            ):
-                _fail("H11 PERMIT_READY path differs from exact retained authority")
-            if harness_reference != authority.manifest_source:
-                _fail("H11 authorization harness reference differs from retained source")
-            if authority.directories[0].reference.path != root:
-                _fail("H11 retained authority formal root differs from authorization")
-            if (
-                armed_reference["uid"] != str(authority.fixture_uid)
-                or armed_reference["gid"] != str(authority.fixture_gid)
-            ):
-                _fail("H11 run ARMED owner differs from retained fixture authority")
-            manifest = _decode_canonical_object(
-                authority.manifest_raw, label="retained H11 harness manifest"
-            )
-
-            acquisition_values = manifest["acquisitions"]
-            if type(acquisition_values) is not list or len(acquisition_values) != 3:
-                _fail("H11 acquisitions must be the exact three-role array")
-            acquisitions: list[dict[str, Any]] = []
-            seen_armed_paths: set[Path] = set()
-            seen_fifo_paths: set[Path] = set()
-            seen_fifo_identities: set[tuple[int, int]] = set()
-            tree_by_path = {item.path: item for item in authority.validated_fifos}
-            if len(tree_by_path) != len(authority.validated_fifos):
-                _fail("H11 retained TREE FIFO inventory aliases one path")
-            commit_paths = {item.reference.path for item in authority.commit_fifos}
-            commit_identities = {
-                (item.reference.device, item.reference.inode)
-                for item in authority.commit_fifos
-            }
-            for index, (expected_role, value) in enumerate(
-                zip(_H11_ACQUISITION_ROLES, acquisition_values)
-            ):
-                if type(value) is not dict:
-                    _fail(f"H11 acquisitions[{index}] must be one exact object")
-                _exact(
-                    value,
-                    {"role", "armed_receipt_path", "ready_fifo", "release_fifo"},
-                    label=f"H11 acquisitions[{index}]",
-                )
-                role = _text(value["role"], label=f"H11 acquisitions[{index}].role")
-                if role != expected_role:
-                    _fail("H11 acquisition roles differ from the exact ordered tuple")
-                armed_receipt_path = _path(
-                    value["armed_receipt_path"],
-                    label=f"H11 acquisitions[{index}].armed_receipt_path",
-                )
-                if armed_receipt_path in seen_armed_paths:
-                    _fail("H11 acquisition ARMED paths alias")
-                decoded = {
-                    "role": role,
-                    "armed_receipt_path": armed_receipt_path,
-                }
-                seen_armed_paths.add(armed_receipt_path)
-                for fifo_key in ("ready_fifo", "release_fifo"):
-                    fifo = value[fifo_key]
-                    if type(fifo) is not dict:
-                        _fail(f"H11 acquisition {fifo_key} must be one exact object")
-                    _exact(
-                        fifo,
-                        {"path", "device", "inode"},
-                        label=f"H11 acquisitions[{index}].{fifo_key}",
-                    )
-                    fifo_path = _path(
-                        fifo["path"],
-                        label=f"H11 acquisitions[{index}].{fifo_key}.path",
-                    )
-                    device = _uint(
-                        fifo["device"],
-                        label=f"H11 acquisitions[{index}].{fifo_key}.device",
-                    )
-                    inode = _uint(
-                        fifo["inode"],
-                        label=f"H11 acquisitions[{index}].{fifo_key}.inode",
-                    )
-                    tree_row = tree_by_path.get(fifo_path)
-                    if (
-                        tree_row is None
-                        or tree_row.owner != "fixture"
-                        or (tree_row.uid, tree_row.gid)
-                        != (authority.fixture_uid, authority.fixture_gid)
-                        or tree_row.mode != 0o600
-                        or tree_row.acquisition_reference != fifo
-                        or fifo_path in commit_paths
-                        or (device, inode) in commit_identities
-                        or fifo_path in seen_fifo_paths
-                        or (device, inode) in seen_fifo_identities
-                    ):
-                        _fail(
-                            "H11 acquisition FIFO differs from retained TREE authority"
-                        )
-                    decoded[fifo_key] = dict(fifo)
-                    seen_fifo_paths.add(fifo_path)
-                    seen_fifo_identities.add((device, inode))
-                acquisitions.append(decoded)
-            if len(seen_fifo_paths) != 6 or len(seen_fifo_identities) != 6:
-                _fail("H11 acquisitions do not bind six distinct TREE FIFO rows")
-            validated_fifo_paths = {
-                item.path for item in authority.validated_fifos
-            }
-            if (
-                len(authority.validated_fifos) != 8
-                or len(validated_fifo_paths) != 8
-                or validated_fifo_paths != seen_fifo_paths | commit_paths
-            ):
-                _fail(
-                    "H11 TREE FIFO authority is not the exact six acquisitions "
-                    "plus two commits"
-                )
-            run_main = acquisitions[0]
-            if armed_path != run_main["armed_receipt_path"]:
-                _fail("H11 authorization cannot select a different run ARMED path")
-
-            static_values = manifest["static_roles"]
-            if type(static_values) is not list or len(static_values) != 3:
-                _fail("H11 static_roles must be the exact three-role array")
-            closer_unit = _text(
-                manifest["closer_unit"], label="H11 manifest closer_unit"
-            )
-            if _UNIT_RE.fullmatch(closer_unit) is None:
-                _fail("H11 manifest closer_unit is not canonical")
-            expected_static_roles = (
-                (
-                    "run-main",
-                    manifest["run_unit"],
-                    "adversary",
-                    "h11-unbounded-hold",
-                ),
-                (
-                    "exec-stop-post",
-                    manifest["run_unit"],
-                    "observer",
-                    "exec-stop-post",
-                ),
-                ("closer", closer_unit, "observer", "closer"),
-            )
-            static_roles: list[dict[str, Any]] = []
-            static_paths: set[Path] = set()
-            for index, (expected_tuple, value) in enumerate(
-                zip(expected_static_roles, static_values)
-            ):
-                if type(value) is not dict:
-                    _fail(f"H11 static_roles[{index}] must be one exact object")
-                _exact(
-                    value,
-                    _H11_STATIC_ROLE_KEYS,
-                    label=f"H11 static_roles[{index}]",
-                )
-                role = _text(value["role"], label=f"H11 static_roles[{index}].role")
-                unit = _text(value["unit"], label=f"H11 static_roles[{index}].unit")
-                owner = _text(
-                    value["owner"], label=f"H11 static_roles[{index}].owner"
-                )
-                mode = _text(value["mode"], label=f"H11 static_roles[{index}].mode")
-                plan_path, plan_digest = _decode_h11_hashed_path(
-                    value["plan"], label=f"H11 static_roles[{index}].plan"
-                )
-                program_path, program_digest = _decode_h11_hashed_path(
-                    value["program"], label=f"H11 static_roles[{index}].program"
-                )
-                if (
-                    (role, unit, owner, mode) != expected_tuple
-                    or _UNIT_RE.fullmatch(unit) is None
-                    or plan_path in static_paths
-                    or program_path in static_paths
-                    or plan_path == program_path
-                ):
-                    _fail("H11 static role tuple or path authority is invalid")
-                static_paths.update((plan_path, program_path))
-                static_roles.append(
-                    {
-                        "role": role,
-                        "unit": unit,
-                        "owner": owner,
-                        "mode": mode,
-                        "plan_path": plan_path,
-                        "plan_sha256": plan_digest,
-                        "program_path": program_path,
-                        "program_sha256": program_digest,
-                    }
-                )
-            run_static = static_roles[0]
-
-            ready_descriptor, ready, ready_raw, ready_source = _pin_h11_json_source(
-                ready_path,
-                label="H11 PERMIT_READY",
-                expected_reference=ready_reference,
-                ownership_bound=True,
-                required_mode=0o444,
-                require_root_owner=require_root,
-            )
-            permit_ready = RetainedH11RootJsonSource(
-                ready_descriptor,
-                ready_path,
-                ready_raw,
-                ready_source,
-                "H11 PERMIT_READY",
-            )
-            armed_descriptor, armed, armed_raw, armed_source = _pin_h11_json_source(
-                armed_path,
-                label="H11 run ARMED",
-                expected_reference=armed_reference,
-                ownership_bound=True,
-                required_mode=0o600,
-            )
-            run_armed = RetainedH11RootJsonSource(
-                armed_descriptor,
-                armed_path,
-                armed_raw,
-                armed_source,
-                "H11 run ARMED",
-            )
-            if (
-                armed_source["uid"] != str(authority.fixture_uid)
-                or armed_source["gid"] != str(authority.fixture_gid)
-            ):
-                _fail("H11 pinned run ARMED owner differs from fixture authority")
-
-            _exact(ready, _H11_READY_KEYS, label="H11 PERMIT_READY")
-            run_unit = _text(ready["run_unit"], label="H11 PERMIT_READY.run_unit")
-            boot_id = _text(ready["boot_id"], label="H11 PERMIT_READY.boot_id")
-            invocation_id = _text(
-                ready["invocation_id"], label="H11 PERMIT_READY.invocation_id"
-            )
-            if (
-                ready["schema"] != H11_PERMIT_READY_SCHEMA
-                or ready["scenario"] != "H11"
-                or ready["phase"] != "h11-permit-ready"
-                or run_unit != manifest["run_unit"]
-                or _UNIT_RE.fullmatch(run_unit) is None
-                or _BOOT_RE.fullmatch(boot_id) is None
-                or _INVOCATION_RE.fullmatch(invocation_id) is None
-                or ready["harness_manifest"] != harness_reference
-                or ready["run_armed"] != armed_reference
-                or ready["permit_authority"] != permit_authority
-                or type(ready["present_outputs"]) is not list
-                or type(ready["absent_paths"]) is not list
-            ):
-                _fail("H11 PERMIT_READY tuple or source cross-binding is invalid")
-
-            _exact(armed, _H11_ADVERSARY_ARMED_KEYS, label="H11 run ARMED")
-            actor = armed["actor"]
-            if type(actor) is not dict:
-                _fail("H11 run ARMED actor must be one exact object")
-            _exact(actor, _H11_ADVERSARY_ACTOR_KEYS, label="H11 run ARMED actor")
-            unified_cgroup = _text(
-                actor["unified_cgroup"], label="H11 run ARMED actor.unified_cgroup"
-            )
-            plan_path = _path(armed["plan_path"], label="H11 run ARMED.plan_path")
-            request_path = _path(
-                armed["request_path"], label="H11 run ARMED.request_path"
-            )
-            receipt_path = _path(
-                armed["receipt_path"], label="H11 run ARMED.receipt_path"
-            )
-            plan_sha256 = _text(
-                armed["plan_sha256"], label="H11 run ARMED.plan_sha256"
-            )
-            request_sha256 = _text(
-                armed["request_sha256"], label="H11 run ARMED.request_sha256"
-            )
-            program = armed["program"]
-            if type(program) is not dict:
-                _fail("H11 run ARMED program must be one exact object")
-            _exact(program, _H11_ARMED_PROGRAM_KEYS, label="H11 run ARMED program")
-            program_path = _path(
-                program["path"], label="H11 run ARMED program.path"
-            )
-            program_sha256 = _text(
-                program["sha256"], label="H11 run ARMED program.sha256"
-            )
-            program_identity = program["identity"]
-            if type(program_identity) is not dict:
-                _fail("H11 run ARMED program.identity must be one exact object")
-            _exact(
-                program_identity,
-                _H11_ARMED_PROGRAM_IDENTITY_KEYS,
-                label="H11 run ARMED program.identity",
-            )
-            if any(
-                type(program_identity[key]) is not int
-                or program_identity[key] <= 0
-                for key in ("device", "inode")
-            ) or (
-                type(program_identity["mode"]) is not int
-                or program_identity["mode"] != 0o444
-            ):
-                _fail("H11 run ARMED program identity is not canonical")
-            digests = (
-                plan_sha256,
-                request_sha256,
-                program_sha256,
-                _text(armed["ready_sha256"], label="H11 run ARMED.ready_sha256"),
-                _text(
-                    armed["release_sha256"],
-                    label="H11 run ARMED.release_sha256",
-                ),
-            )
-            if any(_HEX_RE.fullmatch(digest) is None for digest in digests):
-                _fail("H11 run ARMED carries a noncanonical SHA-256 digest")
-            if (
-                armed["schema"]
-                != "scion.generic_backend.systemd_adversary_armed.v1"
-                or armed["scenario"] != "h11-unbounded-hold"
-                or armed["unit"] != run_unit
-                or actor["boot_id"] != boot_id
-                or actor["invocation_id"] != invocation_id
-                or type(actor["pid"]) is not int
-                or actor["pid"] <= 0
-                or type(actor["starttime"]) is not int
-                or actor["starttime"] <= 0
-                or type(actor["session_id"]) is not int
-                or actor["session_id"] <= 0
-                or not unified_cgroup.startswith("/")
-                or unified_cgroup == "/"
-                or "//" in unified_cgroup
-                or any(
-                    part in {"", ".", ".."}
-                    for part in unified_cgroup.split("/")[1:]
-                )
-                or actor["proc_cgroup_raw"] != f"0::{unified_cgroup}\n"
-                or actor["stop_selector_environment"] != {}
-                or armed["ready_fifo"] != run_main["ready_fifo"]
-                or armed["release_fifo"] != run_main["release_fifo"]
-                or plan_path != run_static["plan_path"]
-                or plan_sha256 != run_static["plan_sha256"]
-                or program_path != run_static["program_path"]
-                or program_sha256 != run_static["program_sha256"]
-                or armed["ready_sha256"]
-                != hashlib.sha256(H11_READY_BYTES).hexdigest()
-                or armed["release_sha256"]
-                != hashlib.sha256(H11_RELEASE_BYTES).hexdigest()
-            ):
-                _fail("H11 run ARMED tuple or FIFO authority is invalid")
-
-            path_authorities: list[tuple[str, Path]] = [
-                *(
-                    (
-                        f"output:{item.role}",
-                        item.path,
-                    )
-                    for index, value in enumerate(manifest["outputs"])
-                    for item in (
-                        H11RootRolePath.decode(
-                            value, label=f"H11 manifest outputs[{index}]"
-                        ),
-                    )
-                ),
-                ("frozen-root", root / "frozen"),
-                *(
-                    (f"transaction:{role}", path)
-                    for (role, _leaf), path in zip(
-                        _H11_TRANSACTION_LAYOUT,
-                        authority._transaction_paths(permit_authority),
-                    )
-                ),
-                *(
-                    (f"directory:{item.reference.role}", item.reference.path)
-                    for item in authority.directories
-                ),
-                ("source:harness-manifest", authority.manifest_path),
-                *(
-                    (f"source:{item.label}", item.path)
-                    for item in authority.bound_sources
-                ),
-                *(
-                    (f"TREE-FIFO:{item.role}", item.path)
-                    for item in authority.validated_fifos
-                ),
-                *(
-                    (f"ARMED:{item['role']}", item["armed_receipt_path"])
-                    for item in acquisitions
-                ),
-                *(
-                    (f"static-plan:{item['role']}", item["plan_path"])
-                    for item in static_roles
-                ),
-                *(
-                    (f"static-program:{item['role']}", item["program_path"])
-                    for item in static_roles
-                ),
-                ("ARMED-request:run-main", request_path),
-                ("ARMED-receipt:run-main", receipt_path),
-            ]
-            seen_paths: dict[Path, str] = {}
-            for label, path in path_authorities:
-                previous = seen_paths.get(path)
-                if previous is not None:
-                    _fail(f"H11 authorizer path authority aliases {previous} and {label}")
-                seen_paths[path] = label
-
-            regular_sources = (
-                ("H11 authorization manifest", source),
-                ("H11 harness manifest", authority.manifest_source),
-                ("H11 PERMIT_READY", ready_source),
-                ("H11 run ARMED", armed_source),
-                *((item.label, item.source) for item in authority.bound_sources),
-            )
-            seen_source_inodes: dict[tuple[str, str], str] = {}
-            for label, retained_source in regular_sources:
-                identity = (
-                    retained_source["device"],
-                    retained_source["inode"],
-                )
-                previous = seen_source_inodes.get(identity)
-                if previous is not None:
-                    _fail(
-                        f"H11 authorizer regular source aliases {previous} and {label}"
-                    )
-                seen_source_inodes[identity] = label
-
-            result = cls(
-                authorization,
-                authority,
-                permit_ready,
-                run_armed,
-                plan,
-                ready,
-                armed,
-            )
-            result.revalidate()
-            return result
-        except BaseException as exc:
-            _close_h11_ownership(
-                tuple(
-                    owner
-                    for owner in (
-                        run_armed,
-                        permit_ready,
-                        authority,
-                        authorization,
-                    )
-                    if owner is not None
-                ),
-                active_error=exc,
-            )
-            raise
-
-    def revalidate(self) -> None:
-        self.authorization.revalidate()
-        self.authority.revalidate(require_root=self.authority.require_root)
-        self.permit_ready.revalidate()
-        self.run_armed.revalidate()
-
-    def close(self) -> None:
-        _close_h11_ownership(
-            (
-                self.run_armed,
-                self.permit_ready,
-                self.authority,
-                self.authorization,
-            )
-        )
-
-
-@dataclass
-class RetainedH11RootPresentOutput:
-    role: str
-    path: Path
-    parent: RetainedH11RootDirectory
-    descriptor: int
-    raw: bytes
-    reference_items: tuple[tuple[str, str], ...]
-    require_root: bool
-
-    @property
-    def reference(self) -> dict[str, str]:
-        return dict(self.reference_items)
-
-    @classmethod
-    def pin(
-        cls,
-        value: Any,
-        *,
-        expected: H11RootRolePath,
-        parent: RetainedH11RootDirectory,
-        require_root: bool,
-    ) -> "RetainedH11RootPresentOutput":
-        label = f"H11 present output {expected.role}"
-        if type(value) is not dict:
-            _fail(f"{label} must be one exact full reference")
-        _exact(
-            value,
-            {
-                "role",
-                "path",
-                "sha256",
-                "device",
-                "inode",
-                "mode",
-                "uid",
-                "gid",
-            },
-            label=label,
-        )
-        role = _text(value["role"], label=f"{label}.role")
-        path = _path(value["path"], label=f"{label}.path")
-        digest = _text(value["sha256"], label=f"{label}.sha256")
-        if _HEX_RE.fullmatch(digest) is None:
-            _fail(f"{label}.sha256 is not canonical")
-        _uint(value["device"], label=f"{label}.device")
-        _uint(value["inode"], label=f"{label}.inode")
-        _uint(value["uid"], label=f"{label}.uid")
-        _uint(value["gid"], label=f"{label}.gid")
-        if (
-            role != expected.role
-            or path != expected.path
-            or path.parent != parent.reference.path
-            or value["mode"] != "0444"
-        ):
-            _fail(f"{label} role/path/mode differs from the derived authority")
-        expected_owner = (
-            (0, 0)
-            if require_root
-            else (parent.reference.uid, parent.reference.gid)
-        )
-        if (value["uid"], value["gid"]) != tuple(
-            str(item) for item in expected_owner
-        ):
-            _fail(f"{label} owner differs from retained root authority")
-
-        parent.revalidate(require_root=require_root)
-        descriptor = -1
-        try:
-            before = os.stat(
-                path.name,
-                dir_fd=parent.descriptor,
-                follow_symlinks=False,
-            )
-            descriptor = os.open(
-                path.name,
-                os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
-                dir_fd=parent.descriptor,
-            )
-            opened = os.fstat(descriptor)
-            chunks: list[bytes] = []
-            while True:
-                chunk = os.read(descriptor, 1024 * 1024)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            raw = b"".join(chunks)
-            after = os.fstat(descriptor)
-            current = os.stat(
-                path.name,
-                dir_fd=parent.descriptor,
-                follow_symlinks=False,
-            )
-            actual = {
-                "role": role,
-                "path": str(path),
-                "sha256": hashlib.sha256(raw).hexdigest(),
-                "device": str(after.st_dev),
-                "inode": str(after.st_ino),
-                "mode": format(stat.S_IMODE(after.st_mode), "04o"),
-                "uid": str(after.st_uid),
-                "gid": str(after.st_gid),
-            }
-            observations = (before, opened, after, current)
-            if (
-                any(not stat.S_ISREG(info.st_mode) for info in observations)
-                or any(
-                    (info.st_dev, info.st_ino)
-                    != (after.st_dev, after.st_ino)
-                    for info in observations
-                )
-                or any(
-                    stat.S_IMODE(info.st_mode) != 0o444
-                    for info in observations
-                )
-                or any(
-                    (info.st_uid, info.st_gid) != expected_owner
-                    for info in observations
-                )
-                or after.st_size != len(raw)
-                or after.st_mtime_ns != opened.st_mtime_ns
-                or actual != value
-            ):
-                _fail(f"{label} bytes/identity/mode/owner drifted while pinning")
-            os.lseek(descriptor, 0, os.SEEK_SET)
-            return cls(
-                role,
-                path,
-                parent,
-                descriptor,
-                raw,
-                tuple((key, value[key]) for key in sorted(value)),
-                require_root,
-            )
-        except InstallerError as exc:
-            closing_descriptor = descriptor
-            descriptor = -1
-            _close_h11_ownership(
-                (),
-                active_error=exc,
-                initial_descriptor=closing_descriptor,
-            )
-            raise
-        except OSError as exc:
-            error = InstallerError(f"cannot pin {label}")
-            closing_descriptor = descriptor
-            descriptor = -1
-            _close_h11_ownership(
-                (),
-                active_error=error,
-                initial_descriptor=closing_descriptor,
-            )
-            raise error from exc
-        except BaseException as exc:
-            closing_descriptor = descriptor
-            descriptor = -1
-            _close_h11_ownership(
-                (),
-                active_error=exc,
-                initial_descriptor=closing_descriptor,
-            )
-            raise
-
-    def revalidate(self) -> None:
-        if self.descriptor < 0:
-            _fail(f"H11 present output {self.role} closed before last use")
-        self.parent.revalidate(require_root=self.require_root)
-        try:
-            opened = os.fstat(self.descriptor)
-            os.lseek(self.descriptor, 0, os.SEEK_SET)
-            chunks: list[bytes] = []
-            while True:
-                chunk = os.read(self.descriptor, 1024 * 1024)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            reread = b"".join(chunks)
-            os.lseek(self.descriptor, 0, os.SEEK_SET)
-            current = os.stat(
-                self.path.name,
-                dir_fd=self.parent.descriptor,
-                follow_symlinks=False,
-            )
-        except OSError as exc:
-            raise InstallerError(
-                f"cannot revalidate H11 present output {self.role}"
-            ) from exc
-        actual = {
-            "role": self.role,
-            "path": str(self.path),
-            "sha256": hashlib.sha256(reread).hexdigest(),
-            "device": str(opened.st_dev),
-            "inode": str(opened.st_ino),
-            "mode": format(stat.S_IMODE(opened.st_mode), "04o"),
-            "uid": str(opened.st_uid),
-            "gid": str(opened.st_gid),
-        }
-        if (
-            reread != self.raw
-            or actual != self.reference
-            or not stat.S_ISREG(current.st_mode)
-            or (str(current.st_dev), str(current.st_ino))
-            != (self.reference["device"], self.reference["inode"])
-            or format(stat.S_IMODE(current.st_mode), "04o") != "0444"
-            or (str(current.st_uid), str(current.st_gid))
-            != (self.reference["uid"], self.reference["gid"])
-        ):
-            _fail(f"retained H11 present output {self.role} drifted")
-
-    def close(self) -> None:
-        if self.descriptor >= 0:
-            descriptor = self.descriptor
-            self.descriptor = -1
-            os.close(descriptor)
-
-
-def _bind_h11_authorizer_transaction_sources(
-    session: H11RootAuthorizerSession,
-    transaction_state: tuple[H11RootTransactionState, ...],
-) -> None:
-    if tuple(item.role for item in transaction_state) != tuple(
-        role for role, _leaf in _H11_TRANSACTION_LAYOUT
-    ):
-        _fail("H11 authorizer transaction rows are not the exact ordered layout")
-    scenario = session.authority.directories[3]
-    by_role = {item.role: item for item in transaction_state}
-    for role, leaf, source in (
-        ("authorization", "AUTHORIZE-RELEASE.json", session.authorization),
-        ("permit-ready", "PERMIT_READY.json", session.permit_ready),
-    ):
-        row = by_role[role]
-        if row.state != "present" or row.path != source.path:
-            _fail(f"H11 {role} transaction row differs from its retained source")
-        try:
-            current = os.stat(
-                leaf,
-                dir_fd=scenario.descriptor,
-                follow_symlinks=False,
-            )
-            opened = os.fstat(source.descriptor)
-        except OSError as exc:
-            raise InstallerError(
-                f"cannot bind H11 {role} transaction source"
-            ) from exc
-        expected = (source.source["device"], source.source["inode"])
-        if (
-            not stat.S_ISREG(current.st_mode)
-            or not stat.S_ISREG(opened.st_mode)
-            or (str(current.st_dev), str(current.st_ino)) != expected
-            or (str(opened.st_dev), str(opened.st_ino)) != expected
-            or format(stat.S_IMODE(current.st_mode), "04o")
-            != source.source["mode"]
-            or (str(current.st_uid), str(current.st_gid))
-            != (source.source["uid"], source.source["gid"])
-        ):
-            _fail(f"H11 {role} leaf identity differs from its retained source")
-
-
-@dataclass
-class H11RootAuthorizerReadyClosure:
-    session: H11RootAuthorizerSession
-    ready_commit: H11RootCommitReceipt
-    partition: H11RootClosedPartition
-    present_sources: tuple[RetainedH11RootPresentOutput, ...]
-    transaction_state: tuple[H11RootTransactionState, ...]
-    present_outputs_sha256: str
-    future_absence_sha256: str
-    poisoned: bool = False
-    closed: bool = False
-
-    @property
-    def present_outputs(self) -> list[dict[str, str]]:
-        return [dict(item.reference) for item in self.present_sources]
-
-    @property
-    def future_absence_inventory(self) -> list[dict[str, str]]:
-        return [
-            item.reference for item in self.partition.future_absence_inventory
-        ]
-
-    @classmethod
-    def consume(
-        cls,
-        session: H11RootAuthorizerSession,
-    ) -> "H11RootAuthorizerReadyClosure":
-        present_sources: list[RetainedH11RootPresentOutput] = []
-        result: H11RootAuthorizerReadyClosure | None = None
-        try:
-            session.revalidate()
-            ready_fifos = tuple(
-                item
-                for item in session.authority.commit_fifos
-                if item.role == "h11-ready-commit"
-            )
-            if len(ready_fifos) != 1:
-                _fail("H11 root authority lacks exactly one READY commit FIFO")
-            ready_commit = ready_fifos[0].read_ready_commit(
-                require_root=session.authority.require_root
-            )
-            session.revalidate()
-
-            partition = session.authority.derive_closed_partition()
-            ready_present = session.ready_receipt["present_outputs"]
-            ready_absent = session.ready_receipt["absent_paths"]
-            if type(ready_present) is not list or type(ready_absent) is not list:
-                _fail("H11 READY partition must contain two exact arrays")
-            if len(ready_present) != 2 or len(ready_absent) != 11:
-                _fail("H11 READY partition is not the exact 2-present/11-future split")
-
-            declared_present_role_paths: list[H11RootRolePath] = []
-            for index, value in enumerate(ready_present):
-                if type(value) is not dict:
-                    _fail(f"H11 READY present_outputs[{index}] is not an object")
-                declared_present_role_paths.append(
-                    H11RootRolePath.decode(
-                        {"role": value.get("role"), "path": value.get("path")},
-                        label=f"H11 READY present_outputs[{index}] role/path",
-                    )
-                )
-            declared_absent = tuple(
-                H11RootRolePath.decode(
-                    value,
-                    label=f"H11 READY absent_paths[{index}]",
-                )
-                for index, value in enumerate(ready_absent)
-            )
-            if tuple(declared_present_role_paths) != partition.present_prerequisites:
-                _fail("H11 READY present_outputs differ from the derived partition")
-            if declared_absent != partition.future_absence_inventory:
-                _fail("H11 READY absent_paths differ from the derived partition")
-
-            input_parent = session.authority.directories[4]
-            receipt_parent = session.authority.directories[5]
-            for value, expected in zip(
-                ready_present, partition.present_prerequisites
-            ):
-                if expected.path.parent == input_parent.reference.path:
-                    parent = input_parent
-                elif expected.path.parent == receipt_parent.reference.path:
-                    parent = receipt_parent
-                else:
-                    _fail("H11 present output is outside both retained output roots")
-                present_sources.append(
-                    RetainedH11RootPresentOutput.pin(
-                        value,
-                        expected=expected,
-                        parent=parent,
-                        require_root=session.authority.require_root,
-                    )
-                )
-
-            transaction_state = session.authority.validate_transaction_phase(
-                "authorizer-input"
-            )
-            _bind_h11_authorizer_transaction_sources(session, transaction_state)
-
-            occupied_identities = {
-                (
-                    session.authorization.source["device"],
-                    session.authorization.source["inode"],
-                ),
-                (
-                    session.authority.manifest_source["device"],
-                    session.authority.manifest_source["inode"],
-                ),
-                (
-                    session.permit_ready.source["device"],
-                    session.permit_ready.source["inode"],
-                ),
-                (
-                    session.run_armed.source["device"],
-                    session.run_armed.source["inode"],
-                ),
-                *(
-                    (item.source["device"], item.source["inode"])
-                    for item in session.authority.bound_sources
-                ),
-                *(
-                    (str(item.reference.device), str(item.reference.inode))
-                    for item in session.authority.directories
-                ),
-                *(
-                    (str(item.reference.device), str(item.reference.inode))
-                    for item in session.authority.commit_fifos
-                ),
-                *(
-                    (str(item.device), str(item.inode))
-                    for item in session.authority.validated_fifos
-                ),
-            }
-            present_identities = [
-                (item.reference["device"], item.reference["inode"])
-                for item in present_sources
-            ]
-            if (
-                len(set(present_identities)) != 2
-                or any(
-                    identity in occupied_identities
-                    for identity in present_identities
-                )
-            ):
-                _fail("H11 present output identities alias retained authority")
-
-            present_array = [dict(item.reference) for item in present_sources]
-            future_array = [
-                item.reference for item in partition.future_absence_inventory
-            ]
-            result = cls(
-                session,
-                ready_commit,
-                partition,
-                tuple(present_sources),
-                transaction_state,
-                hashlib.sha256(_canonical(present_array)).hexdigest(),
-                hashlib.sha256(_canonical(future_array)).hexdigest(),
-            )
-            result.revalidate()
-            return result
-        except BaseException as exc:
-            if result is not None:
-                result.poisoned = True
-                owners: tuple[Any, ...] = (result,)
-            else:
-                owners = (*reversed(present_sources), session)
-            _close_h11_ownership(owners, active_error=exc)
-            raise
-
-    def _revalidate_retained_common(self) -> None:
-        if self.poisoned or self.closed:
-            _fail("H11 READY closure is poisoned or closed before last use")
-        self.session.revalidate()
-        partition = self.session.authority.derive_closed_partition()
-        if partition != self.partition:
-            _fail("H11 retained partition drifted after READY commit")
-        for source in self.present_sources:
-            source.revalidate()
-        if (
-            hashlib.sha256(_canonical(self.present_outputs)).hexdigest()
-            != self.present_outputs_sha256
-            or hashlib.sha256(
-                _canonical(self.future_absence_inventory)
-            ).hexdigest()
-            != self.future_absence_sha256
-        ):
-            _fail("H11 READY closure canonical inventory digest drifted")
-
-    def _validate_exact_transaction_phase(
-        self, phase: str
-    ) -> tuple[H11RootTransactionState, ...]:
-        if phase not in {"authorizer-input", "permit-committed"}:
-            _fail("H11 C2 transaction phase is outside the fixed literal pair")
-        transaction_state = self.session.authority.validate_transaction_phase(
-            phase
-        )
-        _bind_h11_authorizer_transaction_sources(self.session, transaction_state)
-        return transaction_state
-
-    def revalidate(self) -> None:
-        self._revalidate_retained_common()
-        transaction_state = self._validate_exact_transaction_phase(
-            "authorizer-input"
-        )
-        if transaction_state != self.transaction_state:
-            _fail("H11 authorizer-input transaction state drifted")
-
-    def poison(self) -> None:
-        self.poisoned = True
-        self.close()
-
-    def close(self) -> None:
-        if self.closed:
-            return
-        self.closed = True
-        _close_h11_ownership(
-            (*reversed(self.present_sources), self.session)
-        )
-
-
-@dataclass
-class RetainedH11RootPublication:
-    parent: RetainedH11RootDirectory
-    final_name: str
-    descriptor: int
-    raw: bytes
-    reference: dict[str, str]
-    require_root: bool
-
-    def revalidate(self) -> None:
-        if self.descriptor < 0:
-            _fail("retained H11 publication descriptor closed before last use")
-        self.parent.revalidate(require_root=self.require_root)
-        try:
-            opened = os.fstat(self.descriptor)
-            current = os.stat(
-                self.final_name,
-                dir_fd=self.parent.descriptor,
-                follow_symlinks=False,
-            )
-            os.lseek(self.descriptor, 0, os.SEEK_SET)
-            chunks: list[bytes] = []
-            while True:
-                chunk = os.read(self.descriptor, 1024 * 1024)
-                if not chunk:
-                    break
-                chunks.append(chunk)
-            reread = b"".join(chunks)
-            os.lseek(self.descriptor, 0, os.SEEK_SET)
-        except OSError as exc:
-            raise InstallerError("cannot revalidate retained H11 publication") from exc
-        actual_reference = {
-            "path": str(self.parent.reference.path / self.final_name),
-            "sha256": hashlib.sha256(reread).hexdigest(),
-            "device": str(opened.st_dev),
-            "inode": str(opened.st_ino),
-            "mode": format(stat.S_IMODE(opened.st_mode), "04o"),
-            "uid": str(opened.st_uid),
-            "gid": str(opened.st_gid),
-        }
-        if (
-            reread != self.raw
-            or actual_reference != self.reference
-            or not stat.S_ISREG(opened.st_mode)
-            or not stat.S_ISREG(current.st_mode)
-            or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
-            or stat.S_IMODE(current.st_mode) != 0o444
-            or (current.st_uid, current.st_gid) != (opened.st_uid, opened.st_gid)
-        ):
-            _fail("retained H11 publication drifted")
-
-    def close(self) -> None:
-        if self.descriptor >= 0:
-            descriptor = self.descriptor
-            self.descriptor = -1
-            os.close(descriptor)
-
-
 @dataclass(frozen=True, slots=True)
 class H11RootNamedStagingPlan:
-    parent: RetainedH11RootDirectory
+    parent: H11RootDirectoryReference
     staging_name: str
     final_name: str
     raw: bytes
     expected_owner: tuple[int, int]
     require_root: bool
     test_failure: str | None
-
-
-def _prepare_h11_named_staging(
-    parent: RetainedH11RootDirectory,
-    staging_name: str,
-    final_name: str,
-    payload: dict[str, Any],
-    *,
-    require_root: bool,
-    _test_failure: str | None = None,
-) -> H11RootNamedStagingPlan:
-    if _test_failure is not None:
-        if require_root:
-            _fail("privileged H11 publication forbids test failure injection")
-        if (
-            type(_test_failure) is not str
-            or _test_failure not in _H11_PUBLICATION_TEST_FAILURES
-        ):
-            _fail("H11 publication test failure is outside the closed enum")
-    if (
-        type(staging_name) is not str
-        or type(final_name) is not str
-        or _H11_PUBLICATION_PAIRS.get(staging_name) != final_name
-    ):
-        _fail("H11 publication leaf pair is outside the exact transaction layout")
-    if type(payload) is not dict:
-        _fail("H11 publication payload must be one exact object")
-    if parent.reference.role != "scenario-root":
-        _fail("H11 publication parent must be the retained scenario-root")
-    parent.revalidate(require_root=require_root)
-    return H11RootNamedStagingPlan(
-        parent,
-        staging_name,
-        final_name,
-        _canonical(payload),
-        (
-            (0, 0)
-            if require_root
-            else (parent.reference.uid, parent.reference.gid)
-        ),
-        require_root,
-        _test_failure,
-    )
-
-
-def _open_h11_named_staging(plan: H11RootNamedStagingPlan) -> int:
-    return os.open(
-        plan.staging_name,
-        os.O_RDWR
-        | os.O_CREAT
-        | os.O_EXCL
-        | os.O_NOFOLLOW
-        | os.O_CLOEXEC,
-        0o444,
-        dir_fd=plan.parent.descriptor,
-    )
-
-
-def _complete_h11_named_staging(
-    plan: H11RootNamedStagingPlan,
-    descriptor: int,
-) -> RetainedH11RootPublication:
-    parent = plan.parent
-    try:
-        view = memoryview(plan.raw)
-        while view:
-            written = os.write(descriptor, view)
-            if written <= 0:
-                _fail("H11 staged publication write made no progress")
-            view = view[written:]
-        os.fchmod(descriptor, 0o444)
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        chunks: list[bytes] = []
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            chunks.append(chunk)
-        reread = b"".join(chunks)
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        opened = os.fstat(descriptor)
-        if (
-            reread != plan.raw
-            or opened.st_size != len(plan.raw)
-            or not stat.S_ISREG(opened.st_mode)
-            or stat.S_IMODE(opened.st_mode) != 0o444
-            or (opened.st_uid, opened.st_gid) != plan.expected_owner
-        ):
-            _fail("H11 staged publication readback or metadata is invalid")
-        os.fsync(descriptor)
-        if plan.test_failure == "pre-rename":
-            _fail("injected H11 publication failure before rename")
-
-        libc = ctypes.CDLL(None, use_errno=True)
-        renameat2 = libc.renameat2
-        renameat2.argtypes = [
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_int,
-            ctypes.c_char_p,
-            ctypes.c_uint,
-        ]
-        renameat2.restype = ctypes.c_int
-        ctypes.set_errno(0)
-        if (
-            renameat2(
-                parent.descriptor,
-                plan.staging_name.encode("ascii"),
-                parent.descriptor,
-                plan.final_name.encode("ascii"),
-                1,
-            )
-            != 0
-        ):
-            error = ctypes.get_errno()
-            raise InstallerError(
-                f"cannot publish no-replace H11 transaction: {os.strerror(error)}"
-            )
-        os.fsync(parent.descriptor)
-        final_info = os.stat(
-            plan.final_name,
-            dir_fd=parent.descriptor,
-            follow_symlinks=False,
-        )
-        retained_info = os.fstat(descriptor)
-        if (
-            not stat.S_ISREG(final_info.st_mode)
-            or (final_info.st_dev, final_info.st_ino)
-            != (retained_info.st_dev, retained_info.st_ino)
-            or stat.S_IMODE(final_info.st_mode) != 0o444
-            or (final_info.st_uid, final_info.st_gid) != plan.expected_owner
-        ):
-            _fail("H11 publication final name differs from its retained inode")
-        reference = {
-            "path": str(parent.reference.path / plan.final_name),
-            "sha256": hashlib.sha256(plan.raw).hexdigest(),
-            "device": str(retained_info.st_dev),
-            "inode": str(retained_info.st_ino),
-            "mode": "0444",
-            "uid": str(retained_info.st_uid),
-            "gid": str(retained_info.st_gid),
-        }
-        result = RetainedH11RootPublication(
-            parent,
-            plan.final_name,
-            descriptor,
-            plan.raw,
-            reference,
-            plan.require_root,
-        )
-        result.revalidate()
-        return result
-    except BaseException as exc:
-        closing_descriptor = descriptor
-        descriptor = -1
-        _close_h11_ownership(
-            (),
-            active_error=exc,
-            initial_descriptor=closing_descriptor,
-        )
-        raise
-
-
-def _publish_h11_named_staging(
-    parent: RetainedH11RootDirectory,
-    staging_name: str,
-    final_name: str,
-    payload: dict[str, Any],
-    *,
-    require_root: bool,
-    _test_failure: str | None = None,
-) -> RetainedH11RootPublication:
-    plan = _prepare_h11_named_staging(
-        parent,
-        staging_name,
-        final_name,
-        payload,
-        require_root=require_root,
-        _test_failure=_test_failure,
-    )
-    descriptor = _open_h11_named_staging(plan)
-    return _complete_h11_named_staging(plan, descriptor)
 
 
 @dataclass(frozen=True, slots=True)
@@ -3746,217 +1491,6 @@ class H11RootPrePermitBarrier:
     future_absence_sha256: str
     transaction_state: tuple[H11RootTransactionState, ...]
     future_absence_inventory: tuple[H11RootRolePath, ...]
-
-    @classmethod
-    def capture(
-        cls,
-        closure: H11RootAuthorizerReadyClosure,
-        plan: H11RootNamedStagingPlan,
-    ) -> "H11RootPrePermitBarrier":
-        if (
-            plan.parent is not closure.session.authority.directories[3]
-            or plan.staging_name != "PERMIT.pending"
-            or plan.final_name != "PERMIT.json"
-            or plan.test_failure is not None
-        ):
-            _fail("H11 pre-permit barrier plan is not the exact permit transaction")
-        closure.revalidate()
-        authority = closure.session.authority
-        if len(closure.partition.future_absence_inventory) != 11:
-            _fail("H11 pre-permit barrier lacks the exact future inventory")
-        formal_parent = authority.directories[0]
-        input_parent = authority.directories[4]
-        receipt_parent = authority.directories[5]
-        for item in closure.partition.future_absence_inventory:
-            if item.role == "frozen-root":
-                parent = formal_parent
-            elif item.path.parent == input_parent.reference.path:
-                parent = input_parent
-            elif item.path.parent == receipt_parent.reference.path:
-                parent = receipt_parent
-            else:
-                _fail("H11 future absence is outside its retained parent")
-            try:
-                os.stat(
-                    item.path.name,
-                    dir_fd=parent.descriptor,
-                    follow_symlinks=False,
-                )
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                raise InstallerError(
-                    f"cannot prove H11 future absence {item.role}"
-                ) from exc
-            else:
-                _fail(f"H11 future output {item.role} exists before permit")
-        result = cls(
-            tuple(item.reference for item in authority.directories),
-            closure.present_outputs_sha256,
-            closure.future_absence_sha256,
-            closure.transaction_state,
-            closure.partition.future_absence_inventory,
-        )
-        try:
-            os.stat(
-                "PERMIT.pending",
-                dir_fd=plan.parent.descriptor,
-                follow_symlinks=False,
-            )
-        except FileNotFoundError:
-            return result
-        except OSError as exc:
-            raise InstallerError(
-                "cannot prove final H11 permit staging absence"
-            ) from exc
-        _fail("H11 permit staging exists at the final pre-publication barrier")
-
-
-@dataclass
-class H11RootAuthorizedPermit:
-    closure: H11RootAuthorizerReadyClosure
-    barrier: H11RootPrePermitBarrier
-    publication: RetainedH11RootPublication
-    transaction_state: tuple[H11RootTransactionState, ...]
-    closed: bool = False
-    poisoned: bool = False
-    commit_started: bool = False
-
-    @classmethod
-    def publish(
-        cls,
-        closure: H11RootAuthorizerReadyClosure,
-    ) -> "H11RootAuthorizedPermit":
-        publication: RetainedH11RootPublication | None = None
-        try:
-            session = closure.session
-            retained_ready = _decode_canonical_object(
-                session.permit_ready.raw,
-                label="retained H11 PERMIT_READY for permit publication",
-            )
-            payload = {
-                "schema": H11_PERMIT_SCHEMA,
-                "scenario": "H11",
-                "run_unit": retained_ready["run_unit"],
-                "boot_id": retained_ready["boot_id"],
-                "invocation_id": retained_ready["invocation_id"],
-                "authorization_manifest": dict(session.authorization.source),
-                "harness_manifest": dict(session.authority.manifest_source),
-                "permit_ready": dict(session.permit_ready.source),
-                "run_armed": dict(session.run_armed.source),
-                "ready_commit": closure.ready_commit.reference,
-                "present_outputs_sha256": closure.present_outputs_sha256,
-                "future_absence_sha256": closure.future_absence_sha256,
-                "phase": "operator-release-authorized",
-            }
-            plan = _prepare_h11_named_staging(
-                session.authority.directories[3],
-                "PERMIT.pending",
-                "PERMIT.json",
-                payload,
-                require_root=session.authority.require_root,
-            )
-            expected_transaction_state = tuple(
-                H11RootTransactionState(item.role, item.path, state)
-                for item, state in zip(
-                    closure.transaction_state,
-                    _H11_TRANSACTION_PHASES["permit-committed"],
-                )
-            )
-            barrier = H11RootPrePermitBarrier.capture(closure, plan)
-            descriptor = _open_h11_named_staging(plan)
-            publication = _complete_h11_named_staging(plan, descriptor)
-            result = cls(
-                closure,
-                barrier,
-                publication,
-                expected_transaction_state,
-            )
-            result.revalidate()
-            return result
-        except BaseException as exc:
-            closure.poisoned = True
-            _close_h11_ownership(
-                (
-                    (publication, closure)
-                    if publication is not None
-                    else (closure,)
-                ),
-                active_error=exc,
-            )
-            raise
-
-    def revalidate(self) -> None:
-        try:
-            if self.closed or self.poisoned:
-                _fail("H11 authorized permit is poisoned or closed before last use")
-            self.closure._revalidate_retained_common()
-            transaction_state = self.closure._validate_exact_transaction_phase(
-                "permit-committed"
-            )
-            if transaction_state != self.transaction_state:
-                _fail("H11 permit-committed transaction state drifted")
-            self.publication.revalidate()
-        except BaseException as exc:
-            self.poisoned = True
-            _close_h11_ownership((self,), active_error=exc)
-            raise
-
-    def poison(self) -> None:
-        self.poisoned = True
-        self.close()
-
-    def close(self) -> None:
-        if self.closed:
-            return
-        self.closed = True
-        _close_h11_ownership((self.publication, self.closure))
-
-
-def _commit_h11_authorized_permit(
-    permit: H11RootAuthorizedPermit,
-) -> H11RootCommitReceipt:
-    descriptor = -1
-    try:
-        if permit.closed or permit.poisoned or permit.commit_started:
-            _fail("H11 authorized permit cannot begin another commit handoff")
-        permit.commit_started = True
-        permit.revalidate()
-        matches = tuple(
-            item
-            for item in permit.closure.session.authority.commit_fifos
-            if item.role == "h11-permit-commit"
-        )
-        if len(matches) != 1:
-            _fail("H11 root authority lacks exactly one PERMIT commit FIFO")
-        fifo = matches[0]
-        receipt = H11RootCommitReceipt.permit_committed(
-            fifo,
-            H11_PERMIT_COMMITTED_BYTES,
-        )
-        descriptor = fifo.open_permit_commit_writer(
-            require_root=permit.closure.session.authority.require_root,
-        )
-        permit.revalidate()
-        written = os.write(descriptor, H11_PERMIT_COMMITTED_BYTES)
-        if written != len(H11_PERMIT_COMMITTED_BYTES):
-            _fail("H11 PERMIT commit FIFO write was incomplete")
-        closing_descriptor = descriptor
-        descriptor = -1
-        os.close(closing_descriptor)
-        permit.close()
-        return receipt
-    except BaseException as exc:
-        closing_descriptor = descriptor
-        descriptor = -1
-        permit.poisoned = True
-        _close_h11_ownership(
-            (permit,),
-            active_error=exc,
-            initial_descriptor=closing_descriptor,
-        )
-        raise
-
 
 def prepare_tree(manifest_path: Path, *, require_root: bool = True) -> dict[str, Any]:
     """Create the unique authority tree and all named FIFO identities."""
@@ -5555,6 +3089,3867 @@ def _validate_frozen_receipt(
         _fail("frozen SHA256SUMS drifted")
 
 
+class H11RootAuthorizationState(Enum):
+    NEW = "new"
+    AUTHORITIES_RETAINED = "authorities-retained"
+    READY_CONSUMED = "ready-consumed"
+    PERMIT_PUBLISHED = "permit-published"
+    PERMIT_WRITER_OPEN = "permit-writer-open"
+    PERMIT_FRAME_WRITTEN = "permit-frame-written"
+    COMPLETE = "complete"
+    FAILED_PREWRITE = "failed-prewrite"
+    FAILED_WRITE_AMBIGUOUS = "failed-write-ambiguous"
+    FAILED_POSTWRITE = "failed-postwrite"
+    CLOSED = "closed"
+
+
+class H11RootCommitBoundary(Enum):
+    PREWRITE = "prewrite"
+    WRITE_IN_FLIGHT = "write-in-flight"
+    POSTWRITE = "postwrite"
+
+
+class H11OwnedFdSlot:
+    __slots__ = ("_role", "_descriptor", "_open_started")
+
+    def __init__(self, *, role: str) -> None:
+        self._role = role
+        self._descriptor = -1
+        self._open_started = False
+
+    @property
+    def role(self) -> str:
+        return self._role
+
+    def open(
+        self,
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> None:
+        if self._open_started or self._descriptor != -1:
+            _fail(f"H11 FD slot {self._role} cannot be opened twice")
+        self._open_started = True
+        self._bind(os.open(path, flags, mode, dir_fd=dir_fd))
+
+    def _bind(self, descriptor: int) -> None:
+        if self._descriptor != -1 or type(descriptor) is not int or descriptor < 0:
+            _fail(f"H11 FD slot {self._role} cannot bind this descriptor")
+        self._descriptor = descriptor
+
+    def borrow(self) -> int:
+        if self._descriptor < 0:
+            _fail(f"H11 FD slot {self._role} is empty")
+        return self._descriptor
+
+    def detach(self) -> int:
+        descriptor = self._descriptor
+        self._descriptor = -1
+        return descriptor
+
+
+def _prove_h11_execution_authority(
+    *,
+    require_root: bool,
+    process_euid: int,
+) -> None:
+    if not require_root:
+        return
+    if process_euid != 0:
+        _fail("root authority is required; installer does not invoke sudo")
+    if Path.resolve(Path(sys.executable)) != Path("/usr/bin/python3.12"):
+        _fail("privileged installer requires exact /usr/bin/python3.12")
+    if sys.flags.isolated != 1 or sys.flags.dont_write_bytecode != 1:
+        _fail("privileged installer requires Python -I -B")
+
+
+@dataclass(frozen=True, slots=True)
+class H11RootIndirectAuthoritySpec:
+    semantic_role: str
+    equivalence_class: str
+    install_ordinal: int | None
+    path: Path
+    kind: str
+    device: int
+    inode: int
+    mode: int | None
+    accepted_owners: tuple[tuple[int, int], ...] | None
+
+
+@dataclass(frozen=True, slots=True)
+class H11RootObservedPathIdentity:
+    semantic_role: str
+    equivalence_class: str
+    install_ordinal: int | None
+    path: Path
+    kind: str
+    device: int
+    inode: int
+    mode: int
+    uid: int
+    gid: int
+
+
+def _make_h11_indirect_authority_spec(
+    *,
+    semantic_role: str,
+    equivalence_class: str,
+    install_ordinal: int | None,
+    path: Path,
+    kind: str,
+    device: int,
+    inode: int,
+    mode: int | None,
+    accepted_owners: tuple[tuple[int, int], ...] | None,
+) -> H11RootIndirectAuthoritySpec:
+    if kind not in ("directory", "fifo", "regular"):
+        _fail("H11 indirect authority kind is outside the exact closed set")
+    if install_ordinal is not None and install_ordinal not in (0, 1, 2):
+        _fail("H11 install authority ordinal is outside the exact closed set")
+    if accepted_owners is not None and (
+        not accepted_owners
+        or accepted_owners != tuple(sorted(set(accepted_owners)))
+    ):
+        _fail("H11 indirect accepted-owner policy is not canonical")
+    return H11RootIndirectAuthoritySpec(
+        semantic_role,
+        equivalence_class,
+        install_ordinal,
+        path,
+        kind,
+        device,
+        inode,
+        mode,
+        accepted_owners,
+    )
+
+
+def _observe_h11_indirect_authority(
+    spec: H11RootIndirectAuthoritySpec,
+) -> H11RootObservedPathIdentity:
+    try:
+        info = Path.lstat(spec.path)
+    except OSError as exc:
+        raise InstallerError(
+            f"cannot observe H11 indirect authority {spec.semantic_role}"
+        ) from exc
+    kind = (
+        "directory"
+        if stat.S_ISDIR(info.st_mode)
+        else "fifo"
+        if stat.S_ISFIFO(info.st_mode)
+        else "regular"
+        if stat.S_ISREG(info.st_mode)
+        else ""
+    )
+    if kind != spec.kind:
+        _fail(f"H11 indirect authority {spec.semantic_role} kind drifted")
+    return H11RootObservedPathIdentity(
+        spec.semantic_role,
+        spec.equivalence_class,
+        spec.install_ordinal,
+        spec.path,
+        kind,
+        info.st_dev,
+        info.st_ino,
+        stat.S_IMODE(info.st_mode),
+        info.st_uid,
+        info.st_gid,
+    )
+
+
+def _prove_h11_indirect_observations(
+    indirect_specs: tuple[H11RootIndirectAuthoritySpec, ...],
+    observed_identities: tuple[H11RootObservedPathIdentity, ...],
+) -> None:
+    if type(indirect_specs) is not tuple or type(observed_identities) is not tuple:
+        _fail("H11 indirect authority proof requires exact tuples")
+    if len(indirect_specs) != len(observed_identities):
+        _fail("H11 indirect authority observation count drifted")
+    seen_paths: set[Path] = set()
+    seen_identities: set[tuple[int, int]] = set()
+    for spec, observed in zip(indirect_specs, observed_identities):
+        if (
+            type(spec) is not H11RootIndirectAuthoritySpec
+            or type(observed) is not H11RootObservedPathIdentity
+            or observed.semantic_role != spec.semantic_role
+            or observed.equivalence_class != spec.equivalence_class
+            or observed.install_ordinal != spec.install_ordinal
+            or observed.path != spec.path
+            or observed.kind != spec.kind
+            or (observed.device, observed.inode) != (spec.device, spec.inode)
+            or (spec.mode is not None and observed.mode != spec.mode)
+            or (
+                spec.accepted_owners is not None
+                and (observed.uid, observed.gid) not in spec.accepted_owners
+            )
+            or observed.path in seen_paths
+            or (observed.device, observed.inode) in seen_identities
+        ):
+            _fail(f"H11 indirect authority {spec.semantic_role} drifted")
+        seen_paths.add(observed.path)
+        seen_identities.add((observed.device, observed.inode))
+
+
+def _prove_h11_direct_authority_bindings(
+    *,
+    authorization_manifest: H11RootFrozenJsonObject,
+    harness_manifest: H11RootFrozenJsonObject,
+    install_receipt: H11RootFrozenJsonObject,
+    install_manifest: H11RootFrozenJsonObject,
+    tree_receipt: H11RootFrozenJsonObject,
+    seal_receipt: H11RootFrozenJsonObject,
+    preflight_receipt: H11RootFrozenJsonObject,
+    permit_ready: H11RootFrozenJsonObject,
+    run_armed: H11RootFrozenJsonObject,
+    authorization_source_reference: H11RootFrozenJsonObject,
+    harness_source_reference: H11RootFrozenJsonObject,
+    install_receipt_source_reference: H11RootFrozenJsonObject,
+    install_manifest_source_reference: H11RootFrozenJsonObject,
+    tree_receipt_source_reference: H11RootFrozenJsonObject,
+    seal_receipt_source_reference: H11RootFrozenJsonObject,
+    preflight_receipt_source_reference: H11RootFrozenJsonObject,
+    permit_ready_source_reference: H11RootFrozenJsonObject,
+    run_armed_source_reference: H11RootFrozenJsonObject,
+    formal_root_directory_reference: H11RootDirectoryReference,
+    authority_root_directory_reference: H11RootDirectoryReference,
+    harness_root_directory_reference: H11RootDirectoryReference,
+    scenario_root_directory_reference: H11RootDirectoryReference,
+    input_root_directory_reference: H11RootDirectoryReference,
+    receipt_root_directory_reference: H11RootDirectoryReference,
+    fifo_root_directory_reference: H11RootDirectoryReference,
+    ready_commit_fifo_reference: H11RootFifoReference,
+    permit_commit_fifo_reference: H11RootFifoReference,
+) -> None:
+    authorization_manifest = _h11_exact_object_fields(
+        authorization_manifest,
+        (
+            "formal_root",
+            "harness_manifest",
+            "permit_path",
+            "permit_ready",
+            "run_armed",
+            "schema",
+        ),
+        label="H11 authorization",
+    )
+    harness_manifest = _h11_exact_object_fields(
+        harness_manifest,
+        (
+            "acquisitions",
+            "boot_id_file",
+            "closer_unit",
+            "descriptor",
+            "formal_actions",
+            "harness_program",
+            "input_root",
+            "installer_receipt",
+            "outputs",
+            "permit_authority",
+            "preflight_receipt",
+            "receipt_root",
+            "run_unit",
+            "scenario",
+            "scenario_input",
+            "schema",
+            "static_inventory",
+            "static_roles",
+        ),
+        label="H11 harness manifest",
+    )
+    permit_authority = _h11_exact_object_fields(
+        _h11_object_member(
+            harness_manifest,
+            "permit_authority",
+            label="H11 harness manifest",
+        ),
+        (
+            "directory_chain",
+            "future_absence_inventory",
+            "permit_commit_fifo",
+            "permit_ledger_path",
+            "permit_ledger_staging_path",
+            "permit_parent",
+            "permit_path",
+            "permit_ready_path",
+            "permit_ready_staging_path",
+            "permit_staging_path",
+            "present_prerequisite_roles",
+            "ready_commit_fifo",
+            "run_unit",
+            "scenario",
+            "schema",
+        ),
+        label="H11 permit authority",
+    )
+    permit_ready = _h11_exact_object_fields(
+        permit_ready,
+        (
+            "absent_paths",
+            "boot_id",
+            "harness_manifest",
+            "invocation_id",
+            "permit_authority",
+            "phase",
+            "present_outputs",
+            "run_armed",
+            "run_unit",
+            "scenario",
+            "schema",
+        ),
+        label="H11 PERMIT_READY receipt",
+    )
+    harness_run_unit = _h11_text(
+        _h11_object_member(
+            harness_manifest,
+            "run_unit",
+            label="H11 harness manifest",
+        ),
+        label="H11 harness manifest.run_unit",
+    )
+    if (
+        _h11_text(
+            _h11_object_member(
+                authorization_manifest,
+                "schema",
+                label="H11 authorization",
+            ),
+            label="H11 authorization.schema",
+        )
+        != H11_AUTHORIZATION_SCHEMA
+        or _h11_text(
+            _h11_object_member(
+                harness_manifest,
+                "schema",
+                label="H11 harness manifest",
+            ),
+            label="H11 harness manifest.schema",
+        )
+        != "scion.generic_backend.systemd_harness_manifest.v1"
+        or _h11_text(
+            _h11_object_member(
+                harness_manifest,
+                "scenario",
+                label="H11 harness manifest",
+            ),
+            label="H11 harness manifest.scenario",
+        )
+        != "H11"
+        or _h11_text(
+            _h11_object_member(
+                permit_authority,
+                "schema",
+                label="H11 permit authority",
+            ),
+            label="H11 permit authority.schema",
+        )
+        != H11_PERMIT_AUTHORITY_SCHEMA
+        or _h11_text(
+            _h11_object_member(
+                permit_authority,
+                "scenario",
+                label="H11 permit authority",
+            ),
+            label="H11 permit authority.scenario",
+        )
+        != "H11"
+        or _h11_text(
+            _h11_object_member(
+                permit_authority,
+                "run_unit",
+                label="H11 permit authority",
+            ),
+            label="H11 permit authority.run_unit",
+        )
+        != harness_run_unit
+        or _h11_text(
+            _h11_object_member(
+                permit_ready,
+                "schema",
+                label="H11 PERMIT_READY receipt",
+            ),
+            label="H11 PERMIT_READY receipt.schema",
+        )
+        != H11_PERMIT_READY_SCHEMA
+        or _h11_text(
+            _h11_object_member(
+                permit_ready,
+                "scenario",
+                label="H11 PERMIT_READY receipt",
+            ),
+            label="H11 PERMIT_READY receipt.scenario",
+        )
+        != "H11"
+        or _h11_text(
+            _h11_object_member(
+                permit_ready,
+                "run_unit",
+                label="H11 PERMIT_READY receipt",
+            ),
+            label="H11 PERMIT_READY receipt.run_unit",
+        )
+        != harness_run_unit
+        or _h11_text(
+            _h11_object_member(
+                permit_ready,
+                "phase",
+                label="H11 PERMIT_READY receipt",
+            ),
+            label="H11 PERMIT_READY receipt.phase",
+        )
+        != "h11-permit-ready"
+        or _h11_object_member(
+            permit_ready,
+            "permit_authority",
+            label="H11 PERMIT_READY receipt",
+        )
+        != permit_authority
+    ):
+        _fail("H11 direct wire schema or phase cross-binding drifted")
+    sources = (
+        authorization_source_reference,
+        harness_source_reference,
+        install_receipt_source_reference,
+        install_manifest_source_reference,
+        tree_receipt_source_reference,
+        seal_receipt_source_reference,
+        preflight_receipt_source_reference,
+        permit_ready_source_reference,
+        run_armed_source_reference,
+    )
+    if any(
+        type(source) is not tuple
+        or tuple(key for key, _value in source)
+        != ("device", "gid", "inode", "mode", "path", "sha256", "uid")
+        for source in sources
+    ):
+        _fail("H11 direct source references are not exact frozen full references")
+    if (
+        _h11_object_member(authorization_manifest, "harness_manifest", label="H11 authorization")
+        != harness_source_reference
+        or _h11_object_member(authorization_manifest, "permit_ready", label="H11 authorization")
+        != permit_ready_source_reference
+        or _h11_object_member(authorization_manifest, "run_armed", label="H11 authorization")
+        != run_armed_source_reference
+        or _h11_object_member(harness_manifest, "installer_receipt", label="H11 harness")
+        != tuple(
+            (key, value)
+            for key, value in install_receipt_source_reference
+            if key in ("path", "sha256")
+        )
+        or _h11_object_member(install_receipt, "install_manifest", label="H11 install receipt")
+        != tuple(
+            (key, value)
+            for key, value in install_manifest_source_reference
+            if key not in ("uid", "gid")
+        )
+    ):
+        _fail("H11 direct source cross-binding drifted")
+    directory_chain = _h11_object_member(
+        permit_authority,
+        "directory_chain",
+        label="H11 permit authority",
+    )
+    expected_directories = (
+        formal_root_directory_reference,
+        authority_root_directory_reference,
+        harness_root_directory_reference,
+        scenario_root_directory_reference,
+        input_root_directory_reference,
+        receipt_root_directory_reference,
+        fifo_root_directory_reference,
+    )
+    if type(directory_chain) is not tuple or len(directory_chain) != 7:
+        _fail("H11 direct directory chain drifted")
+    for row, reference in zip(directory_chain, expected_directories):
+        if row != (
+            ("device", str(reference.device)),
+            ("gid", str(reference.gid)),
+            ("inode", str(reference.inode)),
+            ("mode", format(reference.mode, "04o")),
+            ("path", str(reference.path)),
+            ("role", reference.role),
+            ("uid", str(reference.uid)),
+        ):
+            _fail("H11 direct directory reference drifted")
+    if (
+        _h11_object_member(permit_authority, "ready_commit_fifo", label="H11 permit authority")
+        != tuple(sorted(ready_commit_fifo_reference.reference.items()))
+        or _h11_object_member(permit_authority, "permit_commit_fifo", label="H11 permit authority")
+        != tuple(sorted(permit_commit_fifo_reference.reference.items()))
+    ):
+        _fail("H11 direct commit FIFO reference drifted")
+
+
+def _build_h11_tree_indirect_specs(
+    *,
+    tree_receipt: H11RootFrozenJsonObject,
+    preflight_receipt: H11RootFrozenJsonObject,
+    harness_manifest: H11RootFrozenJsonObject,
+    run_armed: H11RootFrozenJsonObject,
+    formal_root_directory_reference: H11RootDirectoryReference,
+    authority_root_directory_reference: H11RootDirectoryReference,
+    input_root_directory_reference: H11RootDirectoryReference,
+    fifo_root_directory_reference: H11RootDirectoryReference,
+    ready_commit_fifo_reference: H11RootFifoReference,
+    permit_commit_fifo_reference: H11RootFifoReference,
+    require_root: bool,
+    process_euid: int,
+    process_egid: int,
+) -> tuple[
+    int,
+    int,
+    tuple[H11RootValidatedFifo, ...],
+    tuple[H11RootIndirectAuthoritySpec, ...],
+]:
+    if _h11_text(
+        _h11_object_member(tree_receipt, "schema", label="H11 TREE receipt"),
+        label="H11 TREE receipt.schema",
+    ) != TREE_RECEIPT_SCHEMA or _h11_text(
+        _h11_object_member(tree_receipt, "phase", label="H11 TREE receipt"),
+        label="H11 TREE receipt.phase",
+    ) != "tree-prepared":
+        _fail("H11 TREE schema or phase drifted")
+    fixture_uid = _h11_uint(
+        _h11_object_member(tree_receipt, "fixture_uid", label="H11 TREE receipt"),
+        label="H11 TREE fixture_uid",
+    )
+    fixture_gid = _h11_uint(
+        _h11_object_member(tree_receipt, "fixture_gid", label="H11 TREE receipt"),
+        label="H11 TREE fixture_gid",
+    )
+    directory_roles = (
+        ("formal_root", "formal-root", 0o711),
+        ("sealed_root", "sealed-root", 0o555),
+        ("input_root", "input-root", 0o555),
+        ("work_root", "work-root", 0o700),
+        ("fifo_root", "fifo-root", 0o711),
+        ("authority_root", "authority-root", 0o700),
+    )
+    tree_inputs: list[
+        tuple[str, str, int | None, Path, str, int, int, int | None, tuple[tuple[int, int], ...] | None]
+    ] = []
+    for field, role, mode in directory_roles:
+        row = _h11_object_member(tree_receipt, field, label="H11 TREE receipt")
+        _h11_exact_object_fields(
+            row,
+            ("device", "inode", "path"),
+            label=f"H11 TREE {role}",
+        )
+        tree_inputs.append(
+            (
+                role,
+                f"tree/directory/{role}",
+                None,
+                _h11_path(_h11_object_member(row, "path", label=role), label=f"{role}.path"),
+                "directory",
+                _h11_uint(_h11_object_member(row, "device", label=role), label=f"{role}.device"),
+                _h11_uint(_h11_object_member(row, "inode", label=role), label=f"{role}.inode"),
+                mode,
+                ((0, 0),) if require_root else None,
+            )
+        )
+    fifo_values = _h11_object_member(tree_receipt, "fifos", label="H11 TREE receipt")
+    preflight_fifo_values = _h11_object_member(
+        preflight_receipt, "fifos", label="H11 PREFLIGHT receipt"
+    )
+    if type(fifo_values) is not tuple or fifo_values != preflight_fifo_values or len(fifo_values) != 8:
+        _fail("H11 TREE/PREFLIGHT FIFO inventory drifted")
+    validated: list[H11RootValidatedFifo] = []
+    for row in fifo_values:
+        _h11_exact_object_fields(
+            row,
+            ("device", "gid", "inode", "mode", "owner", "path", "role", "uid"),
+            label="H11 TREE FIFO",
+        )
+        role = _h11_text(_h11_object_member(row, "role", label="H11 TREE FIFO"), label="H11 TREE FIFO.role")
+        owner = _h11_text(_h11_object_member(row, "owner", label="H11 TREE FIFO"), label="H11 TREE FIFO.owner")
+        uid = _h11_uint(_h11_object_member(row, "uid", label="H11 TREE FIFO"), label="H11 TREE FIFO.uid")
+        gid = _h11_uint(_h11_object_member(row, "gid", label="H11 TREE FIFO"), label="H11 TREE FIFO.gid")
+        device = _h11_uint(_h11_object_member(row, "device", label="H11 TREE FIFO"), label="H11 TREE FIFO.device")
+        inode = _h11_uint(_h11_object_member(row, "inode", label="H11 TREE FIFO"), label="H11 TREE FIFO.inode")
+        mode_text = _h11_text(_h11_object_member(row, "mode", label="H11 TREE FIFO"), label="H11 TREE FIFO.mode")
+        if mode_text != "0600":
+            _fail("H11 TREE FIFO mode drifted")
+        accepted_owners = (
+            ready_commit_fifo_reference.accepted_owners
+            if role == "h11-ready-commit"
+            else permit_commit_fifo_reference.accepted_owners
+            if role == "h11-permit-commit"
+            else ((fixture_uid, fixture_gid),)
+        )
+        if (
+            (owner == "fixture" and (uid, gid) != (fixture_uid, fixture_gid))
+            or (owner == "root" and (uid, gid) != (0, 0))
+            or owner not in ("fixture", "root")
+        ):
+            _fail("H11 TREE FIFO owner drifted")
+        validated.append(
+            H11RootValidatedFifo(
+                role,
+                _h11_path(_h11_object_member(row, "path", label="H11 TREE FIFO"), label="H11 TREE FIFO.path"),
+                owner,
+                uid,
+                gid,
+                0o600,
+                device,
+                inode,
+                accepted_owners,
+            )
+        )
+    if tuple(item.role for item in validated) != tuple(sorted(item.role for item in validated)):
+        _fail("H11 TREE FIFO order drifted")
+    expected_fifo_roles = (
+        "closer-ready",
+        "closer-release",
+        "exec-stop-post-ready",
+        "exec-stop-post-release",
+        "h11-permit-commit",
+        "h11-ready-commit",
+        "run-main-ready",
+        "run-main-release",
+    )
+    if tuple(item.role for item in validated) != expected_fifo_roles:
+        _fail("H11 TREE FIFO role closure drifted")
+    directory_by_role = {
+        spec[0]: spec for spec in tree_inputs[:6]
+    }
+    if (
+        directory_by_role["formal-root"][3]
+        != formal_root_directory_reference.path
+        or (directory_by_role["formal-root"][5], directory_by_role["formal-root"][6])
+        != (formal_root_directory_reference.device, formal_root_directory_reference.inode)
+        or directory_by_role["authority-root"][3]
+        != authority_root_directory_reference.path
+        or (directory_by_role["authority-root"][5], directory_by_role["authority-root"][6])
+        != (authority_root_directory_reference.device, authority_root_directory_reference.inode)
+        or directory_by_role["input-root"][3]
+        != input_root_directory_reference.path
+        or (directory_by_role["input-root"][5], directory_by_role["input-root"][6])
+        != (input_root_directory_reference.device, input_root_directory_reference.inode)
+        or directory_by_role["fifo-root"][3]
+        != fifo_root_directory_reference.path
+        or (directory_by_role["fifo-root"][5], directory_by_role["fifo-root"][6])
+        != (fifo_root_directory_reference.device, fifo_root_directory_reference.inode)
+        or directory_by_role["sealed-root"][3]
+        != formal_root_directory_reference.path / "sealed"
+        or directory_by_role["work-root"][3]
+        != formal_root_directory_reference.path / "work"
+    ):
+        _fail("H11 TREE directory projection drifted")
+    fifo_by_role = {row.role: row for row in validated}
+    if (
+        fifo_by_role["h11-ready-commit"].path
+        != ready_commit_fifo_reference.path
+        or (
+            fifo_by_role["h11-ready-commit"].device,
+            fifo_by_role["h11-ready-commit"].inode,
+        )
+        != (
+            ready_commit_fifo_reference.device,
+            ready_commit_fifo_reference.inode,
+        )
+        or fifo_by_role["h11-permit-commit"].path
+        != permit_commit_fifo_reference.path
+        or (
+            fifo_by_role["h11-permit-commit"].device,
+            fifo_by_role["h11-permit-commit"].inode,
+        )
+        != (
+            permit_commit_fifo_reference.device,
+            permit_commit_fifo_reference.inode,
+        )
+    ):
+        _fail("H11 TREE commit FIFO projection drifted")
+    acquisition_values = _h11_object_member(
+        harness_manifest,
+        "acquisitions",
+        label="H11 harness manifest",
+    )
+    if type(acquisition_values) is not tuple or len(acquisition_values) != 3:
+        _fail("H11 acquisition inventory drifted")
+    expected_acquisition_roles = ("run-main", "exec-stop-post", "closer")
+    acquisition_fifo_roles = (
+        ("run-main-ready", "run-main-release"),
+        ("exec-stop-post-ready", "exec-stop-post-release"),
+        ("closer-ready", "closer-release"),
+    )
+    run_main_acquisition: H11RootFrozenJsonObject | None = None
+    for acquisition, expected_role, fifo_roles in zip(
+        acquisition_values,
+        expected_acquisition_roles,
+        acquisition_fifo_roles,
+    ):
+        _h11_exact_object_fields(
+            acquisition,
+            ("armed_receipt_path", "ready_fifo", "release_fifo", "role"),
+            label=f"H11 acquisition {expected_role}",
+        )
+        if _h11_text(
+            _h11_object_member(
+                acquisition,
+                "role",
+                label=f"H11 acquisition {expected_role}",
+            ),
+            label=f"H11 acquisition {expected_role}.role",
+        ) != expected_role:
+            _fail("H11 acquisition role order drifted")
+        ready_acquisition = _h11_object_member(
+            acquisition,
+            "ready_fifo",
+            label=f"H11 acquisition {expected_role}",
+        )
+        release_acquisition = _h11_object_member(
+            acquisition,
+            "release_fifo",
+            label=f"H11 acquisition {expected_role}",
+        )
+        ready_row = fifo_by_role[fifo_roles[0]]
+        release_row = fifo_by_role[fifo_roles[1]]
+        if (
+            ready_acquisition != (
+                ("device", str(ready_row.device)),
+                ("inode", str(ready_row.inode)),
+                ("path", str(ready_row.path)),
+            )
+            or release_acquisition != (
+                ("device", str(release_row.device)),
+                ("inode", str(release_row.inode)),
+                ("path", str(release_row.path)),
+            )
+        ):
+            _fail(f"H11 acquisition {expected_role} FIFO projection drifted")
+        if expected_role == "run-main":
+            run_main_acquisition = acquisition
+    if run_main_acquisition is None:
+        _fail("H11 run-main acquisition is missing")
+    if (
+        _h11_object_member(
+            run_armed,
+            "ready_fifo",
+            label="H11 run ARMED",
+        )
+        != _h11_object_member(
+            run_main_acquisition,
+            "ready_fifo",
+            label="H11 run-main acquisition",
+        )
+        or _h11_object_member(
+            run_armed,
+            "release_fifo",
+            label="H11 run ARMED",
+        )
+        != _h11_object_member(
+            run_main_acquisition,
+            "release_fifo",
+            label="H11 run-main acquisition",
+        )
+    ):
+        _fail("H11 run ARMED FIFO projection drifted")
+    for row in validated:
+        tree_inputs.append(
+            (
+                row.role,
+                f"tree/fifo/{row.role}",
+                None,
+                row.path,
+                "fifo",
+                row.device,
+                row.inode,
+                row.mode,
+                row.accepted_owners,
+            )
+        )
+    prepare = _h11_object_member(tree_receipt, "prepare_manifest", label="H11 TREE receipt")
+    tree_inputs.append(
+        (
+            "prepare-manifest",
+            "tree/prepare-manifest",
+            None,
+            _h11_path(_h11_object_member(prepare, "path", label="H11 prepare manifest"), label="H11 prepare manifest.path"),
+            "regular",
+            _h11_uint(_h11_object_member(prepare, "device", label="H11 prepare manifest"), label="H11 prepare manifest.device"),
+            _h11_uint(_h11_object_member(prepare, "inode", label="H11 prepare manifest"), label="H11 prepare manifest.inode"),
+            None,
+            None,
+        )
+    )
+    specs = tuple(
+        _make_h11_indirect_authority_spec(
+            semantic_role=row[0],
+            equivalence_class=row[1],
+            install_ordinal=row[2],
+            path=row[3],
+            kind=row[4],
+            device=row[5],
+            inode=row[6],
+            mode=row[7],
+            accepted_owners=row[8],
+        )
+        for row in tree_inputs
+    )
+    ready_row = tuple(item for item in validated if item.role == "h11-ready-commit")
+    permit_row = tuple(item for item in validated if item.role == "h11-permit-commit")
+    ready_spec = tuple(item for item in specs if item.semantic_role == "h11-ready-commit")
+    permit_spec = tuple(item for item in specs if item.semantic_role == "h11-permit-commit")
+    if (
+        len(ready_row) != 1
+        or len(permit_row) != 1
+        or len(ready_spec) != 1
+        or len(permit_spec) != 1
+        or ready_row[0].accepted_owners is not ready_commit_fifo_reference.accepted_owners
+        or permit_row[0].accepted_owners is not permit_commit_fifo_reference.accepted_owners
+        or ready_spec[0].accepted_owners is not ready_commit_fifo_reference.accepted_owners
+        or permit_spec[0].accepted_owners is not permit_commit_fifo_reference.accepted_owners
+    ):
+        _fail("H11 commit owner policy identity drifted")
+    return fixture_uid, fixture_gid, tuple(validated), specs
+
+
+def _build_h11_seal_indirect_specs(
+    *,
+    seal_receipt: H11RootFrozenJsonObject,
+    tree_receipt: H11RootFrozenJsonObject,
+    preflight_receipt: H11RootFrozenJsonObject,
+    install_receipt: H11RootFrozenJsonObject,
+    install_manifest: H11RootFrozenJsonObject,
+    harness_manifest: H11RootFrozenJsonObject,
+    run_armed: H11RootFrozenJsonObject,
+    install_receipt_source_reference: H11RootFrozenJsonObject,
+    install_manifest_source_reference: H11RootFrozenJsonObject,
+    preflight_receipt_source_reference: H11RootFrozenJsonObject,
+    formal_root: Path,
+    require_root: bool,
+) -> tuple[H11RootIndirectAuthoritySpec, ...]:
+    if _h11_text(_h11_object_member(seal_receipt, "schema", label="H11 SEAL receipt"), label="H11 SEAL receipt.schema") != SEAL_RECEIPT_SCHEMA or _h11_text(_h11_object_member(seal_receipt, "phase", label="H11 SEAL receipt"), label="H11 SEAL receipt.phase") != "static-authority-sealed":
+        _fail("H11 SEAL schema or phase drifted")
+    seal_inputs: list[
+        tuple[str, str, int | None, Path, str, int, int, int | None, tuple[tuple[int, int], ...] | None]
+    ] = []
+    seal_manifest = _h11_object_member(seal_receipt, "seal_manifest", label="H11 SEAL receipt")
+    seal_inputs.append((
+        "seal-manifest", "seal/manifest", None,
+        _h11_path(_h11_object_member(seal_manifest, "path", label="H11 seal manifest"), label="H11 seal manifest.path"),
+        "regular",
+        _h11_uint(_h11_object_member(seal_manifest, "device", label="H11 seal manifest"), label="H11 seal manifest.device"),
+        _h11_uint(_h11_object_member(seal_manifest, "inode", label="H11 seal manifest"), label="H11 seal manifest.inode"),
+        None, None,
+    ))
+    files = _h11_object_member(seal_receipt, "files", label="H11 SEAL receipt")
+    if type(files) is not tuple or not files:
+        _fail("H11 SEAL files inventory is invalid")
+    parsed_files: list[tuple[str, Path, int, int, int]] = []
+    for row in files:
+        _h11_exact_object_fields(row, ("device", "inode", "mode", "path", "role", "sha256"), label="H11 SEAL file")
+        role = _h11_text(_h11_object_member(row, "role", label="H11 SEAL file"), label="H11 SEAL file.role")
+        mode_text = _h11_text(_h11_object_member(row, "mode", label="H11 SEAL file"), label="H11 SEAL file.mode")
+        if mode_text != "0444":
+            _fail("H11 SEAL file mode drifted")
+        _h11_sha256_text(_h11_object_member(row, "sha256", label="H11 SEAL file"), label="H11 SEAL file.sha256")
+        parsed_files.append((
+            role,
+            _h11_path(_h11_object_member(row, "path", label="H11 SEAL file"), label="H11 SEAL file.path"),
+            _h11_uint(_h11_object_member(row, "device", label="H11 SEAL file"), label="H11 SEAL file.device"),
+            _h11_uint(_h11_object_member(row, "inode", label="H11 SEAL file"), label="H11 SEAL file.inode"),
+            0o444,
+        ))
+    ordered_files = tuple(item for item in parsed_files if item[0] == "preflight-manifest") + tuple(
+        sorted((item for item in parsed_files if item[0] != "preflight-manifest"), key=lambda item: item[0])
+    )
+    if len(ordered_files) != len(parsed_files) or len(set(item[0] for item in ordered_files)) != len(ordered_files):
+        _fail("H11 SEAL file roles are duplicated")
+    for role, path, device, inode, mode in ordered_files:
+        seal_inputs.append((
+            "preflight-manifest" if role == "preflight-manifest" else role,
+            "preflight/inventory" if role == "preflight-manifest" else f"seal/file/{role}",
+            None, path, "regular", device, inode, mode,
+            ((0, 0),) if require_root else None,
+        ))
+    return tuple(
+        _make_h11_indirect_authority_spec(
+            semantic_role=row[0], equivalence_class=row[1], install_ordinal=row[2],
+            path=row[3], kind=row[4], device=row[5], inode=row[6], mode=row[7],
+            accepted_owners=row[8],
+        )
+        for row in seal_inputs
+    )
+
+
+def _prove_h11_preflight_snapshot_bindings(
+    *,
+    preflight_receipt: H11RootFrozenJsonObject,
+    tree_receipt: H11RootFrozenJsonObject,
+    seal_receipt: H11RootFrozenJsonObject,
+    harness_manifest: H11RootFrozenJsonObject,
+    preflight_receipt_source_reference: H11RootFrozenJsonObject,
+    formal_root: Path,
+    validated_fifos: tuple[H11RootValidatedFifo, ...],
+) -> None:
+    if _h11_text(_h11_object_member(preflight_receipt, "schema", label="H11 PREFLIGHT receipt"), label="H11 PREFLIGHT receipt.schema") != PREFLIGHT_RECEIPT_SCHEMA or _h11_text(_h11_object_member(preflight_receipt, "phase", label="H11 PREFLIGHT receipt"), label="H11 PREFLIGHT receipt.phase") != "static-preflight-complete":
+        _fail("H11 PREFLIGHT schema or phase drifted")
+    if _h11_path(_h11_object_member(preflight_receipt, "formal_root", label="H11 PREFLIGHT receipt"), label="H11 PREFLIGHT formal_root") != formal_root:
+        _fail("H11 PREFLIGHT formal root drifted")
+    fifo_values = _h11_object_member(preflight_receipt, "fifos", label="H11 PREFLIGHT receipt")
+    if type(fifo_values) is not tuple or len(fifo_values) != len(validated_fifos):
+        _fail("H11 PREFLIGHT FIFO projection drifted")
+
+
+def _build_h11_install_target_specs(
+    *,
+    install_receipt: H11RootFrozenJsonObject,
+    install_manifest: H11RootFrozenJsonObject,
+    harness_manifest: H11RootFrozenJsonObject,
+    seal_receipt: H11RootFrozenJsonObject,
+    install_receipt_source_reference: H11RootFrozenJsonObject,
+    install_manifest_source_reference: H11RootFrozenJsonObject,
+    formal_root: Path,
+    require_root: bool,
+) -> tuple[H11RootIndirectAuthoritySpec, ...]:
+    if _h11_text(_h11_object_member(install_receipt, "schema", label="H11 install receipt"), label="H11 install receipt.schema") != INSTALL_RECEIPT_SCHEMA or _h11_text(_h11_object_member(install_manifest, "schema", label="H11 install manifest"), label="H11 install manifest.schema") != INSTALL_SCHEMA:
+        _fail("H11 install receipt or manifest schema drifted")
+    units = _h11_object_member(install_receipt, "units", label="H11 install receipt")
+    manifest_units = _h11_object_member(install_manifest, "units", label="H11 install manifest")
+    if type(units) is not tuple or type(manifest_units) is not tuple or len(units) != 3 or len(manifest_units) != 3:
+        _fail("H11 install unit inventory drifted")
+    install_inputs: list[
+        tuple[str, str, int | None, Path, str, int, int, int | None, tuple[tuple[int, int], ...] | None]
+    ] = []
+    for ordinal, (unit_row, manifest_row) in enumerate(zip(units, manifest_units)):
+        role = _h11_text(_h11_object_member(unit_row, "role", label="H11 install unit"), label="H11 install unit.role")
+        unit = _h11_text(_h11_object_member(unit_row, "unit", label="H11 install unit"), label="H11 install unit.unit")
+        if _systemd_unit_object_path(unit) != _h11_text(_h11_object_member(unit_row, "object_path", label="H11 install unit"), label="H11 install unit.object_path"):
+            _fail("H11 install unit object path drifted")
+        target = _h11_object_member(unit_row, "target", label="H11 install unit")
+        uid = _h11_uint(_h11_object_member(target, "uid", label="H11 install target"), label="H11 install target.uid")
+        gid = _h11_uint(_h11_object_member(target, "gid", label="H11 install target"), label="H11 install target.gid")
+        mode_text = _h11_text(_h11_object_member(target, "mode", label="H11 install target"), label="H11 install target.mode")
+        if mode_text != "0644" or role != _h11_text(_h11_object_member(manifest_row, "role", label="H11 install manifest unit"), label="H11 install manifest unit.role"):
+            _fail("H11 install target mode or role drifted")
+        install_inputs.append((
+            role,
+            f"install/target/{role}",
+            ordinal,
+            _h11_path(_h11_object_member(target, "path", label="H11 install target"), label="H11 install target.path"),
+            "regular",
+            _h11_uint(_h11_object_member(target, "device", label="H11 install target"), label="H11 install target.device"),
+            _h11_uint(_h11_object_member(target, "inode", label="H11 install target"), label="H11 install target.inode"),
+            0o644,
+            ((uid, gid),),
+        ))
+    return tuple(
+        _make_h11_indirect_authority_spec(
+            semantic_role=row[0], equivalence_class=row[1], install_ordinal=row[2],
+            path=row[3], kind=row[4], device=row[5], inode=row[6], mode=row[7],
+            accepted_owners=row[8],
+        )
+        for row in install_inputs
+    )
+
+
+def _build_h11_indirect_authority_inventory(
+    *,
+    authorization_manifest: H11RootFrozenJsonObject,
+    harness_manifest: H11RootFrozenJsonObject,
+    install_receipt: H11RootFrozenJsonObject,
+    install_manifest: H11RootFrozenJsonObject,
+    tree_receipt: H11RootFrozenJsonObject,
+    seal_receipt: H11RootFrozenJsonObject,
+    preflight_receipt: H11RootFrozenJsonObject,
+    permit_ready: H11RootFrozenJsonObject,
+    run_armed: H11RootFrozenJsonObject,
+    authorization_source_reference: H11RootFrozenJsonObject,
+    harness_source_reference: H11RootFrozenJsonObject,
+    install_receipt_source_reference: H11RootFrozenJsonObject,
+    install_manifest_source_reference: H11RootFrozenJsonObject,
+    tree_receipt_source_reference: H11RootFrozenJsonObject,
+    seal_receipt_source_reference: H11RootFrozenJsonObject,
+    preflight_receipt_source_reference: H11RootFrozenJsonObject,
+    permit_ready_source_reference: H11RootFrozenJsonObject,
+    run_armed_source_reference: H11RootFrozenJsonObject,
+    formal_root_directory_reference: H11RootDirectoryReference,
+    authority_root_directory_reference: H11RootDirectoryReference,
+    harness_root_directory_reference: H11RootDirectoryReference,
+    scenario_root_directory_reference: H11RootDirectoryReference,
+    input_root_directory_reference: H11RootDirectoryReference,
+    receipt_root_directory_reference: H11RootDirectoryReference,
+    fifo_root_directory_reference: H11RootDirectoryReference,
+    ready_commit_fifo_reference: H11RootFifoReference,
+    permit_commit_fifo_reference: H11RootFifoReference,
+    formal_root: Path,
+    require_root: bool,
+    process_euid: int,
+    process_egid: int,
+) -> tuple[int, int, tuple[H11RootValidatedFifo, ...], tuple[H11RootIndirectAuthoritySpec, ...]]:
+    _prove_h11_direct_authority_bindings(
+        authorization_manifest=authorization_manifest, harness_manifest=harness_manifest,
+        install_receipt=install_receipt, install_manifest=install_manifest,
+        tree_receipt=tree_receipt, seal_receipt=seal_receipt,
+        preflight_receipt=preflight_receipt, permit_ready=permit_ready,
+        run_armed=run_armed, authorization_source_reference=authorization_source_reference,
+        harness_source_reference=harness_source_reference,
+        install_receipt_source_reference=install_receipt_source_reference,
+        install_manifest_source_reference=install_manifest_source_reference,
+        tree_receipt_source_reference=tree_receipt_source_reference,
+        seal_receipt_source_reference=seal_receipt_source_reference,
+        preflight_receipt_source_reference=preflight_receipt_source_reference,
+        permit_ready_source_reference=permit_ready_source_reference,
+        run_armed_source_reference=run_armed_source_reference,
+        formal_root_directory_reference=formal_root_directory_reference,
+        authority_root_directory_reference=authority_root_directory_reference,
+        harness_root_directory_reference=harness_root_directory_reference,
+        scenario_root_directory_reference=scenario_root_directory_reference,
+        input_root_directory_reference=input_root_directory_reference,
+        receipt_root_directory_reference=receipt_root_directory_reference,
+        fifo_root_directory_reference=fifo_root_directory_reference,
+        ready_commit_fifo_reference=ready_commit_fifo_reference,
+        permit_commit_fifo_reference=permit_commit_fifo_reference,
+    )
+    fixture_uid, fixture_gid, validated_fifos, tree_specs = _build_h11_tree_indirect_specs(
+        tree_receipt=tree_receipt, preflight_receipt=preflight_receipt,
+        harness_manifest=harness_manifest, run_armed=run_armed,
+        formal_root_directory_reference=formal_root_directory_reference,
+        authority_root_directory_reference=authority_root_directory_reference,
+        input_root_directory_reference=input_root_directory_reference,
+        fifo_root_directory_reference=fifo_root_directory_reference,
+        ready_commit_fifo_reference=ready_commit_fifo_reference,
+        permit_commit_fifo_reference=permit_commit_fifo_reference,
+        require_root=require_root, process_euid=process_euid, process_egid=process_egid,
+    )
+    seal_specs = _build_h11_seal_indirect_specs(
+        seal_receipt=seal_receipt, tree_receipt=tree_receipt,
+        preflight_receipt=preflight_receipt, install_receipt=install_receipt,
+        install_manifest=install_manifest, harness_manifest=harness_manifest,
+        run_armed=run_armed, install_receipt_source_reference=install_receipt_source_reference,
+        install_manifest_source_reference=install_manifest_source_reference,
+        preflight_receipt_source_reference=preflight_receipt_source_reference,
+        formal_root=formal_root, require_root=require_root,
+    )
+    _prove_h11_preflight_snapshot_bindings(
+        preflight_receipt=preflight_receipt, tree_receipt=tree_receipt,
+        seal_receipt=seal_receipt, harness_manifest=harness_manifest,
+        preflight_receipt_source_reference=preflight_receipt_source_reference,
+        formal_root=formal_root, validated_fifos=validated_fifos,
+    )
+    install_specs = _build_h11_install_target_specs(
+        install_receipt=install_receipt, install_manifest=install_manifest,
+        harness_manifest=harness_manifest, seal_receipt=seal_receipt,
+        install_receipt_source_reference=install_receipt_source_reference,
+        install_manifest_source_reference=install_manifest_source_reference,
+        formal_root=formal_root, require_root=require_root,
+    )
+    indirect_specs = tree_specs + seal_specs + install_specs
+    if (
+        len(indirect_specs) != len({item.path for item in indirect_specs})
+        or len(indirect_specs) != len({(item.device, item.inode) for item in indirect_specs})
+    ):
+        _fail("H11 indirect authority aliases path or identity")
+    return fixture_uid, fixture_gid, validated_fifos, indirect_specs
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootDirectoryView:
+    _flow: "H11RootAuthorizationFlow"
+    _slot: H11OwnedFdSlot
+    _parent_slot: H11OwnedFdSlot | None
+    reference: H11RootDirectoryReference
+    child_name: str | None
+
+    def __init__(
+        self,
+        *,
+        flow: "H11RootAuthorizationFlow",
+        slot: H11OwnedFdSlot,
+        parent_slot: H11OwnedFdSlot | None,
+        reference: H11RootDirectoryReference,
+        child_name: str | None,
+    ) -> None:
+        valid = (
+            (slot is flow._slots[15] and parent_slot is None)
+            or (slot is flow._slots[14] and parent_slot is flow._slots[15])
+            or (slot is flow._slots[13] and parent_slot is flow._slots[14])
+            or (slot is flow._slots[12] and parent_slot is flow._slots[13])
+            or (slot is flow._slots[11] and parent_slot is flow._slots[15])
+            or (slot is flow._slots[10] and parent_slot is flow._slots[12])
+            or (slot is flow._slots[9] and parent_slot is flow._slots[15])
+        )
+        if not valid:
+            _fail("H11 directory view slot topology is invalid")
+        object.__setattr__(self, "_flow", flow)
+        object.__setattr__(self, "_slot", slot)
+        object.__setattr__(self, "_parent_slot", parent_slot)
+        object.__setattr__(self, "reference", reference)
+        object.__setattr__(self, "child_name", child_name)
+
+    def revalidate(self) -> None:
+        allowed = (
+            H11RootAuthorizationState.NEW,
+            H11RootAuthorizationState.AUTHORITIES_RETAINED,
+            H11RootAuthorizationState.READY_CONSUMED,
+            H11RootAuthorizationState.PERMIT_PUBLISHED,
+            H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+        )
+        if self._flow.state not in allowed:
+            _fail("H11 directory view used outside an active state")
+        try:
+            if self._flow.state not in allowed:
+                _fail("H11 directory view state changed before fstat")
+            opened = os.fstat(self._slot.borrow())
+            if self._parent_slot is None:
+                current = Path.lstat(self.reference.path)
+            else:
+                if self._flow.state not in allowed:
+                    _fail("H11 directory view state changed before current-name proof")
+                current = os.stat(
+                    self.child_name,
+                    dir_fd=self._parent_slot.borrow(),
+                    follow_symlinks=False,
+                )
+        except OSError as exc:
+            raise InstallerError(
+                f"cannot revalidate H11 {self.reference.role}"
+            ) from exc
+        self.reference.prove(
+            opened,
+            require_root=self._flow._require_root,
+            label=f"H11 {self.reference.role}",
+        )
+        self.reference.prove(
+            current,
+            require_root=self._flow._require_root,
+            label=f"H11 {self.reference.role}",
+        )
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootFifoView:
+    _flow: "H11RootAuthorizationFlow"
+    _slot: H11OwnedFdSlot
+    _parent_slot: H11OwnedFdSlot
+    role: str
+    reference: H11RootFifoReference
+
+    def __init__(
+        self,
+        *,
+        flow: "H11RootAuthorizationFlow",
+        slot: H11OwnedFdSlot,
+        parent_slot: H11OwnedFdSlot | None,
+        role: str,
+        reference: H11RootFifoReference,
+    ) -> None:
+        if not (
+            parent_slot is flow._slots[9]
+            and (slot is flow._slots[7] or slot is flow._slots[8])
+        ):
+            _fail("H11 FIFO view slot topology is invalid")
+        object.__setattr__(self, "_flow", flow)
+        object.__setattr__(self, "_slot", slot)
+        object.__setattr__(self, "_parent_slot", parent_slot)
+        object.__setattr__(self, "role", role)
+        object.__setattr__(self, "reference", reference)
+
+    def revalidate(self) -> None:
+        allowed = (
+            H11RootAuthorizationState.NEW,
+            H11RootAuthorizationState.AUTHORITIES_RETAINED,
+            H11RootAuthorizationState.READY_CONSUMED,
+            H11RootAuthorizationState.PERMIT_PUBLISHED,
+            H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+        )
+        if self._flow.state not in allowed:
+            _fail("H11 FIFO view used outside an active state")
+        try:
+            if self._flow.state not in allowed:
+                _fail("H11 FIFO view state changed before fstat")
+            opened = os.fstat(self._slot.borrow())
+            if self._flow.state not in allowed:
+                _fail("H11 FIFO view state changed before current-name proof")
+            current = os.stat(
+                self.reference.path.name,
+                dir_fd=self._parent_slot.borrow(),
+                follow_symlinks=False,
+            )
+        except OSError as exc:
+            raise InstallerError(f"cannot revalidate H11 {self.role}") from exc
+        self.reference.prove(opened, label=f"H11 {self.role}")
+        self.reference.prove(current, label=f"H11 {self.role}")
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootJsonSourceView:
+    _flow: "H11RootAuthorizationFlow"
+    _slot: H11OwnedFdSlot
+    _parent_slot: H11OwnedFdSlot | None
+    path: Path
+    raw: bytes
+    source: H11RootFrozenJsonObject
+    label: str
+    child_name: str | None
+
+    def __init__(
+        self,
+        *,
+        flow: "H11RootAuthorizationFlow",
+        slot: H11OwnedFdSlot,
+        parent_slot: H11OwnedFdSlot | None,
+        path: Path,
+        raw: bytes,
+        source: H11RootFrozenJsonObject,
+        label: str,
+        child_name: str | None,
+    ) -> None:
+        valid = (
+            (slot is flow._slots[22] and parent_slot is flow._slots[12])
+            or (slot is flow._slots[6] and parent_slot is flow._slots[12])
+            or (
+                parent_slot is None
+                and (
+                    slot is flow._slots[5]
+                    or slot is flow._slots[16]
+                    or slot is flow._slots[17]
+                    or slot is flow._slots[18]
+                    or slot is flow._slots[19]
+                    or slot is flow._slots[20]
+                    or slot is flow._slots[21]
+                )
+            )
+        )
+        if not valid:
+            _fail("H11 JSON source view slot topology is invalid")
+        object.__setattr__(self, "_flow", flow)
+        object.__setattr__(self, "_slot", slot)
+        object.__setattr__(self, "_parent_slot", parent_slot)
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "raw", raw)
+        object.__setattr__(self, "source", source)
+        object.__setattr__(self, "label", label)
+        object.__setattr__(self, "child_name", child_name)
+
+    def revalidate(self) -> None:
+        allowed = (
+            H11RootAuthorizationState.NEW,
+            H11RootAuthorizationState.AUTHORITIES_RETAINED,
+            H11RootAuthorizationState.READY_CONSUMED,
+            H11RootAuthorizationState.PERMIT_PUBLISHED,
+            H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+        )
+        if self._flow.state not in allowed:
+            _fail("H11 JSON source view used outside an active state")
+        try:
+            if self._flow.state not in allowed:
+                _fail("H11 JSON source state changed before fstat")
+            opened = os.fstat(self._slot.borrow())
+            if self._parent_slot is None:
+                current = Path.lstat(self.path)
+            else:
+                if self._flow.state not in allowed:
+                    _fail("H11 JSON source state changed before current-name proof")
+                current = os.stat(
+                    self.child_name,
+                    dir_fd=self._parent_slot.borrow(),
+                    follow_symlinks=False,
+                )
+            if self._flow.state not in allowed:
+                _fail("H11 JSON source state changed before rewind")
+            os.lseek(self._slot.borrow(), 0, os.SEEK_SET)
+            chunks: list[bytes] = []
+            while True:
+                if self._flow.state not in allowed:
+                    _fail("H11 JSON source state changed during read")
+                chunk = os.read(self._slot.borrow(), 1024 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            reread = bytes.join(b"", chunks)
+            if self._flow.state not in allowed:
+                _fail("H11 JSON source state changed before final rewind")
+            os.lseek(self._slot.borrow(), 0, os.SEEK_SET)
+        except OSError as exc:
+            raise InstallerError(f"cannot revalidate retained {self.label}") from exc
+        expected = dict(self.source)
+        if (
+            reread != self.raw
+            or hashlib.sha256(reread).hexdigest() != expected["sha256"]
+            or (str(opened.st_dev), str(opened.st_ino))
+            != (expected["device"], expected["inode"])
+            or (str(current.st_dev), str(current.st_ino))
+            != (expected["device"], expected["inode"])
+            or format(stat.S_IMODE(opened.st_mode), "04o") != expected["mode"]
+            or format(stat.S_IMODE(current.st_mode), "04o") != expected["mode"]
+            or str(opened.st_uid) != expected["uid"]
+            or str(opened.st_gid) != expected["gid"]
+            or str(current.st_uid) != expected["uid"]
+            or str(current.st_gid) != expected["gid"]
+        ):
+            _fail(f"retained {self.label} drifted")
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootPresentOutputView:
+    _flow: "H11RootAuthorizationFlow"
+    _slot: H11OwnedFdSlot
+    _parent_slot: H11OwnedFdSlot
+    role: str
+    path: Path
+    raw: bytes
+    reference_items: tuple[tuple[str, str], ...]
+
+    def __init__(
+        self,
+        *,
+        flow: "H11RootAuthorizationFlow",
+        slot: H11OwnedFdSlot,
+        parent_slot: H11OwnedFdSlot | None,
+        role: str,
+        path: Path,
+        raw: bytes,
+        reference_items: tuple[tuple[str, str], ...],
+    ) -> None:
+        if not (
+            (slot is flow._slots[4] and parent_slot is flow._slots[10])
+            or (slot is flow._slots[3] and parent_slot is flow._slots[11])
+        ):
+            _fail("H11 present-output view slot topology is invalid")
+        object.__setattr__(self, "_flow", flow)
+        object.__setattr__(self, "_slot", slot)
+        object.__setattr__(self, "_parent_slot", parent_slot)
+        object.__setattr__(self, "role", role)
+        object.__setattr__(self, "path", path)
+        object.__setattr__(self, "raw", raw)
+        object.__setattr__(self, "reference_items", reference_items)
+
+    @property
+    def reference(self) -> dict[str, str]:
+        return dict(self.reference_items)
+
+    def revalidate(self) -> None:
+        allowed = (
+            H11RootAuthorizationState.AUTHORITIES_RETAINED,
+            H11RootAuthorizationState.READY_CONSUMED,
+            H11RootAuthorizationState.PERMIT_PUBLISHED,
+            H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+        )
+        if self._flow.state not in allowed:
+            _fail("H11 present-output view used outside an active state")
+        try:
+            if self._flow.state not in allowed:
+                _fail("H11 present-output state changed before fstat")
+            opened = os.fstat(self._slot.borrow())
+            if self._flow.state not in allowed:
+                _fail("H11 present-output state changed before rewind")
+            os.lseek(self._slot.borrow(), 0, os.SEEK_SET)
+            chunks: list[bytes] = []
+            while True:
+                if self._flow.state not in allowed:
+                    _fail("H11 present-output state changed during read")
+                chunk = os.read(self._slot.borrow(), 1024 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            reread = bytes.join(b"", chunks)
+            if self._flow.state not in allowed:
+                _fail("H11 present-output state changed before final rewind")
+            os.lseek(self._slot.borrow(), 0, os.SEEK_SET)
+            if self._flow.state not in allowed:
+                _fail("H11 present-output state changed before current-name proof")
+            current = os.stat(
+                self.path.name,
+                dir_fd=self._parent_slot.borrow(),
+                follow_symlinks=False,
+            )
+        except OSError as exc:
+            raise InstallerError(
+                f"cannot revalidate H11 present output {self.role}"
+            ) from exc
+        expected = self.reference
+        actual = {
+            "role": self.role,
+            "path": str(self.path),
+            "sha256": hashlib.sha256(reread).hexdigest(),
+            "device": str(opened.st_dev),
+            "inode": str(opened.st_ino),
+            "mode": format(stat.S_IMODE(opened.st_mode), "04o"),
+            "uid": str(opened.st_uid),
+            "gid": str(opened.st_gid),
+        }
+        if (
+            reread != self.raw
+            or actual != expected
+            or not stat.S_ISREG(current.st_mode)
+            or (str(current.st_dev), str(current.st_ino))
+            != (expected["device"], expected["inode"])
+            or format(stat.S_IMODE(current.st_mode), "04o") != "0444"
+            or (str(current.st_uid), str(current.st_gid))
+            != (expected["uid"], expected["gid"])
+        ):
+            _fail(f"retained H11 present output {self.role} drifted")
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootPublicationView:
+    _flow: "H11RootAuthorizationFlow"
+    _slot: H11OwnedFdSlot
+    _parent_slot: H11OwnedFdSlot
+    final_name: str
+    raw: bytes
+    reference_items: tuple[tuple[str, str], ...]
+
+    def __init__(
+        self,
+        *,
+        flow: "H11RootAuthorizationFlow",
+        slot: H11OwnedFdSlot,
+        parent_slot: H11OwnedFdSlot | None,
+        final_name: str,
+        raw: bytes,
+        reference_items: tuple[tuple[str, str], ...],
+    ) -> None:
+        if not (slot is flow._slots[2] and parent_slot is flow._slots[12]):
+            _fail("H11 publication view slot topology is invalid")
+        object.__setattr__(self, "_flow", flow)
+        object.__setattr__(self, "_slot", slot)
+        object.__setattr__(self, "_parent_slot", parent_slot)
+        object.__setattr__(self, "final_name", final_name)
+        object.__setattr__(self, "raw", raw)
+        object.__setattr__(self, "reference_items", reference_items)
+
+    @property
+    def reference(self) -> dict[str, str]:
+        return dict(self.reference_items)
+
+    def revalidate(self) -> None:
+        allowed = (
+            H11RootAuthorizationState.READY_CONSUMED,
+            H11RootAuthorizationState.PERMIT_PUBLISHED,
+            H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+        )
+        if self._flow.state not in allowed:
+            _fail("H11 publication view used outside an active state")
+        try:
+            if self._flow.state not in allowed:
+                _fail("H11 publication state changed before fstat")
+            opened = os.fstat(self._slot.borrow())
+            if self._flow.state not in allowed:
+                _fail("H11 publication state changed before current-name proof")
+            current = os.stat(
+                self.final_name,
+                dir_fd=self._parent_slot.borrow(),
+                follow_symlinks=False,
+            )
+            if self._flow.state not in allowed:
+                _fail("H11 publication state changed before rewind")
+            os.lseek(self._slot.borrow(), 0, os.SEEK_SET)
+            chunks: list[bytes] = []
+            while True:
+                if self._flow.state not in allowed:
+                    _fail("H11 publication state changed during read")
+                chunk = os.read(self._slot.borrow(), 1024 * 1024)
+                if not chunk:
+                    break
+                chunks.append(chunk)
+            reread = bytes.join(b"", chunks)
+            if self._flow.state not in allowed:
+                _fail("H11 publication state changed before final rewind")
+            os.lseek(self._slot.borrow(), 0, os.SEEK_SET)
+        except OSError as exc:
+            raise InstallerError("cannot revalidate retained H11 publication") from exc
+        expected = self.reference
+        actual = {
+            "path": expected["path"],
+            "sha256": hashlib.sha256(reread).hexdigest(),
+            "device": str(opened.st_dev),
+            "inode": str(opened.st_ino),
+            "mode": format(stat.S_IMODE(opened.st_mode), "04o"),
+            "uid": str(opened.st_uid),
+            "gid": str(opened.st_gid),
+        }
+        if (
+            reread != self.raw
+            or actual != expected
+            or not stat.S_ISREG(opened.st_mode)
+            or not stat.S_ISREG(current.st_mode)
+            or (opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
+            or stat.S_IMODE(current.st_mode) != 0o444
+            or (current.st_uid, current.st_gid) != (opened.st_uid, opened.st_gid)
+        ):
+            _fail("retained H11 publication drifted")
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootAuthorityView:
+    _flow: "H11RootAuthorizationFlow"
+    authorization_view: H11RootJsonSourceView
+    harness_manifest_view: H11RootJsonSourceView
+    install_receipt_view: H11RootJsonSourceView
+    install_manifest_view: H11RootJsonSourceView
+    tree_receipt_view: H11RootJsonSourceView
+    seal_receipt_view: H11RootJsonSourceView
+    preflight_receipt_view: H11RootJsonSourceView
+    permit_ready_view: H11RootJsonSourceView
+    run_armed_view: H11RootJsonSourceView
+    formal_root_directory: H11RootDirectoryView
+    authority_root_directory: H11RootDirectoryView
+    harness_root_directory: H11RootDirectoryView
+    scenario_root_directory: H11RootDirectoryView
+    input_root_directory: H11RootDirectoryView
+    receipt_root_directory: H11RootDirectoryView
+    fifo_root_directory: H11RootDirectoryView
+    ready_commit_fifo: H11RootFifoView
+    permit_commit_fifo: H11RootFifoView
+    authorization_manifest: H11RootFrozenJsonObject
+    harness_manifest: H11RootFrozenJsonObject
+    ready_receipt: H11RootFrozenJsonObject
+    armed_receipt: H11RootFrozenJsonObject
+    fixture_uid: int
+    fixture_gid: int
+    validated_fifos: tuple[H11RootValidatedFifo, ...]
+
+    def __init__(
+        self,
+        *,
+        flow: "H11RootAuthorizationFlow",
+        authorization_view: H11RootJsonSourceView,
+        harness_manifest_view: H11RootJsonSourceView,
+        install_receipt_view: H11RootJsonSourceView,
+        install_manifest_view: H11RootJsonSourceView,
+        tree_receipt_view: H11RootJsonSourceView,
+        seal_receipt_view: H11RootJsonSourceView,
+        preflight_receipt_view: H11RootJsonSourceView,
+        permit_ready_view: H11RootJsonSourceView,
+        run_armed_view: H11RootJsonSourceView,
+        formal_root_directory: H11RootDirectoryView,
+        authority_root_directory: H11RootDirectoryView,
+        harness_root_directory: H11RootDirectoryView,
+        scenario_root_directory: H11RootDirectoryView,
+        input_root_directory: H11RootDirectoryView,
+        receipt_root_directory: H11RootDirectoryView,
+        fifo_root_directory: H11RootDirectoryView,
+        ready_commit_fifo: H11RootFifoView,
+        permit_commit_fifo: H11RootFifoView,
+        authorization_manifest: H11RootFrozenJsonObject,
+        harness_manifest: H11RootFrozenJsonObject,
+        ready_receipt: H11RootFrozenJsonObject,
+        armed_receipt: H11RootFrozenJsonObject,
+        fixture_uid: int,
+        fixture_gid: int,
+        validated_fifos: tuple[H11RootValidatedFifo, ...],
+    ) -> None:
+        views = (
+            authorization_view,
+            harness_manifest_view,
+            install_receipt_view,
+            install_manifest_view,
+            tree_receipt_view,
+            seal_receipt_view,
+            preflight_receipt_view,
+            permit_ready_view,
+            run_armed_view,
+            formal_root_directory,
+            authority_root_directory,
+            harness_root_directory,
+            scenario_root_directory,
+            input_root_directory,
+            receipt_root_directory,
+            fifo_root_directory,
+            ready_commit_fifo,
+            permit_commit_fifo,
+        )
+        if any(view._flow is not flow for view in views):
+            _fail("H11 authority view contains a foreign-flow borrowed view")
+        if (
+            ready_commit_fifo.role != "h11-ready-commit"
+            or permit_commit_fifo.role != "h11-permit-commit"
+            or ready_commit_fifo is permit_commit_fifo
+        ):
+            _fail("H11 authority view commit FIFO topology is invalid")
+        object.__setattr__(self, "_flow", flow)
+        object.__setattr__(self, "authorization_view", authorization_view)
+        object.__setattr__(self, "harness_manifest_view", harness_manifest_view)
+        object.__setattr__(self, "install_receipt_view", install_receipt_view)
+        object.__setattr__(self, "install_manifest_view", install_manifest_view)
+        object.__setattr__(self, "tree_receipt_view", tree_receipt_view)
+        object.__setattr__(self, "seal_receipt_view", seal_receipt_view)
+        object.__setattr__(self, "preflight_receipt_view", preflight_receipt_view)
+        object.__setattr__(self, "permit_ready_view", permit_ready_view)
+        object.__setattr__(self, "run_armed_view", run_armed_view)
+        object.__setattr__(self, "formal_root_directory", formal_root_directory)
+        object.__setattr__(self, "authority_root_directory", authority_root_directory)
+        object.__setattr__(self, "harness_root_directory", harness_root_directory)
+        object.__setattr__(self, "scenario_root_directory", scenario_root_directory)
+        object.__setattr__(self, "input_root_directory", input_root_directory)
+        object.__setattr__(self, "receipt_root_directory", receipt_root_directory)
+        object.__setattr__(self, "fifo_root_directory", fifo_root_directory)
+        object.__setattr__(self, "ready_commit_fifo", ready_commit_fifo)
+        object.__setattr__(self, "permit_commit_fifo", permit_commit_fifo)
+        object.__setattr__(self, "authorization_manifest", authorization_manifest)
+        object.__setattr__(self, "harness_manifest", harness_manifest)
+        object.__setattr__(self, "ready_receipt", ready_receipt)
+        object.__setattr__(self, "armed_receipt", armed_receipt)
+        object.__setattr__(self, "fixture_uid", fixture_uid)
+        object.__setattr__(self, "fixture_gid", fixture_gid)
+        object.__setattr__(self, "validated_fifos", validated_fifos)
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootAuthorityPhaseData:
+    authority: H11RootAuthorityView
+
+    def __init__(self, *, authority: H11RootAuthorityView) -> None:
+        if type(authority) is not H11RootAuthorityView:
+            _fail("H11 authority phase data requires exact authority view")
+        object.__setattr__(self, "authority", authority)
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootReadyPhaseData:
+    authority_data: H11RootAuthorityPhaseData
+    ready_commit: H11RootCommitReceipt
+    partition: H11RootClosedPartition
+    present_h0: H11RootPresentOutputView
+    present_run_main_properties: H11RootPresentOutputView
+    transaction_state: tuple[H11RootTransactionState, ...]
+    present_outputs_sha256: str
+    future_absence_sha256: str
+
+    def __init__(
+        self,
+        *,
+        authority_data: H11RootAuthorityPhaseData,
+        ready_commit: H11RootCommitReceipt,
+        partition: H11RootClosedPartition,
+        present_h0: H11RootPresentOutputView,
+        present_run_main_properties: H11RootPresentOutputView,
+        transaction_state: tuple[H11RootTransactionState, ...],
+        present_outputs_sha256: str,
+        future_absence_sha256: str,
+    ) -> None:
+        if (
+            type(authority_data) is not H11RootAuthorityPhaseData
+            or present_h0._flow is not authority_data.authority._flow
+            or present_run_main_properties._flow is not authority_data.authority._flow
+            or type(ready_commit) is not H11RootCommitReceipt
+            or type(partition) is not H11RootClosedPartition
+            or type(transaction_state) is not tuple
+        ):
+            _fail("H11 READY phase data predecessor or flow identity drifted")
+        object.__setattr__(self, "authority_data", authority_data)
+        object.__setattr__(self, "ready_commit", ready_commit)
+        object.__setattr__(self, "partition", partition)
+        object.__setattr__(self, "present_h0", present_h0)
+        object.__setattr__(
+            self,
+            "present_run_main_properties",
+            present_run_main_properties,
+        )
+        object.__setattr__(self, "transaction_state", transaction_state)
+        object.__setattr__(self, "present_outputs_sha256", present_outputs_sha256)
+        object.__setattr__(self, "future_absence_sha256", future_absence_sha256)
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class H11RootPermitPhaseData:
+    ready_data: H11RootReadyPhaseData
+    barrier: H11RootPrePermitBarrier
+    publication: H11RootPublicationView
+    transaction_state: tuple[H11RootTransactionState, ...]
+
+    def __init__(
+        self,
+        *,
+        ready_data: H11RootReadyPhaseData,
+        barrier: H11RootPrePermitBarrier,
+        publication: H11RootPublicationView,
+        transaction_state: tuple[H11RootTransactionState, ...],
+    ) -> None:
+        if (
+            type(ready_data) is not H11RootReadyPhaseData
+            or type(barrier) is not H11RootPrePermitBarrier
+            or type(publication) is not H11RootPublicationView
+            or type(transaction_state) is not tuple
+            or publication._flow is not ready_data.authority_data.authority._flow
+        ):
+            _fail("H11 PERMIT phase data predecessor or flow identity drifted")
+        object.__setattr__(self, "ready_data", ready_data)
+        object.__setattr__(self, "barrier", barrier)
+        object.__setattr__(self, "publication", publication)
+        object.__setattr__(self, "transaction_state", transaction_state)
+
+
+class H11RootAuthorizationFlow:
+    def __init__(
+        self,
+        manifest_path: Path,
+        *,
+        require_root: bool = True,
+    ) -> None:
+        self._slots = (
+            H11OwnedFdSlot(role="permit-writer-endpoint"),
+            H11OwnedFdSlot(role="ready-reader-endpoint"),
+            H11OwnedFdSlot(role="permit-publication"),
+            H11OwnedFdSlot(role="present-run-main-properties"),
+            H11OwnedFdSlot(role="present-h0"),
+            H11OwnedFdSlot(role="run-armed"),
+            H11OwnedFdSlot(role="permit-ready"),
+            H11OwnedFdSlot(role="permit-commit-fifo-pin"),
+            H11OwnedFdSlot(role="ready-commit-fifo-pin"),
+            H11OwnedFdSlot(role="directory-fifo-root"),
+            H11OwnedFdSlot(role="directory-receipt-root"),
+            H11OwnedFdSlot(role="directory-input-root"),
+            H11OwnedFdSlot(role="directory-scenario-root"),
+            H11OwnedFdSlot(role="directory-harness-root"),
+            H11OwnedFdSlot(role="directory-authority-root"),
+            H11OwnedFdSlot(role="directory-formal-root"),
+            H11OwnedFdSlot(role="source-preflight-receipt"),
+            H11OwnedFdSlot(role="source-seal-receipt"),
+            H11OwnedFdSlot(role="source-tree-receipt"),
+            H11OwnedFdSlot(role="source-install-manifest"),
+            H11OwnedFdSlot(role="source-install-receipt"),
+            H11OwnedFdSlot(role="source-harness-manifest"),
+            H11OwnedFdSlot(role="source-authorization"),
+        )
+        self._manifest_path = manifest_path
+        self._require_root = require_root
+        self._phase_data: (
+            None
+            | H11RootAuthorityPhaseData
+            | H11RootReadyPhaseData
+            | H11RootPermitPhaseData
+        ) = None
+        self._state = H11RootAuthorizationState.NEW
+        self._commit_boundary = H11RootCommitBoundary.PREWRITE
+
+    @property
+    def state(self) -> H11RootAuthorizationState:
+        return self._state
+
+    def _transition(
+        self,
+        *,
+        expected: H11RootAuthorizationState,
+        target: H11RootAuthorizationState,
+    ) -> None:
+        if self._state is not expected:
+            _fail("H11 authorization flow state transition source drifted")
+        allowed = (
+            (
+                H11RootAuthorizationState.NEW,
+                H11RootAuthorizationState.AUTHORITIES_RETAINED,
+                H11RootAuthorityPhaseData,
+            ),
+            (
+                H11RootAuthorizationState.AUTHORITIES_RETAINED,
+                H11RootAuthorizationState.READY_CONSUMED,
+                H11RootReadyPhaseData,
+            ),
+            (
+                H11RootAuthorizationState.READY_CONSUMED,
+                H11RootAuthorizationState.PERMIT_PUBLISHED,
+                H11RootPermitPhaseData,
+            ),
+            (
+                H11RootAuthorizationState.PERMIT_PUBLISHED,
+                H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+                H11RootPermitPhaseData,
+            ),
+            (
+                H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+                H11RootAuthorizationState.PERMIT_FRAME_WRITTEN,
+                H11RootPermitPhaseData,
+            ),
+        )
+        matches = tuple(
+            row for row in allowed if row[0] is expected and row[1] is target
+        )
+        if len(matches) != 1 or type(self._phase_data) is not matches[0][2]:
+            _fail("H11 authorization flow state transition is not allowed")
+        self._state = target
+
+    def _mark_write_in_flight(self) -> None:
+        if (
+            self._state is not H11RootAuthorizationState.PERMIT_WRITER_OPEN
+            or self._commit_boundary is not H11RootCommitBoundary.PREWRITE
+            or type(self._phase_data) is not H11RootPermitPhaseData
+        ):
+            _fail("H11 permit write cannot enter the in-flight boundary")
+        self._commit_boundary = H11RootCommitBoundary.WRITE_IN_FLIGHT
+
+    def _mark_postwrite(self) -> None:
+        if (
+            self._state is not H11RootAuthorizationState.PERMIT_WRITER_OPEN
+            or self._commit_boundary is not H11RootCommitBoundary.WRITE_IN_FLIGHT
+            or type(self._phase_data) is not H11RootPermitPhaseData
+        ):
+            _fail("H11 permit write cannot enter the postwrite boundary")
+        self._commit_boundary = H11RootCommitBoundary.POSTWRITE
+
+    def _close_slot_once(
+        self,
+        slot: H11OwnedFdSlot,
+        *,
+        active_error: BaseException | None = None,
+    ) -> BaseException | None:
+        descriptor = slot.detach()
+        if descriptor < 0:
+            return None
+        try:
+            os.close(descriptor)
+        except BaseException as close_error:
+            if active_error is not None:
+                try:
+                    BaseException.add_note(
+                        active_error,
+                        "H11 ownership teardown secondary close failure",
+                    )
+                except BaseException:
+                    pass
+            return close_error
+        return None
+
+    def _sweep_slots(
+        self,
+        *,
+        active_error: BaseException | None = None,
+    ) -> None:
+        first_close_error: BaseException | None = None
+        for slot in self._slots:
+            observed = self._close_slot_once(
+                slot,
+                active_error=(
+                    active_error if first_close_error is None else None
+                ),
+            )
+            if observed is not None and first_close_error is None:
+                first_close_error = observed
+        if active_error is None and first_close_error is not None:
+            raise first_close_error
+
+    def _fail(self, active_error: BaseException) -> NoReturn:
+        if self._commit_boundary is H11RootCommitBoundary.PREWRITE:
+            self._state = H11RootAuthorizationState.FAILED_PREWRITE
+        elif self._commit_boundary is H11RootCommitBoundary.WRITE_IN_FLIGHT:
+            self._state = H11RootAuthorizationState.FAILED_WRITE_AMBIGUOUS
+        else:
+            self._state = H11RootAuthorizationState.FAILED_POSTWRITE
+        self._sweep_slots(active_error=active_error)
+        raise active_error
+
+    def _finish(self, receipt: H11RootCommitReceipt) -> H11RootCommitReceipt:
+        if (
+            self._state is not H11RootAuthorizationState.PERMIT_FRAME_WRITTEN
+            or self._commit_boundary is not H11RootCommitBoundary.POSTWRITE
+        ):
+            _fail("H11 authorization flow cannot finish before exact commit")
+        try:
+            self._sweep_slots(active_error=None)
+        except BaseException:
+            self._state = H11RootAuthorizationState.FAILED_POSTWRITE
+            raise
+        self._state = H11RootAuthorizationState.COMPLETE
+        return receipt
+
+    def close(self) -> None:
+        if self._state in (
+            H11RootAuthorizationState.COMPLETE,
+            H11RootAuthorizationState.FAILED_PREWRITE,
+            H11RootAuthorizationState.FAILED_WRITE_AMBIGUOUS,
+            H11RootAuthorizationState.FAILED_POSTWRITE,
+            H11RootAuthorizationState.CLOSED,
+        ):
+            return
+        primary: InstallerError | None = None
+        if self._commit_boundary is H11RootCommitBoundary.WRITE_IN_FLIGHT:
+            primary = InstallerError(
+                "H11 authorization flow closed while permit write outcome is ambiguous"
+            )
+            self._state = H11RootAuthorizationState.FAILED_WRITE_AMBIGUOUS
+        elif self._state is H11RootAuthorizationState.PERMIT_FRAME_WRITTEN:
+            primary = InstallerError(
+                "H11 authorization flow closed after permit frame write"
+            )
+            self._state = H11RootAuthorizationState.FAILED_POSTWRITE
+        try:
+            self._sweep_slots(active_error=primary)
+        except BaseException:
+            self._state = H11RootAuthorizationState.FAILED_PREWRITE
+            raise
+        if primary is not None:
+            raise primary
+        self._state = H11RootAuthorizationState.CLOSED
+
+    def _acquire_authorities(self) -> None:
+        if (
+            self._state is not H11RootAuthorizationState.NEW
+            or self._phase_data is not None
+        ):
+            _fail("H11 authority acquisition requires a fresh flow")
+        process_euid = os.geteuid()
+        process_egid = os.getegid()
+        _prove_h11_execution_authority(
+            require_root=self._require_root,
+            process_euid=process_euid,
+        )
+        flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW
+        root = self._manifest_path.parents[3]
+        scenario_root = root / "authority" / "harness" / "H11"
+        if self._manifest_path != scenario_root / "AUTHORIZE-RELEASE.json":
+            _fail("H11 authorization path differs from the exact layout")
+
+        authorization_before = Path.lstat(self._manifest_path)
+        self._slots[22].open(self._manifest_path, flags)
+        authorization_opened = os.fstat(self._slots[22].borrow())
+        authorization_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[22].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            authorization_chunks.append(chunk)
+        authorization_raw = bytes.join(b"", authorization_chunks)
+        authorization_after = os.fstat(self._slots[22].borrow())
+        authorization_current = Path.lstat(self._manifest_path)
+        if (
+            not stat.S_ISREG(authorization_before.st_mode)
+            or not stat.S_ISREG(authorization_after.st_mode)
+            or (authorization_before.st_dev, authorization_before.st_ino)
+            != (authorization_after.st_dev, authorization_after.st_ino)
+            or (authorization_current.st_dev, authorization_current.st_ino)
+            != (authorization_after.st_dev, authorization_after.st_ino)
+            or authorization_after.st_size != len(authorization_raw)
+            or stat.S_IMODE(authorization_after.st_mode) != 0o444
+            or (
+                self._require_root
+                and (authorization_after.st_uid, authorization_after.st_gid)
+                != (0, 0)
+            )
+        ):
+            _fail("H11 authorization source drifted while pinning")
+        os.lseek(self._slots[22].borrow(), 0, os.SEEK_SET)
+        authorization_source = (
+            ("device", str(authorization_after.st_dev)),
+            ("gid", str(authorization_after.st_gid)),
+            ("inode", str(authorization_after.st_ino)),
+            ("mode", format(stat.S_IMODE(authorization_after.st_mode), "04o")),
+            ("path", str(self._manifest_path)),
+            ("sha256", hashlib.sha256(authorization_raw).hexdigest()),
+            ("uid", str(authorization_after.st_uid)),
+        )
+        authorization_manifest = _decode_h11_canonical_frozen_object(
+            authorization_raw,
+            label="H11 authorization manifest",
+        )
+        authorization_values = dict(authorization_manifest)
+        harness_binding = authorization_values["harness_manifest"]
+        if type(harness_binding) is not tuple:
+            _fail("H11 authorization harness_manifest is not frozen")
+        harness_path_value = dict(harness_binding)["path"]
+        if type(harness_path_value) is not str:
+            _fail("H11 authorization harness_manifest.path is not text")
+        harness_path = Path(harness_path_value)
+        if (
+            not harness_path.is_absolute()
+            or str(harness_path) != harness_path_value
+            or any(part in {".", ".."} for part in harness_path.parts)
+        ):
+            _fail("H11 authorization harness_manifest.path is not canonical")
+        if harness_path != scenario_root / "MANIFEST.json":
+            _fail("H11 harness manifest path differs from the exact layout")
+
+        harness_before = Path.lstat(harness_path)
+        self._slots[21].open(harness_path, flags)
+        harness_opened = os.fstat(self._slots[21].borrow())
+        harness_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[21].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            harness_chunks.append(chunk)
+        harness_raw = bytes.join(b"", harness_chunks)
+        harness_after = os.fstat(self._slots[21].borrow())
+        harness_current = Path.lstat(harness_path)
+        if (
+            not stat.S_ISREG(harness_before.st_mode)
+            or not stat.S_ISREG(harness_after.st_mode)
+            or (harness_before.st_dev, harness_before.st_ino)
+            != (harness_after.st_dev, harness_after.st_ino)
+            or (harness_current.st_dev, harness_current.st_ino)
+            != (harness_after.st_dev, harness_after.st_ino)
+            or harness_after.st_size != len(harness_raw)
+            or stat.S_IMODE(harness_after.st_mode) != 0o444
+            or (
+                self._require_root
+                and (harness_after.st_uid, harness_after.st_gid) != (0, 0)
+            )
+        ):
+            _fail("H11 harness manifest drifted while pinning")
+        os.lseek(self._slots[21].borrow(), 0, os.SEEK_SET)
+        harness_source = (
+            ("device", str(harness_after.st_dev)),
+            ("gid", str(harness_after.st_gid)),
+            ("inode", str(harness_after.st_ino)),
+            ("mode", format(stat.S_IMODE(harness_after.st_mode), "04o")),
+            ("path", str(harness_path)),
+            ("sha256", hashlib.sha256(harness_raw).hexdigest()),
+            ("uid", str(harness_after.st_uid)),
+        )
+        if harness_binding != harness_source:
+            _fail("H11 harness source differs from authorization authority")
+        harness_manifest = _decode_h11_canonical_frozen_object(
+            harness_raw,
+            label="H11 harness manifest",
+        )
+        harness_values = dict(harness_manifest)
+        installer_binding = harness_values["installer_receipt"]
+        if type(installer_binding) is not tuple:
+            _fail("H11 harness installer_receipt is not frozen")
+        install_receipt_path_value = dict(installer_binding)["path"]
+        if type(install_receipt_path_value) is not str:
+            _fail("H11 harness installer_receipt.path is not text")
+        install_receipt_path = Path(install_receipt_path_value)
+        if (
+            not install_receipt_path.is_absolute()
+            or str(install_receipt_path) != install_receipt_path_value
+            or any(part in {".", ".."} for part in install_receipt_path.parts)
+        ):
+            _fail("H11 harness installer_receipt.path is not canonical")
+
+        install_receipt_before = Path.lstat(install_receipt_path)
+        self._slots[20].open(install_receipt_path, flags)
+        install_receipt_opened = os.fstat(self._slots[20].borrow())
+        install_receipt_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[20].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            install_receipt_chunks.append(chunk)
+        install_receipt_raw = bytes.join(b"", install_receipt_chunks)
+        install_receipt_after = os.fstat(self._slots[20].borrow())
+        install_receipt_current = Path.lstat(install_receipt_path)
+        if (
+            not stat.S_ISREG(install_receipt_before.st_mode)
+            or not stat.S_ISREG(install_receipt_after.st_mode)
+            or (install_receipt_before.st_dev, install_receipt_before.st_ino)
+            != (install_receipt_after.st_dev, install_receipt_after.st_ino)
+            or (install_receipt_current.st_dev, install_receipt_current.st_ino)
+            != (install_receipt_after.st_dev, install_receipt_after.st_ino)
+            or install_receipt_after.st_size != len(install_receipt_raw)
+            or stat.S_IMODE(install_receipt_after.st_mode) != 0o444
+            or (
+                self._require_root
+                and (install_receipt_after.st_uid, install_receipt_after.st_gid)
+                != (0, 0)
+            )
+        ):
+            _fail("H11 install receipt drifted while pinning")
+        os.lseek(self._slots[20].borrow(), 0, os.SEEK_SET)
+        install_receipt_source = (
+            ("device", str(install_receipt_after.st_dev)),
+            ("gid", str(install_receipt_after.st_gid)),
+            ("inode", str(install_receipt_after.st_ino)),
+            ("mode", format(stat.S_IMODE(install_receipt_after.st_mode), "04o")),
+            ("path", str(install_receipt_path)),
+            ("sha256", hashlib.sha256(install_receipt_raw).hexdigest()),
+            ("uid", str(install_receipt_after.st_uid)),
+        )
+        installer_sha256 = dict(installer_binding)["sha256"]
+        if (
+            type(installer_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", installer_sha256) is None
+            or installer_sha256 != dict(install_receipt_source)["sha256"]
+        ):
+            _fail("H11 install receipt hash differs from harness authority")
+        install_receipt = _decode_h11_canonical_frozen_object(
+            install_receipt_raw,
+            label="H11 install receipt",
+        )
+
+        install_receipt_values = dict(install_receipt)
+        install_manifest_binding = install_receipt_values["install_manifest"]
+        if type(install_manifest_binding) is not tuple:
+            _fail("H11 install_manifest reference is not frozen")
+        install_manifest_path_value = dict(install_manifest_binding)["path"]
+        if type(install_manifest_path_value) is not str:
+            _fail("H11 install_manifest.path is not text")
+        install_manifest_path = Path(install_manifest_path_value)
+        if (
+            not install_manifest_path.is_absolute()
+            or str(install_manifest_path) != install_manifest_path_value
+            or any(part in {".", ".."} for part in install_manifest_path.parts)
+        ):
+            _fail("H11 install_manifest.path is not canonical")
+        install_manifest_before = Path.lstat(install_manifest_path)
+        self._slots[19].open(install_manifest_path, flags)
+        install_manifest_opened = os.fstat(self._slots[19].borrow())
+        install_manifest_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[19].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            install_manifest_chunks.append(chunk)
+        install_manifest_raw = bytes.join(b"", install_manifest_chunks)
+        install_manifest_after = os.fstat(self._slots[19].borrow())
+        install_manifest_current = Path.lstat(install_manifest_path)
+        if (
+            not stat.S_ISREG(install_manifest_before.st_mode)
+            or not stat.S_ISREG(install_manifest_after.st_mode)
+            or (install_manifest_before.st_dev, install_manifest_before.st_ino)
+            != (install_manifest_after.st_dev, install_manifest_after.st_ino)
+            or (install_manifest_current.st_dev, install_manifest_current.st_ino)
+            != (install_manifest_after.st_dev, install_manifest_after.st_ino)
+            or install_manifest_after.st_size != len(install_manifest_raw)
+            or stat.S_IMODE(install_manifest_after.st_mode) != 0o444
+            or (
+                self._require_root
+                and (install_manifest_after.st_uid, install_manifest_after.st_gid)
+                != (0, 0)
+            )
+        ):
+            _fail("H11 install manifest drifted while pinning")
+        os.lseek(self._slots[19].borrow(), 0, os.SEEK_SET)
+        install_manifest_source = (
+            ("device", str(install_manifest_after.st_dev)),
+            ("gid", str(install_manifest_after.st_gid)),
+            ("inode", str(install_manifest_after.st_ino)),
+            ("mode", format(stat.S_IMODE(install_manifest_after.st_mode), "04o")),
+            ("path", str(install_manifest_path)),
+            ("sha256", hashlib.sha256(install_manifest_raw).hexdigest()),
+            ("uid", str(install_manifest_after.st_uid)),
+        )
+        if install_manifest_binding != tuple(
+            (key, value)
+            for key, value in install_manifest_source
+            if key not in ("uid", "gid")
+        ):
+            _fail("H11 install manifest differs from its full reference")
+        install_manifest = _decode_h11_canonical_frozen_object(
+            install_manifest_raw,
+            label="H11 install manifest",
+        )
+
+        receipt_values: list[
+            tuple[
+                H11RootFrozenJsonObject,
+                H11RootFrozenJsonObject,
+                bytes,
+                Path,
+            ]
+        ] = []
+        for field in ("tree_receipt", "seal_receipt", "preflight_receipt"):
+            binding = install_receipt_values[field]
+            if type(binding) is not tuple:
+                _fail(f"H11 {field} reference is not frozen")
+            source_path_value = dict(binding)["path"]
+            if type(source_path_value) is not str:
+                _fail(f"H11 {field}.path is not text")
+            source_path = Path(source_path_value)
+            if (
+                not source_path.is_absolute()
+                or str(source_path) != source_path_value
+                or any(part in {".", ".."} for part in source_path.parts)
+            ):
+                _fail(f"H11 {field}.path is not canonical")
+            receipt_values.append((binding, (), b"", source_path))
+        tree_binding, _empty_tree, _empty_tree_raw, tree_path = receipt_values[0]
+        seal_binding, _empty_seal, _empty_seal_raw, seal_path = receipt_values[1]
+        preflight_binding, _empty_preflight, _empty_preflight_raw, preflight_path = receipt_values[2]
+
+        tree_before = Path.lstat(tree_path)
+        self._slots[18].open(tree_path, flags)
+        tree_opened = os.fstat(self._slots[18].borrow())
+        tree_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[18].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            tree_chunks.append(chunk)
+        tree_raw = bytes.join(b"", tree_chunks)
+        tree_after = os.fstat(self._slots[18].borrow())
+        tree_current = Path.lstat(tree_path)
+        if (
+            not stat.S_ISREG(tree_before.st_mode)
+            or not stat.S_ISREG(tree_after.st_mode)
+            or (tree_before.st_dev, tree_before.st_ino)
+            != (tree_after.st_dev, tree_after.st_ino)
+            or (tree_current.st_dev, tree_current.st_ino)
+            != (tree_after.st_dev, tree_after.st_ino)
+            or tree_after.st_size != len(tree_raw)
+            or stat.S_IMODE(tree_after.st_mode) != 0o444
+            or (
+                self._require_root
+                and (tree_after.st_uid, tree_after.st_gid) != (0, 0)
+            )
+        ):
+            _fail("H11 TREE receipt drifted while pinning")
+        os.lseek(self._slots[18].borrow(), 0, os.SEEK_SET)
+        tree_source = (
+            ("device", str(tree_after.st_dev)),
+            ("gid", str(tree_after.st_gid)),
+            ("inode", str(tree_after.st_ino)),
+            ("mode", format(stat.S_IMODE(tree_after.st_mode), "04o")),
+            ("path", str(tree_path)),
+            ("sha256", hashlib.sha256(tree_raw).hexdigest()),
+            ("uid", str(tree_after.st_uid)),
+        )
+        if tuple(
+            (key, value)
+            for key, value in tree_source
+            if key in ("device", "inode", "path", "sha256")
+        ) != tree_binding:
+            _fail("H11 TREE receipt differs from its full reference")
+        tree_receipt = _decode_h11_canonical_frozen_object(
+            tree_raw,
+            label="H11 TREE receipt",
+        )
+
+        seal_before = Path.lstat(seal_path)
+        self._slots[17].open(seal_path, flags)
+        seal_opened = os.fstat(self._slots[17].borrow())
+        seal_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[17].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            seal_chunks.append(chunk)
+        seal_raw = bytes.join(b"", seal_chunks)
+        seal_after = os.fstat(self._slots[17].borrow())
+        seal_current = Path.lstat(seal_path)
+        if (
+            not stat.S_ISREG(seal_before.st_mode)
+            or not stat.S_ISREG(seal_after.st_mode)
+            or (seal_before.st_dev, seal_before.st_ino)
+            != (seal_after.st_dev, seal_after.st_ino)
+            or (seal_current.st_dev, seal_current.st_ino)
+            != (seal_after.st_dev, seal_after.st_ino)
+            or seal_after.st_size != len(seal_raw)
+            or stat.S_IMODE(seal_after.st_mode) != 0o444
+            or (
+                self._require_root
+                and (seal_after.st_uid, seal_after.st_gid) != (0, 0)
+            )
+        ):
+            _fail("H11 SEAL receipt drifted while pinning")
+        os.lseek(self._slots[17].borrow(), 0, os.SEEK_SET)
+        seal_source = (
+            ("device", str(seal_after.st_dev)),
+            ("gid", str(seal_after.st_gid)),
+            ("inode", str(seal_after.st_ino)),
+            ("mode", format(stat.S_IMODE(seal_after.st_mode), "04o")),
+            ("path", str(seal_path)),
+            ("sha256", hashlib.sha256(seal_raw).hexdigest()),
+            ("uid", str(seal_after.st_uid)),
+        )
+        if tuple(
+            (key, value)
+            for key, value in seal_source
+            if key in ("device", "inode", "path", "sha256")
+        ) != seal_binding:
+            _fail("H11 SEAL receipt differs from its full reference")
+        seal_receipt = _decode_h11_canonical_frozen_object(
+            seal_raw,
+            label="H11 SEAL receipt",
+        )
+
+        preflight_before = Path.lstat(preflight_path)
+        self._slots[16].open(preflight_path, flags)
+        preflight_opened = os.fstat(self._slots[16].borrow())
+        preflight_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[16].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            preflight_chunks.append(chunk)
+        preflight_raw = bytes.join(b"", preflight_chunks)
+        preflight_after = os.fstat(self._slots[16].borrow())
+        preflight_current = Path.lstat(preflight_path)
+        if (
+            not stat.S_ISREG(preflight_before.st_mode)
+            or not stat.S_ISREG(preflight_after.st_mode)
+            or (preflight_before.st_dev, preflight_before.st_ino)
+            != (preflight_after.st_dev, preflight_after.st_ino)
+            or (preflight_current.st_dev, preflight_current.st_ino)
+            != (preflight_after.st_dev, preflight_after.st_ino)
+            or preflight_after.st_size != len(preflight_raw)
+            or stat.S_IMODE(preflight_after.st_mode) != 0o444
+            or (
+                self._require_root
+                and (preflight_after.st_uid, preflight_after.st_gid) != (0, 0)
+            )
+        ):
+            _fail("H11 PREFLIGHT receipt drifted while pinning")
+        os.lseek(self._slots[16].borrow(), 0, os.SEEK_SET)
+        preflight_source = (
+            ("device", str(preflight_after.st_dev)),
+            ("gid", str(preflight_after.st_gid)),
+            ("inode", str(preflight_after.st_ino)),
+            ("mode", format(stat.S_IMODE(preflight_after.st_mode), "04o")),
+            ("path", str(preflight_path)),
+            ("sha256", hashlib.sha256(preflight_raw).hexdigest()),
+            ("uid", str(preflight_after.st_uid)),
+        )
+        if tuple(
+            (key, value)
+            for key, value in preflight_source
+            if key in ("device", "inode", "path", "sha256")
+        ) != preflight_binding:
+            _fail("H11 PREFLIGHT receipt differs from its full reference")
+        preflight_receipt = _decode_h11_canonical_frozen_object(
+            preflight_raw,
+            label="H11 PREFLIGHT receipt",
+        )
+
+        permit_authority = harness_values["permit_authority"]
+        if type(permit_authority) is not tuple:
+            _fail("H11 permit authority is not frozen")
+        permit_authority_values = dict(permit_authority)
+        directory_chain = permit_authority_values["directory_chain"]
+        if type(directory_chain) is not tuple or len(directory_chain) != 7:
+            _fail("H11 directory chain must contain exactly seven references")
+        formal_reference = H11RootDirectoryReference.decode(
+            directory_chain[0], label="H11 directory_chain[0]"
+        )
+        authority_reference = H11RootDirectoryReference.decode(
+            directory_chain[1], label="H11 directory_chain[1]"
+        )
+        harness_reference = H11RootDirectoryReference.decode(
+            directory_chain[2], label="H11 directory_chain[2]"
+        )
+        scenario_reference = H11RootDirectoryReference.decode(
+            directory_chain[3], label="H11 directory_chain[3]"
+        )
+        input_reference = H11RootDirectoryReference.decode(
+            directory_chain[4], label="H11 directory_chain[4]"
+        )
+        receipt_reference = H11RootDirectoryReference.decode(
+            directory_chain[5], label="H11 directory_chain[5]"
+        )
+        fifo_reference = H11RootDirectoryReference.decode(
+            directory_chain[6], label="H11 directory_chain[6]"
+        )
+        if tuple(
+            (item.role, item.path, item.mode)
+            for item in (
+                formal_reference,
+                authority_reference,
+                harness_reference,
+                scenario_reference,
+                input_reference,
+                receipt_reference,
+                fifo_reference,
+            )
+        ) != (
+            ("formal-root", root, 0o711),
+            ("authority-root", root / "authority", 0o700),
+            ("harness-root", root / "authority" / "harness", 0o700),
+            ("scenario-root", scenario_root, 0o700),
+            ("input-root", root / "input", 0o555),
+            ("receipt-root", scenario_root / "receipts", 0o555),
+            ("fifo-root", root / "fifo", 0o711),
+        ):
+            _fail("H11 directory chain order/path/mode drifted")
+        directory_flags = (
+            os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC | os.O_NOFOLLOW
+        )
+
+        formal_before = Path.lstat(formal_reference.path)
+        self._slots[15].open(formal_reference.path, directory_flags)
+        formal_reference.prove(
+            formal_before,
+            require_root=self._require_root,
+            label="H11 formal-root",
+        )
+        formal_view = H11RootDirectoryView(
+            flow=self,
+            slot=self._slots[15],
+            parent_slot=None,
+            reference=formal_reference,
+            child_name=None,
+        )
+        formal_view.revalidate()
+
+        authority_before = os.stat(
+            "authority",
+            dir_fd=self._slots[15].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[14].open(
+            "authority",
+            directory_flags,
+            dir_fd=self._slots[15].borrow(),
+        )
+        authority_reference.prove(
+            authority_before,
+            require_root=self._require_root,
+            label="H11 authority-root",
+        )
+        authority_view = H11RootDirectoryView(
+            flow=self,
+            slot=self._slots[14],
+            parent_slot=self._slots[15],
+            reference=authority_reference,
+            child_name="authority",
+        )
+        authority_view.revalidate()
+
+        harness_before = os.stat(
+            "harness",
+            dir_fd=self._slots[14].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[13].open(
+            "harness",
+            directory_flags,
+            dir_fd=self._slots[14].borrow(),
+        )
+        harness_reference.prove(
+            harness_before,
+            require_root=self._require_root,
+            label="H11 harness-root",
+        )
+        harness_root_view = H11RootDirectoryView(
+            flow=self,
+            slot=self._slots[13],
+            parent_slot=self._slots[14],
+            reference=harness_reference,
+            child_name="harness",
+        )
+        harness_root_view.revalidate()
+
+        scenario_before = os.stat(
+            "H11",
+            dir_fd=self._slots[13].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[12].open(
+            "H11",
+            directory_flags,
+            dir_fd=self._slots[13].borrow(),
+        )
+        scenario_reference.prove(
+            scenario_before,
+            require_root=self._require_root,
+            label="H11 scenario-root",
+        )
+        scenario_view = H11RootDirectoryView(
+            flow=self,
+            slot=self._slots[12],
+            parent_slot=self._slots[13],
+            reference=scenario_reference,
+            child_name="H11",
+        )
+        scenario_view.revalidate()
+
+        input_before = os.stat(
+            "input",
+            dir_fd=self._slots[15].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[11].open(
+            "input",
+            directory_flags,
+            dir_fd=self._slots[15].borrow(),
+        )
+        input_reference.prove(
+            input_before,
+            require_root=self._require_root,
+            label="H11 input-root",
+        )
+        input_view = H11RootDirectoryView(
+            flow=self,
+            slot=self._slots[11],
+            parent_slot=self._slots[15],
+            reference=input_reference,
+            child_name="input",
+        )
+        input_view.revalidate()
+
+        receipt_before = os.stat(
+            "receipts",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[10].open(
+            "receipts",
+            directory_flags,
+            dir_fd=self._slots[12].borrow(),
+        )
+        receipt_reference.prove(
+            receipt_before,
+            require_root=self._require_root,
+            label="H11 receipt-root",
+        )
+        receipt_view = H11RootDirectoryView(
+            flow=self,
+            slot=self._slots[10],
+            parent_slot=self._slots[12],
+            reference=receipt_reference,
+            child_name="receipts",
+        )
+        receipt_view.revalidate()
+
+        fifo_before = os.stat(
+            "fifo",
+            dir_fd=self._slots[15].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[9].open(
+            "fifo",
+            directory_flags,
+            dir_fd=self._slots[15].borrow(),
+        )
+        fifo_reference.prove(
+            fifo_before,
+            require_root=self._require_root,
+            label="H11 fifo-root",
+        )
+        fifo_root_view = H11RootDirectoryView(
+            flow=self,
+            slot=self._slots[9],
+            parent_slot=self._slots[15],
+            reference=fifo_reference,
+            child_name="fifo",
+        )
+        fifo_root_view.revalidate()
+
+        ready_fifo_reference = H11RootFifoReference.decode(
+            permit_authority_values["ready_commit_fifo"],
+            label="H11 ready_commit_fifo",
+            require_root=self._require_root,
+            process_euid=process_euid,
+            process_egid=process_egid,
+        )
+        permit_fifo_reference = H11RootFifoReference.decode(
+            permit_authority_values["permit_commit_fifo"],
+            label="H11 permit_commit_fifo",
+            require_root=self._require_root,
+            process_euid=process_euid,
+            process_egid=process_egid,
+        )
+        if (
+            ready_fifo_reference.path
+            != fifo_reference.path / _H11_COMMIT_FIFO_NAMES["h11-ready-commit"]
+            or permit_fifo_reference.path
+            != fifo_reference.path / _H11_COMMIT_FIFO_NAMES["h11-permit-commit"]
+            or (ready_fifo_reference.device, ready_fifo_reference.inode)
+            == (permit_fifo_reference.device, permit_fifo_reference.inode)
+        ):
+            _fail("H11 commit FIFO authority drifted or aliased")
+        self._slots[8].open(
+            _H11_COMMIT_FIFO_NAMES["h11-ready-commit"],
+            os.O_PATH | os.O_CLOEXEC | os.O_NOFOLLOW,
+            dir_fd=self._slots[9].borrow(),
+        )
+        ready_fifo_view = H11RootFifoView(
+            flow=self,
+            slot=self._slots[8],
+            parent_slot=self._slots[9],
+            role="h11-ready-commit",
+            reference=ready_fifo_reference,
+        )
+        ready_fifo_view.revalidate()
+        self._slots[7].open(
+            _H11_COMMIT_FIFO_NAMES["h11-permit-commit"],
+            os.O_PATH | os.O_CLOEXEC | os.O_NOFOLLOW,
+            dir_fd=self._slots[9].borrow(),
+        )
+        permit_fifo_view = H11RootFifoView(
+            flow=self,
+            slot=self._slots[7],
+            parent_slot=self._slots[9],
+            role="h11-permit-commit",
+            reference=permit_fifo_reference,
+        )
+        permit_fifo_view.revalidate()
+
+        formal_view.revalidate()
+        authority_view.revalidate()
+        harness_root_view.revalidate()
+        scenario_view.revalidate()
+        input_view.revalidate()
+        receipt_view.revalidate()
+        fifo_root_view.revalidate()
+        ready_fifo_view.revalidate()
+        permit_fifo_view.revalidate()
+
+        permit_ready_binding = authorization_values["permit_ready"]
+        if type(permit_ready_binding) is not tuple:
+            _fail("H11 authorization permit_ready is not frozen")
+        permit_ready_path_value = dict(permit_ready_binding)["path"]
+        if type(permit_ready_path_value) is not str:
+            _fail("H11 authorization permit_ready.path is not text")
+        permit_ready_path = Path(permit_ready_path_value)
+        if (
+            not permit_ready_path.is_absolute()
+            or str(permit_ready_path) != permit_ready_path_value
+            or any(part in {".", ".."} for part in permit_ready_path.parts)
+        ):
+            _fail("H11 authorization permit_ready.path is not canonical")
+        if permit_ready_path != scenario_root / "PERMIT_READY.json":
+            _fail("H11 PERMIT_READY path differs from the exact layout")
+        permit_ready_before = os.stat(
+            "PERMIT_READY.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[6].open(
+            "PERMIT_READY.json",
+            flags,
+            dir_fd=self._slots[12].borrow(),
+        )
+        permit_ready_opened = os.fstat(self._slots[6].borrow())
+        permit_ready_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[6].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            permit_ready_chunks.append(chunk)
+        permit_ready_raw = bytes.join(b"", permit_ready_chunks)
+        permit_ready_after = os.fstat(self._slots[6].borrow())
+        permit_ready_current = os.stat(
+            "PERMIT_READY.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        if (
+            not stat.S_ISREG(permit_ready_before.st_mode)
+            or not stat.S_ISREG(permit_ready_after.st_mode)
+            or (permit_ready_before.st_dev, permit_ready_before.st_ino)
+            != (permit_ready_after.st_dev, permit_ready_after.st_ino)
+            or (permit_ready_current.st_dev, permit_ready_current.st_ino)
+            != (permit_ready_after.st_dev, permit_ready_after.st_ino)
+            or permit_ready_after.st_size != len(permit_ready_raw)
+            or stat.S_IMODE(permit_ready_after.st_mode) != 0o444
+            or (
+                self._require_root
+                and (permit_ready_after.st_uid, permit_ready_after.st_gid) != (0, 0)
+            )
+        ):
+            _fail("H11 PERMIT_READY drifted while pinning")
+        os.lseek(self._slots[6].borrow(), 0, os.SEEK_SET)
+        permit_ready_source = (
+            ("device", str(permit_ready_after.st_dev)),
+            ("gid", str(permit_ready_after.st_gid)),
+            ("inode", str(permit_ready_after.st_ino)),
+            ("mode", format(stat.S_IMODE(permit_ready_after.st_mode), "04o")),
+            ("path", str(permit_ready_path)),
+            ("sha256", hashlib.sha256(permit_ready_raw).hexdigest()),
+            ("uid", str(permit_ready_after.st_uid)),
+        )
+        if permit_ready_binding != permit_ready_source:
+            _fail("H11 PERMIT_READY differs from authorization authority")
+        permit_ready = _decode_h11_canonical_frozen_object(
+            permit_ready_raw,
+            label="H11 PERMIT_READY",
+        )
+
+        run_armed_binding = authorization_values["run_armed"]
+        if type(run_armed_binding) is not tuple:
+            _fail("H11 authorization run_armed is not frozen")
+        run_armed_path_value = dict(run_armed_binding)["path"]
+        if type(run_armed_path_value) is not str:
+            _fail("H11 authorization run_armed.path is not text")
+        run_armed_path = Path(run_armed_path_value)
+        if (
+            not run_armed_path.is_absolute()
+            or str(run_armed_path) != run_armed_path_value
+            or any(part in {".", ".."} for part in run_armed_path.parts)
+        ):
+            _fail("H11 authorization run_armed.path is not canonical")
+        run_armed_before = Path.lstat(run_armed_path)
+        self._slots[5].open(run_armed_path, flags)
+        run_armed_opened = os.fstat(self._slots[5].borrow())
+        run_armed_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[5].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            run_armed_chunks.append(chunk)
+        run_armed_raw = bytes.join(b"", run_armed_chunks)
+        run_armed_after = os.fstat(self._slots[5].borrow())
+        run_armed_current = Path.lstat(run_armed_path)
+        if (
+            not stat.S_ISREG(run_armed_before.st_mode)
+            or not stat.S_ISREG(run_armed_after.st_mode)
+            or (run_armed_before.st_dev, run_armed_before.st_ino)
+            != (run_armed_after.st_dev, run_armed_after.st_ino)
+            or (run_armed_current.st_dev, run_armed_current.st_ino)
+            != (run_armed_after.st_dev, run_armed_after.st_ino)
+            or run_armed_after.st_size != len(run_armed_raw)
+            or stat.S_IMODE(run_armed_after.st_mode) != 0o600
+        ):
+            _fail("H11 run ARMED drifted while pinning")
+        os.lseek(self._slots[5].borrow(), 0, os.SEEK_SET)
+        run_armed_source = (
+            ("device", str(run_armed_after.st_dev)),
+            ("gid", str(run_armed_after.st_gid)),
+            ("inode", str(run_armed_after.st_ino)),
+            ("mode", format(stat.S_IMODE(run_armed_after.st_mode), "04o")),
+            ("path", str(run_armed_path)),
+            ("sha256", hashlib.sha256(run_armed_raw).hexdigest()),
+            ("uid", str(run_armed_after.st_uid)),
+        )
+        if run_armed_binding != run_armed_source:
+            _fail("H11 run ARMED differs from authorization authority")
+        run_armed = _decode_h11_canonical_frozen_object(
+            run_armed_raw,
+            label="H11 run ARMED",
+        )
+
+        authorization_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[22], parent_slot=self._slots[12],
+            path=self._manifest_path, raw=authorization_raw,
+            source=authorization_source, label="H11 authorization manifest",
+            child_name="AUTHORIZE-RELEASE.json",
+        )
+        harness_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[21], parent_slot=None,
+            path=harness_path, raw=harness_raw, source=harness_source,
+            label="H11 harness manifest", child_name=None,
+        )
+        install_receipt_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[20], parent_slot=None,
+            path=install_receipt_path, raw=install_receipt_raw,
+            source=install_receipt_source, label="H11 install receipt",
+            child_name=None,
+        )
+        install_manifest_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[19], parent_slot=None,
+            path=install_manifest_path, raw=install_manifest_raw,
+            source=install_manifest_source, label="H11 install manifest",
+            child_name=None,
+        )
+        tree_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[18], parent_slot=None,
+            path=tree_path, raw=tree_raw, source=tree_source,
+            label="H11 TREE receipt", child_name=None,
+        )
+        seal_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[17], parent_slot=None,
+            path=seal_path, raw=seal_raw, source=seal_source,
+            label="H11 SEAL receipt", child_name=None,
+        )
+        preflight_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[16], parent_slot=None,
+            path=preflight_path, raw=preflight_raw, source=preflight_source,
+            label="H11 PREFLIGHT receipt", child_name=None,
+        )
+        permit_ready_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[6], parent_slot=self._slots[12],
+            path=permit_ready_path, raw=permit_ready_raw,
+            source=permit_ready_source, label="H11 PERMIT_READY",
+            child_name="PERMIT_READY.json",
+        )
+        run_armed_json_view = H11RootJsonSourceView(
+            flow=self, slot=self._slots[5], parent_slot=None,
+            path=run_armed_path, raw=run_armed_raw, source=run_armed_source,
+            label="H11 run ARMED", child_name=None,
+        )
+
+        authorization_json_view.revalidate()
+        harness_json_view.revalidate()
+        install_receipt_json_view.revalidate()
+        install_manifest_json_view.revalidate()
+        tree_json_view.revalidate()
+        seal_json_view.revalidate()
+        preflight_json_view.revalidate()
+        permit_ready_json_view.revalidate()
+        run_armed_json_view.revalidate()
+        fixture_uid, fixture_gid, validated_fifos, indirect_specs = (
+            _build_h11_indirect_authority_inventory(
+                authorization_manifest=authorization_manifest,
+                harness_manifest=harness_manifest,
+                install_receipt=install_receipt,
+                install_manifest=install_manifest,
+                tree_receipt=tree_receipt,
+                seal_receipt=seal_receipt,
+                preflight_receipt=preflight_receipt,
+                permit_ready=permit_ready,
+                run_armed=run_armed,
+                authorization_source_reference=authorization_source,
+                harness_source_reference=harness_source,
+                install_receipt_source_reference=install_receipt_source,
+                install_manifest_source_reference=install_manifest_source,
+                tree_receipt_source_reference=tree_source,
+                seal_receipt_source_reference=seal_source,
+                preflight_receipt_source_reference=preflight_source,
+                permit_ready_source_reference=permit_ready_source,
+                run_armed_source_reference=run_armed_source,
+                formal_root_directory_reference=formal_reference,
+                authority_root_directory_reference=authority_reference,
+                harness_root_directory_reference=harness_reference,
+                scenario_root_directory_reference=scenario_reference,
+                input_root_directory_reference=input_reference,
+                receipt_root_directory_reference=receipt_reference,
+                fifo_root_directory_reference=fifo_reference,
+                ready_commit_fifo_reference=ready_fifo_reference,
+                permit_commit_fifo_reference=permit_fifo_reference,
+                formal_root=root,
+                require_root=self._require_root,
+                process_euid=process_euid,
+                process_egid=process_egid,
+            )
+        )
+        observed_identities = tuple(
+            _observe_h11_indirect_authority(spec) for spec in indirect_specs
+        )
+        authorization_json_view.revalidate()
+        harness_json_view.revalidate()
+        install_receipt_json_view.revalidate()
+        install_manifest_json_view.revalidate()
+        tree_json_view.revalidate()
+        seal_json_view.revalidate()
+        preflight_json_view.revalidate()
+        permit_ready_json_view.revalidate()
+        run_armed_json_view.revalidate()
+        _prove_h11_indirect_observations(indirect_specs, observed_identities)
+        formal_view.revalidate()
+        authority_view.revalidate()
+        harness_root_view.revalidate()
+        scenario_view.revalidate()
+        input_view.revalidate()
+        receipt_view.revalidate()
+        fifo_root_view.revalidate()
+        ready_fifo_view.revalidate()
+        permit_fifo_view.revalidate()
+
+        authority = H11RootAuthorityView(
+            flow=self,
+            authorization_view=authorization_json_view,
+            harness_manifest_view=harness_json_view,
+            install_receipt_view=install_receipt_json_view,
+            install_manifest_view=install_manifest_json_view,
+            tree_receipt_view=tree_json_view,
+            seal_receipt_view=seal_json_view,
+            preflight_receipt_view=preflight_json_view,
+            permit_ready_view=permit_ready_json_view,
+            run_armed_view=run_armed_json_view,
+            formal_root_directory=formal_view,
+            authority_root_directory=authority_view,
+            harness_root_directory=harness_root_view,
+            scenario_root_directory=scenario_view,
+            input_root_directory=input_view,
+            receipt_root_directory=receipt_view,
+            fifo_root_directory=fifo_root_view,
+            ready_commit_fifo=ready_fifo_view,
+            permit_commit_fifo=permit_fifo_view,
+            authorization_manifest=authorization_manifest,
+            harness_manifest=harness_manifest,
+            ready_receipt=permit_ready,
+            armed_receipt=run_armed,
+            fixture_uid=fixture_uid,
+            fixture_gid=fixture_gid,
+            validated_fifos=validated_fifos,
+        )
+        self._phase_data = H11RootAuthorityPhaseData(authority=authority)
+        self._transition(
+            expected=H11RootAuthorizationState.NEW,
+            target=H11RootAuthorizationState.AUTHORITIES_RETAINED,
+        )
+        return None
+
+    def _consume_ready_commit(self) -> None:
+        phase_data = self._phase_data
+        if (
+            self._state is not H11RootAuthorizationState.AUTHORITIES_RETAINED
+            or type(phase_data) is not H11RootAuthorityPhaseData
+        ):
+            _fail("H11 READY consume requires exact retained authority data")
+        authority = phase_data.authority
+        if authority._flow is not self:
+            _fail("H11 READY consume received foreign-flow authority")
+        authority.authorization_view.revalidate()
+        authority.harness_manifest_view.revalidate()
+        authority.install_receipt_view.revalidate()
+        authority.install_manifest_view.revalidate()
+        authority.tree_receipt_view.revalidate()
+        authority.seal_receipt_view.revalidate()
+        authority.preflight_receipt_view.revalidate()
+        authority.permit_ready_view.revalidate()
+        authority.run_armed_view.revalidate()
+        authority.formal_root_directory.revalidate()
+        authority.authority_root_directory.revalidate()
+        authority.harness_root_directory.revalidate()
+        authority.scenario_root_directory.revalidate()
+        authority.input_root_directory.revalidate()
+        authority.receipt_root_directory.revalidate()
+        authority.fifo_root_directory.revalidate()
+        authority.ready_commit_fifo.revalidate()
+        authority.permit_commit_fifo.revalidate()
+
+        self._slots[1].open(
+            f"/proc/self/fd/{self._slots[8].borrow()}",
+            os.O_RDONLY | os.O_CLOEXEC,
+        )
+        authority.ready_commit_fifo.reference.prove(
+            os.fstat(self._slots[1].borrow()),
+            label="H11 ready-commit reader",
+        )
+        chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[1].borrow(), select.PIPE_BUF)
+            if not chunk:
+                break
+            chunks.append(chunk)
+        payload = bytes.join(b"", chunks)
+        close_error = self._close_slot_once(self._slots[1])
+        if close_error is not None:
+            raise close_error
+        if payload != H11_READY_COMMITTED_BYTES:
+            _fail("H11 READY commit FIFO frame differs before EOF")
+        fifo = authority.ready_commit_fifo
+        if (
+            fifo is not authority.ready_commit_fifo
+            or fifo._flow is not self
+            or fifo._slot is not self._slots[8]
+            or fifo._parent_slot is not self._slots[9]
+        ):
+            _fail("H11 READY receipt FIFO identity gate failed")
+        receipt = H11RootCommitReceipt.ready_committed(fifo, payload)
+        authority.authorization_view.revalidate()
+        authority.harness_manifest_view.revalidate()
+        authority.install_receipt_view.revalidate()
+        authority.install_manifest_view.revalidate()
+        authority.tree_receipt_view.revalidate()
+        authority.seal_receipt_view.revalidate()
+        authority.preflight_receipt_view.revalidate()
+        authority.permit_ready_view.revalidate()
+        authority.run_armed_view.revalidate()
+        authority.formal_root_directory.revalidate()
+        authority.authority_root_directory.revalidate()
+        authority.harness_root_directory.revalidate()
+        authority.scenario_root_directory.revalidate()
+        authority.input_root_directory.revalidate()
+        authority.receipt_root_directory.revalidate()
+        authority.fifo_root_directory.revalidate()
+        authority.ready_commit_fifo.revalidate()
+        authority.permit_commit_fifo.revalidate()
+
+        ready = dict(authority.ready_receipt)
+        present_rows = ready.get("present_outputs")
+        absent_rows = ready.get("absent_paths")
+        if type(present_rows) is not tuple or len(present_rows) != 2:
+            _fail("H11 READY present inventory differs from exact pair")
+        if type(absent_rows) is not tuple or len(absent_rows) != 11:
+            _fail("H11 READY future absence inventory differs from exact eleven")
+        sealed_output_rows = dict(authority.harness_manifest).get("outputs")
+        sealed_permit_authority = dict(authority.harness_manifest).get(
+            "permit_authority"
+        )
+        if (
+            type(sealed_output_rows) is not tuple
+            or len(sealed_output_rows) != 12
+            or type(sealed_permit_authority) is not tuple
+            or ready.get("permit_authority") != sealed_permit_authority
+        ):
+            _fail("H11 READY authority differs from the sealed harness manifest")
+        sealed_future_rows = dict(sealed_permit_authority).get(
+            "future_absence_inventory"
+        )
+        if (
+            type(sealed_future_rows) is not tuple
+            or len(sealed_future_rows) != 11
+            or absent_rows != sealed_future_rows
+        ):
+            _fail("H11 READY future inventory differs from sealed authority")
+        if any(
+            type(row) is not tuple
+            or tuple(key for key, _value in row) != ("path", "role")
+            for row in sealed_output_rows
+        ):
+            _fail("H11 sealed output rows differ from exact role/path objects")
+        canonical_output_roles = (
+            "closer-properties",
+            "exec-stop-post-properties",
+            "final",
+            "final-closer-properties",
+            "final-run-properties",
+            "h0",
+            "h12-absence",
+            "journal",
+            "manager-events",
+            "run-main-properties",
+            "signals",
+            "source-selector",
+        )
+        sealed_output_paths_items: list[Path] = []
+        seen_output_paths: set[Path] = set()
+        seen_output_parent_leaves: set[tuple[Path, str]] = set()
+        for row, expected_role in zip(
+            sealed_output_rows,
+            canonical_output_roles,
+        ):
+            row_values = dict(row)
+            role = row_values["role"]
+            path_text = row_values["path"]
+            if type(role) is not str or role != expected_role:
+                _fail("H11 sealed output role closure or order drifted")
+            if type(path_text) is not str:
+                _fail(f"H11 sealed output {role} path is not one string")
+            path = Path(path_text)
+            parent_leaf = (path.parent, path.name)
+            if (
+                not path.is_absolute()
+                or str(path) != path_text
+                or any(part in {".", ".."} for part in path.parts)
+                or path in seen_output_paths
+                or parent_leaf in seen_output_parent_leaves
+                or path.parent
+                not in (
+                    authority.input_root_directory.reference.path,
+                    authority.receipt_root_directory.reference.path,
+                )
+                or (
+                    role == "h0"
+                    and path.parent
+                    != authority.receipt_root_directory.reference.path
+                )
+                or (
+                    role == "run-main-properties"
+                    and path.parent
+                    != authority.input_root_directory.reference.path
+                )
+            ):
+                _fail(f"H11 sealed output {role} path closure drifted")
+            sealed_output_paths_items.append(path)
+            seen_output_paths.add(path)
+            seen_output_parent_leaves.add(parent_leaf)
+            del row_values
+        sealed_output_paths = tuple(sealed_output_paths_items)
+        del sealed_output_paths_items
+        del seen_output_paths
+        del seen_output_parent_leaves
+        del canonical_output_roles
+        frozen_path = authority.formal_root_directory.reference.path / "frozen"
+        if frozen_path in sealed_output_paths:
+            _fail("H11 frozen-root overlaps one sealed output path")
+        expected_present_role_paths = (
+            ("h0", str(sealed_output_paths[5])),
+            ("run-main-properties", str(sealed_output_paths[9])),
+        )
+        expected_future_role_paths = (
+            ("closer-properties", str(sealed_output_paths[0])),
+            ("exec-stop-post-properties", str(sealed_output_paths[1])),
+            ("final", str(sealed_output_paths[2])),
+            ("final-closer-properties", str(sealed_output_paths[3])),
+            ("final-run-properties", str(sealed_output_paths[4])),
+            ("frozen-root", str(frozen_path)),
+            ("h12-absence", str(sealed_output_paths[6])),
+            ("journal", str(sealed_output_paths[7])),
+            ("manager-events", str(sealed_output_paths[8])),
+            ("signals", str(sealed_output_paths[10])),
+            ("source-selector", str(sealed_output_paths[11])),
+        )
+        if any(
+            type(row) is not tuple
+            or tuple(key for key, _value in row)
+            != (
+                "device",
+                "gid",
+                "inode",
+                "mode",
+                "path",
+                "role",
+                "sha256",
+                "uid",
+            )
+            for row in present_rows
+        ):
+            _fail("H11 READY present rows differ from exact full references")
+        ready_present_role_paths = tuple(
+            (dict(row)["role"], dict(row)["path"])
+            for row in present_rows
+        )
+        sealed_future_role_paths = tuple(
+            (dict(row)["role"], dict(row)["path"])
+            for row in sealed_future_rows
+            if type(row) is tuple
+            and tuple(key for key, _value in row) == ("path", "role")
+        )
+        if (
+            ready_present_role_paths != expected_present_role_paths
+            or sealed_future_role_paths != expected_future_role_paths
+            or len(sealed_future_role_paths) != 11
+            or set(path for _role, path in ready_present_role_paths)
+            & set(path for _role, path in sealed_future_role_paths)
+        ):
+            _fail("H11 READY present/future role-path partition drifted")
+        h0_matches = tuple(
+            dict(row) for row in present_rows if dict(row).get("role") == "h0"
+        )
+        run_matches = tuple(
+            dict(row)
+            for row in present_rows
+            if dict(row).get("role") == "run-main-properties"
+        )
+        if len(h0_matches) != 1 or len(run_matches) != 1:
+            _fail("H11 READY present roles drifted")
+        h0_reference = h0_matches[0]
+        run_reference = run_matches[0]
+        h0_path = Path(h0_reference["path"])
+        run_path = Path(run_reference["path"])
+        if (
+            h0_path.parent != authority.receipt_root_directory.reference.path
+            or run_path.parent != authority.input_root_directory.reference.path
+        ):
+            _fail("H11 READY present paths escaped retained parents")
+
+        h0_before = os.stat(
+            h0_path.name,
+            dir_fd=self._slots[10].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[4].open(
+            h0_path.name,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+            dir_fd=self._slots[10].borrow(),
+        )
+        h0_opened = os.fstat(self._slots[4].borrow())
+        h0_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[4].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            h0_chunks.append(chunk)
+        h0_raw = bytes.join(b"", h0_chunks)
+        h0_after = os.fstat(self._slots[4].borrow())
+        h0_current = os.stat(
+            h0_path.name,
+            dir_fd=self._slots[10].borrow(),
+            follow_symlinks=False,
+        )
+        h0_actual = {
+            "role": "h0", "path": str(h0_path),
+            "sha256": hashlib.sha256(h0_raw).hexdigest(),
+            "device": str(h0_after.st_dev), "inode": str(h0_after.st_ino),
+            "mode": format(stat.S_IMODE(h0_after.st_mode), "04o"),
+            "uid": str(h0_after.st_uid), "gid": str(h0_after.st_gid),
+        }
+        if (
+            h0_actual != h0_reference
+            or any(not stat.S_ISREG(info.st_mode) for info in (h0_before, h0_opened, h0_after, h0_current))
+            or any((info.st_dev, info.st_ino) != (h0_after.st_dev, h0_after.st_ino) for info in (h0_before, h0_opened, h0_current))
+        ):
+            _fail("H11 H0 present source drifted while pinning")
+        os.lseek(self._slots[4].borrow(), 0, os.SEEK_SET)
+        present_h0 = H11RootPresentOutputView(
+            flow=self, slot=self._slots[4], parent_slot=self._slots[10],
+            role="h0", path=h0_path, raw=h0_raw,
+            reference_items=tuple(sorted(h0_reference.items())),
+        )
+
+        run_before = os.stat(
+            run_path.name,
+            dir_fd=self._slots[11].borrow(),
+            follow_symlinks=False,
+        )
+        self._slots[3].open(
+            run_path.name,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW,
+            dir_fd=self._slots[11].borrow(),
+        )
+        run_opened = os.fstat(self._slots[3].borrow())
+        run_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[3].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            run_chunks.append(chunk)
+        run_raw = bytes.join(b"", run_chunks)
+        run_after = os.fstat(self._slots[3].borrow())
+        run_current = os.stat(
+            run_path.name,
+            dir_fd=self._slots[11].borrow(),
+            follow_symlinks=False,
+        )
+        run_actual = {
+            "role": "run-main-properties", "path": str(run_path),
+            "sha256": hashlib.sha256(run_raw).hexdigest(),
+            "device": str(run_after.st_dev), "inode": str(run_after.st_ino),
+            "mode": format(stat.S_IMODE(run_after.st_mode), "04o"),
+            "uid": str(run_after.st_uid), "gid": str(run_after.st_gid),
+        }
+        if (
+            run_actual != run_reference
+            or any(not stat.S_ISREG(info.st_mode) for info in (run_before, run_opened, run_after, run_current))
+            or any((info.st_dev, info.st_ino) != (run_after.st_dev, run_after.st_ino) for info in (run_before, run_opened, run_current))
+        ):
+            _fail("H11 run-main-properties source drifted while pinning")
+        os.lseek(self._slots[3].borrow(), 0, os.SEEK_SET)
+        present_run = H11RootPresentOutputView(
+            flow=self, slot=self._slots[3], parent_slot=self._slots[11],
+            role="run-main-properties", path=run_path, raw=run_raw,
+            reference_items=tuple(sorted(run_reference.items())),
+        )
+        present_h0.revalidate()
+        present_run.revalidate()
+
+        present_partition = (
+            H11RootRolePath("h0", h0_path),
+            H11RootRolePath("run-main-properties", run_path),
+        )
+        future_partition = tuple(
+            H11RootRolePath(str(dict(row)["role"]), Path(dict(row)["path"]))
+            for row in absent_rows
+        )
+        if tuple(item.role for item in future_partition) != (
+            "closer-properties",
+            "exec-stop-post-properties",
+            "final",
+            "final-closer-properties",
+            "final-run-properties",
+            "frozen-root",
+            "h12-absence",
+            "journal",
+            "manager-events",
+            "signals",
+            "source-selector",
+        ):
+            _fail("H11 READY future absence role order drifted")
+        frozen_root = future_partition[5]
+        if (
+            frozen_root.path
+            != authority.formal_root_directory.reference.path / "frozen"
+        ):
+            _fail("H11 frozen-root escaped its retained parent")
+        if (
+            authority.input_root_directory.reference.path
+            == authority.receipt_root_directory.reference.path
+            or (
+                authority.input_root_directory.reference.device,
+                authority.input_root_directory.reference.inode,
+            )
+            == (
+                authority.receipt_root_directory.reference.device,
+                authority.receipt_root_directory.reference.inode,
+            )
+        ):
+            _fail("H11 future output retained parents are aliased")
+        output_inventory = future_partition[:5] + future_partition[6:]
+        input_future_absence_items: list[H11RootRolePath] = []
+        receipt_future_absence_items: list[H11RootRolePath] = []
+        for item in output_inventory:
+            if (
+                item.path.parent
+                == authority.input_root_directory.reference.path
+            ):
+                input_future_absence_items.append(item)
+            elif (
+                item.path.parent
+                == authority.receipt_root_directory.reference.path
+            ):
+                receipt_future_absence_items.append(item)
+            else:
+                _fail(f"H11 future output {item.role} escaped its retained parent")
+        input_future_absence = tuple(input_future_absence_items)
+        receipt_future_absence = tuple(receipt_future_absence_items)
+        del input_future_absence_items
+        del receipt_future_absence_items
+        if len(input_future_absence) + len(receipt_future_absence) != 10:
+            _fail("H11 future output parent partition is incomplete")
+        partition = H11RootClosedPartition(
+            present_prerequisites=present_partition,
+            future_absence_inventory=future_partition,
+            frozen_root=frozen_root,
+            input_future_absence=input_future_absence,
+            receipt_future_absence=receipt_future_absence,
+        )
+        transaction_paths = tuple(
+            authority.scenario_root_directory.reference.path / leaf
+            for _role, leaf in _H11_TRANSACTION_LAYOUT
+        )
+        transaction_rows: list[H11RootTransactionState] = []
+        for (role, leaf), path, expected_state in zip(
+            _H11_TRANSACTION_LAYOUT,
+            transaction_paths,
+            _H11_TRANSACTION_PHASES["authorizer-input"],
+        ):
+            try:
+                os.stat(
+                    leaf,
+                    dir_fd=self._slots[12].borrow(),
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                actual_state = "absent"
+            else:
+                actual_state = "present"
+            if actual_state != expected_state:
+                _fail(f"H11 transaction {role} differs before READY closure")
+            transaction_rows.append(H11RootTransactionState(role, path, actual_state))
+        authorization_current = os.stat(
+            "AUTHORIZE-RELEASE.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        ready_current = os.stat(
+            "PERMIT_READY.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        if (
+            (str(authorization_current.st_dev), str(authorization_current.st_ino))
+            != (dict(authority.authorization_view.source)["device"], dict(authority.authorization_view.source)["inode"])
+            or (str(ready_current.st_dev), str(ready_current.st_ino))
+            != (dict(authority.permit_ready_view.source)["device"], dict(authority.permit_ready_view.source)["inode"])
+        ):
+            _fail("H11 retained transaction sources drifted")
+        transaction_state = tuple(transaction_rows)
+        present_raw = str.encode(
+            json.dumps(
+                [h0_reference, run_reference],
+                sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+                allow_nan=False,
+            ) + "\n",
+            "ascii",
+        )
+        future_raw = str.encode(
+            json.dumps(
+                [item.reference for item in future_partition],
+                sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+                allow_nan=False,
+            ) + "\n",
+            "ascii",
+        )
+        self._phase_data = H11RootReadyPhaseData(
+            authority_data=phase_data,
+            ready_commit=receipt,
+            partition=partition,
+            present_h0=present_h0,
+            present_run_main_properties=present_run,
+            transaction_state=transaction_state,
+            present_outputs_sha256=hashlib.sha256(present_raw).hexdigest(),
+            future_absence_sha256=hashlib.sha256(future_raw).hexdigest(),
+        )
+        self._transition(
+            expected=H11RootAuthorizationState.AUTHORITIES_RETAINED,
+            target=H11RootAuthorizationState.READY_CONSUMED,
+        )
+        return None
+
+    def _publish_permit(self) -> None:
+        phase_data = self._phase_data
+        if (
+            self._state is not H11RootAuthorizationState.READY_CONSUMED
+            or type(phase_data) is not H11RootReadyPhaseData
+        ):
+            _fail("H11 permit publication requires exact READY data")
+        authority = phase_data.authority_data.authority
+        if authority._flow is not self:
+            _fail("H11 permit publication received foreign-flow authority")
+        authority.authorization_view.revalidate()
+        authority.harness_manifest_view.revalidate()
+        authority.install_receipt_view.revalidate()
+        authority.install_manifest_view.revalidate()
+        authority.tree_receipt_view.revalidate()
+        authority.seal_receipt_view.revalidate()
+        authority.preflight_receipt_view.revalidate()
+        authority.permit_ready_view.revalidate()
+        authority.run_armed_view.revalidate()
+        authority.formal_root_directory.revalidate()
+        authority.authority_root_directory.revalidate()
+        authority.harness_root_directory.revalidate()
+        authority.scenario_root_directory.revalidate()
+        authority.input_root_directory.revalidate()
+        authority.receipt_root_directory.revalidate()
+        authority.fifo_root_directory.revalidate()
+        authority.ready_commit_fifo.revalidate()
+        authority.permit_commit_fifo.revalidate()
+        phase_data.present_h0.revalidate()
+        phase_data.present_run_main_properties.revalidate()
+        before_rows: list[H11RootTransactionState] = []
+        for (role, leaf), expected in zip(
+            _H11_TRANSACTION_LAYOUT,
+            _H11_TRANSACTION_PHASES["authorizer-input"],
+        ):
+            try:
+                os.stat(
+                    leaf,
+                    dir_fd=self._slots[12].borrow(),
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                observed = "absent"
+            else:
+                observed = "present"
+            if observed != expected:
+                _fail(f"H11 transaction {role} drifted before permit publication")
+            before_rows.append(
+                H11RootTransactionState(
+                    role,
+                    authority.scenario_root_directory.reference.path / leaf,
+                    observed,
+                )
+            )
+        if tuple(before_rows) != phase_data.transaction_state:
+            _fail("H11 authorizer-input transaction evidence drifted")
+        authorization_current = os.stat(
+            "AUTHORIZE-RELEASE.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        ready_current = os.stat(
+            "PERMIT_READY.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        if (
+            (str(authorization_current.st_dev), str(authorization_current.st_ino))
+            != (dict(authority.authorization_view.source)["device"], dict(authority.authorization_view.source)["inode"])
+            or (str(ready_current.st_dev), str(ready_current.st_ino))
+            != (dict(authority.permit_ready_view.source)["device"], dict(authority.permit_ready_view.source)["inode"])
+        ):
+            _fail("H11 transaction source identity drifted before publication")
+        try:
+            os.stat(
+                "frozen",
+                dir_fd=self._slots[15].borrow(),
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            _fail("H11 future output frozen-root exists before permit")
+        for item in phase_data.partition.input_future_absence:
+            try:
+                os.stat(
+                    item.path.name,
+                    dir_fd=self._slots[11].borrow(),
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                pass
+            else:
+                _fail(f"H11 future output {item.role} exists before permit")
+        for item in phase_data.partition.receipt_future_absence:
+            try:
+                os.stat(
+                    item.path.name,
+                    dir_fd=self._slots[10].borrow(),
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                pass
+            else:
+                _fail(f"H11 future output {item.role} exists before permit")
+        try:
+            os.stat(
+                "PERMIT.pending",
+                dir_fd=self._slots[12].borrow(),
+                follow_symlinks=False,
+            )
+        except FileNotFoundError:
+            pass
+        else:
+            _fail("H11 permit staging exists before publication")
+
+        ready = dict(authority.ready_receipt)
+        payload = {
+            "schema": H11_PERMIT_SCHEMA,
+            "scenario": "H11",
+            "run_unit": ready["run_unit"],
+            "boot_id": ready["boot_id"],
+            "invocation_id": ready["invocation_id"],
+            "authorization_manifest": dict(authority.authorization_view.source),
+            "harness_manifest": dict(authority.harness_manifest_view.source),
+            "permit_ready": dict(authority.permit_ready_view.source),
+            "run_armed": dict(authority.run_armed_view.source),
+            "ready_commit": phase_data.ready_commit.reference,
+            "present_outputs_sha256": phase_data.present_outputs_sha256,
+            "future_absence_sha256": phase_data.future_absence_sha256,
+            "phase": "operator-release-authorized",
+        }
+        publication_raw = str.encode(
+            json.dumps(
+                payload,
+                sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+                allow_nan=False,
+            ) + "\n",
+            "ascii",
+        )
+        barrier = H11RootPrePermitBarrier(
+            (
+                authority.formal_root_directory.reference,
+                authority.authority_root_directory.reference,
+                authority.harness_root_directory.reference,
+                authority.scenario_root_directory.reference,
+                authority.input_root_directory.reference,
+                authority.receipt_root_directory.reference,
+                authority.fifo_root_directory.reference,
+            ),
+            phase_data.present_outputs_sha256,
+            phase_data.future_absence_sha256,
+            phase_data.transaction_state,
+            phase_data.partition.future_absence_inventory,
+        )
+        self._slots[2].open(
+            "PERMIT.pending",
+            os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+            0o444,
+            dir_fd=self._slots[12].borrow(),
+        )
+        remaining = memoryview(publication_raw)
+        while remaining:
+            written = os.write(self._slots[2].borrow(), remaining)
+            if written <= 0:
+                _fail("H11 permit staging write made no progress")
+            remaining = remaining[written:]
+        os.fchmod(self._slots[2].borrow(), 0o444)
+        os.lseek(self._slots[2].borrow(), 0, os.SEEK_SET)
+        publication_chunks: list[bytes] = []
+        while True:
+            chunk = os.read(self._slots[2].borrow(), 1024 * 1024)
+            if not chunk:
+                break
+            publication_chunks.append(chunk)
+        reread = bytes.join(b"", publication_chunks)
+        os.lseek(self._slots[2].borrow(), 0, os.SEEK_SET)
+        retained_before = os.fstat(self._slots[2].borrow())
+        expected_owner = (
+            (0, 0)
+            if self._require_root
+            else (
+                authority.scenario_root_directory.reference.uid,
+                authority.scenario_root_directory.reference.gid,
+            )
+        )
+        if (
+            reread != publication_raw
+            or retained_before.st_size != len(publication_raw)
+            or not stat.S_ISREG(retained_before.st_mode)
+            or stat.S_IMODE(retained_before.st_mode) != 0o444
+            or (retained_before.st_uid, retained_before.st_gid) != expected_owner
+        ):
+            _fail("H11 permit staging readback or metadata drifted")
+        os.fsync(self._slots[2].borrow())
+        libc = ctypes.CDLL(None, use_errno=True)
+        libc.renameat2.argtypes = [
+            ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        libc.renameat2.restype = ctypes.c_int
+        ctypes.set_errno(0)
+        if libc.renameat2(
+            self._slots[12].borrow(),
+            str.encode("PERMIT.pending", "ascii"),
+            self._slots[12].borrow(),
+            str.encode("PERMIT.json", "ascii"),
+            1,
+        ) != 0:
+            error = ctypes.get_errno()
+            raise InstallerError(
+                f"cannot publish no-replace H11 permit: {os.strerror(error)}"
+            )
+        os.fsync(self._slots[12].borrow())
+        final_info = os.stat(
+            "PERMIT.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        retained_after = os.fstat(self._slots[2].borrow())
+        if (
+            not stat.S_ISREG(final_info.st_mode)
+            or (final_info.st_dev, final_info.st_ino)
+            != (retained_after.st_dev, retained_after.st_ino)
+            or stat.S_IMODE(final_info.st_mode) != 0o444
+            or (final_info.st_uid, final_info.st_gid) != expected_owner
+        ):
+            _fail("H11 final permit name differs from retained publication")
+        reference_items = tuple(sorted({
+            "path": str(authority.scenario_root_directory.reference.path / "PERMIT.json"),
+            "sha256": hashlib.sha256(publication_raw).hexdigest(),
+            "device": str(retained_after.st_dev), "inode": str(retained_after.st_ino),
+            "mode": "0444", "uid": str(retained_after.st_uid),
+            "gid": str(retained_after.st_gid),
+        }.items()))
+        publication = H11RootPublicationView(
+            flow=self, slot=self._slots[2], parent_slot=self._slots[12],
+            final_name="PERMIT.json", raw=publication_raw,
+            reference_items=reference_items,
+        )
+        publication.revalidate()
+        final_rows: list[H11RootTransactionState] = []
+        for (role, leaf), expected in zip(
+            _H11_TRANSACTION_LAYOUT,
+            _H11_TRANSACTION_PHASES["permit-committed"],
+        ):
+            try:
+                os.stat(
+                    leaf,
+                    dir_fd=self._slots[12].borrow(),
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                observed = "absent"
+            else:
+                observed = "present"
+            if observed != expected:
+                _fail(f"H11 transaction {role} drifted after permit publication")
+            final_rows.append(
+                H11RootTransactionState(
+                    role,
+                    authority.scenario_root_directory.reference.path / leaf,
+                    observed,
+                )
+            )
+        authorization_final = os.stat(
+            "AUTHORIZE-RELEASE.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        ready_final = os.stat(
+            "PERMIT_READY.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        if (
+            (str(authorization_final.st_dev), str(authorization_final.st_ino))
+            != (dict(authority.authorization_view.source)["device"], dict(authority.authorization_view.source)["inode"])
+            or (str(ready_final.st_dev), str(ready_final.st_ino))
+            != (dict(authority.permit_ready_view.source)["device"], dict(authority.permit_ready_view.source)["inode"])
+        ):
+            _fail("H11 transaction sources drifted after publication")
+        transaction_state = tuple(final_rows)
+        authority.authorization_view.revalidate()
+        authority.harness_manifest_view.revalidate()
+        authority.install_receipt_view.revalidate()
+        authority.install_manifest_view.revalidate()
+        authority.tree_receipt_view.revalidate()
+        authority.seal_receipt_view.revalidate()
+        authority.preflight_receipt_view.revalidate()
+        authority.permit_ready_view.revalidate()
+        authority.run_armed_view.revalidate()
+        authority.formal_root_directory.revalidate()
+        authority.authority_root_directory.revalidate()
+        authority.harness_root_directory.revalidate()
+        authority.scenario_root_directory.revalidate()
+        authority.input_root_directory.revalidate()
+        authority.receipt_root_directory.revalidate()
+        authority.fifo_root_directory.revalidate()
+        authority.ready_commit_fifo.revalidate()
+        authority.permit_commit_fifo.revalidate()
+        phase_data.present_h0.revalidate()
+        phase_data.present_run_main_properties.revalidate()
+        self._phase_data = H11RootPermitPhaseData(
+            ready_data=phase_data,
+            barrier=barrier,
+            publication=publication,
+            transaction_state=transaction_state,
+        )
+        self._transition(
+            expected=H11RootAuthorizationState.READY_CONSUMED,
+            target=H11RootAuthorizationState.PERMIT_PUBLISHED,
+        )
+        return None
+
+    def _commit_permit(self) -> H11RootCommitReceipt:
+        phase_data = self._phase_data
+        if (
+            self._state is not H11RootAuthorizationState.PERMIT_PUBLISHED
+            or type(phase_data) is not H11RootPermitPhaseData
+        ):
+            _fail("H11 permit commit requires exact published permit data")
+        authority = phase_data.ready_data.authority_data.authority
+        if (
+            phase_data.barrier.directory_chain
+            != (
+                authority.formal_root_directory.reference,
+                authority.authority_root_directory.reference,
+                authority.harness_root_directory.reference,
+                authority.scenario_root_directory.reference,
+                authority.input_root_directory.reference,
+                authority.receipt_root_directory.reference,
+                authority.fifo_root_directory.reference,
+            )
+            or phase_data.barrier.present_outputs_sha256
+            != phase_data.ready_data.present_outputs_sha256
+            or phase_data.barrier.future_absence_sha256
+            != phase_data.ready_data.future_absence_sha256
+            or phase_data.barrier.transaction_state
+            != phase_data.ready_data.transaction_state
+            or phase_data.barrier.future_absence_inventory
+            != phase_data.ready_data.partition.future_absence_inventory
+        ):
+            _fail("H11 pre-permit barrier evidence drifted before commit")
+        authority.authorization_view.revalidate()
+        authority.harness_manifest_view.revalidate()
+        authority.install_receipt_view.revalidate()
+        authority.install_manifest_view.revalidate()
+        authority.tree_receipt_view.revalidate()
+        authority.seal_receipt_view.revalidate()
+        authority.preflight_receipt_view.revalidate()
+        authority.permit_ready_view.revalidate()
+        authority.run_armed_view.revalidate()
+        authority.formal_root_directory.revalidate()
+        authority.authority_root_directory.revalidate()
+        authority.harness_root_directory.revalidate()
+        authority.scenario_root_directory.revalidate()
+        authority.input_root_directory.revalidate()
+        authority.receipt_root_directory.revalidate()
+        authority.fifo_root_directory.revalidate()
+        authority.ready_commit_fifo.revalidate()
+        authority.permit_commit_fifo.revalidate()
+        phase_data.publication.revalidate()
+        phase_data.ready_data.present_h0.revalidate()
+        phase_data.ready_data.present_run_main_properties.revalidate()
+        entry_rows: list[H11RootTransactionState] = []
+        for (role, leaf), expected in zip(
+            _H11_TRANSACTION_LAYOUT,
+            _H11_TRANSACTION_PHASES["permit-committed"],
+        ):
+            try:
+                os.stat(
+                    leaf,
+                    dir_fd=self._slots[12].borrow(),
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                observed = "absent"
+            else:
+                observed = "present"
+            if observed != expected:
+                _fail(f"H11 transaction {role} drifted before permit commit")
+            entry_rows.append(
+                H11RootTransactionState(
+                    role,
+                    authority.scenario_root_directory.reference.path / leaf,
+                    observed,
+                )
+            )
+        if tuple(entry_rows) != phase_data.transaction_state:
+            _fail("H11 permit transaction evidence drifted before writer open")
+        authorization_entry = os.stat(
+            "AUTHORIZE-RELEASE.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        ready_entry = os.stat(
+            "PERMIT_READY.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        if (
+            (str(authorization_entry.st_dev), str(authorization_entry.st_ino))
+            != (dict(authority.authorization_view.source)["device"], dict(authority.authorization_view.source)["inode"])
+            or (str(ready_entry.st_dev), str(ready_entry.st_ino))
+            != (dict(authority.permit_ready_view.source)["device"], dict(authority.permit_ready_view.source)["inode"])
+        ):
+            _fail("H11 transaction sources drifted before permit writer")
+        fifo = authority.permit_commit_fifo
+        if (
+            fifo is not authority.permit_commit_fifo
+            or fifo._flow is not self
+            or fifo._slot is not self._slots[7]
+            or fifo._parent_slot is not self._slots[9]
+        ):
+            _fail("H11 PERMIT receipt FIFO identity gate failed")
+        receipt = H11RootCommitReceipt.permit_committed(
+            fifo,
+            H11_PERMIT_COMMITTED_BYTES,
+        )
+        self._slots[0].open(
+            f"/proc/self/fd/{self._slots[7].borrow()}",
+            os.O_WRONLY | os.O_CLOEXEC,
+        )
+        authority.permit_commit_fifo.reference.prove(
+            os.fstat(self._slots[0].borrow()),
+            label="H11 permit-commit writer",
+        )
+        self._transition(
+            expected=H11RootAuthorizationState.PERMIT_PUBLISHED,
+            target=H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+        )
+        authority.authorization_view.revalidate()
+        authority.harness_manifest_view.revalidate()
+        authority.install_receipt_view.revalidate()
+        authority.install_manifest_view.revalidate()
+        authority.tree_receipt_view.revalidate()
+        authority.seal_receipt_view.revalidate()
+        authority.preflight_receipt_view.revalidate()
+        authority.permit_ready_view.revalidate()
+        authority.run_armed_view.revalidate()
+        authority.formal_root_directory.revalidate()
+        authority.authority_root_directory.revalidate()
+        authority.harness_root_directory.revalidate()
+        authority.scenario_root_directory.revalidate()
+        authority.input_root_directory.revalidate()
+        authority.receipt_root_directory.revalidate()
+        authority.fifo_root_directory.revalidate()
+        authority.ready_commit_fifo.revalidate()
+        authority.permit_commit_fifo.revalidate()
+        phase_data.publication.revalidate()
+        phase_data.ready_data.present_h0.revalidate()
+        phase_data.ready_data.present_run_main_properties.revalidate()
+        writer_rows: list[H11RootTransactionState] = []
+        for (role, leaf), expected in zip(
+            _H11_TRANSACTION_LAYOUT,
+            _H11_TRANSACTION_PHASES["permit-committed"],
+        ):
+            try:
+                os.stat(
+                    leaf,
+                    dir_fd=self._slots[12].borrow(),
+                    follow_symlinks=False,
+                )
+            except FileNotFoundError:
+                observed = "absent"
+            else:
+                observed = "present"
+            if observed != expected:
+                _fail(f"H11 transaction {role} drifted after permit writer open")
+            writer_rows.append(
+                H11RootTransactionState(
+                    role,
+                    authority.scenario_root_directory.reference.path / leaf,
+                    observed,
+                )
+            )
+        if tuple(writer_rows) != phase_data.transaction_state:
+            _fail("H11 permit transaction evidence drifted after writer open")
+        authorization_writer = os.stat(
+            "AUTHORIZE-RELEASE.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        ready_writer = os.stat(
+            "PERMIT_READY.json",
+            dir_fd=self._slots[12].borrow(),
+            follow_symlinks=False,
+        )
+        if (
+            (str(authorization_writer.st_dev), str(authorization_writer.st_ino))
+            != (dict(authority.authorization_view.source)["device"], dict(authority.authorization_view.source)["inode"])
+            or (str(ready_writer.st_dev), str(ready_writer.st_ino))
+            != (dict(authority.permit_ready_view.source)["device"], dict(authority.permit_ready_view.source)["inode"])
+        ):
+            _fail("H11 transaction sources drifted after permit writer open")
+        self._mark_write_in_flight()
+        written = os.write(
+            self._slots[0].borrow(),
+            H11_PERMIT_COMMITTED_BYTES,
+        )
+        if written != len(H11_PERMIT_COMMITTED_BYTES):
+            _fail("H11 PERMIT commit FIFO write was incomplete")
+        self._mark_postwrite()
+        self._transition(
+            expected=H11RootAuthorizationState.PERMIT_WRITER_OPEN,
+            target=H11RootAuthorizationState.PERMIT_FRAME_WRITTEN,
+        )
+        close_error = self._close_slot_once(self._slots[0])
+        if close_error is not None:
+            raise close_error
+        return receipt
+
+    def authorize_once(self) -> H11RootCommitReceipt:
+        if self._state is not H11RootAuthorizationState.NEW:
+            _fail("H11 authorization flow is one-shot")
+        try:
+            self._acquire_authorities()
+            self._consume_ready_commit()
+            self._publish_permit()
+            receipt = self._commit_permit()
+        except BaseException as primary:
+            self._fail(active_error=primary)
+        return self._finish(receipt)
+
 def authorize_h11_release(
     manifest_path: Path,
     *,
@@ -5562,25 +6957,12 @@ def authorize_h11_release(
 ) -> dict[str, Any]:
     """Publish and commit the one external operator permit."""
 
-    owner: (
-        H11RootAuthorizerSession
-        | H11RootAuthorizerReadyClosure
-        | H11RootAuthorizedPermit
-        | None
-    ) = None
-    try:
-        owner = H11RootAuthorizerSession.open(
-            manifest_path,
-            require_root=require_root,
-        )
-        owner = H11RootAuthorizerReadyClosure.consume(owner)
-        owner = H11RootAuthorizedPermit.publish(owner)
-        receipt = _commit_h11_authorized_permit(owner)
-        owner = None
-        return receipt.reference
-    finally:
-        if owner is not None:
-            owner.close()
+    flow = H11RootAuthorizationFlow(
+        manifest_path,
+        require_root=require_root,
+    )
+    receipt = flow.authorize_once()
+    return receipt.reference
 
 
 def cleanup_units(
