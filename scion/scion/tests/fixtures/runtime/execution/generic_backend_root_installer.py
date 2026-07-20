@@ -3695,11 +3695,6 @@ def _prove_h11_direct_authority_bindings(
         ("path", preflight_receipt_source_values["path"]),
         ("sha256", preflight_receipt_source_values["sha256"]),
     )
-    preflight_receipt_source_path_sha = (
-        ("path", preflight_receipt_source_values["path"]),
-        ("sha256", preflight_receipt_source_values["sha256"]),
-    )
-
     if (
         _h11_object_member(
             authorization_manifest,
@@ -3813,12 +3808,6 @@ def _prove_h11_direct_authority_bindings(
             label="H11 install manifest",
         )
         != preflight_receipt_source_base
-        or _h11_object_member(
-            harness_manifest,
-            "preflight_receipt",
-            label="H11 harness manifest",
-        )
-        != preflight_receipt_source_path_sha
     ):
         _fail("H11 direct receipt source projection drifted")
 
@@ -4898,20 +4887,149 @@ def _build_h11_seal_indirect_specs(
 def _prove_h11_preflight_snapshot_bindings(
     *,
     preflight_receipt: H11RootFrozenJsonObject,
-    tree_receipt: H11RootFrozenJsonObject,
     seal_receipt: H11RootFrozenJsonObject,
     harness_manifest: H11RootFrozenJsonObject,
     preflight_receipt_source_reference: H11RootFrozenJsonObject,
     formal_root: Path,
-    validated_fifos: tuple[H11RootValidatedFifo, ...],
 ) -> None:
-    if _h11_text(_h11_object_member(preflight_receipt, "schema", label="H11 PREFLIGHT receipt"), label="H11 PREFLIGHT receipt.schema") != PREFLIGHT_RECEIPT_SCHEMA or _h11_text(_h11_object_member(preflight_receipt, "phase", label="H11 PREFLIGHT receipt"), label="H11 PREFLIGHT receipt.phase") != "static-preflight-complete":
-        _fail("H11 PREFLIGHT schema or phase drifted")
-    if _h11_path(_h11_object_member(preflight_receipt, "formal_root", label="H11 PREFLIGHT receipt"), label="H11 PREFLIGHT formal_root") != formal_root:
+    preflight_receipt = _h11_exact_object_fields(
+        preflight_receipt,
+        (
+            "asset_count",
+            "close_unit",
+            "fifos",
+            "formal_root",
+            "inventory_manifest",
+            "phase",
+            "run_unit",
+            "schema",
+            "seal_receipt",
+            "tree_receipt",
+        ),
+        label="H11 PREFLIGHT receipt",
+    )
+    if (
+        _h11_text(
+            _h11_object_member(
+                preflight_receipt,
+                "schema",
+                label="H11 PREFLIGHT receipt",
+            ),
+            label="H11 PREFLIGHT receipt.schema",
+        )
+        != PREFLIGHT_RECEIPT_SCHEMA
+    ):
+        _fail("H11 PREFLIGHT receipt schema drifted")
+    if (
+        _h11_text(
+            _h11_object_member(
+                preflight_receipt,
+                "phase",
+                label="H11 PREFLIGHT receipt",
+            ),
+            label="H11 PREFLIGHT receipt.phase",
+        )
+        != "static-preflight-complete"
+    ):
+        _fail("H11 PREFLIGHT receipt phase drifted")
+
+    preflight_source_values = dict(preflight_receipt_source_reference)
+    preflight_source_path = _h11_path(
+        preflight_source_values["path"],
+        label="H11 PREFLIGHT receipt source.path",
+    )
+    if (
+        preflight_source_path
+        != formal_root / "authority" / "preflight" / "PREFLIGHT.json"
+    ):
+        _fail("H11 PREFLIGHT receipt source path drifted")
+    harness_preflight_reference = _h11_exact_object_fields(
+        _h11_object_member(
+            harness_manifest,
+            "preflight_receipt",
+            label="H11 harness manifest",
+        ),
+        ("path", "sha256"),
+        label="H11 harness preflight receipt",
+    )
+    if harness_preflight_reference != (
+        ("path", preflight_source_values["path"]),
+        ("sha256", preflight_source_values["sha256"]),
+    ):
+        _fail("H11 preflight receipt manifest source binding drifted")
+
+    if (
+        _h11_path(
+            _h11_object_member(
+                preflight_receipt,
+                "formal_root",
+                label="H11 PREFLIGHT receipt",
+            ),
+            label="H11 PREFLIGHT formal_root",
+        )
+        != formal_root
+    ):
         _fail("H11 PREFLIGHT formal root drifted")
-    fifo_values = _h11_object_member(preflight_receipt, "fifos", label="H11 PREFLIGHT receipt")
-    if type(fifo_values) is not tuple or len(fifo_values) != len(validated_fifos):
-        _fail("H11 PREFLIGHT FIFO projection drifted")
+
+    run_unit = _h11_text(
+        _h11_object_member(
+            preflight_receipt,
+            "run_unit",
+            label="H11 PREFLIGHT receipt",
+        ),
+        label="H11 PREFLIGHT receipt.run_unit",
+    )
+    close_unit = _h11_text(
+        _h11_object_member(
+            preflight_receipt,
+            "close_unit",
+            label="H11 PREFLIGHT receipt",
+        ),
+        label="H11 PREFLIGHT receipt.close_unit",
+    )
+    if (
+        re.fullmatch(r"scion-w3-[A-Za-z0-9_.:-]+\.service", run_unit) is None
+        or re.fullmatch(r"scion-w3-[A-Za-z0-9_.:-]+\.service", close_unit) is None
+        or run_unit == close_unit
+    ):
+        _fail("H11 PREFLIGHT receipt unit closure drifted")
+    if (
+        run_unit
+        != _h11_text(
+            _h11_object_member(
+                harness_manifest,
+                "run_unit",
+                label="H11 harness manifest",
+            ),
+            label="H11 harness manifest.run_unit",
+        )
+        or close_unit
+        != _h11_text(
+            _h11_object_member(
+                harness_manifest,
+                "closer_unit",
+                label="H11 harness manifest",
+            ),
+            label="H11 harness manifest.closer_unit",
+        )
+    ):
+        _fail("H11 preflight receipt harness unit binding drifted")
+
+    asset_count = _h11_uint(
+        _h11_object_member(
+            preflight_receipt,
+            "asset_count",
+            label="H11 PREFLIGHT receipt",
+        ),
+        label="H11 PREFLIGHT receipt.asset_count",
+    )
+    seal_files = _h11_object_member(
+        seal_receipt,
+        "files",
+        label="H11 SEAL receipt",
+    )
+    if asset_count != len(seal_files) - 1:
+        _fail("H11 PREFLIGHT receipt asset count drifted")
 
 
 def _build_h11_install_target_specs(
@@ -5045,10 +5163,10 @@ def _build_h11_indirect_authority_inventory(
         formal_root=formal_root, require_root=require_root,
     )
     _prove_h11_preflight_snapshot_bindings(
-        preflight_receipt=preflight_receipt, tree_receipt=tree_receipt,
-        seal_receipt=seal_receipt, harness_manifest=harness_manifest,
+        preflight_receipt=preflight_receipt, seal_receipt=seal_receipt,
+        harness_manifest=harness_manifest,
         preflight_receipt_source_reference=preflight_receipt_source_reference,
-        formal_root=formal_root, validated_fifos=validated_fifos,
+        formal_root=formal_root,
     )
     install_specs = _build_h11_install_target_specs(
         install_receipt=install_receipt, install_manifest=install_manifest,

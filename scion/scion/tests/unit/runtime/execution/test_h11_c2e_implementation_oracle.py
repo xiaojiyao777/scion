@@ -28,6 +28,16 @@ DESIGN = (
     / "v0.4-w3-h11-c2e-implementation-oracle-design-20260720.md"
 )
 DESIGN_SHA256 = "a30f8858873c69d8d2e34b3827325f6c34ae09e1096e43b0048848283f7ffd7b"
+DOMAIN_OWNER_CORRECTION_DESIGN = (
+    Path(__file__).parents[5]
+    / "docs"
+    / "planning"
+    / "v0.4"
+    / "v0.4-w3-h11-c2e-domain-proof-owner-correction-design-20260720.md"
+)
+DOMAIN_OWNER_CORRECTION_DESIGN_SHA256 = (
+    "58fd9dbcd97283154e7fb0374b4d8b9f71c540a4e0d55461639b0fffebb7ad14"
+)
 M = "generic_backend_root_installer"
 ROOT_QNAME = f"{M}.authorize_h11_release"
 
@@ -3194,16 +3204,14 @@ DOMAIN_NEGATIVE_AXES = {
         "duplicate-identity",
     ),
     "_prove_h11_preflight_snapshot_bindings": (
+        "exact-key-set",
         "schema",
+        "phase",
         "path",
         "unit",
         "manifest-source-binding",
         "formal-root-binding",
         "harness-unit-binding",
-        "tree-projection",
-        "seal-projection",
-        "fifo-equality",
-        "inventory-reference",
         "asset-count",
     ),
     "_build_h11_install_target_specs": (
@@ -3458,6 +3466,10 @@ def _build_c2e_inventory_fixture(
 
 def test_c2e_oracle_is_bound_to_the_reviewed_design() -> None:
     assert hashlib.sha256(DESIGN.read_bytes()).hexdigest() == DESIGN_SHA256
+    assert (
+        hashlib.sha256(DOMAIN_OWNER_CORRECTION_DESIGN.read_bytes()).hexdigest()
+        == DOMAIN_OWNER_CORRECTION_DESIGN_SHA256
+    )
     assert INSTALLER_SOURCE.is_file()
 
 
@@ -4869,7 +4881,7 @@ def test_c2e_domain_single_delta_matrix_is_closed_and_nonduplicated() -> None:
         for helper, axes in DOMAIN_NEGATIVE_AXES.items()
         for axis in axes
     }
-    assert len(registered) == sum(len(axes) for axes in DOMAIN_NEGATIVE_AXES.values()) == 75
+    assert len(registered) == sum(len(axes) for axes in DOMAIN_NEGATIVE_AXES.values()) == 73
 
 
 @pytest.mark.parametrize(
@@ -5226,6 +5238,25 @@ SEAL_DOMAIN_CASES = (
     ("duplicate-identity", "manifest-file"),
 )
 
+PREFLIGHT_DOMAIN_CASES = (
+    ("exact-key-set", "missing"),
+    ("exact-key-set", "extra"),
+    ("schema", "value"),
+    ("phase", "value"),
+    ("path", "real-sibling-source"),
+    ("unit", "invalid-run"),
+    ("unit", "invalid-close"),
+    ("unit", "same"),
+    ("manifest-source-binding", "path-only"),
+    ("manifest-source-binding", "sha-only"),
+    ("formal-root-binding", "path"),
+    ("harness-unit-binding", "run-mismatch"),
+    ("harness-unit-binding", "close-mismatch"),
+    ("harness-unit-binding", "coherent-closer-rebind"),
+    ("asset-count", "value"),
+    ("asset-count", "noncanonical"),
+)
+
 
 def _tree_domain_arguments(fixture: C2EInventoryFixture) -> dict[str, Any]:
     return {name: fixture.arguments[name] for name in TREE_DOMAIN_ARGUMENTS}
@@ -5284,6 +5315,135 @@ def _replace_inventory_document(
         _canonical_json(document),
         label=label,
     )
+
+
+def _rebuild_c2e_inventory_from_real_sources(
+    fixture: C2EInventoryFixture,
+    *,
+    preflight_source_path: Path,
+    harness_preflight_reference: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    accepted_fixtures = _load_accepted_fixture_tests()
+    documents = {
+        name: json.loads(json.dumps(document))
+        for name, document in fixture.documents.items()
+    }
+    install_receipt_path = Path(
+        fixture.documents["harness_manifest"]["installer_receipt"]["path"]
+    )
+    install_manifest_path = Path(
+        fixture.documents["install_receipt"]["install_manifest"]["path"]
+    )
+    tree_receipt_path = Path(
+        fixture.documents["install_receipt"]["tree_receipt"]["path"]
+    )
+    seal_receipt_path = Path(
+        fixture.documents["install_receipt"]["seal_receipt"]["path"]
+    )
+
+    preflight_parent_mode = stat.S_IMODE(preflight_source_path.parent.lstat().st_mode)
+    if not preflight_source_path.exists():
+        preflight_source_path.parent.chmod(0o755)
+    try:
+        accepted_fixtures._root_c2a_write_json(
+            preflight_source_path,
+            documents["preflight_receipt"],
+        )
+    finally:
+        preflight_source_path.parent.chmod(preflight_parent_mode)
+    preflight_reference = _asset_reference(preflight_source_path)
+
+    install_manifest = documents["install_manifest"]
+    install_manifest["preflight_receipt"] = {
+        key: preflight_reference[key]
+        for key in ("path", "sha256", "device", "inode")
+    }
+    accepted_fixtures._root_c2a_write_json(
+        install_manifest_path,
+        install_manifest,
+    )
+    install_manifest_reference = _asset_reference(install_manifest_path)
+
+    install_receipt = documents["install_receipt"]
+    install_receipt["install_manifest"] = {
+        key: install_manifest_reference[key]
+        for key in ("path", "sha256", "device", "inode", "mode")
+    }
+    install_receipt["preflight_receipt"] = {
+        key: preflight_reference[key]
+        for key in ("path", "sha256", "device", "inode")
+    }
+    accepted_fixtures._root_c2a_write_json(
+        install_receipt_path,
+        install_receipt,
+    )
+    install_receipt_reference = _asset_reference(install_receipt_path)
+
+    harness = documents["harness_manifest"]
+    harness["installer_receipt"] = {
+        key: install_receipt_reference[key] for key in ("path", "sha256")
+    }
+    harness["preflight_receipt"] = (
+        dict(harness_preflight_reference)
+        if harness_preflight_reference is not None
+        else {key: preflight_reference[key] for key in ("path", "sha256")}
+    )
+    accepted_fixtures._root_c2a_write_json(fixture.paths["manifest"], harness)
+    harness_reference = _asset_reference(fixture.paths["manifest"])
+
+    run_armed_reference = _asset_reference(fixture.paths["armed"])
+    permit_ready = documents["permit_ready"]
+    permit_ready["harness_manifest"] = dict(harness_reference)
+    permit_ready["run_armed"] = dict(run_armed_reference)
+    accepted_fixtures._root_c2a_write_json(fixture.paths["ready"], permit_ready)
+    permit_ready_reference = _asset_reference(fixture.paths["ready"])
+
+    authorization = documents["authorization_manifest"]
+    authorization["harness_manifest"] = dict(harness_reference)
+    authorization["permit_ready"] = dict(permit_ready_reference)
+    authorization["run_armed"] = dict(run_armed_reference)
+    accepted_fixtures._root_c2a_write_json(
+        fixture.paths["authorization"],
+        authorization,
+    )
+
+    source_paths = {
+        "authorization_manifest": fixture.paths["authorization"],
+        "harness_manifest": fixture.paths["manifest"],
+        "install_receipt": install_receipt_path,
+        "install_manifest": install_manifest_path,
+        "tree_receipt": tree_receipt_path,
+        "seal_receipt": seal_receipt_path,
+        "preflight_receipt": preflight_source_path,
+        "permit_ready": fixture.paths["ready"],
+        "run_armed": fixture.paths["armed"],
+    }
+    reference_names = {
+        "authorization_manifest": "authorization_source_reference",
+        "harness_manifest": "harness_source_reference",
+        "install_receipt": "install_receipt_source_reference",
+        "install_manifest": "install_manifest_source_reference",
+        "tree_receipt": "tree_receipt_source_reference",
+        "seal_receipt": "seal_receipt_source_reference",
+        "preflight_receipt": "preflight_receipt_source_reference",
+        "permit_ready": "permit_ready_source_reference",
+        "run_armed": "run_armed_source_reference",
+    }
+    arguments = dict(fixture.arguments)
+    decoder = fixture.production._decode_h11_canonical_frozen_object
+    for document_name, source_path in source_paths.items():
+        raw = source_path.read_bytes()
+        arguments[document_name] = decoder(
+            raw,
+            label=f"C2e PREFLIGHT real source {document_name}",
+        )
+        reference = _asset_reference(source_path)
+        arguments[reference_names[document_name]] = _frozen_json(reference)
+        assert dict(arguments[reference_names[document_name]])["sha256"] == hashlib.sha256(
+            raw
+        ).hexdigest()
+    assert len(source_paths) == len(reference_names) == 9
+    return arguments
 
 
 @pytest.mark.parametrize(
@@ -5799,6 +5959,209 @@ def test_c2e_seal_domain_accepts_extra_valid_rows_and_merges_preflight_once(
         if spec.semantic_role in {"aaa-expanded-asset", "zzz-expanded-asset"}
     ) == ("aaa-expanded-asset", "zzz-expanded-asset")
     assert sum(spec.equivalence_class == "preflight/inventory" for spec in specs) == 1
+
+
+@pytest.mark.parametrize(
+    ("axis", "variant"),
+    PREFLIGHT_DOMAIN_CASES,
+    ids=lambda value: value,
+)
+def test_c2e_preflight_domain_each_registered_axis_is_owned_first_by_preflight(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    axis: str,
+    variant: str,
+) -> None:
+    assert {case_axis for case_axis, _variant in PREFLIGHT_DOMAIN_CASES} == set(
+        DOMAIN_NEGATIVE_AXES["_prove_h11_preflight_snapshot_bindings"]
+    )
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    arguments = dict(fixture.arguments)
+    preflight = json.loads(json.dumps(fixture.documents["preflight_receipt"]))
+    harness = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+    real_source_case = axis in {"path", "manifest-source-binding"}
+
+    if axis == "exact-key-set":
+        if variant == "missing":
+            preflight.pop("asset_count")
+        else:
+            assert variant == "extra"
+            preflight["unexpected"] = True
+    elif axis == "schema":
+        preflight["schema"] = "scion.invalid.preflight.v1"
+    elif axis == "phase":
+        preflight["phase"] = "not-preflight-complete"
+    elif axis == "path":
+        assert variant == "real-sibling-source"
+        original_source = Path(
+            fixture.documents["preflight_receipt"]["inventory_manifest"]["path"]
+        ).parents[1] / "authority" / "preflight" / "PREFLIGHT.json"
+        assert original_source == Path(
+            fixture.documents["install_receipt"]["preflight_receipt"]["path"]
+        )
+        sibling_source = original_source.with_name("PREFLIGHT-sibling.json")
+        arguments = _rebuild_c2e_inventory_from_real_sources(
+            fixture,
+            preflight_source_path=sibling_source,
+        )
+        assert sibling_source.is_file()
+        assert dict(arguments["preflight_receipt_source_reference"])["path"] == str(
+            sibling_source
+        )
+    elif axis == "unit":
+        if variant == "invalid-run":
+            preflight["run_unit"] = "invalid-run-unit"
+        elif variant == "invalid-close":
+            preflight["close_unit"] = "invalid-close-unit"
+        else:
+            assert variant == "same"
+            preflight["close_unit"] = preflight["run_unit"]
+    elif axis == "manifest-source-binding":
+        actual_source = Path(
+            fixture.documents["install_receipt"]["preflight_receipt"]["path"]
+        )
+        actual_reference = _asset_reference(actual_source)
+        if variant == "path-only":
+            sibling_source = actual_source.with_name("PREFLIGHT-harness-sibling.json")
+            preflight_parent_mode = stat.S_IMODE(actual_source.parent.lstat().st_mode)
+            actual_source.parent.chmod(0o755)
+            try:
+                sibling_source.write_bytes(actual_source.read_bytes())
+                sibling_source.chmod(0o444)
+            finally:
+                actual_source.parent.chmod(preflight_parent_mode)
+            sibling_reference = _asset_reference(sibling_source)
+            assert sibling_reference["sha256"] == actual_reference["sha256"]
+            harness_reference = {
+                "path": sibling_reference["path"],
+                "sha256": actual_reference["sha256"],
+            }
+        else:
+            assert variant == "sha-only"
+            changed_sha = (
+                "0" * 64
+                if actual_reference["sha256"] != "0" * 64
+                else "1" * 64
+            )
+            harness_reference = {
+                "path": actual_reference["path"],
+                "sha256": changed_sha,
+            }
+        arguments = _rebuild_c2e_inventory_from_real_sources(
+            fixture,
+            preflight_source_path=actual_source,
+            harness_preflight_reference=harness_reference,
+        )
+        decoded_harness = dict(arguments["harness_manifest"])
+        assert dict(decoded_harness["preflight_receipt"]) == harness_reference
+        assert harness_reference != {
+            key: actual_reference[key] for key in ("path", "sha256")
+        }
+    elif axis == "formal-root-binding":
+        assert variant == "path"
+        preflight["formal_root"] = str(tmp_path / "other-formal-root")
+    elif axis == "harness-unit-binding":
+        if variant == "run-mismatch":
+            preflight["run_unit"] = "scion-w3-preflight-other-run.service"
+        elif variant == "close-mismatch":
+            preflight["close_unit"] = "scion-w3-preflight-other-close.service"
+        else:
+            assert variant == "coherent-closer-rebind"
+            changed_closer = "scion-w3-coherent-close.service"
+            harness["closer_unit"] = changed_closer
+            closer_role = next(
+                row for row in harness["static_roles"] if row["role"] == "closer"
+            )
+            closer_role["unit"] = changed_closer
+    elif axis == "asset-count":
+        if variant == "value":
+            preflight["asset_count"] = str(int(preflight["asset_count"]) + 1)
+        else:
+            assert variant == "noncanonical"
+            preflight["asset_count"] = "01"
+    else:
+        raise AssertionError((axis, variant))
+
+    if not real_source_case:
+        _replace_inventory_document(
+            fixture,
+            arguments,
+            "preflight_receipt",
+            preflight,
+            label=f"C2e PREFLIGHT {axis} {variant} receipt",
+        )
+        _replace_inventory_document(
+            fixture,
+            arguments,
+            "harness_manifest",
+            harness,
+            label=f"C2e PREFLIGHT {axis} {variant} harness",
+        )
+
+    owner_order = (
+        "_prove_h11_direct_authority_bindings",
+        "_build_h11_tree_indirect_specs",
+        "_build_h11_seal_indirect_specs",
+        "_prove_h11_preflight_snapshot_bindings",
+    )
+    originals = {name: getattr(production, name) for name in owner_order}
+    install = production._build_h11_install_target_specs
+    entered: list[str] = []
+    completed: list[str] = []
+    install_attempts: list[str] = []
+
+    def recording_owner(name: str) -> Any:
+        def invoke(**kwargs: Any) -> Any:
+            entered.append(name)
+            result = originals[name](**kwargs)
+            completed.append(name)
+            return result
+
+        return invoke
+
+    for name in owner_order:
+        monkeypatch.setattr(production, name, recording_owner(name))
+
+    def forbidden_install(**_kwargs: Any) -> Any:
+        install_attempts.append("install")
+        raise production.InstallerError(
+            f"C2e PREFLIGHT {axis} {variant} escaped into INSTALL"
+        )
+
+    monkeypatch.setattr(
+        production,
+        "_build_h11_install_target_specs",
+        forbidden_install,
+    )
+    with pytest.raises(production.InstallerError):
+        production._build_h11_indirect_authority_inventory(**arguments)
+    assert entered == list(owner_order)
+    assert completed == list(owner_order[:3])
+    assert install_attempts == []
+
+    if real_source_case:
+        later_domains: list[str] = []
+
+        def removed_preflight_gate(**_kwargs: Any) -> None:
+            return None
+
+        def recording_install(**kwargs: Any) -> Any:
+            later_domains.append("install")
+            return install(**kwargs)
+
+        monkeypatch.setattr(
+            production,
+            "_prove_h11_preflight_snapshot_bindings",
+            removed_preflight_gate,
+        )
+        monkeypatch.setattr(
+            production,
+            "_build_h11_install_target_specs",
+            recording_install,
+        )
+        production._build_h11_indirect_authority_inventory(**arguments)
+        assert later_domains == ["install"]
 
 
 @pytest.mark.parametrize("axis", FINAL_PROOF_OBSERVED_AXES)
