@@ -4494,44 +4494,391 @@ def _build_h11_seal_indirect_specs(
     formal_root: Path,
     require_root: bool,
 ) -> tuple[H11RootIndirectAuthoritySpec, ...]:
-    if _h11_text(_h11_object_member(seal_receipt, "schema", label="H11 SEAL receipt"), label="H11 SEAL receipt.schema") != SEAL_RECEIPT_SCHEMA or _h11_text(_h11_object_member(seal_receipt, "phase", label="H11 SEAL receipt"), label="H11 SEAL receipt.phase") != "static-authority-sealed":
+    seal_receipt = _h11_exact_object_fields(
+        seal_receipt,
+        ("files", "formal_root", "phase", "schema", "seal_manifest", "tree_receipt"),
+        label="H11 SEAL receipt",
+    )
+    if (
+        _h11_text(
+            _h11_object_member(seal_receipt, "schema", label="H11 SEAL receipt"),
+            label="H11 SEAL receipt.schema",
+        )
+        != SEAL_RECEIPT_SCHEMA
+        or _h11_text(
+            _h11_object_member(seal_receipt, "phase", label="H11 SEAL receipt"),
+            label="H11 SEAL receipt.phase",
+        )
+        != "static-authority-sealed"
+    ):
         _fail("H11 SEAL schema or phase drifted")
+    seal_formal_root = _h11_exact_object_fields(
+        _h11_object_member(seal_receipt, "formal_root", label="H11 SEAL receipt"),
+        ("device", "inode", "path"),
+        label="H11 SEAL formal root",
+    )
+    if (
+        seal_formal_root
+        != _h11_object_member(tree_receipt, "formal_root", label="H11 TREE receipt")
+        or _h11_path(
+            _h11_object_member(
+                seal_formal_root,
+                "path",
+                label="H11 SEAL formal root",
+            ),
+            label="H11 SEAL formal root.path",
+        )
+        != formal_root
+    ):
+        _fail("H11 SEAL formal root drifted")
     seal_inputs: list[
         tuple[str, str, int | None, Path, str, int, int, int | None, tuple[tuple[int, int], ...] | None]
     ] = []
-    seal_manifest = _h11_object_member(seal_receipt, "seal_manifest", label="H11 SEAL receipt")
-    seal_inputs.append((
-        "seal-manifest", "seal/manifest", None,
-        _h11_path(_h11_object_member(seal_manifest, "path", label="H11 seal manifest"), label="H11 seal manifest.path"),
-        "regular",
-        _h11_uint(_h11_object_member(seal_manifest, "device", label="H11 seal manifest"), label="H11 seal manifest.device"),
-        _h11_uint(_h11_object_member(seal_manifest, "inode", label="H11 seal manifest"), label="H11 seal manifest.inode"),
-        None, None,
-    ))
+    seal_manifest = _h11_exact_object_fields(
+        _h11_object_member(seal_receipt, "seal_manifest", label="H11 SEAL receipt"),
+        ("device", "inode", "path", "sha256"),
+        label="H11 seal manifest",
+    )
+    seal_manifest_path = _h11_path(
+        _h11_object_member(seal_manifest, "path", label="H11 seal manifest"),
+        label="H11 seal manifest.path",
+    )
+    seal_manifest_device = _h11_uint(
+        _h11_object_member(seal_manifest, "device", label="H11 seal manifest"),
+        label="H11 seal manifest.device",
+    )
+    seal_manifest_inode = _h11_uint(
+        _h11_object_member(seal_manifest, "inode", label="H11 seal manifest"),
+        label="H11 seal manifest.inode",
+    )
+    _h11_sha256_text(
+        _h11_object_member(seal_manifest, "sha256", label="H11 seal manifest"),
+        label="H11 seal manifest.sha256",
+    )
+    seal_inputs.append(
+        (
+            "seal-manifest",
+            "seal/manifest",
+            None,
+            seal_manifest_path,
+            "regular",
+            seal_manifest_device,
+            seal_manifest_inode,
+            None,
+            None,
+        )
+    )
     files = _h11_object_member(seal_receipt, "files", label="H11 SEAL receipt")
     if type(files) is not tuple or not files:
         _fail("H11 SEAL files inventory is invalid")
-    parsed_files: list[tuple[str, Path, int, int, int]] = []
+    parsed_files: list[tuple[str, Path, str, int, int, int]] = []
+    seen_roles: set[str] = set()
+    seen_paths = {seal_manifest_path}
+    seen_identities = {(seal_manifest_device, seal_manifest_inode)}
     for row in files:
         _h11_exact_object_fields(row, ("device", "inode", "mode", "path", "role", "sha256"), label="H11 SEAL file")
         role = _h11_text(_h11_object_member(row, "role", label="H11 SEAL file"), label="H11 SEAL file.role")
         mode_text = _h11_text(_h11_object_member(row, "mode", label="H11 SEAL file"), label="H11 SEAL file.mode")
-        if mode_text != "0444":
+        sha256 = _h11_sha256_text(
+            _h11_object_member(row, "sha256", label="H11 SEAL file"),
+            label="H11 SEAL file.sha256",
+        )
+        path = _h11_path(
+            _h11_object_member(row, "path", label="H11 SEAL file"),
+            label="H11 SEAL file.path",
+        )
+        device = _h11_uint(
+            _h11_object_member(row, "device", label="H11 SEAL file"),
+            label="H11 SEAL file.device",
+        )
+        inode = _h11_uint(
+            _h11_object_member(row, "inode", label="H11 SEAL file"),
+            label="H11 SEAL file.inode",
+        )
+        if (
+            re.fullmatch(r"[a-z][a-z0-9]*(?:[-_.][a-z0-9]+)*", role) is None
+            or mode_text != "0444"
+            or path.parent not in {formal_root / "sealed", formal_root / "input"}
+            or role in seen_roles
+            or path in seen_paths
+            or (device, inode) in seen_identities
+        ):
             _fail("H11 SEAL file mode drifted")
-        _h11_sha256_text(_h11_object_member(row, "sha256", label="H11 SEAL file"), label="H11 SEAL file.sha256")
-        parsed_files.append((
-            role,
-            _h11_path(_h11_object_member(row, "path", label="H11 SEAL file"), label="H11 SEAL file.path"),
-            _h11_uint(_h11_object_member(row, "device", label="H11 SEAL file"), label="H11 SEAL file.device"),
-            _h11_uint(_h11_object_member(row, "inode", label="H11 SEAL file"), label="H11 SEAL file.inode"),
-            0o444,
-        ))
+        seen_roles.add(role)
+        seen_paths.add(path)
+        seen_identities.add((device, inode))
+        parsed_files.append((role, path, sha256, device, inode, 0o444))
     ordered_files = tuple(item for item in parsed_files if item[0] == "preflight-manifest") + tuple(
         sorted((item for item in parsed_files if item[0] != "preflight-manifest"), key=lambda item: item[0])
     )
-    if len(ordered_files) != len(parsed_files) or len(set(item[0] for item in ordered_files)) != len(ordered_files):
-        _fail("H11 SEAL file roles are duplicated")
-    for role, path, device, inode, mode in ordered_files:
+    files_by_role = {row[0]: row for row in parsed_files}
+    files_by_hashed_reference = {(row[1], row[2]): row for row in parsed_files}
+
+    if "preflight-manifest" not in files_by_role:
+        _fail("H11 SEAL preflight inventory class is missing")
+    preflight_row = files_by_role["preflight-manifest"]
+    preflight_inventory = _h11_exact_object_fields(
+        _h11_object_member(
+            preflight_receipt,
+            "inventory_manifest",
+            label="H11 PREFLIGHT receipt",
+        ),
+        ("device", "inode", "mode", "path", "sha256"),
+        label="H11 PREFLIGHT inventory manifest",
+    )
+    preflight_full_reference = (
+        ("device", str(preflight_row[3])),
+        ("inode", str(preflight_row[4])),
+        ("mode", format(preflight_row[5], "04o")),
+        ("path", str(preflight_row[1])),
+        ("sha256", preflight_row[2]),
+    )
+    harness_static_inventory = _h11_exact_object_fields(
+        _h11_object_member(
+            harness_manifest,
+            "static_inventory",
+            label="H11 harness manifest",
+        ),
+        ("path", "sha256"),
+        label="H11 harness static inventory",
+    )
+    if (
+        preflight_inventory != preflight_full_reference
+        or harness_static_inventory
+        != (("path", str(preflight_row[1])), ("sha256", preflight_row[2]))
+    ):
+        _fail("H11 SEAL preflight inventory class drifted")
+
+    named_member_roles = {"preflight-manifest"}
+    for harness_field, seal_role in (
+        ("descriptor", "start-descriptor"),
+        ("harness_program", "harness-program"),
+    ):
+        if seal_role not in files_by_role:
+            _fail(f"H11 SEAL {seal_role} class is missing")
+        seal_row = files_by_role[seal_role]
+        harness_reference = _h11_exact_object_fields(
+            _h11_object_member(
+                harness_manifest,
+                harness_field,
+                label="H11 harness manifest",
+            ),
+            ("path", "sha256"),
+            label=f"H11 harness {harness_field}",
+        )
+        if harness_reference != (
+            ("path", str(seal_row[1])),
+            ("sha256", seal_row[2]),
+        ):
+            _fail(f"H11 SEAL {seal_role} class drifted")
+        named_member_roles.add(seal_role)
+
+    if "installer-program" not in files_by_role:
+        _fail("H11 SEAL installer-program class is missing")
+    installer_row = files_by_role["installer-program"]
+    installer_reference = _h11_exact_object_fields(
+        _h11_object_member(install_receipt, "installer", label="H11 install receipt"),
+        ("device", "inode", "mode", "path", "sha256"),
+        label="H11 install receipt installer",
+    )
+    if installer_reference != (
+        ("device", str(installer_row[3])),
+        ("inode", str(installer_row[4])),
+        ("mode", format(installer_row[5], "04o")),
+        ("path", str(installer_row[1])),
+        ("sha256", installer_row[2]),
+    ):
+        _fail("H11 SEAL installer-program class drifted")
+    named_member_roles.add("installer-program")
+
+    install_units = _h11_object_member(
+        install_receipt,
+        "units",
+        label="H11 install receipt",
+    )
+    if type(install_units) is not tuple:
+        _fail("H11 SEAL install source inventory is invalid")
+    for unit_row in install_units:
+        role = _h11_text(
+            _h11_object_member(unit_row, "role", label="H11 install unit"),
+            label="H11 install unit.role",
+        )
+        source_reference = _h11_exact_object_fields(
+            _h11_object_member(unit_row, "source", label="H11 install unit"),
+            ("device", "inode", "mode", "path", "sha256"),
+            label=f"H11 install source {role}",
+        )
+        if role not in files_by_role:
+            _fail(f"H11 SEAL install source {role} class drifted")
+        seal_row = files_by_role[role]
+        if source_reference != (
+            ("device", str(seal_row[3])),
+            ("inode", str(seal_row[4])),
+            ("mode", format(seal_row[5], "04o")),
+            ("path", str(seal_row[1])),
+            ("sha256", seal_row[2]),
+        ):
+            _fail(f"H11 SEAL install source {role} class drifted")
+        named_member_roles.add(role)
+
+    static_roles = _h11_object_member(
+        harness_manifest,
+        "static_roles",
+        label="H11 harness manifest",
+    )
+    if type(static_roles) is not tuple or len(static_roles) != 3:
+        _fail("H11 SEAL static role closure drifted")
+    harness_run_unit = _h11_text(
+        _h11_object_member(harness_manifest, "run_unit", label="H11 harness manifest"),
+        label="H11 harness manifest.run_unit",
+    )
+    harness_closer_unit = _h11_text(
+        _h11_object_member(
+            harness_manifest,
+            "closer_unit",
+            label="H11 harness manifest",
+        ),
+        label="H11 harness manifest.closer_unit",
+    )
+    expected_static_roles = (
+        ("run-main", harness_run_unit, "adversary", "h11-unbounded-hold"),
+        ("exec-stop-post", harness_run_unit, "observer", "exec-stop-post"),
+        ("closer", harness_closer_unit, "observer", "closer"),
+    )
+    expected_static_member_roles = (
+        ("run-plan", "run-program"),
+        ("stop-plan", "stop-program"),
+        ("close-plan", "close-program"),
+    )
+    static_members: list[tuple[tuple[str, Path, str, int, int, int], tuple[str, Path, str, int, int, int]]] = []
+    static_member_roles: set[str] = set()
+    for static_role, expected, expected_member_roles in zip(
+        static_roles,
+        expected_static_roles,
+        expected_static_member_roles,
+    ):
+        static_role = _h11_exact_object_fields(
+            static_role,
+            ("mode", "owner", "plan", "program", "role", "unit"),
+            label=f"H11 SEAL static role {expected[0]}",
+        )
+        if (
+            _h11_text(
+                _h11_object_member(static_role, "role", label="H11 SEAL static role"),
+                label="H11 SEAL static role.role",
+            ),
+            _h11_text(
+                _h11_object_member(static_role, "unit", label="H11 SEAL static role"),
+                label="H11 SEAL static role.unit",
+            ),
+            _h11_text(
+                _h11_object_member(static_role, "owner", label="H11 SEAL static role"),
+                label="H11 SEAL static role.owner",
+            ),
+            _h11_text(
+                _h11_object_member(static_role, "mode", label="H11 SEAL static role"),
+                label="H11 SEAL static role.mode",
+            ),
+        ) != expected:
+            _fail("H11 SEAL static role tuple drifted")
+        matched_members: list[tuple[str, Path, str, int, int, int]] = []
+        for member_name, expected_member_role in zip(
+            ("plan", "program"),
+            expected_member_roles,
+        ):
+            reference = _h11_exact_object_fields(
+                _h11_object_member(
+                    static_role,
+                    member_name,
+                    label="H11 SEAL static role",
+                ),
+                ("path", "sha256"),
+                label=f"H11 SEAL static role {expected[0]} {member_name}",
+            )
+            path = _h11_path(
+                _h11_object_member(
+                    reference,
+                    "path",
+                    label=f"H11 SEAL static role {member_name}",
+                ),
+                label=f"H11 SEAL static role {member_name}.path",
+            )
+            sha256 = _h11_sha256_text(
+                _h11_object_member(
+                    reference,
+                    "sha256",
+                    label=f"H11 SEAL static role {member_name}",
+                ),
+                label=f"H11 SEAL static role {member_name}.sha256",
+            )
+            if (path, sha256) not in files_by_hashed_reference:
+                _fail(f"H11 SEAL static role {expected[0]} {member_name} is unbound")
+            matched = files_by_hashed_reference[(path, sha256)]
+            if matched[0] != expected_member_role:
+                _fail(
+                    f"H11 SEAL static role {expected[0]} {member_name} "
+                    "is bound to the wrong SEAL role"
+                )
+            matched_members.append(matched)
+        static_members.append((matched_members[0], matched_members[1]))
+        static_member_roles.update((matched_members[0][0], matched_members[1][0]))
+    if (
+        len(static_member_roles) != 6
+        or static_member_roles & named_member_roles
+    ):
+        _fail("H11 SEAL static role classes are duplicated or aliased")
+
+    run_plan_row, run_program_row = static_members[0]
+    armed_plan_path = _h11_path(
+        _h11_object_member(run_armed, "plan_path", label="H11 run ARMED"),
+        label="H11 run ARMED.plan_path",
+    )
+    armed_plan_sha256 = _h11_sha256_text(
+        _h11_object_member(run_armed, "plan_sha256", label="H11 run ARMED"),
+        label="H11 run ARMED.plan_sha256",
+    )
+    armed_program = _h11_exact_object_fields(
+        _h11_object_member(run_armed, "program", label="H11 run ARMED"),
+        ("identity", "path", "sha256"),
+        label="H11 run ARMED program",
+    )
+    armed_program_identity = _h11_exact_object_fields(
+        _h11_object_member(
+            armed_program,
+            "identity",
+            label="H11 run ARMED program",
+        ),
+        ("device", "inode", "mode"),
+        label="H11 run ARMED program identity",
+    )
+    armed_identity_values = dict(armed_program_identity)
+    if (
+        armed_plan_path != run_plan_row[1]
+        or armed_plan_sha256 != run_plan_row[2]
+        or _h11_path(
+            _h11_object_member(armed_program, "path", label="H11 run ARMED program"),
+            label="H11 run ARMED program.path",
+        )
+        != run_program_row[1]
+        or _h11_sha256_text(
+            _h11_object_member(
+                armed_program,
+                "sha256",
+                label="H11 run ARMED program",
+            ),
+            label="H11 run ARMED program.sha256",
+        )
+        != run_program_row[2]
+        or type(armed_identity_values["device"]) is not int
+        or type(armed_identity_values["inode"]) is not int
+        or type(armed_identity_values["mode"]) is not int
+        or armed_identity_values["device"] != run_program_row[3]
+        or armed_identity_values["inode"] != run_program_row[4]
+        or armed_identity_values["mode"] != run_program_row[5]
+    ):
+        _fail("H11 SEAL run ARMED plan or program class drifted")
+
+    for role, path, _sha256, device, inode, mode in ordered_files:
         seal_inputs.append((
             "preflight-manifest" if role == "preflight-manifest" else role,
             "preflight/inventory" if role == "preflight-manifest" else f"seal/file/{role}",

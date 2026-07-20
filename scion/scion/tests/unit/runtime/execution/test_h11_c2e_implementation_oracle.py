@@ -3244,6 +3244,7 @@ class C2EInventoryFixture:
     production: Any
     arguments: dict[str, Any]
     documents: dict[str, dict[str, Any]]
+    paths: dict[str, Path]
 
     def with_document_delta(self, document: str, field: str, value: Any) -> dict[str, Any]:
         changed = json.loads(json.dumps(self.documents[document]))
@@ -3315,6 +3316,30 @@ def _build_c2e_inventory_fixture(
         paths = accepted_fixtures._root_c2a_session_model(tmp_path)
     finally:
         accepted_fixtures.installer.seal_tree = original_seal_tree
+    harness_manifest = json.loads(paths["manifest"].read_text(encoding="ascii"))
+    fixture_install_receipt = json.loads(
+        Path(harness_manifest["installer_receipt"]["path"]).read_text(encoding="ascii")
+    )
+    fixture_seal_receipt = json.loads(
+        Path(fixture_install_receipt["seal_receipt"]["path"]).read_text(
+            encoding="ascii"
+        )
+    )
+    fixture_seal_rows = {
+        row["role"]: row for row in fixture_seal_receipt["files"]
+    }
+    for field, role in (
+        ("descriptor", "start-descriptor"),
+        ("harness_program", "harness-program"),
+        ("static_inventory", "preflight-manifest"),
+    ):
+        row = fixture_seal_rows[role]
+        harness_manifest[field] = {
+            "path": row["path"],
+            "sha256": row["sha256"],
+        }
+    accepted_fixtures._root_c2a_write_json(paths["manifest"], harness_manifest)
+    accepted_fixtures._root_c2a_rebind_sources(paths)
     documents: dict[str, dict[str, Any]] = {
         "authorization_manifest": json.loads(paths["authorization"].read_text(encoding="ascii")),
         "harness_manifest": json.loads(paths["manifest"].read_text(encoding="ascii")),
@@ -3428,7 +3453,7 @@ def _build_c2e_inventory_fixture(
         "process_euid",
         "process_egid",
     }
-    return C2EInventoryFixture(production, arguments, documents)
+    return C2EInventoryFixture(production, arguments, documents, paths)
 
 
 def test_c2e_oracle_is_bound_to_the_reviewed_design() -> None:
@@ -3453,8 +3478,9 @@ def test_c2e_legacy_module_symbol_and_factory_matrix_is_removed() -> None:
 
 
 def test_c2e_new_flow_e2e_commits_one_exact_frame_and_receipt(tmp_path: Path) -> None:
-    production = _load_installer()
-    paths = _load_accepted_fixture_tests()._root_c2a_session_model(tmp_path)
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    paths = fixture.paths
     harness = json.loads(paths["manifest"].read_text(encoding="ascii"))
     permit_fifo_reference = harness["permit_authority"]["permit_commit_fifo"]
     frames: list[bytes] = []
@@ -5143,6 +5169,63 @@ TOP_ALIAS_CASES = (
     ("direct-only-identity-alias", "directory-directory"),
 )
 
+SEAL_DOMAIN_CASES = (
+    ("schema", "value"),
+    ("schema", "extra-key"),
+    ("phase", "value"),
+    ("seal-manifest", "missing-sha"),
+    ("seal-manifest", "noncanonical-sha"),
+    ("static-role-closure", "missing"),
+    ("static-role-closure", "reordered"),
+    ("static-role-closure", "extra"),
+    ("static-role-closure", "extra-field"),
+    ("static-role-closure", "role"),
+    ("static-role-closure", "unit"),
+    ("static-role-closure", "owner"),
+    ("static-role-closure", "mode"),
+    ("static-role-closure", "plan-path"),
+    ("static-role-closure", "plan-sha256"),
+    ("static-role-closure", "program-path"),
+    ("static-role-closure", "program-sha256"),
+    ("static-role-closure", "cross-role-plan-permutation"),
+    ("static-role-closure", "cross-role-program-permutation"),
+    ("static-role-closure", "extra-valid-plan-substitution"),
+    ("static-role-closure", "plan-plan-alias"),
+    ("static-role-closure", "program-program-alias"),
+    ("static-role-closure", "plan-program-alias"),
+    ("armed-plan-program", "plan-path"),
+    ("armed-plan-program", "plan-sha256"),
+    ("armed-plan-program", "program-path"),
+    ("armed-plan-program", "program-sha256"),
+    ("armed-plan-program", "program-device"),
+    ("armed-plan-program", "program-inode"),
+    ("armed-plan-program", "program-mode"),
+    ("install-source", "path"),
+    ("install-source", "sha256"),
+    ("install-source", "device"),
+    ("install-source", "inode"),
+    ("install-source", "mode"),
+    ("installer", "path"),
+    ("installer", "sha256"),
+    ("installer", "device"),
+    ("installer", "inode"),
+    ("installer", "mode"),
+    ("preflight-class", "missing-role"),
+    ("preflight-class", "inventory-path"),
+    ("preflight-class", "inventory-sha256"),
+    ("preflight-class", "inventory-device"),
+    ("preflight-class", "inventory-inode"),
+    ("preflight-class", "inventory-mode"),
+    ("preflight-class", "static-path"),
+    ("preflight-class", "static-sha256"),
+    ("preflight-class", "coherent-decoy"),
+    ("duplicate-role", "file-file"),
+    ("duplicate-path", "file-file"),
+    ("duplicate-path", "manifest-file"),
+    ("duplicate-identity", "file-file"),
+    ("duplicate-identity", "manifest-file"),
+)
+
 
 def _tree_domain_arguments(fixture: C2EInventoryFixture) -> dict[str, Any]:
     return {name: fixture.arguments[name] for name in TREE_DOMAIN_ARGUMENTS}
@@ -5427,6 +5510,295 @@ def test_c2e_tree_domain_each_registered_axis_has_an_owner_isolated_delta(
 
     with pytest.raises(production.InstallerError):
         production._build_h11_tree_indirect_specs(**arguments)
+
+
+@pytest.mark.parametrize(
+    ("axis", "variant"),
+    SEAL_DOMAIN_CASES,
+    ids=lambda value: value,
+)
+def test_c2e_seal_domain_each_rejection_is_owned_first_by_the_seal_builder(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    axis: str,
+    variant: str,
+) -> None:
+    assert {case_axis for case_axis, _variant in SEAL_DOMAIN_CASES} | {
+        "extra-valid-row"
+    } == set(DOMAIN_NEGATIVE_AXES["_build_h11_seal_indirect_specs"])
+    fixture = _build_c2e_inventory_fixture(
+        tmp_path,
+        variant=(
+            "expanded"
+            if axis == "static-role-closure"
+            and variant == "extra-valid-plan-substitution"
+            else "canonical"
+        ),
+    )
+    production = fixture.production
+    arguments = dict(fixture.arguments)
+    seal = json.loads(json.dumps(fixture.documents["seal_receipt"]))
+    preflight = json.loads(json.dumps(fixture.documents["preflight_receipt"]))
+    install = json.loads(json.dumps(fixture.documents["install_receipt"]))
+    install_manifest = json.loads(json.dumps(fixture.documents["install_manifest"]))
+    harness = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+    armed = json.loads(json.dumps(fixture.documents["run_armed"]))
+
+    def seal_row(role: str) -> dict[str, Any]:
+        return next(row for row in seal["files"] if row["role"] == role)
+
+    def changed_sha(value: str) -> str:
+        return ("0" if value != "0" * 64 else "1") * 64
+
+    if axis == "schema":
+        if variant == "value":
+            seal["schema"] = "scion.invalid.seal.v1"
+        else:
+            seal["unexpected"] = True
+    elif axis == "phase":
+        seal["phase"] = "not-sealed"
+    elif axis == "seal-manifest":
+        if variant == "missing-sha":
+            seal["seal_manifest"].pop("sha256")
+        else:
+            seal["seal_manifest"]["sha256"] = "A" * 64
+    elif axis == "static-role-closure":
+        static_roles = harness["static_roles"]
+        if variant == "missing":
+            static_roles.pop()
+        elif variant == "reordered":
+            static_roles[0], static_roles[1] = static_roles[1], static_roles[0]
+        elif variant == "extra":
+            static_roles.append(json.loads(json.dumps(static_roles[-1])))
+        elif variant == "extra-field":
+            static_roles[0]["unexpected"] = True
+        elif variant == "role":
+            static_roles[1]["role"] = "foreign-observer"
+        elif variant == "unit":
+            static_roles[2]["unit"] = "scion-w3-wrong-close.service"
+        elif variant == "owner":
+            static_roles[0]["owner"] = "observer"
+        elif variant == "mode":
+            static_roles[1]["mode"] = "wrong-mode"
+        elif variant == "plan-path":
+            plan = static_roles[2]["plan"]
+            plan["path"] = str(Path(plan["path"]).with_name("wrong-close-plan.json"))
+        elif variant == "plan-sha256":
+            plan = static_roles[2]["plan"]
+            plan["sha256"] = changed_sha(plan["sha256"])
+        elif variant == "program-path":
+            program = static_roles[1]["program"]
+            program["path"] = str(
+                Path(program["path"]).with_name("wrong-observer-program.py")
+            )
+        elif variant == "program-sha256":
+            program = static_roles[1]["program"]
+            program["sha256"] = changed_sha(program["sha256"])
+        elif variant == "cross-role-plan-permutation":
+            static_roles[1]["plan"], static_roles[2]["plan"] = (
+                static_roles[2]["plan"],
+                static_roles[1]["plan"],
+            )
+        elif variant == "cross-role-program-permutation":
+            static_roles[1]["program"], static_roles[2]["program"] = (
+                static_roles[2]["program"],
+                static_roles[1]["program"],
+            )
+        elif variant == "extra-valid-plan-substitution":
+            row = seal_row("aaa-expanded-asset")
+            static_roles[2]["plan"] = {
+                "path": row["path"],
+                "sha256": row["sha256"],
+            }
+        elif variant == "plan-plan-alias":
+            static_roles[2]["plan"] = json.loads(
+                json.dumps(static_roles[1]["plan"])
+            )
+        elif variant == "program-program-alias":
+            static_roles[2]["program"] = json.loads(
+                json.dumps(static_roles[1]["program"])
+            )
+        else:
+            assert variant == "plan-program-alias"
+            static_roles[2]["plan"] = json.loads(
+                json.dumps(static_roles[2]["program"])
+            )
+    elif axis == "armed-plan-program":
+        if variant == "plan-path":
+            armed["plan_path"] = str(
+                Path(armed["plan_path"]).with_name("wrong-run-plan.json")
+            )
+        elif variant == "plan-sha256":
+            armed["plan_sha256"] = changed_sha(armed["plan_sha256"])
+        elif variant == "program-path":
+            armed["program"]["path"] = str(
+                Path(armed["program"]["path"]).with_name("wrong-run-program.py")
+            )
+        elif variant == "program-sha256":
+            program = armed["program"]
+            program["sha256"] = changed_sha(program["sha256"])
+        else:
+            field = variant.removeprefix("program-")
+            armed["program"]["identity"][field] += 1
+    elif axis == "install-source":
+        receipt_row = next(row for row in install["units"] if row["role"] == "run-fragment")
+        manifest_row = next(
+            row for row in install_manifest["units"] if row["role"] == "run-fragment"
+        )
+        source = receipt_row["source"]
+        if variant == "path":
+            changed = str(Path(source["path"]).with_name("wrong-run-fragment.service"))
+            source["path"] = changed
+            manifest_row["source"] = changed
+        elif variant == "sha256":
+            changed = changed_sha(source["sha256"])
+            source["sha256"] = changed
+            manifest_row["sha256"] = changed
+        elif variant in {"device", "inode"}:
+            source[variant] = str(int(source[variant]) + 1)
+        else:
+            assert variant == "mode"
+            source["mode"] = "0400"
+    elif axis == "installer":
+        installer = install["installer"]
+        if variant == "path":
+            installer["path"] = str(
+                Path(installer["path"]).with_name("wrong-root-installer.py")
+            )
+        elif variant == "sha256":
+            installer["sha256"] = changed_sha(installer["sha256"])
+        elif variant in {"device", "inode"}:
+            installer[variant] = str(int(installer[variant]) + 1)
+        else:
+            assert variant == "mode"
+            installer["mode"] = "0400"
+    elif axis == "preflight-class":
+        if variant == "missing-role":
+            seal["files"] = [
+                row for row in seal["files"] if row["role"] != "preflight-manifest"
+            ]
+        elif variant.startswith("inventory-"):
+            field = variant.removeprefix("inventory-")
+            inventory = preflight["inventory_manifest"]
+            if field == "path":
+                inventory[field] = str(
+                    Path(inventory[field]).with_name("wrong-static-inventory.tsv")
+                )
+            elif field == "sha256":
+                inventory[field] = changed_sha(inventory[field])
+            elif field in {"device", "inode"}:
+                inventory[field] = str(int(inventory[field]) + 1)
+            else:
+                assert field == "mode"
+                inventory[field] = "0400"
+        elif variant.startswith("static-"):
+            field = variant.removeprefix("static-")
+            inventory = harness["static_inventory"]
+            if field == "path":
+                inventory[field] = str(
+                    Path(inventory[field]).with_name("wrong-static-inventory.tsv")
+                )
+            else:
+                assert field == "sha256"
+                inventory[field] = changed_sha(inventory[field])
+        else:
+            assert variant == "coherent-decoy"
+            row = seal_row("preflight-manifest")
+            row["path"] = str(Path(row["path"]).with_name("decoy-static-inventory.tsv"))
+            row["sha256"] = changed_sha(row["sha256"])
+            row["device"] = str(int(row["device"]) + 1000)
+            row["inode"] = str(int(row["inode"]) + 1000)
+            preflight["inventory_manifest"] = {
+                key: row[key]
+                for key in ("path", "sha256", "device", "inode", "mode")
+            }
+    elif axis == "duplicate-role":
+        seal_row("close-plan")["role"] = "run-plan"
+    elif axis in {"duplicate-path", "duplicate-identity"}:
+        source = seal_row("run-plan")
+        target = (
+            seal_row("close-plan")
+            if variant == "file-file"
+            else seal["seal_manifest"]
+        )
+        if axis == "duplicate-path":
+            target["path"] = source["path"]
+        else:
+            target["device"] = source["device"]
+            target["inode"] = source["inode"]
+    else:
+        raise AssertionError((axis, variant))
+
+    for name, document in (
+        ("seal_receipt", seal),
+        ("preflight_receipt", preflight),
+        ("install_receipt", install),
+        ("install_manifest", install_manifest),
+        ("harness_manifest", harness),
+        ("run_armed", armed),
+    ):
+        _replace_inventory_document(
+            fixture,
+            arguments,
+            name,
+            document,
+            label=f"C2e SEAL {axis} {variant} {name}",
+        )
+
+    owner_order = (
+        "_prove_h11_direct_authority_bindings",
+        "_build_h11_tree_indirect_specs",
+        "_build_h11_seal_indirect_specs",
+    )
+    originals = {name: getattr(production, name) for name in owner_order}
+    entered: list[str] = []
+    completed: list[str] = []
+
+    def recording_owner(name: str) -> Any:
+        def invoke(**kwargs: Any) -> Any:
+            entered.append(name)
+            result = originals[name](**kwargs)
+            completed.append(name)
+            return result
+
+        return invoke
+
+    for name in owner_order:
+        monkeypatch.setattr(production, name, recording_owner(name))
+
+    def forbidden_later(**_kwargs: Any) -> Any:
+        pytest.fail(f"C2e SEAL {axis} {variant} escaped into a later domain")
+
+    monkeypatch.setattr(
+        production,
+        "_prove_h11_preflight_snapshot_bindings",
+        forbidden_later,
+    )
+    monkeypatch.setattr(production, "_build_h11_install_target_specs", forbidden_later)
+    with pytest.raises(production.InstallerError):
+        production._build_h11_indirect_authority_inventory(**arguments)
+    assert entered == list(owner_order)
+    assert completed == list(owner_order[:2])
+
+
+def test_c2e_seal_domain_accepts_extra_valid_rows_and_merges_preflight_once(
+    tmp_path: Path,
+) -> None:
+    fixture = _build_c2e_inventory_fixture(tmp_path, variant="expanded")
+    _fixture_uid, _fixture_gid, _validated, specs = (
+        fixture.production._build_h11_indirect_authority_inventory(**fixture.arguments)
+    )
+    assert len(specs) == len(CANONICAL_INDIRECT_CLASSES) + 2
+    assert tuple(
+        (spec.equivalence_class, spec.semantic_role, spec.install_ordinal)
+        for spec in specs
+    ) == EXPANDED_INDIRECT_CLASSES
+    assert tuple(
+        spec.semantic_role
+        for spec in specs
+        if spec.semantic_role in {"aaa-expanded-asset", "zzz-expanded-asset"}
+    ) == ("aaa-expanded-asset", "zzz-expanded-asset")
+    assert sum(spec.equivalence_class == "preflight/inventory" for spec in specs) == 1
 
 
 @pytest.mark.parametrize("axis", FINAL_PROOF_OBSERVED_AXES)
