@@ -4277,6 +4277,7 @@ def _c2e_instrument_actual_close(
     flow: Any,
     descriptors: tuple[int, ...],
     failure_indices: tuple[int, ...],
+    failure_objects: dict[int, OSError] | None = None,
 ) -> tuple[
     list[tuple[int, Any, BaseException | None]],
     list[int],
@@ -4290,10 +4291,15 @@ def _c2e_instrument_actual_close(
     }
     visits: list[tuple[int, Any, BaseException | None]] = []
     close_counts = [0 for _index in SWEEP_ORDER]
-    failures = {
-        index: OSError(f"C2E close matrix failure at slot {index}")
-        for index in failure_indices
-    }
+    failures = (
+        {
+            index: OSError(f"C2E close matrix failure at slot {index}")
+            for index in failure_indices
+        }
+        if failure_objects is None
+        else dict(failure_objects)
+    )
+    assert tuple(failures) == failure_indices
 
     def record_close_slot_once(
         self: Any,
@@ -4413,22 +4419,35 @@ def test_c2e_actual_flow_close_terminal_state_is_zero_slot_noop(
     )
     real_close = os.close
     visits: list[Any] = []
+    sweep_visits: list[Any] = []
 
     def record_unexpected_slot_access(*args: Any, **kwargs: Any) -> None:
         visits.append((args, kwargs))
+
+    def record_unexpected_sweep(*args: Any, **kwargs: Any) -> None:
+        sweep_visits.append((args, kwargs))
 
     monkeypatch.setattr(
         production.H11RootAuthorizationFlow,
         "_close_slot_once",
         record_unexpected_slot_access,
     )
+    monkeypatch.setattr(
+        production.H11RootAuthorizationFlow,
+        "_sweep_slots",
+        record_unexpected_sweep,
+    )
     try:
         flow.close()
         flow.close()
         assert visits == []
+        assert sweep_visits == []
         assert flow.state is state
         if bind_all_slots:
             assert tuple(slot._descriptor for slot in flow._slots) == descriptors
+            assert len(tuple(os.fstat(descriptor) for descriptor in descriptors)) == len(
+                SWEEP_ORDER
+            )
     finally:
         _c2e_cleanup_actual_close_flow(flow, real_close)
 
@@ -4484,6 +4503,60 @@ def test_c2e_actual_flow_close_prewrite_sweeps_all_slots_once(
             getattr(close_error, "__notes__", []) == []
             for close_error in failures.values()
         )
+
+        visits.clear()
+        before_repeat = tuple(close_counts)
+        flow.close()
+        assert visits == []
+        assert tuple(close_counts) == before_repeat
+    finally:
+        _c2e_cleanup_actual_close_flow(flow, real_close)
+
+
+@pytest.mark.parametrize(
+    "failure_index",
+    SWEEP_ORDER,
+    ids=tuple(f"slot-{index}" for index in SWEEP_ORDER),
+)
+def test_c2e_actual_sweep_fixed_primary_exhausts_every_failure_index(
+    monkeypatch: pytest.MonkeyPatch,
+    failure_index: int,
+) -> None:
+    production = _load_installer()
+    flow, descriptors = _c2e_actual_close_flow(
+        production,
+        state=production.H11RootAuthorizationState.AUTHORITIES_RETAINED,
+        boundary=production.H11RootCommitBoundary.PREWRITE,
+        bind_all_slots=True,
+    )
+    visits, close_counts, failures, real_close = _c2e_instrument_actual_close(
+        monkeypatch,
+        production,
+        flow,
+        descriptors,
+        (failure_index,),
+    )
+    primary = production.InstallerError("H11 C2e fixed teardown primary")
+    try:
+        with pytest.raises(production.InstallerError) as caught:
+            flow._fail(primary)
+        assert caught.value is primary
+        assert str(primary) == "H11 C2e fixed teardown primary"
+        assert flow.state is production.H11RootAuthorizationState.FAILED_PREWRITE
+        assert tuple(index for index, _state, _error in visits) == SWEEP_ORDER
+        assert all(
+            state is production.H11RootAuthorizationState.FAILED_PREWRITE
+            for _index, state, _error in visits
+        )
+        assert tuple(error is primary for _index, _state, error in visits) == tuple(
+            index <= failure_index for index in SWEEP_ORDER
+        )
+        assert getattr(primary, "__notes__", []) == [
+            "H11 ownership teardown secondary close failure"
+        ]
+        assert getattr(failures[failure_index], "__notes__", []) == []
+        assert close_counts == [1 for _index in SWEEP_ORDER]
+        assert all(slot._descriptor == -1 for slot in flow._slots)
 
         visits.clear()
         before_repeat = tuple(close_counts)
@@ -4612,7 +4685,10 @@ def test_c2e_actual_sweep_uses_base_note_channel_against_hostile_override(
 
     primary = HostileNotePrimary("C2E hostile note-channel primary")
     try:
-        flow._sweep_slots(active_error=primary)
+        with pytest.raises(HostileNotePrimary) as caught:
+            flow._fail(primary)
+        assert caught.value is primary
+        assert flow.state is production.H11RootAuthorizationState.FAILED_PREWRITE
         assert tuple(index for index, _state, _error in visits) == SWEEP_ORDER
         assert tuple(error is primary for _index, _state, error in visits) == (
             True,
@@ -4630,6 +4706,115 @@ def test_c2e_actual_sweep_uses_base_note_channel_against_hostile_override(
         )
     finally:
         _c2e_cleanup_actual_close_flow(flow, real_close)
+
+
+def test_c2e_actual_sweep_survives_hostile_secondary_and_poisoned_notes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    production = _load_installer()
+    flow, descriptors = _c2e_actual_close_flow(
+        production,
+        state=production.H11RootAuthorizationState.AUTHORITIES_RETAINED,
+        boundary=production.H11RootCommitBoundary.PREWRITE,
+        bind_all_slots=True,
+    )
+    hostile_channel_calls: list[str] = []
+
+    class HostileSecondary(OSError):
+        def __str__(self) -> str:
+            hostile_channel_calls.append("__str__")
+            raise AssertionError("secondary __str__ was invoked")
+
+        def __repr__(self) -> str:
+            hostile_channel_calls.append("__repr__")
+            raise AssertionError("secondary __repr__ was invoked")
+
+    failure_indices = (0, 11, 22)
+    failure_objects = {
+        index: HostileSecondary(index) for index in failure_indices
+    }
+    visits, close_counts, failures, real_close = _c2e_instrument_actual_close(
+        monkeypatch,
+        production,
+        flow,
+        descriptors,
+        failure_indices,
+        failure_objects,
+    )
+    primary = production.InstallerError("H11 C2e poisoned note-channel primary")
+    poisoned_notes = ("C2E poisoned notes",)
+    primary.__notes__ = poisoned_notes
+    try:
+        with pytest.raises(production.InstallerError) as caught:
+            flow._fail(primary)
+        assert caught.value is primary
+        assert flow.state is production.H11RootAuthorizationState.FAILED_PREWRITE
+        assert tuple(index for index, _state, _error in visits) == SWEEP_ORDER
+        assert tuple(error is primary for _index, _state, error in visits) == (
+            True,
+            *(False for _index in SWEEP_ORDER[1:]),
+        )
+        assert close_counts == [1 for _index in SWEEP_ORDER]
+        assert all(slot._descriptor == -1 for slot in flow._slots)
+        assert hostile_channel_calls == []
+        assert primary.__notes__ is poisoned_notes
+        assert tuple(failures) == failure_indices
+    finally:
+        _c2e_cleanup_actual_close_flow(flow, real_close)
+
+
+def test_c2e_actual_partial_bitmap_excludes_early_detached_holes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    production = _load_installer()
+    flow, descriptors = _c2e_actual_close_flow(
+        production,
+        state=production.H11RootAuthorizationState.AUTHORITIES_RETAINED,
+        boundary=production.H11RootCommitBoundary.PREWRITE,
+        bind_all_slots=True,
+    )
+    bound_indices = (2, 4, 7, 11, 16, 20, 22)
+    bound_bitmap = tuple(index in bound_indices for index in SWEEP_ORDER)
+    failure_indices = expected_secondary_indices(bound_bitmap)
+    assert failure_indices == (2, 11, 22)
+    real_close = os.close
+    hole_indices = tuple(index for index in SWEEP_ORDER if index not in bound_indices)
+    assert 0 in hole_indices
+    for index in hole_indices:
+        early_descriptor = flow._slots[index].detach()
+        assert early_descriptor == descriptors[index]
+        real_close(early_descriptor)
+
+    visits, close_counts, failures, instrumented_close = (
+        _c2e_instrument_actual_close(
+            monkeypatch,
+            production,
+            flow,
+            descriptors,
+            failure_indices,
+        )
+    )
+    primary = production.InstallerError("H11 C2e fixed teardown primary")
+    try:
+        with pytest.raises(production.InstallerError) as caught:
+            flow._fail(primary)
+        assert caught.value is primary
+        assert tuple(index for index, _state, _error in visits) == SWEEP_ORDER
+        assert tuple(close_counts) == tuple(
+            1 if index in bound_indices else 0 for index in SWEEP_ORDER
+        )
+        assert close_counts[0] == 0
+        assert all(flow._slots[index]._descriptor == -1 for index in SWEEP_ORDER)
+        assert tuple(failures) == failure_indices
+        assert all(
+            getattr(close_error, "__notes__", []) == []
+            for close_error in failures.values()
+        )
+        assert getattr(primary, "__notes__", []) == [
+            "H11 ownership teardown secondary close failure"
+        ]
+    finally:
+        _c2e_cleanup_actual_close_flow(flow, instrumented_close)
 
 
 def test_c2e_domain_single_delta_matrix_is_closed_and_nonduplicated() -> None:
