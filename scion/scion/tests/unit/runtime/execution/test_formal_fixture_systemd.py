@@ -5711,132 +5711,232 @@ def test_root_c2a_accepts_non_authority_armed_payload_drift(
     assert frames == (installer.H11_PERMIT_COMMITTED_BYTES,)
 
 
-def test_root_c2a_rejects_pinned_armed_owner_outside_fixture_authority(
+def test_root_c2a_rejects_run_armed_owner_reference_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
-    original_pin = installer._pin_h11_json_source
-
-    def wrong_owner_pin(*args: Any, **kwargs: Any) -> tuple[Any, ...]:
-        result = original_pin(*args, **kwargs)
-        if kwargs.get("label") == "H11 run ARMED":
-            source = dict(result[3])
-            source["uid"] = str(int(source["uid"]) + 1)
-            result = (*result[:3], source)
-        return result
-
-    monkeypatch.setattr(installer, "_pin_h11_json_source", wrong_owner_pin)
-    with pytest.raises(installer.InstallerError, match="ARMED owner"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    authorization = json.loads(paths["authorization"].read_text())
+    authorization["run_armed"]["uid"] = str(
+        int(authorization["run_armed"]["uid"]) + 1
+    )
+    _root_c2a_write_json(paths["authorization"], authorization)
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match=(
+            r"\AH11 run ARMED differs from authorization authority\Z"
+        ),
+    )
 
 
 def test_root_c2a_rejects_authorizer_regular_source_inode_alias(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
-    original_pin = installer._pin_h11_json_source
-    authorization_identity: tuple[str, str] | None = None
+    authorization_info = paths["authorization"].lstat()
+    permit_ready_info = paths["ready"].lstat()
+    authorization = json.loads(paths["authorization"].read_text())
+    authorization["permit_ready"]["device"] = str(authorization_info.st_dev)
+    authorization["permit_ready"]["inode"] = str(authorization_info.st_ino)
+    _root_c2a_write_json(paths["authorization"], authorization)
+    original_stat = os.stat
+    original_fstat = os.fstat
 
-    def aliasing_pin(*args: Any, **kwargs: Any) -> tuple[Any, ...]:
-        nonlocal authorization_identity
-        result = original_pin(*args, **kwargs)
-        label = kwargs.get("label")
-        if label == "H11 authorization manifest":
-            authorization_identity = (result[3]["device"], result[3]["inode"])
-        elif label == "H11 PERMIT_READY":
-            assert authorization_identity is not None
-            source = dict(result[3])
-            source["device"], source["inode"] = authorization_identity
-            result = (*result[:3], source)
-        return result
-
-    monkeypatch.setattr(installer, "_pin_h11_json_source", aliasing_pin)
-    with pytest.raises(installer.InstallerError, match="regular source aliases"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
+    def aliased_ready_info(info: os.stat_result) -> SimpleNamespace:
+        return SimpleNamespace(
+            st_mode=info.st_mode,
+            st_size=info.st_size,
+            st_dev=authorization_info.st_dev,
+            st_ino=authorization_info.st_ino,
+            st_uid=info.st_uid,
+            st_gid=info.st_gid,
         )
+
+    def aliasing_stat(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *,
+        dir_fd: int | None = None,
+        follow_symlinks: bool = True,
+    ) -> os.stat_result | SimpleNamespace:
+        info = original_stat(
+            path,
+            dir_fd=dir_fd,
+            follow_symlinks=follow_symlinks,
+        )
+        if (info.st_dev, info.st_ino) == (
+            permit_ready_info.st_dev,
+            permit_ready_info.st_ino,
+        ):
+            return aliased_ready_info(info)
+        return info
+
+    def aliasing_fstat(
+        descriptor: int,
+    ) -> os.stat_result | SimpleNamespace:
+        info = original_fstat(descriptor)
+        if (info.st_dev, info.st_ino) == (
+            permit_ready_info.st_dev,
+            permit_ready_info.st_ino,
+        ):
+            return aliased_ready_info(info)
+        return info
+
+    monkeypatch.setattr(os, "stat", aliasing_stat)
+    monkeypatch.setattr(os, "fstat", aliasing_fstat)
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match=(
+            r"\AH11 permit-ready-source class or identity drifted\Z"
+        ),
+    )
 
 
 @pytest.mark.parametrize(
-    "mutation",
-    ("armed-output", "request-transaction", "static-plan-transaction"),
+    ("mutation", "exact_error_match"),
+    (
+        (
+            "armed-output",
+            r"\AH11 acquisition exec-stop-post ARMED path drifted\Z",
+        ),
+        (
+            "static-plan-transaction",
+            r"\AH11 SEAL static role exec-stop-post plan is unbound\Z",
+        ),
+        (
+            "armed-frozen-root",
+            r"\AH11 acquisition exec-stop-post ARMED path drifted\Z",
+        ),
+    ),
 )
-def test_root_c2a_rejects_global_path_authority_alias(
+def test_root_c2a_rejects_tree_or_seal_authority_drift(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     mutation: str,
+    exact_error_match: str,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
     manifest = json.loads(paths["manifest"].read_text())
-    armed = json.loads(paths["armed"].read_text())
     if mutation == "armed-output":
         manifest["acquisitions"][1]["armed_receipt_path"] = manifest["outputs"][0][
             "path"
         ]
-    elif mutation == "request-transaction":
-        armed["request_path"] = manifest["permit_authority"]["permit_staging_path"]
-    else:
+    elif mutation == "static-plan-transaction":
         manifest["static_roles"][1]["plan"] = {
             "path": manifest["permit_authority"]["permit_ledger_staging_path"],
             "sha256": "f" * 64,
         }
-    _root_c2a_write_json(paths["manifest"], manifest)
-    paths["armed"].chmod(0o600)
-    _write(paths["armed"], armed)
-    paths["armed"].chmod(0o600)
-    _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError, match="path authority aliases"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
-
-
-@pytest.mark.parametrize("mutation", ("armed", "request"))
-def test_root_c2a_rejects_frozen_root_alias_from_runtime_authority(
-    tmp_path: Path,
-    mutation: str,
-) -> None:
-    paths = _root_c2a_session_model(tmp_path)
-    manifest = json.loads(paths["manifest"].read_text())
-    frozen_root = paths["manifest"].parents[3] / "frozen"
-    if mutation == "armed":
-        manifest["acquisitions"][1]["armed_receipt_path"] = str(frozen_root)
-        _root_c2a_write_json(paths["manifest"], manifest)
     else:
-        armed = json.loads(paths["armed"].read_text())
-        armed["request_path"] = str(frozen_root)
-        paths["armed"].chmod(0o600)
-        _write(paths["armed"], armed)
-        paths["armed"].chmod(0o600)
-    _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError, match="frozen-root"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
+        manifest["acquisitions"][1]["armed_receipt_path"] = str(
+            paths["manifest"].parents[3] / "frozen"
         )
+    _root_c2a_write_json(paths["manifest"], manifest)
+    _root_c2a_rebind_sources(paths)
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match=exact_error_match,
+    )
 
 
-@pytest.mark.parametrize("source", ("authorization", "manifest", "ready", "armed"))
+@pytest.mark.parametrize(
+    ("source", "exact_error_match"),
+    (
+        (
+            "authorization",
+            r"\Aretained H11 authorization manifest drifted\Z",
+        ),
+        ("manifest", r"\Aretained H11 harness manifest drifted\Z"),
+        ("ready", r"\Aretained H11 PERMIT_READY drifted\Z"),
+        ("armed", r"\Aretained H11 run ARMED drifted\Z"),
+    ),
+)
 def test_root_c2a_revalidate_rejects_same_byte_source_replacement(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     source: str,
+    exact_error_match: str,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
-    session = installer.H11RootAuthorizerSession.open(
-        paths["authorization"], require_root=False
-    )
     path = paths[source]
     displaced = path.with_name(f"{path.name}.displaced")
     raw = path.read_bytes()
     mode = stat.S_IMODE(path.lstat().st_mode)
-    path.rename(displaced)
-    path.write_bytes(raw)
-    path.chmod(mode)
+    original_identity = (path.lstat().st_dev, path.lstat().st_ino)
+    original_open = os.open
+    main_thread = threading.get_ident()
+    opened_descriptors: list[int] = []
+    replacement_done = False
+    ready_commit_path = (
+        paths["authorization"].parents[3]
+        / "fifo"
+        / "h11-ready-committed.fifo"
+    )
+
+    def replacing_open(
+        opened_path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode_bits: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        nonlocal replacement_done
+        decoded = os.fsdecode(opened_path)
+        if (
+            not replacement_done
+            and decoded.startswith("/proc/self/fd/")
+            and flags & os.O_ACCMODE == os.O_RDONLY
+            and not flags & os.O_PATH
+            and Path(os.readlink(decoded)) == ready_commit_path
+        ):
+            path.rename(displaced)
+            path.write_bytes(raw)
+            path.chmod(mode)
+            replacement_done = True
+        descriptor = (
+            original_open(opened_path, flags, mode_bits)
+            if dir_fd is None
+            else original_open(
+                opened_path,
+                flags,
+                mode_bits,
+                dir_fd=dir_fd,
+            )
+        )
+        if threading.get_ident() == main_thread:
+            opened_descriptors.append(descriptor)
+        return descriptor
+
+    monkeypatch.setattr(os, "open", replacing_open)
+    peer_errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2e_atomic_flow_ready_only_peer,
+        args=(paths, peer_errors),
+    )
+    peer.start()
+    flow = installer.H11RootAuthorizationFlow(
+        paths["authorization"],
+        require_root=False,
+    )
     try:
-        with pytest.raises(installer.InstallerError, match="revalidate|drifted"):
-            session.revalidate()
+        with pytest.raises(
+            installer.InstallerError,
+            match=exact_error_match,
+        ):
+            flow.authorize_once()
     finally:
-        session.close()
+        flow.close()
+    peer.join()
+    assert peer_errors == []
+    assert replacement_done is True
+    assert (path.lstat().st_dev, path.lstat().st_ino) != original_identity
+    assert flow.state is installer.H11RootAuthorizationState.FAILED_PREWRITE
+    assert len(set(opened_descriptors)) == len(opened_descriptors)
+    for descriptor in opened_descriptors:
+        with pytest.raises(OSError):
+            os.fstat(descriptor)
+    assert not (paths["authorization"].parent / "PERMIT.pending").exists()
+    assert not (paths["authorization"].parent / "PERMIT.json").exists()
 
 
 @pytest.mark.parametrize("failure", ("manifest", "ready", "armed"))
