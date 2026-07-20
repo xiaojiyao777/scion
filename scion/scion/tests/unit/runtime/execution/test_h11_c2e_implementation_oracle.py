@@ -4835,6 +4835,131 @@ def test_c2e_domain_single_delta_matrix_is_closed_and_nonduplicated() -> None:
 
 
 @pytest.mark.parametrize(
+    "axis",
+    DOMAIN_NEGATIVE_AXES["_prove_h11_direct_authority_bindings"],
+)
+def test_c2e_direct_domain_axes_are_real_producer_single_deltas_before_observation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    axis: str,
+) -> None:
+    local_root = tmp_path / "local"
+    local_root.mkdir()
+    fixture = _build_c2e_inventory_fixture(local_root)
+    arguments = dict(fixture.arguments)
+    decoder = fixture.production._decode_h11_canonical_frozen_object
+
+    def replace_source_field(reference_name: str, field: str, value: str) -> None:
+        changed = dict(arguments[reference_name])
+        changed[field] = value
+        arguments[reference_name] = _frozen_json(changed)
+
+    def replace_document(document_name: str, changed: dict[str, Any]) -> None:
+        arguments[document_name] = decoder(
+            _canonical_json(changed),
+            label=f"C2e direct {axis} producer single delta",
+        )
+
+    if axis == "source-class":
+        replace_source_field("authorization_source_reference", "mode", "0600")
+    elif axis == "source-path":
+        replace_source_field(
+            "harness_source_reference",
+            "path",
+            str(tmp_path / "wrong-harness-source.json"),
+        )
+    elif axis == "source-hash":
+        replace_source_field("harness_source_reference", "sha256", "0" * 64)
+    elif axis == "source-identity":
+        replace_source_field("harness_source_reference", "inode", "1")
+    elif axis == "authorization-projection":
+        changed = json.loads(json.dumps(fixture.documents["authorization_manifest"]))
+        changed["formal_root"] = str(tmp_path / "wrong-formal-root")
+        replace_document("authorization_manifest", changed)
+    elif axis == "ready-projection":
+        changed = json.loads(json.dumps(fixture.documents["permit_ready"]))
+        changed["harness_manifest"]["sha256"] = "1" * 64
+        replace_document("permit_ready", changed)
+    elif axis == "armed-projection":
+        changed = json.loads(json.dumps(fixture.documents["run_armed"]))
+        changed["actor"]["boot_id"] = "22222222-2222-2222-2222-222222222222"
+        replace_document("run_armed", changed)
+    elif axis == "harness-projection":
+        changed = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+        changed["run_unit"] = "scion-w3-direct-delta.service"
+        replace_document("harness_manifest", changed)
+    elif axis == "directory-chain":
+        changed = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+        changed["permit_authority"]["directory_chain"][0]["inode"] = "1"
+        replace_document("harness_manifest", changed)
+    elif axis == "slot19-slot20-binding":
+        changed = json.loads(json.dumps(fixture.documents["install_manifest"]))
+        changed["receipt_path"] = str(tmp_path / "wrong-install-receipt.json")
+        replace_document("install_manifest", changed)
+    elif axis == "missing":
+        changed = json.loads(json.dumps(fixture.documents["authorization_manifest"]))
+        changed.pop("formal_root")
+        replace_document("authorization_manifest", changed)
+    elif axis == "extra":
+        changed = json.loads(json.dumps(fixture.documents["authorization_manifest"]))
+        changed["unexpected"] = "single-delta"
+        replace_document("authorization_manifest", changed)
+    elif axis == "duplicate":
+        changed = dict(arguments["authorization_source_reference"])
+        harness_source = dict(arguments["harness_source_reference"])
+        changed["device"] = harness_source["device"]
+        changed["inode"] = harness_source["inode"]
+        arguments["authorization_source_reference"] = _frozen_json(changed)
+    else:
+        assert axis == "foreign-flow"
+        foreign_root = tmp_path / "foreign"
+        foreign_root.mkdir()
+        foreign_fixture = _build_c2e_inventory_fixture(foreign_root)
+        for document_name in ("install_receipt", "install_manifest"):
+            arguments[document_name] = foreign_fixture.arguments[document_name]
+        for reference_name in (
+            "install_receipt_source_reference",
+            "install_manifest_source_reference",
+        ):
+            arguments[reference_name] = foreign_fixture.arguments[reference_name]
+
+    calls: list[str] = []
+    direct = fixture.production._prove_h11_direct_authority_bindings
+
+    def recording_direct(**kwargs: Any) -> None:
+        calls.append("direct")
+        direct(**kwargs)
+
+    def forbidden_later_domain(**_kwargs: Any) -> None:
+        raise AssertionError(
+            f"C2e direct {axis} delta escaped into a later domain"
+        )
+
+    monkeypatch.setattr(
+        fixture.production,
+        "_prove_h11_direct_authority_bindings",
+        recording_direct,
+    )
+    for helper_name in (
+        "_build_h11_tree_indirect_specs",
+        "_build_h11_seal_indirect_specs",
+        "_prove_h11_preflight_snapshot_bindings",
+        "_build_h11_install_target_specs",
+    ):
+        monkeypatch.setattr(fixture.production, helper_name, forbidden_later_domain)
+    if axis == "duplicate":
+        with pytest.raises(
+            fixture.production.InstallerError,
+            match=r"\AH11 harness-source class or identity drifted\Z",
+        ):
+            fixture.production._build_h11_indirect_authority_inventory(**arguments)
+    else:
+        with pytest.raises(fixture.production.InstallerError):
+            fixture.production._build_h11_indirect_authority_inventory(**arguments)
+    assert calls == ["direct"]
+
+
+@pytest.mark.parametrize(
     ("variant", "expected_classes"),
     (
         ("canonical", CANONICAL_INDIRECT_CLASSES),

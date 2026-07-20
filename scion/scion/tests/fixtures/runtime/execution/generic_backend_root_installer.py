@@ -3401,6 +3401,40 @@ def _prove_h11_direct_authority_bindings(
         ),
         label="H11 PERMIT_READY receipt",
     )
+    run_armed = _h11_exact_object_fields(
+        run_armed,
+        (
+            "actor",
+            "plan_path",
+            "plan_sha256",
+            "program",
+            "ready_fifo",
+            "ready_sha256",
+            "receipt_path",
+            "release_fifo",
+            "release_sha256",
+            "request_path",
+            "request_sha256",
+            "scenario",
+            "schema",
+            "unit",
+        ),
+        label="H11 run ARMED",
+    )
+    actor = _h11_exact_object_fields(
+        _h11_object_member(run_armed, "actor", label="H11 run ARMED"),
+        (
+            "boot_id",
+            "invocation_id",
+            "pid",
+            "proc_cgroup_raw",
+            "session_id",
+            "starttime",
+            "stop_selector_environment",
+            "unified_cgroup",
+        ),
+        label="H11 run ARMED actor",
+    )
     harness_run_unit = _h11_text(
         _h11_object_member(
             harness_manifest,
@@ -3408,6 +3442,22 @@ def _prove_h11_direct_authority_bindings(
             label="H11 harness manifest",
         ),
         label="H11 harness manifest.run_unit",
+    )
+    ready_boot_id = _h11_text(
+        _h11_object_member(
+            permit_ready,
+            "boot_id",
+            label="H11 PERMIT_READY receipt",
+        ),
+        label="H11 PERMIT_READY receipt.boot_id",
+    )
+    ready_invocation_id = _h11_text(
+        _h11_object_member(
+            permit_ready,
+            "invocation_id",
+            label="H11 PERMIT_READY receipt",
+        ),
+        label="H11 PERMIT_READY receipt.invocation_id",
     )
     if (
         _h11_text(
@@ -3506,47 +3556,360 @@ def _prove_h11_direct_authority_bindings(
             label="H11 PERMIT_READY receipt",
         )
         != permit_authority
+        or re.fullmatch(r"scion-w3-[A-Za-z0-9_.:-]+\.service", harness_run_unit)
+        is None
+        or re.fullmatch(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            ready_boot_id,
+        )
+        is None
+        or re.fullmatch(r"[0-9a-f]{32}", ready_invocation_id) is None
+        or _h11_text(
+            _h11_object_member(run_armed, "schema", label="H11 run ARMED"),
+            label="H11 run ARMED.schema",
+        )
+        != "scion.generic_backend.systemd_adversary_armed.v1"
+        or _h11_text(
+            _h11_object_member(run_armed, "scenario", label="H11 run ARMED"),
+            label="H11 run ARMED.scenario",
+        )
+        != "h11-unbounded-hold"
+        or _h11_text(
+            _h11_object_member(run_armed, "unit", label="H11 run ARMED"),
+            label="H11 run ARMED.unit",
+        )
+        != harness_run_unit
+        or _h11_text(
+            _h11_object_member(actor, "boot_id", label="H11 run ARMED actor"),
+            label="H11 run ARMED actor.boot_id",
+        )
+        != ready_boot_id
+        or _h11_text(
+            _h11_object_member(
+                actor,
+                "invocation_id",
+                label="H11 run ARMED actor",
+            ),
+            label="H11 run ARMED actor.invocation_id",
+        )
+        != ready_invocation_id
     ):
         _fail("H11 direct wire schema or phase cross-binding drifted")
-    sources = (
-        authorization_source_reference,
-        harness_source_reference,
-        install_receipt_source_reference,
-        install_manifest_source_reference,
-        tree_receipt_source_reference,
-        seal_receipt_source_reference,
-        preflight_receipt_source_reference,
-        permit_ready_source_reference,
-        run_armed_source_reference,
+    source_rows = (
+        ("authorization-source", authorization_source_reference, "0444"),
+        ("harness-source", harness_source_reference, "0444"),
+        ("install-receipt-source", install_receipt_source_reference, "0444"),
+        ("install-manifest-source", install_manifest_source_reference, "0444"),
+        ("tree-receipt-source", tree_receipt_source_reference, "0444"),
+        ("seal-receipt-source", seal_receipt_source_reference, "0444"),
+        ("preflight-receipt-source", preflight_receipt_source_reference, "0444"),
+        ("permit-ready-source", permit_ready_source_reference, "0444"),
+        ("run-armed-source", run_armed_source_reference, "0600"),
     )
-    if any(
-        type(source) is not tuple
-        or tuple(key for key, _value in source)
-        != ("device", "gid", "inode", "mode", "path", "sha256", "uid")
-        for source in sources
-    ):
-        _fail("H11 direct source references are not exact frozen full references")
+    source_paths: set[Path] = set()
+    source_identities: set[tuple[int, int]] = set()
+    for label, source, expected_mode in source_rows:
+        source = _h11_exact_object_fields(
+            source,
+            ("device", "gid", "inode", "mode", "path", "sha256", "uid"),
+            label=f"H11 {label}",
+        )
+        source_values = dict(source)
+        source_path = _h11_path(
+            source_values["path"],
+            label=f"H11 {label}.path",
+        )
+        source_device = _h11_uint(
+            source_values["device"],
+            label=f"H11 {label}.device",
+        )
+        source_inode = _h11_uint(
+            source_values["inode"],
+            label=f"H11 {label}.inode",
+        )
+        _h11_uint(source_values["uid"], label=f"H11 {label}.uid")
+        _h11_uint(source_values["gid"], label=f"H11 {label}.gid")
+        _h11_sha256_text(
+            source_values["sha256"],
+            label=f"H11 {label}.sha256",
+        )
+        if (
+            source_values["mode"] != expected_mode
+            or source_path in source_paths
+            or (source_device, source_inode) in source_identities
+        ):
+            _fail(f"H11 {label} class or identity drifted")
+        source_paths.add(source_path)
+        source_identities.add((source_device, source_inode))
+
+    authorization_source_values = dict(authorization_source_reference)
+    harness_source_values = dict(harness_source_reference)
+    install_receipt_source_values = dict(install_receipt_source_reference)
+    install_manifest_source_values = dict(install_manifest_source_reference)
+    tree_receipt_source_values = dict(tree_receipt_source_reference)
+    seal_receipt_source_values = dict(seal_receipt_source_reference)
+    preflight_receipt_source_values = dict(preflight_receipt_source_reference)
+    permit_ready_source_values = dict(permit_ready_source_reference)
+    run_armed_source_values = dict(run_armed_source_reference)
+    harness_source_full = tuple(harness_source_reference)
+    install_receipt_source_path_sha = (
+        ("path", install_receipt_source_values["path"]),
+        ("sha256", install_receipt_source_values["sha256"]),
+    )
+    install_manifest_source_base = (
+        ("device", install_manifest_source_values["device"]),
+        ("inode", install_manifest_source_values["inode"]),
+        ("mode", install_manifest_source_values["mode"]),
+        ("path", install_manifest_source_values["path"]),
+        ("sha256", install_manifest_source_values["sha256"]),
+    )
+    tree_receipt_source_base = (
+        ("device", tree_receipt_source_values["device"]),
+        ("inode", tree_receipt_source_values["inode"]),
+        ("path", tree_receipt_source_values["path"]),
+        ("sha256", tree_receipt_source_values["sha256"]),
+    )
+    tree_receipt_source_with_mode = (
+        ("device", tree_receipt_source_values["device"]),
+        ("inode", tree_receipt_source_values["inode"]),
+        ("mode", tree_receipt_source_values["mode"]),
+        ("path", tree_receipt_source_values["path"]),
+        ("sha256", tree_receipt_source_values["sha256"]),
+    )
+    seal_receipt_source_base = (
+        ("device", seal_receipt_source_values["device"]),
+        ("inode", seal_receipt_source_values["inode"]),
+        ("path", seal_receipt_source_values["path"]),
+        ("sha256", seal_receipt_source_values["sha256"]),
+    )
+    seal_receipt_source_with_mode = (
+        ("device", seal_receipt_source_values["device"]),
+        ("inode", seal_receipt_source_values["inode"]),
+        ("mode", seal_receipt_source_values["mode"]),
+        ("path", seal_receipt_source_values["path"]),
+        ("sha256", seal_receipt_source_values["sha256"]),
+    )
+    preflight_receipt_source_base = (
+        ("device", preflight_receipt_source_values["device"]),
+        ("inode", preflight_receipt_source_values["inode"]),
+        ("path", preflight_receipt_source_values["path"]),
+        ("sha256", preflight_receipt_source_values["sha256"]),
+    )
+    preflight_receipt_source_path_sha = (
+        ("path", preflight_receipt_source_values["path"]),
+        ("sha256", preflight_receipt_source_values["sha256"]),
+    )
+
     if (
-        _h11_object_member(authorization_manifest, "harness_manifest", label="H11 authorization")
-        != harness_source_reference
-        or _h11_object_member(authorization_manifest, "permit_ready", label="H11 authorization")
-        != permit_ready_source_reference
-        or _h11_object_member(authorization_manifest, "run_armed", label="H11 authorization")
-        != run_armed_source_reference
-        or _h11_object_member(harness_manifest, "installer_receipt", label="H11 harness")
-        != tuple(
-            (key, value)
-            for key, value in install_receipt_source_reference
-            if key in ("path", "sha256")
+        _h11_object_member(
+            authorization_manifest,
+            "harness_manifest",
+            label="H11 authorization",
         )
-        or _h11_object_member(install_receipt, "install_manifest", label="H11 install receipt")
-        != tuple(
-            (key, value)
-            for key, value in install_manifest_source_reference
-            if key not in ("uid", "gid")
+        != harness_source_full
+        or _h11_object_member(
+            permit_ready,
+            "harness_manifest",
+            label="H11 PERMIT_READY receipt",
+        )
+        != harness_source_full
+        or _h11_object_member(
+            authorization_manifest,
+            "permit_ready",
+            label="H11 authorization",
+        )
+        != permit_ready_source_reference
+        or _h11_object_member(
+            authorization_manifest,
+            "run_armed",
+            label="H11 authorization",
+        )
+        != run_armed_source_reference
+        or _h11_object_member(
+            permit_ready,
+            "run_armed",
+            label="H11 PERMIT_READY receipt",
+        )
+        != run_armed_source_reference
+        or _h11_object_member(
+            harness_manifest,
+            "installer_receipt",
+            label="H11 harness manifest",
+        )
+        != install_receipt_source_path_sha
+        or _h11_object_member(
+            install_receipt,
+            "install_manifest",
+            label="H11 install receipt",
+        )
+        != install_manifest_source_base
+        or _h11_path(
+            _h11_object_member(
+                install_manifest,
+                "receipt_path",
+                label="H11 install manifest",
+            ),
+            label="H11 install manifest.receipt_path",
+        )
+        != _h11_path(
+            install_receipt_source_values["path"],
+            label="H11 install receipt source.path",
         )
     ):
-        _fail("H11 direct source cross-binding drifted")
+        _fail("H11 direct source projection drifted")
+
+    if (
+        _h11_object_member(
+            install_receipt,
+            "tree_receipt",
+            label="H11 install receipt",
+        )
+        != tree_receipt_source_base
+        or _h11_object_member(
+            install_manifest,
+            "tree_receipt",
+            label="H11 install manifest",
+        )
+        != tree_receipt_source_base
+        or _h11_object_member(
+            seal_receipt,
+            "tree_receipt",
+            label="H11 SEAL receipt",
+        )
+        != tree_receipt_source_base
+        or _h11_object_member(
+            preflight_receipt,
+            "tree_receipt",
+            label="H11 PREFLIGHT receipt",
+        )
+        != tree_receipt_source_with_mode
+        or _h11_object_member(
+            install_receipt,
+            "seal_receipt",
+            label="H11 install receipt",
+        )
+        != seal_receipt_source_base
+        or _h11_object_member(
+            install_manifest,
+            "seal_receipt",
+            label="H11 install manifest",
+        )
+        != seal_receipt_source_base
+        or _h11_object_member(
+            preflight_receipt,
+            "seal_receipt",
+            label="H11 PREFLIGHT receipt",
+        )
+        != seal_receipt_source_with_mode
+        or _h11_object_member(
+            install_receipt,
+            "preflight_receipt",
+            label="H11 install receipt",
+        )
+        != preflight_receipt_source_base
+        or _h11_object_member(
+            install_manifest,
+            "preflight_receipt",
+            label="H11 install manifest",
+        )
+        != preflight_receipt_source_base
+        or _h11_object_member(
+            harness_manifest,
+            "preflight_receipt",
+            label="H11 harness manifest",
+        )
+        != preflight_receipt_source_path_sha
+    ):
+        _fail("H11 direct receipt source projection drifted")
+
+    if (
+        type(formal_root_directory_reference) is not H11RootDirectoryReference
+        or type(authority_root_directory_reference) is not H11RootDirectoryReference
+        or type(harness_root_directory_reference) is not H11RootDirectoryReference
+        or type(scenario_root_directory_reference) is not H11RootDirectoryReference
+        or type(input_root_directory_reference) is not H11RootDirectoryReference
+        or type(receipt_root_directory_reference) is not H11RootDirectoryReference
+        or type(fifo_root_directory_reference) is not H11RootDirectoryReference
+        or type(ready_commit_fifo_reference) is not H11RootFifoReference
+        or type(permit_commit_fifo_reference) is not H11RootFifoReference
+    ):
+        _fail("H11 direct directory or FIFO reference type drifted")
+    formal_root = formal_root_directory_reference.path
+    authority_root = authority_root_directory_reference.path
+    harness_root = harness_root_directory_reference.path
+    scenario_root = scenario_root_directory_reference.path
+    if (
+        authority_root != formal_root / "authority"
+        or harness_root != authority_root / "harness"
+        or scenario_root != harness_root / "H11"
+        or input_root_directory_reference.path != formal_root / "input"
+        or receipt_root_directory_reference.path != scenario_root / "receipts"
+        or fifo_root_directory_reference.path != formal_root / "fifo"
+        or _h11_path(
+            _h11_object_member(
+                authorization_manifest,
+                "formal_root",
+                label="H11 authorization",
+            ),
+            label="H11 authorization.formal_root",
+        )
+        != formal_root
+        or _h11_path(
+            _h11_object_member(
+                authorization_manifest,
+                "permit_path",
+                label="H11 authorization",
+            ),
+            label="H11 authorization.permit_path",
+        )
+        != scenario_root / "PERMIT.json"
+        or _h11_path(
+            _h11_object_member(
+                permit_authority,
+                "permit_path",
+                label="H11 permit authority",
+            ),
+            label="H11 permit authority.permit_path",
+        )
+        != scenario_root / "PERMIT.json"
+        or _h11_path(
+            _h11_object_member(
+                permit_authority,
+                "permit_ready_path",
+                label="H11 permit authority",
+            ),
+            label="H11 permit authority.permit_ready_path",
+        )
+        != _h11_path(
+            permit_ready_source_values["path"],
+            label="H11 PERMIT_READY source.path",
+        )
+        or _h11_path(
+            authorization_source_values["path"],
+            label="H11 authorization source.path",
+        )
+        != scenario_root / "AUTHORIZE-RELEASE.json"
+        or _h11_path(
+            harness_source_values["path"],
+            label="H11 harness source.path",
+        )
+        != scenario_root / "MANIFEST.json"
+        or _h11_path(
+            permit_ready_source_values["path"],
+            label="H11 PERMIT_READY source.path",
+        )
+        != scenario_root / "PERMIT_READY.json"
+    ):
+        _fail("H11 direct source or transaction layout drifted")
+
+    if (
+        _h11_path(
+            run_armed_source_values["path"],
+            label="H11 run ARMED source.path",
+        )
+        != formal_root / "work" / "RUN-MAIN-ARMED.json"
+    ):
+        _fail("H11 authorization cannot select a different run ARMED source")
     directory_chain = _h11_object_member(
         permit_authority,
         "directory_chain",
@@ -5039,10 +5402,20 @@ class H11RootAuthorizationFlow:
             label="H11 authorization manifest",
         )
         authorization_values = dict(authorization_manifest)
-        harness_binding = authorization_values["harness_manifest"]
+        try:
+            harness_binding = authorization_values["harness_manifest"]
+        except KeyError as exc:
+            raise InstallerError(
+                "H11 authorization harness_manifest is missing"
+            ) from exc
         if type(harness_binding) is not tuple:
             _fail("H11 authorization harness_manifest is not frozen")
-        harness_path_value = dict(harness_binding)["path"]
+        try:
+            harness_path_value = dict(harness_binding)["path"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InstallerError(
+                "H11 authorization harness_manifest.path is missing or malformed"
+            ) from exc
         if type(harness_path_value) is not str:
             _fail("H11 authorization harness_manifest.path is not text")
         harness_path = Path(harness_path_value)
@@ -5099,10 +5472,20 @@ class H11RootAuthorizationFlow:
             label="H11 harness manifest",
         )
         harness_values = dict(harness_manifest)
-        installer_binding = harness_values["installer_receipt"]
+        try:
+            installer_binding = harness_values["installer_receipt"]
+        except KeyError as exc:
+            raise InstallerError(
+                "H11 harness installer_receipt is missing"
+            ) from exc
         if type(installer_binding) is not tuple:
             _fail("H11 harness installer_receipt is not frozen")
-        install_receipt_path_value = dict(installer_binding)["path"]
+        try:
+            install_receipt_path_value = dict(installer_binding)["path"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InstallerError(
+                "H11 harness installer_receipt.path is missing or malformed"
+            ) from exc
         if type(install_receipt_path_value) is not str:
             _fail("H11 harness installer_receipt.path is not text")
         install_receipt_path = Path(install_receipt_path_value)
@@ -5151,7 +5534,12 @@ class H11RootAuthorizationFlow:
             ("sha256", hashlib.sha256(install_receipt_raw).hexdigest()),
             ("uid", str(install_receipt_after.st_uid)),
         )
-        installer_sha256 = dict(installer_binding)["sha256"]
+        try:
+            installer_sha256 = dict(installer_binding)["sha256"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InstallerError(
+                "H11 harness installer_receipt.sha256 is missing or malformed"
+            ) from exc
         if (
             type(installer_sha256) is not str
             or re.fullmatch(r"[0-9a-f]{64}", installer_sha256) is None
@@ -5164,10 +5552,20 @@ class H11RootAuthorizationFlow:
         )
 
         install_receipt_values = dict(install_receipt)
-        install_manifest_binding = install_receipt_values["install_manifest"]
+        try:
+            install_manifest_binding = install_receipt_values["install_manifest"]
+        except KeyError as exc:
+            raise InstallerError(
+                "H11 install receipt install_manifest is missing"
+            ) from exc
         if type(install_manifest_binding) is not tuple:
             _fail("H11 install_manifest reference is not frozen")
-        install_manifest_path_value = dict(install_manifest_binding)["path"]
+        try:
+            install_manifest_path_value = dict(install_manifest_binding)["path"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InstallerError(
+                "H11 install_manifest.path is missing or malformed"
+            ) from exc
         if type(install_manifest_path_value) is not str:
             _fail("H11 install_manifest.path is not text")
         install_manifest_path = Path(install_manifest_path_value)
@@ -5235,10 +5633,20 @@ class H11RootAuthorizationFlow:
             ]
         ] = []
         for field in ("tree_receipt", "seal_receipt", "preflight_receipt"):
-            binding = install_receipt_values[field]
+            try:
+                binding = install_receipt_values[field]
+            except KeyError as exc:
+                raise InstallerError(
+                    f"H11 install receipt {field} is missing"
+                ) from exc
             if type(binding) is not tuple:
                 _fail(f"H11 {field} reference is not frozen")
-            source_path_value = dict(binding)["path"]
+            try:
+                source_path_value = dict(binding)["path"]
+            except (KeyError, TypeError, ValueError) as exc:
+                raise InstallerError(
+                    f"H11 {field}.path is missing or malformed"
+                ) from exc
             if type(source_path_value) is not str:
                 _fail(f"H11 {field}.path is not text")
             source_path = Path(source_path_value)
@@ -5397,11 +5805,21 @@ class H11RootAuthorizationFlow:
             label="H11 PREFLIGHT receipt",
         )
 
-        permit_authority = harness_values["permit_authority"]
+        try:
+            permit_authority = harness_values["permit_authority"]
+        except KeyError as exc:
+            raise InstallerError(
+                "H11 harness permit_authority is missing"
+            ) from exc
         if type(permit_authority) is not tuple:
             _fail("H11 permit authority is not frozen")
         permit_authority_values = dict(permit_authority)
-        directory_chain = permit_authority_values["directory_chain"]
+        try:
+            directory_chain = permit_authority_values["directory_chain"]
+        except KeyError as exc:
+            raise InstallerError(
+                "H11 permit authority directory_chain is missing"
+            ) from exc
         if type(directory_chain) is not tuple or len(directory_chain) != 7:
             _fail("H11 directory chain must contain exactly seven references")
         formal_reference = H11RootDirectoryReference.decode(
@@ -5610,15 +6028,29 @@ class H11RootAuthorizationFlow:
         )
         fifo_root_view.revalidate()
 
+        try:
+            ready_commit_fifo_value = permit_authority_values["ready_commit_fifo"]
+        except KeyError as exc:
+            raise InstallerError(
+                "H11 permit authority ready_commit_fifo is missing"
+            ) from exc
         ready_fifo_reference = H11RootFifoReference.decode(
-            permit_authority_values["ready_commit_fifo"],
+            ready_commit_fifo_value,
             label="H11 ready_commit_fifo",
             require_root=self._require_root,
             process_euid=process_euid,
             process_egid=process_egid,
         )
+        try:
+            permit_commit_fifo_value = permit_authority_values[
+                "permit_commit_fifo"
+            ]
+        except KeyError as exc:
+            raise InstallerError(
+                "H11 permit authority permit_commit_fifo is missing"
+            ) from exc
         permit_fifo_reference = H11RootFifoReference.decode(
-            permit_authority_values["permit_commit_fifo"],
+            permit_commit_fifo_value,
             label="H11 permit_commit_fifo",
             require_root=self._require_root,
             process_euid=process_euid,
@@ -5670,10 +6102,20 @@ class H11RootAuthorizationFlow:
         ready_fifo_view.revalidate()
         permit_fifo_view.revalidate()
 
-        permit_ready_binding = authorization_values["permit_ready"]
+        try:
+            permit_ready_binding = authorization_values["permit_ready"]
+        except KeyError as exc:
+            raise InstallerError(
+                "H11 authorization permit_ready is missing"
+            ) from exc
         if type(permit_ready_binding) is not tuple:
             _fail("H11 authorization permit_ready is not frozen")
-        permit_ready_path_value = dict(permit_ready_binding)["path"]
+        try:
+            permit_ready_path_value = dict(permit_ready_binding)["path"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InstallerError(
+                "H11 authorization permit_ready.path is missing or malformed"
+            ) from exc
         if type(permit_ready_path_value) is not str:
             _fail("H11 authorization permit_ready.path is not text")
         permit_ready_path = Path(permit_ready_path_value)
@@ -5741,10 +6183,18 @@ class H11RootAuthorizationFlow:
             label="H11 PERMIT_READY",
         )
 
-        run_armed_binding = authorization_values["run_armed"]
+        try:
+            run_armed_binding = authorization_values["run_armed"]
+        except KeyError as exc:
+            raise InstallerError("H11 authorization run_armed is missing") from exc
         if type(run_armed_binding) is not tuple:
             _fail("H11 authorization run_armed is not frozen")
-        run_armed_path_value = dict(run_armed_binding)["path"]
+        try:
+            run_armed_path_value = dict(run_armed_binding)["path"]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise InstallerError(
+                "H11 authorization run_armed.path is missing or malformed"
+            ) from exc
         if type(run_armed_path_value) is not str:
             _fail("H11 authorization run_armed.path is not text")
         run_armed_path = Path(run_armed_path_value)
