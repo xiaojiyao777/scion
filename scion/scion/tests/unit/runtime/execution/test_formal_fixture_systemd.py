@@ -5210,19 +5210,10 @@ def test_root_c2a_does_not_open_static_plan_program_or_request(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
-    authority = installer.H11RootRetainedAuthority.open(
-        paths["manifest"], require_root=False
-    )
-    monkeypatch.setattr(
-        installer.H11RootRetainedAuthority,
-        "open",
-        classmethod(
-            lambda cls, manifest_path, *, require_root=True: authority
-        ),
-    )
     forbidden = {paths["run_plan"], paths["run_program"], paths["request"]}
     original_open = os.open
-    forbidden_opens: list[Path] = []
+    main_thread = threading.get_ident()
+    flow_opens: list[Path] = []
 
     def recording_open(
         path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
@@ -5231,9 +5222,11 @@ def test_root_c2a_does_not_open_static_plan_program_or_request(
         *,
         dir_fd: int | None = None,
     ) -> int:
-        decoded = Path(os.fsdecode(path))
-        if dir_fd is None and decoded in forbidden:
-            forbidden_opens.append(decoded)
+        observed = Path(os.fsdecode(path))
+        if dir_fd is not None and not observed.is_absolute():
+            observed = Path(os.readlink(f"/proc/self/fd/{dir_fd}")) / observed
+        if threading.get_ident() == main_thread:
+            flow_opens.append(observed)
         return (
             original_open(path, flags, mode)
             if dir_fd is None
@@ -5241,11 +5234,13 @@ def test_root_c2a_does_not_open_static_plan_program_or_request(
         )
 
     monkeypatch.setattr(os, "open", recording_open)
-    session = installer.H11RootAuthorizerSession.open(
-        paths["authorization"], require_root=False
-    )
-    session.close()
-    assert forbidden_opens == []
+    flow, receipt, frames = _root_c2a_run_public_authorization_flow(paths)
+
+    assert flow.state is installer.H11RootAuthorizationState.COMPLETE
+    assert receipt.phase == "permit-committed"
+    assert frames == (installer.H11_PERMIT_COMMITTED_BYTES,)
+    assert len(flow_opens) == 23
+    assert forbidden.isdisjoint(flow_opens)
 
 
 @pytest.mark.parametrize(
@@ -5939,20 +5934,55 @@ def test_root_c2a_revalidate_rejects_same_byte_source_replacement(
     assert not (paths["authorization"].parent / "PERMIT.json").exists()
 
 
-@pytest.mark.parametrize("failure", ("manifest", "ready", "armed"))
+@pytest.mark.parametrize(
+    ("failure", "source_ordinal", "successful_descriptor_count"),
+    (
+        ("manifest", 1, 1),
+        ("ready", 7, 16),
+        ("armed", 8, 17),
+    ),
+)
 def test_root_c2a_partial_open_failure_rolls_back_every_descriptor(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     failure: str,
+    source_ordinal: int,
+    successful_descriptor_count: int,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
-    target = {
-        "manifest": "MANIFEST.json",
-        "ready": "PERMIT_READY.json",
-        "armed": "RUN-MAIN-ARMED.json",
+    manifest = json.loads(paths["manifest"].read_text(encoding="ascii"))
+    install_receipt_path = Path(manifest["installer_receipt"]["path"])
+    install_receipt = json.loads(
+        install_receipt_path.read_text(encoding="ascii")
+    )
+    source_order = (
+        paths["authorization"],
+        paths["manifest"],
+        install_receipt_path,
+        Path(install_receipt["install_manifest"]["path"]),
+        Path(install_receipt["tree_receipt"]["path"]),
+        Path(install_receipt["seal_receipt"]["path"]),
+        Path(install_receipt["preflight_receipt"]["path"]),
+        paths["ready"],
+        paths["armed"],
+    )
+    assert source_order[source_ordinal] == {
+        "manifest": paths["manifest"],
+        "ready": paths["ready"],
+        "armed": paths["armed"],
     }[failure]
+    target = source_order[source_ordinal]
+    source_paths = set(source_order)
     original_open = os.open
+    original_close = os.close
+    original_fstat = os.fstat
     opened: list[int] = []
+    attempted_sources: list[Path] = []
+    close_counts: dict[int, int] = {}
+    injected_error = OSError(
+        errno.EIO,
+        f"injected C2a {failure} source open failure",
+    )
 
     def failing_open(
         path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
@@ -5961,8 +5991,13 @@ def test_root_c2a_partial_open_failure_rolls_back_every_descriptor(
         *,
         dir_fd: int | None = None,
     ) -> int:
-        if Path(os.fsdecode(path)).name == target:
-            raise OSError("injected C2a pin failure")
+        observed = Path(os.fsdecode(path))
+        if dir_fd is not None and not observed.is_absolute():
+            observed = Path(os.readlink(f"/proc/self/fd/{dir_fd}")) / observed
+        if observed in source_paths:
+            attempted_sources.append(observed)
+        if observed == target:
+            raise injected_error
         descriptor = (
             original_open(path, flags, mode)
             if dir_fd is None
@@ -5971,18 +6006,39 @@ def test_root_c2a_partial_open_failure_rolls_back_every_descriptor(
         opened.append(descriptor)
         return descriptor
 
+    def recording_close(descriptor: int) -> None:
+        close_counts[descriptor] = close_counts.get(descriptor, 0) + 1
+        original_close(descriptor)
+
     monkeypatch.setattr(os, "open", failing_open)
-    with pytest.raises(installer.InstallerError, match="cannot pin") as error:
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
-    assert isinstance(error.value.__cause__, OSError)
-    assert "injected C2a" in str(error.value.__cause__)
-    assert opened
+    monkeypatch.setattr(os, "close", recording_close)
+    flow = installer.H11RootAuthorizationFlow(
+        paths["authorization"],
+        require_root=False,
+    )
+    with pytest.raises(OSError) as caught:
+        flow.authorize_once()
+
+    assert caught.value is injected_error
+    assert attempted_sources == list(source_order[: source_ordinal + 1])
+    assert len(opened) == successful_descriptor_count
+    assert len(set(opened)) == successful_descriptor_count
+    assert close_counts == {descriptor: 1 for descriptor in opened}
     for descriptor in opened:
         with pytest.raises(OSError):
-            os.fstat(descriptor)
-    assert not (paths["authorization"].parent / "PERMIT.json").exists()
+            original_fstat(descriptor)
+    assert flow.state is installer.H11RootAuthorizationState.FAILED_PREWRITE
+    counts_before_close = dict(close_counts)
+    flow.close()
+    assert close_counts == counts_before_close
+    scenario_root = paths["authorization"].parent
+    for name in (
+        "PERMIT.pending",
+        "PERMIT.json",
+        "PERMIT-LEDGER.pending",
+        "PERMIT-LEDGER.json",
+    ):
+        assert not (scenario_root / name).exists()
 
 
 def _root_c2b_ready_fifo(
