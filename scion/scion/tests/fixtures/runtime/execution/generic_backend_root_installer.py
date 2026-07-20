@@ -3967,6 +3967,26 @@ def _build_h11_tree_indirect_specs(
     tuple[H11RootValidatedFifo, ...],
     tuple[H11RootIndirectAuthoritySpec, ...],
 ]:
+    tree_receipt = _h11_exact_object_fields(
+        tree_receipt,
+        (
+            "authority_root",
+            "fifo_root",
+            "fifos",
+            "fixture_gid",
+            "fixture_group",
+            "fixture_uid",
+            "fixture_user",
+            "formal_root",
+            "input_root",
+            "phase",
+            "prepare_manifest",
+            "schema",
+            "sealed_root",
+            "work_root",
+        ),
+        label="H11 TREE receipt",
+    )
     if _h11_text(
         _h11_object_member(tree_receipt, "schema", label="H11 TREE receipt"),
         label="H11 TREE receipt.schema",
@@ -3983,42 +4003,173 @@ def _build_h11_tree_indirect_specs(
         _h11_object_member(tree_receipt, "fixture_gid", label="H11 TREE receipt"),
         label="H11 TREE fixture_gid",
     )
+    fixture_user = _h11_text(
+        _h11_object_member(tree_receipt, "fixture_user", label="H11 TREE receipt"),
+        label="H11 TREE fixture_user",
+    )
+    fixture_group = _h11_text(
+        _h11_object_member(tree_receipt, "fixture_group", label="H11 TREE receipt"),
+        label="H11 TREE fixture_group",
+    )
+    if (
+        not fixture_user
+        or any(ord(character) < 0x20 for character in fixture_user)
+        or not fixture_group
+        or any(ord(character) < 0x20 for character in fixture_group)
+        or fixture_uid == 0
+    ):
+        _fail("H11 TREE fixture identity is not canonical non-root authority")
+    fixture_owners = ((fixture_uid, fixture_gid),)
     directory_roles = (
-        ("formal_root", "formal-root", 0o711),
-        ("sealed_root", "sealed-root", 0o555),
-        ("input_root", "input-root", 0o555),
-        ("work_root", "work-root", 0o700),
-        ("fifo_root", "fifo-root", 0o711),
-        ("authority_root", "authority-root", 0o700),
+        (
+            "formal_root",
+            "formal-root",
+            0o711,
+            formal_root_directory_reference,
+            formal_root_directory_reference.path,
+            ((formal_root_directory_reference.uid, formal_root_directory_reference.gid),),
+        ),
+        (
+            "sealed_root",
+            "sealed-root",
+            0o555,
+            None,
+            formal_root_directory_reference.path / "sealed",
+            ((0, 0),) if require_root else None,
+        ),
+        (
+            "input_root",
+            "input-root",
+            0o555,
+            input_root_directory_reference,
+            input_root_directory_reference.path,
+            ((input_root_directory_reference.uid, input_root_directory_reference.gid),),
+        ),
+        (
+            "work_root",
+            "work-root",
+            0o700,
+            None,
+            formal_root_directory_reference.path / "work",
+            fixture_owners,
+        ),
+        (
+            "fifo_root",
+            "fifo-root",
+            0o711,
+            fifo_root_directory_reference,
+            fifo_root_directory_reference.path,
+            ((fifo_root_directory_reference.uid, fifo_root_directory_reference.gid),),
+        ),
+        (
+            "authority_root",
+            "authority-root",
+            0o700,
+            authority_root_directory_reference,
+            authority_root_directory_reference.path,
+            ((authority_root_directory_reference.uid, authority_root_directory_reference.gid),),
+        ),
     )
     tree_inputs: list[
         tuple[str, str, int | None, Path, str, int, int, int | None, tuple[tuple[int, int], ...] | None]
     ] = []
-    for field, role, mode in directory_roles:
+    for field, role, mode, direct_reference, expected_path, accepted_owners in directory_roles:
         row = _h11_object_member(tree_receipt, field, label="H11 TREE receipt")
         _h11_exact_object_fields(
             row,
             ("device", "inode", "path"),
             label=f"H11 TREE {role}",
         )
+        path = _h11_path(
+            _h11_object_member(row, "path", label=role),
+            label=f"{role}.path",
+        )
+        device = _h11_uint(
+            _h11_object_member(row, "device", label=role),
+            label=f"{role}.device",
+        )
+        inode = _h11_uint(
+            _h11_object_member(row, "inode", label=role),
+            label=f"{role}.inode",
+        )
+        if path != expected_path:
+            _fail(f"H11 TREE {role} path drifted")
+        if direct_reference is not None and (
+            direct_reference.role != role
+            or direct_reference.path != path
+            or (direct_reference.device, direct_reference.inode) != (device, inode)
+            or direct_reference.mode != mode
+            or (require_root and (direct_reference.uid, direct_reference.gid) != (0, 0))
+        ):
+            _fail(f"H11 TREE {role} direct directory projection drifted")
         tree_inputs.append(
             (
                 role,
                 f"tree/directory/{role}",
                 None,
-                _h11_path(_h11_object_member(row, "path", label=role), label=f"{role}.path"),
+                path,
                 "directory",
-                _h11_uint(_h11_object_member(row, "device", label=role), label=f"{role}.device"),
-                _h11_uint(_h11_object_member(row, "inode", label=role), label=f"{role}.inode"),
+                device,
+                inode,
                 mode,
-                ((0, 0),) if require_root else None,
+                accepted_owners,
             )
         )
+    if (
+        len({row[3] for row in tree_inputs}) != len(tree_inputs)
+        or len({(row[5], row[6]) for row in tree_inputs}) != len(tree_inputs)
+    ):
+        _fail("H11 TREE directory authority is duplicated or aliased")
     fifo_values = _h11_object_member(tree_receipt, "fifos", label="H11 TREE receipt")
     preflight_fifo_values = _h11_object_member(
         preflight_receipt, "fifos", label="H11 PREFLIGHT receipt"
     )
-    if type(fifo_values) is not tuple or fifo_values != preflight_fifo_values or len(fifo_values) != 8:
+    if (
+        type(fifo_values) is not tuple
+        or len(fifo_values) != 8
+        or type(preflight_fifo_values) is not tuple
+        or len(preflight_fifo_values) != 8
+    ):
+        _fail("H11 TREE/PREFLIGHT FIFO inventory drifted")
+    for row in preflight_fifo_values:
+        _h11_exact_object_fields(
+            row,
+            ("device", "gid", "inode", "mode", "owner", "path", "role", "uid"),
+            label="H11 PREFLIGHT FIFO",
+        )
+        _h11_text(
+            _h11_object_member(row, "role", label="H11 PREFLIGHT FIFO"),
+            label="H11 PREFLIGHT FIFO.role",
+        )
+        _h11_path(
+            _h11_object_member(row, "path", label="H11 PREFLIGHT FIFO"),
+            label="H11 PREFLIGHT FIFO.path",
+        )
+        _h11_text(
+            _h11_object_member(row, "owner", label="H11 PREFLIGHT FIFO"),
+            label="H11 PREFLIGHT FIFO.owner",
+        )
+        _h11_uint(
+            _h11_object_member(row, "uid", label="H11 PREFLIGHT FIFO"),
+            label="H11 PREFLIGHT FIFO.uid",
+        )
+        _h11_uint(
+            _h11_object_member(row, "gid", label="H11 PREFLIGHT FIFO"),
+            label="H11 PREFLIGHT FIFO.gid",
+        )
+        _h11_text(
+            _h11_object_member(row, "mode", label="H11 PREFLIGHT FIFO"),
+            label="H11 PREFLIGHT FIFO.mode",
+        )
+        _h11_uint(
+            _h11_object_member(row, "device", label="H11 PREFLIGHT FIFO"),
+            label="H11 PREFLIGHT FIFO.device",
+        )
+        _h11_uint(
+            _h11_object_member(row, "inode", label="H11 PREFLIGHT FIFO"),
+            label="H11 PREFLIGHT FIFO.inode",
+        )
+    if fifo_values != preflight_fifo_values:
         _fail("H11 TREE/PREFLIGHT FIFO inventory drifted")
     validated: list[H11RootValidatedFifo] = []
     for row in fifo_values:
@@ -4036,23 +4187,48 @@ def _build_h11_tree_indirect_specs(
         mode_text = _h11_text(_h11_object_member(row, "mode", label="H11 TREE FIFO"), label="H11 TREE FIFO.mode")
         if mode_text != "0600":
             _fail("H11 TREE FIFO mode drifted")
-        accepted_owners = (
-            ready_commit_fifo_reference.accepted_owners
-            if role == "h11-ready-commit"
-            else permit_commit_fifo_reference.accepted_owners
-            if role == "h11-permit-commit"
-            else ((fixture_uid, fixture_gid),)
+        path = _h11_path(
+            _h11_object_member(row, "path", label="H11 TREE FIFO"),
+            label="H11 TREE FIFO.path",
         )
-        if (
-            (owner == "fixture" and (uid, gid) != (fixture_uid, fixture_gid))
-            or (owner == "root" and (uid, gid) != (0, 0))
-            or owner not in ("fixture", "root")
-        ):
+        if path.parent != fifo_root_directory_reference.path:
+            _fail("H11 TREE FIFO path is outside the retained FIFO root")
+        is_ready_commit = role == "h11-ready-commit"
+        is_permit_commit = role == "h11-permit-commit"
+        is_commit = is_ready_commit or is_permit_commit
+        expected_owner = "root" if is_commit else "fixture"
+        expected_uid_gid = (0, 0) if is_commit else (fixture_uid, fixture_gid)
+        if owner != expected_owner or (uid, gid) != expected_uid_gid:
             _fail("H11 TREE FIFO owner drifted")
+        direct_reference = (
+            ready_commit_fifo_reference
+            if is_ready_commit
+            else permit_commit_fifo_reference
+            if is_permit_commit
+            else None
+        )
+        accepted_owners = (
+            direct_reference.accepted_owners
+            if direct_reference is not None
+            else fixture_owners
+        )
+        if direct_reference is not None and (
+            direct_reference.path != path
+            or (direct_reference.device, direct_reference.inode) != (device, inode)
+            or direct_reference.mode != 0o600
+            or (direct_reference.uid, direct_reference.gid) != (0, 0)
+            or direct_reference.accepted_owners
+            != (
+                ((0, 0),)
+                if require_root
+                else tuple(sorted({(0, 0), (process_euid, process_egid)}))
+            )
+        ):
+            _fail("H11 TREE commit FIFO owner translation drifted")
         validated.append(
             H11RootValidatedFifo(
                 role,
-                _h11_path(_h11_object_member(row, "path", label="H11 TREE FIFO"), label="H11 TREE FIFO.path"),
+                path,
                 owner,
                 uid,
                 gid,
@@ -4062,6 +4238,11 @@ def _build_h11_tree_indirect_specs(
                 accepted_owners,
             )
         )
+    if (
+        len({row.path for row in validated}) != len(validated)
+        or len({(row.device, row.inode) for row in validated}) != len(validated)
+    ):
+        _fail("H11 TREE FIFO authority is duplicated or aliased")
     if tuple(item.role for item in validated) != tuple(sorted(item.role for item in validated)):
         _fail("H11 TREE FIFO order drifted")
     expected_fifo_roles = (
@@ -4140,6 +4321,7 @@ def _build_h11_tree_indirect_specs(
         ("closer-ready", "closer-release"),
     )
     run_main_acquisition: H11RootFrozenJsonObject | None = None
+    acquisition_armed_paths: list[Path] = []
     for acquisition, expected_role, fifo_roles in zip(
         acquisition_values,
         expected_acquisition_roles,
@@ -4159,6 +4341,17 @@ def _build_h11_tree_indirect_specs(
             label=f"H11 acquisition {expected_role}.role",
         ) != expected_role:
             _fail("H11 acquisition role order drifted")
+        armed_receipt_path = _h11_path(
+            _h11_object_member(
+                acquisition,
+                "armed_receipt_path",
+                label=f"H11 acquisition {expected_role}",
+            ),
+            label=f"H11 acquisition {expected_role}.armed_receipt_path",
+        )
+        if armed_receipt_path.parent != formal_root_directory_reference.path / "work":
+            _fail(f"H11 acquisition {expected_role} ARMED path drifted")
+        acquisition_armed_paths.append(armed_receipt_path)
         ready_acquisition = _h11_object_member(
             acquisition,
             "ready_fifo",
@@ -4186,6 +4379,8 @@ def _build_h11_tree_indirect_specs(
             _fail(f"H11 acquisition {expected_role} FIFO projection drifted")
         if expected_role == "run-main":
             run_main_acquisition = acquisition
+    if len(set(acquisition_armed_paths)) != len(acquisition_armed_paths):
+        _fail("H11 acquisition ARMED paths are duplicated")
     if run_main_acquisition is None:
         _fail("H11 run-main acquisition is missing")
     if (
@@ -4225,7 +4420,15 @@ def _build_h11_tree_indirect_specs(
                 row.accepted_owners,
             )
         )
-    prepare = _h11_object_member(tree_receipt, "prepare_manifest", label="H11 TREE receipt")
+    prepare = _h11_exact_object_fields(
+        _h11_object_member(tree_receipt, "prepare_manifest", label="H11 TREE receipt"),
+        ("device", "inode", "path", "sha256"),
+        label="H11 TREE prepare manifest",
+    )
+    _h11_sha256_text(
+        _h11_object_member(prepare, "sha256", label="H11 TREE prepare manifest"),
+        label="H11 TREE prepare manifest.sha256",
+    )
     tree_inputs.append(
         (
             "prepare-manifest",
@@ -4239,6 +4442,11 @@ def _build_h11_tree_indirect_specs(
             None,
         )
     )
+    if (
+        len({row[3] for row in tree_inputs}) != len(tree_inputs)
+        or len({(row[5], row[6]) for row in tree_inputs}) != len(tree_inputs)
+    ):
+        _fail("H11 TREE indirect authority is duplicated or aliased")
     specs = tuple(
         _make_h11_indirect_authority_spec(
             semantic_role=row[0],
@@ -4503,6 +4711,53 @@ def _build_h11_indirect_authority_inventory(
         formal_root=formal_root, require_root=require_root,
     )
     indirect_specs = tree_specs + seal_specs + install_specs
+    direct_source_references = (
+        authorization_source_reference,
+        harness_source_reference,
+        install_receipt_source_reference,
+        install_manifest_source_reference,
+        tree_receipt_source_reference,
+        seal_receipt_source_reference,
+        preflight_receipt_source_reference,
+        permit_ready_source_reference,
+        run_armed_source_reference,
+    )
+    direct_only_directory_references = (
+        harness_root_directory_reference,
+        scenario_root_directory_reference,
+        receipt_root_directory_reference,
+    )
+    if len(
+        {
+            (reference.device, reference.inode)
+            for reference in direct_only_directory_references
+        }
+    ) != len(direct_only_directory_references):
+        _fail("H11 direct-only directory identities alias")
+    for directory_reference in direct_only_directory_references:
+        for source_reference in direct_source_references:
+            if (
+                ("path", str(directory_reference.path)) in source_reference
+                or (
+                    ("device", str(directory_reference.device)) in source_reference
+                    and ("inode", str(directory_reference.inode)) in source_reference
+                )
+            ):
+                _fail("H11 direct-only directory aliases a direct source")
+    for spec in indirect_specs:
+        if any(
+            ("path", str(spec.path)) in reference
+            or (
+                ("device", str(spec.device)) in reference
+                and ("inode", str(spec.inode)) in reference
+            )
+            for reference in direct_source_references
+        ) or any(
+            spec.path == reference.path
+            or (spec.device, spec.inode) == (reference.device, reference.inode)
+            for reference in direct_only_directory_references
+        ):
+            _fail("H11 direct-only authority aliases indirect authority")
     if (
         len(indirect_specs) != len({item.path for item in indirect_specs})
         or len(indirect_specs) != len({(item.device, item.inode) for item in indirect_specs})

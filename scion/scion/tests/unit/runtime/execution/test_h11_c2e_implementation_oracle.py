@@ -3226,6 +3226,18 @@ DOMAIN_NEGATIVE_AXES = {
     ),
 }
 
+TOP_ALIAS_AXES = (
+    "direct-only-path-alias",
+    "direct-only-identity-alias",
+)
+
+FINAL_PROOF_OBSERVED_AXES = (
+    "observed-path",
+    "observed-identity",
+    "observed-mode",
+    "observed-owner",
+)
+
 
 @dataclass(slots=True)
 class C2EInventoryFixture:
@@ -4998,6 +5010,10 @@ def test_c2e_producer_valid_fixture_builds_exact_inventory_and_owner_identity(
         spec = next(item for item in indirect_specs if item.semantic_role == role)
         assert row.accepted_owners is reference.accepted_owners
         assert spec.accepted_owners is reference.accepted_owners
+    sealed_spec = next(item for item in indirect_specs if item.semantic_role == "sealed-root")
+    work_spec = next(item for item in indirect_specs if item.semantic_role == "work-root")
+    assert sealed_spec.accepted_owners is None
+    assert work_spec.accepted_owners == ((fixture_uid, fixture_gid),)
 
 
 def test_c2e_expanded_full_producer_freezes_inventory_rows_and_asset_count(tmp_path: Path) -> None:
@@ -5058,6 +5074,612 @@ def test_c2e_each_domain_owns_an_independent_schema_delta(
     with pytest.raises(fixture.production.InstallerError):
         fixture.production._build_h11_indirect_authority_inventory(**arguments)
     assert calls == [helper_name]
+
+
+TREE_DOMAIN_ARGUMENTS = (
+    "tree_receipt",
+    "preflight_receipt",
+    "harness_manifest",
+    "run_armed",
+    "formal_root_directory_reference",
+    "authority_root_directory_reference",
+    "input_root_directory_reference",
+    "fifo_root_directory_reference",
+    "ready_commit_fifo_reference",
+    "permit_commit_fifo_reference",
+    "require_root",
+    "process_euid",
+    "process_egid",
+)
+
+
+TREE_DOMAIN_CASES = (
+    ("schema", "value"),
+    ("schema", "extra-key"),
+    ("phase", "value"),
+    ("directory-role", "swap-sealed-work"),
+    ("directory-path", "formal-projection"),
+    ("directory-identity", "formal-projection"),
+    ("directory-mode", "formal-direct-reference"),
+    ("directory-owner", "formal-direct-reference-root"),
+    ("fifo-role", "unknown-ordinary"),
+    ("fifo-path", "outside-fifo-root"),
+    ("fifo-identity", "acquisition-projection"),
+    ("fifo-mode", "wire"),
+    ("fifo-owner", "ordinary-root-wire"),
+    ("fifo-owner", "commit-fixture-wire"),
+    ("harness-acquisition", "missing"),
+    ("harness-acquisition", "reordered"),
+    ("harness-acquisition", "extra"),
+    ("harness-acquisition", "duplicate-role"),
+    ("harness-acquisition", "extra-field"),
+    ("harness-acquisition", "armed-outside-work"),
+    ("harness-acquisition", "armed-duplicate"),
+    ("harness-acquisition", "fifo-projection"),
+    ("armed-ready-release", "ready"),
+    ("armed-ready-release", "release"),
+    ("preflight-fifo", "identity"),
+    ("prepare-manifest", "missing-sha"),
+    ("prepare-manifest", "noncanonical-sha"),
+    ("fixture-uid-gid", "root-coherent"),
+    ("fixture-uid-gid", "empty-user"),
+    ("fixture-uid-gid", "control-group"),
+    ("commit-owner-translation", "accepted-owner-set"),
+    ("commit-owner-translation", "direct-wire-projection"),
+    ("commit-accepted-owner-identity", "validated-row-copy"),
+    ("commit-accepted-owner-identity", "spec-copy"),
+    ("duplicate", "fifo-role"),
+    ("alias", "fifo-path-identity"),
+    ("order", "fifo"),
+)
+
+TOP_ALIAS_CASES = (
+    ("direct-only-path-alias", "source-indirect"),
+    ("direct-only-path-alias", "directory-indirect"),
+    ("direct-only-path-alias", "directory-source"),
+    ("direct-only-identity-alias", "source-indirect"),
+    ("direct-only-identity-alias", "directory-indirect"),
+    ("direct-only-identity-alias", "directory-source"),
+    ("direct-only-identity-alias", "directory-directory"),
+)
+
+
+def _tree_domain_arguments(fixture: C2EInventoryFixture) -> dict[str, Any]:
+    return {name: fixture.arguments[name] for name in TREE_DOMAIN_ARGUMENTS}
+
+
+def _replace_tree_document(
+    fixture: C2EInventoryFixture,
+    arguments: dict[str, Any],
+    name: str,
+    document: dict[str, Any],
+) -> None:
+    arguments[name] = fixture.production._decode_h11_canonical_frozen_object(
+        _canonical_json(document),
+        label=f"C2e TREE {name} delta",
+    )
+
+
+def _tree_fifo_row(document: dict[str, Any], role: str) -> dict[str, Any]:
+    return next(row for row in document["fifos"] if row["role"] == role)
+
+
+def _tree_observed_identities(production: Any, specs: tuple[Any, ...]) -> tuple[Any, ...]:
+    result = []
+    for spec in specs:
+        uid, gid = (
+            spec.accepted_owners[0]
+            if spec.accepted_owners is not None
+            else (os.geteuid(), os.getegid())
+        )
+        result.append(
+            production.H11RootObservedPathIdentity(
+                spec.semantic_role,
+                spec.equivalence_class,
+                spec.install_ordinal,
+                spec.path,
+                spec.kind,
+                spec.device,
+                spec.inode,
+                spec.mode if spec.mode is not None else 0o444,
+                uid,
+                gid,
+            )
+        )
+    return tuple(result)
+
+
+def _replace_inventory_document(
+    fixture: C2EInventoryFixture,
+    arguments: dict[str, Any],
+    name: str,
+    document: dict[str, Any],
+    *,
+    label: str,
+) -> None:
+    arguments[name] = fixture.production._decode_h11_canonical_frozen_object(
+        _canonical_json(document),
+        label=label,
+    )
+
+
+@pytest.mark.parametrize(
+    ("axis", "variant"),
+    TREE_DOMAIN_CASES,
+    ids=lambda value: value,
+)
+def test_c2e_tree_domain_each_registered_axis_has_an_owner_isolated_delta(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    axis: str,
+    variant: str,
+) -> None:
+    assert {item_axis for item_axis, _variant in TREE_DOMAIN_CASES} == set(
+        DOMAIN_NEGATIVE_AXES["_build_h11_tree_indirect_specs"]
+    )
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    arguments = _tree_domain_arguments(fixture)
+    tree = json.loads(json.dumps(fixture.documents["tree_receipt"]))
+    preflight = json.loads(json.dumps(fixture.documents["preflight_receipt"]))
+    harness = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+    armed = json.loads(json.dumps(fixture.documents["run_armed"]))
+
+    if axis == "schema":
+        if variant == "value":
+            tree["schema"] = "scion.invalid.tree.v1"
+        else:
+            tree["unexpected"] = True
+    elif axis == "phase":
+        tree["phase"] = "tree-not-prepared"
+    elif axis == "directory-role":
+        tree["sealed_root"], tree["work_root"] = tree["work_root"], tree["sealed_root"]
+    elif axis == "directory-path":
+        tree["formal_root"]["path"] = str(Path(tree["formal_root"]["path"]).with_name("wrong-formal"))
+    elif axis == "directory-identity" and variant == "formal-projection":
+        tree["formal_root"]["inode"] = str(int(tree["formal_root"]["inode"]) + 1)
+    elif axis == "directory-mode":
+        reference = arguments["formal_root_directory_reference"]
+        arguments["formal_root_directory_reference"] = replace(
+            reference,
+            mode=reference.mode ^ 0o010,
+        )
+    elif axis == "directory-owner":
+        arguments["require_root"] = True
+        for reference_name in (
+            "formal_root_directory_reference",
+            "authority_root_directory_reference",
+            "input_root_directory_reference",
+            "fifo_root_directory_reference",
+        ):
+            arguments[reference_name] = replace(
+                arguments[reference_name],
+                uid=0,
+                gid=0,
+            )
+        for reference_name in (
+            "ready_commit_fifo_reference",
+            "permit_commit_fifo_reference",
+        ):
+            arguments[reference_name] = replace(
+                arguments[reference_name],
+                accepted_owners=((0, 0),),
+            )
+        _root_uid, _root_gid, _root_fifos, root_specs = (
+            production._build_h11_tree_indirect_specs(**arguments)
+        )
+        root_specs_by_role = {spec.semantic_role: spec for spec in root_specs}
+        assert root_specs_by_role["sealed-root"].accepted_owners == ((0, 0),)
+        assert root_specs_by_role["work-root"].accepted_owners == (
+            (int(tree["fixture_uid"]), int(tree["fixture_gid"])),
+        )
+        arguments["formal_root_directory_reference"] = replace(
+            arguments["formal_root_directory_reference"],
+            uid=1,
+        )
+    elif axis == "fifo-role":
+        for document in (tree, preflight):
+            _tree_fifo_row(document, "run-main-ready")["role"] = "unused-ready"
+            document["fifos"].sort(key=lambda row: row["role"])
+    elif axis == "fifo-path":
+        wrong_path = str(Path(tree["formal_root"]["path"]) / "work" / "wrong-ready.fifo")
+        for document in (tree, preflight):
+            _tree_fifo_row(document, "exec-stop-post-ready")["path"] = wrong_path
+        harness["acquisitions"][1]["ready_fifo"]["path"] = wrong_path
+    elif axis == "fifo-identity":
+        for document in (tree, preflight):
+            row = _tree_fifo_row(document, "exec-stop-post-ready")
+            row["inode"] = str(int(row["inode"]) + 1)
+    elif axis == "fifo-mode":
+        for document in (tree, preflight):
+            _tree_fifo_row(document, "exec-stop-post-ready")["mode"] = "0640"
+    elif axis == "fifo-owner" and variant == "ordinary-root-wire":
+        for document in (tree, preflight):
+            row = _tree_fifo_row(document, "exec-stop-post-ready")
+            row["owner"] = "root"
+            row["uid"] = "0"
+            row["gid"] = "0"
+    elif axis == "fifo-owner" and variant == "commit-fixture-wire":
+        for document in (tree, preflight):
+            row = _tree_fifo_row(document, "h11-ready-commit")
+            row["owner"] = "fixture"
+            row["uid"] = tree["fixture_uid"]
+            row["gid"] = tree["fixture_gid"]
+    elif axis == "harness-acquisition":
+        acquisitions = harness["acquisitions"]
+        if variant == "missing":
+            acquisitions.pop()
+        elif variant == "reordered":
+            acquisitions[0], acquisitions[1] = acquisitions[1], acquisitions[0]
+        elif variant == "extra":
+            acquisitions.append(json.loads(json.dumps(acquisitions[-1])))
+        elif variant == "duplicate-role":
+            acquisitions[1]["role"] = "run-main"
+        elif variant == "extra-field":
+            acquisitions[0]["extra"] = True
+        elif variant == "armed-outside-work":
+            acquisitions[1]["armed_receipt_path"] = str(
+                Path(tree["formal_root"]["path"]) / "authority" / "WRONG-ARMED.json"
+            )
+        elif variant == "armed-duplicate":
+            acquisitions[1]["armed_receipt_path"] = acquisitions[0]["armed_receipt_path"]
+        else:
+            acquisitions[1]["ready_fifo"]["inode"] = str(
+                int(acquisitions[1]["ready_fifo"]["inode"]) + 1
+            )
+    elif axis == "armed-ready-release":
+        armed[f"{variant}_fifo"]["inode"] = str(int(armed[f"{variant}_fifo"]["inode"]) + 1)
+    elif axis == "preflight-fifo":
+        row = _tree_fifo_row(preflight, "exec-stop-post-ready")
+        row["inode"] = str(int(row["inode"]) + 1)
+    elif axis == "prepare-manifest":
+        if variant == "missing-sha":
+            tree["prepare_manifest"].pop("sha256")
+        else:
+            tree["prepare_manifest"]["sha256"] = "A" * 64
+    elif axis == "fixture-uid-gid":
+        if variant == "root-coherent":
+            tree["fixture_uid"] = "0"
+            tree["fixture_gid"] = "0"
+            for document in (tree, preflight):
+                for row in document["fifos"]:
+                    if row["role"] not in {"h11-ready-commit", "h11-permit-commit"}:
+                        row["uid"] = "0"
+                        row["gid"] = "0"
+        elif variant == "empty-user":
+            tree["fixture_user"] = ""
+        else:
+            tree["fixture_group"] = "bad\u0001group"
+    elif axis == "commit-owner-translation" and variant == "accepted-owner-set":
+        reference = arguments["ready_commit_fifo_reference"]
+        arguments["ready_commit_fifo_reference"] = production.H11RootFifoReference(
+            reference.path,
+            reference.device,
+            reference.inode,
+            reference.mode,
+            reference.uid,
+            reference.gid,
+            ((arguments["process_euid"], arguments["process_egid"]),),
+        )
+    elif axis == "commit-owner-translation":
+        reference = arguments["ready_commit_fifo_reference"]
+        foreign_owner = (reference.uid + 1, reference.gid + 1)
+        arguments["ready_commit_fifo_reference"] = production.H11RootFifoReference(
+            reference.path,
+            reference.device,
+            reference.inode,
+            reference.mode,
+            foreign_owner[0],
+            foreign_owner[1],
+            (foreign_owner,),
+        )
+    elif axis == "commit-accepted-owner-identity":
+        if variant == "validated-row-copy":
+            original = production.H11RootValidatedFifo
+
+            def copied_validated_fifo(*values: Any, **keywords: Any) -> Any:
+                if values:
+                    values = (*values[:8], tuple(pair for pair in values[8]))
+                else:
+                    keywords["accepted_owners"] = tuple(
+                        pair for pair in keywords["accepted_owners"]
+                    )
+                return original(*values, **keywords)
+
+            monkeypatch.setattr(production, "H11RootValidatedFifo", copied_validated_fifo)
+        else:
+            original_spec = production._make_h11_indirect_authority_spec
+
+            def copied_spec(**keywords: Any) -> Any:
+                accepted_owners = keywords["accepted_owners"]
+                if accepted_owners is not None:
+                    keywords["accepted_owners"] = tuple(pair for pair in accepted_owners)
+                return original_spec(**keywords)
+
+            monkeypatch.setattr(production, "_make_h11_indirect_authority_spec", copied_spec)
+    elif axis == "duplicate":
+        for document in (tree, preflight):
+            _tree_fifo_row(document, "exec-stop-post-ready")["role"] = "closer-ready"
+            document["fifos"].sort(key=lambda row: row["role"])
+    elif axis == "alias":
+        source = _tree_fifo_row(tree, "closer-ready")
+        for document in (tree, preflight):
+            target = _tree_fifo_row(document, "exec-stop-post-ready")
+            target["path"] = source["path"]
+            target["device"] = source["device"]
+            target["inode"] = source["inode"]
+        harness["acquisitions"][1]["ready_fifo"] = {
+            key: source[key] for key in ("path", "device", "inode")
+        }
+    elif axis == "order":
+        for document in (tree, preflight):
+            document["fifos"][0], document["fifos"][1] = (
+                document["fifos"][1],
+                document["fifos"][0],
+            )
+    else:
+        raise AssertionError((axis, variant))
+
+    _replace_tree_document(fixture, arguments, "tree_receipt", tree)
+    _replace_tree_document(fixture, arguments, "preflight_receipt", preflight)
+    _replace_tree_document(fixture, arguments, "harness_manifest", harness)
+    _replace_tree_document(fixture, arguments, "run_armed", armed)
+
+    with pytest.raises(production.InstallerError):
+        production._build_h11_tree_indirect_specs(**arguments)
+
+
+@pytest.mark.parametrize("axis", FINAL_PROOF_OBSERVED_AXES)
+def test_c2e_final_proof_observed_axes_are_owned_only_by_the_pure_proof(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    axis: str,
+) -> None:
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    _fixture_uid, _fixture_gid, _validated, specs = (
+        production._build_h11_tree_indirect_specs(**_tree_domain_arguments(fixture))
+    )
+    observed = _tree_observed_identities(production, specs)
+    production._prove_h11_indirect_observations(specs, observed)
+
+    ordinal = next(
+        index for index, spec in enumerate(specs) if spec.semantic_role == "work-root"
+    )
+    changed = list(observed)
+    if axis == "observed-path":
+        changed[ordinal] = replace(
+            changed[ordinal],
+            path=changed[ordinal].path.with_name(changed[ordinal].path.name + ".wrong"),
+        )
+    elif axis == "observed-identity":
+        changed[ordinal] = replace(changed[ordinal], inode=changed[ordinal].inode + 1)
+    elif axis == "observed-mode":
+        changed[ordinal] = replace(changed[ordinal], mode=changed[ordinal].mode ^ 0o010)
+    else:
+        assert axis == "observed-owner"
+        changed[ordinal] = replace(changed[ordinal], uid=changed[ordinal].uid + 1)
+    changed_tuple = tuple(changed)
+    assert len(changed_tuple) == len(observed)
+    assert tuple(item.semantic_role for item in changed_tuple) == tuple(
+        item.semantic_role for item in observed
+    )
+    assert sum(before != after for before, after in zip(observed, changed_tuple)) == 1
+
+    def forbidden_owner(*_args: Any, **_kwargs: Any) -> Any:
+        pytest.fail(f"C2e {axis} escaped its final-proof owner")
+
+    for helper_name in (
+        "_build_h11_indirect_authority_inventory",
+        "_prove_h11_direct_authority_bindings",
+        "_build_h11_tree_indirect_specs",
+        "_build_h11_seal_indirect_specs",
+        "_prove_h11_preflight_snapshot_bindings",
+        "_build_h11_install_target_specs",
+        "_observe_h11_indirect_authority",
+    ):
+        monkeypatch.setattr(production, helper_name, forbidden_owner)
+    with pytest.raises(production.InstallerError):
+        production._prove_h11_indirect_observations(specs, changed_tuple)
+
+
+@pytest.mark.parametrize(
+    ("axis", "variant"),
+    TOP_ALIAS_CASES,
+    ids=lambda value: value,
+)
+def test_c2e_top_builder_first_rejects_each_direct_only_alias_partition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    axis: str,
+    variant: str,
+) -> None:
+    assert {case_axis for case_axis, _variant in TOP_ALIAS_CASES} == set(TOP_ALIAS_AXES)
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    arguments = dict(fixture.arguments)
+    target_field = "path" if axis == "direct-only-path-alias" else "identity"
+
+    if variant in {"source-indirect", "directory-indirect"}:
+        tree = json.loads(json.dumps(fixture.documents["tree_receipt"]))
+        prepare = tree["prepare_manifest"]
+        if variant == "source-indirect":
+            source = dict(arguments["authorization_source_reference"])
+            source_path = source["path"]
+            source_device = source["device"]
+            source_inode = source["inode"]
+        else:
+            source = arguments["harness_root_directory_reference"]
+            source_path = str(source.path)
+            source_device = str(source.device)
+            source_inode = str(source.inode)
+        if target_field == "path":
+            prepare["path"] = source_path
+        else:
+            prepare["device"] = source_device
+            prepare["inode"] = source_inode
+        _replace_inventory_document(
+            fixture,
+            arguments,
+            "tree_receipt",
+            tree,
+            label=f"C2e top {axis} {variant}",
+        )
+    elif variant == "directory-source":
+        harness_root = arguments["harness_root_directory_reference"]
+        tree_source = dict(arguments["tree_receipt_source_reference"])
+        if target_field == "path":
+            tree_source["path"] = str(harness_root.path)
+        else:
+            tree_source["device"] = str(harness_root.device)
+            tree_source["inode"] = str(harness_root.inode)
+        arguments["tree_receipt_source_reference"] = _frozen_json(tree_source)
+        tree_base = {
+            key: tree_source[key]
+            for key in ("path", "sha256", "device", "inode")
+        }
+        changed_documents = {
+            name: json.loads(json.dumps(fixture.documents[name]))
+            for name in (
+                "install_receipt",
+                "install_manifest",
+                "seal_receipt",
+                "preflight_receipt",
+            )
+        }
+        for name in ("install_receipt", "install_manifest", "seal_receipt"):
+            changed_documents[name]["tree_receipt"] = dict(tree_base)
+        changed_documents["preflight_receipt"]["tree_receipt"] = {
+            **tree_base,
+            "mode": tree_source["mode"],
+        }
+        for name, document in changed_documents.items():
+            _replace_inventory_document(
+                fixture,
+                arguments,
+                name,
+                document,
+                label=f"C2e top {axis} {variant} {name}",
+            )
+    else:
+        assert variant == "directory-directory" and target_field == "identity"
+        harness_root = arguments["harness_root_directory_reference"]
+        receipt_root = arguments["receipt_root_directory_reference"]
+        arguments["receipt_root_directory_reference"] = replace(
+            receipt_root,
+            device=harness_root.device,
+            inode=harness_root.inode,
+        )
+        harness = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+        receipt_row = next(
+            row
+            for row in harness["permit_authority"]["directory_chain"]
+            if row["role"] == "receipt-root"
+        )
+        receipt_row["device"] = str(harness_root.device)
+        receipt_row["inode"] = str(harness_root.inode)
+        _replace_inventory_document(
+            fixture,
+            arguments,
+            "harness_manifest",
+            harness,
+            label=f"C2e top {axis} {variant}",
+        )
+        permit_ready = json.loads(json.dumps(fixture.documents["permit_ready"]))
+        permit_ready["permit_authority"] = json.loads(
+            json.dumps(harness["permit_authority"])
+        )
+        _replace_inventory_document(
+            fixture,
+            arguments,
+            "permit_ready",
+            permit_ready,
+            label=f"C2e top {axis} {variant} PERMIT_READY",
+        )
+
+    helper_order = tuple(DOMAIN_NEGATIVE_AXES)
+    original_helpers = {
+        helper_name: getattr(production, helper_name) for helper_name in helper_order
+    }
+    entered: list[str] = []
+    completed: list[str] = []
+
+    def recording_helper(helper_name: str) -> Any:
+        def invoke(**kwargs: Any) -> Any:
+            entered.append(helper_name)
+            result = original_helpers[helper_name](**kwargs)
+            completed.append(helper_name)
+            return result
+
+        return invoke
+
+    for helper_name in helper_order:
+        monkeypatch.setattr(production, helper_name, recording_helper(helper_name))
+
+    def forbidden_observation(*_args: Any, **_kwargs: Any) -> Any:
+        pytest.fail(f"C2e top {axis} {variant} escaped into observation")
+
+    monkeypatch.setattr(production, "_observe_h11_indirect_authority", forbidden_observation)
+    monkeypatch.setattr(production, "_prove_h11_indirect_observations", forbidden_observation)
+    failure: BaseException | None = None
+    try:
+        production._build_h11_indirect_authority_inventory(**arguments)
+    except production.InstallerError as exc:
+        failure = exc
+    assert entered == completed == list(helper_order)
+    assert failure is not None, f"C2e top accepted {axis} {variant}"
+    expected_failure = (
+        "H11 direct-only directory identities alias"
+        if variant == "directory-directory"
+        else "H11 direct-only directory aliases a direct source"
+        if variant == "directory-source"
+        else "H11 direct-only authority aliases indirect authority"
+    )
+    assert str(failure) == expected_failure
+
+
+def test_c2e_top_alias_closed_sets_are_exact_literals() -> None:
+    tree = ast.parse(INSTALLER_SOURCE.read_text(encoding="utf-8"))
+    builder = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_build_h11_indirect_authority_inventory"
+    )
+    assignments = {
+        statement.targets[0].id: statement.value
+        for statement in builder.body
+        if isinstance(statement, ast.Assign)
+        and len(statement.targets) == 1
+        and isinstance(statement.targets[0], ast.Name)
+        and statement.targets[0].id
+        in {"direct_source_references", "direct_only_directory_references"}
+    }
+    expected = {
+        "direct_source_references": (
+            "authorization_source_reference",
+            "harness_source_reference",
+            "install_receipt_source_reference",
+            "install_manifest_source_reference",
+            "tree_receipt_source_reference",
+            "seal_receipt_source_reference",
+            "preflight_receipt_source_reference",
+            "permit_ready_source_reference",
+            "run_armed_source_reference",
+        ),
+        "direct_only_directory_references": (
+            "harness_root_directory_reference",
+            "scenario_root_directory_reference",
+            "receipt_root_directory_reference",
+        ),
+    }
+    assert set(assignments) == set(expected)
+    for name, value in assignments.items():
+        assert isinstance(value, ast.Tuple)
+        assert tuple(
+            element.id for element in value.elts if isinstance(element, ast.Name)
+        ) == expected[name]
+        assert all(isinstance(element, ast.Name) for element in value.elts)
 
 
 def test_c2e_canonical_codec_accepts_only_frozen_canonical_objects() -> None:
