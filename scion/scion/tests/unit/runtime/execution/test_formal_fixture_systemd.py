@@ -5115,6 +5115,55 @@ def _root_c2a_run_public_authorization_flow(
     return flow, receipt, tuple(frames)
 
 
+def _root_c2a_run_public_pre_ready_rejection(
+    paths: dict[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    authorization_path: Path | None = None,
+    error_match: str | None = None,
+) -> tuple[str, ...]:
+    original_open = os.open
+    opened_paths: list[str] = []
+
+    def guarded_open(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        flags: int,
+        mode: int = 0o777,
+        *,
+        dir_fd: int | None = None,
+    ) -> int:
+        decoded = os.fsdecode(path)
+        observed = Path(decoded)
+        if dir_fd is not None and not observed.is_absolute():
+            observed = Path(os.readlink(f"/proc/self/fd/{dir_fd}")) / observed
+        opened_paths.append(str(observed))
+        if (
+            decoded.startswith("/proc/self/fd/")
+            and flags & os.O_ACCMODE == os.O_RDONLY
+            and not flags & os.O_PATH
+        ):
+            raise AssertionError(
+                "pre-READY rejection reached the blocking READY FIFO open"
+            )
+        return (
+            original_open(path, flags, mode)
+            if dir_fd is None
+            else original_open(path, flags, mode, dir_fd=dir_fd)
+        )
+
+    monkeypatch.setattr(os, "open", guarded_open)
+    flow = installer.H11RootAuthorizationFlow(
+        authorization_path or paths["authorization"],
+        require_root=False,
+    )
+    with pytest.raises(installer.InstallerError, match=error_match):
+        flow.authorize_once()
+    assert flow.state is installer.H11RootAuthorizationState.FAILED_PREWRITE
+    assert not (paths["authorization"].parent / "PERMIT.pending").exists()
+    assert not (paths["authorization"].parent / "PERMIT.json").exists()
+    return tuple(opened_paths)
+
+
 def test_root_c2a_public_flow_accepts_exact_read_only_authority(
     tmp_path: Path,
 ) -> None:
@@ -5197,6 +5246,7 @@ def test_root_c2a_does_not_open_static_plan_program_or_request(
 )
 def test_root_c2a_rejects_authorization_schema_reference_or_layout_drift(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     mutation: str,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
@@ -5213,24 +5263,29 @@ def test_root_c2a_rejects_authorization_schema_reference_or_layout_drift(
     else:
         authorization["permit_path"] = str(tmp_path / "wrong-permit.json")
     _root_c2a_write_json(paths["authorization"], authorization)
-    with pytest.raises(installer.InstallerError):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    _root_c2a_run_public_pre_ready_rejection(paths, monkeypatch)
 
 
 def test_root_c2a_rejects_authorization_outside_exact_scenario_layout(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
     wrong = paths["authorization"].with_name("WRONG-AUTHORIZE.json")
     wrong.write_bytes(paths["authorization"].read_bytes())
     wrong.chmod(0o444)
-    with pytest.raises(installer.InstallerError, match="authorization path"):
-        installer.H11RootAuthorizerSession.open(wrong, require_root=False)
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        authorization_path=wrong,
+        error_match="authorization path",
+    )
 
 
-def test_root_c2a_rejects_caller_selected_run_armed_source(tmp_path: Path) -> None:
+def test_root_c2a_rejects_caller_selected_run_armed_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     paths = _root_c2a_session_model(tmp_path)
     decoy = paths["armed"].with_name("CALLER-SELECTED-ARMED.json")
     decoy.write_bytes(paths["armed"].read_bytes())
@@ -5243,10 +5298,11 @@ def test_root_c2a_rejects_caller_selected_run_armed_source(tmp_path: Path) -> No
     authorization["run_armed"] = decoy_reference
     authorization["permit_ready"] = _root_c2a_full_reference(paths["ready"])
     _root_c2a_write_json(paths["authorization"], authorization)
-    with pytest.raises(installer.InstallerError, match="cannot select"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match="cannot select",
+    )
 
 
 def test_root_c2a_rejects_decoy_ready_before_any_decoy_open(
@@ -5259,30 +5315,12 @@ def test_root_c2a_rejects_decoy_ready_before_any_decoy_open(
     authorization = json.loads(paths["authorization"].read_text())
     authorization["permit_ready"] = _root_c2a_full_reference(decoy)
     _root_c2a_write_json(paths["authorization"], authorization)
-    original_open = os.open
-    decoy_opens: list[tuple[Any, ...]] = []
-
-    def recording_open(
-        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
-        flags: int,
-        mode: int = 0o777,
-        *,
-        dir_fd: int | None = None,
-    ) -> int:
-        if Path(os.fsdecode(path)) == decoy:
-            decoy_opens.append((path, flags, mode, dir_fd))
-        return (
-            original_open(path, flags, mode)
-            if dir_fd is None
-            else original_open(path, flags, mode, dir_fd=dir_fd)
-        )
-
-    monkeypatch.setattr(os, "open", recording_open)
-    with pytest.raises(installer.InstallerError, match="PERMIT_READY path"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
-    assert decoy_opens == []
+    opened_paths = _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match="PERMIT_READY path",
+    )
+    assert str(decoy) not in opened_paths
 
 
 @pytest.mark.parametrize(
@@ -5299,6 +5337,7 @@ def test_root_c2a_rejects_decoy_ready_before_any_decoy_open(
 )
 def test_root_c2a_rejects_wrong_acquisition_tuple_or_fifo_authority(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     mutation: str,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
@@ -5323,20 +5362,23 @@ def test_root_c2a_rejects_wrong_acquisition_tuple_or_fifo_authority(
         }
     _root_c2a_write_json(paths["manifest"], manifest)
     _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError, match="acquisition"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match="acquisition",
+    )
 
 
 def test_root_c2a_rejects_extra_tree_fifo_outside_closed_acquisitions(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path, extra_ordinary_fifo=True)
-    with pytest.raises(installer.InstallerError, match="exact six acquisitions"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match="TREE/PREFLIGHT FIFO inventory drifted",
+    )
 
 
 @pytest.mark.parametrize(
@@ -5353,6 +5395,7 @@ def test_root_c2a_rejects_extra_tree_fifo_outside_closed_acquisitions(
 )
 def test_root_c2a_rejects_static_role_or_run_binding_drift(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     mutation: str,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
@@ -5374,10 +5417,11 @@ def test_root_c2a_rejects_static_role_or_run_binding_drift(
         static_roles[0]["program"] = dict(static_roles[1]["program"])
     _root_c2a_write_json(paths["manifest"], manifest)
     _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError, match="static"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match="static",
+    )
 
 
 @pytest.mark.parametrize(
@@ -5393,6 +5437,7 @@ def test_root_c2a_rejects_static_role_or_run_binding_drift(
 )
 def test_root_c2a_rejects_literal_stop_and_closer_static_tuple_drift(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     index: int,
     field: str,
     value: str,
@@ -5402,14 +5447,16 @@ def test_root_c2a_rejects_literal_stop_and_closer_static_tuple_drift(
     manifest["static_roles"][index][field] = value
     _root_c2a_write_json(paths["manifest"], manifest)
     _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError, match="static role tuple"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match="static role tuple",
+    )
 
 
 def test_root_c2a_rejects_coherent_closer_unit_rebind_from_preflight_authority(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
     manifest = json.loads(paths["manifest"].read_text())
@@ -5417,10 +5464,11 @@ def test_root_c2a_rejects_coherent_closer_unit_rebind_from_preflight_authority(
     manifest["static_roles"][2]["unit"] = manifest["run_unit"]
     _root_c2a_write_json(paths["manifest"], manifest)
     _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError, match="preflight receipt"):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match="preflight receipt",
+    )
 
 
 @pytest.mark.parametrize(
