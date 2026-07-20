@@ -5036,44 +5036,544 @@ def _build_h11_install_target_specs(
     *,
     install_receipt: H11RootFrozenJsonObject,
     install_manifest: H11RootFrozenJsonObject,
+    tree_receipt: H11RootFrozenJsonObject,
     harness_manifest: H11RootFrozenJsonObject,
-    seal_receipt: H11RootFrozenJsonObject,
-    install_receipt_source_reference: H11RootFrozenJsonObject,
-    install_manifest_source_reference: H11RootFrozenJsonObject,
     formal_root: Path,
     require_root: bool,
 ) -> tuple[H11RootIndirectAuthoritySpec, ...]:
-    if _h11_text(_h11_object_member(install_receipt, "schema", label="H11 install receipt"), label="H11 install receipt.schema") != INSTALL_RECEIPT_SCHEMA or _h11_text(_h11_object_member(install_manifest, "schema", label="H11 install manifest"), label="H11 install manifest.schema") != INSTALL_SCHEMA:
-        _fail("H11 install receipt or manifest schema drifted")
+    install_receipt = _h11_exact_object_fields(
+        install_receipt,
+        (
+            "fixture_gid",
+            "fixture_group",
+            "fixture_uid",
+            "fixture_user",
+            "formal_root",
+            "install_manifest",
+            "installer",
+            "load_call_count",
+            "manager_ledger",
+            "manager_owner",
+            "phase",
+            "preflight_receipt",
+            "reload_call_count",
+            "schema",
+            "seal_receipt",
+            "tree_receipt",
+            "units",
+        ),
+        label="H11 install receipt",
+    )
+    install_manifest = _h11_exact_object_fields(
+        install_manifest,
+        (
+            "formal_root",
+            "preflight_receipt",
+            "receipt_path",
+            "schema",
+            "seal_receipt",
+            "tree_receipt",
+            "units",
+        ),
+        label="H11 install manifest",
+    )
+    if (
+        _h11_text(
+            _h11_object_member(
+                install_receipt,
+                "schema",
+                label="H11 install receipt",
+            ),
+            label="H11 install receipt.schema",
+        )
+        != INSTALL_RECEIPT_SCHEMA
+        or _h11_text(
+            _h11_object_member(
+                install_receipt,
+                "phase",
+                label="H11 install receipt",
+            ),
+            label="H11 install receipt.phase",
+        )
+        != "installed-before-observation"
+    ):
+        _fail("H11 install receipt schema or phase drifted")
+    receipt_formal_root = _h11_exact_object_fields(
+        _h11_object_member(
+            install_receipt,
+            "formal_root",
+            label="H11 install receipt",
+        ),
+        ("device", "inode", "path"),
+        label="H11 install receipt formal root",
+    )
+    if receipt_formal_root != _h11_object_member(
+        tree_receipt,
+        "formal_root",
+        label="H11 TREE receipt",
+    ):
+        _fail("H11 install receipt formal root drifted")
+    if any(
+        _h11_object_member(
+            install_receipt,
+            field,
+            label="H11 install receipt",
+        )
+        != _h11_object_member(
+            tree_receipt,
+            field,
+            label="H11 TREE receipt",
+        )
+        for field in (
+            "fixture_user",
+            "fixture_group",
+            "fixture_uid",
+            "fixture_gid",
+        )
+    ):
+        _fail("H11 install receipt fixture identity drifted")
+    if (
+        _h11_text(
+            _h11_object_member(
+                install_manifest,
+                "schema",
+                label="H11 install manifest",
+            ),
+            label="H11 install manifest.schema",
+        )
+        != INSTALL_SCHEMA
+        or _h11_path(
+            _h11_object_member(
+                install_manifest,
+                "formal_root",
+                label="H11 install manifest",
+            ),
+            label="H11 install manifest.formal_root",
+        )
+        != formal_root
+    ):
+        _fail("H11 install manifest schema or formal root drifted")
+
     units = _h11_object_member(install_receipt, "units", label="H11 install receipt")
-    manifest_units = _h11_object_member(install_manifest, "units", label="H11 install manifest")
-    if type(units) is not tuple or type(manifest_units) is not tuple or len(units) != 3 or len(manifest_units) != 3:
+    manifest_units = _h11_object_member(
+        install_manifest,
+        "units",
+        label="H11 install manifest",
+    )
+    if (
+        type(units) is not tuple
+        or type(manifest_units) is not tuple
+        or len(units) != 3
+        or len(manifest_units) != 3
+    ):
         _fail("H11 install unit inventory drifted")
+
+    harness_run_unit = _h11_text(
+        _h11_object_member(
+            harness_manifest,
+            "run_unit",
+            label="H11 harness manifest",
+        ),
+        label="H11 harness manifest.run_unit",
+    )
+    harness_closer_unit = _h11_text(
+        _h11_object_member(
+            harness_manifest,
+            "closer_unit",
+            label="H11 harness manifest",
+        ),
+        label="H11 harness manifest.closer_unit",
+    )
+    unit_inputs: list[
+        tuple[
+            int,
+            str,
+            str,
+            str,
+            str,
+            H11RootFrozenJsonObject,
+            H11RootFrozenJsonObject,
+            H11RootFrozenJsonObject,
+        ]
+    ] = []
+    seen_roles: set[str] = set()
+    seen_units: set[str] = set()
+    seen_object_paths: set[str] = set()
+    for ordinal, (unit_row, manifest_row) in enumerate(zip(units, manifest_units)):
+        unit_row = _h11_exact_object_fields(
+            unit_row,
+            (
+                "fragment_path",
+                "need_daemon_reload",
+                "object_path",
+                "role",
+                "source",
+                "target",
+                "unit",
+            ),
+            label=f"H11 install unit {ordinal}",
+        )
+        manifest_row = _h11_exact_object_fields(
+            manifest_row,
+            ("role", "sha256", "source", "unit"),
+            label=f"H11 install manifest unit {ordinal}",
+        )
+        target = _h11_exact_object_fields(
+            _h11_object_member(
+                unit_row,
+                "target",
+                label=f"H11 install unit {ordinal}",
+            ),
+            ("device", "gid", "inode", "mode", "path", "sha256", "uid"),
+            label=f"H11 install target {ordinal}",
+        )
+        source = _h11_object_member(
+            unit_row,
+            "source",
+            label=f"H11 install unit {ordinal}",
+        )
+        role = _h11_text(
+            _h11_object_member(
+                unit_row,
+                "role",
+                label=f"H11 install unit {ordinal}",
+            ),
+            label=f"H11 install unit {ordinal}.role",
+        )
+        manifest_role = _h11_text(
+            _h11_object_member(
+                manifest_row,
+                "role",
+                label=f"H11 install manifest unit {ordinal}",
+            ),
+            label=f"H11 install manifest unit {ordinal}.role",
+        )
+        unit = _h11_text(
+            _h11_object_member(
+                unit_row,
+                "unit",
+                label=f"H11 install unit {ordinal}",
+            ),
+            label=f"H11 install unit {ordinal}.unit",
+        )
+        manifest_unit = _h11_text(
+            _h11_object_member(
+                manifest_row,
+                "unit",
+                label=f"H11 install manifest unit {ordinal}",
+            ),
+            label=f"H11 install manifest unit {ordinal}.unit",
+        )
+        object_path = _h11_text(
+            _h11_object_member(
+                unit_row,
+                "object_path",
+                label=f"H11 install unit {ordinal}",
+            ),
+            label=f"H11 install unit {ordinal}.object_path",
+        )
+        expected_object_path = _systemd_unit_object_path(unit)
+        fragment_path = _h11_text(
+            _h11_object_member(
+                unit_row,
+                "fragment_path",
+                label=f"H11 install unit {ordinal}",
+            ),
+            label=f"H11 install unit {ordinal}.fragment_path",
+        )
+        if (
+            role != manifest_role
+            or unit != manifest_unit
+            or object_path != expected_object_path
+            or fragment_path
+            != _h11_object_member(
+                target,
+                "path",
+                label=f"H11 install target {ordinal}",
+            )
+            or _h11_object_member(
+                unit_row,
+                "need_daemon_reload",
+                label=f"H11 install unit {ordinal}",
+            )
+            is not False
+            or role in seen_roles
+            or unit in seen_units
+            or object_path in seen_object_paths
+        ):
+            _fail("H11 install unit role, ordinal, or manager binding drifted")
+        if (
+            (role == "run-fragment" and unit != harness_run_unit)
+            or (role == "close-fragment" and unit != harness_closer_unit)
+            or role
+            not in ("run-fragment", "close-fragment", "gc-fragment")
+        ):
+            _fail("H11 install unit harness binding drifted")
+        seen_roles.add(role)
+        seen_units.add(unit)
+        seen_object_paths.add(object_path)
+        unit_inputs.append(
+            (
+                ordinal,
+                role,
+                unit,
+                object_path,
+                fragment_path,
+                source,
+                target,
+                manifest_row,
+            )
+        )
+    if seen_roles != {"run-fragment", "close-fragment", "gc-fragment"}:
+        _fail("H11 install unit role closure drifted")
+
+    manager_owner = _h11_text(
+        _h11_object_member(
+            install_receipt,
+            "manager_owner",
+            label="H11 install receipt",
+        ),
+        label="H11 install receipt.manager_owner",
+    )
+    ledger = _h11_object_member(
+        install_receipt,
+        "manager_ledger",
+        label="H11 install receipt",
+    )
+    if (
+        re.fullmatch(
+            r":(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)",
+            manager_owner,
+        )
+        is None
+        or _h11_uint(
+            _h11_object_member(
+                install_receipt,
+                "reload_call_count",
+                label="H11 install receipt",
+            ),
+            label="H11 install receipt.reload_call_count",
+        )
+        != 1
+        or _h11_uint(
+            _h11_object_member(
+                install_receipt,
+                "load_call_count",
+                label="H11 install receipt",
+            ),
+            label="H11 install receipt.load_call_count",
+        )
+        != 3
+        or type(ledger) is not tuple
+        or len(ledger) != 10
+    ):
+        _fail("H11 install manager owner, count, or ledger length drifted")
+
+    expected_ledger: list[H11RootFrozenJsonObject] = [
+        (
+            ("arguments", ()),
+            ("begin_ordinal", "1"),
+            ("interface", "org.freedesktop.systemd1.Manager"),
+            ("member", "Reload"),
+            ("object_path", "/org/freedesktop/systemd1"),
+            ("reply", None),
+            ("reply_ordinal", "2"),
+            ("signature", ""),
+        )
+    ]
+    for _ordinal, _role, unit, object_path, _fragment_path, _source, _target, _manifest_row in unit_inputs:
+        entry_ordinal = len(expected_ledger)
+        expected_ledger.append(
+            (
+                ("arguments", (unit,)),
+                ("begin_ordinal", str(2 * entry_ordinal + 1)),
+                ("interface", "org.freedesktop.systemd1.Manager"),
+                ("member", "LoadUnit"),
+                ("object_path", "/org/freedesktop/systemd1"),
+                ("reply", object_path),
+                ("reply_ordinal", str(2 * entry_ordinal + 2)),
+                ("signature", "s"),
+            )
+        )
+    for _ordinal, _role, _unit, object_path, fragment_path, _source, _target, _manifest_row in unit_inputs:
+        entry_ordinal = len(expected_ledger)
+        expected_ledger.append(
+            (
+                (
+                    "arguments",
+                    ("org.freedesktop.systemd1.Unit", "FragmentPath"),
+                ),
+                ("begin_ordinal", str(2 * entry_ordinal + 1)),
+                ("interface", "org.freedesktop.DBus.Properties"),
+                ("member", "Get"),
+                ("object_path", object_path),
+                ("reply", fragment_path),
+                ("reply_ordinal", str(2 * entry_ordinal + 2)),
+                ("signature", "ss"),
+            )
+        )
+        entry_ordinal = len(expected_ledger)
+        expected_ledger.append(
+            (
+                (
+                    "arguments",
+                    ("org.freedesktop.systemd1.Unit", "NeedDaemonReload"),
+                ),
+                ("begin_ordinal", str(2 * entry_ordinal + 1)),
+                ("interface", "org.freedesktop.DBus.Properties"),
+                ("member", "Get"),
+                ("object_path", object_path),
+                ("reply", False),
+                ("reply_ordinal", str(2 * entry_ordinal + 2)),
+                ("signature", "ss"),
+            )
+        )
+    for ledger_ordinal, (entry, expected_entry) in enumerate(
+        zip(ledger, expected_ledger)
+    ):
+        entry = _h11_exact_object_fields(
+            entry,
+            (
+                "arguments",
+                "begin_ordinal",
+                "interface",
+                "member",
+                "object_path",
+                "reply",
+                "reply_ordinal",
+                "signature",
+            ),
+            label=f"H11 install manager ledger {ledger_ordinal}",
+        )
+        if entry != expected_entry:
+            _fail("H11 install manager ledger drifted")
+
     install_inputs: list[
         tuple[str, str, int | None, Path, str, int, int, int | None, tuple[tuple[int, int], ...] | None]
     ] = []
-    for ordinal, (unit_row, manifest_row) in enumerate(zip(units, manifest_units)):
-        role = _h11_text(_h11_object_member(unit_row, "role", label="H11 install unit"), label="H11 install unit.role")
-        unit = _h11_text(_h11_object_member(unit_row, "unit", label="H11 install unit"), label="H11 install unit.unit")
-        if _systemd_unit_object_path(unit) != _h11_text(_h11_object_member(unit_row, "object_path", label="H11 install unit"), label="H11 install unit.object_path"):
-            _fail("H11 install unit object path drifted")
-        target = _h11_object_member(unit_row, "target", label="H11 install unit")
-        uid = _h11_uint(_h11_object_member(target, "uid", label="H11 install target"), label="H11 install target.uid")
-        gid = _h11_uint(_h11_object_member(target, "gid", label="H11 install target"), label="H11 install target.gid")
-        mode_text = _h11_text(_h11_object_member(target, "mode", label="H11 install target"), label="H11 install target.mode")
-        if mode_text != "0644" or role != _h11_text(_h11_object_member(manifest_row, "role", label="H11 install manifest unit"), label="H11 install manifest unit.role"):
-            _fail("H11 install target mode or role drifted")
-        install_inputs.append((
-            role,
-            f"install/target/{role}",
-            ordinal,
-            _h11_path(_h11_object_member(target, "path", label="H11 install target"), label="H11 install target.path"),
-            "regular",
-            _h11_uint(_h11_object_member(target, "device", label="H11 install target"), label="H11 install target.device"),
-            _h11_uint(_h11_object_member(target, "inode", label="H11 install target"), label="H11 install target.inode"),
-            0o644,
-            ((uid, gid),),
-        ))
+    target_parent: Path | None = None
+    for ordinal, role, unit, _object_path, _fragment_path, source, target, manifest_row in unit_inputs:
+        source_path = _h11_path(
+            _h11_object_member(
+                source,
+                "path",
+                label=f"H11 install source {ordinal}",
+            ),
+            label=f"H11 install source {ordinal}.path",
+        )
+        if source_path.parent != formal_root / "sealed" or source_path.name != unit:
+            _fail("H11 install source path layout drifted")
+        manifest_source_path = _h11_path(
+            _h11_object_member(
+                manifest_row,
+                "source",
+                label=f"H11 install manifest unit {ordinal}",
+            ),
+            label=f"H11 install manifest unit {ordinal}.source",
+        )
+        manifest_source_sha256 = _h11_sha256_text(
+            _h11_object_member(
+                manifest_row,
+                "sha256",
+                label=f"H11 install manifest unit {ordinal}",
+            ),
+            label=f"H11 install manifest unit {ordinal}.sha256",
+        )
+        source_sha256 = _h11_object_member(
+            source,
+            "sha256",
+            label=f"H11 install source {ordinal}",
+        )
+        if (
+            manifest_source_path != source_path
+            or manifest_source_sha256 != source_sha256
+        ):
+            _fail("H11 install receipt and manifest source projection drifted")
+        target_sha256 = _h11_sha256_text(
+            _h11_object_member(
+                target,
+                "sha256",
+                label=f"H11 install target {ordinal}",
+            ),
+            label=f"H11 install target {ordinal}.sha256",
+        )
+        if target_sha256 != source_sha256:
+            _fail("H11 install source and target snapshot SHA drifted")
+        target_path = _h11_path(
+            _h11_object_member(
+                target,
+                "path",
+                label=f"H11 install target {ordinal}",
+            ),
+            label=f"H11 install target {ordinal}.path",
+        )
+        if target_path.name != unit:
+            _fail("H11 install target basename drifted")
+        if target_parent is None:
+            target_parent = target_path.parent
+        elif target_path.parent != target_parent:
+            _fail("H11 install target parent closure drifted")
+        device = _h11_uint(
+            _h11_object_member(
+                target,
+                "device",
+                label=f"H11 install target {ordinal}",
+            ),
+            label=f"H11 install target {ordinal}.device",
+        )
+        inode = _h11_uint(
+            _h11_object_member(
+                target,
+                "inode",
+                label=f"H11 install target {ordinal}",
+            ),
+            label=f"H11 install target {ordinal}.inode",
+        )
+        if (
+            _h11_text(
+                _h11_object_member(
+                    target,
+                    "mode",
+                    label=f"H11 install target {ordinal}",
+                ),
+                label=f"H11 install target {ordinal}.mode",
+            )
+            != "0644"
+        ):
+            _fail("H11 install target mode drifted")
+        uid = _h11_uint(
+            _h11_object_member(
+                target,
+                "uid",
+                label=f"H11 install target {ordinal}",
+            ),
+            label=f"H11 install target {ordinal}.uid",
+        )
+        gid = _h11_uint(
+            _h11_object_member(
+                target,
+                "gid",
+                label=f"H11 install target {ordinal}",
+            ),
+            label=f"H11 install target {ordinal}.gid",
+        )
+        if require_root and (uid != 0 or gid != 0):
+            _fail("H11 install target root owner policy drifted")
+        install_inputs.append(
+            (
+                role,
+                f"install/target/{role}",
+                ordinal,
+                target_path,
+                "regular",
+                device,
+                inode,
+                0o644,
+                ((uid, gid),),
+            )
+        )
+    if require_root and target_parent != Path("/run/systemd/system"):
+        _fail("H11 install target root parent drifted")
     return tuple(
         _make_h11_indirect_authority_spec(
             semantic_role=row[0], equivalence_class=row[1], install_ordinal=row[2],
@@ -5170,9 +5670,7 @@ def _build_h11_indirect_authority_inventory(
     )
     install_specs = _build_h11_install_target_specs(
         install_receipt=install_receipt, install_manifest=install_manifest,
-        harness_manifest=harness_manifest, seal_receipt=seal_receipt,
-        install_receipt_source_reference=install_receipt_source_reference,
-        install_manifest_source_reference=install_manifest_source_reference,
+        tree_receipt=tree_receipt, harness_manifest=harness_manifest,
         formal_root=formal_root, require_root=require_root,
     )
     indirect_specs = tree_specs + seal_specs + install_specs

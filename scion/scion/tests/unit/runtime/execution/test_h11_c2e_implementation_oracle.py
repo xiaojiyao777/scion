@@ -38,6 +38,16 @@ DOMAIN_OWNER_CORRECTION_DESIGN = (
 DOMAIN_OWNER_CORRECTION_DESIGN_SHA256 = (
     "58fd9dbcd97283154e7fb0374b4d8b9f71c540a4e0d55461639b0fffebb7ad14"
 )
+INSTALL_OWNER_CORRECTION_DESIGN = (
+    Path(__file__).parents[5]
+    / "docs"
+    / "planning"
+    / "v0.4"
+    / "v0.4-w3-h11-c2e-install-proof-owner-correction-design-20260720.md"
+)
+INSTALL_OWNER_CORRECTION_DESIGN_SHA256 = (
+    "f41f0fc8d168afae3e930fd5dc7d95a0abfce6fd77a01dcf350c4e79d162eb65"
+)
 M = "generic_backend_root_installer"
 ROOT_QNAME = f"{M}.authorize_h11_release"
 
@@ -307,6 +317,137 @@ EXPECTED_INTERNAL_QNAMES = frozenset(
         f"{M}.H11OwnedFdSlot.detach",
     }
 )
+
+REACHABLE_INTERNAL_COUNTER_LEDGER_SHA256 = (
+    "ea129be90afdce679ea54cac81ebd7816e198a5809249bfe4be1cee2a3310e1a"
+)
+REACHABLE_SENSITIVE_SITE_LEDGER_SHA256 = (
+    "95cf31ad72b36308bb7176032e89922070aec5b6d6c27e613951dd5bd85ec40b"
+)
+
+
+def _reachable_internal_counter_ledger(
+    result: H11ScanResult,
+) -> tuple[tuple[str, str, int], ...]:
+    counts = Counter(
+        (call.caller_qname, call.canonical_target)
+        for call in result.calls
+        if call.target_kind == "internal"
+    )
+    return tuple(
+        sorted((caller, callee, count) for (caller, callee), count in counts.items())
+    )
+
+
+def _reachable_sensitive_site_ledger(
+    result: H11ScanResult,
+) -> tuple[tuple[str, str, str, int], ...]:
+    return tuple(
+        sorted(
+            (
+                call.caller_qname,
+                call.canonical_target,
+                call.lexical_target,
+                call.same_caller_occurrence,
+            )
+            for call in result.calls
+            if call.target_kind == "sensitive"
+        )
+    )
+
+
+def _reachable_ledger_sha256(rows: tuple[tuple[Any, ...], ...]) -> str:
+    payload = json.dumps(
+        rows,
+        ensure_ascii=True,
+        separators=(",", ":"),
+    ).encode("ascii")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _assert_reachable_ledgers_are_exact(result: H11ScanResult) -> None:
+    assert (
+        _reachable_ledger_sha256(_reachable_internal_counter_ledger(result))
+        == REACHABLE_INTERNAL_COUNTER_LEDGER_SHA256
+    )
+    assert (
+        _reachable_ledger_sha256(_reachable_sensitive_site_ledger(result))
+        == REACHABLE_SENSITIVE_SITE_LEDGER_SHA256
+    )
+
+
+def _inject_install_builder_statement(source: str, statement: str) -> str:
+    tree = ast.parse(source)
+    builder = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_build_h11_install_target_specs"
+    )
+    lines = source.splitlines(keepends=True)
+    lines.insert(builder.body[0].lineno - 1, f"    {statement}\n")
+    return "".join(lines)
+
+
+def _assert_install_builder_signature_and_unique_top_caller(source: str) -> None:
+    scanner = H11ReachableCallScanner(source)
+    builder_qname = f"{M}._build_h11_install_target_specs"
+    top_qname = f"{M}._build_h11_indirect_authority_inventory"
+    builder = scanner.functions[builder_qname].node
+    expected_keywords = (
+        "install_receipt",
+        "install_manifest",
+        "tree_receipt",
+        "harness_manifest",
+        "formal_root",
+        "require_root",
+    )
+    expected_annotations = (
+        "H11RootFrozenJsonObject",
+        "H11RootFrozenJsonObject",
+        "H11RootFrozenJsonObject",
+        "H11RootFrozenJsonObject",
+        "Path",
+        "bool",
+    )
+    assert isinstance(builder, ast.FunctionDef)
+    assert builder.type_params == []
+    assert builder.args.posonlyargs == []
+    assert builder.args.args == []
+    assert tuple(argument.arg for argument in builder.args.kwonlyargs) == expected_keywords
+    assert tuple(
+        ast.unparse(argument.annotation)
+        for argument in builder.args.kwonlyargs
+        if argument.annotation is not None
+    ) == expected_annotations
+    assert all(
+        argument.annotation is not None for argument in builder.args.kwonlyargs
+    )
+    assert ast.unparse(builder.returns) == "tuple[H11RootIndirectAuthoritySpec, ...]"
+    assert builder.args.defaults == []
+    assert builder.args.kw_defaults == [None] * len(expected_keywords)
+    assert builder.args.vararg is None
+    assert builder.args.kwarg is None
+
+    callers = tuple(
+        (qname, call)
+        for qname, info in scanner.functions.items()
+        for call in ast.walk(info.node)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "_build_h11_install_target_specs"
+    )
+    assert len(callers) == 1
+    caller_qname, call = callers[0]
+    assert caller_qname == top_qname
+    assert call.args == []
+    assert tuple(keyword.arg for keyword in call.keywords) == expected_keywords
+    assert tuple(
+        keyword.value.id
+        for keyword in call.keywords
+        if isinstance(keyword.value, ast.Name)
+    ) == expected_keywords
+    assert all(isinstance(keyword.value, ast.Name) for keyword in call.keywords)
 
 _FROZEN_FIELD_METHODS = {
     ("H11RootDirectoryView", "_slot", "borrow"): f"{M}.H11OwnedFdSlot.borrow",
@@ -3220,23 +3361,20 @@ DOMAIN_NEGATIVE_AXES = {
         "unit-role-ordinal",
         "manager-ledger",
         "source-path",
-        "source-hash",
-        "source-identity",
-        "source-mode",
-        "source-owner",
+        "receipt-manifest-source-merge",
+        "source-target-hash",
         "target-path",
-        "target-hash",
         "target-identity",
         "target-mode",
         "target-owner",
-        "source-member-merge",
-        "target-alias",
     ),
 }
 
 TOP_ALIAS_AXES = (
     "direct-only-path-alias",
     "direct-only-identity-alias",
+    "indirect-path-alias",
+    "indirect-identity-alias",
 )
 
 FINAL_PROOF_OBSERVED_AXES = (
@@ -3469,6 +3607,10 @@ def test_c2e_oracle_is_bound_to_the_reviewed_design() -> None:
     assert (
         hashlib.sha256(DOMAIN_OWNER_CORRECTION_DESIGN.read_bytes()).hexdigest()
         == DOMAIN_OWNER_CORRECTION_DESIGN_SHA256
+    )
+    assert (
+        hashlib.sha256(INSTALL_OWNER_CORRECTION_DESIGN.read_bytes()).hexdigest()
+        == INSTALL_OWNER_CORRECTION_DESIGN_SHA256
     )
     assert INSTALLER_SOURCE.is_file()
 
@@ -4881,7 +5023,7 @@ def test_c2e_domain_single_delta_matrix_is_closed_and_nonduplicated() -> None:
         for helper, axes in DOMAIN_NEGATIVE_AXES.items()
         for axis in axes
     }
-    assert len(registered) == sum(len(axes) for axes in DOMAIN_NEGATIVE_AXES.values()) == 73
+    assert len(registered) == sum(len(axes) for axes in DOMAIN_NEGATIVE_AXES.values()) == 68
 
 
 @pytest.mark.parametrize(
@@ -5171,7 +5313,7 @@ TREE_DOMAIN_CASES = (
     ("order", "fifo"),
 )
 
-TOP_ALIAS_CASES = (
+TOP_DIRECT_ALIAS_CASES = (
     ("direct-only-path-alias", "source-indirect"),
     ("direct-only-path-alias", "directory-indirect"),
     ("direct-only-path-alias", "directory-source"),
@@ -5179,6 +5321,12 @@ TOP_ALIAS_CASES = (
     ("direct-only-identity-alias", "directory-indirect"),
     ("direct-only-identity-alias", "directory-source"),
     ("direct-only-identity-alias", "directory-directory"),
+)
+
+TOP_INDIRECT_ALIAS_CASES = (
+    ("indirect-path-alias", "target-source"),
+    ("indirect-identity-alias", "target-target"),
+    ("indirect-identity-alias", "target-source"),
 )
 
 SEAL_DOMAIN_CASES = (
@@ -5255,6 +5403,72 @@ PREFLIGHT_DOMAIN_CASES = (
     ("harness-unit-binding", "coherent-closer-rebind"),
     ("asset-count", "value"),
     ("asset-count", "noncanonical"),
+)
+
+INSTALL_DOMAIN_CASES = (
+    ("receipt", "missing-key"),
+    ("receipt", "extra-key"),
+    ("receipt", "schema"),
+    ("receipt", "phase"),
+    ("receipt", "formal-root-missing-key"),
+    ("receipt", "formal-root-extra-key"),
+    ("receipt", "formal-root-device"),
+    ("receipt", "formal-root-inode"),
+    ("receipt", "formal-root-path"),
+    ("receipt", "fixture-user"),
+    ("receipt", "fixture-group"),
+    ("receipt", "fixture-uid"),
+    ("receipt", "fixture-gid"),
+    ("manifest", "missing-key"),
+    ("manifest", "extra-key"),
+    ("manifest", "schema"),
+    ("manifest", "formal-root"),
+    ("unit-role-ordinal", "missing-unit"),
+    ("unit-role-ordinal", "manifest-order-mismatch"),
+    ("unit-role-ordinal", "manifest-role-set-mismatch"),
+    ("unit-role-ordinal", "manifest-duplicate-role"),
+    ("unit-role-ordinal", "manifest-unit-mismatch"),
+    ("unit-role-ordinal", "receipt-unit-missing-key"),
+    ("unit-role-ordinal", "receipt-unit-extra-key"),
+    ("unit-role-ordinal", "manifest-unit-missing-key"),
+    ("unit-role-ordinal", "manifest-unit-extra-key"),
+    ("unit-role-ordinal", "target-missing-key"),
+    ("unit-role-ordinal", "target-extra-key"),
+    ("unit-role-ordinal", "object-path"),
+    ("unit-role-ordinal", "fragment-path"),
+    ("unit-role-ordinal", "need-daemon-reload"),
+    ("unit-role-ordinal", "coherent-foreign-receipt-role"),
+    ("unit-role-ordinal", "coherent-duplicate-receipt-row"),
+    ("unit-role-ordinal", "run-harness-mismatch"),
+    ("unit-role-ordinal", "close-harness-mismatch"),
+    ("unit-role-ordinal", "gc-invalid-unit"),
+    ("manager-ledger", "manager-owner"),
+    ("manager-ledger", "reload-count"),
+    ("manager-ledger", "load-count"),
+    ("manager-ledger", "missing-entry"),
+    ("manager-ledger", "entry-extra-key"),
+    ("manager-ledger", "ordinal"),
+    ("manager-ledger", "member-order"),
+    ("manager-ledger", "reload-entry"),
+    ("manager-ledger", "load-entry"),
+    ("manager-ledger", "fragment-entry"),
+    ("manager-ledger", "reload-property-entry"),
+    ("source-path", "input-parent"),
+    ("source-path", "wrong-basename"),
+    ("receipt-manifest-source-merge", "path"),
+    ("receipt-manifest-source-merge", "sha256"),
+    ("source-target-hash", "source-side-coherent"),
+    ("source-target-hash", "target-side-valid"),
+    ("source-target-hash", "target-noncanonical"),
+    ("target-path", "wrong-basename"),
+    ("target-path", "parent"),
+    ("target-identity", "device"),
+    ("target-identity", "inode"),
+    ("target-mode", "value"),
+    ("target-mode", "noncanonical"),
+    ("target-owner", "uid-noncanonical"),
+    ("target-owner", "gid-noncanonical"),
+    ("target-owner", "root-policy"),
 )
 
 
@@ -6164,6 +6378,504 @@ def test_c2e_preflight_domain_each_registered_axis_is_owned_first_by_preflight(
         assert later_domains == ["install"]
 
 
+def test_c2e_install_domain_positive_builds_exact_target_classes_and_merges_sources(
+    tmp_path: Path,
+) -> None:
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    _fixture_uid, _fixture_gid, _validated, all_specs = (
+        production._build_h11_indirect_authority_inventory(**fixture.arguments)
+    )
+    target_specs = all_specs[-3:]
+    assert tuple(
+        (spec.equivalence_class, spec.semantic_role, spec.install_ordinal)
+        for spec in target_specs
+    ) == CANONICAL_INDIRECT_CLASSES[-3:]
+    for ordinal, (spec, unit_row) in enumerate(
+        zip(target_specs, fixture.documents["install_receipt"]["units"])
+    ):
+        target = unit_row["target"]
+        assert spec.install_ordinal == ordinal
+        assert spec.path == Path(target["path"])
+        assert (spec.device, spec.inode, spec.mode) == (
+            int(target["device"]),
+            int(target["inode"]),
+            0o644,
+        )
+        assert spec.accepted_owners == ((int(target["uid"]), int(target["gid"])),)
+
+    for role in ("run-fragment", "close-fragment", "gc-fragment"):
+        assert tuple(
+            spec.equivalence_class
+            for spec in all_specs
+            if spec.semantic_role == role
+        ) == (f"seal/file/{role}", f"install/target/{role}")
+
+
+def test_c2e_install_domain_nonroot_target_owner_is_independent_of_tree_fixture_owner(
+    tmp_path: Path,
+) -> None:
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    arguments = dict(fixture.arguments)
+    assert arguments["require_root"] is False
+    receipt = json.loads(json.dumps(fixture.documents["install_receipt"]))
+    tree_fixture_pair = (
+        int(fixture.documents["tree_receipt"]["fixture_uid"]),
+        int(fixture.documents["tree_receipt"]["fixture_gid"]),
+    )
+    changed_pair = (tree_fixture_pair[0] + 101, tree_fixture_pair[1] + 202)
+    run_target = next(
+        row["target"]
+        for row in receipt["units"]
+        if row["role"] == "run-fragment"
+    )
+    run_target["uid"], run_target["gid"] = map(str, changed_pair)
+    _replace_inventory_document(
+        fixture,
+        arguments,
+        "install_receipt",
+        receipt,
+        label="C2e INSTALL independent nonroot target owner receipt",
+    )
+
+    _fixture_uid, _fixture_gid, _validated, specs = (
+        production._build_h11_indirect_authority_inventory(**arguments)
+    )
+    run_install_spec = next(
+        spec
+        for spec in specs
+        if spec.equivalence_class == "install/target/run-fragment"
+    )
+    assert changed_pair != tree_fixture_pair
+    assert run_install_spec.accepted_owners == (changed_pair,)
+
+
+def test_c2e_install_domain_accepts_synchronized_producer_order_permutation(
+    tmp_path: Path,
+) -> None:
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    arguments = dict(fixture.arguments)
+    receipt = json.loads(json.dumps(fixture.documents["install_receipt"]))
+    manifest = json.loads(json.dumps(fixture.documents["install_manifest"]))
+    permutation = (2, 0, 1)
+    receipt["units"] = [receipt["units"][index] for index in permutation]
+    manifest["units"] = [manifest["units"][index] for index in permutation]
+    ledger = receipt["manager_ledger"]
+    reordered_ledger = [ledger[0]]
+    reordered_ledger.extend(ledger[1 + index] for index in permutation)
+    property_rows = ledger[4:]
+    for index in permutation:
+        reordered_ledger.extend(property_rows[2 * index : 2 * index + 2])
+    for ordinal, row in enumerate(reordered_ledger, start=1):
+        row["begin_ordinal"] = str(2 * ordinal - 1)
+        row["reply_ordinal"] = str(2 * ordinal)
+    receipt["manager_ledger"] = reordered_ledger
+    for name, document in (
+        ("install_receipt", receipt),
+        ("install_manifest", manifest),
+    ):
+        _replace_inventory_document(
+            fixture,
+            arguments,
+            name,
+            document,
+            label=f"C2e INSTALL synchronized permutation {name}",
+        )
+
+    _fixture_uid, _fixture_gid, _validated, specs = (
+        production._build_h11_indirect_authority_inventory(**arguments)
+    )
+    expected_roles = tuple(receipt["units"][index]["role"] for index in range(3))
+    assert expected_roles == ("gc-fragment", "run-fragment", "close-fragment")
+    assert tuple(
+        (spec.semantic_role, spec.install_ordinal)
+        for spec in specs[-3:]
+    ) == tuple((role, ordinal) for ordinal, role in enumerate(expected_roles))
+    assert tuple(spec.semantic_role for spec in specs[-3:]) != tuple(
+        sorted(expected_roles)
+    )
+
+
+@pytest.mark.parametrize(
+    ("axis", "variant"),
+    INSTALL_DOMAIN_CASES,
+    ids=lambda value: value,
+)
+def test_c2e_install_domain_each_registered_axis_is_owned_first_by_install(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    axis: str,
+    variant: str,
+) -> None:
+    assert {case_axis for case_axis, _variant in INSTALL_DOMAIN_CASES} == set(
+        DOMAIN_NEGATIVE_AXES["_build_h11_install_target_specs"]
+    )
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    arguments = dict(fixture.arguments)
+    receipt = json.loads(json.dumps(fixture.documents["install_receipt"]))
+    manifest = json.loads(json.dumps(fixture.documents["install_manifest"]))
+    seal = json.loads(json.dumps(fixture.documents["seal_receipt"]))
+    harness = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+    permit_ready = json.loads(json.dumps(fixture.documents["permit_ready"]))
+
+    def receipt_unit(role: str) -> dict[str, Any]:
+        return next(row for row in receipt["units"] if row["role"] == role)
+
+    def manifest_unit(role: str) -> dict[str, Any]:
+        return next(row for row in manifest["units"] if row["role"] == role)
+
+    def seal_row(role: str) -> dict[str, Any]:
+        return next(row for row in seal["files"] if row["role"] == role)
+
+    run_receipt = receipt_unit("run-fragment")
+    run_manifest = manifest_unit("run-fragment")
+    run_seal = seal_row("run-fragment")
+    run_target = run_receipt["target"]
+
+    def synchronize_unit_identity(role: str, changed_unit: str) -> None:
+        changed_object_paths = {
+            "scion-w3-install-wrong-run.service": (
+                "/org/freedesktop/systemd1/unit/"
+                "scion_2dw3_2dinstall_2dwrong_2drun_2eservice"
+            ),
+            "scion-w3-install-wrong-close.service": (
+                "/org/freedesktop/systemd1/unit/"
+                "scion_2dw3_2dinstall_2dwrong_2dclose_2eservice"
+            ),
+            "invalid-gc-unit": (
+                "/org/freedesktop/systemd1/unit/invalid_2dgc_2dunit"
+            ),
+        }
+        receipt_row = receipt_unit(role)
+        manifest_row = manifest_unit(role)
+        sealed_row = seal_row(role)
+        unit_ordinal = receipt["units"].index(receipt_row)
+        changed_source_path = Path(receipt_row["source"]["path"]).with_name(
+            changed_unit
+        )
+        changed_target_path = Path(receipt_row["target"]["path"]).with_name(
+            changed_unit
+        )
+        changed_object_path = changed_object_paths[changed_unit]
+
+        receipt_row["unit"] = changed_unit
+        manifest_row["unit"] = changed_unit
+        receipt_row["source"]["path"] = str(changed_source_path)
+        manifest_row["source"] = str(changed_source_path)
+        sealed_row["path"] = str(changed_source_path)
+        receipt_row["target"]["path"] = str(changed_target_path)
+        receipt_row["fragment_path"] = str(changed_target_path)
+        receipt_row["object_path"] = changed_object_path
+
+        ledger = receipt["manager_ledger"]
+        load_row = ledger[1 + unit_ordinal]
+        load_row["arguments"] = [changed_unit]
+        load_row["reply"] = changed_object_path
+        property_start = 1 + len(receipt["units"])
+        fragment_row = ledger[property_start + 2 * unit_ordinal]
+        daemon_reload_row = ledger[property_start + 2 * unit_ordinal + 1]
+        fragment_row["object_path"] = changed_object_path
+        fragment_row["reply"] = str(changed_target_path)
+        daemon_reload_row["object_path"] = changed_object_path
+
+    if axis == "receipt":
+        if variant == "missing-key":
+            receipt.pop("manager_owner")
+        elif variant == "extra-key":
+            receipt["unexpected"] = True
+        elif variant == "schema":
+            receipt["schema"] = "scion.invalid.install_receipt.v1"
+        elif variant == "phase":
+            receipt["phase"] = "not-installed"
+        elif variant == "formal-root-missing-key":
+            receipt["formal_root"].pop("device")
+        elif variant == "formal-root-extra-key":
+            receipt["formal_root"]["unexpected"] = True
+        elif variant in {"formal-root-device", "formal-root-inode"}:
+            field = variant.removeprefix("formal-root-")
+            receipt["formal_root"][field] = str(
+                int(receipt["formal_root"][field]) + 1
+            )
+        elif variant == "formal-root-path":
+            receipt["formal_root"]["path"] = str(tmp_path / "wrong-formal-root")
+        else:
+            assert variant in {
+                "fixture-user",
+                "fixture-group",
+                "fixture-uid",
+                "fixture-gid",
+            }
+            field = variant.removeprefix("fixture-")
+            key = f"fixture_{field}"
+            if field in {"uid", "gid"}:
+                receipt[key] = str(int(receipt[key]) + 1)
+            else:
+                receipt[key] = f"wrong-{field}"
+    elif axis == "manifest":
+        if variant == "missing-key":
+            manifest.pop("formal_root")
+        elif variant == "extra-key":
+            manifest["unexpected"] = True
+        elif variant == "schema":
+            manifest["schema"] = "scion.invalid.install.v1"
+        else:
+            assert variant == "formal-root"
+            manifest["formal_root"] = str(tmp_path / "wrong-formal-root")
+    elif axis == "unit-role-ordinal":
+        if variant == "missing-unit":
+            receipt["units"].pop()
+            manifest["units"].pop()
+        elif variant == "manifest-order-mismatch":
+            manifest["units"][0], manifest["units"][1] = (
+                manifest["units"][1],
+                manifest["units"][0],
+            )
+        elif variant == "manifest-role-set-mismatch":
+            run_manifest["role"] = "foreign-fragment"
+        elif variant == "manifest-duplicate-role":
+            run_manifest["role"] = "close-fragment"
+        elif variant == "manifest-unit-mismatch":
+            run_manifest["unit"] = "scion-w3-wrong-run.service"
+        elif variant == "receipt-unit-missing-key":
+            run_receipt.pop("fragment_path")
+        elif variant == "receipt-unit-extra-key":
+            run_receipt["unexpected"] = True
+        elif variant == "manifest-unit-missing-key":
+            run_manifest.pop("sha256")
+        elif variant == "manifest-unit-extra-key":
+            run_manifest["unexpected"] = True
+        elif variant == "target-missing-key":
+            run_target.pop("gid")
+        elif variant == "target-extra-key":
+            run_target["unexpected"] = True
+        elif variant == "object-path":
+            run_receipt["object_path"] = "/org/freedesktop/systemd1/unit/wrong"
+        elif variant == "fragment-path":
+            run_receipt["fragment_path"] = str(tmp_path / "wrong-fragment.service")
+        elif variant == "need-daemon-reload":
+            run_receipt["need_daemon_reload"] = True
+        elif variant == "coherent-foreign-receipt-role":
+            changed_role = "foreign-fragment"
+            run_receipt["role"] = changed_role
+            run_manifest["role"] = changed_role
+            run_seal["role"] = changed_role
+        elif variant == "coherent-duplicate-receipt-row":
+            close_receipt = receipt_unit("close-fragment")
+            close_manifest = manifest_unit("close-fragment")
+            run_ordinal = receipt["units"].index(run_receipt)
+            receipt["units"][run_ordinal] = json.loads(
+                json.dumps(close_receipt)
+            )
+            manifest["units"][run_ordinal] = json.loads(
+                json.dumps(close_manifest)
+            )
+            ledger = receipt["manager_ledger"]
+            replacement = receipt["units"][run_ordinal]
+            load_row = ledger[1 + run_ordinal]
+            load_row["arguments"] = [replacement["unit"]]
+            load_row["reply"] = replacement["object_path"]
+            property_start = 1 + len(receipt["units"])
+            fragment_row = ledger[property_start + 2 * run_ordinal]
+            reload_row = ledger[property_start + 2 * run_ordinal + 1]
+            fragment_row["object_path"] = replacement["object_path"]
+            fragment_row["reply"] = replacement["fragment_path"]
+            reload_row["object_path"] = replacement["object_path"]
+        elif variant == "run-harness-mismatch":
+            synchronize_unit_identity(
+                "run-fragment",
+                "scion-w3-install-wrong-run.service",
+            )
+        elif variant == "close-harness-mismatch":
+            synchronize_unit_identity(
+                "close-fragment",
+                "scion-w3-install-wrong-close.service",
+            )
+        else:
+            assert variant == "gc-invalid-unit"
+            synchronize_unit_identity("gc-fragment", "invalid-gc-unit")
+    elif axis == "manager-ledger":
+        ledger = receipt["manager_ledger"]
+        if variant == "manager-owner":
+            receipt["manager_owner"] = "not-a-unique-owner"
+        elif variant == "reload-count":
+            receipt["reload_call_count"] = "2"
+        elif variant == "load-count":
+            receipt["load_call_count"] = "2"
+        elif variant == "missing-entry":
+            ledger.pop()
+        elif variant == "entry-extra-key":
+            ledger[0]["unexpected"] = True
+        elif variant == "ordinal":
+            ledger[1]["begin_ordinal"] = "99"
+        elif variant == "member-order":
+            ledger[1]["member"] = "Reload"
+        elif variant == "reload-entry":
+            ledger[0]["interface"] = "org.freedesktop.systemd1.Wrong"
+        elif variant == "load-entry":
+            ledger[1]["arguments"] = ["scion-w3-wrong.service"]
+        elif variant == "fragment-entry":
+            ledger[4]["reply"] = str(tmp_path / "wrong-fragment.service")
+        else:
+            assert variant == "reload-property-entry"
+            ledger[5]["reply"] = True
+    elif axis == "source-path":
+        if variant == "input-parent":
+            changed_path = Path(arguments["formal_root"]) / "input" / Path(
+                run_receipt["source"]["path"]
+            ).name
+        else:
+            assert variant == "wrong-basename"
+            changed_path = Path(arguments["formal_root"]) / "sealed" / "wrong.service"
+        run_receipt["source"]["path"] = str(changed_path)
+        run_manifest["source"] = str(changed_path)
+        run_seal["path"] = str(changed_path)
+    elif axis == "receipt-manifest-source-merge":
+        if variant == "path":
+            run_manifest["source"] = str(
+                Path(run_manifest["source"]).with_name("wrong-run.service")
+            )
+        else:
+            assert variant == "sha256"
+            run_manifest["sha256"] = (
+                "0" * 64
+                if run_manifest["sha256"] != "0" * 64
+                else "1" * 64
+            )
+    elif axis == "source-target-hash":
+        if variant == "source-side-coherent":
+            changed_sha = (
+                "0" * 64
+                if run_receipt["source"]["sha256"] != "0" * 64
+                else "1" * 64
+            )
+            run_receipt["source"]["sha256"] = changed_sha
+            run_manifest["sha256"] = changed_sha
+            run_seal["sha256"] = changed_sha
+        elif variant == "target-side-valid":
+            run_target["sha256"] = (
+                "0" * 64 if run_target["sha256"] != "0" * 64 else "1" * 64
+            )
+        else:
+            assert variant == "target-noncanonical"
+            run_target["sha256"] = "A" * 64
+    elif axis == "target-path":
+        if variant == "wrong-basename":
+            changed_path = Path(run_target["path"]).with_name("wrong.service")
+        else:
+            assert variant == "parent"
+            changed_path = tmp_path / "other-target" / run_receipt["unit"]
+        run_target["path"] = str(changed_path)
+        run_receipt["fragment_path"] = str(changed_path)
+        run_ordinal = receipt["units"].index(run_receipt)
+        property_start = 1 + len(receipt["units"])
+        receipt["manager_ledger"][property_start + 2 * run_ordinal]["reply"] = str(
+            changed_path
+        )
+    elif axis == "target-identity":
+        run_target[variant] = "01"
+    elif axis == "target-mode":
+        run_target["mode"] = "0600" if variant == "value" else "644"
+    elif axis == "target-owner":
+        if variant in {"uid-noncanonical", "gid-noncanonical"}:
+            run_target[variant.removesuffix("-noncanonical")] = "01"
+        else:
+            assert variant == "root-policy"
+            arguments["require_root"] = True
+            for reference_name in (
+                "formal_root_directory_reference",
+                "authority_root_directory_reference",
+                "input_root_directory_reference",
+                "fifo_root_directory_reference",
+            ):
+                arguments[reference_name] = replace(
+                    arguments[reference_name],
+                    uid=0,
+                    gid=0,
+                )
+            root_directory_roles = {
+                "formal-root",
+                "authority-root",
+                "input-root",
+                "fifo-root",
+            }
+            for row in harness["permit_authority"]["directory_chain"]:
+                if row["role"] in root_directory_roles:
+                    row["uid"] = "0"
+                    row["gid"] = "0"
+            permit_ready["permit_authority"] = json.loads(
+                json.dumps(harness["permit_authority"])
+            )
+            for reference_name in (
+                "ready_commit_fifo_reference",
+                "permit_commit_fifo_reference",
+            ):
+                arguments[reference_name] = replace(
+                    arguments[reference_name],
+                    accepted_owners=((0, 0),),
+                )
+            property_rows = receipt["manager_ledger"][4:]
+            for ordinal, unit_row in enumerate(receipt["units"]):
+                target_path = Path("/run/systemd/system") / unit_row["unit"]
+                unit_row["target"]["path"] = str(target_path)
+                unit_row["fragment_path"] = str(target_path)
+                property_rows[2 * ordinal]["reply"] = str(target_path)
+    else:
+        raise AssertionError((axis, variant))
+
+    for name, document in (
+        ("install_receipt", receipt),
+        ("install_manifest", manifest),
+        ("seal_receipt", seal),
+        ("harness_manifest", harness),
+        ("permit_ready", permit_ready),
+    ):
+        _replace_inventory_document(
+            fixture,
+            arguments,
+            name,
+            document,
+            label=f"C2e INSTALL {axis} {variant} {name}",
+        )
+
+    owner_order = tuple(DOMAIN_NEGATIVE_AXES)
+    originals = {name: getattr(production, name) for name in owner_order}
+    entered: list[str] = []
+    completed: list[str] = []
+
+    def recording_owner(name: str) -> Any:
+        def invoke(**kwargs: Any) -> Any:
+            entered.append(name)
+            result = originals[name](**kwargs)
+            completed.append(name)
+            return result
+
+        return invoke
+
+    for name in owner_order:
+        monkeypatch.setattr(production, name, recording_owner(name))
+
+    def forbidden_observation(*_args: Any, **_kwargs: Any) -> Any:
+        pytest.fail(f"C2e INSTALL {axis} {variant} escaped into observation")
+
+    monkeypatch.setattr(
+        production,
+        "_observe_h11_indirect_authority",
+        forbidden_observation,
+    )
+    monkeypatch.setattr(
+        production,
+        "_prove_h11_indirect_observations",
+        forbidden_observation,
+    )
+    with pytest.raises(production.InstallerError):
+        production._build_h11_indirect_authority_inventory(**arguments)
+    assert entered == list(owner_order)
+    assert completed == list(owner_order[:-1])
+
+
 @pytest.mark.parametrize("axis", FINAL_PROOF_OBSERVED_AXES)
 def test_c2e_final_proof_observed_axes_are_owned_only_by_the_pure_proof(
     tmp_path: Path,
@@ -6220,7 +6932,7 @@ def test_c2e_final_proof_observed_axes_are_owned_only_by_the_pure_proof(
 
 @pytest.mark.parametrize(
     ("axis", "variant"),
-    TOP_ALIAS_CASES,
+    TOP_DIRECT_ALIAS_CASES,
     ids=lambda value: value,
 )
 def test_c2e_top_builder_first_rejects_each_direct_only_alias_partition(
@@ -6229,7 +6941,10 @@ def test_c2e_top_builder_first_rejects_each_direct_only_alias_partition(
     axis: str,
     variant: str,
 ) -> None:
-    assert {case_axis for case_axis, _variant in TOP_ALIAS_CASES} == set(TOP_ALIAS_AXES)
+    assert {
+        case_axis
+        for case_axis, _variant in TOP_DIRECT_ALIAS_CASES + TOP_INDIRECT_ALIAS_CASES
+    } == set(TOP_ALIAS_AXES)
     fixture = _build_c2e_inventory_fixture(tmp_path)
     production = fixture.production
     arguments = dict(fixture.arguments)
@@ -6371,6 +7086,102 @@ def test_c2e_top_builder_first_rejects_each_direct_only_alias_partition(
         else "H11 direct-only authority aliases indirect authority"
     )
     assert str(failure) == expected_failure
+
+
+@pytest.mark.parametrize(
+    ("axis", "variant"),
+    TOP_INDIRECT_ALIAS_CASES,
+    ids=lambda value: value,
+)
+def test_c2e_top_builder_first_rejects_each_indirect_alias_partition(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    axis: str,
+    variant: str,
+) -> None:
+    assert {
+        case_axis
+        for case_axis, _variant in TOP_DIRECT_ALIAS_CASES + TOP_INDIRECT_ALIAS_CASES
+    } == set(TOP_ALIAS_AXES)
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    arguments = dict(fixture.arguments)
+    receipt = json.loads(json.dumps(fixture.documents["install_receipt"]))
+
+    if axis == "indirect-path-alias":
+        assert variant == "target-source"
+        property_rows = receipt["manager_ledger"][4:]
+        for ordinal, unit_row in enumerate(receipt["units"]):
+            source_path = unit_row["source"]["path"]
+            unit_row["target"]["path"] = source_path
+            unit_row["fragment_path"] = source_path
+            property_rows[2 * ordinal]["reply"] = source_path
+    else:
+        assert axis == "indirect-identity-alias"
+        run_row = next(row for row in receipt["units"] if row["role"] == "run-fragment")
+        target = run_row["target"]
+        if variant == "target-target":
+            close_target = next(
+                row["target"]
+                for row in receipt["units"]
+                if row["role"] == "close-fragment"
+            )
+            close_target["device"] = target["device"]
+            close_target["inode"] = target["inode"]
+        else:
+            assert variant == "target-source"
+            target["device"] = run_row["source"]["device"]
+            target["inode"] = run_row["source"]["inode"]
+
+    _replace_inventory_document(
+        fixture,
+        arguments,
+        "install_receipt",
+        receipt,
+        label=f"C2e top {axis} {variant} install receipt",
+    )
+    helper_order = tuple(DOMAIN_NEGATIVE_AXES)
+    originals = {
+        helper_name: getattr(production, helper_name) for helper_name in helper_order
+    }
+    entered: list[str] = []
+    completed: list[str] = []
+
+    def recording_helper(helper_name: str) -> Any:
+        def invoke(**kwargs: Any) -> Any:
+            entered.append(helper_name)
+            result = originals[helper_name](**kwargs)
+            completed.append(helper_name)
+            return result
+
+        return invoke
+
+    for helper_name in helper_order:
+        monkeypatch.setattr(
+            production,
+            helper_name,
+            recording_helper(helper_name),
+        )
+
+    def forbidden_observation(*_args: Any, **_kwargs: Any) -> Any:
+        pytest.fail(f"C2e top {axis} {variant} escaped into observation")
+
+    monkeypatch.setattr(
+        production,
+        "_observe_h11_indirect_authority",
+        forbidden_observation,
+    )
+    monkeypatch.setattr(
+        production,
+        "_prove_h11_indirect_observations",
+        forbidden_observation,
+    )
+    with pytest.raises(
+        production.InstallerError,
+        match=r"\AH11 indirect authority aliases path or identity\Z",
+    ):
+        production._build_h11_indirect_authority_inventory(**arguments)
+    assert entered == completed == list(helper_order)
 
 
 def test_c2e_top_alias_closed_sets_are_exact_literals() -> None:
@@ -6592,12 +7403,90 @@ def test_c2e_direct_fifo_owner_policy_and_spec_identity_are_preserved(monkeypatc
         )
 
 
+def test_c2e_install_builder_signature_and_unique_top_caller_are_exact() -> None:
+    source = INSTALLER_SOURCE.read_text(encoding="utf-8")
+    _assert_install_builder_signature_and_unique_top_caller(source)
+
+
+def test_c2e_install_signature_annotation_mutant_preserves_ledgers_but_is_rejected() -> None:
+    source = INSTALLER_SOURCE.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    builder = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_build_h11_install_target_specs"
+    )
+    builder.args.kwonlyargs[0].annotation = ast.Name(id="object", ctx=ast.Load())
+    builder.returns = ast.Name(id="object", ctx=ast.Load())
+    mutant = ast.unparse(ast.fix_missing_locations(tree))
+
+    baseline_result = H11ReachableCallScanner(source).scan(ROOT_QNAME)
+    mutant_result = H11ReachableCallScanner(mutant).scan(ROOT_QNAME)
+    assert mutant_result.unresolved == ()
+    assert mutant_result.multi_target == ()
+    assert mutant_result.unclassified == ()
+    assert _reachable_internal_counter_ledger(mutant_result) == (
+        _reachable_internal_counter_ledger(baseline_result)
+    )
+    assert _reachable_sensitive_site_ledger(mutant_result) == (
+        _reachable_sensitive_site_ledger(baseline_result)
+    )
+    _assert_reachable_ledgers_are_exact(mutant_result)
+    with pytest.raises(AssertionError):
+        _assert_install_builder_signature_and_unique_top_caller(mutant)
+
+
+def test_c2e_reachable_internal_ledger_rejects_install_pure_helper_mutant() -> None:
+    source = INSTALLER_SOURCE.read_text(encoding="utf-8")
+    mutant = _inject_install_builder_statement(
+        source,
+        "_c2e_install_mutant_pure_helper()",
+    )
+    mutant += """
+
+def _c2e_install_mutant_pure_helper() -> None:
+    return None
+"""
+    result = H11ReachableCallScanner(mutant).scan(ROOT_QNAME)
+    assert result.unresolved == result.multi_target == result.unclassified == ()
+    assert any(
+        call.canonical_target == f"{M}._c2e_install_mutant_pure_helper"
+        for call in result.calls
+    )
+    assert (
+        _reachable_ledger_sha256(_reachable_internal_counter_ledger(result))
+        != REACHABLE_INTERNAL_COUNTER_LEDGER_SHA256
+    )
+    with pytest.raises(AssertionError):
+        _assert_reachable_ledgers_are_exact(result)
+
+
+def test_c2e_reachable_sensitive_ledger_rejects_install_geteuid_mutant() -> None:
+    source = INSTALLER_SOURCE.read_text(encoding="utf-8")
+    mutant = _inject_install_builder_statement(source, "os.geteuid()")
+    result = H11ReachableCallScanner(mutant).scan(ROOT_QNAME)
+    assert result.unresolved == result.multi_target == result.unclassified == ()
+    assert any(
+        call.caller_qname == f"{M}._build_h11_install_target_specs"
+        and call.canonical_target == "os.geteuid"
+        for call in result.calls
+    )
+    assert (
+        _reachable_ledger_sha256(_reachable_sensitive_site_ledger(result))
+        != REACHABLE_SENSITIVE_SITE_LEDGER_SHA256
+    )
+    with pytest.raises(AssertionError):
+        _assert_reachable_ledgers_are_exact(result)
+
+
 def test_c2e_production_reachable_call_graph_matches_fixed_topology() -> None:
     result = H11ReachableCallScanner(INSTALLER_SOURCE.read_text(encoding="utf-8")).scan(ROOT_QNAME)
     assert result.unresolved == ()
     assert result.multi_target == ()
     assert result.unclassified == ()
     assert result.resolved_call_count == result.reachable_ast_call_count
+    _assert_reachable_ledgers_are_exact(result)
     actual_edges = Counter(
         (call.caller_qname, call.canonical_target)
         for call in result.calls
