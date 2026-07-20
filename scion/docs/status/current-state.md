@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-07-18*
+*Last updated: 2026-07-20*
 
 Read `scion/TASK.md` first. Use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
@@ -11,11 +11,23 @@ No solver or Warehouse W3 formal experiment is live. The accepted native
 spawn/build root is terminal and read-only in intent at
 `/home/clawd/research/scion-experiments/v04-w3-native-acceptance-20260718T221215Z-r6-claw`.
 Its external acceptance record SHA is `51948ccd...00de7`; two final independent
-reviews report P0=0/P1=0/P2=0 and `NATIVE_ACCEPT`. This unlocks only the next
-generic `SpawnBackend`/cgroup/systemd implementation slice. Its exact design is
-now accepted at raw SHA `d40e75a3...5911f50` after two independent full reviews
-and one systemd-255 specialist review each reported P0=0/P1=0/P2=0. No generic
-implementation or systemd acceptance fixture has run yet.
+reviews report P0=0/P1=0/P2=0 and `NATIVE_ACCEPT`. Generic `SpawnBackend` is
+implemented at `f72f0f5c`, followed by the formal-fixture/H11 authorization
+path on `v0.4-dev`.
+
+The current acceptance worktree is
+`/home/clawd/research/or-autoresearch-agent-h11-c2e-clean`, branch
+`codex/h11-c2e-implementation`, pushed through `e028fa6b`. The C2e candidate
+replaces the layered private authorizer ownership graph with one
+`H11RootAuthorizationFlow`; production SHA is `67468431...cdbe5`. Python 3.12
+and 3.13 each pass the exact `416`-case implementation oracle and the exact
+`74` public C2a official cases with `-W error`. Python 3.12 full-file diagnosis
+is `752 passed / 187 failed / 1 skipped`, improved from
+`709 passed / 230 failed / 1 skipped`. The remaining exact failures are C1a
+11, C1b1 21, C1b2 23, C1c 20, C2b 40, C2c 36, and C2d 36. They still encode
+the deleted private topology; they are not a reason to add compatibility
+wrappers or mechanically port 187 tests. Full official acceptance and branch
+merge remain open pending one retained/rewrite/delete canonicalization design.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -341,13 +353,15 @@ Batch 17 removed one additional pre-campaign shell only after its substantive
 patch payload was proved byte-identical to a retained completed eight-round
 owner. Batch 18 removed a pre-evaluation permission-failure replay shell and a
 zero-effective capacity-blocked successor only after isolated database review
-proved complete retained-owner coverage. `752` roots remain and about
-`37 GiB` is currently available.
+proved complete retained-owner coverage.
 Read-only batch 19 rescanned those `752` roots and found no further exact-safe
 whole-root deletion: every plausible boundary candidate retained a report
 reference, a unique trace or research artifact, newer nonzero evidence, or no
 provable complete retained owner. It therefore deleted zero roots and zero
 bytes; the cleanup boundary is now unique research evidence, not disk space.
+At the close of recorded batch 19, `752` roots remained and about `37 GiB` was
+available; those are historical cleanup-report values rather than a current
+filesystem inventory. Disk space remains outside the active blocker set.
 Exact whole-root,
 gray, disposition, subtree-hash, and restore manifests are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
@@ -1031,18 +1045,16 @@ contract SHA `afaa0b7e...24f27`, and the fresh acceptance root ending
 64/64, the two offline builds were byte-identical, both mandatory
 2074-file/22-alias rehashes passed, and independent prebuild/final reviews each
 reported P0=0/P1=0/P2=0. The accepted record is
-`v04-w3-native-spawn-build-acceptance-20260718.md`. This accepts only the native
-slice. The generic `SpawnBackend`/cgroup/systemd contract is accepted at exact
-raw SHA `d40e75a3...5911f50`; its acceptance record is
-`v0.4-w3-generic-spawn-backend-systemd-design-acceptance-20260718.md`. It now
-authorizes implementation of only `runtime/execution` and focused
-pure/delegated/systemd-255 fixtures. The implementation must still pass the
-complete no-timeout/no-cap matrix, systemd GC/handoff and failed-close
-`CollectMode=inactive` behavior. Guardian/terminal, Warehouse W3, dry-root and
-formal launch remain locked. The untracked rejected W3 lifecycle is excluded
-from clean accepted source and is not to be modified or staged here. There is
-no sandbox, retry, budget, truncation or new research gate.
-B1 no longer occupies the host.
+`v04-w3-native-spawn-build-acceptance-20260718.md`. Generic `SpawnBackend` is
+implemented at `f72f0f5c`; the formal-fixture composition, manager lifecycle,
+H11 public authorization path, and C2e single-owner candidate followed. The
+candidate's deep oracle and public C2a surface are accepted on the feature
+branch, but full official acceptance is still open on the exact 187 legacy
+private-topology tests recorded above. The next action is one test-authority
+canonicalization design, not 187 local repairs. Warehouse W3, dry-root and
+formal launch remain locked. The rejected W3 lifecycle remains excluded, B1 no
+longer occupies the host, and there is no sandbox, retry, budget, truncation or
+new research gate.
 
 The fresh activation execution seam is design-frozen at SHA
 `25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
@@ -1072,11 +1084,15 @@ actual-journal-handle design is frozen and accepted.
    W2-overlap caveats; it cannot select a profile or authorize promotion. F1 is
    design-frozen at `a8167117...07faa` and must seal/reparse exact
    `.vrp + .sol` pairs.
-   The W3 native spawn/build slice is accepted. Implement and independently
-   accept the frozen generic `SpawnBackend`/cgroup/systemd layer next, then the
-   generic guardian/terminal layer, then the problem-owned W3 manifest/replay/
-   analysis and independent source/dry-root acceptance. F1's dormant
-   materializer is accepted, but neither W3 nor F1 has formal launch authority.
+   The W3 native slice and generic `SpawnBackend` are implemented. C2e public
+   C2a and its 416-case oracle are accepted on the pushed feature branch. Freeze
+   one canonicalization design for the remaining 187 C1/C2b-C2d tests, classify
+   retained public contracts versus redundant oracle coverage versus obsolete
+   private topology, and execute that classification without compatibility
+   wrappers. Only after full official acceptance and branch merge continue to
+   the problem-owned W3 manifest/replay/analysis and independent source/dry-root
+   acceptance. F1's dormant materializer is accepted, but neither W3 nor F1 has
+   formal launch authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,

@@ -1,7 +1,8 @@
 # Scion v0.4 Direct-Runtime Research Task
 
 *Branch: `v0.4-dev`*
-*Last updated: 2026-07-18*
+*Active acceptance branch: `codex/h11-c2e-implementation`*
+*Last updated: 2026-07-20*
 
 This is the active task source. Read it with
 `scion/docs/status/current-state.md`; use
@@ -72,6 +73,22 @@ scientifically valid negative result is not mislabeled as a solver improvement.
   truncation, top-k selection, summary substitution, or a context budget.
 
 ## Current Evidence
+
+The H11 C2e single-owner authorization Flow candidate is pushed at
+`e028fa6b` on `codex/h11-c2e-implementation`. It replaces the layered private
+Session/RetainedAuthority ownership graph with one public
+`H11RootAuthorizationFlow`; production remains fixed at SHA
+`67468431...cdbe5`. Its implementation oracle passes exact `416` on both
+Python 3.12 and 3.13 with `-W error`, and the migrated public C2a official
+surface passes exact `74` on both versions. The scoped Python 3.12 full-file
+diagnostic improved from `709 passed / 230 failed / 1 skipped` to
+`752 passed / 187 failed / 1 skipped`. The remaining failures are exact C1a
+11, C1b1 21, C1b2 23, C1c 20, C2b 40, C2c 36, and C2d 36; they still express
+the deleted private ownership graph. Do not mechanically port those 187 tests
+or restore compatibility wrappers. Before merge, freeze one canonicalization
+design that classifies each legacy contract as retained public behavior,
+already-owned oracle coverage, or obsolete private topology, then rewrites or
+deletes by class. No experiment is live or authorized by this candidate.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
@@ -818,7 +835,10 @@ No path and zero bytes were deleted in batch 19.
 Batches 8-10 and 12 then compacted
 `2,850` Git-restorable static subtree copies totaling `6.759 GiB` without
 deleting any additional root or changing registry/DB/metrics/trace/formal/log
-counts. `752` roots remain and about `37 GiB` is currently available.
+counts. At the close of recorded batch 19, `752` roots remained and about
+`37 GiB` was available; those are historical cleanup-report values, not a
+current filesystem inventory. Disk space remains outside the active blocker
+set.
 The exact paths, predicates, restore manifests, inventories, and
 retained gray set are recorded in
 `scion/docs/experiments/v0.4/v04-experiment-retention-cleanup-20260716.md`.
@@ -897,19 +917,18 @@ scientific and lineage-owning artifacts remain in place.
      prebuild and final postrun reviews report P0=0/P1=0/P2=0; the sole formal
      delegated-cgroup transaction passed 64/64, both builds were byte-identical,
      and both 2074-file/22-alias rehashes passed. Exact evidence is recorded in
-     `v04-w3-native-spawn-build-acceptance-20260718.md`. The next generic
-     `SpawnBackend`/cgroup/systemd implementation contract is now frozen at raw
-     SHA `d40e75a3...5911f50`; two independent full reviews and one systemd-255
-     specialist review each report P0=0/P1=0/P2=0. It freezes one consumed
-     backend/cgroup owner, complete binary capture without timeout/cap/retry,
-     exact failure/fail-stop semantics, retained durable cleanup authority and
-     explicit `CollectMode=inactive` GC handoff. Implement and independently
-     accept only this generic slice next. Then design the generic guardian/
-     terminal layer and problem-owned W3 manifest/replay/analysis without a
-     Warehouse helper fork. No W3 dry root or formal launch is authorized yet;
-     the dirty-worktree rejected W3 files are not accepted source and must not
-     be modified or staged as part of this slice. B1 no longer occupies the
-     host.
+     `v04-w3-native-spawn-build-acceptance-20260718.md`. Generic `SpawnBackend`
+     is implemented at `f72f0f5c`; the formal-fixture/H11 composition and public
+     authorization path followed on `v0.4-dev`. The C2e maintainability
+     candidate is pushed through `e028fa6b`: its exact oracle passes `416` on
+     Python 3.12/3.13 and public C2a passes `74` on both. Full official
+     acceptance is not yet claimed because 187 C1/C2b-C2d legacy tests still
+     encode deleted private topology. Freeze and execute one test-authority
+     canonicalization design before merging this branch; do not repair the 187
+     one by one or add compatibility wrappers. Warehouse W3, dry-root and
+     formal launch remain locked. The rejected W3 lifecycle stays excluded,
+     B1 no longer occupies the host, and no sandbox, retry, budget, truncation
+     or new research gate is added.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-
