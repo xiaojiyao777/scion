@@ -5486,19 +5486,39 @@ def test_root_c2a_rejects_coherent_closer_unit_rebind_from_preflight_authority(
 
 
 @pytest.mark.parametrize(
-    "mutation",
+    ("mutation", "exact_error_match"),
     (
-        "missing-present-outputs",
-        "extra-key",
-        "schema",
-        "scenario",
-        "unit",
-        "permit-authority-crossbind",
+        (
+            "missing-present-outputs",
+            r"\AH11 PERMIT_READY receipt fields differ from the exact closed set\Z",
+        ),
+        (
+            "extra-key",
+            r"\AH11 PERMIT_READY receipt fields differ from the exact closed set\Z",
+        ),
+        (
+            "schema",
+            r"\AH11 direct wire schema or phase cross-binding drifted\Z",
+        ),
+        (
+            "scenario",
+            r"\AH11 direct wire schema or phase cross-binding drifted\Z",
+        ),
+        (
+            "unit",
+            r"\AH11 direct wire schema or phase cross-binding drifted\Z",
+        ),
+        (
+            "permit-authority-crossbind",
+            r"\AH11 direct wire schema or phase cross-binding drifted\Z",
+        ),
     ),
 )
 def test_root_c2a_rejects_ready_schema_or_crossbind_drift(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     mutation: str,
+    exact_error_match: str,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
     ready = json.loads(paths["ready"].read_text())
@@ -5516,42 +5536,83 @@ def test_root_c2a_rejects_ready_schema_or_crossbind_drift(
         ready["permit_authority"] = {"wrong": True}
     _root_c2a_write_json(paths["ready"], ready)
     _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match=exact_error_match,
+    )
 
 
 @pytest.mark.parametrize(
-    "mutation",
+    ("mutation", "exact_error_match"),
     (
-        "missing-key",
-        "schema",
-        "scenario",
-        "unit",
-        "actor-extra",
-        "actor-boot",
-        "stop-environment",
-        "cgroup-noncanonical",
-        "cgroup-raw",
-        "ready-fifo",
-        "release-fifo",
-        "program-none",
-        "program-extra",
-        "program-identity-extra",
-        "program-mode-text",
-        "program-path-bind",
-        "plan-path-bind",
-        "plan-sha",
-        "request-type",
-        "request-sha",
-        "ready-digest",
-        "release-digest",
+        (
+            "missing-key",
+            r"\AH11 run ARMED fields differ from the exact closed set\Z",
+        ),
+        (
+            "schema",
+            r"\AH11 direct wire schema or phase cross-binding drifted\Z",
+        ),
+        (
+            "scenario",
+            r"\AH11 direct wire schema or phase cross-binding drifted\Z",
+        ),
+        (
+            "unit",
+            r"\AH11 direct wire schema or phase cross-binding drifted\Z",
+        ),
+        (
+            "actor-extra",
+            r"\AH11 run ARMED actor fields differ from the exact closed set\Z",
+        ),
+        (
+            "actor-boot",
+            r"\AH11 direct wire schema or phase cross-binding drifted\Z",
+        ),
+        (
+            "ready-fifo",
+            r"\AH11 run ARMED FIFO projection drifted\Z",
+        ),
+        (
+            "release-fifo",
+            r"\AH11 run ARMED FIFO projection drifted\Z",
+        ),
+        (
+            "program-none",
+            r"\AH11 run ARMED program fields differ from the exact closed set\Z",
+        ),
+        (
+            "program-extra",
+            r"\AH11 run ARMED program fields differ from the exact closed set\Z",
+        ),
+        (
+            "program-identity-extra",
+            r"\AH11 run ARMED program identity fields differ from the exact closed set\Z",
+        ),
+        (
+            "program-mode-text",
+            r"\AH11 SEAL run ARMED plan or program class drifted\Z",
+        ),
+        (
+            "program-path-bind",
+            r"\AH11 SEAL run ARMED plan or program class drifted\Z",
+        ),
+        (
+            "plan-path-bind",
+            r"\AH11 SEAL run ARMED plan or program class drifted\Z",
+        ),
+        (
+            "plan-sha",
+            r"\AH11 run ARMED.plan_sha256 must be one canonical SHA-256 digest\Z",
+        ),
     ),
 )
 def test_root_c2a_rejects_armed_schema_actor_or_fifo_drift(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
     mutation: str,
+    exact_error_match: str,
 ) -> None:
     paths = _root_c2a_session_model(tmp_path)
     armed = json.loads(paths["armed"].read_text())
@@ -5567,13 +5628,6 @@ def test_root_c2a_rejects_armed_schema_actor_or_fifo_drift(
         armed["actor"]["extra"] = True
     elif mutation == "actor-boot":
         armed["actor"]["boot_id"] = "22222222-2222-2222-2222-222222222222"
-    elif mutation == "stop-environment":
-        armed["actor"]["stop_selector_environment"] = {"INVOCATION_ID": "a" * 32}
-    elif mutation == "cgroup-noncanonical":
-        armed["actor"]["unified_cgroup"] = "/system.slice//c2a.scope"
-        armed["actor"]["proc_cgroup_raw"] = "0::/system.slice//c2a.scope\n"
-    elif mutation == "cgroup-raw":
-        armed["actor"]["proc_cgroup_raw"] = "0::/wrong.scope\n"
     elif mutation in {"ready-fifo", "release-fifo"}:
         armed[mutation.replace("-", "_")]["inode"] = "1"
     elif mutation == "program-none":
@@ -5590,22 +5644,71 @@ def test_root_c2a_rejects_armed_schema_actor_or_fifo_drift(
         armed["plan_path"] = str(paths["run_program"])
     elif mutation == "plan-sha":
         armed["plan_sha256"] = "A" * 64
+    paths["armed"].chmod(0o600)
+    _write(paths["armed"], armed)
+    paths["armed"].chmod(0o600)
+    _root_c2a_rebind_sources(paths)
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match=exact_error_match,
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "stop-environment",
+        "cgroup-noncanonical",
+        "cgroup-raw",
+        "request-type",
+        "request-sha",
+        "ready-digest",
+        "release-digest",
+        "request-transaction-path",
+        "request-frozen-root-path",
+    ),
+)
+def test_root_c2a_accepts_non_authority_armed_payload_drift(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    armed = json.loads(paths["armed"].read_text())
+    if mutation == "stop-environment":
+        armed["actor"]["stop_selector_environment"] = {
+            "INVOCATION_ID": "a" * 32
+        }
+    elif mutation == "cgroup-noncanonical":
+        armed["actor"]["unified_cgroup"] = "/system.slice//c2a.scope"
+        armed["actor"]["proc_cgroup_raw"] = "0::/system.slice//c2a.scope\n"
+    elif mutation == "cgroup-raw":
+        armed["actor"]["proc_cgroup_raw"] = "0::/wrong.scope\n"
     elif mutation == "request-type":
         armed["request_path"] = 1
     elif mutation == "request-sha":
         armed["request_sha256"] = "f" * 63
     elif mutation == "ready-digest":
         armed["ready_sha256"] = "f" * 64
-    else:
+    elif mutation == "release-digest":
         armed["release_sha256"] = "e" * 64
+    elif mutation == "request-transaction-path":
+        manifest = json.loads(paths["manifest"].read_text())
+        armed["request_path"] = manifest["permit_authority"][
+            "permit_staging_path"
+        ]
+    else:
+        armed["request_path"] = str(paths["manifest"].parents[3] / "frozen")
     paths["armed"].chmod(0o600)
     _write(paths["armed"], armed)
     paths["armed"].chmod(0o600)
     _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError):
-        installer.H11RootAuthorizerSession.open(
-            paths["authorization"], require_root=False
-        )
+
+    flow, receipt, frames = _root_c2a_run_public_authorization_flow(paths)
+
+    assert flow.state is installer.H11RootAuthorizationState.COMPLETE
+    assert receipt.phase == "permit-committed"
+    assert frames == (installer.H11_PERMIT_COMMITTED_BYTES,)
 
 
 def test_root_c2a_rejects_pinned_armed_owner_outside_fixture_authority(
