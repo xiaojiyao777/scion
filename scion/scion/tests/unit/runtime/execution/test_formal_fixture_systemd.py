@@ -4952,6 +4952,20 @@ def _root_c2a_session_model(
         }
         for role, unit, owner, mode, plan_path, program_path in static_specs
     ]
+    seal_receipt = json.loads(
+        sources["seal_receipt"].read_text(encoding="ascii")
+    )
+    seal_rows = {row["role"]: row for row in seal_receipt["files"]}
+    for field, role in (
+        ("descriptor", "start-descriptor"),
+        ("harness_program", "harness-program"),
+        ("static_inventory", "preflight-manifest"),
+    ):
+        row = seal_rows[role]
+        manifest[field] = {
+            "path": row["path"],
+            "sha256": row["sha256"],
+        }
     _root_c2a_write_json(manifest_path, manifest)
 
     boot_id = "11111111-1111-1111-1111-111111111111"
