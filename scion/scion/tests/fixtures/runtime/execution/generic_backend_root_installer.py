@@ -3828,6 +3828,37 @@ def _prove_h11_direct_authority_bindings(
     harness_root = harness_root_directory_reference.path
     scenario_root = scenario_root_directory_reference.path
     if (
+        _h11_path(
+            _h11_object_member(
+                harness_manifest,
+                "input_root",
+                label="H11 harness manifest",
+            ),
+            label="H11 harness manifest.input_root",
+        )
+        != input_root_directory_reference.path
+        or _h11_path(
+            _h11_object_member(
+                harness_manifest,
+                "receipt_root",
+                label="H11 harness manifest",
+            ),
+            label="H11 harness manifest.receipt_root",
+        )
+        != receipt_root_directory_reference.path
+    ):
+        _fail("H11 harness output roots drifted")
+    present_prerequisite_roles = _h11_object_member(
+        permit_authority,
+        "present_prerequisite_roles",
+        label="H11 permit authority",
+    )
+    if (
+        type(present_prerequisite_roles) is not tuple
+        or present_prerequisite_roles != _H11_PRESENT_ROLES
+    ):
+        _fail("H11 present prerequisite role authority drifted")
+    if (
         authority_root != formal_root / "authority"
         or harness_root != authority_root / "harness"
         or scenario_root != harness_root / "H11"
@@ -3938,6 +3969,7 @@ def _prove_h11_direct_authority_bindings(
 def _build_h11_tree_indirect_specs(
     *,
     tree_receipt: H11RootFrozenJsonObject,
+    tree_receipt_source_reference: H11RootFrozenJsonObject,
     preflight_receipt: H11RootFrozenJsonObject,
     harness_manifest: H11RootFrozenJsonObject,
     run_armed: H11RootFrozenJsonObject,
@@ -3984,6 +4016,11 @@ def _build_h11_tree_indirect_specs(
         label="H11 TREE receipt.phase",
     ) != "tree-prepared":
         _fail("H11 TREE schema or phase drifted")
+    if (
+        Path(dict(tree_receipt_source_reference)["path"])
+        != authority_root_directory_reference.path / "tree.json"
+    ):
+        _fail("H11 TREE receipt source layout drifted")
     fixture_uid = _h11_uint(
         _h11_object_member(tree_receipt, "fixture_uid", label="H11 TREE receipt"),
         label="H11 TREE fixture_uid",
@@ -5617,7 +5654,13 @@ def _build_h11_indirect_authority_inventory(
     require_root: bool,
     process_euid: int,
     process_egid: int,
-) -> tuple[int, int, tuple[H11RootValidatedFifo, ...], tuple[H11RootIndirectAuthoritySpec, ...]]:
+) -> tuple[
+    int,
+    int,
+    tuple[H11RootValidatedFifo, ...],
+    tuple[H11RootIndirectAuthoritySpec, ...],
+    tuple[tuple[int, int], ...],
+]:
     _prove_h11_direct_authority_bindings(
         authorization_manifest=authorization_manifest, harness_manifest=harness_manifest,
         install_receipt=install_receipt, install_manifest=install_manifest,
@@ -5643,7 +5686,9 @@ def _build_h11_indirect_authority_inventory(
         permit_commit_fifo_reference=permit_commit_fifo_reference,
     )
     fixture_uid, fixture_gid, validated_fifos, tree_specs = _build_h11_tree_indirect_specs(
-        tree_receipt=tree_receipt, preflight_receipt=preflight_receipt,
+        tree_receipt=tree_receipt,
+        tree_receipt_source_reference=tree_receipt_source_reference,
+        preflight_receipt=preflight_receipt,
         harness_manifest=harness_manifest, run_armed=run_armed,
         formal_root_directory_reference=formal_root_directory_reference,
         authority_root_directory_reference=authority_root_directory_reference,
@@ -5726,7 +5771,27 @@ def _build_h11_indirect_authority_inventory(
         or len(indirect_specs) != len({(item.device, item.inode) for item in indirect_specs})
     ):
         _fail("H11 indirect authority aliases path or identity")
-    return fixture_uid, fixture_gid, validated_fifos, indirect_specs
+    authority_identity_closure = (
+        tuple(
+            (
+                int(dict(reference)["device"]),
+                int(dict(reference)["inode"]),
+            )
+            for reference in direct_source_references
+        )
+        + tuple(
+            (reference.device, reference.inode)
+            for reference in direct_only_directory_references
+        )
+        + tuple((spec.device, spec.inode) for spec in indirect_specs)
+    )
+    return (
+        fixture_uid,
+        fixture_gid,
+        validated_fifos,
+        indirect_specs,
+        authority_identity_closure,
+    )
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -6186,6 +6251,7 @@ class H11RootAuthorityView:
     fixture_uid: int
     fixture_gid: int
     validated_fifos: tuple[H11RootValidatedFifo, ...]
+    authority_identity_closure: tuple[tuple[int, int], ...]
 
     def __init__(
         self,
@@ -6216,6 +6282,7 @@ class H11RootAuthorityView:
         fixture_uid: int,
         fixture_gid: int,
         validated_fifos: tuple[H11RootValidatedFifo, ...],
+        authority_identity_closure: tuple[tuple[int, int], ...],
     ) -> None:
         views = (
             authorization_view,
@@ -6245,6 +6312,13 @@ class H11RootAuthorityView:
             or ready_commit_fifo is permit_commit_fifo
         ):
             _fail("H11 authority view commit FIFO topology is invalid")
+        if type(authority_identity_closure) is not tuple or any(
+            type(identity) is not tuple
+            or len(identity) != 2
+            or any(type(value) is not int for value in identity)
+            for identity in authority_identity_closure
+        ):
+            _fail("H11 authority identity closure structure drifted")
         object.__setattr__(self, "_flow", flow)
         object.__setattr__(self, "authorization_view", authorization_view)
         object.__setattr__(self, "harness_manifest_view", harness_manifest_view)
@@ -6271,6 +6345,11 @@ class H11RootAuthorityView:
         object.__setattr__(self, "fixture_uid", fixture_uid)
         object.__setattr__(self, "fixture_gid", fixture_gid)
         object.__setattr__(self, "validated_fifos", validated_fifos)
+        object.__setattr__(
+            self,
+            "authority_identity_closure",
+            authority_identity_closure,
+        )
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -7521,7 +7600,13 @@ class H11RootAuthorizationFlow:
         preflight_json_view.revalidate()
         permit_ready_json_view.revalidate()
         run_armed_json_view.revalidate()
-        fixture_uid, fixture_gid, validated_fifos, indirect_specs = (
+        (
+            fixture_uid,
+            fixture_gid,
+            validated_fifos,
+            indirect_specs,
+            authority_identity_closure,
+        ) = (
             _build_h11_indirect_authority_inventory(
                 authorization_manifest=authorization_manifest,
                 harness_manifest=harness_manifest,
@@ -7606,6 +7691,7 @@ class H11RootAuthorizationFlow:
             fixture_uid=fixture_uid,
             fixture_gid=fixture_gid,
             validated_fifos=validated_fifos,
+            authority_identity_closure=authority_identity_closure,
         )
         self._phase_data = H11RootAuthorityPhaseData(authority=authority)
         self._transition(
@@ -7949,6 +8035,15 @@ class H11RootAuthorizationFlow:
         )
         present_h0.revalidate()
         present_run.revalidate()
+        h0_identity = (h0_after.st_dev, h0_after.st_ino)
+        run_identity = (run_after.st_dev, run_after.st_ino)
+        if h0_identity == run_identity:
+            _fail("H11 present output identities alias")
+        if (
+            h0_identity in authority.authority_identity_closure
+            or run_identity in authority.authority_identity_closure
+        ):
+            _fail("H11 present output aliases retained authority")
 
         present_partition = (
             H11RootRolePath("h0", h0_path),
@@ -8038,6 +8133,10 @@ class H11RootAuthorizationFlow:
                 )
             except FileNotFoundError:
                 actual_state = "absent"
+            except OSError as exc:
+                raise InstallerError(
+                    f"cannot observe H11 transaction {role} before READY closure"
+                ) from exc
             else:
                 actual_state = "present"
             if actual_state != expected_state:
@@ -8136,6 +8235,10 @@ class H11RootAuthorizationFlow:
                 )
             except FileNotFoundError:
                 observed = "absent"
+            except OSError as exc:
+                raise InstallerError(
+                    f"cannot observe H11 transaction {role} before permit publication"
+                ) from exc
             else:
                 observed = "present"
             if observed != expected:
@@ -8347,6 +8450,10 @@ class H11RootAuthorizationFlow:
                 )
             except FileNotFoundError:
                 observed = "absent"
+            except OSError as exc:
+                raise InstallerError(
+                    f"cannot observe H11 transaction {role} after permit publication"
+                ) from exc
             else:
                 observed = "present"
             if observed != expected:
@@ -8471,6 +8578,10 @@ class H11RootAuthorizationFlow:
                 )
             except FileNotFoundError:
                 observed = "absent"
+            except OSError as exc:
+                raise InstallerError(
+                    f"cannot observe H11 transaction {role} before permit commit"
+                ) from exc
             else:
                 observed = "present"
             if observed != expected:
@@ -8559,6 +8670,10 @@ class H11RootAuthorizationFlow:
                 )
             except FileNotFoundError:
                 observed = "absent"
+            except OSError as exc:
+                raise InstallerError(
+                    f"cannot observe H11 transaction {role} after permit writer open"
+                ) from exc
             else:
                 observed = "present"
             if observed != expected:
