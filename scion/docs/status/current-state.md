@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-07-20*
+*Last updated: 2026-07-22*
 
 Read `scion/TASK.md` first. Use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
@@ -17,17 +17,17 @@ path on `v0.4-dev`.
 
 The current acceptance worktree is
 `/home/clawd/research/or-autoresearch-agent-h11-c2e-clean`, branch
-`codex/h11-c2e-implementation`, pushed through `e028fa6b`. The C2e candidate
-replaces the layered private authorizer ownership graph with one
-`H11RootAuthorizationFlow`; production SHA is `67468431...cdbe5`. Python 3.12
-and 3.13 each pass the exact `416`-case implementation oracle and the exact
-`74` public C2a official cases with `-W error`. Python 3.12 full-file diagnosis
-is `752 passed / 187 failed / 1 skipped`, improved from
-`709 passed / 230 failed / 1 skipped`. The remaining exact failures are C1a
-11, C1b1 21, C1b2 23, C1c 20, C2b 40, C2c 36, and C2d 36. They still encode
-the deleted private topology; they are not a reason to add compatibility
-wrappers or mechanically port 187 tests. Full official acceptance and branch
-merge remain open pending one retained/rewrite/delete canonicalization design.
+`codex/h11-c2e-implementation`. The C2e candidate replaces the layered private
+authorizer graph with one `H11RootAuthorizationFlow`; its authority-closure
+correction is accepted in design/production/oracle/official commits
+`fb81e116 / adb407db / f64ecdf8 / d5ce7a8a`. Production SHA is
+`1d7ded02...e9a0c`. Python 3.12 and 3.13 each pass the exact `456`-case oracle
+and exact `74` public C2a cases with `-W error`; Python 3.12 full-file diagnosis
+is `763 passed / 177 failed / 1 skipped`. Fixed-hash reviews have no open
+P0-P3. The remaining exact failures are C1a 8, C1b1 17, C1b2 22, C1c 20,
+C2b 38, C2c 36, and C2d 36. Full H11 official acceptance and branch merge
+remain open pending one retained/rewrite/delete canonicalization; do not add
+compatibility wrappers or mechanically port 177 tests.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -1047,11 +1047,11 @@ contract SHA `afaa0b7e...24f27`, and the fresh acceptance root ending
 reported P0=0/P1=0/P2=0. The accepted record is
 `v04-w3-native-spawn-build-acceptance-20260718.md`. Generic `SpawnBackend` is
 implemented at `f72f0f5c`; the formal-fixture composition, manager lifecycle,
-H11 public authorization path, and C2e single-owner candidate followed. The
-candidate's deep oracle and public C2a surface are accepted on the feature
-branch, but full official acceptance is still open on the exact 187 legacy
-private-topology tests recorded above. The next action is one test-authority
-canonicalization design, not 187 local repairs. Warehouse W3, dry-root and
+H11 public authorization path, and C2e single-owner candidate followed. Its
+authority-closure correction, deep oracle and public C2a surface are accepted
+on the feature branch, but full H11 official acceptance is still open on the
+exact 177 tests recorded above. The next action is one test-authority
+canonicalization design, not 177 local repairs. Warehouse W3, dry-root and
 formal launch remain locked. The rejected W3 lifecycle remains excluded, B1 no
 longer occupies the host, and there is no sandbox, retry, budget, truncation or
 new research gate.
@@ -1085,8 +1085,9 @@ actual-journal-handle design is frozen and accepted.
    design-frozen at `a8167117...07faa` and must seal/reparse exact
    `.vrp + .sol` pairs.
    The W3 native slice and generic `SpawnBackend` are implemented. C2e public
-   C2a and its 416-case oracle are accepted on the pushed feature branch. Freeze
-   one canonicalization design for the remaining 187 C1/C2b-C2d tests, classify
+   C2a, the authority-closure correction and its 456-case oracle are accepted
+   on the feature branch. Freeze one canonicalization design for the remaining
+   177 C1/C2b-C2d tests, classify
    retained public contracts versus redundant oracle coverage versus obsolete
    private topology, and execute that classification without compatibility
    wrappers. Only after full official acceptance and branch merge continue to

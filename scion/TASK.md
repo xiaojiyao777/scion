@@ -2,7 +2,7 @@
 
 *Branch: `v0.4-dev`*
 *Active acceptance branch: `codex/h11-c2e-implementation`*
-*Last updated: 2026-07-20*
+*Last updated: 2026-07-22*
 
 This is the active task source. Read it with
 `scion/docs/status/current-state.md`; use
@@ -74,21 +74,22 @@ scientifically valid negative result is not mislabeled as a solver improvement.
 
 ## Current Evidence
 
-The H11 C2e single-owner authorization Flow candidate is pushed at
-`e028fa6b` on `codex/h11-c2e-implementation`. It replaces the layered private
-Session/RetainedAuthority ownership graph with one public
-`H11RootAuthorizationFlow`; production remains fixed at SHA
-`67468431...cdbe5`. Its implementation oracle passes exact `416` on both
-Python 3.12 and 3.13 with `-W error`, and the migrated public C2a official
-surface passes exact `74` on both versions. The scoped Python 3.12 full-file
-diagnostic improved from `709 passed / 230 failed / 1 skipped` to
-`752 passed / 187 failed / 1 skipped`. The remaining failures are exact C1a
-11, C1b1 21, C1b2 23, C1c 20, C2b 40, C2c 36, and C2d 36; they still express
-the deleted private ownership graph. Do not mechanically port those 187 tests
-or restore compatibility wrappers. Before merge, freeze one canonicalization
-design that classifies each legacy contract as retained public behavior,
-already-owned oracle coverage, or obsolete private topology, then rewrites or
-deletes by class. No experiment is live or authorized by this candidate.
+The H11 C2e single-owner authorization Flow and its authority-closure
+correction are accepted on `codex/h11-c2e-implementation`. The correction is
+split into design `fb81e116`, production `adb407db`, oracle `f64ecdf8`, and
+official migration `d5ce7a8a`; production SHA is
+`1d7ded02...e9a0c`. Its implementation oracle passes exact `456` on Python
+3.12 and 3.13 with `-W error`, and the public C2a official surface passes exact
+`74` on both versions. The scoped Python 3.12 full-file diagnostic is now
+`763 passed / 177 failed / 1 skipped`; the 11-case correction surface and all
+fixed-hash reviews pass with no open P0-P3. Exact acceptance evidence is in
+`v0.4-w3-h11-authority-closure-correction-acceptance-20260722.md`. The
+remaining failures are exact C1a 8, C1b1 17, C1b2 22, C1c 20, C2b 38, C2c 36,
+and C2d 36. Do not mechanically port those 177 tests or restore compatibility
+wrappers. Before merge, freeze one canonicalization design that classifies
+each legacy contract as retained public behavior, already-owned oracle
+coverage, or obsolete private topology, then rewrites, retains or deletes by
+class. No experiment is live or authorized by this candidate.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
@@ -919,16 +920,18 @@ scientific and lineage-owning artifacts remain in place.
      and both 2074-file/22-alias rehashes passed. Exact evidence is recorded in
      `v04-w3-native-spawn-build-acceptance-20260718.md`. Generic `SpawnBackend`
      is implemented at `f72f0f5c`; the formal-fixture/H11 composition and public
-     authorization path followed on `v0.4-dev`. The C2e maintainability
-     candidate is pushed through `e028fa6b`: its exact oracle passes `416` on
-     Python 3.12/3.13 and public C2a passes `74` on both. Full official
-     acceptance is not yet claimed because 187 C1/C2b-C2d legacy tests still
-     encode deleted private topology. Freeze and execute one test-authority
-     canonicalization design before merging this branch; do not repair the 187
-     one by one or add compatibility wrappers. Warehouse W3, dry-root and
-     formal launch remain locked. The rejected W3 lifecycle stays excluded,
-     B1 no longer occupies the host, and no sandbox, retry, budget, truncation
-     or new research gate is added.
+     authorization path followed on `v0.4-dev`. The C2e authority-closure
+     correction is accepted in separately reviewed commits `adb407db`,
+     `f64ecdf8`, and `d5ce7a8a`: its exact oracle passes `456` on Python
+     3.12/3.13, public C2a passes `74` on both, and the Python 3.12 official
+     diagnostic is `763 passed / 177 failed / 1 skipped`. Full H11 official
+     acceptance is not yet claimed because those 177 C1/C2b-C2d cases still
+     require one retained/rewrite/delete test-authority canonicalization.
+     Freeze and execute that design before merging this branch; do not repair
+     the 177 one by one or add compatibility wrappers. Warehouse W3, dry-root
+     and formal launch remain locked. The rejected W3 lifecycle stays
+     excluded, B1 no longer occupies the host, and no sandbox, retry, budget,
+     truncation or new research gate is added.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-
