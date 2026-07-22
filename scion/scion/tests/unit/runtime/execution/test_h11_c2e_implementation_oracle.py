@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 from collections import Counter, deque
 from dataclasses import dataclass, replace
+import errno
 from functools import lru_cache
 import hashlib
 import importlib.util
@@ -47,6 +48,16 @@ INSTALL_OWNER_CORRECTION_DESIGN = (
 )
 INSTALL_OWNER_CORRECTION_DESIGN_SHA256 = (
     "f41f0fc8d168afae3e930fd5dc7d95a0abfce6fd77a01dcf350c4e79d162eb65"
+)
+AUTHORITY_CLOSURE_CORRECTION_DESIGN = (
+    Path(__file__).parents[5]
+    / "docs"
+    / "planning"
+    / "v0.4"
+    / "v0.4-w3-h11-authority-closure-correction-design-20260720.md"
+)
+AUTHORITY_CLOSURE_CORRECTION_DESIGN_SHA256 = (
+    "bd2e2aaa1ac709822bd8d533804ee369ce5ac732fd3afeeb6193b706a2830541"
 )
 M = "generic_backend_root_installer"
 ROOT_QNAME = f"{M}.authorize_h11_release"
@@ -319,7 +330,7 @@ EXPECTED_INTERNAL_QNAMES = frozenset(
 )
 
 REACHABLE_INTERNAL_COUNTER_LEDGER_SHA256 = (
-    "ea129be90afdce679ea54cac81ebd7816e198a5809249bfe4be1cee2a3310e1a"
+    "04f2da1a86c3b3e1982a0dd0a98436d970d93ccdaf5bfe49641971cafdf81d92"
 )
 REACHABLE_SENSITIVE_SITE_LEDGER_SHA256 = (
     "95cf31ad72b36308bb7176032e89922070aec5b6d6c27e613951dd5bd85ec40b"
@@ -515,7 +526,7 @@ _EXPLICIT_FROZEN_FIELDS = {
         "scenario_root_directory", "input_root_directory", "receipt_root_directory",
         "fifo_root_directory", "ready_commit_fifo", "permit_commit_fifo",
         "authorization_manifest", "harness_manifest", "ready_receipt", "armed_receipt",
-        "fixture_uid", "fixture_gid", "validated_fifos",
+        "fixture_uid", "fixture_gid", "validated_fifos", "authority_identity_closure",
     ),
     "H11RootAuthorityPhaseData": ("authority",),
     "H11RootReadyPhaseData": (
@@ -3299,6 +3310,8 @@ DOMAIN_NEGATIVE_AXES = {
         "ready-projection",
         "armed-projection",
         "harness-projection",
+        "harness-root-projection",
+        "present-prerequisite-roles",
         "directory-chain",
         "slot19-slot20-binding",
         "missing",
@@ -3309,6 +3322,7 @@ DOMAIN_NEGATIVE_AXES = {
     "_build_h11_tree_indirect_specs": (
         "schema",
         "phase",
+        "source-layout",
         "directory-role",
         "directory-path",
         "directory-identity",
@@ -3612,6 +3626,10 @@ def test_c2e_oracle_is_bound_to_the_reviewed_design() -> None:
         hashlib.sha256(INSTALL_OWNER_CORRECTION_DESIGN.read_bytes()).hexdigest()
         == INSTALL_OWNER_CORRECTION_DESIGN_SHA256
     )
+    assert (
+        hashlib.sha256(AUTHORITY_CLOSURE_CORRECTION_DESIGN.read_bytes()).hexdigest()
+        == AUTHORITY_CLOSURE_CORRECTION_DESIGN_SHA256
+    )
     assert INSTALLER_SOURCE.is_file()
 
 
@@ -3679,6 +3697,498 @@ def test_c2e_new_flow_e2e_commits_one_exact_frame_and_receipt(tmp_path: Path) ->
         ).hexdigest(),
         "byte_count": str(len(production.H11_PERMIT_COMMITTED_BYTES)),
     }
+
+
+def test_c2e_top_builder_returns_exact_ordered_authority_identity_closure(
+    tmp_path: Path,
+) -> None:
+    tree = ast.parse(INSTALLER_SOURCE.read_text(encoding="utf-8"))
+    top_builder = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_build_h11_indirect_authority_inventory"
+    )
+    assert ast.unparse(top_builder.returns) == (
+        "tuple[int, int, tuple[H11RootValidatedFifo, ...], "
+        "tuple[H11RootIndirectAuthoritySpec, ...], tuple[tuple[int, int], ...]]"
+    )
+
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    (
+        fixture_uid,
+        fixture_gid,
+        validated_fifos,
+        indirect_specs,
+        authority_identity_closure,
+    ) = fixture.production._build_h11_indirect_authority_inventory(
+        **fixture.arguments
+    )
+    direct_source_names = (
+        "authorization_source_reference",
+        "harness_source_reference",
+        "install_receipt_source_reference",
+        "install_manifest_source_reference",
+        "tree_receipt_source_reference",
+        "seal_receipt_source_reference",
+        "preflight_receipt_source_reference",
+        "permit_ready_source_reference",
+        "run_armed_source_reference",
+    )
+    direct_directory_names = (
+        "harness_root_directory_reference",
+        "scenario_root_directory_reference",
+        "receipt_root_directory_reference",
+    )
+    expected = (
+        tuple(
+            (
+                int(dict(fixture.arguments[name])["device"]),
+                int(dict(fixture.arguments[name])["inode"]),
+            )
+            for name in direct_source_names
+        )
+        + tuple(
+            (
+                fixture.arguments[name].device,
+                fixture.arguments[name].inode,
+            )
+            for name in direct_directory_names
+        )
+        + tuple((spec.device, spec.inode) for spec in indirect_specs)
+    )
+    assert (fixture_uid, fixture_gid) == (os.geteuid(), os.getegid())
+    assert len(validated_fifos) == 8
+    assert type(authority_identity_closure) is tuple
+    assert authority_identity_closure == expected
+    assert len(authority_identity_closure) == 12 + len(indirect_specs)
+
+
+def test_c2e_authority_closure_field_projection_and_late_gate_order_are_exact() -> None:
+    tree = ast.parse(INSTALLER_SOURCE.read_text(encoding="utf-8"))
+    tree_builder = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_build_h11_tree_indirect_specs"
+    )
+    expected_tree_keywords = (
+        "tree_receipt",
+        "tree_receipt_source_reference",
+        "preflight_receipt",
+        "harness_manifest",
+        "run_armed",
+        "formal_root_directory_reference",
+        "authority_root_directory_reference",
+        "input_root_directory_reference",
+        "fifo_root_directory_reference",
+        "ready_commit_fifo_reference",
+        "permit_commit_fifo_reference",
+        "require_root",
+        "process_euid",
+        "process_egid",
+    )
+    expected_tree_annotations = (
+        "H11RootFrozenJsonObject",
+        "H11RootFrozenJsonObject",
+        "H11RootFrozenJsonObject",
+        "H11RootFrozenJsonObject",
+        "H11RootFrozenJsonObject",
+        "H11RootDirectoryReference",
+        "H11RootDirectoryReference",
+        "H11RootDirectoryReference",
+        "H11RootDirectoryReference",
+        "H11RootFifoReference",
+        "H11RootFifoReference",
+        "bool",
+        "int",
+        "int",
+    )
+    assert tree_builder.type_params == []
+    assert tree_builder.args.posonlyargs == []
+    assert tree_builder.args.args == []
+    assert tuple(
+        argument.arg for argument in tree_builder.args.kwonlyargs
+    ) == expected_tree_keywords
+    assert tuple(
+        ast.unparse(argument.annotation)
+        for argument in tree_builder.args.kwonlyargs
+        if argument.annotation is not None
+    ) == expected_tree_annotations
+    assert all(
+        argument.annotation is not None
+        for argument in tree_builder.args.kwonlyargs
+    )
+    assert tree_builder.args.defaults == []
+    assert tree_builder.args.kw_defaults == [None] * len(expected_tree_keywords)
+    assert tree_builder.args.vararg is None
+    assert tree_builder.args.kwarg is None
+
+    authority_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "H11RootAuthorityView"
+    )
+    declared_fields = tuple(
+        node.target.id
+        for node in authority_class.body
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+    )
+    assert declared_fields == _EXPLICIT_FROZEN_FIELDS["H11RootAuthorityView"]
+    constructor = next(
+        node
+        for node in authority_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+    )
+    assert constructor.args.kwonlyargs[-1].arg == "authority_identity_closure"
+    stores = tuple(
+        call
+        for call in ast.walk(constructor)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "object"
+        and call.func.attr == "__setattr__"
+    )
+    assert len(stores) == 27
+    assert isinstance(stores[-1].args[1], ast.Constant)
+    assert stores[-1].args[1].value == "authority_identity_closure"
+
+    readers = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if any(
+            isinstance(member, ast.Attribute)
+            and isinstance(member.ctx, ast.Load)
+            and member.attr == "authority_identity_closure"
+            for member in ast.walk(node)
+        ):
+            readers.append(node.name)
+    assert readers == ["_consume_ready_commit"]
+
+    flow_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "H11RootAuthorizationFlow"
+    )
+    consume = next(
+        node
+        for node in flow_class.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_consume_ready_commit"
+    )
+    assignments = {
+        statement.targets[0].id: statement
+        for statement in consume.body
+        if isinstance(statement, ast.Assign)
+        and len(statement.targets) == 1
+        and isinstance(statement.targets[0], ast.Name)
+        and statement.targets[0].id in {"h0_identity", "run_identity"}
+    }
+    assert set(assignments) == {"h0_identity", "run_identity"}
+    assert ast.unparse(assignments["h0_identity"].value) == (
+        "(h0_after.st_dev, h0_after.st_ino)"
+    )
+    assert ast.unparse(assignments["run_identity"].value) == (
+        "(run_after.st_dev, run_after.st_ino)"
+    )
+    alias_gate = next(
+        statement
+        for statement in consume.body
+        if isinstance(statement, ast.If)
+        and ast.unparse(statement.test) == "h0_identity == run_identity"
+    )
+    retained_gate = next(
+        statement
+        for statement in consume.body
+        if isinstance(statement, ast.If)
+        and ast.unparse(statement.test)
+        == (
+            "h0_identity in authority.authority_identity_closure or "
+            "run_identity in authority.authority_identity_closure"
+        )
+    )
+    for gate, expected_error in (
+        (alias_gate, "H11 present output identities alias"),
+        (retained_gate, "H11 present output aliases retained authority"),
+    ):
+        assert gate.orelse == []
+        assert len(gate.body) == 1
+        assert isinstance(gate.body[0], ast.Expr)
+        fail_call = gate.body[0].value
+        assert isinstance(fail_call, ast.Call)
+        assert isinstance(fail_call.func, ast.Name)
+        assert fail_call.func.id == "_fail"
+        assert fail_call.keywords == []
+        assert len(fail_call.args) == 1
+        assert isinstance(fail_call.args[0], ast.Constant)
+        assert fail_call.args[0].value == expected_error
+
+    revalidation_lines = tuple(
+        call.lineno
+        for call in ast.walk(consume)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id in {"present_h0", "present_run"}
+        and call.func.attr == "revalidate"
+    )
+    closure_read_line = next(
+        node.lineno
+        for node in ast.walk(consume)
+        if isinstance(node, ast.Attribute)
+        and node.attr == "authority_identity_closure"
+    )
+    partition_line = next(
+        call.lineno
+        for call in ast.walk(consume)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "H11RootClosedPartition"
+    )
+    transaction_stat_line = min(
+        call.lineno
+        for call in ast.walk(consume)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Attribute)
+        and isinstance(call.func.value, ast.Name)
+        and call.func.value.id == "os"
+        and call.func.attr == "stat"
+        and call.lineno > closure_read_line
+    )
+    ready_phase_line = next(
+        call.lineno
+        for call in ast.walk(consume)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "H11RootReadyPhaseData"
+    )
+    assert len(revalidation_lines) == 2
+    assert (
+        max(revalidation_lines)
+        < assignments["h0_identity"].lineno
+        < assignments["run_identity"].lineno
+        < alias_gate.lineno
+        < retained_gate.lineno
+        <= closure_read_line
+        < partition_line
+        < transaction_stat_line
+        < ready_phase_line
+    )
+
+    top_builder = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_build_h11_indirect_authority_inventory"
+    )
+    projection = next(
+        node.value
+        for node in top_builder.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "authority_identity_closure"
+            for target in node.targets
+        )
+    )
+    projection_calls = {
+        call.func.id
+        for call in ast.walk(projection)
+        if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    }
+    assert projection_calls == {"dict", "int", "tuple"}
+    assert not any(
+        isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "os"
+        for node in ast.walk(projection)
+    )
+
+
+TRANSACTION_NON_ENOENT_SITES = (
+    (
+        "before-ready-closure",
+        "_consume_ready_commit",
+        "AUTHORITIES_RETAINED",
+        None,
+        "before READY closure",
+    ),
+    (
+        "before-permit-publication",
+        "_publish_permit",
+        "READY_CONSUMED",
+        False,
+        "before permit publication",
+    ),
+    (
+        "after-permit-publication",
+        "_publish_permit",
+        "READY_CONSUMED",
+        True,
+        "after permit publication",
+    ),
+    (
+        "before-permit-commit",
+        "_commit_permit",
+        "PERMIT_PUBLISHED",
+        True,
+        "before permit commit",
+    ),
+    (
+        "after-permit-writer-open",
+        "_commit_permit",
+        "PERMIT_WRITER_OPEN",
+        True,
+        "after permit writer open",
+    ),
+)
+
+
+@pytest.mark.parametrize(
+    ("role", "leaf"),
+    _load_installer()._H11_TRANSACTION_LAYOUT,
+    ids=lambda value: value,
+)
+@pytest.mark.parametrize(
+    ("site", "caller", "state_name", "permit_published", "label_suffix"),
+    TRANSACTION_NON_ENOENT_SITES,
+    ids=lambda value: value,
+)
+def test_c2e_transaction_non_enoent_matrix_fails_closed_with_exact_abi(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    site: str,
+    caller: str,
+    state_name: str,
+    permit_published: bool | None,
+    label_suffix: str,
+    role: str,
+    leaf: str,
+) -> None:
+    fixture = _build_c2e_inventory_fixture(tmp_path)
+    production = fixture.production
+    flow = production.H11RootAuthorizationFlow(
+        fixture.paths["authorization"],
+        require_root=False,
+    )
+    original_stat = os.stat
+    original_close = os.close
+    original_write = os.write
+    original_sweep = production.H11RootAuthorizationFlow._sweep_slots
+    injected_error = PermissionError(
+        errno.EACCES,
+        f"injected H11 transaction denial at {site}/{role}",
+    )
+    target_fired = False
+    target_descriptors: tuple[int, ...] = ()
+    eligible_hits = 0
+    close_counts: Counter[int] = Counter()
+    sweep_calls: list[tuple[int, ...]] = []
+    commit_writes: list[int] = []
+    permit_path = fixture.paths["authorization"].parent / "PERMIT.json"
+
+    def focused_stat(
+        path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
+        *args: Any,
+        **kwargs: Any,
+    ) -> os.stat_result:
+        nonlocal target_fired, target_descriptors, eligible_hits
+        if (
+            not target_fired
+            and os.fsdecode(path) == leaf
+            and kwargs.get("dir_fd") == flow._slots[12]._descriptor
+            and sys._getframe(1).f_code.co_name == caller
+            and flow.state.name == state_name
+        ):
+            if permit_published is not None:
+                try:
+                    original_stat(permit_path)
+                except FileNotFoundError:
+                    observed_published = False
+                else:
+                    observed_published = True
+                if observed_published is not permit_published:
+                    return original_stat(path, *args, **kwargs)
+            if site == "after-permit-publication" and role == "permit":
+                eligible_hits += 1
+                if eligible_hits == 1:
+                    return original_stat(path, *args, **kwargs)
+            target_fired = True
+            target_descriptors = tuple(
+                slot._descriptor
+                for slot in flow._slots
+                if slot._descriptor >= 0
+            )
+            raise injected_error
+        return original_stat(path, *args, **kwargs)
+
+    def counting_close(descriptor: int) -> None:
+        if target_fired and descriptor in target_descriptors:
+            close_counts[descriptor] += 1
+        original_close(descriptor)
+
+    def counting_write(descriptor: int, payload: Any) -> int:
+        if bytes(payload) == production.H11_PERMIT_COMMITTED_BYTES:
+            commit_writes.append(descriptor)
+        return original_write(descriptor, payload)
+
+    def recording_sweep(
+        instance: Any,
+        *,
+        active_error: BaseException | None = None,
+    ) -> None:
+        if instance is flow:
+            sweep_calls.append(
+                tuple(
+                    slot._descriptor
+                    for slot in instance._slots
+                    if slot._descriptor >= 0
+                )
+            )
+        original_sweep(instance, active_error=active_error)
+
+    monkeypatch.setattr(os, "stat", focused_stat)
+    monkeypatch.setattr(os, "close", counting_close)
+    monkeypatch.setattr(os, "write", counting_write)
+    monkeypatch.setattr(
+        production.H11RootAuthorizationFlow,
+        "_sweep_slots",
+        recording_sweep,
+    )
+    frames: list[bytes] = []
+    peer_errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=(
+            _c2e_new_flow_fifo_peer
+            if site == "after-permit-writer-open"
+            else _load_accepted_fixture_tests()._root_c2e_atomic_flow_ready_only_peer
+        ),
+        args=(
+            (fixture.paths, production, frames, peer_errors)
+            if site == "after-permit-writer-open"
+            else (fixture.paths, peer_errors)
+        ),
+        name=f"c2e-transaction-{site}-{role}",
+    )
+    peer.start()
+    with pytest.raises(production.InstallerError) as caught:
+        flow.authorize_once()
+    peer.join()
+
+    assert type(caught.value) is production.InstallerError
+    assert str(caught.value) == f"cannot observe H11 transaction {role} {label_suffix}"
+    assert caught.value.__cause__ is injected_error
+    assert target_fired is True
+    assert flow.state is production.H11RootAuthorizationState.FAILED_PREWRITE
+    assert len(sweep_calls) == 1
+    assert sweep_calls[0] == target_descriptors
+    assert len(target_descriptors) == len(set(target_descriptors))
+    assert all(close_counts[descriptor] == 1 for descriptor in target_descriptors)
+    assert all(slot._descriptor == -1 for slot in flow._slots)
+    assert commit_writes == []
+    assert b"".join(frames) == b""
+    assert peer_errors == []
 
 
 def test_c2e_scanner_accepts_only_resolved_classified_calls() -> None:
@@ -4073,15 +4583,16 @@ async def inventory(slot):
     assert inventory.forms["nonlocal_name"] == Counter({"Nonlocal": 1})
 
 
-def test_c2e_exact_nominal_and_frozen_store_closure_accepts_only_70() -> None:
+def test_c2e_exact_nominal_and_frozen_store_closure_accepts_only_71() -> None:
     scanner = _production_scanner()
     assert set(scanner.classes) >= _EXACT_NOMINAL_CLASSES
     assert all(scanner._prove_exact_nominal_class(name) for name in _EXACT_NOMINAL_CLASSES)
-    assert sum(map(len, _EXPLICIT_FROZEN_FIELDS.values())) == 70
+    assert len(_EXPLICIT_FROZEN_FIELDS["H11RootAuthorityView"]) == 27
+    assert sum(map(len, _EXPLICIT_FROZEN_FIELDS.values())) == 71
     assert all(scanner._prove_frozen_constructor(name) for name in _EXPLICIT_FROZEN_FIELDS)
     result = scanner.scan(ROOT_QNAME)
     stores = [call for call in result.calls if call.rule_id == "FROZEN_CONSTRUCTOR_STORE"]
-    assert len(stores) == 70
+    assert len(stores) == 71
     assert {call.canonical_target for call in stores} == {"builtins.object.__setattr__"}
     assert result.resolved_call_count + len(result.unresolved) == result.reachable_ast_call_count
 
@@ -5023,7 +5534,7 @@ def test_c2e_domain_single_delta_matrix_is_closed_and_nonduplicated() -> None:
         for helper, axes in DOMAIN_NEGATIVE_AXES.items()
         for axis in axes
     }
-    assert len(registered) == sum(len(axes) for axes in DOMAIN_NEGATIVE_AXES.values()) == 68
+    assert len(registered) == sum(len(axes) for axes in DOMAIN_NEGATIVE_AXES.values()) == 71
 
 
 @pytest.mark.parametrize(
@@ -5080,6 +5591,20 @@ def test_c2e_direct_domain_axes_are_real_producer_single_deltas_before_observati
         changed = json.loads(json.dumps(fixture.documents["harness_manifest"]))
         changed["run_unit"] = "scion-w3-direct-delta.service"
         replace_document("harness_manifest", changed)
+    elif axis == "harness-root-projection":
+        changed = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+        changed["input_root"] = str(tmp_path / "wrong-input-root")
+        replace_document("harness_manifest", changed)
+    elif axis == "present-prerequisite-roles":
+        changed = json.loads(json.dumps(fixture.documents["harness_manifest"]))
+        changed["permit_authority"]["present_prerequisite_roles"] = [
+            "run-main-properties",
+            "h0",
+        ]
+        replace_document("harness_manifest", changed)
+        ready = json.loads(json.dumps(fixture.documents["permit_ready"]))
+        ready["permit_authority"] = changed["permit_authority"]
+        replace_document("permit_ready", ready)
     elif axis == "directory-chain":
         changed = json.loads(json.dumps(fixture.documents["harness_manifest"]))
         changed["permit_authority"]["directory_chain"][0]["inode"] = "1"
@@ -5145,6 +5670,18 @@ def test_c2e_direct_domain_axes_are_real_producer_single_deltas_before_observati
             match=r"\AH11 harness-source class or identity drifted\Z",
         ):
             fixture.production._build_h11_indirect_authority_inventory(**arguments)
+    elif axis == "harness-root-projection":
+        with pytest.raises(
+            fixture.production.InstallerError,
+            match=r"\AH11 harness output roots drifted\Z",
+        ):
+            fixture.production._build_h11_indirect_authority_inventory(**arguments)
+    elif axis == "present-prerequisite-roles":
+        with pytest.raises(
+            fixture.production.InstallerError,
+            match=r"\AH11 present prerequisite role authority drifted\Z",
+        ):
+            fixture.production._build_h11_indirect_authority_inventory(**arguments)
     else:
         with pytest.raises(fixture.production.InstallerError):
             fixture.production._build_h11_indirect_authority_inventory(**arguments)
@@ -5165,7 +5702,7 @@ def test_c2e_producer_valid_fixture_builds_exact_inventory_and_owner_identity(
     expected_classes: tuple[FixtureClass, ...],
 ) -> None:
     fixture = _build_c2e_inventory_fixture(tmp_path, variant=variant)
-    fixture_uid, fixture_gid, validated_fifos, indirect_specs = (
+    fixture_uid, fixture_gid, validated_fifos, indirect_specs, _closure = (
         fixture.production._build_h11_indirect_authority_inventory(**fixture.arguments)
     )
     assert (fixture_uid, fixture_gid) == (os.geteuid(), os.getegid())
@@ -5258,6 +5795,7 @@ def test_c2e_each_domain_owns_an_independent_schema_delta(
 
 TREE_DOMAIN_ARGUMENTS = (
     "tree_receipt",
+    "tree_receipt_source_reference",
     "preflight_receipt",
     "harness_manifest",
     "run_armed",
@@ -5277,6 +5815,7 @@ TREE_DOMAIN_CASES = (
     ("schema", "value"),
     ("schema", "extra-key"),
     ("phase", "value"),
+    ("source-layout", "outside-authority-root"),
     ("directory-role", "swap-sealed-work"),
     ("directory-path", "formal-projection"),
     ("directory-identity", "formal-projection"),
@@ -5689,6 +6228,10 @@ def test_c2e_tree_domain_each_registered_axis_has_an_owner_isolated_delta(
             tree["unexpected"] = True
     elif axis == "phase":
         tree["phase"] = "tree-not-prepared"
+    elif axis == "source-layout":
+        reference = dict(arguments["tree_receipt_source_reference"])
+        reference["path"] = str(tmp_path / "external-tree.json")
+        arguments["tree_receipt_source_reference"] = _frozen_json(reference)
     elif axis == "directory-role":
         tree["sealed_root"], tree["work_root"] = tree["work_root"], tree["sealed_root"]
     elif axis == "directory-path":
@@ -5882,8 +6425,15 @@ def test_c2e_tree_domain_each_registered_axis_has_an_owner_isolated_delta(
     _replace_tree_document(fixture, arguments, "harness_manifest", harness)
     _replace_tree_document(fixture, arguments, "run_armed", armed)
 
-    with pytest.raises(production.InstallerError):
-        production._build_h11_tree_indirect_specs(**arguments)
+    if axis == "source-layout":
+        with pytest.raises(
+            production.InstallerError,
+            match=r"\AH11 TREE receipt source layout drifted\Z",
+        ):
+            production._build_h11_tree_indirect_specs(**arguments)
+    else:
+        with pytest.raises(production.InstallerError):
+            production._build_h11_tree_indirect_specs(**arguments)
 
 
 @pytest.mark.parametrize(
@@ -6159,7 +6709,7 @@ def test_c2e_seal_domain_accepts_extra_valid_rows_and_merges_preflight_once(
     tmp_path: Path,
 ) -> None:
     fixture = _build_c2e_inventory_fixture(tmp_path, variant="expanded")
-    _fixture_uid, _fixture_gid, _validated, specs = (
+    _fixture_uid, _fixture_gid, _validated, specs, _closure = (
         fixture.production._build_h11_indirect_authority_inventory(**fixture.arguments)
     )
     assert len(specs) == len(CANONICAL_INDIRECT_CLASSES) + 2
@@ -6383,7 +6933,7 @@ def test_c2e_install_domain_positive_builds_exact_target_classes_and_merges_sour
 ) -> None:
     fixture = _build_c2e_inventory_fixture(tmp_path)
     production = fixture.production
-    _fixture_uid, _fixture_gid, _validated, all_specs = (
+    _fixture_uid, _fixture_gid, _validated, all_specs, _closure = (
         production._build_h11_indirect_authority_inventory(**fixture.arguments)
     )
     target_specs = all_specs[-3:]
@@ -6439,7 +6989,7 @@ def test_c2e_install_domain_nonroot_target_owner_is_independent_of_tree_fixture_
         label="C2e INSTALL independent nonroot target owner receipt",
     )
 
-    _fixture_uid, _fixture_gid, _validated, specs = (
+    _fixture_uid, _fixture_gid, _validated, specs, _closure = (
         production._build_h11_indirect_authority_inventory(**arguments)
     )
     run_install_spec = next(
@@ -6484,7 +7034,7 @@ def test_c2e_install_domain_accepts_synchronized_producer_order_permutation(
             label=f"C2e INSTALL synchronized permutation {name}",
         )
 
-    _fixture_uid, _fixture_gid, _validated, specs = (
+    _fixture_uid, _fixture_gid, _validated, specs, _closure = (
         production._build_h11_indirect_authority_inventory(**arguments)
     )
     expected_roles = tuple(receipt["units"][index]["role"] for index in range(3))
@@ -7076,6 +7626,11 @@ def test_c2e_top_builder_first_rejects_each_direct_only_alias_partition(
         production._build_h11_indirect_authority_inventory(**arguments)
     except production.InstallerError as exc:
         failure = exc
+    if variant == "directory-source" and target_field == "path":
+        assert entered == list(helper_order[:2])
+        assert completed == list(helper_order[:1])
+        assert str(failure) == "H11 TREE receipt source layout drifted"
+        return
     assert entered == completed == list(helper_order)
     assert failure is not None, f"C2e top accepted {axis} {variant}"
     expected_failure = (
