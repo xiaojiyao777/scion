@@ -15,7 +15,7 @@ reviews report P0=0/P1=0/P2=0 and `NATIVE_ACCEPT`. Generic `SpawnBackend` is
 implemented at `f72f0f5c`, followed by the formal-fixture/H11 authorization
 path on `v0.4-dev`.
 
-The current acceptance worktree is
+The accepted H11 integration was prepared in
 `/home/clawd/research/or-autoresearch-agent-h11-c2e-clean`, branch
 `codex/h11-c2e-implementation`. The C2e candidate replaces the layered private
 authorizer graph with one `H11RootAuthorizationFlow`; its authority correction
@@ -28,9 +28,9 @@ remain and none of the 78 rehomed/deleted old node IDs remain. Python 3.12 and
 3.13 each pass exact oracle `456` and public C2a `74` with `-W error`; Python
 3.12 collects exact `863` official cases and passes `862 / 1 skipped`.
 Production, oracle and final official fixed-hash reviews have no open P0-P3.
-The accepted head is a linear descendant of `v0.4-dev` and may be integrated
-only by exact fast-forward. H11 acceptance does not authorize a Warehouse W3
-or CVRP F1 experiment; their separately frozen launch gates remain binding.
+Acceptance commit `7623077f` is integrated into `origin/v0.4-dev` by exact
+fast-forward. H11 acceptance does not authorize a Warehouse W3 or CVRP F1
+experiment; their separately frozen launch gates remain binding.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -1055,10 +1055,11 @@ authority correction, deep oracle, public C2a surface and exact 177-node
 official canonicalization are accepted in commits
 `c5ce6bff / 87fae4c7 / 46ca056e / 96ebb938`. The final official gate is exact
 `863 collected / 862 passed / 1 skipped`, and both Python versions retain
-oracle `456` and C2a `74`. Only exact fast-forward integration remains.
-Warehouse W3, dry-root and formal launch remain locked. The rejected W3
-lifecycle remains excluded, B1 no longer occupies the host, and there is no
-sandbox, retry, budget, truncation or new research gate.
+oracle `456` and C2a `74`. Acceptance commit `7623077f` is integrated into
+`origin/v0.4-dev` by exact fast-forward. Warehouse W3, dry-root and formal
+launch remain locked. The rejected W3 lifecycle remains excluded, B1 no longer
+occupies the host, and there is no sandbox, retry, budget, truncation or new
+research gate.
 
 The fresh activation execution seam is design-frozen at SHA
 `25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
@@ -1091,10 +1092,11 @@ actual-journal-handle design is frozen and accepted.
    The W3 native slice and generic `SpawnBackend` are implemented. C2e public
    C2a, its 456-case oracle and the exact 177-node canonicalization are accepted
    on the feature branch at final official gate
-   `863 collected / 862 passed / 1 skipped`. Integrate only by exact
-   fast-forward, then continue to the problem-owned W3 manifest/replay/analysis
-   and independent source/dry-root acceptance. F1's dormant materializer is
-   accepted, but neither W3 nor F1 has formal launch authority.
+   `863 collected / 862 passed / 1 skipped`; acceptance commit `7623077f` is
+   now integrated into `origin/v0.4-dev` by exact fast-forward. Continue to the
+   problem-owned W3 manifest/replay/analysis and independent source/dry-root
+   acceptance. F1's dormant materializer is accepted, but neither W3 nor F1
+   has formal launch authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,

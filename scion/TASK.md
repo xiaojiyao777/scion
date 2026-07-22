@@ -1,7 +1,7 @@
 # Scion v0.4 Direct-Runtime Research Task
 
 *Branch: `v0.4-dev`*
-*Active acceptance branch: `codex/h11-c2e-implementation`*
+*Accepted H11 evidence head: `7623077f`*
 *Last updated: 2026-07-22*
 
 This is the active task source. Read it with
@@ -88,8 +88,8 @@ each pass the exact `456`-case oracle and exact `74` public C2a cases with
 `P0=P1=P2=P3=0`. Exact evidence is in
 `v0.4-w3-h11-official-test-authority-canonicalization-acceptance-20260722.md`.
 This closes H11 official canonicalization; no compatibility wrapper or
-experiment launch is authorized, and the accepted head may enter `v0.4-dev`
-only by exact fast-forward.
+experiment launch is authorized. Acceptance commit `7623077f` is integrated
+into `origin/v0.4-dev` by exact fast-forward.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
@@ -926,11 +926,12 @@ scientific and lineage-owning artifacts remain in place.
      implementation oracle passes exact `456` on Python 3.12/3.13, public C2a
      passes exact `74` on both, and Python 3.12 collects exact `863` official
      cases and passes `862 / 1 skipped`. The final split is exact
-     `P91/TL8/OF33/OR16/D29`, and fixed-hash reviews have no open P0-P3. Only
-     exact fast-forward integration remains; no compatibility wrapper is
-     authorized. Warehouse W3, dry-root and formal launch remain locked. The
-     rejected W3 lifecycle stays excluded, B1 no longer occupies the host, and
-     no sandbox, retry, budget, truncation or new research gate is added.
+     `P91/TL8/OF33/OR16/D29`, and fixed-hash reviews have no open P0-P3.
+     Acceptance commit `7623077f` is integrated into `origin/v0.4-dev` by exact
+     fast-forward; no compatibility wrapper is authorized. Warehouse W3,
+     dry-root and formal launch remain locked. The rejected W3 lifecycle stays
+     excluded, B1 no longer occupies the host, and no sandbox, retry, budget,
+     truncation or new research gate is added.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-
