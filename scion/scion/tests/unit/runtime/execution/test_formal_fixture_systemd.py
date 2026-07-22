@@ -3236,25 +3236,42 @@ def test_root_c1a_rejects_manifest_preflight_split_brain(tmp_path: Path) -> None
 
 @pytest.mark.parametrize("field", ("input_root", "receipt_root"))
 def test_root_c1a_rejects_manifest_output_root_split_brain(
-    tmp_path: Path, field: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    field: str,
 ) -> None:
-    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
-    manifest = json.loads(manifest_path.read_text(encoding="ascii"))
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text(encoding="ascii"))
     manifest[field] = str(tmp_path / f"wrong-{field}")
-    manifest_path.chmod(0o644)
-    _write(manifest_path, manifest)
-    manifest_path.chmod(0o444)
-    with pytest.raises(installer.InstallerError, match="output roots"):
-        installer.H11RootRetainedAuthority.open(
-            manifest_path,
-            require_root=False,
-        )
+    _root_c2a_write_json(paths["manifest"], manifest)
+    _root_c2a_rebind_sources(paths)
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match=r"\AH11 harness output roots drifted\Z",
+    )
 
 
 def test_root_c1a_rejects_coherently_rebound_tree_outside_authority(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    manifest_path, sources = _root_c1a_authority_model(tmp_path)
+    paths = _root_c2a_session_model(tmp_path)
+    manifest_path = paths["manifest"]
+    harness = json.loads(manifest_path.read_text(encoding="ascii"))
+    install_receipt_path = Path(harness["installer_receipt"]["path"])
+    install_receipt = json.loads(
+        install_receipt_path.read_text(encoding="ascii")
+    )
+    sources = {
+        "tree_receipt": Path(install_receipt["tree_receipt"]["path"]),
+        "seal_receipt": Path(install_receipt["seal_receipt"]["path"]),
+        "preflight_receipt": Path(
+            install_receipt["preflight_receipt"]["path"]
+        ),
+        "install_manifest": Path(install_receipt["install_manifest"]["path"]),
+        "install_receipt": install_receipt_path,
+    }
     original_tree_path = sources["tree_receipt"]
     tree = json.loads(original_tree_path.read_text(encoding="ascii"))
     prepare_path = Path(tree["prepare_manifest"]["path"])
@@ -3325,11 +3342,12 @@ def test_root_c1a_rejects_coherently_rebound_tree_outside_authority(
     _write(manifest_path, manifest)
     manifest_path.chmod(0o444)
 
-    with pytest.raises(installer.InstallerError, match="TREE receipt.*authority root"):
-        installer.H11RootRetainedAuthority.open(
-            manifest_path,
-            require_root=False,
-        )
+    _root_c2a_rebind_sources(paths)
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match=r"\AH11 TREE receipt source layout drifted\Z",
+    )
 
 
 def test_root_c1a_revalidate_rejects_same_byte_seal_replacement(
@@ -3564,30 +3582,31 @@ def test_root_c1b1_rejects_nonclosed_manifest_output_inventory(
     ("present-missing", "present-extra", "present-reordered", "present-wrong"),
 )
 def test_root_c1b1_rejects_declared_present_partition_drift(
-    tmp_path: Path, mutation: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
 ) -> None:
-    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
-
-    def mutate(manifest: dict[str, Any]) -> None:
-        present = manifest["permit_authority"]["present_prerequisite_roles"]
-        if mutation == "present-missing":
-            present.pop()
-        elif mutation == "present-extra":
-            present.append("signals")
-        elif mutation == "present-reordered":
-            present.reverse()
-        else:
-            present[0] = "signals"
-
-    _rewrite_root_h11_manifest(manifest_path, mutate)
-    authority = installer.H11RootRetainedAuthority.open(
-        manifest_path, require_root=False
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text(encoding="ascii"))
+    present = manifest["permit_authority"]["present_prerequisite_roles"]
+    if mutation == "present-missing":
+        present.pop()
+    elif mutation == "present-extra":
+        present.append("signals")
+    elif mutation == "present-reordered":
+        present.reverse()
+    else:
+        present[0] = "signals"
+    _root_c2a_write_json(paths["manifest"], manifest)
+    ready = json.loads(paths["ready"].read_text(encoding="ascii"))
+    ready["permit_authority"] = manifest["permit_authority"]
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+    _root_c2a_run_public_pre_ready_rejection(
+        paths,
+        monkeypatch,
+        error_match=r"\AH11 present prerequisite role authority drifted\Z",
     )
-    try:
-        with pytest.raises(installer.InstallerError, match="present prerequisites"):
-            authority.derive_closed_partition()
-    finally:
-        authority.close()
 
 
 @pytest.mark.parametrize(
@@ -3911,11 +3930,16 @@ def test_root_c1b2_non_enoent_leaf_error_fails_closed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    manifest_path, _sources = _root_c1a_authority_model(tmp_path)
-    authority = installer.H11RootRetainedAuthority.open(
-        manifest_path, require_root=False
+    paths = _root_c2a_session_model(tmp_path)
+    flow = installer.H11RootAuthorizationFlow(
+        paths["authorization"],
+        require_root=False,
     )
     original_stat = os.stat
+    injected_error = PermissionError(
+        errno.EACCES,
+        "injected transaction authority denial",
+    )
 
     def denied_leaf_stat(
         path: str | bytes | os.PathLike[str] | os.PathLike[bytes],
@@ -3924,20 +3948,25 @@ def test_root_c1b2_non_enoent_leaf_error_fails_closed(
     ) -> os.stat_result:
         if (
             os.fsdecode(path) == "AUTHORIZE-RELEASE.json"
-            and kwargs.get("dir_fd") == authority.directories[3].descriptor
+            and inspect.currentframe().f_back.f_code.co_name
+            == "_consume_ready_commit"
+            and flow.state
+            is installer.H11RootAuthorizationState.AUTHORITIES_RETAINED
         ):
-            raise PermissionError("injected transaction authority denial")
+            raise injected_error
         return original_stat(path, *args, **kwargs)
 
     monkeypatch.setattr(os, "stat", denied_leaf_stat)
-    try:
-        with pytest.raises(
-            installer.InstallerError, match="cannot validate.*AUTHORIZE"
-        ) as caught:
-            authority.validate_transaction_phase("pre-start")
-        assert isinstance(caught.value.__cause__, PermissionError)
-    finally:
-        authority.close()
+    caught = _root_c2a_run_public_ready_rejection(
+        paths,
+        flow=flow,
+        error_match=(
+            r"\Acannot observe H11 transaction authorization "
+            r"before READY closure\Z"
+        ),
+    )
+    assert type(caught) is installer.InstallerError
+    assert caught.__cause__ is injected_error
 
 
 def test_root_c1b2_uses_seven_ordered_relative_leaf_lookups(
@@ -5127,6 +5156,35 @@ def _root_c2a_run_public_authorization_flow(
     peer.join()
     assert errors == []
     return flow, receipt, tuple(frames)
+
+
+def _root_c2a_run_public_ready_rejection(
+    paths: dict[str, Path],
+    *,
+    flow: installer.H11RootAuthorizationFlow | None = None,
+    error_match: str,
+) -> installer.InstallerError:
+    peer_errors: list[BaseException] = []
+    peer = threading.Thread(
+        target=_root_c2e_atomic_flow_ready_only_peer,
+        args=(paths, peer_errors),
+    )
+    peer.start()
+    active_flow = flow or installer.H11RootAuthorizationFlow(
+        paths["authorization"],
+        require_root=False,
+    )
+    with pytest.raises(installer.InstallerError, match=error_match) as caught:
+        active_flow.authorize_once()
+    peer.join()
+    assert peer_errors == []
+    assert (
+        active_flow.state
+        is installer.H11RootAuthorizationState.FAILED_PREWRITE
+    )
+    assert not (paths["authorization"].parent / "PERMIT.pending").exists()
+    assert not (paths["authorization"].parent / "PERMIT.json").exists()
+    return caught.value
 
 
 def _root_c2a_run_public_pre_ready_rejection(
@@ -6639,8 +6697,10 @@ def test_root_c2b_rejects_present_output_inode_alias(tmp_path: Path) -> None:
     )
     _root_c2a_write_json(paths["ready"], ready)
     _root_c2a_rebind_sources(paths)
-    with pytest.raises(installer.InstallerError, match="identities alias"):
-        _root_c2b_consume_with_writer(paths)
+    _root_c2a_run_public_ready_rejection(
+        paths,
+        error_match=r"\AH11 present output identities alias\Z",
+    )
 
 
 def test_root_c2b_rejects_present_output_hardlink_to_retained_source(
@@ -6664,11 +6724,46 @@ def test_root_c2b_rejects_present_output_hardlink_to_retained_source(
     }
     _root_c2a_write_json(paths["ready"], ready)
     _root_c2a_rebind_sources(paths)
-    with pytest.raises(
-        installer.InstallerError,
-        match="identities alias retained authority",
-    ):
-        _root_c2b_consume_with_writer(paths)
+    _root_c2a_run_public_ready_rejection(
+        paths,
+        error_match=r"\AH11 present output aliases retained authority\Z",
+    )
+
+
+def test_root_c2b_rejects_present_output_hardlink_to_indirect_regular_source(
+    tmp_path: Path,
+) -> None:
+    paths = _root_c2a_session_model(tmp_path)
+    manifest = json.loads(paths["manifest"].read_text(encoding="ascii"))
+    install_receipt_path = Path(manifest["installer_receipt"]["path"])
+    install_receipt = json.loads(
+        install_receipt_path.read_text(encoding="ascii")
+    )
+    seal_receipt_path = Path(install_receipt["seal_receipt"]["path"])
+    seal_receipt = json.loads(seal_receipt_path.read_text(encoding="ascii"))
+    indirect_regular_source = Path(seal_receipt["files"][0]["path"])
+    assert stat.S_IMODE(indirect_regular_source.lstat().st_mode) == 0o444
+    ready = json.loads(paths["ready"].read_text(encoding="ascii"))
+    h0_index = next(
+        index
+        for index, item in enumerate(ready["present_outputs"])
+        if item["role"] == "h0"
+    )
+    h0_path = Path(ready["present_outputs"][h0_index]["path"])
+    h0_path.parent.chmod(0o755)
+    h0_path.unlink()
+    os.link(indirect_regular_source, h0_path)
+    h0_path.parent.chmod(0o555)
+    ready["present_outputs"][h0_index] = {
+        "role": "h0",
+        **_root_c2a_full_reference(h0_path),
+    }
+    _root_c2a_write_json(paths["ready"], ready)
+    _root_c2a_rebind_sources(paths)
+    _root_c2a_run_public_ready_rejection(
+        paths,
+        error_match=r"\AH11 present output aliases retained authority\Z",
+    )
 
 
 @pytest.mark.parametrize(
