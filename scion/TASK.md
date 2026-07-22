@@ -85,11 +85,14 @@ official migration `d5ce7a8a`; production SHA is
 fixed-hash reviews pass with no open P0-P3. Exact acceptance evidence is in
 `v0.4-w3-h11-authority-closure-correction-acceptance-20260722.md`. The
 remaining failures are exact C1a 8, C1b1 17, C1b2 22, C1c 20, C2b 38, C2c 36,
-and C2d 36. Do not mechanically port those 177 tests or restore compatibility
-wrappers. Before merge, freeze one canonicalization design that classifies
-each legacy contract as retained public behavior, already-owned oracle
-coverage, or obsolete private topology, then rewrites, retains or deletes by
-class. No experiment is live or authorized by this candidate.
+and C2d 36. Their canonicalization design is now frozen at exact SHA
+`a6b86d71...d2ce`; architecture, fixture/manifest and production/oracle ABI
+reviews all close at P0=P1=P2=P3=0. Its exact 177-node manifest assigns
+P91/TL8/OF33/OR16/D29 and targets `863 collected / 862 passed / 1 skipped`.
+Implementation must now proceed in fixed-hash responsibility slices:
+production authority cleanup and writer boundary, the still-456 oracle, then
+official canonicalization. Do not mechanically port the 177 tests, restore
+compatibility wrappers, or start any experiment from this candidate.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction

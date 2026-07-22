@@ -26,8 +26,14 @@ and exact `74` public C2a cases with `-W error`; Python 3.12 full-file diagnosis
 is `763 passed / 177 failed / 1 skipped`. Fixed-hash reviews have no open
 P0-P3. The remaining exact failures are C1a 8, C1b1 17, C1b2 22, C1c 20,
 C2b 38, C2c 36, and C2d 36. Full H11 official acceptance and branch merge
-remain open pending one retained/rewrite/delete canonicalization; do not add
-compatibility wrappers or mechanically port 177 tests.
+remain open. The exact retained/rewrite/delete canonicalization is now frozen
+at design SHA `a6b86d71...d2ce`, with three independent specialty reviews at
+P0=P1=P2=P3=0. Its 177-node destination manifest is
+P91/TL8/OF33/OR16/D29 and its final gate is
+`863 collected / 862 passed / 1 skipped`. Production authority cleanup and
+writer OSError ABI correction are the next responsibility slice, followed by
+the still-456 oracle and only then official migration. Do not add compatibility
+wrappers, mechanically port 177 tests, or start an experiment.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
