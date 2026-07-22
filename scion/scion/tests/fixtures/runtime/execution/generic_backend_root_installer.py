@@ -156,28 +156,11 @@ _H11_TRANSACTION_LAYOUT = (
     ("permit-ledger-staging", "PERMIT-LEDGER.pending"),
     ("permit-ledger", "PERMIT-LEDGER.json"),
 )
-_H11_TRANSACTION_PHASES = {
-    "pre-start": ("absent",) * 7,
-    "ready-visible": (
-        "absent", "absent", "present", "absent", "absent", "absent", "absent"
-    ),
-    "authorizer-input": (
-        "present", "absent", "present", "absent", "absent", "absent", "absent"
-    ),
-    "permit-committed": (
-        "present", "absent", "present", "absent", "present", "absent", "absent"
-    ),
-    "ledger-committed": (
-        "present", "absent", "present", "absent", "present", "absent", "present"
-    ),
-}
-_H11_PUBLICATION_PAIRS = {
-    "PERMIT_READY.pending": "PERMIT_READY.json",
-    "PERMIT.pending": "PERMIT.json",
-    "PERMIT-LEDGER.pending": "PERMIT-LEDGER.json",
-}
-_H11_PUBLICATION_TEST_FAILURES = frozenset(
-    {"pre-rename"}
+_H11_AUTHORIZER_INPUT_TRANSACTION_STATE = (
+    "present", "absent", "present", "absent", "absent", "absent", "absent"
+)
+_H11_PERMIT_COMMITTED_TRANSACTION_STATE = (
+    "present", "absent", "present", "absent", "present", "absent", "absent"
 )
 _H11_AUTHORIZATION_KEYS = {
     "schema",
@@ -1471,17 +1454,6 @@ class H11RootValidatedFifo:
             "device": str(self.device),
             "inode": str(self.inode),
         }
-
-
-@dataclass(frozen=True, slots=True)
-class H11RootNamedStagingPlan:
-    parent: H11RootDirectoryReference
-    staging_name: str
-    final_name: str
-    raw: bytes
-    expected_owner: tuple[int, int]
-    require_root: bool
-    test_failure: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -8123,7 +8095,7 @@ class H11RootAuthorizationFlow:
         for (role, leaf), path, expected_state in zip(
             _H11_TRANSACTION_LAYOUT,
             transaction_paths,
-            _H11_TRANSACTION_PHASES["authorizer-input"],
+            _H11_AUTHORIZER_INPUT_TRANSACTION_STATE,
         ):
             try:
                 os.stat(
@@ -8225,7 +8197,7 @@ class H11RootAuthorizationFlow:
         before_rows: list[H11RootTransactionState] = []
         for (role, leaf), expected in zip(
             _H11_TRANSACTION_LAYOUT,
-            _H11_TRANSACTION_PHASES["authorizer-input"],
+            _H11_AUTHORIZER_INPUT_TRANSACTION_STATE,
         ):
             try:
                 os.stat(
@@ -8440,7 +8412,7 @@ class H11RootAuthorizationFlow:
         final_rows: list[H11RootTransactionState] = []
         for (role, leaf), expected in zip(
             _H11_TRANSACTION_LAYOUT,
-            _H11_TRANSACTION_PHASES["permit-committed"],
+            _H11_PERMIT_COMMITTED_TRANSACTION_STATE,
         ):
             try:
                 os.stat(
@@ -8568,7 +8540,7 @@ class H11RootAuthorizationFlow:
         entry_rows: list[H11RootTransactionState] = []
         for (role, leaf), expected in zip(
             _H11_TRANSACTION_LAYOUT,
-            _H11_TRANSACTION_PHASES["permit-committed"],
+            _H11_PERMIT_COMMITTED_TRANSACTION_STATE,
         ):
             try:
                 os.stat(
@@ -8624,14 +8596,17 @@ class H11RootAuthorizationFlow:
             fifo,
             H11_PERMIT_COMMITTED_BYTES,
         )
-        self._slots[0].open(
-            f"/proc/self/fd/{self._slots[7].borrow()}",
-            os.O_WRONLY | os.O_CLOEXEC,
-        )
-        authority.permit_commit_fifo.reference.prove(
-            os.fstat(self._slots[0].borrow()),
-            label="H11 permit-commit writer",
-        )
+        try:
+            self._slots[0].open(
+                f"/proc/self/fd/{self._slots[7].borrow()}",
+                os.O_WRONLY | os.O_CLOEXEC,
+            )
+            authority.permit_commit_fifo.reference.prove(
+                os.fstat(self._slots[0].borrow()),
+                label="H11 permit-commit writer",
+            )
+        except OSError as exc:
+            raise InstallerError("cannot open H11 PERMIT commit writer") from exc
         self._transition(
             expected=H11RootAuthorizationState.PERMIT_PUBLISHED,
             target=H11RootAuthorizationState.PERMIT_WRITER_OPEN,
@@ -8660,7 +8635,7 @@ class H11RootAuthorizationFlow:
         writer_rows: list[H11RootTransactionState] = []
         for (role, leaf), expected in zip(
             _H11_TRANSACTION_LAYOUT,
-            _H11_TRANSACTION_PHASES["permit-committed"],
+            _H11_PERMIT_COMMITTED_TRANSACTION_STATE,
         ):
             try:
                 os.stat(
