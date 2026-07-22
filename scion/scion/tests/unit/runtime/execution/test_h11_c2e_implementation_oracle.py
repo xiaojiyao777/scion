@@ -59,6 +59,16 @@ AUTHORITY_CLOSURE_CORRECTION_DESIGN = (
 AUTHORITY_CLOSURE_CORRECTION_DESIGN_SHA256 = (
     "bd2e2aaa1ac709822bd8d533804ee369ce5ac732fd3afeeb6193b706a2830541"
 )
+TEST_AUTHORITY_CANONICALIZATION_DESIGN = (
+    Path(__file__).parents[5]
+    / "docs"
+    / "planning"
+    / "v0.4"
+    / "v0.4-w3-h11-official-test-authority-canonicalization-design-20260722.md"
+)
+TEST_AUTHORITY_CANONICALIZATION_DESIGN_SHA256 = (
+    "a6b86d71c53e2ed220f9b4ee283d59311e2a1f93263746a21940bb7e4763d2ce"
+)
 M = "generic_backend_root_installer"
 ROOT_QNAME = f"{M}.authorize_h11_release"
 
@@ -77,6 +87,10 @@ LEGACY_MODULE_SYMBOLS = (
     "_publish_h11_named_staging",
     "_open_h11_named_staging",
     "_complete_h11_named_staging",
+    "_H11_TRANSACTION_PHASES",
+    "_H11_PUBLICATION_PAIRS",
+    "_H11_PUBLICATION_TEST_FAILURES",
+    "H11RootNamedStagingPlan",
 )
 LEGACY_CLASS_ATTRIBUTES = (
     ("H11RootValidatedFifo", "from_tree_row"),
@@ -194,7 +208,6 @@ PURE_VALUE_NAMES = frozenset(
         f"{M}.H11RootDirectoryReference.__init__",
         f"{M}.H11RootFifoReference.__init__",
         f"{M}.H11RootIndirectAuthoritySpec.__init__",
-        f"{M}.H11RootNamedStagingPlan.__init__",
         f"{M}.H11RootObservedPathIdentity.__init__",
         f"{M}.H11RootPrePermitBarrier.__init__",
         f"{M}.H11RootRolePath.__init__",
@@ -551,7 +564,6 @@ _GENERATED_CLASS_FIELDS = {
     ),
     "H11RootTransactionState": ("role", "path", "state"),
     "H11RootValidatedFifo": ("role", "path", "owner", "uid", "gid", "mode", "device", "inode", "accepted_owners"),
-    "H11RootNamedStagingPlan": ("parent", "staging_name", "final_name", "raw", "expected_owner", "require_root", "test_failure"),
     "H11RootPrePermitBarrier": (
         "directory_chain", "present_outputs_sha256", "future_absence_sha256",
         "transaction_state", "future_absence_inventory",
@@ -599,7 +611,6 @@ _EXACT_CLASS_METHODS = {
     "H11RootClosedPartition": (),
     "H11RootTransactionState": ("reference",),
     "H11RootValidatedFifo": ("acquisition_reference",),
-    "H11RootNamedStagingPlan": (),
     "H11RootPrePermitBarrier": (),
     "H11RootIndirectAuthoritySpec": (),
     "H11RootObservedPathIdentity": (),
@@ -3630,6 +3641,10 @@ def test_c2e_oracle_is_bound_to_the_reviewed_design() -> None:
         hashlib.sha256(AUTHORITY_CLOSURE_CORRECTION_DESIGN.read_bytes()).hexdigest()
         == AUTHORITY_CLOSURE_CORRECTION_DESIGN_SHA256
     )
+    assert (
+        hashlib.sha256(TEST_AUTHORITY_CANONICALIZATION_DESIGN.read_bytes()).hexdigest()
+        == TEST_AUTHORITY_CANONICALIZATION_DESIGN_SHA256
+    )
     assert INSTALLER_SOURCE.is_file()
 
 
@@ -3647,9 +3662,165 @@ def test_c2e_legacy_module_symbol_and_factory_matrix_is_removed() -> None:
         not hasattr(getattr(production, class_name), attribute_name)
         for class_name, attribute_name in LEGACY_CLASS_ATTRIBUTES
     )
+    expected_transaction_states = {
+        "_H11_AUTHORIZER_INPUT_TRANSACTION_STATE": (
+            "present", "absent", "present", "absent", "absent", "absent", "absent"
+        ),
+        "_H11_PERMIT_COMMITTED_TRANSACTION_STATE": (
+            "present", "absent", "present", "absent", "present", "absent", "absent"
+        ),
+    }
+    assignments = {
+        target.id: statement.value
+        for statement in tree.body
+        if isinstance(statement, ast.Assign)
+        and len(statement.targets) == 1
+        and isinstance((target := statement.targets[0]), ast.Name)
+        and target.id in expected_transaction_states
+    }
+    assert set(assignments) == set(expected_transaction_states)
+    assert {
+        name: ast.literal_eval(value) for name, value in assignments.items()
+    } == expected_transaction_states
+    assert {
+        name: sum(
+            isinstance(node, ast.Name)
+            and isinstance(node.ctx, ast.Load)
+            and node.id == name
+            for node in ast.walk(tree)
+        )
+        for name in expected_transaction_states
+    } == {
+        "_H11_AUTHORIZER_INPUT_TRANSACTION_STATE": 2,
+        "_H11_PERMIT_COMMITTED_TRANSACTION_STATE": 3,
+    }
+    flow_class = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+        and node.name == "H11RootAuthorizationFlow"
+    )
+    assert {
+        name: {
+            method.name: count
+            for method in flow_class.body
+            if isinstance(method, ast.FunctionDef)
+            and (
+                count := sum(
+                    isinstance(node, ast.Name)
+                    and isinstance(node.ctx, ast.Load)
+                    and node.id == name
+                    for node in ast.walk(method)
+                )
+            )
+        }
+        for name in expected_transaction_states
+    } == {
+        "_H11_AUTHORIZER_INPUT_TRANSACTION_STATE": {
+            "_consume_ready_commit": 1,
+            "_publish_permit": 1,
+        },
+        "_H11_PERMIT_COMMITTED_TRANSACTION_STATE": {
+            "_publish_permit": 1,
+            "_commit_permit": 2,
+        },
+    }
+    exact_transaction_consumers = (
+        (
+            "_consume_ready_commit",
+            "((role, leaf), path, expected_state)",
+            (
+                "_H11_TRANSACTION_LAYOUT",
+                "transaction_paths",
+                "_H11_AUTHORIZER_INPUT_TRANSACTION_STATE",
+            ),
+        ),
+        (
+            "_publish_permit",
+            "((role, leaf), expected)",
+            (
+                "_H11_TRANSACTION_LAYOUT",
+                "_H11_AUTHORIZER_INPUT_TRANSACTION_STATE",
+            ),
+        ),
+        (
+            "_publish_permit",
+            "((role, leaf), expected)",
+            (
+                "_H11_TRANSACTION_LAYOUT",
+                "_H11_PERMIT_COMMITTED_TRANSACTION_STATE",
+            ),
+        ),
+        (
+            "_commit_permit",
+            "((role, leaf), expected)",
+            (
+                "_H11_TRANSACTION_LAYOUT",
+                "_H11_PERMIT_COMMITTED_TRANSACTION_STATE",
+            ),
+        ),
+        (
+            "_commit_permit",
+            "((role, leaf), expected)",
+            (
+                "_H11_TRANSACTION_LAYOUT",
+                "_H11_PERMIT_COMMITTED_TRANSACTION_STATE",
+            ),
+        ),
+    )
+    actual_transaction_consumers: list[
+        tuple[str, str, tuple[str, ...]]
+    ] = []
+    consumer_load_nodes: list[ast.Name] = []
+    for method in flow_class.body:
+        if not isinstance(method, ast.FunctionDef):
+            continue
+        for node in ast.walk(method):
+            if (
+                not isinstance(node, ast.For)
+                or not isinstance(node.iter, ast.Call)
+                or not isinstance(node.iter.func, ast.Name)
+                or node.iter.func.id != "zip"
+                or not any(
+                    isinstance(argument, ast.Name)
+                    and argument.id in expected_transaction_states
+                    for argument in node.iter.args
+                )
+            ):
+                continue
+            actual_transaction_consumers.append(
+                (
+                    method.name,
+                    ast.unparse(node.target),
+                    tuple(ast.unparse(argument) for argument in node.iter.args),
+                )
+            )
+            consumer_load_nodes.extend(
+                argument
+                for argument in node.iter.args
+                if isinstance(argument, ast.Name)
+                and argument.id in expected_transaction_states
+            )
+    assert Counter(actual_transaction_consumers) == Counter(
+        exact_transaction_consumers
+    )
+    all_transaction_load_nodes = tuple(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Name)
+        and isinstance(node.ctx, ast.Load)
+        and node.id in expected_transaction_states
+    )
+    assert len(consumer_load_nodes) == len(all_transaction_load_nodes) == 5
+    assert {id(node) for node in consumer_load_nodes} == {
+        id(node) for node in all_transaction_load_nodes
+    }
 
 
-def test_c2e_new_flow_e2e_commits_one_exact_frame_and_receipt(tmp_path: Path) -> None:
+def test_c2e_new_flow_e2e_commits_one_exact_frame_and_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fixture = _build_c2e_inventory_fixture(tmp_path)
     production = fixture.production
     paths = fixture.paths
@@ -3697,6 +3868,153 @@ def test_c2e_new_flow_e2e_commits_one_exact_frame_and_receipt(tmp_path: Path) ->
         ).hexdigest(),
         "byte_count": str(len(production.H11_PERMIT_COMMITTED_BYTES)),
     }
+    assert production.H11_PERMIT_COMMITTED_BYTES == (
+        b"SCION_H11_PERMIT_COMMITTED_V1\n"
+    )
+    assert len(production.H11_PERMIT_COMMITTED_BYTES) == 30
+    assert hashlib.sha256(production.H11_PERMIT_COMMITTED_BYTES).hexdigest() == (
+        "0b32db23105bfd4165781e1de72e0dcd2edfa6717f51e9e4cf08fd34d0beb59a"
+    )
+    assert production.H11_COMMIT_FIFO_RECEIPT_SCHEMA == (
+        "scion.generic_backend.h11_commit_fifo_receipt.v1"
+    )
+
+    fifo_reference = fixture.arguments["permit_commit_fifo_reference"]
+    factory_fifo = SimpleNamespace(
+        role="h11-permit-commit",
+        reference=fifo_reference,
+    )
+    factory_receipt = production.H11RootCommitReceipt.permit_committed(
+        factory_fifo,
+        production.H11_PERMIT_COMMITTED_BYTES,
+    )
+    assert type(factory_receipt) is production.H11RootCommitReceipt
+    assert factory_receipt == production.H11RootCommitReceipt(
+        "permit-committed",
+        fifo_reference,
+        "0b32db23105bfd4165781e1de72e0dcd2edfa6717f51e9e4cf08fd34d0beb59a",
+        "30",
+    )
+    reject_inputs = (
+        ("h11-ready-commit", b"SCION_H11_PERMIT_COMMITTED_V1\n"),
+        ("h11-permit-commit", b"SCION_H11_PERMIT_COMMITTED_V1"),
+        ("h11-permit-commit", b"SCION_H11_PERMIT_COMMITTED_V1\nX"),
+        ("h11-permit-commit", b"SCION_H11_PERMIT_COMMITTED_V1\n" * 2),
+    )
+    for role, payload in reject_inputs:
+        rejected_fifo = SimpleNamespace(role=role, reference=fifo_reference)
+        with pytest.raises(production.InstallerError) as caught:
+            production.H11RootCommitReceipt.permit_committed(
+                rejected_fifo,
+                payload,
+            )
+        assert str(caught.value) == (
+            "H11 PERMIT commit receipt source is not the exact committed frame"
+        )
+
+    for fault_site in ("open", "fstat", "prove", "prove-non-oserror"):
+        fault_root = tmp_path / f"writer-{fault_site}"
+        fault_root.mkdir()
+        fault_fixture = _build_c2e_inventory_fixture(fault_root)
+        fault_production = fault_fixture.production
+        flow = fault_production.H11RootAuthorizationFlow(
+            fault_fixture.paths["authorization"],
+            require_root=False,
+        )
+        fault: BaseException = (
+            RuntimeError("H11 writer proof non-OSError")
+            if fault_site == "prove-non-oserror"
+            else PermissionError(errno.EACCES, f"H11 writer {fault_site}")
+        )
+        fault_frames: list[bytes] = []
+        fault_peer_errors: list[BaseException] = []
+        fault_peer = threading.Thread(
+            target=_c2e_new_flow_fifo_peer,
+            args=(
+                fault_fixture.paths,
+                fault_production,
+                fault_frames,
+                fault_peer_errors,
+            ),
+            name=f"c2e-writer-{fault_site}-peer",
+        )
+        with monkeypatch.context() as patch:
+            if fault_site == "open":
+                original_open = fault_production.H11OwnedFdSlot.open
+
+                def faulting_open(
+                    slot: Any,
+                    *args: Any,
+                    **kwargs: Any,
+                ) -> None:
+                    if slot is flow._slots[0]:
+                        raise fault
+                    original_open(slot, *args, **kwargs)
+
+                patch.setattr(
+                    fault_production.H11OwnedFdSlot,
+                    "open",
+                    faulting_open,
+                )
+            elif fault_site == "fstat":
+                original_fstat = os.fstat
+
+                def faulting_fstat(descriptor: int) -> os.stat_result:
+                    if (
+                        flow._slots[0]._descriptor >= 0
+                        and descriptor == flow._slots[0]._descriptor
+                    ):
+                        raise fault
+                    return original_fstat(descriptor)
+
+                patch.setattr(os, "fstat", faulting_fstat)
+            else:
+                original_prove = fault_production.H11RootFifoReference.prove
+
+                def faulting_prove(
+                    reference: Any,
+                    info: os.stat_result,
+                    *,
+                    label: str,
+                ) -> None:
+                    if label == "H11 permit-commit writer":
+                        raise fault
+                    original_prove(reference, info, label=label)
+
+                patch.setattr(
+                    fault_production.H11RootFifoReference,
+                    "prove",
+                    faulting_prove,
+                )
+
+            fault_peer.start()
+            try:
+                flow.authorize_once()
+            except BaseException as raised:
+                observed_error = raised
+            else:
+                pytest.fail(f"writer {fault_site} fault was accepted")
+
+        if fault_site == "open":
+            permit_path = (
+                fault_fixture.paths["authorization"].parents[3]
+                / "fifo"
+                / "h11-permit-committed.fifo"
+            )
+            release = os.open(permit_path, os.O_WRONLY | os.O_CLOEXEC)
+            os.close(release)
+        fault_peer.join()
+        assert not fault_peer.is_alive()
+        assert fault_peer_errors == []
+        assert fault_frames == [b""]
+        assert flow.state is fault_production.H11RootAuthorizationState.FAILED_PREWRITE
+        assert all(slot._descriptor == -1 for slot in flow._slots)
+        if fault_site == "prove-non-oserror":
+            assert observed_error is fault
+        else:
+            assert type(observed_error) is fault_production.InstallerError
+            assert str(observed_error) == "cannot open H11 PERMIT commit writer"
+            assert observed_error.__cause__ is fault
 
 
 def test_c2e_top_builder_returns_exact_ordered_authority_identity_closure(
@@ -4529,6 +4847,149 @@ def _phase_cursor_source() -> str:
     return INSTALLER_SOURCE.read_text()
 
 
+def _production_class_method(
+    tree: ast.Module,
+    class_name: str,
+    method_name: str,
+) -> ast.FunctionDef:
+    class_node = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == class_name
+    )
+    return next(
+        node
+        for node in class_node.body
+        if isinstance(node, ast.FunctionDef) and node.name == method_name
+    )
+
+
+def _assert_ready_reader_source_shape(tree: ast.Module) -> None:
+    consume = _production_class_method(
+        tree,
+        "H11RootAuthorizationFlow",
+        "_consume_ready_commit",
+    )
+    open_index = next(
+        index
+        for index, statement in enumerate(consume.body)
+        if ast.unparse(statement).startswith("self._slots[1].open(")
+    )
+    assert tuple(ast.unparse(statement) for statement in consume.body[open_index:open_index + 11]) == (
+        "self._slots[1].open(f'/proc/self/fd/{self._slots[8].borrow()}', os.O_RDONLY | os.O_CLOEXEC)",
+        "authority.ready_commit_fifo.reference.prove(os.fstat(self._slots[1].borrow()), label='H11 ready-commit reader')",
+        "chunks: list[bytes] = []",
+        "while True:\n    chunk = os.read(self._slots[1].borrow(), select.PIPE_BUF)\n    if not chunk:\n        break\n    chunks.append(chunk)",
+        "payload = bytes.join(b'', chunks)",
+        "close_error = self._close_slot_once(self._slots[1])",
+        "if close_error is not None:\n    raise close_error",
+        "if payload != H11_READY_COMMITTED_BYTES:\n    _fail('H11 READY commit FIFO frame differs before EOF')",
+        "fifo = authority.ready_commit_fifo",
+        "if fifo is not authority.ready_commit_fifo or fifo._flow is not self or fifo._slot is not self._slots[8] or (fifo._parent_slot is not self._slots[9]):\n    _fail('H11 READY receipt FIFO identity gate failed')",
+        "receipt = H11RootCommitReceipt.ready_committed(fifo, payload)",
+    )
+    forbidden_names = {"O_NONBLOCK", "poll", "sleep", "timeout"}
+    assert not any(
+        (
+            isinstance(node, ast.Name) and node.id in forbidden_names
+        )
+        or (
+            isinstance(node, ast.Attribute) and node.attr in forbidden_names
+        )
+        for node in ast.walk(consume)
+    )
+    assert not any(
+        isinstance(call, ast.Call)
+        and (
+            (
+                isinstance(call.func, ast.Attribute)
+                and call.func.attr in {"write", "fsync", "rename", "renameat2"}
+            )
+            or (
+                isinstance(call.func, ast.Name)
+                and call.func.id in {"write", "fsync", "rename", "renameat2"}
+            )
+        )
+        for call in ast.walk(consume)
+    )
+
+
+def _assert_permit_factory_and_writer_source_shape(tree: ast.Module) -> None:
+    factory = _production_class_method(
+        tree,
+        "H11RootCommitReceipt",
+        "permit_committed",
+    )
+    assert len(factory.body) == 2
+    reject, accepted_return = factory.body
+    assert isinstance(reject, ast.If)
+    assert reject.orelse == []
+    assert ast.unparse(reject.test) == (
+        "fifo.role != 'h11-permit-commit' or payload != H11_PERMIT_COMMITTED_BYTES"
+    )
+    assert ast.unparse(reject.body[0]) == (
+        "_fail('H11 PERMIT commit receipt source is not the exact committed frame')"
+    )
+    assert isinstance(accepted_return, ast.Return)
+    assert ast.unparse(accepted_return.value) == (
+        "H11RootCommitReceipt('permit-committed', fifo.reference, "
+        "hashlib.sha256(payload).hexdigest(), str(len(payload)))"
+    )
+
+    commit = _production_class_method(
+        tree,
+        "H11RootAuthorizationFlow",
+        "_commit_permit",
+    )
+    fifo_index = next(
+        index
+        for index, statement in enumerate(commit.body)
+        if ast.unparse(statement) == "fifo = authority.permit_commit_fifo"
+    )
+    fifo_assignment, identity_gate, receipt_assignment, writer_try, transition = (
+        commit.body[fifo_index:fifo_index + 5]
+    )
+    assert ast.unparse(fifo_assignment) == "fifo = authority.permit_commit_fifo"
+    assert isinstance(identity_gate, ast.If)
+    assert identity_gate.orelse == []
+    assert ast.unparse(identity_gate.test) == (
+        "fifo is not authority.permit_commit_fifo or fifo._flow is not self or "
+        "fifo._slot is not self._slots[7] or (fifo._parent_slot is not self._slots[9])"
+    )
+    assert ast.unparse(identity_gate.body[0]) == (
+        "_fail('H11 PERMIT receipt FIFO identity gate failed')"
+    )
+    assert ast.unparse(receipt_assignment) == (
+        "receipt = H11RootCommitReceipt.permit_committed(fifo, "
+        "H11_PERMIT_COMMITTED_BYTES)"
+    )
+    assert sum(
+        isinstance(call, ast.Call)
+        and ast.unparse(call.func) == "H11RootCommitReceipt.permit_committed"
+        for call in ast.walk(commit)
+    ) == 1
+    assert isinstance(writer_try, ast.Try)
+    assert writer_try.orelse == writer_try.finalbody == []
+    assert tuple(ast.unparse(statement) for statement in writer_try.body) == (
+        "self._slots[0].open(f'/proc/self/fd/{self._slots[7].borrow()}', "
+        "os.O_WRONLY | os.O_CLOEXEC)",
+        "authority.permit_commit_fifo.reference.prove("
+        "os.fstat(self._slots[0].borrow()), label='H11 permit-commit writer')",
+    )
+    assert len(writer_try.handlers) == 1
+    handler = writer_try.handlers[0]
+    assert isinstance(handler.type, ast.Name) and handler.type.id == "OSError"
+    assert handler.name == "exc"
+    assert len(handler.body) == 1
+    assert ast.unparse(handler.body[0]) == (
+        "raise InstallerError('cannot open H11 PERMIT commit writer') from exc"
+    )
+    assert ast.unparse(transition) == (
+        "self._transition(expected=H11RootAuthorizationState.PERMIT_PUBLISHED, "
+        "target=H11RootAuthorizationState.PERMIT_WRITER_OPEN)"
+    )
+
+
 def test_c2e_binding_forms_constant_and_inventory_are_exact() -> None:
     assert C2E_BINDING_FORMS == frozenset(
         {
@@ -4738,6 +5199,9 @@ def test_c2e_phase_cursor_accepts_only_fixed_first_assignment_and_gate() -> None
         current._prove_phase_cursor(current.functions[qname])
         for qname in _PHASE_CURSORS
     )
+    tree = ast.parse(INSTALLER_SOURCE.read_text(encoding="utf-8"))
+    _assert_ready_reader_source_shape(tree)
+    _assert_permit_factory_and_writer_source_shape(tree)
     source = _phase_cursor_source()
     adversaries = (
         source.replace("phase_data = self._phase_data", "cursor = self._phase_data", 1),
@@ -8040,7 +8504,28 @@ def test_c2e_production_reachable_call_graph_matches_fixed_topology() -> None:
     assert result.unresolved == ()
     assert result.multi_target == ()
     assert result.unclassified == ()
-    assert result.resolved_call_count == result.reachable_ast_call_count
+    assert result.resolved_call_count == result.reachable_ast_call_count == 2088
+    assert Counter(call.target_kind for call in result.calls) == Counter(
+        {"internal": 1039, "pure-value": 899, "sensitive": 150}
+    )
+    writer_error_edges = tuple(
+        call
+        for call in result.calls
+        if call.caller_qname == f"{M}.H11RootAuthorizationFlow._commit_permit"
+        and call.canonical_target == f"{M}.InstallerError"
+    )
+    assert tuple(
+        (
+            call.target_kind,
+            call.rule_id,
+            call.same_caller_occurrence,
+        )
+        for call in writer_error_edges
+    ) == (
+        ("pure-value", "DIRECT_CLASS", 0),
+        ("pure-value", "DIRECT_CLASS", 1),
+        ("pure-value", "DIRECT_CLASS", 2),
+    )
     _assert_reachable_ledgers_are_exact(result)
     actual_edges = Counter(
         (call.caller_qname, call.canonical_target)
