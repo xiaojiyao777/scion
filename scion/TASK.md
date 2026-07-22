@@ -74,25 +74,22 @@ scientifically valid negative result is not mislabeled as a solver improvement.
 
 ## Current Evidence
 
-The H11 C2e single-owner authorization Flow and its authority-closure
-correction are accepted on `codex/h11-c2e-implementation`. The correction is
-split into design `fb81e116`, production `adb407db`, oracle `f64ecdf8`, and
-official migration `d5ce7a8a`; production SHA is
-`1d7ded02...e9a0c`. Its implementation oracle passes exact `456` on Python
-3.12 and 3.13 with `-W error`, and the public C2a official surface passes exact
-`74` on both versions. The scoped Python 3.12 full-file diagnostic is now
-`763 passed / 177 failed / 1 skipped`; the 11-case correction surface and all
-fixed-hash reviews pass with no open P0-P3. Exact acceptance evidence is in
-`v0.4-w3-h11-authority-closure-correction-acceptance-20260722.md`. The
-remaining failures are exact C1a 8, C1b1 17, C1b2 22, C1c 20, C2b 38, C2c 36,
-and C2d 36. Their canonicalization design is now frozen at exact SHA
-`a6b86d71...d2ce`; architecture, fixture/manifest and production/oracle ABI
-reviews all close at P0=P1=P2=P3=0. Its exact 177-node manifest assigns
-P91/TL8/OF33/OR16/D29 and targets `863 collected / 862 passed / 1 skipped`.
-Implementation must now proceed in fixed-hash responsibility slices:
-production authority cleanup and writer boundary, the still-456 oracle, then
-official canonicalization. Do not mechanically port the 177 tests, restore
-compatibility wrappers, or start any experiment from this candidate.
+The H11 C2e single-owner authorization Flow, authority-closure correction and
+official test-authority canonicalization are accepted on
+`codex/h11-c2e-implementation`. Canonicalization is split into design
+`c5ce6bff`, production `87fae4c7`, oracle `46ca056e`, and official tests
+`96ebb938`; their exact SHAs are respectively `a6b86d71...d2ce`,
+`c048f3cf...b1043`, `15bd5ff9...92e1`, and `641067ca...d17e5d0`. The 177-node
+manifest is exact `P91/TL8/OF33/OR16/D29`: all 99 retained/replaced node IDs
+remain and all 78 rehomed/deleted old node IDs are absent. Python 3.12 and 3.13
+each pass the exact `456`-case oracle and exact `74` public C2a cases with
+`-W error`; Python 3.12 collects exact `863` official cases and passes
+`862 / 1 skipped`. Final fixed-hash reviews close at
+`P0=P1=P2=P3=0`. Exact evidence is in
+`v0.4-w3-h11-official-test-authority-canonicalization-acceptance-20260722.md`.
+This closes H11 official canonicalization; no compatibility wrapper or
+experiment launch is authorized, and the accepted head may enter `v0.4-dev`
+only by exact fast-forward.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
@@ -923,18 +920,17 @@ scientific and lineage-owning artifacts remain in place.
      and both 2074-file/22-alias rehashes passed. Exact evidence is recorded in
      `v04-w3-native-spawn-build-acceptance-20260718.md`. Generic `SpawnBackend`
      is implemented at `f72f0f5c`; the formal-fixture/H11 composition and public
-     authorization path followed on `v0.4-dev`. The C2e authority-closure
-     correction is accepted in separately reviewed commits `adb407db`,
-     `f64ecdf8`, and `d5ce7a8a`: its exact oracle passes `456` on Python
-     3.12/3.13, public C2a passes `74` on both, and the Python 3.12 official
-     diagnostic is `763 passed / 177 failed / 1 skipped`. Full H11 official
-     acceptance is not yet claimed because those 177 C1/C2b-C2d cases still
-     require one retained/rewrite/delete test-authority canonicalization.
-     Freeze and execute that design before merging this branch; do not repair
-     the 177 one by one or add compatibility wrappers. Warehouse W3, dry-root
-     and formal launch remain locked. The rejected W3 lifecycle stays
-     excluded, B1 no longer occupies the host, and no sandbox, retry, budget,
-     truncation or new research gate is added.
+     authorization path followed on `v0.4-dev`. The C2e authority correction
+     and its 177-node official test-authority canonicalization are now accepted
+     in exact commits `c5ce6bff / 87fae4c7 / 46ca056e / 96ebb938`. The
+     implementation oracle passes exact `456` on Python 3.12/3.13, public C2a
+     passes exact `74` on both, and Python 3.12 collects exact `863` official
+     cases and passes `862 / 1 skipped`. The final split is exact
+     `P91/TL8/OF33/OR16/D29`, and fixed-hash reviews have no open P0-P3. Only
+     exact fast-forward integration remains; no compatibility wrapper is
+     authorized. Warehouse W3, dry-root and formal launch remain locked. The
+     rejected W3 lifecycle stays excluded, B1 no longer occupies the host, and
+     no sandbox, retry, budget, truncation or new research gate is added.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-

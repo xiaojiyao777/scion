@@ -18,22 +18,19 @@ path on `v0.4-dev`.
 The current acceptance worktree is
 `/home/clawd/research/or-autoresearch-agent-h11-c2e-clean`, branch
 `codex/h11-c2e-implementation`. The C2e candidate replaces the layered private
-authorizer graph with one `H11RootAuthorizationFlow`; its authority-closure
-correction is accepted in design/production/oracle/official commits
-`fb81e116 / adb407db / f64ecdf8 / d5ce7a8a`. Production SHA is
-`1d7ded02...e9a0c`. Python 3.12 and 3.13 each pass the exact `456`-case oracle
-and exact `74` public C2a cases with `-W error`; Python 3.12 full-file diagnosis
-is `763 passed / 177 failed / 1 skipped`. Fixed-hash reviews have no open
-P0-P3. The remaining exact failures are C1a 8, C1b1 17, C1b2 22, C1c 20,
-C2b 38, C2c 36, and C2d 36. Full H11 official acceptance and branch merge
-remain open. The exact retained/rewrite/delete canonicalization is now frozen
-at design SHA `a6b86d71...d2ce`, with three independent specialty reviews at
-P0=P1=P2=P3=0. Its 177-node destination manifest is
-P91/TL8/OF33/OR16/D29 and its final gate is
-`863 collected / 862 passed / 1 skipped`. Production authority cleanup and
-writer OSError ABI correction are the next responsibility slice, followed by
-the still-456 oracle and only then official migration. Do not add compatibility
-wrappers, mechanically port 177 tests, or start an experiment.
+authorizer graph with one `H11RootAuthorizationFlow`; its authority correction
+and official test canonicalization are now fully accepted in exact commits
+`c5ce6bff / 87fae4c7 / 46ca056e / 96ebb938`. The exact fixed SHAs are design
+`a6b86d71...d2ce`, production `c048f3cf...b1043`, oracle
+`15bd5ff9...92e1`, and official `641067ca...d17e5d0`. The 177-node destination
+manifest is exact `P91/TL8/OF33/OR16/D29`; all 99 retained/replaced node IDs
+remain and none of the 78 rehomed/deleted old node IDs remain. Python 3.12 and
+3.13 each pass exact oracle `456` and public C2a `74` with `-W error`; Python
+3.12 collects exact `863` official cases and passes `862 / 1 skipped`.
+Production, oracle and final official fixed-hash reviews have no open P0-P3.
+The accepted head is a linear descendant of `v0.4-dev` and may be integrated
+only by exact fast-forward. H11 acceptance does not authorize a Warehouse W3
+or CVRP F1 experiment; their separately frozen launch gates remain binding.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -1054,13 +1051,14 @@ reported P0=0/P1=0/P2=0. The accepted record is
 `v04-w3-native-spawn-build-acceptance-20260718.md`. Generic `SpawnBackend` is
 implemented at `f72f0f5c`; the formal-fixture composition, manager lifecycle,
 H11 public authorization path, and C2e single-owner candidate followed. Its
-authority-closure correction, deep oracle and public C2a surface are accepted
-on the feature branch, but full H11 official acceptance is still open on the
-exact 177 tests recorded above. The next action is one test-authority
-canonicalization design, not 177 local repairs. Warehouse W3, dry-root and
-formal launch remain locked. The rejected W3 lifecycle remains excluded, B1 no
-longer occupies the host, and there is no sandbox, retry, budget, truncation or
-new research gate.
+authority correction, deep oracle, public C2a surface and exact 177-node
+official canonicalization are accepted in commits
+`c5ce6bff / 87fae4c7 / 46ca056e / 96ebb938`. The final official gate is exact
+`863 collected / 862 passed / 1 skipped`, and both Python versions retain
+oracle `456` and C2a `74`. Only exact fast-forward integration remains.
+Warehouse W3, dry-root and formal launch remain locked. The rejected W3
+lifecycle remains excluded, B1 no longer occupies the host, and there is no
+sandbox, retry, budget, truncation or new research gate.
 
 The fresh activation execution seam is design-frozen at SHA
 `25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
@@ -1091,15 +1089,12 @@ actual-journal-handle design is frozen and accepted.
    design-frozen at `a8167117...07faa` and must seal/reparse exact
    `.vrp + .sol` pairs.
    The W3 native slice and generic `SpawnBackend` are implemented. C2e public
-   C2a, the authority-closure correction and its 456-case oracle are accepted
-   on the feature branch. Freeze one canonicalization design for the remaining
-   177 C1/C2b-C2d tests, classify
-   retained public contracts versus redundant oracle coverage versus obsolete
-   private topology, and execute that classification without compatibility
-   wrappers. Only after full official acceptance and branch merge continue to
-   the problem-owned W3 manifest/replay/analysis and independent source/dry-root
-   acceptance. F1's dormant materializer is accepted, but neither W3 nor F1 has
-   formal launch authority.
+   C2a, its 456-case oracle and the exact 177-node canonicalization are accepted
+   on the feature branch at final official gate
+   `863 collected / 862 passed / 1 skipped`. Integrate only by exact
+   fast-forward, then continue to the problem-owned W3 manifest/replay/analysis
+   and independent source/dry-root acceptance. F1's dormant materializer is
+   accepted, but neither W3 nor F1 has formal launch authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,
