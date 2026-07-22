@@ -91,6 +91,20 @@ This closes H11 official canonicalization; no compatibility wrapper or
 experiment launch is authorized. Acceptance commit `7623077f` is integrated
 into `origin/v0.4-dev` by exact fast-forward.
 
+The dormant Warehouse W3 problem layer and its independent source/dry-root
+gate are accepted on pushed feature commit `b879bbc1`. The problem layer owns
+only the fixed manifest/schedule/preflight, `ClosedSpawnObservation` scientific
+validation, canonical row bytes, and deterministic replay/analysis bytes; it
+contains no direct process, terminal, raw-row, or artifact-publication owner.
+The accepted zero-job root ends `20260722T234345Z-claw`, with manifest SHA
+`ad693646...0212`, Git-blob aggregate `af751163...f30`, and stable 166-file
+aggregate `6205460c...bbf`. It has exact `43` cells / `172` jobs, all 43 greedy
+and eight counter preflights pass, raw/artifacts/control are empty, and formal
+execution is explicitly unauthorized. Exact evidence is in
+`v04-warehouse-w3-problem-source-dry-root-acceptance-20260722.md`. W3 formal
+launch remains locked until generic invocation terminal and opaque row/artifact
+publication owners are implemented and separately accepted.
+
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
 from branch evidence, found a screening-positive cumulative candidate, expanded
@@ -928,8 +942,12 @@ scientific and lineage-owning artifacts remain in place.
      cases and passes `862 / 1 skipped`. The final split is exact
      `P91/TL8/OF33/OR16/D29`, and fixed-hash reviews have no open P0-P3.
      Acceptance commit `7623077f` is integrated into `origin/v0.4-dev` by exact
-     fast-forward; no compatibility wrapper is authorized. Warehouse W3,
-     dry-root and formal launch remain locked. The rejected W3 lifecycle stays
+     fast-forward; no compatibility wrapper is authorized. The problem-owned
+     W3 manifest/validator/replay/analysis source and independent zero-job dry
+     root are accepted at pushed feature commit `b879bbc1`, manifest SHA
+     `ad693646...0212`, and stable file aggregate `6205460c...bbf`. Formal W3
+     launch remains locked on the missing generic invocation-terminal and
+     opaque row/artifact publication owners. The rejected W3 lifecycle stays
      excluded, B1 no longer occupies the host, and no sandbox, retry, budget,
      truncation or new research gate is added.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated

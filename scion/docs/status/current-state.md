@@ -32,6 +32,20 @@ Acceptance commit `7623077f` is integrated into `origin/v0.4-dev` by exact
 fast-forward. H11 acceptance does not authorize a Warehouse W3 or CVRP F1
 experiment; their separately frozen launch gates remain binding.
 
+Warehouse W3's dormant problem-owned layer and independent source/dry-root
+gate are now accepted on clean pushed feature commit `b879bbc1`. The accepted
+zero-job root is
+`/home/clawd/research/scion-experiments/v04-warehouse-w3-problem-source-dry-20260722T234345Z-claw`.
+Its manifest SHA is `ad693646...0212`, Git-blob aggregate is
+`af751163...f30`, and its 166-file content aggregate remained
+`6205460c...bbf` before and after independent verification. Exact `43` cells /
+`172` jobs, all greedy/counter preflights, Git-blob/external/generated
+provenance, and empty raw/artifacts/control were rederived with zero mutation.
+No formal job was started and formal execution is explicitly unauthorized.
+The problem layer has no process, terminal, raw-row, or artifact-publication
+owner. W3 launch remains blocked until generic invocation terminal and opaque
+row/artifact publication owners are implemented and separately accepted.
+
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
 with terminal wrapper PID `2892669`. Its clean detached runtime is
@@ -1056,10 +1070,14 @@ official canonicalization are accepted in commits
 `c5ce6bff / 87fae4c7 / 46ca056e / 96ebb938`. The final official gate is exact
 `863 collected / 862 passed / 1 skipped`, and both Python versions retain
 oracle `456` and C2a `74`. Acceptance commit `7623077f` is integrated into
-`origin/v0.4-dev` by exact fast-forward. Warehouse W3, dry-root and formal
-launch remain locked. The rejected W3 lifecycle remains excluded, B1 no longer
-occupies the host, and there is no sandbox, retry, budget, truncation or new
-research gate.
+`origin/v0.4-dev` by exact fast-forward. The problem-owned W3
+manifest/validator/replay/analysis source and independent zero-job dry root are
+accepted at pushed feature commit `b879bbc1`, manifest SHA
+`ad693646...0212`, and stable file aggregate `6205460c...bbf`. Formal W3 launch
+remains locked on the missing generic invocation-terminal and opaque
+row/artifact publication owners. The rejected W3 lifecycle remains excluded,
+B1 no longer occupies the host, and there is no sandbox, retry, budget,
+truncation or new research gate.
 
 The fresh activation execution seam is design-frozen at SHA
 `25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
@@ -1093,10 +1111,12 @@ actual-journal-handle design is frozen and accepted.
    C2a, its 456-case oracle and the exact 177-node canonicalization are accepted
    on the feature branch at final official gate
    `863 collected / 862 passed / 1 skipped`; acceptance commit `7623077f` is
-   now integrated into `origin/v0.4-dev` by exact fast-forward. Continue to the
-   problem-owned W3 manifest/replay/analysis and independent source/dry-root
-   acceptance. F1's dormant materializer is accepted, but neither W3 nor F1
-   has formal launch authority.
+   now integrated into `origin/v0.4-dev` by exact fast-forward. The
+   problem-owned W3 source and independent zero-job dry root are accepted at
+   `b879bbc1` / `ad693646...0212`. Keep that root read-only. Implement and
+   accept the missing generic invocation-terminal and opaque row/artifact
+   publication owners before any separate W3 launch review. F1's dormant
+   materializer is accepted, but neither W3 nor F1 has formal launch authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,
