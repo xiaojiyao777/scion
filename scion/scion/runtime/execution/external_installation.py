@@ -704,6 +704,453 @@ class DirectorySnapshot:
         }
 
 
+def _publication_mode(value: object, *, field: str) -> int:
+    mode = _positive_int(value, field=field, allow_zero=True)
+    if mode > 0o7777:
+        raise ExternalInstallationError(f"{field} differs")
+    return mode
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class PublishedTreeReceipt:
+    role: str
+    path: str
+    source_receipt_sha256: str
+    expected_tree_sha256: str
+    reopened_tree_sha256: str
+    identity: DirectorySnapshot
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "PublishedTreeReceipt":
+        del cls
+        raise TypeError("PublishedTreeReceipt must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("PublishedTreeReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        role: str,
+        path: str,
+        source_receipt_sha256: str,
+        expected_tree_sha256: str,
+        reopened_tree_sha256: str,
+        identity: DirectorySnapshot,
+    ) -> "PublishedTreeReceipt":
+        if type(identity) is not DirectorySnapshot:
+            raise TypeError("identity must be exact DirectorySnapshot")
+        value = {
+            "schema": "scion.published-tree.v1",
+            "role": _text(role, field="published tree role"),
+            "path": _path(path, field="published tree path", allow_root=False),
+            "source_receipt_sha256": _sha256(
+                source_receipt_sha256,
+                field="published tree source receipt sha256",
+            ),
+            "expected_tree_sha256": _sha256(
+                expected_tree_sha256,
+                field="published tree expected sha256",
+            ),
+            "reopened_tree_sha256": _sha256(
+                reopened_tree_sha256,
+                field="published tree reopened sha256",
+            ),
+            "identity": identity.to_mapping(),
+        }
+        return cls.from_bytes(_canonical_json(value))
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "PublishedTreeReceipt":
+        value = _exact_fields(
+            _decode_canonical_json(raw, label="published tree receipt"),
+            frozenset(
+                {
+                    "schema",
+                    "role",
+                    "path",
+                    "source_receipt_sha256",
+                    "expected_tree_sha256",
+                    "reopened_tree_sha256",
+                    "identity",
+                }
+            ),
+            label="published tree receipt",
+        )
+        if value["schema"] != "scion.published-tree.v1":
+            raise CanonicalReceiptError("published tree receipt schema differs")
+        role = _text(value["role"], field="published tree role")
+        path = _path(value["path"], field="published tree path", allow_root=False)
+        source_sha = _sha256(
+            value["source_receipt_sha256"],
+            field="published tree source receipt sha256",
+        )
+        expected_sha = _sha256(
+            value["expected_tree_sha256"],
+            field="published tree expected sha256",
+        )
+        reopened_sha = _sha256(
+            value["reopened_tree_sha256"],
+            field="published tree reopened sha256",
+        )
+        if reopened_sha != expected_sha:
+            raise ExternalInstallationError(
+                "published tree digest drifted after reopen"
+            )
+        identity = DirectorySnapshot.from_mapping(value["identity"])
+        if identity.mode != 0o555 or identity.uid != 0 or identity.gid != 0:
+            raise ExternalInstallationError(
+                "published tree identity is not root-owned mode 0555"
+            )
+        instance = object.__new__(cls)
+        for field, item in (
+            ("role", role),
+            ("path", path),
+            ("source_receipt_sha256", source_sha),
+            ("expected_tree_sha256", expected_sha),
+            ("reopened_tree_sha256", reopened_sha),
+            ("identity", identity),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class PublishedRegularFileReceipt:
+    role: str
+    path: str
+    content_sha256: str
+    size_bytes: int
+    device: int
+    inode: int
+    mode: int
+    uid: int
+    gid: int
+    nlink: int
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "PublishedRegularFileReceipt":
+        del cls
+        raise TypeError("PublishedRegularFileReceipt must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("PublishedRegularFileReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        role: str,
+        path: str,
+        content_sha256: str,
+        size_bytes: int,
+        device: int,
+        inode: int,
+        mode: int,
+        uid: int,
+        gid: int,
+        nlink: int,
+    ) -> "PublishedRegularFileReceipt":
+        value = {
+            "schema": "scion.published-regular-file.v1",
+            "role": _text(role, field="published regular file role"),
+            "path": _path(
+                path,
+                field="published regular file path",
+                allow_root=False,
+            ),
+            "content_sha256": _sha256(
+                content_sha256,
+                field="published regular file content sha256",
+            ),
+            "size_bytes": _positive_int(
+                size_bytes,
+                field="published regular file size_bytes",
+                allow_zero=True,
+            ),
+            "device": _positive_int(
+                device,
+                field="published regular file device",
+                allow_zero=True,
+            ),
+            "inode": _positive_int(
+                inode,
+                field="published regular file inode",
+            ),
+            "mode": _publication_mode(
+                mode,
+                field="published regular file mode",
+            ),
+            "uid": _positive_int(
+                uid,
+                field="published regular file uid",
+                allow_zero=True,
+            ),
+            "gid": _positive_int(
+                gid,
+                field="published regular file gid",
+                allow_zero=True,
+            ),
+            "nlink": _positive_int(
+                nlink,
+                field="published regular file nlink",
+            ),
+        }
+        return cls.from_bytes(_canonical_json(value))
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "PublishedRegularFileReceipt":
+        value = _exact_fields(
+            _decode_canonical_json(raw, label="published regular file receipt"),
+            frozenset(
+                {
+                    "schema",
+                    "role",
+                    "path",
+                    "content_sha256",
+                    "size_bytes",
+                    "device",
+                    "inode",
+                    "mode",
+                    "uid",
+                    "gid",
+                    "nlink",
+                }
+            ),
+            label="published regular file receipt",
+        )
+        if value["schema"] != "scion.published-regular-file.v1":
+            raise CanonicalReceiptError("published regular file receipt schema differs")
+        role = _text(value["role"], field="published regular file role")
+        path = _path(
+            value["path"],
+            field="published regular file path",
+            allow_root=False,
+        )
+        content_sha = _sha256(
+            value["content_sha256"],
+            field="published regular file content sha256",
+        )
+        size_bytes = _positive_int(
+            value["size_bytes"],
+            field="published regular file size_bytes",
+            allow_zero=True,
+        )
+        device = _positive_int(
+            value["device"],
+            field="published regular file device",
+            allow_zero=True,
+        )
+        inode = _positive_int(value["inode"], field="published regular file inode")
+        mode = _publication_mode(
+            value["mode"],
+            field="published regular file mode",
+        )
+        uid = _positive_int(
+            value["uid"],
+            field="published regular file uid",
+            allow_zero=True,
+        )
+        gid = _positive_int(
+            value["gid"],
+            field="published regular file gid",
+            allow_zero=True,
+        )
+        nlink = _positive_int(
+            value["nlink"],
+            field="published regular file nlink",
+        )
+        if mode != 0o444 or uid != 0 or gid != 0 or nlink != 1:
+            raise ExternalInstallationError(
+                "published regular file identity is not root-owned mode 0444 nlink 1"
+            )
+        instance = object.__new__(cls)
+        for field, item in (
+            ("role", role),
+            ("path", path),
+            ("content_sha256", content_sha),
+            ("size_bytes", size_bytes),
+            ("device", device),
+            ("inode", inode),
+            ("mode", mode),
+            ("uid", uid),
+            ("gid", gid),
+            ("nlink", nlink),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class PublishedDirectoryReceipt:
+    role: str
+    path: str
+    device: int
+    inode: int
+    mode: int
+    uid: int
+    gid: int
+    nlink: int
+    expected_mode: int
+    expected_uid: int
+    expected_gid: int
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "PublishedDirectoryReceipt":
+        del cls
+        raise TypeError("PublishedDirectoryReceipt must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("PublishedDirectoryReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        role: str,
+        path: str,
+        device: int,
+        inode: int,
+        mode: int,
+        uid: int,
+        gid: int,
+        nlink: int,
+        expected_mode: int,
+        expected_uid: int,
+        expected_gid: int,
+    ) -> "PublishedDirectoryReceipt":
+        value = {
+            "schema": "scion.published-directory.v1",
+            "role": _text(role, field="published directory role"),
+            "path": _path(path, field="published directory path", allow_root=False),
+            "device": _positive_int(
+                device,
+                field="published directory device",
+                allow_zero=True,
+            ),
+            "inode": _positive_int(inode, field="published directory inode"),
+            "mode": _publication_mode(mode, field="published directory mode"),
+            "uid": _positive_int(
+                uid,
+                field="published directory uid",
+                allow_zero=True,
+            ),
+            "gid": _positive_int(
+                gid,
+                field="published directory gid",
+                allow_zero=True,
+            ),
+            "nlink": _positive_int(nlink, field="published directory nlink"),
+            "expected_mode": _publication_mode(
+                expected_mode,
+                field="published directory expected_mode",
+            ),
+            "expected_uid": _positive_int(
+                expected_uid,
+                field="published directory expected_uid",
+                allow_zero=True,
+            ),
+            "expected_gid": _positive_int(
+                expected_gid,
+                field="published directory expected_gid",
+                allow_zero=True,
+            ),
+        }
+        return cls.from_bytes(_canonical_json(value))
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "PublishedDirectoryReceipt":
+        value = _exact_fields(
+            _decode_canonical_json(raw, label="published directory receipt"),
+            frozenset(
+                {
+                    "schema",
+                    "role",
+                    "path",
+                    "device",
+                    "inode",
+                    "mode",
+                    "uid",
+                    "gid",
+                    "nlink",
+                    "expected_mode",
+                    "expected_uid",
+                    "expected_gid",
+                }
+            ),
+            label="published directory receipt",
+        )
+        if value["schema"] != "scion.published-directory.v1":
+            raise CanonicalReceiptError("published directory receipt schema differs")
+        role = _text(value["role"], field="published directory role")
+        path = _path(value["path"], field="published directory path", allow_root=False)
+        device = _positive_int(
+            value["device"],
+            field="published directory device",
+            allow_zero=True,
+        )
+        inode = _positive_int(value["inode"], field="published directory inode")
+        mode = _publication_mode(value["mode"], field="published directory mode")
+        uid = _positive_int(
+            value["uid"],
+            field="published directory uid",
+            allow_zero=True,
+        )
+        gid = _positive_int(
+            value["gid"],
+            field="published directory gid",
+            allow_zero=True,
+        )
+        nlink = _positive_int(value["nlink"], field="published directory nlink")
+        expected_mode = _publication_mode(
+            value["expected_mode"],
+            field="published directory expected_mode",
+        )
+        expected_uid = _positive_int(
+            value["expected_uid"],
+            field="published directory expected_uid",
+            allow_zero=True,
+        )
+        expected_gid = _positive_int(
+            value["expected_gid"],
+            field="published directory expected_gid",
+            allow_zero=True,
+        )
+        if mode != expected_mode or uid != expected_uid or gid != expected_gid:
+            raise ExternalInstallationError(
+                "published directory identity differs from expected ownership"
+            )
+        instance = object.__new__(cls)
+        for field, item in (
+            ("role", role),
+            ("path", path),
+            ("device", device),
+            ("inode", inode),
+            ("mode", mode),
+            ("uid", uid),
+            ("gid", gid),
+            ("nlink", nlink),
+            ("expected_mode", expected_mode),
+            ("expected_uid", expected_uid),
+            ("expected_gid", expected_gid),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class SelectionReceipt:
     selection_key: str
@@ -3925,6 +4372,9 @@ __all__ = [
     "NoReplaceReceiptWriter",
     "NoReplaceReceiptSet",
     "PreStartReacquirer",
+    "PublishedDirectoryReceipt",
+    "PublishedRegularFileReceipt",
+    "PublishedTreeReceipt",
     "ReceiptDagError",
     "RootInstallationState",
     "RootPhase",

@@ -27,6 +27,9 @@ from scion.runtime.execution.external_installation import (
     MountBindingReceipt,
     MountInfoError,
     NoReplaceReceiptSet,
+    PublishedDirectoryReceipt,
+    PublishedRegularFileReceipt,
+    PublishedTreeReceipt,
     ReceiptDagError,
     RootInstallationState,
     RootPhaseIntentReceipt,
@@ -684,6 +687,221 @@ def test_root_phase_parser_rejects_noncanonical_and_duplicate_fields() -> None:
     )
     with pytest.raises(CanonicalReceiptError, match="not canonical JSON"):
         RootPhaseReceipt.from_bytes(duplicate)
+
+
+def _published_tree(
+    *,
+    identity: DirectorySnapshot | None = None,
+    expected_tree_sha256: str = "1" * 64,
+    reopened_tree_sha256: str = "1" * 64,
+) -> PublishedTreeReceipt:
+    return PublishedTreeReceipt.create(
+        role="generic-tree",
+        path="/var/lib/scion/published/tree",
+        source_receipt_sha256="2" * 64,
+        expected_tree_sha256=expected_tree_sha256,
+        reopened_tree_sha256=reopened_tree_sha256,
+        identity=identity
+        or DirectorySnapshot(
+            device=31,
+            inode=41,
+            mode=0o555,
+            uid=0,
+            gid=0,
+            nlink=2,
+        ),
+    )
+
+
+def _published_file() -> PublishedRegularFileReceipt:
+    return PublishedRegularFileReceipt.create(
+        role="generic-file",
+        path="/var/lib/scion/published/authority.json",
+        content_sha256="3" * 64,
+        size_bytes=127,
+        device=31,
+        inode=42,
+        mode=0o444,
+        uid=0,
+        gid=0,
+        nlink=1,
+    )
+
+
+def _published_directory() -> PublishedDirectoryReceipt:
+    return PublishedDirectoryReceipt.create(
+        role="generic-directory",
+        path="/var/lib/scion/published/nonce-claims",
+        device=31,
+        inode=43,
+        mode=0o700,
+        uid=1001,
+        gid=1002,
+        nlink=2,
+        expected_mode=0o700,
+        expected_uid=1001,
+        expected_gid=1002,
+    )
+
+
+def test_published_leaf_receipts_are_closed_canonical_records() -> None:
+    tree = _published_tree()
+    regular = _published_file()
+    directory = _published_directory()
+
+    assert PublishedTreeReceipt.from_bytes(tree.raw) == tree
+    assert PublishedRegularFileReceipt.from_bytes(regular.raw) == regular
+    assert PublishedDirectoryReceipt.from_bytes(directory.raw) == directory
+    assert tree.expected_tree_sha256 == tree.reopened_tree_sha256
+    assert tree.identity.mode == 0o555
+    assert regular.content_sha256 == "3" * 64
+    assert regular.size_bytes == 127
+    assert directory.uid == directory.expected_uid == 1001
+    assert directory.gid == directory.expected_gid == 1002
+    assert directory.mode == directory.expected_mode == 0o700
+    for receipt in (tree, regular, directory):
+        assert receipt.raw_sha256 == hashlib.sha256(receipt.raw).hexdigest()
+    with pytest.raises(TypeError, match="parsed from exact bytes"):
+        PublishedTreeReceipt()
+    with pytest.raises(TypeError, match="parsed from exact bytes"):
+        PublishedRegularFileReceipt()
+    with pytest.raises(TypeError, match="parsed from exact bytes"):
+        PublishedDirectoryReceipt()
+
+
+@pytest.mark.parametrize(
+    ("receipt", "parser"),
+    (
+        (_published_tree(), PublishedTreeReceipt.from_bytes),
+        (_published_file(), PublishedRegularFileReceipt.from_bytes),
+        (_published_directory(), PublishedDirectoryReceipt.from_bytes),
+    ),
+)
+def test_published_leaf_receipts_reject_extra_fields(
+    receipt: object,
+    parser: object,
+) -> None:
+    changed = json.loads(receipt.raw)  # type: ignore[attr-defined]
+    changed["extra"] = False
+
+    with pytest.raises(CanonicalReceiptError, match="fields differ"):
+        parser(_canonical(changed))  # type: ignore[operator]
+
+
+@pytest.mark.parametrize("path", ("relative/path", "/a/../b", "//a/b", "/"))
+def test_published_leaf_receipts_reject_noncanonical_paths(path: str) -> None:
+    for receipt, parser in (
+        (_published_tree(), PublishedTreeReceipt.from_bytes),
+        (_published_file(), PublishedRegularFileReceipt.from_bytes),
+        (_published_directory(), PublishedDirectoryReceipt.from_bytes),
+    ):
+        changed = json.loads(receipt.raw)
+        changed["path"] = path
+        with pytest.raises(ExternalInstallationError, match="canonical absolute path"):
+            parser(_canonical(changed))
+
+
+@pytest.mark.parametrize(
+    ("receipt", "field_path"),
+    (
+        (_published_tree(), ("identity", "inode")),
+        (_published_file(), ("size_bytes",)),
+        (_published_directory(), ("expected_uid",)),
+    ),
+)
+def test_published_leaf_receipts_reject_boolean_integer_aliases(
+    receipt: object,
+    field_path: tuple[str, ...],
+) -> None:
+    changed = json.loads(receipt.raw)  # type: ignore[attr-defined]
+    target = changed
+    for field in field_path[:-1]:
+        target = target[field]
+    target[field_path[-1]] = True
+    parser = {
+        PublishedTreeReceipt: PublishedTreeReceipt.from_bytes,
+        PublishedRegularFileReceipt: PublishedRegularFileReceipt.from_bytes,
+        PublishedDirectoryReceipt: PublishedDirectoryReceipt.from_bytes,
+    }[type(receipt)]
+
+    with pytest.raises(ExternalInstallationError, match="not an integer"):
+        parser(_canonical(changed))
+
+
+def test_published_tree_rejects_reopen_drift_and_nonroot_identity() -> None:
+    with pytest.raises(ExternalInstallationError, match="digest drifted"):
+        _published_tree(reopened_tree_sha256="4" * 64)
+
+    for identity in (
+        DirectorySnapshot(
+            device=31,
+            inode=41,
+            mode=0o755,
+            uid=0,
+            gid=0,
+            nlink=2,
+        ),
+        DirectorySnapshot(
+            device=31,
+            inode=41,
+            mode=0o555,
+            uid=1001,
+            gid=0,
+            nlink=2,
+        ),
+        DirectorySnapshot(
+            device=31,
+            inode=41,
+            mode=0o555,
+            uid=0,
+            gid=1002,
+            nlink=2,
+        ),
+    ):
+        with pytest.raises(
+            ExternalInstallationError,
+            match="root-owned mode 0555",
+        ):
+            _published_tree(identity=identity)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("mode", 0o644),
+        ("uid", 1001),
+        ("gid", 1002),
+        ("nlink", 2),
+    ),
+)
+def test_published_regular_file_rejects_identity_drift(
+    field: str,
+    value: int,
+) -> None:
+    changed = json.loads(_published_file().raw)
+    changed[field] = value
+
+    with pytest.raises(ExternalInstallationError, match="root-owned mode 0444"):
+        PublishedRegularFileReceipt.from_bytes(_canonical(changed))
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("mode", 0o750),
+        ("uid", 1003),
+        ("gid", 1004),
+    ),
+)
+def test_published_directory_rejects_expected_identity_drift(
+    field: str,
+    value: int,
+) -> None:
+    changed = json.loads(_published_directory().raw)
+    changed[field] = value
+
+    with pytest.raises(ExternalInstallationError, match="expected ownership"):
+        PublishedDirectoryReceipt.from_bytes(_canonical(changed))
 
 
 def test_selection_and_installed_acceptance_are_closed_canonical_records() -> None:
