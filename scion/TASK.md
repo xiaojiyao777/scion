@@ -115,9 +115,17 @@ on both Python 3.12 and 3.13; H11 remains exact at oracle `456`, public C2a
 `74` on both, and official `863 collected / 862 passed / 1 skipped`. Exact
 evidence is in
 `v04-w3-generic-invocation-terminal-opaque-publication-acceptance-20260723.md`.
-W3 formal launch remains locked pending a separate composition and
-launch-readiness review covering external authority, nonce, systemd acquisition
-and `ExecStopPost` wiring on one clean pushed commit.
+The independent W3 composition and launch-readiness source is now accepted at
+clean pushed commit `82d5394b`. It closes strict external
+authority/installation records, crash-consuming nonce ownership, read-only
+systemd acquisition, the exact run/`ExecStopPost`/close path, and problem-owned
+replay/analysis over generic terminal publication. Dual-version composition
+and full execution gates pass exact `132 / 1723`, with unchanged H11
+`456 / 74 / 863` authority. The accepted dry root remained read-only and exact
+`43 / 172 / 0 formal`. Exact evidence is in
+`v04-w3-composition-launch-readiness-acceptance-20260723.md`. Formal launch
+remains locked pending a separate root-owned installation/loaded-manager
+acceptance and explicit human `StartUnit` authorization.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
@@ -963,11 +971,16 @@ scientific and lineage-owning artifacts remain in place.
      launch remains locked. The generic invocation terminal and opaque
      row/artifact publisher are accepted at pushed source commit `bf4c7490`
      with dual-version `18 / 249` gates and unchanged exact H11
-     `456 / 74 / 863` evidence. A separate composition/launch-readiness review
-     must still close external authority, nonce, systemd acquisition and
-     `ExecStopPost` wiring before any formal job. The rejected W3 lifecycle
-     stays excluded, B1 no longer occupies the host, and no sandbox, retry,
-     budget, truncation or new research gate is added.
+     `456 / 74 / 863` evidence. The independent composition/launch-readiness
+     source is accepted at clean pushed commit `82d5394b`; exact external
+     authority, nonce, read-only systemd acquisition and
+     run/`ExecStopPost`/close wiring now have accepted dormant owners.
+     Dual-version composition/execution gates are exact `132 / 1723`; the
+     accepted problem root remains exact `43 / 172 / 0 formal` and read-only.
+     Formal launch still requires a separate root-owned installation and
+     loaded-manager acceptance plus explicit human `StartUnit` authorization.
+     The rejected W3 lifecycle stays excluded, B1 no longer occupies the host,
+     and no sandbox, retry, budget, truncation or new research gate is added.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-

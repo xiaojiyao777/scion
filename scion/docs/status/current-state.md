@@ -54,9 +54,19 @@ publishes one no-replace opaque artifact bundle without parsing problem bytes.
 Focused and generic execution-core gates pass exact `18 / 249` on Python 3.12
 and 3.13. H11 oracle `456` and public C2a `74` pass on both; Python 3.12
 retains exact `863 collected / 862 passed / 1 skipped`. No formal job or
-experiment root was created. W3 launch remains blocked pending a separate
-composition/launch-readiness review of external authority, nonce, systemd
-acquisition and `ExecStopPost` wiring.
+experiment root was created.
+
+The independent W3 composition and launch-readiness source is accepted at
+clean pushed commit `82d5394b`. Strict external authority/installation
+records, crash-consuming nonce ownership, read-only systemd acquisition, the
+exact run/`ExecStopPost`/close path, and problem-owned replay/analysis now have
+accepted dormant owners. Composition and full execution gates pass exact
+`132 / 1723` on Python 3.12 and 3.13, with unchanged H11 `456 / 74 / 863`.
+The accepted dry root remained read-only at exact `43 cells / 172 jobs /
+0 formal`. No external W3 authority, installation, projection or loaded
+manager receipt exists. Formal launch remains locked pending separate
+root-owned installation/manager acceptance and explicit human `StartUnit`
+authorization.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -1089,11 +1099,16 @@ accepted at pushed feature commit `b879bbc1`, manifest SHA
 remains locked. The generic invocation-terminal and opaque row/artifact
 publisher are accepted at pushed source commit `bf4c7490`, with dual-version
 focused/core gates exact `18 / 249` and unchanged H11
-`456 / 74 / 863` authority. External authority, nonce, systemd acquisition,
-`ExecStopPost` wiring and campaign composition remain for a separate
-launch-readiness review. The rejected W3 lifecycle remains excluded, B1 no
-longer occupies the host, and there is no sandbox, retry, budget, truncation or
-new research gate.
+`456 / 74 / 863` authority. Independent composition/launch-readiness source is
+accepted at clean pushed commit `82d5394b`: strict external authority and
+installation records, crash-consuming nonce, read-only systemd acquisition,
+and exact run/`ExecStopPost`/close wiring now have accepted dormant owners.
+Dual-version composition/execution gates pass exact `132 / 1723`, while the
+accepted problem root remains read-only at exact `43 / 172 / 0 formal`.
+Formal launch still requires separate root-owned installation/loaded-manager
+acceptance and explicit human `StartUnit` authorization. The rejected W3
+lifecycle remains excluded, B1 no longer occupies the host, and there is no
+sandbox, retry, budget, truncation or new research gate.
 
 The fresh activation execution seam is design-frozen at SHA
 `25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
@@ -1131,11 +1146,14 @@ actual-journal-handle design is frozen and accepted.
    problem-owned W3 source and independent zero-job dry root are accepted at
    `b879bbc1` / `ad693646...0212`. Keep that root read-only. The generic
    invocation-terminal and opaque row/artifact publisher are accepted at
-   `bf4c7490`; keep them dormant. Next, perform a separate W3 composition and
-   launch-readiness review, and do not authorize a job until external authority,
-   nonce, systemd acquisition and `ExecStopPost` wiring have exact accepted
-   owners. F1's dormant materializer is accepted, but neither W3 nor F1 has
-   formal launch authority.
+   `bf4c7490`; keep them dormant. The independent W3 composition and
+   launch-readiness source is accepted at `82d5394b`, including exact external
+   authority/installation records, nonce, read-only systemd acquisition and
+   run/`ExecStopPost`/close wiring. Keep it dormant. Next, perform the separate
+   root-owned installation and loaded-manager acceptance; do not authorize a
+   job without that evidence and an explicit human `StartUnit` decision. F1's
+   dormant materializer is accepted, but neither W3 nor F1 has formal launch
+   authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,
