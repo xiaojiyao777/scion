@@ -2,7 +2,7 @@
 
 *Branch: `v0.4-dev`*
 *Accepted H11 evidence head: `7623077f`*
-*Last updated: 2026-07-22*
+*Last updated: 2026-07-23*
 
 This is the active task source. Read it with
 `scion/docs/status/current-state.md`; use
@@ -102,8 +102,22 @@ aggregate `6205460c...bbf`. It has exact `43` cells / `172` jobs, all 43 greedy
 and eight counter preflights pass, raw/artifacts/control are empty, and formal
 execution is explicitly unauthorized. Exact evidence is in
 `v04-warehouse-w3-problem-source-dry-root-acceptance-20260722.md`. W3 formal
-launch remains locked until generic invocation terminal and opaque row/artifact
-publication owners are implemented and separately accepted.
+execution remains unauthorized.
+
+The missing generic invocation terminal and opaque row/artifact publication
+owners are now accepted at pushed source commit `bf4c7490`. They bind the
+exact authority/manifest/nonce policy, publish complete copied spawn evidence
+before each opaque row, seal `RAW_COMPLETE / UNIT_DRAINED / UNIT_FINAL /
+COMPLETE / CLOSED`, and atomically publish one exact opaque artifact bundle.
+The generic layer has no Warehouse/CVRP semantics, process scheduler, network
+or retry/resume path. Focused and execution-core tests pass exact `18 / 249`
+on both Python 3.12 and 3.13; H11 remains exact at oracle `456`, public C2a
+`74` on both, and official `863 collected / 862 passed / 1 skipped`. Exact
+evidence is in
+`v04-w3-generic-invocation-terminal-opaque-publication-acceptance-20260723.md`.
+W3 formal launch remains locked pending a separate composition and
+launch-readiness review covering external authority, nonce, systemd acquisition
+and `ExecStopPost` wiring on one clean pushed commit.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
@@ -946,10 +960,14 @@ scientific and lineage-owning artifacts remain in place.
      W3 manifest/validator/replay/analysis source and independent zero-job dry
      root are accepted at pushed feature commit `b879bbc1`, manifest SHA
      `ad693646...0212`, and stable file aggregate `6205460c...bbf`. Formal W3
-     launch remains locked on the missing generic invocation-terminal and
-     opaque row/artifact publication owners. The rejected W3 lifecycle stays
-     excluded, B1 no longer occupies the host, and no sandbox, retry, budget,
-     truncation or new research gate is added.
+     launch remains locked. The generic invocation terminal and opaque
+     row/artifact publisher are accepted at pushed source commit `bf4c7490`
+     with dual-version `18 / 249` gates and unchanged exact H11
+     `456 / 74 / 863` evidence. A separate composition/launch-readiness review
+     must still close external authority, nonce, systemd acquisition and
+     `ExecStopPost` wiring before any formal job. The rejected W3 lifecycle
+     stays excluded, B1 no longer occupies the host, and no sandbox, retry,
+     budget, truncation or new research gate is added.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated
    fixtures under execution-addendum SHA `25b2c424...3a939`, pushed at
    `9119e89b`: descriptor-

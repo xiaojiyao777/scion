@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-07-22*
+*Last updated: 2026-07-23*
 
 Read `scion/TASK.md` first. Use
 `scion/design/scion-architecture-v3.md` as the architecture tie-breaker.
@@ -43,8 +43,20 @@ Its manifest SHA is `ad693646...0212`, Git-blob aggregate is
 provenance, and empty raw/artifacts/control were rederived with zero mutation.
 No formal job was started and formal execution is explicitly unauthorized.
 The problem layer has no process, terminal, raw-row, or artifact-publication
-owner. W3 launch remains blocked until generic invocation terminal and opaque
-row/artifact publication owners are implemented and separately accepted.
+owner.
+
+The problem-neutral invocation terminal and opaque row/artifact publisher are
+now accepted at pushed source commit `bf4c7490` on
+`codex/w3-problem-owned-acceptance`. The generic owner durably orders complete
+copied spawn evidence before opaque rows, seals the exact
+`RAW_COMPLETE / UNIT_DRAINED / UNIT_FINAL / COMPLETE / CLOSED` chain, and
+publishes one no-replace opaque artifact bundle without parsing problem bytes.
+Focused and generic execution-core gates pass exact `18 / 249` on Python 3.12
+and 3.13. H11 oracle `456` and public C2a `74` pass on both; Python 3.12
+retains exact `863 collected / 862 passed / 1 skipped`. No formal job or
+experiment root was created. W3 launch remains blocked pending a separate
+composition/launch-readiness review of external authority, nonce, systemd
+acquisition and `ExecStopPost` wiring.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -1074,10 +1086,14 @@ oracle `456` and C2a `74`. Acceptance commit `7623077f` is integrated into
 manifest/validator/replay/analysis source and independent zero-job dry root are
 accepted at pushed feature commit `b879bbc1`, manifest SHA
 `ad693646...0212`, and stable file aggregate `6205460c...bbf`. Formal W3 launch
-remains locked on the missing generic invocation-terminal and opaque
-row/artifact publication owners. The rejected W3 lifecycle remains excluded,
-B1 no longer occupies the host, and there is no sandbox, retry, budget,
-truncation or new research gate.
+remains locked. The generic invocation-terminal and opaque row/artifact
+publisher are accepted at pushed source commit `bf4c7490`, with dual-version
+focused/core gates exact `18 / 249` and unchanged H11
+`456 / 74 / 863` authority. External authority, nonce, systemd acquisition,
+`ExecStopPost` wiring and campaign composition remain for a separate
+launch-readiness review. The rejected W3 lifecycle remains excluded, B1 no
+longer occupies the host, and there is no sandbox, retry, budget, truncation or
+new research gate.
 
 The fresh activation execution seam is design-frozen at SHA
 `25b2c424...3a939` and pushed at `9119e89b`, after independent architecture and
@@ -1113,10 +1129,13 @@ actual-journal-handle design is frozen and accepted.
    `863 collected / 862 passed / 1 skipped`; acceptance commit `7623077f` is
    now integrated into `origin/v0.4-dev` by exact fast-forward. The
    problem-owned W3 source and independent zero-job dry root are accepted at
-   `b879bbc1` / `ad693646...0212`. Keep that root read-only. Implement and
-   accept the missing generic invocation-terminal and opaque row/artifact
-   publication owners before any separate W3 launch review. F1's dormant
-   materializer is accepted, but neither W3 nor F1 has formal launch authority.
+   `b879bbc1` / `ad693646...0212`. Keep that root read-only. The generic
+   invocation-terminal and opaque row/artifact publisher are accepted at
+   `bf4c7490`; keep them dormant. Next, perform a separate W3 composition and
+   launch-readiness review, and do not authorize a job until external authority,
+   nonce, systemd acquisition and `ExecStopPost` wiring have exact accepted
+   owners. F1's dormant materializer is accepted, but neither W3 nor F1 has
+   formal launch authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,
