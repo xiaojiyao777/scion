@@ -13,7 +13,10 @@ from dataclasses import dataclass
 from typing import Mapping
 
 from scion.problems.warehouse_delivery.w3_candidate_gate import CandidateGateReceipt
-from scion.problems.warehouse_delivery.w3_installation import CandidateRootIdentity
+from scion.problems.warehouse_delivery.w3_installation import (
+    ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+    CandidateRootIdentity,
+)
 from scion.runtime.execution.launch_authority import (
     AcceptedLaunchAuthority,
     InstallationRecord,
@@ -23,6 +26,7 @@ _SHA256_LENGTH = 64
 _DRY_ROOT_SCHEMA = "scion.w3-dry-root-readiness.v1"
 _ABSENCE_SCHEMA = "scion.w3-prestart-absence.v1"
 _ACCOUNT_SCHEMA = "scion.w3-runtime-account.v1"
+WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA = "scion.w3-prestart-evidence.v1"
 _ABSENCE_ROLES = tuple(
     sorted(
         {
@@ -694,6 +698,8 @@ class WarehouseW3RuntimeAccountReceipt:
 
 
 __all__ = [
+    "ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256",
+    "WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA",
     "PreStartAbsenceObservation",
     "WarehouseW3DryRootReadinessReceipt",
     "WarehouseW3PreStartAbsenceReceipt",

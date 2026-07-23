@@ -28,6 +28,7 @@ from scion.problems.warehouse_delivery.w3_installation import (
     SealedStoreReceipt,
 )
 from scion.problems.warehouse_delivery.w3_prestart_facts import (
+    WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA,
     WarehouseW3DryRootReadinessReceipt,
     WarehouseW3PreStartAbsenceReceipt,
     WarehouseW3RuntimeAccountReceipt,
@@ -65,7 +66,6 @@ _STAGED_SCHEMA = "scion.w3-root-staged-candidate.v1"
 _STORES_SCHEMA = "scion.w3-root-stores-published.v1"
 _AUTHORITY_SCHEMA = "scion.w3-root-authority-published.v1"
 _PROJECTION_SCHEMA = "scion.w3-root-projection.v1"
-WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA = "scion.w3-prestart-evidence.v1"
 
 _SEALED_ROLE = "sealed"
 _ENVIRONMENT_ROLE = "environment"

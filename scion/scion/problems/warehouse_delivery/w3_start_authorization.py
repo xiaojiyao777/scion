@@ -16,8 +16,8 @@ from scion.runtime.execution.external_installation import (
     StartAuthorizationReceipt,
 )
 
+from .w3_prestart_facts import WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA
 from .w3_root_installation import (
-    WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA,
     WarehouseW3PreStartEvidence,
 )
 from .w3_installation import (
