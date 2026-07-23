@@ -476,13 +476,55 @@ def _launch_pair() -> tuple[AcceptedLaunchAuthority, InstallationRecord]:
 
 def _unit_publication() -> UnitPublicationReceipt:
     authority, installation = _launch_pair()
+    run_publication, close_publication = _unit_fragment_publications()
     return UnitPublicationReceipt.create(
         authority=authority,
         installation=installation,
         run_template_raw=RUN_TEMPLATE_RAW,
         close_template_raw=CLOSE_TEMPLATE_RAW,
-        published_run_raw=RUN_TEMPLATE_RAW,
-        published_close_raw=CLOSE_TEMPLATE_RAW,
+        run_publication=run_publication,
+        close_publication=close_publication,
+    )
+
+
+def _unit_fragment_publication(
+    *,
+    role: str,
+    path: str,
+    raw: bytes,
+    inode: int,
+) -> PublishedRegularFileReceipt:
+    return PublishedRegularFileReceipt.create(
+        role=role,
+        path=path,
+        content_sha256=hashlib.sha256(raw).hexdigest(),
+        size_bytes=len(raw),
+        device=31,
+        inode=inode,
+        mode=0o444,
+        uid=0,
+        gid=0,
+        nlink=1,
+    )
+
+
+def _unit_fragment_publications() -> tuple[
+    PublishedRegularFileReceipt,
+    PublishedRegularFileReceipt,
+]:
+    return (
+        _unit_fragment_publication(
+            role="run-fragment",
+            path=RUN_FRAGMENT,
+            raw=RUN_TEMPLATE_RAW,
+            inode=43,
+        ),
+        _unit_fragment_publication(
+            role="close-fragment",
+            path=CLOSE_FRAGMENT,
+            raw=CLOSE_TEMPLATE_RAW,
+            inode=44,
+        ),
     )
 
 
@@ -1564,11 +1606,15 @@ def test_unit_publication_binds_installation_paths_and_reopened_template_bytes()
     None
 ):
     authority, installation = _launch_pair()
+    run_publication, close_publication = _unit_fragment_publications()
     receipt = _unit_publication()
 
     assert receipt.run_fragment_path == RUN_FRAGMENT
     assert receipt.close_fragment_path == CLOSE_FRAGMENT
     assert receipt.configured_pair_sha256 == installation.configured_pair_sha256
+    assert receipt.run_publication_sha256 == run_publication.raw_sha256
+    assert receipt.close_publication_sha256 == close_publication.raw_sha256
+    assert json.loads(receipt.raw)["schema"] == "scion.unit-publication-acceptance.v3"
     assert (
         UnitPublicationReceipt.from_bytes(
             receipt.raw,
@@ -1576,18 +1622,28 @@ def test_unit_publication_binds_installation_paths_and_reopened_template_bytes()
             installation=installation,
             run_template_raw=RUN_TEMPLATE_RAW,
             close_template_raw=CLOSE_TEMPLATE_RAW,
+            run_publication=run_publication,
+            close_publication=close_publication,
         )
         == receipt
     )
 
-    with pytest.raises(ManagerAcceptanceError, match="published unit bytes"):
+    with pytest.raises(
+        ManagerAcceptanceError,
+        match="run-fragment unit fragment publication authority",
+    ):
         UnitPublicationReceipt.create(
             authority=authority,
             installation=installation,
             run_template_raw=RUN_TEMPLATE_RAW,
             close_template_raw=CLOSE_TEMPLATE_RAW,
-            published_run_raw=RUN_TEMPLATE_RAW + b"# drift\n",
-            published_close_raw=CLOSE_TEMPLATE_RAW,
+            run_publication=_unit_fragment_publication(
+                role="run-fragment",
+                path=RUN_FRAGMENT,
+                raw=RUN_TEMPLATE_RAW + b"# drift\n",
+                inode=45,
+            ),
+            close_publication=close_publication,
         )
 
     changed = json.loads(receipt.raw)
@@ -1599,6 +1655,106 @@ def test_unit_publication_binds_installation_paths_and_reopened_template_bytes()
             installation=installation,
             run_template_raw=RUN_TEMPLATE_RAW,
             close_template_raw=CLOSE_TEMPLATE_RAW,
+            run_publication=run_publication,
+            close_publication=close_publication,
+        )
+
+
+@pytest.mark.parametrize(
+    ("role", "path", "raw"),
+    (
+        ("alternate-run-fragment", RUN_FRAGMENT, RUN_TEMPLATE_RAW),
+        ("run-fragment", "/etc/systemd/system/alternate@.service", RUN_TEMPLATE_RAW),
+        ("run-fragment", RUN_FRAGMENT, RUN_TEMPLATE_RAW + b"# drift\n"),
+    ),
+)
+def test_unit_publication_rejects_unbound_regular_publication(
+    role: str,
+    path: str,
+    raw: bytes,
+) -> None:
+    authority, installation = _launch_pair()
+    _, close_publication = _unit_fragment_publications()
+    run_publication = _unit_fragment_publication(
+        role=role,
+        path=path,
+        raw=raw,
+        inode=45,
+    )
+
+    with pytest.raises(
+        ManagerAcceptanceError,
+        match="run-fragment unit fragment publication authority",
+    ):
+        UnitPublicationReceipt.create(
+            authority=authority,
+            installation=installation,
+            run_template_raw=RUN_TEMPLATE_RAW,
+            close_template_raw=CLOSE_TEMPLATE_RAW,
+            run_publication=run_publication,
+            close_publication=close_publication,
+        )
+
+
+def test_unit_publication_rejects_same_inode_for_distinct_fragments() -> None:
+    authority, installation = _launch_pair()
+    run_publication, _ = _unit_fragment_publications()
+    close_publication = _unit_fragment_publication(
+        role="close-fragment",
+        path=CLOSE_FRAGMENT,
+        raw=CLOSE_TEMPLATE_RAW,
+        inode=run_publication.inode,
+    )
+
+    with pytest.raises(
+        ManagerAcceptanceError,
+        match="fragment publications are not distinct",
+    ):
+        UnitPublicationReceipt.create(
+            authority=authority,
+            installation=installation,
+            run_template_raw=RUN_TEMPLATE_RAW,
+            close_template_raw=CLOSE_TEMPLATE_RAW,
+            run_publication=run_publication,
+            close_publication=close_publication,
+        )
+
+
+def test_unit_publication_rejects_publication_object_raw_split_and_digest_drift() -> (
+    None
+):
+    authority, installation = _launch_pair()
+    run_publication, close_publication = _unit_fragment_publications()
+    forged = object.__new__(PublishedRegularFileReceipt)
+    for field in PublishedRegularFileReceipt.__dataclass_fields__:
+        object.__setattr__(forged, field, getattr(run_publication, field))
+    object.__setattr__(forged, "path", "/etc/systemd/system/forged@.service")
+
+    with pytest.raises(
+        ManagerAcceptanceError,
+        match="run-fragment unit fragment publication authority",
+    ):
+        UnitPublicationReceipt.create(
+            authority=authority,
+            installation=installation,
+            run_template_raw=RUN_TEMPLATE_RAW,
+            close_template_raw=CLOSE_TEMPLATE_RAW,
+            run_publication=forged,
+            close_publication=close_publication,
+        )
+
+    receipt = _unit_publication()
+    changed = json.loads(receipt.raw)
+    changed["run_publication_sha256"] = "0" * 64
+    with pytest.raises(ManagerAcceptanceError, match="authority differs"):
+        UnitPublicationReceipt.from_bytes(
+            _canonical(changed),
+            authority=authority,
+            installation=installation,
+            run_template_raw=RUN_TEMPLATE_RAW,
+            close_template_raw=CLOSE_TEMPLATE_RAW,
+            run_publication=run_publication,
+            close_publication=close_publication,
         )
 
 
@@ -1617,6 +1773,7 @@ def test_installation_rejects_units_from_another_launch_instance() -> None:
 
 def test_unit_publication_rederives_pair_from_exact_templates() -> None:
     authority, installation = _launch_pair()
+    run_publication, close_publication = _unit_fragment_publications()
     alternate_run = f"alternate-run@{LAUNCH}.service"
     alternate_close = f"alternate-close@{LAUNCH}.service"
     original_pair = installation.configured_pair
@@ -1671,8 +1828,8 @@ def test_unit_publication_rederives_pair_from_exact_templates() -> None:
             installation=alternate_installation,
             run_template_raw=RUN_TEMPLATE_RAW,
             close_template_raw=CLOSE_TEMPLATE_RAW,
-            published_run_raw=RUN_TEMPLATE_RAW,
-            published_close_raw=CLOSE_TEMPLATE_RAW,
+            run_publication=run_publication,
+            close_publication=close_publication,
         )
 
 

@@ -2116,6 +2116,61 @@ def _rederive_configured_pair(
     return pair, hashlib.sha256(derivation_raw).hexdigest()
 
 
+_RUN_FRAGMENT_PUBLICATION_ROLE = "run-fragment"
+_CLOSE_FRAGMENT_PUBLICATION_ROLE = "close-fragment"
+
+
+def _reopen_unit_fragment_publication(
+    receipt: PublishedRegularFileReceipt,
+    *,
+    role: str,
+    path: str,
+    raw: bytes,
+) -> PublishedRegularFileReceipt:
+    if type(receipt) is not PublishedRegularFileReceipt:
+        raise TypeError(
+            "unit fragment publication must be exact PublishedRegularFileReceipt"
+        )
+    try:
+        reopened = PublishedRegularFileReceipt.from_bytes(receipt.raw)
+    except Exception as exc:
+        raise ManagerAcceptanceError(
+            f"{role} unit fragment publication cannot be reopened"
+        ) from exc
+    expected_sha = hashlib.sha256(raw).hexdigest()
+    if (
+        reopened != receipt
+        or reopened.role != role
+        or reopened.path != path
+        or reopened.content_sha256 != expected_sha
+        or reopened.size_bytes != len(raw)
+        or reopened.mode != 0o444
+        or reopened.uid != 0
+        or reopened.gid != 0
+        or reopened.nlink != 1
+    ):
+        raise ManagerAcceptanceError(
+            f"{role} unit fragment publication authority differs"
+        )
+    return reopened
+
+
+def _require_distinct_unit_fragment_publications(
+    run_publication: PublishedRegularFileReceipt,
+    close_publication: PublishedRegularFileReceipt,
+) -> None:
+    if (
+        run_publication.device,
+        run_publication.inode,
+    ) == (
+        close_publication.device,
+        close_publication.inode,
+    ):
+        raise ManagerAcceptanceError(
+            "run and closer unit fragment publications are not distinct"
+        )
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class UnitPublicationReceipt:
     """Exact reopened unit fragments bound to one launch installation."""
@@ -2133,6 +2188,8 @@ class UnitPublicationReceipt:
     close_template_sha256: str
     run_template_size_bytes: int
     close_template_size_bytes: int
+    run_publication_sha256: str
+    close_publication_sha256: str
     raw: bytes
     raw_sha256: str
 
@@ -2152,8 +2209,8 @@ class UnitPublicationReceipt:
         installation: InstallationRecord,
         run_template_raw: bytes,
         close_template_raw: bytes,
-        published_run_raw: bytes,
-        published_close_raw: bytes,
+        run_publication: PublishedRegularFileReceipt,
+        close_publication: PublishedRegularFileReceipt,
     ) -> "UnitPublicationReceipt":
         authority, installation = _reopen_launch_installation(
             authority,
@@ -2167,14 +2224,6 @@ class UnitPublicationReceipt:
             close_template_raw,
             field="close_template_raw",
         )
-        published_run = _unit_fragment_bytes(
-            published_run_raw,
-            field="published_run_raw",
-        )
-        published_close = _unit_fragment_bytes(
-            published_close_raw,
-            field="published_close_raw",
-        )
         run_sha = hashlib.sha256(run_raw).hexdigest()
         close_sha = hashlib.sha256(close_raw).hexdigest()
         _configured_pair, derivation_sha = _rederive_configured_pair(
@@ -2183,17 +2232,13 @@ class UnitPublicationReceipt:
             close_template_raw=close_raw,
         )
         if (
-            published_run != run_raw
-            or published_close != close_raw
-            or run_sha != authority.run_template_sha256
+            run_sha != authority.run_template_sha256
             or close_sha != authority.close_template_sha256
             or run_sha != installation.run_template_sha256
             or close_sha != installation.close_template_sha256
             or installation.authority_sha256 != authority.authority_sha256
         ):
-            raise ManagerAcceptanceError(
-                "published unit bytes or launch template authority differs"
-            )
+            raise ManagerAcceptanceError("unit template or launch authority differs")
         run_fragment = _template_fragment_path(
             installation.run_unit,
             field="installation.run_unit",
@@ -2204,8 +2249,24 @@ class UnitPublicationReceipt:
         )
         if run_fragment == close_fragment:
             raise ManagerAcceptanceError("run and closer fragment paths must differ")
+        reopened_run_publication = _reopen_unit_fragment_publication(
+            run_publication,
+            role=_RUN_FRAGMENT_PUBLICATION_ROLE,
+            path=run_fragment,
+            raw=run_raw,
+        )
+        reopened_close_publication = _reopen_unit_fragment_publication(
+            close_publication,
+            role=_CLOSE_FRAGMENT_PUBLICATION_ROLE,
+            path=close_fragment,
+            raw=close_raw,
+        )
+        _require_distinct_unit_fragment_publications(
+            reopened_run_publication,
+            reopened_close_publication,
+        )
         value = {
-            "schema": "scion.unit-publication-acceptance.v2",
+            "schema": "scion.unit-publication-acceptance.v3",
             "state": "PUBLISHED_REOPENED",
             "launch_id": installation.launch_id,
             "authority_sha256": authority.authority_sha256,
@@ -2220,6 +2281,8 @@ class UnitPublicationReceipt:
             "close_template_sha256": close_sha,
             "run_template_size_bytes": len(run_raw),
             "close_template_size_bytes": len(close_raw),
+            "run_publication_sha256": reopened_run_publication.raw_sha256,
+            "close_publication_sha256": reopened_close_publication.raw_sha256,
         }
         return cls.from_bytes(
             _canonical_json(value),
@@ -2227,6 +2290,8 @@ class UnitPublicationReceipt:
             installation=installation,
             run_template_raw=run_raw,
             close_template_raw=close_raw,
+            run_publication=reopened_run_publication,
+            close_publication=reopened_close_publication,
         )
 
     @classmethod
@@ -2238,6 +2303,8 @@ class UnitPublicationReceipt:
         installation: InstallationRecord,
         run_template_raw: bytes,
         close_template_raw: bytes,
+        run_publication: PublishedRegularFileReceipt,
+        close_publication: PublishedRegularFileReceipt,
     ) -> "UnitPublicationReceipt":
         authority, installation = _reopen_launch_installation(
             authority,
@@ -2270,6 +2337,8 @@ class UnitPublicationReceipt:
                     "close_template_sha256",
                     "run_template_size_bytes",
                     "close_template_size_bytes",
+                    "run_publication_sha256",
+                    "close_publication_sha256",
                 }
             ),
             label="unit publication receipt",
@@ -2289,8 +2358,24 @@ class UnitPublicationReceipt:
             run_template_raw=run_raw,
             close_template_raw=close_raw,
         )
+        reopened_run_publication = _reopen_unit_fragment_publication(
+            run_publication,
+            role=_RUN_FRAGMENT_PUBLICATION_ROLE,
+            path=run_fragment,
+            raw=run_raw,
+        )
+        reopened_close_publication = _reopen_unit_fragment_publication(
+            close_publication,
+            role=_CLOSE_FRAGMENT_PUBLICATION_ROLE,
+            path=close_fragment,
+            raw=close_raw,
+        )
+        _require_distinct_unit_fragment_publications(
+            reopened_run_publication,
+            reopened_close_publication,
+        )
         expected = {
-            "schema": "scion.unit-publication-acceptance.v2",
+            "schema": "scion.unit-publication-acceptance.v3",
             "state": "PUBLISHED_REOPENED",
             "launch_id": installation.launch_id,
             "authority_sha256": authority.authority_sha256,
@@ -2305,6 +2390,8 @@ class UnitPublicationReceipt:
             "close_template_sha256": close_sha,
             "run_template_size_bytes": len(run_raw),
             "close_template_size_bytes": len(close_raw),
+            "run_publication_sha256": reopened_run_publication.raw_sha256,
+            "close_publication_sha256": reopened_close_publication.raw_sha256,
         }
         if (
             _canonical_json(value) != _canonical_json(expected)
@@ -2330,6 +2417,8 @@ class UnitPublicationReceipt:
             ("close_template_sha256", close_sha),
             ("run_template_size_bytes", len(run_raw)),
             ("close_template_size_bytes", len(close_raw)),
+            ("run_publication_sha256", reopened_run_publication.raw_sha256),
+            ("close_publication_sha256", reopened_close_publication.raw_sha256),
             ("raw", raw),
             ("raw_sha256", hashlib.sha256(raw).hexdigest()),
         ):

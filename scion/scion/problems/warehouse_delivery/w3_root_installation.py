@@ -1733,9 +1733,11 @@ class WarehouseW3PreStartEvidence:
                     "close_template_sha256",
                     "run_template_size_bytes",
                     "close_template_size_bytes",
+                    "run_publication_sha256",
+                    "close_publication_sha256",
                 }
             ),
-            schema="scion.unit-publication-acceptance.v2",
+            schema="scion.unit-publication-acceptance.v3",
         )
         reload_raw = _require_exact_receipt_object(
             manager_reload,
@@ -1963,8 +1965,17 @@ class WarehouseW3PreStartEvidence:
             "authority_sha256": unit_publication.authority_sha256,
             "installation_sha256": unit_publication.installation_sha256,
             "configured_pair_sha256": (unit_publication.configured_pair_sha256),
+            "template_derivation_sha256": (unit_publication.template_derivation_sha256),
             "run_unit": unit_publication.run_unit,
             "close_unit": unit_publication.close_unit,
+            "run_fragment_path": unit_publication.run_fragment_path,
+            "close_fragment_path": unit_publication.close_fragment_path,
+            "run_template_sha256": unit_publication.run_template_sha256,
+            "close_template_sha256": unit_publication.close_template_sha256,
+            "run_template_size_bytes": unit_publication.run_template_size_bytes,
+            "close_template_size_bytes": unit_publication.close_template_size_bytes,
+            "run_publication_sha256": (unit_publication.run_publication_sha256),
+            "close_publication_sha256": (unit_publication.close_publication_sha256),
         }
         reload_raw_binding = {
             "unit_publication_sha256": manager_reload.unit_publication_sha256,

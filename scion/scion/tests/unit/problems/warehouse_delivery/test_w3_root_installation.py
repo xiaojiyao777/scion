@@ -498,13 +498,25 @@ def _manager_bundle(
         close_wiring=close_wiring,
     )
     run_template, close_template = _template_raws()
+    run_publication = _published_file(
+        role="run-fragment",
+        path="/etc/systemd/system/scion-w3@.service",
+        raw=run_template,
+        inode=501,
+    )
+    close_publication = _published_file(
+        role="close-fragment",
+        path="/etc/systemd/system/scion-w3-close@.service",
+        raw=close_template,
+        inode=502,
+    )
     unit_publication = UnitPublicationReceipt.create(
         authority=authority,
         installation=installation,
         run_template_raw=run_template,
         close_template_raw=close_template,
-        published_run_raw=run_template,
-        published_close_raw=close_template,
+        run_publication=run_publication,
+        close_publication=close_publication,
     )
     identity = ManagerIdentity(
         unique_owner=":1.42",
@@ -1481,6 +1493,14 @@ def test_prestart_evidence_round_trip_closes_exact_pending_gate(
             "runtime_account",
         }
     )
+    unit_value = json.loads(inputs["unit_publication"].raw)
+    assert unit_value["schema"] == "scion.unit-publication-acceptance.v3"
+    assert unit_value["run_publication_sha256"] == (
+        inputs["unit_publication"].run_publication_sha256
+    )
+    assert unit_value["close_publication_sha256"] == (
+        inputs["unit_publication"].close_publication_sha256
+    )
     forbidden = {
         "acceptance_sha256",
         "installed_acceptance_sha256",
@@ -1808,6 +1828,50 @@ def test_prestart_evidence_rejects_forged_exact_class_raw_attribute_split(
         match="object differs from canonical raw",
     ):
         WarehouseW3PreStartEvidence.create(**forged_inputs)
+
+
+def test_prestart_evidence_rejects_forged_unit_publication_raw_binding(
+    semantic_inputs: dict[str, object],
+) -> None:
+    inputs = _prestart_inputs(semantic_inputs)
+    original = inputs["unit_publication"]
+    mutations = (
+        ("launch_id", "f" * 64),
+        ("authority_sha256", "f" * 64),
+        ("installation_sha256", "f" * 64),
+        ("configured_pair_sha256", "f" * 64),
+        ("template_derivation_sha256", "f" * 64),
+        ("run_unit", "forged-run.service"),
+        ("close_unit", "forged-close.service"),
+        ("run_fragment_path", "/etc/systemd/system/forged-run.service"),
+        ("close_fragment_path", "/etc/systemd/system/forged-close.service"),
+        ("run_template_sha256", "f" * 64),
+        ("close_template_sha256", "f" * 64),
+        ("run_template_size_bytes", original.run_template_size_bytes + 1),
+        ("close_template_size_bytes", original.close_template_size_bytes + 1),
+        ("run_publication_sha256", "f" * 64),
+        ("close_publication_sha256", "f" * 64),
+    )
+    for wire_field, wire_value in mutations:
+        forged = object.__new__(UnitPublicationReceipt)
+        for field in UnitPublicationReceipt.__dataclass_fields__:
+            object.__setattr__(forged, field, getattr(original, field))
+        changed = json.loads(original.raw)
+        changed[wire_field] = wire_value
+        forged_raw = _canonical(changed)
+        object.__setattr__(forged, "raw", forged_raw)
+        object.__setattr__(
+            forged,
+            "raw_sha256",
+            hashlib.sha256(forged_raw).hexdigest(),
+        )
+        forged_inputs = {**inputs, "unit_publication": forged}
+
+        with pytest.raises(
+            WarehouseW3RootInstallationError,
+            match="dependency object differs",
+        ):
+            WarehouseW3PreStartEvidence.create(**forged_inputs)
 
 
 def test_prestart_evidence_parser_rejects_extra_or_forbidden_fields(
