@@ -19,6 +19,7 @@ from typing import Mapping
 from scion.problems.warehouse_delivery.w3_candidate_gate import CandidateGateReceipt
 from scion.problems.warehouse_delivery.w3_environment_receipts import (
     EnvironmentRelocationReceipt,
+    LiveEnvironmentRehashFact,
     WarehouseEnvironmentContentReceipt,
     derive_final_environment_path,
 )
@@ -26,11 +27,24 @@ from scion.problems.warehouse_delivery.w3_installation import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
     SealedStoreReceipt,
 )
+from scion.problems.warehouse_delivery.w3_prestart_facts import (
+    WarehouseW3DryRootReadinessReceipt,
+    WarehouseW3PreStartAbsenceReceipt,
+    WarehouseW3RuntimeAccountReceipt,
+)
 from scion.runtime.execution.external_installation import (
+    INSTALL_PHASES,
+    LoadedManagerReceipt,
+    ManagerReloadReceipt,
     MountBindingReceipt,
     PublishedDirectoryReceipt,
     PublishedRegularFileReceipt,
     PublishedTreeReceipt,
+    RootPhaseIntentReceipt,
+    RootPhaseReceipt,
+    SelectionReceipt,
+    UnitPublicationReceipt,
+    validate_root_transaction,
 )
 from scion.runtime.execution.external_linux import (
     FileIdentity,
@@ -51,6 +65,7 @@ _STAGED_SCHEMA = "scion.w3-root-staged-candidate.v1"
 _STORES_SCHEMA = "scion.w3-root-stores-published.v1"
 _AUTHORITY_SCHEMA = "scion.w3-root-authority-published.v1"
 _PROJECTION_SCHEMA = "scion.w3-root-projection.v1"
+WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA = "scion.w3-prestart-evidence.v1"
 
 _SEALED_ROLE = "sealed"
 _ENVIRONMENT_ROLE = "environment"
@@ -295,6 +310,56 @@ def _reopen_mount(receipt: MountBindingReceipt) -> MountBindingReceipt:
     if reopened != receipt:
         raise WarehouseW3RootInstallationError("mount binding object differs")
     return reopened
+
+
+def _require_exact_receipt_object(
+    receipt: object,
+    *,
+    expected_type: type[object],
+    label: str,
+    expected_fields: frozenset[str],
+    schema: str,
+) -> dict[str, object]:
+    """Check one final producer object when its parser needs unavailable inputs."""
+
+    if type(receipt) is not expected_type:
+        raise TypeError(f"{label} must be exact {expected_type.__name__}")
+    raw = getattr(receipt, "raw", None)
+    raw_sha256 = getattr(receipt, "raw_sha256", None)
+    if (
+        type(raw) is not bytes
+        or type(raw_sha256) is not str
+        or hashlib.sha256(raw).hexdigest() != raw_sha256
+    ):
+        raise WarehouseW3RootInstallationError(f"{label} raw identity differs")
+    value = _exact_fields(
+        _decode_canonical(raw, label=label),
+        expected_fields,
+        label=label,
+    )
+    if value.get("schema") != schema:
+        raise WarehouseW3RootInstallationError(f"{label} schema differs")
+    return value
+
+
+def _directory_identity_tuple(identity: object) -> tuple[int, int, int, int, int, int]:
+    try:
+        return (
+            identity.device,  # type: ignore[attr-defined]
+            identity.inode,  # type: ignore[attr-defined]
+            stat.S_IMODE(identity.mode),  # type: ignore[attr-defined]
+            identity.uid,  # type: ignore[attr-defined]
+            identity.gid,  # type: ignore[attr-defined]
+            (
+                identity.nlink  # type: ignore[attr-defined]
+                if hasattr(identity, "nlink")
+                else identity.link_count  # type: ignore[attr-defined]
+            ),
+        )
+    except (AttributeError, TypeError) as exc:
+        raise WarehouseW3RootInstallationError(
+            "selection directory identity differs"
+        ) from exc
 
 
 def _require_candidate_installation_binding(
@@ -1433,8 +1498,822 @@ class WarehouseW3ProjectionReceipt:
         return instance
 
 
+@dataclass(frozen=True, slots=True, init=False)
+class WarehouseW3PreStartEvidence:
+    launch_id: str
+    authority_sha256: str
+    installation_sha256: str
+    pending_intent_sha256: str
+    predecessor_phase_receipt_sha256: str
+    phase_effect_sha256: tuple[tuple[str, str], ...]
+    producer_receipt_sha256: tuple[tuple[str, str], ...]
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "WarehouseW3PreStartEvidence":
+        del cls
+        raise TypeError("WarehouseW3PreStartEvidence must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("WarehouseW3PreStartEvidence is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        candidate_gate: CandidateGateReceipt,
+        staged_candidate: WarehouseW3StagedCandidateReceipt,
+        selection: SelectionReceipt,
+        stores_published: WarehouseW3StoresPublishedReceipt,
+        authority_published: WarehouseW3AuthorityPublishedReceipt,
+        projection: WarehouseW3ProjectionReceipt,
+        unit_publication: UnitPublicationReceipt,
+        manager_reload: ManagerReloadReceipt,
+        loaded_manager: LoadedManagerReceipt,
+        environment_rehash: LiveEnvironmentRehashFact,
+        dry_root: WarehouseW3DryRootReadinessReceipt,
+        prestart_absence: WarehouseW3PreStartAbsenceReceipt,
+        runtime_account: WarehouseW3RuntimeAccountReceipt,
+        phase_intents: tuple[RootPhaseIntentReceipt, ...],
+        phase_receipts: tuple[RootPhaseReceipt, ...],
+    ) -> "WarehouseW3PreStartEvidence":
+        expected = cls._expected(
+            authority=authority,
+            installation=installation,
+            candidate_gate=candidate_gate,
+            staged_candidate=staged_candidate,
+            selection=selection,
+            stores_published=stores_published,
+            authority_published=authority_published,
+            projection=projection,
+            unit_publication=unit_publication,
+            manager_reload=manager_reload,
+            loaded_manager=loaded_manager,
+            environment_rehash=environment_rehash,
+            dry_root=dry_root,
+            prestart_absence=prestart_absence,
+            runtime_account=runtime_account,
+            phase_intents=phase_intents,
+            phase_receipts=phase_receipts,
+        )
+        return cls.from_bytes(
+            _canonical_json(expected),
+            authority=authority,
+            installation=installation,
+            candidate_gate=candidate_gate,
+            staged_candidate=staged_candidate,
+            selection=selection,
+            stores_published=stores_published,
+            authority_published=authority_published,
+            projection=projection,
+            unit_publication=unit_publication,
+            manager_reload=manager_reload,
+            loaded_manager=loaded_manager,
+            environment_rehash=environment_rehash,
+            dry_root=dry_root,
+            prestart_absence=prestart_absence,
+            runtime_account=runtime_account,
+            phase_intents=phase_intents,
+            phase_receipts=phase_receipts,
+        )
+
+    @staticmethod
+    def _expected(
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        candidate_gate: CandidateGateReceipt,
+        staged_candidate: WarehouseW3StagedCandidateReceipt,
+        selection: SelectionReceipt,
+        stores_published: WarehouseW3StoresPublishedReceipt,
+        authority_published: WarehouseW3AuthorityPublishedReceipt,
+        projection: WarehouseW3ProjectionReceipt,
+        unit_publication: UnitPublicationReceipt,
+        manager_reload: ManagerReloadReceipt,
+        loaded_manager: LoadedManagerReceipt,
+        environment_rehash: LiveEnvironmentRehashFact,
+        dry_root: WarehouseW3DryRootReadinessReceipt,
+        prestart_absence: WarehouseW3PreStartAbsenceReceipt,
+        runtime_account: WarehouseW3RuntimeAccountReceipt,
+        phase_intents: tuple[RootPhaseIntentReceipt, ...],
+        phase_receipts: tuple[RootPhaseReceipt, ...],
+    ) -> dict[str, object]:
+        authority_value, installation_value = _reopen_authority_pair(
+            authority,
+            installation,
+        )
+        candidate = _reopen_candidate(candidate_gate)
+        if type(selection) is not SelectionReceipt:
+            raise TypeError("selection must be exact SelectionReceipt")
+        selection_value = SelectionReceipt.from_bytes(selection.raw)
+        if selection_value != selection:
+            raise WarehouseW3RootInstallationError("selection object differs")
+        staged_raw = _require_exact_receipt_object(
+            staged_candidate,
+            expected_type=WarehouseW3StagedCandidateReceipt,
+            label="staged_candidate",
+            expected_fields=frozenset(
+                {
+                    "schema",
+                    "state",
+                    "plan_sha256",
+                    "selection_key",
+                    "launch_id",
+                    "authority_sha256",
+                    "installation_sha256",
+                    "candidate_gate_sha256",
+                    "tree_import_sha256",
+                    "candidate_root",
+                    "source_identity",
+                    "staging_leaf",
+                    "destination_identity",
+                    "imported_tree_aggregate_sha256",
+                    "retry",
+                    "resume",
+                    "reuse",
+                }
+            ),
+            schema=_STAGED_SCHEMA,
+        )
+        stores_raw = _require_exact_receipt_object(
+            stores_published,
+            expected_type=WarehouseW3StoresPublishedReceipt,
+            label="stores_published",
+            expected_fields=frozenset(
+                {
+                    "schema",
+                    "state",
+                    "plan_sha256",
+                    "selection_key",
+                    "launch_id",
+                    "authority_sha256",
+                    "installation_sha256",
+                    "candidate_gate_sha256",
+                    "sealed_store_sha256",
+                    "environment_content_sha256",
+                    "sealed_publication_sha256",
+                    "environment_publication_sha256",
+                    "environment_relocation_sha256",
+                    "stores",
+                    "retry",
+                    "resume",
+                    "reuse",
+                }
+            ),
+            schema=_STORES_SCHEMA,
+        )
+        authority_raw = _require_exact_receipt_object(
+            authority_published,
+            expected_type=WarehouseW3AuthorityPublishedReceipt,
+            label="authority_published",
+            expected_fields=frozenset(
+                {
+                    "schema",
+                    "state",
+                    "plan_sha256",
+                    "launch_id",
+                    "authority_sha256",
+                    "installation_sha256",
+                    "authority_publication_sha256",
+                    "installation_publication_sha256",
+                    "nonce_directory_sha256",
+                    "files",
+                    "nonce_ledger",
+                    "retry",
+                    "resume",
+                    "reuse",
+                }
+            ),
+            schema=_AUTHORITY_SCHEMA,
+        )
+        projection_raw = _require_exact_receipt_object(
+            projection,
+            expected_type=WarehouseW3ProjectionReceipt,
+            label="projection",
+            expected_fields=frozenset(
+                {
+                    "schema",
+                    "state",
+                    "plan_sha256",
+                    "launch_id",
+                    "authority_sha256",
+                    "installation_sha256",
+                    "boot_id",
+                    "mount_namespaces",
+                    "destination_parent_chain",
+                    "inventory",
+                    "retry",
+                    "resume",
+                    "reuse",
+                }
+            ),
+            schema=_PROJECTION_SCHEMA,
+        )
+        unit_raw = _require_exact_receipt_object(
+            unit_publication,
+            expected_type=UnitPublicationReceipt,
+            label="unit_publication",
+            expected_fields=frozenset(
+                {
+                    "schema",
+                    "state",
+                    "launch_id",
+                    "authority_sha256",
+                    "installation_sha256",
+                    "configured_pair_sha256",
+                    "template_derivation_sha256",
+                    "run_unit",
+                    "close_unit",
+                    "run_fragment_path",
+                    "close_fragment_path",
+                    "run_template_sha256",
+                    "close_template_sha256",
+                    "run_template_size_bytes",
+                    "close_template_size_bytes",
+                }
+            ),
+            schema="scion.unit-publication-acceptance.v2",
+        )
+        reload_raw = _require_exact_receipt_object(
+            manager_reload,
+            expected_type=ManagerReloadReceipt,
+            label="manager_reload",
+            expected_fields=frozenset(
+                {
+                    "schema",
+                    "manager",
+                    "unit_publication_sha256",
+                    "configured_pair_readback_sha256",
+                    "configured_pair_sha256",
+                }
+            ),
+            schema="scion.manager-reload.v1",
+        )
+        loaded_raw = _require_exact_receipt_object(
+            loaded_manager,
+            expected_type=LoadedManagerReceipt,
+            label="loaded_manager",
+            expected_fields=frozenset(
+                {
+                    "schema",
+                    "run_unit",
+                    "close_unit",
+                    "manager",
+                    "run_object_path",
+                    "close_object_path",
+                    "run_properties",
+                    "close_properties",
+                    "unit_publication_sha256",
+                    "configured_pair_readback_sha256",
+                    "configured_pair_sha256",
+                    "manager_reload_sha256",
+                }
+            ),
+            schema="scion.loaded-manager-acceptance.v4",
+        )
+        if type(dry_root) is not WarehouseW3DryRootReadinessReceipt:
+            raise TypeError("dry_root must be exact WarehouseW3DryRootReadinessReceipt")
+        reopened_dry = WarehouseW3DryRootReadinessReceipt.from_bytes(
+            dry_root.raw,
+            candidate_gate=candidate,
+            installation=installation_value,
+            observed_identity=dry_root.identity,
+            observed_inventory_sha256=dry_root.inventory_sha256,
+            observed_inventory_count=dry_root.inventory_count,
+            observed_read_only=dry_root.read_only,
+            composition_state=dry_root.composition_state,
+        )
+        if reopened_dry != dry_root:
+            raise WarehouseW3RootInstallationError("dry-root object differs")
+        if type(prestart_absence) is not WarehouseW3PreStartAbsenceReceipt:
+            raise TypeError(
+                "prestart_absence must be exact WarehouseW3PreStartAbsenceReceipt"
+            )
+        reopened_absence = WarehouseW3PreStartAbsenceReceipt.from_bytes(
+            prestart_absence.raw,
+            authority=authority_value,
+            installation=installation_value,
+            observations=prestart_absence.observations,
+        )
+        if reopened_absence != prestart_absence:
+            raise WarehouseW3RootInstallationError("pre-start absence object differs")
+        if type(runtime_account) is not WarehouseW3RuntimeAccountReceipt:
+            raise TypeError(
+                "runtime_account must be exact WarehouseW3RuntimeAccountReceipt"
+            )
+        reopened_account = WarehouseW3RuntimeAccountReceipt.from_bytes(
+            runtime_account.raw,
+            observed_name=runtime_account.name,
+            observed_uid=runtime_account.uid,
+            observed_gid=runtime_account.gid,
+        )
+        if reopened_account != runtime_account:
+            raise WarehouseW3RootInstallationError("runtime account object differs")
+        if type(environment_rehash) is not LiveEnvironmentRehashFact:
+            raise TypeError(
+                "environment_rehash must be exact LiveEnvironmentRehashFact"
+            )
+        rehash = LiveEnvironmentRehashFact.from_bytes(environment_rehash.raw)
+        if rehash != environment_rehash:
+            raise WarehouseW3RootInstallationError(
+                "live environment rehash object differs"
+            )
+        ordered_intents, ordered_receipts = validate_root_transaction(
+            phase_intents,
+            phase_receipts,
+        )
+        pending_phases = INSTALL_PHASES[:8]
+        committed_phases = INSTALL_PHASES[:7]
+        if (
+            len(ordered_intents) != 8
+            or len(ordered_receipts) != 7
+            or tuple(intent.phase for intent in ordered_intents) != pending_phases
+            or tuple(receipt.phase for receipt in ordered_receipts) != committed_phases
+        ):
+            raise WarehouseW3RootInstallationError(
+                "pre-start evidence requires exact pending I7 transaction"
+            )
+        pending = ordered_intents[-1]
+        if (
+            pending.predecessor_sha256 != (ordered_receipts[-1].raw_sha256,)
+            or pending.effect_authority_sha256 != manager_reload.raw_sha256
+        ):
+            raise WarehouseW3RootInstallationError(
+                "pending I7 predecessor or effect authority differs"
+            )
+        _require_candidate_installation_binding(
+            candidate,
+            authority_value,
+            installation_value,
+        )
+        # W3 gives the generic SelectionReceipt candidate slot one exact
+        # problem-owned meaning: root selected the fully closed CandidateGate,
+        # not the earlier candidate source/header receipt.
+        launch_id = installation_value.launch_id
+        authority_sha = authority_value.authority_sha256
+        installation_sha = installation_value.installation_sha256
+        raw_stores = stores_raw["stores"]
+        if type(raw_stores) is not list or len(raw_stores) != 2:
+            raise WarehouseW3RootInstallationError(
+                "stores_published raw inventory differs"
+            )
+        store_by_role = {
+            item.get("role"): item
+            for item in raw_stores
+            if type(item) is dict and type(item.get("role")) is str
+        }
+        raw_environment_store = store_by_role.get(_ENVIRONMENT_ROLE)
+        raw_sealed_store = store_by_role.get(_SEALED_ROLE)
+        raw_nonce_ledger = authority_raw["nonce_ledger"]
+        raw_inventory = projection_raw["inventory"]
+        if (
+            type(raw_environment_store) is not dict
+            or type(raw_sealed_store) is not dict
+            or frozenset(store_by_role) != frozenset({_ENVIRONMENT_ROLE, _SEALED_ROLE})
+            or type(raw_nonce_ledger) is not dict
+            or type(raw_inventory) is not list
+            or len(raw_inventory) != 6
+        ):
+            raise WarehouseW3RootInstallationError(
+                "pre-start dependency raw inventory differs"
+            )
+        projection_by_role = {
+            item.get("role"): item
+            for item in raw_inventory
+            if type(item) is dict and type(item.get("role")) is str
+        }
+        raw_reload_manager = reload_raw["manager"]
+        raw_loaded_manager = loaded_raw["manager"]
+        if (
+            frozenset(projection_by_role)
+            != frozenset(
+                {
+                    _AUTHORITY_ROLE,
+                    _ENVIRONMENT_ROLE,
+                    _INSTALLATION_ROLE,
+                    _NONCE_CLAIMS_ROLE,
+                    _RUN_ROLE,
+                    _SEALED_ROLE,
+                }
+            )
+            or type(raw_reload_manager) is not dict
+            or type(raw_loaded_manager) is not dict
+            or type(loaded_raw["run_properties"]) is not dict
+            or type(loaded_raw["close_properties"]) is not dict
+        ):
+            raise WarehouseW3RootInstallationError(
+                "pre-start manager or projection raw inventory differs"
+            )
+        staged_raw_binding = {
+            "selection_key": staged_candidate.selection_key,
+            "launch_id": staged_candidate.launch_id,
+            "authority_sha256": staged_candidate.authority_sha256,
+            "installation_sha256": staged_candidate.installation_sha256,
+            "candidate_gate_sha256": staged_candidate.candidate_gate_sha256,
+            "tree_import_sha256": staged_candidate.tree_import_sha256,
+            "candidate_root": staged_candidate.candidate_root,
+            "source_identity": _identity_mapping(staged_candidate.source_identity),
+            "staging_leaf": staged_candidate.staging_leaf,
+            "destination_identity": _identity_mapping(
+                staged_candidate.destination_identity
+            ),
+            "imported_tree_aggregate_sha256": (
+                staged_candidate.imported_tree_aggregate_sha256
+            ),
+        }
+        stores_raw_binding = {
+            "selection_key": stores_published.selection_key,
+            "launch_id": stores_published.launch_id,
+            "authority_sha256": stores_published.authority_sha256,
+            "installation_sha256": stores_published.installation_sha256,
+            "candidate_gate_sha256": stores_published.candidate_gate_sha256,
+            "sealed_store_sha256": stores_published.sealed_store_sha256,
+            "environment_content_sha256": (stores_published.environment_content_sha256),
+            "sealed_publication_sha256": (stores_published.sealed_publication_sha256),
+            "environment_publication_sha256": (
+                stores_published.environment_publication_sha256
+            ),
+            "environment_relocation_sha256": (
+                stores_published.environment_relocation_sha256
+            ),
+        }
+        authority_raw_binding = {
+            "launch_id": authority_published.launch_id,
+            "authority_sha256": authority_published.authority_sha256,
+            "installation_sha256": authority_published.installation_sha256,
+            "authority_publication_sha256": (
+                authority_published.authority_publication_sha256
+            ),
+            "installation_publication_sha256": (
+                authority_published.installation_publication_sha256
+            ),
+            "nonce_directory_sha256": (authority_published.nonce_directory_sha256),
+        }
+        projection_raw_binding = {
+            "launch_id": projection.launch_id,
+            "authority_sha256": projection.authority_sha256,
+            "installation_sha256": projection.installation_sha256,
+            "boot_id": projection.boot_id,
+        }
+        unit_raw_binding = {
+            "launch_id": unit_publication.launch_id,
+            "authority_sha256": unit_publication.authority_sha256,
+            "installation_sha256": unit_publication.installation_sha256,
+            "configured_pair_sha256": (unit_publication.configured_pair_sha256),
+            "run_unit": unit_publication.run_unit,
+            "close_unit": unit_publication.close_unit,
+        }
+        reload_raw_binding = {
+            "unit_publication_sha256": manager_reload.unit_publication_sha256,
+            "configured_pair_readback_sha256": (
+                manager_reload.configured_pair_readback_sha256
+            ),
+            "configured_pair_sha256": manager_reload.configured_pair_sha256,
+        }
+        loaded_raw_binding = {
+            "run_unit": loaded_manager.run_unit,
+            "close_unit": loaded_manager.close_unit,
+            "unit_publication_sha256": (loaded_manager.unit_publication_sha256),
+            "configured_pair_readback_sha256": (
+                loaded_manager.configured_pair_readback_sha256
+            ),
+            "configured_pair_sha256": loaded_manager.configured_pair_sha256,
+            "manager_reload_sha256": loaded_manager.manager_reload_sha256,
+        }
+        if (
+            any(
+                value.get("plan_sha256") != ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
+                or value.get("retry") is not False
+                or value.get("resume") is not False
+                or value.get("reuse") is not False
+                or value.get("state") != expected_state
+                for value, expected_state in (
+                    (staged_raw, "ROOT_STAGING_IMPORTED"),
+                    (stores_raw, "STORES_PUBLISHED"),
+                    (authority_raw, "AUTHORITY_PUBLISHED"),
+                    (projection_raw, "PROJECTION_MOUNTED"),
+                )
+            )
+            or unit_raw.get("state") != "PUBLISHED_REOPENED"
+            or any(
+                staged_raw.get(name) != item
+                for name, item in staged_raw_binding.items()
+            )
+            or any(
+                stores_raw.get(name) != item
+                for name, item in stores_raw_binding.items()
+            )
+            or raw_sealed_store.get("path") != stores_published.sealed_path
+            or raw_sealed_store.get("tree_aggregate_sha256")
+            != stores_published.sealed_tree_aggregate_sha256
+            or raw_sealed_store.get("publication_sha256")
+            != stores_published.sealed_publication_sha256
+            or raw_environment_store.get("path") != stores_published.environment_path
+            or raw_environment_store.get("tree_aggregate_sha256")
+            != stores_published.environment_tree_aggregate_sha256
+            or raw_environment_store.get("publication_sha256")
+            != stores_published.environment_publication_sha256
+            or any(
+                authority_raw.get(name) != item
+                for name, item in authority_raw_binding.items()
+            )
+            or raw_nonce_ledger.get("uid") != authority_published.nonce_uid
+            or raw_nonce_ledger.get("gid") != authority_published.nonce_gid
+            or any(
+                projection_raw.get(name) != item
+                for name, item in projection_raw_binding.items()
+            )
+            or projection_by_role[_RUN_ROLE].get("source_fact_sha256")
+            != projection.run_source_fact_sha256
+            or projection_by_role[_SEALED_ROLE].get("source_fact_sha256")
+            != projection.sealed_source_fact_sha256
+            or projection_by_role[_ENVIRONMENT_ROLE].get("source_fact_sha256")
+            != projection.environment_source_fact_sha256
+            or projection_by_role[_NONCE_CLAIMS_ROLE].get("source_fact_sha256")
+            != projection.nonce_claims_source_fact_sha256
+            or any(
+                unit_raw.get(name) != item for name, item in unit_raw_binding.items()
+            )
+            or any(
+                reload_raw.get(name) != item
+                for name, item in reload_raw_binding.items()
+            )
+            or raw_reload_manager
+            != {
+                "unique_owner": manager_reload.manager_identity.unique_owner,
+                "boot_id": manager_reload.manager_identity.boot_id,
+                "version": manager_reload.manager_identity.version,
+            }
+            or any(
+                loaded_raw.get(name) != item
+                for name, item in loaded_raw_binding.items()
+            )
+            or raw_loaded_manager
+            != {
+                "unique_owner": loaded_manager.manager_identity.unique_owner,
+                "boot_id": loaded_manager.manager_identity.boot_id,
+                "version": loaded_manager.manager_identity.version,
+            }
+            or _canonical_json(loaded_raw["run_properties"])
+            != _canonical_json(dict(loaded_manager.run_properties))
+            or _canonical_json(loaded_raw["close_properties"])
+            != _canonical_json(dict(loaded_manager.close_properties))
+        ):
+            raise WarehouseW3RootInstallationError(
+                "pre-start dependency object differs from canonical raw"
+            )
+        if (
+            staged_candidate.selection_key != candidate.selection_key
+            or staged_candidate.launch_id != launch_id
+            or staged_candidate.authority_sha256 != authority_sha
+            or staged_candidate.installation_sha256 != installation_sha
+            or staged_candidate.candidate_gate_sha256 != candidate.raw_sha256
+            or staged_candidate.candidate_root != candidate.candidate_root
+            or selection_value.selection_key != candidate.selection_key
+            or selection_value.launch_id != launch_id
+            or selection_value.nonce != authority_value.nonce
+            or selection_value.authority_sha256 != authority_sha
+            or selection_value.candidate_sha256 != candidate.raw_sha256
+            or selection_value.import_receipt_sha256
+            != staged_candidate.tree_import_sha256
+            or selection_value.imported_staging_aggregate_sha256
+            != staged_candidate.imported_tree_aggregate_sha256
+            or _directory_identity_tuple(selection_value.source_candidate_identity)
+            != _directory_identity_tuple(staged_candidate.source_identity)
+            or stores_published.selection_key != candidate.selection_key
+            or stores_published.launch_id != launch_id
+            or stores_published.authority_sha256 != authority_sha
+            or stores_published.installation_sha256 != installation_sha
+            or stores_published.candidate_gate_sha256 != candidate.raw_sha256
+            or authority_published.launch_id != launch_id
+            or authority_published.authority_sha256 != authority_sha
+            or authority_published.installation_sha256 != installation_sha
+            or projection.launch_id != launch_id
+            or projection.authority_sha256 != authority_sha
+            or projection.installation_sha256 != installation_sha
+            or unit_publication.launch_id != launch_id
+            or unit_publication.authority_sha256 != authority_sha
+            or unit_publication.installation_sha256 != installation_sha
+            or dry_root.candidate_gate_sha256 != candidate.raw_sha256
+            or dry_root.launch_id != launch_id
+            or dry_root.authority_sha256 != authority_sha
+            or dry_root.installation_sha256 != installation_sha
+            or prestart_absence.authority_sha256 != authority_sha
+            or prestart_absence.installation_sha256 != installation_sha
+        ):
+            raise WarehouseW3RootInstallationError(
+                "pre-start launch, authority, installation, or selection binding differs"
+            )
+        if (
+            projection.run_source_fact_sha256 != candidate.raw_sha256
+            or projection.sealed_source_fact_sha256
+            != stores_published.sealed_publication_sha256
+            or projection.environment_source_fact_sha256
+            != stores_published.environment_publication_sha256
+            or projection.nonce_claims_source_fact_sha256
+            != authority_published.nonce_directory_sha256
+        ):
+            raise WarehouseW3RootInstallationError(
+                "projection source fact binding differs"
+            )
+        configured_pair_sha = installation_value.configured_pair_sha256
+        if (
+            unit_publication.run_unit != installation_value.run_unit
+            or unit_publication.close_unit != installation_value.close_unit
+            or unit_publication.configured_pair_sha256 != configured_pair_sha
+            or manager_reload.unit_publication_sha256 != unit_publication.raw_sha256
+            or manager_reload.configured_pair_sha256 != configured_pair_sha
+            or loaded_manager.run_unit != installation_value.run_unit
+            or loaded_manager.close_unit != installation_value.close_unit
+            or loaded_manager.unit_publication_sha256 != unit_publication.raw_sha256
+            or loaded_manager.configured_pair_readback_sha256
+            != manager_reload.configured_pair_readback_sha256
+            or loaded_manager.configured_pair_sha256 != configured_pair_sha
+            or loaded_manager.manager_reload_sha256 != manager_reload.raw_sha256
+            or loaded_manager.manager_identity != manager_reload.manager_identity
+            or projection.boot_id != manager_reload.manager_identity.boot_id
+            or projection.boot_id != loaded_manager.manager_identity.boot_id
+        ):
+            raise WarehouseW3RootInstallationError(
+                "manager unit, reload, configured pair, identity, or boot binding differs"
+            )
+        for label, properties in (
+            ("run", dict(loaded_manager.run_properties)),
+            ("closer", dict(loaded_manager.close_properties)),
+        ):
+            if (
+                properties.get("User") != runtime_account.name
+                or properties.get("Group") != runtime_account.name
+                or type(properties.get("UMask")) is not int
+                or properties["UMask"] != 0o077
+            ):
+                raise WarehouseW3RootInstallationError(
+                    f"loaded {label} runtime account or UMask differs"
+                )
+        if (
+            runtime_account.uid == 0
+            or runtime_account.gid == 0
+            or runtime_account.uid != authority_published.nonce_uid
+            or runtime_account.gid != authority_published.nonce_gid
+        ):
+            raise WarehouseW3RootInstallationError(
+                "runtime account and nonce directory ownership differ"
+            )
+        if (
+            rehash.phase != "preclaim"
+            or rehash.content_receipt_sha256
+            != candidate.semantic_environment_receipt_sha256
+            or rehash.content_receipt_sha256
+            != stores_published.environment_content_sha256
+            or rehash.generic_receipt_sha256
+            != candidate.environment_content_receipt_sha256
+            or rehash.environment_root != stores_published.environment_path
+            or rehash.environment_inventory_sha256
+            != stores_published.environment_tree_aggregate_sha256
+        ):
+            raise WarehouseW3RootInstallationError(
+                "live preclaim environment binding differs"
+            )
+        effect_producers = (
+            staged_candidate,
+            selection_value,
+            stores_published,
+            authority_published,
+            projection,
+            unit_publication,
+            manager_reload,
+        )
+        if any(
+            receipt.effect_sha256 != producer.raw_sha256
+            for receipt, producer in zip(
+                ordered_receipts,
+                effect_producers,
+                strict=True,
+            )
+        ):
+            raise WarehouseW3RootInstallationError(
+                "pre-start committed phase effect differs"
+            )
+        phase_effects = {
+            receipt.phase.value: receipt.effect_sha256 for receipt in ordered_receipts
+        }
+        producer_receipts = {
+            "candidate_gate": candidate.raw_sha256,
+            "dry_root": dry_root.raw_sha256,
+            "environment_rehash": rehash.raw_sha256,
+            "loaded_manager": loaded_manager.raw_sha256,
+            "prestart_absence": prestart_absence.raw_sha256,
+            "runtime_account": runtime_account.raw_sha256,
+        }
+        return {
+            "schema": WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA,
+            "state": "PRESTART_GATES_REACQUIRED_NOT_STARTED",
+            "plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+            "launch_id": launch_id,
+            "authority_sha256": authority_sha,
+            "installation_sha256": installation_sha,
+            "pending_intent_sha256": pending.raw_sha256,
+            "predecessor_phase_receipt_sha256": ordered_receipts[-1].raw_sha256,
+            "phase_effect_sha256": phase_effects,
+            "producer_receipt_sha256": producer_receipts,
+            "formal_jobs_started": 0,
+            "retry": False,
+            "resume": False,
+            "reuse": False,
+        }
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        candidate_gate: CandidateGateReceipt,
+        staged_candidate: WarehouseW3StagedCandidateReceipt,
+        selection: SelectionReceipt,
+        stores_published: WarehouseW3StoresPublishedReceipt,
+        authority_published: WarehouseW3AuthorityPublishedReceipt,
+        projection: WarehouseW3ProjectionReceipt,
+        unit_publication: UnitPublicationReceipt,
+        manager_reload: ManagerReloadReceipt,
+        loaded_manager: LoadedManagerReceipt,
+        environment_rehash: LiveEnvironmentRehashFact,
+        dry_root: WarehouseW3DryRootReadinessReceipt,
+        prestart_absence: WarehouseW3PreStartAbsenceReceipt,
+        runtime_account: WarehouseW3RuntimeAccountReceipt,
+        phase_intents: tuple[RootPhaseIntentReceipt, ...],
+        phase_receipts: tuple[RootPhaseReceipt, ...],
+    ) -> "WarehouseW3PreStartEvidence":
+        expected = cls._expected(
+            authority=authority,
+            installation=installation,
+            candidate_gate=candidate_gate,
+            staged_candidate=staged_candidate,
+            selection=selection,
+            stores_published=stores_published,
+            authority_published=authority_published,
+            projection=projection,
+            unit_publication=unit_publication,
+            manager_reload=manager_reload,
+            loaded_manager=loaded_manager,
+            environment_rehash=environment_rehash,
+            dry_root=dry_root,
+            prestart_absence=prestart_absence,
+            runtime_account=runtime_account,
+            phase_intents=phase_intents,
+            phase_receipts=phase_receipts,
+        )
+        _require_exact_value(
+            raw,
+            expected=expected,
+            fields=frozenset(expected),
+            label="W3 pre-start evidence",
+        )
+        ordered_intents, ordered_receipts = validate_root_transaction(
+            phase_intents,
+            phase_receipts,
+        )
+        instance = object.__new__(cls)
+        for field, item in (
+            ("launch_id", installation.launch_id),
+            ("authority_sha256", authority.authority_sha256),
+            ("installation_sha256", installation.installation_sha256),
+            ("pending_intent_sha256", ordered_intents[-1].raw_sha256),
+            (
+                "predecessor_phase_receipt_sha256",
+                ordered_receipts[-1].raw_sha256,
+            ),
+            (
+                "phase_effect_sha256",
+                tuple(
+                    (receipt.phase.value, receipt.effect_sha256)
+                    for receipt in ordered_receipts
+                ),
+            ),
+            (
+                "producer_receipt_sha256",
+                tuple(
+                    (name, sha256)
+                    for name, sha256 in sorted(
+                        expected["producer_receipt_sha256"].items()  # type: ignore[union-attr]
+                    )
+                ),
+            ),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
 __all__ = [
+    "WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA",
     "WarehouseW3AuthorityPublishedReceipt",
+    "WarehouseW3PreStartEvidence",
     "WarehouseW3ProjectionReceipt",
     "WarehouseW3RootInstallationError",
     "WarehouseW3StagedCandidateReceipt",
