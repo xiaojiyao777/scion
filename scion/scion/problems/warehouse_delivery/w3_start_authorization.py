@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 from scion.runtime.execution.external_installation import (
     InstalledAcceptance,
+    RootPhaseIntentReceipt,
     RootPhaseReceipt,
     SelectionReceipt,
     StartAuthorizationReceipt,
@@ -174,6 +175,7 @@ def bind_start_authorization(
     preparation_commit: CandidateSelectionCommit,
     root_selection: SelectionReceipt,
     installed_acceptance: InstalledAcceptance,
+    phase_intents: tuple[RootPhaseIntentReceipt, ...],
     phase_receipts: tuple[RootPhaseReceipt, ...],
     recorded_at_utc: str,
     unit: str,
@@ -190,7 +192,10 @@ def bind_start_authorization(
         raise TypeError("root_selection must be exact SelectionReceipt")
     if type(installed_acceptance) is not InstalledAcceptance:
         raise TypeError("installed_acceptance must be exact InstalledAcceptance")
-    installed_acceptance.verify_phase_receipts(phase_receipts)
+    installed_acceptance.verify_phase_receipts(
+        phase_intents,
+        phase_receipts,
+    )
     subordinate = dict(installed_acceptance.subordinate_receipt_sha256)
     candidate_identity = preparation_commit.candidate_root_identity
     selected_identity = root_selection.source_candidate_identity

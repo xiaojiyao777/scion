@@ -20,6 +20,13 @@ from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Callable, Mapping, Protocol
 
+from .launch_authority import AcceptedLaunchAuthority, InstallationRecord
+from .systemd_acquisition import (
+    ConfiguredPairFact,
+    ConfiguredPairReadback,
+    parse_unit_template,
+)
+
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _SELECTION_KEY_RE = re.compile(r"[0-9a-f]{64}\Z")
 _UNIT_RE = re.compile(r"[A-Za-z0-9:_.@-]+\.service\Z")
@@ -286,10 +293,105 @@ class RootInstallationState(str, Enum):
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class RootPhaseReceipt:
+class RootPhaseIntentReceipt:
     launch_id: str
     phase: RootPhase
     predecessor_sha256: tuple[str, ...]
+    effect_authority_sha256: str
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "RootPhaseIntentReceipt":
+        del cls
+        raise TypeError("RootPhaseIntentReceipt must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("RootPhaseIntentReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        launch_id: str,
+        phase: RootPhase,
+        predecessor_sha256: tuple[str, ...],
+        effect_authority_sha256: str,
+    ) -> "RootPhaseIntentReceipt":
+        if type(phase) is not RootPhase:
+            raise TypeError("phase must be exact RootPhase")
+        if type(predecessor_sha256) is not tuple:
+            raise TypeError("predecessor_sha256 must be an exact tuple")
+        value = {
+            "schema": "scion.external-root-phase-intent.v1",
+            "launch_id": _launch_id(launch_id),
+            "phase": phase.value,
+            "predecessor_sha256": [
+                _sha256(item, field="predecessor_sha256") for item in predecessor_sha256
+            ],
+            "effect_authority_sha256": _sha256(
+                effect_authority_sha256,
+                field="effect_authority_sha256",
+            ),
+        }
+        return cls.from_bytes(_canonical_json(value))
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "RootPhaseIntentReceipt":
+        value = _exact_fields(
+            _decode_canonical_json(raw, label="root phase intent"),
+            frozenset(
+                {
+                    "schema",
+                    "launch_id",
+                    "phase",
+                    "predecessor_sha256",
+                    "effect_authority_sha256",
+                }
+            ),
+            label="root phase intent",
+        )
+        if value["schema"] != "scion.external-root-phase-intent.v1":
+            raise CanonicalReceiptError("root phase intent schema differs")
+        try:
+            phase = RootPhase(value["phase"])
+        except (TypeError, ValueError) as exc:
+            raise CanonicalReceiptError("root phase intent phase differs") from exc
+        predecessors = _string_tuple(
+            value["predecessor_sha256"],
+            field="predecessor_sha256",
+        )
+        predecessors = tuple(
+            _sha256(item, field="predecessor_sha256") for item in predecessors
+        )
+        if len(set(predecessors)) != len(predecessors):
+            raise CanonicalReceiptError("predecessor_sha256 contains a duplicate")
+        instance = object.__new__(cls)
+        object.__setattr__(instance, "launch_id", _launch_id(value["launch_id"]))
+        object.__setattr__(instance, "phase", phase)
+        object.__setattr__(instance, "predecessor_sha256", predecessors)
+        object.__setattr__(
+            instance,
+            "effect_authority_sha256",
+            _sha256(
+                value["effect_authority_sha256"],
+                field="effect_authority_sha256",
+            ),
+        )
+        object.__setattr__(instance, "raw", raw)
+        object.__setattr__(instance, "raw_sha256", hashlib.sha256(raw).hexdigest())
+        if instance.raw_sha256 in predecessors:
+            raise ReceiptDagError("root phase intent references itself")
+        return instance
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class RootPhaseReceipt:
+    launch_id: str
+    phase: RootPhase
+    intent_sha256: str
+    predecessor_sha256: tuple[str, ...]
+    effect_authority_sha256: str
     effect_sha256: str
     raw: bytes
     raw_sha256: str
@@ -306,47 +408,54 @@ class RootPhaseReceipt:
     def create(
         cls,
         *,
-        launch_id: str,
-        phase: RootPhase,
-        predecessor_sha256: tuple[str, ...],
+        intent: RootPhaseIntentReceipt,
         effect_sha256: str,
     ) -> "RootPhaseReceipt":
-        if type(phase) is not RootPhase:
-            raise TypeError("phase must be exact RootPhase")
-        if type(predecessor_sha256) is not tuple:
-            raise TypeError("predecessor_sha256 must be an exact tuple")
-        value = {
-            "schema": "scion.external-root-phase.v1",
-            "launch_id": _launch_id(launch_id),
-            "phase": phase.value,
-            "predecessor_sha256": [
-                _sha256(item, field="predecessor_sha256") for item in predecessor_sha256
-            ],
-            "effect_sha256": _sha256(effect_sha256, field="effect_sha256"),
-        }
-        return cls.from_bytes(_canonical_json(value))
+        if type(intent) is not RootPhaseIntentReceipt:
+            raise TypeError("intent must be exact RootPhaseIntentReceipt")
+        reopened = RootPhaseIntentReceipt.from_bytes(intent.raw)
+        if reopened != intent:
+            raise ReceiptDagError("root phase intent object differs")
+        return cls.from_bytes(
+            _canonical_json(
+                {
+                    "schema": "scion.external-root-phase-commit.v2",
+                    "launch_id": intent.launch_id,
+                    "phase": intent.phase.value,
+                    "intent_sha256": intent.raw_sha256,
+                    "predecessor_sha256": list(intent.predecessor_sha256),
+                    "effect_authority_sha256": intent.effect_authority_sha256,
+                    "effect_sha256": _sha256(
+                        effect_sha256,
+                        field="effect_sha256",
+                    ),
+                }
+            )
+        )
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> "RootPhaseReceipt":
         value = _exact_fields(
-            _decode_canonical_json(raw, label="root phase receipt"),
+            _decode_canonical_json(raw, label="root phase commit"),
             frozenset(
                 {
                     "schema",
                     "launch_id",
                     "phase",
+                    "intent_sha256",
                     "predecessor_sha256",
+                    "effect_authority_sha256",
                     "effect_sha256",
                 }
             ),
-            label="root phase receipt",
+            label="root phase commit",
         )
-        if value["schema"] != "scion.external-root-phase.v1":
-            raise CanonicalReceiptError("root phase receipt schema differs")
+        if value["schema"] != "scion.external-root-phase-commit.v2":
+            raise CanonicalReceiptError("root phase commit schema differs")
         try:
             phase = RootPhase(value["phase"])
         except (TypeError, ValueError) as exc:
-            raise CanonicalReceiptError("root phase receipt phase differs") from exc
+            raise CanonicalReceiptError("root phase commit phase differs") from exc
         predecessors = _string_tuple(
             value["predecessor_sha256"],
             field="predecessor_sha256",
@@ -359,7 +468,20 @@ class RootPhaseReceipt:
         instance = object.__new__(cls)
         object.__setattr__(instance, "launch_id", _launch_id(value["launch_id"]))
         object.__setattr__(instance, "phase", phase)
+        object.__setattr__(
+            instance,
+            "intent_sha256",
+            _sha256(value["intent_sha256"], field="intent_sha256"),
+        )
         object.__setattr__(instance, "predecessor_sha256", predecessors)
+        object.__setattr__(
+            instance,
+            "effect_authority_sha256",
+            _sha256(
+                value["effect_authority_sha256"],
+                field="effect_authority_sha256",
+            ),
+        )
         object.__setattr__(
             instance,
             "effect_sha256",
@@ -367,26 +489,63 @@ class RootPhaseReceipt:
         )
         object.__setattr__(instance, "raw", raw)
         object.__setattr__(instance, "raw_sha256", hashlib.sha256(raw).hexdigest())
-        if instance.raw_sha256 in predecessors:
-            raise ReceiptDagError("root phase receipt references itself")
+        if (
+            instance.raw_sha256 in predecessors
+            or instance.intent_sha256 in predecessors
+            or instance.raw_sha256 == instance.intent_sha256
+        ):
+            raise ReceiptDagError("root phase commit contains a self-reference")
         return instance
 
 
-def validate_forward_receipt_dag(
+def validate_root_transaction(
+    intents: tuple[RootPhaseIntentReceipt, ...],
     receipts: tuple[RootPhaseReceipt, ...],
-) -> tuple[RootPhaseReceipt, ...]:
-    """Validate one exact no-gap, no-cycle installation prefix."""
+) -> tuple[
+    tuple[RootPhaseIntentReceipt, ...],
+    tuple[RootPhaseReceipt, ...],
+]:
+    """Validate one exact intent-before-effect, commit-after-readback prefix."""
 
+    if type(intents) is not tuple or any(
+        type(intent) is not RootPhaseIntentReceipt for intent in intents
+    ):
+        raise TypeError("intents must be an exact tuple of RootPhaseIntentReceipt")
     if type(receipts) is not tuple or any(
         type(receipt) is not RootPhaseReceipt for receipt in receipts
     ):
         raise TypeError("receipts must be an exact tuple of RootPhaseReceipt")
-    if not receipts:
-        return ()
-    launch_id = receipts[0].launch_id
+    if not intents:
+        if receipts:
+            raise ReceiptDagError("root phase commit exists without intent")
+        return (), ()
+    if len(intents) not in {len(receipts), len(receipts) + 1}:
+        raise ReceiptDagError("root transaction has an ambiguous pending phase")
+    launch_id = intents[0].launch_id
+    intent_by_phase: dict[RootPhase, RootPhaseIntentReceipt] = {}
+    intent_by_sha: dict[str, RootPhaseIntentReceipt] = {}
+    for intent in intents:
+        if RootPhaseIntentReceipt.from_bytes(intent.raw) != intent:
+            raise ReceiptDagError("root intent object differs from exact bytes")
+        if intent.launch_id != launch_id:
+            raise ReceiptDagError("root intent launch identity differs")
+        if intent.phase in intent_by_phase or intent.raw_sha256 in intent_by_sha:
+            raise ReceiptDagError("root intent replacement or duplicate differs")
+        intent_by_phase[intent.phase] = intent
+        intent_by_sha[intent.raw_sha256] = intent
+    ordered_intents = tuple(
+        sorted(intents, key=lambda intent: _PHASE_INDEX[intent.phase])
+    )
+    if (
+        tuple(intent.phase for intent in ordered_intents)
+        != INSTALL_PHASES[: len(ordered_intents)]
+    ):
+        raise ReceiptDagError("root intents are not a forward prefix")
     by_phase: dict[RootPhase, RootPhaseReceipt] = {}
     by_sha: dict[str, RootPhaseReceipt] = {}
     for receipt in receipts:
+        if RootPhaseReceipt.from_bytes(receipt.raw) != receipt:
+            raise ReceiptDagError("root receipt object differs from exact bytes")
         if receipt.launch_id != launch_id:
             raise ReceiptDagError("root receipt launch identity differs")
         if receipt.phase in by_phase or receipt.raw_sha256 in by_sha:
@@ -397,23 +556,46 @@ def validate_forward_receipt_dag(
     expected_phases = INSTALL_PHASES[: len(ordered)]
     if tuple(receipt.phase for receipt in ordered) != expected_phases:
         raise ReceiptDagError("root receipts are not a forward prefix")
-    for index, receipt in enumerate(ordered):
+    for index, intent in enumerate(ordered_intents):
         expected_predecessors = () if index == 0 else (ordered[index - 1].raw_sha256,)
-        if receipt.predecessor_sha256 != expected_predecessors:
-            raise ReceiptDagError("root receipt predecessor differs")
+        if intent.predecessor_sha256 != expected_predecessors:
+            raise ReceiptDagError("root intent predecessor differs")
+        if index < len(ordered):
+            receipt = ordered[index]
+            if (
+                receipt.phase is not intent.phase
+                or receipt.intent_sha256 != intent.raw_sha256
+                or receipt.predecessor_sha256 != expected_predecessors
+                or receipt.effect_authority_sha256 != intent.effect_authority_sha256
+            ):
+                raise ReceiptDagError("root phase commit does not bind its intent")
+    return ordered_intents, ordered
+
+
+def validate_forward_receipt_dag(
+    intents: tuple[RootPhaseIntentReceipt, ...],
+    receipts: tuple[RootPhaseReceipt, ...],
+) -> tuple[RootPhaseReceipt, ...]:
+    """Compatibility name for the committed side of a full root transaction."""
+
+    _ordered_intents, ordered = validate_root_transaction(intents, receipts)
     return ordered
 
 
 def classify_root_installation(
+    intents: tuple[RootPhaseIntentReceipt, ...],
     receipts: tuple[RootPhaseReceipt, ...],
 ) -> RootInstallationState:
-    if not receipts:
+    if not intents and not receipts:
         return RootInstallationState.ABSENT
     try:
-        ordered = validate_forward_receipt_dag(receipts)
+        ordered_intents, ordered = validate_root_transaction(intents, receipts)
     except (ReceiptDagError, TypeError):
         return RootInstallationState.PARTIAL_HOLD
-    if tuple(receipt.phase for receipt in ordered) == INSTALL_PHASES:
+    if (
+        tuple(intent.phase for intent in ordered_intents) == INSTALL_PHASES
+        and tuple(receipt.phase for receipt in ordered) == INSTALL_PHASES
+    ):
         return RootInstallationState.ACCEPTED
     return RootInstallationState.PARTIAL_HOLD
 
@@ -704,6 +886,7 @@ class InstalledAcceptance:
     launch_id: str
     authority_sha256: str
     installation_sha256: str
+    phase_intent_sha256: tuple[str, ...]
     phase_receipt_sha256: tuple[str, ...]
     subordinate_receipt_sha256: tuple[tuple[str, str], ...]
     raw: bytes
@@ -724,19 +907,30 @@ class InstalledAcceptance:
         launch_id: str,
         authority_sha256: str,
         installation_sha256: str,
+        phase_intents: tuple[RootPhaseIntentReceipt, ...],
         phase_receipts: tuple[RootPhaseReceipt, ...],
         subordinate_receipt_sha256: Mapping[str, str],
     ) -> "InstalledAcceptance":
-        ordered = validate_forward_receipt_dag(phase_receipts)
+        ordered_intents, ordered = validate_root_transaction(
+            phase_intents,
+            phase_receipts,
+        )
         normalized_launch_id = _launch_id(launch_id)
+        acceptance_prefix = INSTALL_PHASES[:-1]
         if (
-            len(ordered) != len(INSTALL_PHASES)
-            or tuple(receipt.phase for receipt in ordered) != INSTALL_PHASES
+            len(ordered_intents) != len(acceptance_prefix)
+            or len(ordered) != len(acceptance_prefix)
+            or tuple(intent.phase for intent in ordered_intents) != acceptance_prefix
+            or tuple(receipt.phase for receipt in ordered) != acceptance_prefix
+            or any(
+                intent.launch_id != normalized_launch_id for intent in ordered_intents
+            )
             or any(receipt.launch_id != normalized_launch_id for receipt in ordered)
         ):
             raise ExternalInstallationError(
-                "installed acceptance requires one complete exact phase DAG"
+                "installed acceptance requires the exact pre-acceptance phase DAG"
             )
+        intents = tuple(intent.raw_sha256 for intent in ordered_intents)
         phases = tuple(receipt.raw_sha256 for receipt in ordered)
         required_subordinates = frozenset(
             {
@@ -767,7 +961,7 @@ class InstalledAcceptance:
             for name in sorted(required_subordinates)
         }
         value = {
-            "schema": "scion.external-installed-acceptance.v1",
+            "schema": "scion.external-installed-acceptance.v3",
             "state": "INSTALLATION_ACCEPTED_NOT_STARTED",
             "formal_jobs_started": 0,
             "launch_id": normalized_launch_id,
@@ -779,6 +973,7 @@ class InstalledAcceptance:
                 installation_sha256,
                 field="installation_sha256",
             ),
+            "phase_intent_sha256": list(intents),
             "phase_receipt_sha256": list(phases),
             "subordinate_receipt_sha256": subordinates,
         }
@@ -796,6 +991,7 @@ class InstalledAcceptance:
                     "launch_id",
                     "authority_sha256",
                     "installation_sha256",
+                    "phase_intent_sha256",
                     "phase_receipt_sha256",
                     "subordinate_receipt_sha256",
                 }
@@ -803,7 +999,7 @@ class InstalledAcceptance:
             label="installed acceptance",
         )
         if (
-            value["schema"] != "scion.external-installed-acceptance.v1"
+            value["schema"] != "scion.external-installed-acceptance.v3"
             or value["state"] != "INSTALLATION_ACCEPTED_NOT_STARTED"
             or type(value["formal_jobs_started"]) is not int
             or value["formal_jobs_started"] != 0
@@ -820,13 +1016,24 @@ class InstalledAcceptance:
                 field,
                 _sha256(value[field], field=field),
             )
+        raw_intents = value["phase_intent_sha256"]
         raw_phases = value["phase_receipt_sha256"]
-        if type(raw_phases) is not list:
-            raise CanonicalReceiptError("installed acceptance phases are not an array")
+        if type(raw_intents) is not list or type(raw_phases) is not list:
+            raise CanonicalReceiptError(
+                "installed acceptance transaction is not two arrays"
+            )
+        intents = tuple(
+            _sha256(item, field="phase_intent_sha256") for item in raw_intents
+        )
         phases = tuple(
             _sha256(item, field="phase_receipt_sha256") for item in raw_phases
         )
-        if len(phases) != len(INSTALL_PHASES) or len(set(phases)) != len(phases):
+        if (
+            len(intents) != len(INSTALL_PHASES) - 1
+            or len(set(intents)) != len(intents)
+            or len(phases) != len(INSTALL_PHASES) - 1
+            or len(set(phases)) != len(phases)
+        ):
             raise CanonicalReceiptError("installed acceptance phase inventory differs")
         raw_subordinates = _exact_fields(
             value["subordinate_receipt_sha256"],
@@ -855,6 +1062,7 @@ class InstalledAcceptance:
             )
             for name in sorted(raw_subordinates)
         )
+        object.__setattr__(instance, "phase_intent_sha256", intents)
         object.__setattr__(instance, "phase_receipt_sha256", phases)
         object.__setattr__(
             instance,
@@ -867,17 +1075,35 @@ class InstalledAcceptance:
 
     def verify_phase_receipts(
         self,
+        phase_intents: tuple[RootPhaseIntentReceipt, ...],
         phase_receipts: tuple[RootPhaseReceipt, ...],
     ) -> tuple[RootPhaseReceipt, ...]:
         """Reopen the exact full forward DAG bound by this acceptance."""
 
-        ordered = validate_forward_receipt_dag(phase_receipts)
+        ordered_intents, ordered = validate_root_transaction(
+            phase_intents,
+            phase_receipts,
+        )
+        acceptance_prefix = INSTALL_PHASES[:-1]
         if (
-            len(ordered) != len(INSTALL_PHASES)
+            len(ordered_intents) != len(INSTALL_PHASES)
+            or len(ordered) != len(INSTALL_PHASES)
+            or tuple(intent.phase for intent in ordered_intents) != INSTALL_PHASES
             or tuple(receipt.phase for receipt in ordered) != INSTALL_PHASES
+            or any(intent.launch_id != self.launch_id for intent in ordered_intents)
             or any(receipt.launch_id != self.launch_id for receipt in ordered)
-            or tuple(receipt.raw_sha256 for receipt in ordered)
+            or tuple(
+                intent.raw_sha256
+                for intent in ordered_intents[: len(acceptance_prefix)]
+            )
+            != self.phase_intent_sha256
+            or tuple(
+                receipt.raw_sha256 for receipt in ordered[: len(acceptance_prefix)]
+            )
             != self.phase_receipt_sha256
+            or ordered_intents[-1].effect_authority_sha256 != self.raw_sha256
+            or ordered[-1].effect_authority_sha256 != self.raw_sha256
+            or ordered[-1].effect_sha256 != self.raw_sha256
         ):
             raise ReceiptDagError("installed acceptance phase DAG differs")
         return ordered
@@ -1315,6 +1541,352 @@ def _thaw_manager_value(value: object) -> object:
     return value
 
 
+def _exact_manager_value_equal(first: object, second: object) -> bool:
+    if type(first) is not type(second):
+        return False
+    if type(first) is tuple:
+        return len(first) == len(second) and all(
+            _exact_manager_value_equal(left, right)
+            for left, right in zip(first, second, strict=True)
+        )
+    return bool(first == second)
+
+
+def _exact_manager_properties_equal(
+    first: tuple[tuple[str, object], ...],
+    second: tuple[tuple[str, object], ...],
+) -> bool:
+    return len(first) == len(second) and all(
+        left_name == right_name and _exact_manager_value_equal(left_value, right_value)
+        for (left_name, left_value), (right_name, right_value) in zip(
+            first,
+            second,
+            strict=True,
+        )
+    )
+
+
+_MAX_UNIT_FRAGMENT_BYTES = 1024 * 1024
+
+
+def _unit_fragment_bytes(value: object, *, field: str) -> bytes:
+    if (
+        type(value) is not bytes
+        or not value
+        or len(value) > _MAX_UNIT_FRAGMENT_BYTES
+        or b"\x00" in value
+    ):
+        raise ManagerAcceptanceError(f"{field} is not bounded exact unit bytes")
+    return value
+
+
+def _template_fragment_path(unit: str, *, field: str) -> str:
+    name = _unit(unit, field=field)
+    stem = name.removesuffix(".service")
+    parts = stem.split("@")
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ManagerAcceptanceError(f"{field} is not one template instance")
+    return f"/etc/systemd/system/{parts[0]}@.service"
+
+
+def _reopen_launch_installation(
+    authority: AcceptedLaunchAuthority,
+    installation: InstallationRecord,
+) -> tuple[AcceptedLaunchAuthority, InstallationRecord]:
+    if type(authority) is not AcceptedLaunchAuthority:
+        raise TypeError("authority must be exact AcceptedLaunchAuthority")
+    if type(installation) is not InstallationRecord:
+        raise TypeError("installation must be exact InstallationRecord")
+    reopened_authority = AcceptedLaunchAuthority.from_bytes(authority.raw)
+    reopened_installation = InstallationRecord.from_bytes(
+        installation.raw,
+        reopened_authority,
+    )
+    if reopened_authority != authority or reopened_installation != installation:
+        raise ManagerAcceptanceError("launch authority or installation differs")
+    return reopened_authority, reopened_installation
+
+
+def _rederive_configured_pair(
+    *,
+    installation: InstallationRecord,
+    run_template_raw: bytes,
+    close_template_raw: bytes,
+) -> tuple[ConfiguredPairFact, str]:
+    try:
+        run_template = parse_unit_template(run_template_raw)
+        close_template = parse_unit_template(close_template_raw)
+        pair = installation.configured_pair
+        for role, template, configured in (
+            ("run", run_template, pair.run),
+            ("closer", close_template, pair.closer),
+        ):
+            merged: dict[str, str] = {}
+            for section in template.sections:
+                for name, raw_value in section.directives:
+                    if name in merged:
+                        raise ManagerAcceptanceError(
+                            f"{role} template repeats a configured directive"
+                        )
+                    merged[name] = raw_value.replace(
+                        "%i",
+                        installation.launch_id,
+                    )
+            for name, expected in configured.configured_directives:
+                if merged.get(name) != expected:
+                    raise ManagerAcceptanceError(
+                        f"{role} configured pair differs from exact template"
+                    )
+    except Exception as exc:
+        if isinstance(exc, ManagerAcceptanceError):
+            raise
+        raise ManagerAcceptanceError(
+            "configured pair cannot be rederived from exact templates"
+        ) from exc
+    if (
+        type(pair) is not ConfiguredPairFact
+        or pair.configured_pair_sha256 != installation.configured_pair_sha256
+        or pair.run.unit != installation.run_unit
+        or pair.closer.unit != installation.close_unit
+    ):
+        raise ManagerAcceptanceError(
+            "configured pair differs from exact template derivation"
+        )
+    derivation_raw = _canonical_json(
+        {
+            "schema": "scion.template-configured-pair-derivation.v1",
+            "launch_id": installation.launch_id,
+            "run_unit": installation.run_unit,
+            "close_unit": installation.close_unit,
+            "run_template_sha256": hashlib.sha256(run_template_raw).hexdigest(),
+            "close_template_sha256": hashlib.sha256(close_template_raw).hexdigest(),
+            "configured_pair_sha256": pair.configured_pair_sha256,
+        }
+    )
+    return pair, hashlib.sha256(derivation_raw).hexdigest()
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class UnitPublicationReceipt:
+    """Exact reopened unit fragments bound to one launch installation."""
+
+    launch_id: str
+    authority_sha256: str
+    installation_sha256: str
+    configured_pair_sha256: str
+    template_derivation_sha256: str
+    run_unit: str
+    close_unit: str
+    run_fragment_path: str
+    close_fragment_path: str
+    run_template_sha256: str
+    close_template_sha256: str
+    run_template_size_bytes: int
+    close_template_size_bytes: int
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "UnitPublicationReceipt":
+        del cls
+        raise TypeError("UnitPublicationReceipt must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("UnitPublicationReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        run_template_raw: bytes,
+        close_template_raw: bytes,
+        published_run_raw: bytes,
+        published_close_raw: bytes,
+    ) -> "UnitPublicationReceipt":
+        authority, installation = _reopen_launch_installation(
+            authority,
+            installation,
+        )
+        run_raw = _unit_fragment_bytes(
+            run_template_raw,
+            field="run_template_raw",
+        )
+        close_raw = _unit_fragment_bytes(
+            close_template_raw,
+            field="close_template_raw",
+        )
+        published_run = _unit_fragment_bytes(
+            published_run_raw,
+            field="published_run_raw",
+        )
+        published_close = _unit_fragment_bytes(
+            published_close_raw,
+            field="published_close_raw",
+        )
+        run_sha = hashlib.sha256(run_raw).hexdigest()
+        close_sha = hashlib.sha256(close_raw).hexdigest()
+        _configured_pair, derivation_sha = _rederive_configured_pair(
+            installation=installation,
+            run_template_raw=run_raw,
+            close_template_raw=close_raw,
+        )
+        if (
+            published_run != run_raw
+            or published_close != close_raw
+            or run_sha != authority.run_template_sha256
+            or close_sha != authority.close_template_sha256
+            or run_sha != installation.run_template_sha256
+            or close_sha != installation.close_template_sha256
+            or installation.authority_sha256 != authority.authority_sha256
+        ):
+            raise ManagerAcceptanceError(
+                "published unit bytes or launch template authority differs"
+            )
+        run_fragment = _template_fragment_path(
+            installation.run_unit,
+            field="installation.run_unit",
+        )
+        close_fragment = _template_fragment_path(
+            installation.close_unit,
+            field="installation.close_unit",
+        )
+        if run_fragment == close_fragment:
+            raise ManagerAcceptanceError("run and closer fragment paths must differ")
+        value = {
+            "schema": "scion.unit-publication-acceptance.v2",
+            "state": "PUBLISHED_REOPENED",
+            "launch_id": installation.launch_id,
+            "authority_sha256": authority.authority_sha256,
+            "installation_sha256": installation.installation_sha256,
+            "configured_pair_sha256": installation.configured_pair_sha256,
+            "template_derivation_sha256": derivation_sha,
+            "run_unit": installation.run_unit,
+            "close_unit": installation.close_unit,
+            "run_fragment_path": run_fragment,
+            "close_fragment_path": close_fragment,
+            "run_template_sha256": run_sha,
+            "close_template_sha256": close_sha,
+            "run_template_size_bytes": len(run_raw),
+            "close_template_size_bytes": len(close_raw),
+        }
+        return cls.from_bytes(
+            _canonical_json(value),
+            authority=authority,
+            installation=installation,
+            run_template_raw=run_raw,
+            close_template_raw=close_raw,
+        )
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        run_template_raw: bytes,
+        close_template_raw: bytes,
+    ) -> "UnitPublicationReceipt":
+        authority, installation = _reopen_launch_installation(
+            authority,
+            installation,
+        )
+        run_raw = _unit_fragment_bytes(
+            run_template_raw,
+            field="run_template_raw",
+        )
+        close_raw = _unit_fragment_bytes(
+            close_template_raw,
+            field="close_template_raw",
+        )
+        value = _exact_fields(
+            _decode_canonical_json(raw, label="unit publication receipt"),
+            frozenset(
+                {
+                    "schema",
+                    "state",
+                    "launch_id",
+                    "authority_sha256",
+                    "installation_sha256",
+                    "configured_pair_sha256",
+                    "template_derivation_sha256",
+                    "run_unit",
+                    "close_unit",
+                    "run_fragment_path",
+                    "close_fragment_path",
+                    "run_template_sha256",
+                    "close_template_sha256",
+                    "run_template_size_bytes",
+                    "close_template_size_bytes",
+                }
+            ),
+            label="unit publication receipt",
+        )
+        run_fragment = _template_fragment_path(
+            installation.run_unit,
+            field="installation.run_unit",
+        )
+        close_fragment = _template_fragment_path(
+            installation.close_unit,
+            field="installation.close_unit",
+        )
+        run_sha = hashlib.sha256(run_raw).hexdigest()
+        close_sha = hashlib.sha256(close_raw).hexdigest()
+        _configured_pair, derivation_sha = _rederive_configured_pair(
+            installation=installation,
+            run_template_raw=run_raw,
+            close_template_raw=close_raw,
+        )
+        expected = {
+            "schema": "scion.unit-publication-acceptance.v2",
+            "state": "PUBLISHED_REOPENED",
+            "launch_id": installation.launch_id,
+            "authority_sha256": authority.authority_sha256,
+            "installation_sha256": installation.installation_sha256,
+            "configured_pair_sha256": installation.configured_pair_sha256,
+            "template_derivation_sha256": derivation_sha,
+            "run_unit": installation.run_unit,
+            "close_unit": installation.close_unit,
+            "run_fragment_path": run_fragment,
+            "close_fragment_path": close_fragment,
+            "run_template_sha256": run_sha,
+            "close_template_sha256": close_sha,
+            "run_template_size_bytes": len(run_raw),
+            "close_template_size_bytes": len(close_raw),
+        }
+        if (
+            _canonical_json(value) != _canonical_json(expected)
+            or run_sha != authority.run_template_sha256
+            or close_sha != authority.close_template_sha256
+            or run_sha != installation.run_template_sha256
+            or close_sha != installation.close_template_sha256
+            or run_fragment == close_fragment
+        ):
+            raise ManagerAcceptanceError("unit publication receipt authority differs")
+        instance = object.__new__(cls)
+        for field, item in (
+            ("launch_id", installation.launch_id),
+            ("authority_sha256", authority.authority_sha256),
+            ("installation_sha256", installation.installation_sha256),
+            ("configured_pair_sha256", installation.configured_pair_sha256),
+            ("template_derivation_sha256", derivation_sha),
+            ("run_unit", installation.run_unit),
+            ("close_unit", installation.close_unit),
+            ("run_fragment_path", run_fragment),
+            ("close_fragment_path", close_fragment),
+            ("run_template_sha256", run_sha),
+            ("close_template_sha256", close_sha),
+            ("run_template_size_bytes", len(run_raw)),
+            ("close_template_size_bytes", len(close_raw)),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
 def _manager_invocation_id(value: object, *, field: str) -> str:
     if type(value) not in {tuple, list} or len(value) != 16:
         raise ManagerAcceptanceError(f"{field} is not a 16-byte manager invocation ID")
@@ -1341,6 +1913,57 @@ _LOADED_REQUIRED_PROPERTIES = frozenset(
         "Transient",
     }
 )
+
+
+def _expected_loaded_properties(
+    configured_readback: ConfiguredPairReadback,
+    unit_publication: UnitPublicationReceipt,
+    *,
+    role: str,
+) -> dict[str, object]:
+    if type(configured_readback) is not ConfiguredPairReadback:
+        raise TypeError("configured_readback must be exact ConfiguredPairReadback")
+    if type(unit_publication) is not UnitPublicationReceipt:
+        raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+    if (
+        configured_readback.run_unit != unit_publication.run_unit
+        or configured_readback.close_unit != unit_publication.close_unit
+        or configured_readback.configured_pair.configured_pair_sha256
+        != unit_publication.configured_pair_sha256
+    ):
+        raise ManagerAcceptanceError(
+            "configured readback and unit publication authority differ"
+        )
+    if role == "run":
+        configured = dict(configured_readback.run_properties)
+        expected_unit = configured_readback.run_unit
+        fragment_path = unit_publication.run_fragment_path
+    elif role == "closer":
+        configured = dict(configured_readback.close_properties)
+        expected_unit = configured_readback.close_unit
+        fragment_path = unit_publication.close_fragment_path
+    else:
+        raise ValueError("role must be run or closer")
+    if configured.get("Id") != expected_unit:
+        raise ManagerAcceptanceError(
+            f"configured {role} readback unit identity differs"
+        )
+    fragment = _path(
+        fragment_path,
+        field=f"expected {role} fragment path",
+        allow_root=False,
+    )
+    return {
+        **configured,
+        "FragmentPath": fragment,
+        "DropInPaths": (),
+        "LoadState": "loaded",
+        "ActiveState": "inactive",
+        "SubState": "dead",
+        "Job": (0, "/"),
+        "InvocationID": (0,) * 16,
+        "Transient": False,
+    }
 
 
 def _normalize_loaded_properties(
@@ -1467,6 +2090,12 @@ class NoReplaceReceiptWriter(Protocol):
     """Durable adapters must implement one exact no-replace leaf write."""
 
     def write_no_replace(self, name: str, raw: bytes) -> None: ...
+
+
+class RootPhaseReceiptWriter(NoReplaceReceiptWriter, Protocol):
+    """Durable root-ledger adapter with exact post-fsync reopen."""
+
+    def read(self, name: str) -> bytes: ...
 
 
 class PreStartReacquirer(Protocol):
@@ -1638,6 +2267,84 @@ class DurableReceiptDirectory:
     ) -> None:
         del exc_type, exc, traceback
         self.close()
+
+
+def apply_root_phase(
+    *,
+    launch_id: str,
+    phase: RootPhase,
+    effect_authority_sha256: str,
+    prior_intents: tuple[RootPhaseIntentReceipt, ...],
+    prior_receipts: tuple[RootPhaseReceipt, ...],
+    writer: RootPhaseReceiptWriter,
+    apply_effect: Callable[[], None],
+    reopen_effect: Callable[[], bytes],
+) -> tuple[RootPhaseIntentReceipt, RootPhaseReceipt]:
+    """Persist intent, perform one effect, then commit its reopened exact fact."""
+
+    _require_root()
+    if type(phase) is not RootPhase:
+        raise TypeError("phase must be exact RootPhase")
+    if not callable(apply_effect) or not callable(reopen_effect):
+        raise TypeError("root phase effect and reopen callbacks must be callable")
+    write = getattr(writer, "write_no_replace", None)
+    read = getattr(writer, "read", None)
+    if not callable(write) or not callable(read):
+        raise TypeError("writer must expose durable write_no_replace and read")
+    ordered_intents, ordered_receipts = validate_root_transaction(
+        prior_intents,
+        prior_receipts,
+    )
+    normalized_launch_id = _launch_id(launch_id)
+    if ordered_intents and ordered_intents[0].launch_id != normalized_launch_id:
+        raise ReceiptDagError("root phase launch differs before external effect")
+    if len(ordered_intents) != len(ordered_receipts):
+        raise ReceiptDagError("a pending root intent forbids another effect")
+    expected_index = len(ordered_receipts)
+    if (
+        expected_index >= len(INSTALL_PHASES)
+        or phase is not INSTALL_PHASES[expected_index]
+    ):
+        raise ReceiptDagError("root phase is not the next exact transaction phase")
+    predecessors = () if not ordered_receipts else (ordered_receipts[-1].raw_sha256,)
+    intent = RootPhaseIntentReceipt.create(
+        launch_id=normalized_launch_id,
+        phase=phase,
+        predecessor_sha256=predecessors,
+        effect_authority_sha256=effect_authority_sha256,
+    )
+    prefix = f"{expected_index:02d}-{phase.value.lower().replace('_', '-')}"
+    intent_name = f"{prefix}.intent.v1.json"
+    commit_name = f"{prefix}.commit.v2.json"
+    write(intent_name, intent.raw)
+    reopened_intent = RootPhaseIntentReceipt.from_bytes(read(intent_name))
+    if reopened_intent != intent:
+        raise ReceiptDagError("durable root phase intent differs after reopen")
+
+    result = apply_effect()
+    if result is not None:
+        raise ExternalInstallationError(
+            "root phase effect returned an ambiguous result"
+        )
+    observed = reopen_effect()
+    if type(observed) is not bytes or not observed:
+        raise ExternalInstallationError(
+            "root phase readback is not nonempty exact bytes"
+        )
+    effect_sha256 = hashlib.sha256(observed).hexdigest()
+    receipt = RootPhaseReceipt.create(
+        intent=reopened_intent,
+        effect_sha256=effect_sha256,
+    )
+    write(commit_name, receipt.raw)
+    reopened_receipt = RootPhaseReceipt.from_bytes(read(commit_name))
+    if reopened_receipt != receipt:
+        raise ReceiptDagError("durable root phase commit differs after reopen")
+    validate_root_transaction(
+        (*ordered_intents, reopened_intent),
+        (*ordered_receipts, reopened_receipt),
+    )
+    return reopened_intent, reopened_receipt
 
 
 _SYSTEMD_DESTINATION = "org.freedesktop.systemd1"
@@ -1934,6 +2641,8 @@ class LoadedManagerReceipt:
     close_object_path: str
     run_properties: tuple[tuple[str, object], ...]
     close_properties: tuple[tuple[str, object], ...]
+    unit_publication_sha256: str
+    configured_pair_readback_sha256: str
     configured_pair_sha256: str
     raw: bytes
     raw_sha256: str
@@ -1950,27 +2659,38 @@ class LoadedManagerReceipt:
     def create(
         cls,
         *,
-        run_unit: str,
-        close_unit: str,
         manager_identity: ManagerIdentity,
         run_object_path: str,
         close_object_path: str,
         run_properties: Mapping[str, object],
         close_properties: Mapping[str, object],
-        expected_run_properties: Mapping[str, object],
-        expected_close_properties: Mapping[str, object],
-        configured_pair_sha256: str,
+        configured_readback: ConfiguredPairReadback,
+        unit_publication: UnitPublicationReceipt,
     ) -> "LoadedManagerReceipt":
         if type(manager_identity) is not ManagerIdentity:
             raise TypeError("manager_identity must be exact ManagerIdentity")
-        run_name = _unit(run_unit, field="run_unit")
-        close_name = _unit(close_unit, field="close_unit")
+        if type(configured_readback) is not ConfiguredPairReadback:
+            raise TypeError("configured_readback must be exact ConfiguredPairReadback")
+        if type(unit_publication) is not UnitPublicationReceipt:
+            raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+        run_name = _unit(configured_readback.run_unit, field="run_unit")
+        close_name = _unit(configured_readback.close_unit, field="close_unit")
         if run_name == close_name:
             raise ManagerAcceptanceError("run and closer units must differ")
         run_path = _object_path(run_object_path, field="run object path")
         close_path = _object_path(close_object_path, field="closer object path")
         if run_path == close_path:
             raise ManagerAcceptanceError("run and closer object paths must differ")
+        expected_run_properties = _expected_loaded_properties(
+            configured_readback,
+            unit_publication,
+            role="run",
+        )
+        expected_close_properties = _expected_loaded_properties(
+            configured_readback,
+            unit_publication,
+            role="closer",
+        )
         run_inventory = frozenset(expected_run_properties)
         close_inventory = frozenset(expected_close_properties)
         actual_run = _normalize_loaded_properties(
@@ -2001,10 +2721,13 @@ class LoadedManagerReceipt:
             field="expected closer",
             manager_wire=True,
         )
-        if actual_run != expected_run or actual_close != expected_close:
+        if not _exact_manager_properties_equal(
+            actual_run,
+            expected_run,
+        ) or not _exact_manager_properties_equal(actual_close, expected_close):
             raise ManagerAcceptanceError("loaded manager property mapping differs")
         value = {
-            "schema": "scion.loaded-manager-acceptance.v1",
+            "schema": "scion.loaded-manager-acceptance.v3",
             "run_unit": run_name,
             "close_unit": close_name,
             "manager": {
@@ -2016,16 +2739,16 @@ class LoadedManagerReceipt:
             "close_object_path": close_path,
             "run_properties": _properties_mapping(actual_run),
             "close_properties": _properties_mapping(actual_close),
-            "configured_pair_sha256": _sha256(
-                configured_pair_sha256,
-                field="configured_pair_sha256",
+            "unit_publication_sha256": unit_publication.raw_sha256,
+            "configured_pair_readback_sha256": configured_readback.raw_sha256,
+            "configured_pair_sha256": (
+                configured_readback.configured_pair.configured_pair_sha256
             ),
         }
         return cls.from_bytes(
             _canonical_json(value),
-            expected_run_properties=expected_run_properties,
-            expected_close_properties=expected_close_properties,
-            expected_configured_pair_sha256=configured_pair_sha256,
+            configured_readback=configured_readback,
+            unit_publication=unit_publication,
         )
 
     @classmethod
@@ -2033,10 +2756,13 @@ class LoadedManagerReceipt:
         cls,
         raw: bytes,
         *,
-        expected_run_properties: Mapping[str, object],
-        expected_close_properties: Mapping[str, object],
-        expected_configured_pair_sha256: str,
+        configured_readback: ConfiguredPairReadback,
+        unit_publication: UnitPublicationReceipt,
     ) -> "LoadedManagerReceipt":
+        if type(configured_readback) is not ConfiguredPairReadback:
+            raise TypeError("configured_readback must be exact ConfiguredPairReadback")
+        if type(unit_publication) is not UnitPublicationReceipt:
+            raise TypeError("unit_publication must be exact UnitPublicationReceipt")
         value = _exact_fields(
             _decode_canonical_json(raw, label="loaded manager receipt"),
             frozenset(
@@ -2049,12 +2775,14 @@ class LoadedManagerReceipt:
                     "close_object_path",
                     "run_properties",
                     "close_properties",
+                    "unit_publication_sha256",
+                    "configured_pair_readback_sha256",
                     "configured_pair_sha256",
                 }
             ),
             label="loaded manager receipt",
         )
-        if value["schema"] != "scion.loaded-manager-acceptance.v1":
+        if value["schema"] != "scion.loaded-manager-acceptance.v3":
             raise CanonicalReceiptError("loaded manager receipt schema differs")
         manager_value = _exact_fields(
             value["manager"],
@@ -2077,6 +2805,16 @@ class LoadedManagerReceipt:
         )
         if run_path == close_path:
             raise ManagerAcceptanceError("run and closer object paths must differ")
+        expected_run_properties = _expected_loaded_properties(
+            configured_readback,
+            unit_publication,
+            role="run",
+        )
+        expected_close_properties = _expected_loaded_properties(
+            configured_readback,
+            unit_publication,
+            role="closer",
+        )
         run_inventory = frozenset(expected_run_properties)
         close_inventory = frozenset(expected_close_properties)
         run_properties = _normalize_loaded_properties(
@@ -2107,12 +2845,18 @@ class LoadedManagerReceipt:
             field="expected closer",
             manager_wire=True,
         )
-        if run_properties != expected_run or close_properties != expected_close:
+        if not _exact_manager_properties_equal(
+            run_properties,
+            expected_run,
+        ) or not _exact_manager_properties_equal(close_properties, expected_close):
             raise ManagerAcceptanceError("loaded manager receipt properties differ")
-        expected_pair_sha = _sha256(
-            expected_configured_pair_sha256,
-            field="expected_configured_pair_sha256",
-        )
+        expected_unit_publication_sha = unit_publication.raw_sha256
+        if value["unit_publication_sha256"] != expected_unit_publication_sha:
+            raise ManagerAcceptanceError("unit publication digest differs")
+        expected_readback_sha = configured_readback.raw_sha256
+        if value["configured_pair_readback_sha256"] != expected_readback_sha:
+            raise ManagerAcceptanceError("configured pair readback digest differs")
+        expected_pair_sha = configured_readback.configured_pair.configured_pair_sha256
         if value["configured_pair_sha256"] != expected_pair_sha:
             raise ManagerAcceptanceError("configured pair digest differs")
         instance = object.__new__(cls)
@@ -2130,6 +2874,8 @@ class LoadedManagerReceipt:
             ),
             ("run_properties", run_properties),
             ("close_properties", close_properties),
+            ("unit_publication_sha256", expected_unit_publication_sha),
+            ("configured_pair_readback_sha256", expected_readback_sha),
             ("configured_pair_sha256", expected_pair_sha),
             ("raw", raw),
             ("raw_sha256", hashlib.sha256(raw).hexdigest()),
@@ -2147,11 +2893,8 @@ def _require_root() -> None:
 def acquire_loaded_manager_receipt(
     manager: NarrowInstallationManager,
     *,
-    run_unit: str,
-    close_unit: str,
-    expected_run_properties: Mapping[str, object],
-    expected_close_properties: Mapping[str, object],
-    configured_pair_sha256: str,
+    configured_readback: ConfiguredPairReadback,
+    unit_publication: UnitPublicationReceipt,
     persist_and_reopen: Callable[[bytes], bytes],
 ) -> LoadedManagerReceipt:
     """Acquire one mocked/narrow loaded-manager receipt under one identity."""
@@ -2159,10 +2902,24 @@ def acquire_loaded_manager_receipt(
     _require_root()
     if not callable(persist_and_reopen):
         raise TypeError("persist_and_reopen must be callable")
-    run_name = _unit(run_unit, field="run_unit")
-    close_name = _unit(close_unit, field="close_unit")
+    if type(configured_readback) is not ConfiguredPairReadback:
+        raise TypeError("configured_readback must be exact ConfiguredPairReadback")
+    if type(unit_publication) is not UnitPublicationReceipt:
+        raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+    run_name = _unit(configured_readback.run_unit, field="run_unit")
+    close_name = _unit(configured_readback.close_unit, field="close_unit")
     if run_name == close_name:
         raise ManagerAcceptanceError("run and closer units must differ")
+    expected_run_properties = _expected_loaded_properties(
+        configured_readback,
+        unit_publication,
+        role="run",
+    )
+    expected_close_properties = _expected_loaded_properties(
+        configured_readback,
+        unit_publication,
+        role="closer",
+    )
     run_inventory = frozenset(expected_run_properties)
     close_inventory = frozenset(expected_close_properties)
     if (
@@ -2210,23 +2967,19 @@ def acquire_loaded_manager_receipt(
         if _read_manager_identity(manager) != identity:
             raise ManagerAcceptanceError("manager identity changed across closer read")
         receipt = LoadedManagerReceipt.create(
-            run_unit=run_name,
-            close_unit=close_name,
             manager_identity=identity,
             run_object_path=run_loaded,
             close_object_path=close_loaded,
             run_properties=run_properties,
             close_properties=close_properties,
-            expected_run_properties=expected_run_properties,
-            expected_close_properties=expected_close_properties,
-            configured_pair_sha256=configured_pair_sha256,
+            configured_readback=configured_readback,
+            unit_publication=unit_publication,
         )
         reopened_raw = persist_and_reopen(receipt.raw)
         reopened = LoadedManagerReceipt.from_bytes(
             reopened_raw,
-            expected_run_properties=expected_run_properties,
-            expected_close_properties=expected_close_properties,
-            expected_configured_pair_sha256=configured_pair_sha256,
+            configured_readback=configured_readback,
+            unit_publication=unit_publication,
         )
         if reopened != receipt or _read_manager_identity(manager) != identity:
             raise ManagerAcceptanceError("durable manager receipt or identity differs")
@@ -2733,6 +3486,7 @@ class StartPermitOwner:
         *,
         authorization: StartAuthorizationReceipt,
         installed_acceptance: InstalledAcceptance,
+        phase_intents: tuple[RootPhaseIntentReceipt, ...],
         phase_receipts: tuple[RootPhaseReceipt, ...],
         issue: StartIssueReceipt,
         manager: NarrowStartManager,
@@ -2743,7 +3497,10 @@ class StartPermitOwner:
             raise TypeError("authorization must be exact StartAuthorizationReceipt")
         if type(installed_acceptance) is not InstalledAcceptance:
             raise TypeError("installed_acceptance must be exact InstalledAcceptance")
-        installed_acceptance.verify_phase_receipts(phase_receipts)
+        installed_acceptance.verify_phase_receipts(
+            phase_intents,
+            phase_receipts,
+        )
         if type(issue) is not StartIssueReceipt:
             raise TypeError("issue must be exact StartIssueReceipt")
         if not callable(reacquire_prestart):
@@ -2937,7 +3694,9 @@ __all__ = [
     "ReceiptDagError",
     "RootInstallationState",
     "RootPhase",
+    "RootPhaseIntentReceipt",
     "RootPhaseReceipt",
+    "RootPhaseReceiptWriter",
     "SelectionReceipt",
     "StartDispatchReceipt",
     "StartDispatchState",
@@ -2946,9 +3705,12 @@ __all__ = [
     "StartPermitError",
     "StartPermitOwner",
     "SystemdExternalManager",
+    "UnitPublicationReceipt",
     "acquire_loaded_manager_receipt",
+    "apply_root_phase",
     "classify_root_installation",
     "classify_start_dispatch",
     "parse_selected_mountinfo",
     "validate_forward_receipt_dag",
+    "validate_root_transaction",
 ]

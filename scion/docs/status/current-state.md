@@ -77,23 +77,26 @@ pair derivation, W3 tool packaging and both service templates in the wheel.
 The accepted native extension SHA `3d747973...803fc` is reproducible with the
 frozen builder.
 
-A production-unwired source candidate is pushed at exact
-`eee9e0f6916e1b4e5505a599e345a263911881f2`. Environment inventory/staging,
-candidate receipts, FD-pinned Linux primitives, manager/start contracts and
-prospective intent binding now have dormant owners. Focused gates pass exact
-`90` on Python 3.12 and 3.13, and the Python 3.12 execution suite passes
-`1798 / 1 skipped`. Independent final reviews report
-`P0=0 / P1=6 / P2=0`; the P1s explicitly block production use. No complete
-double-wheel/environment-relocation/candidate gate, live-prestart owner, root
-intent/commit DAG, configured-pair manager binding, CLI or installed
-acceptance exists.
+A candidate-artifact source closure is now accepted on the `eee9e0f6`
+foundation. It adds the fixed non-injected double-wheel builder and live
+verifier, semantic environment/external-runtime evidence, simulated
+relocation, complete candidate/dry-root/absence acquisition, Git
+replacement-object rejection and the unambiguous nine-phase root
+intent/commit DAG. Main dual-version gates pass exact `142`; the Python 3.12
+execution suite passes `1815 / 1 skipped`. Independent fixed-hash review
+reports `P0=0 / P1=0 / P2=0`. Exact evidence is in
+`v04-w3-candidate-artifact-source-acceptance-20260723.md`.
 
 No `/var/lib/scion`, unit fragment, mount, manager mutation, nonce or formal
-job was created. The active next slice is candidate artifact closure, followed
-by root transaction/DAG acceptance and only then thin CLI wiring. Root
-apply/start remains forbidden. The current shell has no passwordless sudo, so
-the later accepted root phase will require an interactive root shell rather
-than code invoking sudo.
+job was created. This is source acceptance, not a production candidate,
+installation or installed acceptance. The active next slice is the concrete
+root composition/partial-hold owner: separate manager reload from loaded-pair
+acquisition, add typed store/authority/projection/reload/installed-state
+receipts, complete live pre-start reacquisition and expose the four fixed root
+CLI surfaces. Root apply/start remains forbidden until that source and one
+actual candidate independently close at P0=0/P1=0. The current shell has no
+passwordless sudo, so the later accepted root phase will require an
+interactive root shell rather than code invoking sudo.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -1176,15 +1179,17 @@ actual-journal-handle design is frozen and accepted.
    `bf4c7490`; keep them dormant. The independent W3 composition and
    launch-readiness source is accepted at `82d5394b`, including exact external
    authority/installation records, nonce, read-only systemd acquisition and
-   run/`ExecStopPost`/close wiring. Keep it dormant. Next, perform the separate
-   candidate artifact closure on the pushed `eee9e0f6` source foundation:
-   double-wheel/native/member evidence, semantic environment/relocation
-   receipts and dry-root/absence verification. Then implement and accept the
-   root intent/commit DAG, full live-prestart owner and configured-pair manager
-   binding before wiring the thin CLI. Do not perform root installation or
-   authorize a job without those gates and the exact bound human `StartUnit`
-   decision. F1's dormant materializer is accepted, but neither W3 nor F1 has
-   formal launch authority.
+   run/`ExecStopPost`/close wiring. Keep it dormant. The candidate-artifact
+   source closure on `eee9e0f6` is accepted with double-wheel/native/member
+   evidence, semantic environment/relocation receipts,
+   candidate/dry-root/absence verification and the nine-phase root DAG.
+   Next implement and accept the concrete root composition/partial-hold owner,
+   typed aggregate receipts, separated manager reload/load acquisition,
+   full installed/live-prestart verification and fixed thin CLI. Then prepare
+   and independently accept one actual candidate. Do not perform root
+   installation or authorize a job without those gates and the exact bound
+   human `StartUnit` decision. F1's dormant materializer is accepted, but
+   neither W3 nor F1 has formal launch authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,

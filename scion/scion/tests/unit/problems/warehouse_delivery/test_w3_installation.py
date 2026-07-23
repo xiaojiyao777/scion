@@ -83,6 +83,39 @@ class _FakeRunner:
         return self.responses[argv]
 
 
+def test_subprocess_git_runner_disables_replace_objects(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _Completed:
+        returncode = 0
+        stdout = b"exact git output\n"
+        stderr = b""
+
+    def run(argv: tuple[str, ...], **kwargs: object) -> _Completed:
+        captured["argv"] = argv
+        captured.update(kwargs)
+        return _Completed()
+
+    monkeypatch.setenv("GIT_OBJECT_DIRECTORY", "/tmp/untrusted-object-directory")
+    monkeypatch.setattr(installation_module.subprocess, "run", run)
+    output = installation_module.SubprocessGitRunner().run(
+        ("git", "rev-parse", "--verify", "HEAD^{commit}"),
+        cwd=tmp_path,
+    )
+
+    environment = captured["env"]
+    assert type(environment) is dict
+    assert output == b"exact git output\n"
+    assert environment["GIT_NO_REPLACE_OBJECTS"] == "1"
+    assert environment["GIT_OPTIONAL_LOCKS"] == "0"
+    assert environment["GIT_TERMINAL_PROMPT"] == "0"
+    assert "GIT_OBJECT_DIRECTORY" not in environment
+    assert captured["shell"] is False
+
+
 def _source_fixture(
     tmp_path: Path,
     blobs: dict[str, bytes],

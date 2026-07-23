@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import replace
 import hashlib
 import json
 import os
@@ -26,6 +27,7 @@ from scion.runtime.execution.external_installation import (
     NoReplaceReceiptSet,
     ReceiptDagError,
     RootInstallationState,
+    RootPhaseIntentReceipt,
     RootPhaseReceipt,
     SelectionReceipt,
     StartAuthorizationReceipt,
@@ -35,29 +37,168 @@ from scion.runtime.execution.external_installation import (
     StartPermitError,
     StartPermitOwner,
     SystemdExternalManager,
+    UnitPublicationReceipt,
+    apply_root_phase,
     acquire_loaded_manager_receipt,
     classify_root_installation,
     classify_start_dispatch,
     parse_selected_mountinfo,
     validate_forward_receipt_dag,
+    validate_root_transaction,
+)
+from scion.runtime.execution.launch_authority import (
+    AcceptedLaunchAuthority,
+    InstallationRecord,
+)
+from scion.runtime.execution.systemd255 import ConfiguredUnitProperties, UnitRole
+from scion.runtime.execution.systemd_acquisition import (
+    ConfiguredPairFact,
+    ConfiguredPairReadback,
 )
 
 LAUNCH = "a" * 64
 SELECTION = "b" * 64
 CANDIDATE = "c" * 64
 INTENT = "d" * 64
-PAIR = "e" * 64
 AUTHORIZATION = "1" * 64
 INSTALLED = "2" * 64
 PRESTART_RAW = b'{"schema":"fixture.prestart.v1"}\n'
 PRESTART = hashlib.sha256(PRESTART_RAW).hexdigest()
 INSTALLATION = "4" * 64
-RUN = "scion-run@fixture.service"
-CLOSE = "scion-close@fixture.service"
+RUN = f"scion-run@{LAUNCH}.service"
+CLOSE = f"scion-close@{LAUNCH}.service"
 BOOT = "12345678-1234-1234-1234-123456789abc"
 VERSION = "255.4-1ubuntu8"
 RUN_OBJECT = "/org/freedesktop/systemd1/unit/scion_2drun_40fixture_2eservice"
 CLOSE_OBJECT = "/org/freedesktop/systemd1/unit/scion_2dclose_40fixture_2eservice"
+RUN_FRAGMENT = "/etc/systemd/system/scion-run@.service"
+CLOSE_FRAGMENT = "/etc/systemd/system/scion-close@.service"
+RUN_TEMPLATE_RAW = (
+    b"[Unit]\n"
+    b"CollectMode=inactive\n"
+    + f"OnFailure={CLOSE}\n".encode()
+    + f"OnSuccess={CLOSE}\n".encode()
+    + b"\n[Service]\n"
+    + b"Delegate=pids\n"
+    + b"DelegateSubgroup=supervisor\n"
+    + b"KillMode=control-group\n"
+    + b"Restart=no\n"
+    + b"TimeoutStopSec=infinity\n"
+)
+CLOSE_TEMPLATE_RAW = (
+    b"[Unit]\n"
+    + f"After={RUN}\n".encode()
+    + b"CollectMode=inactive\n"
+    + b"\n[Service]\n"
+    + b"Restart=no\n"
+    + b"TimeoutStartSec=infinity\n"
+)
+PYTHON = "/opt/scion/python"
+TOOL = "/opt/scion/tool"
+READ_ONLY = ("/opt/scion", "/var/lib/scion/sealed")
+READ_WRITE = ("/var/lib/scion/run", "/var/lib/scion/nonce-claims")
+RUN_START = f"{PYTHON} {TOOL} run"
+RUN_STOP = f"{PYTHON} {TOOL} seal-unit-drained"
+CLOSE_START = f"{PYTHON} {TOOL} close"
+RUN_DIRECTIVES = {
+    "Delegate": "pids",
+    "DelegateSubgroup": "supervisor",
+    "CollectMode": "inactive",
+    "Restart": "no",
+    "KillMode": "control-group",
+    "TimeoutStopSec": "infinity",
+    "OnSuccess": CLOSE,
+    "OnFailure": CLOSE,
+}
+CLOSE_DIRECTIVES = {
+    "CollectMode": "inactive",
+    "Restart": "no",
+    "TimeoutStartSec": "infinity",
+    "After": RUN,
+}
+RUN_WIRING = {
+    "Type": "exec",
+    "User": "clawd",
+    "Group": "clawd",
+    "UMask": "0077",
+    "ExecStart": RUN_START,
+    "ExecStopPost": RUN_STOP,
+    "ExitType": "main",
+    "SendSIGKILL": "yes",
+    "OOMPolicy": "stop",
+    "NoNewPrivileges": "yes",
+    "PrivateTmp": "yes",
+    "PrivateMounts": "yes",
+    "ProtectSystem": "strict",
+    "ProtectHome": "read-only",
+    "ProtectControlGroups": "no",
+    "ProtectProc": "invisible",
+    "ProcSubset": "all",
+    "ReadOnlyPaths": " ".join(READ_ONLY),
+    "ReadWritePaths": " ".join(READ_WRITE),
+}
+CLOSE_WIRING = {
+    "Type": "oneshot",
+    "User": "clawd",
+    "Group": "clawd",
+    "UMask": "0077",
+    "ExecStart": CLOSE_START,
+    "NoNewPrivileges": "yes",
+    "PrivateTmp": "yes",
+    "ProtectSystem": "strict",
+    "ProtectHome": "read-only",
+    "ReadOnlyPaths": " ".join(READ_ONLY),
+    "ReadWritePaths": " ".join(READ_WRITE),
+}
+RUN_CONFIGURED_NAMES = (
+    "Id",
+    "Type",
+    "User",
+    "Group",
+    "UMask",
+    "ExecStart",
+    "ExecStopPost",
+    "ExitType",
+    "SendSIGKILL",
+    "OOMPolicy",
+    "NoNewPrivileges",
+    "PrivateTmp",
+    "PrivateMounts",
+    "ProtectSystem",
+    "ProtectHome",
+    "ProtectControlGroups",
+    "ProtectProc",
+    "ProcSubset",
+    "ReadOnlyPaths",
+    "ReadWritePaths",
+    "Delegate",
+    "DelegateControllers",
+    "DelegateSubgroup",
+    "CollectMode",
+    "Restart",
+    "KillMode",
+    "TimeoutStopUSec",
+    "OnSuccess",
+    "OnFailure",
+)
+CLOSE_CONFIGURED_NAMES = (
+    "Id",
+    "Type",
+    "User",
+    "Group",
+    "UMask",
+    "ExecStart",
+    "NoNewPrivileges",
+    "PrivateTmp",
+    "ProtectSystem",
+    "ProtectHome",
+    "ReadOnlyPaths",
+    "ReadWritePaths",
+    "CollectMode",
+    "Restart",
+    "TimeoutStartUSec",
+    "After",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -72,25 +213,51 @@ def _canonical(value: object) -> bytes:
     ).encode()
 
 
-def _phase_prefix(length: int) -> tuple[RootPhaseReceipt, ...]:
+def _phase_prefix(
+    length: int,
+) -> tuple[tuple[RootPhaseIntentReceipt, ...], tuple[RootPhaseReceipt, ...]]:
+    intents: list[RootPhaseIntentReceipt] = []
     receipts: list[RootPhaseReceipt] = []
     for index, phase in enumerate(INSTALL_PHASES[:length]):
-        receipt = RootPhaseReceipt.create(
+        intent = RootPhaseIntentReceipt.create(
             launch_id=LAUNCH,
             phase=phase,
             predecessor_sha256=(
                 () if index == 0 else (receipts[index - 1].raw_sha256,)
             ),
+            effect_authority_sha256=hashlib.sha256(
+                f"authority:{phase.value}".encode()
+            ).hexdigest(),
+        )
+        receipt = RootPhaseReceipt.create(
+            intent=intent,
             effect_sha256=hashlib.sha256(phase.value.encode()).hexdigest(),
         )
+        intents.append(intent)
         receipts.append(receipt)
-    return tuple(receipts)
+    return tuple(intents), tuple(receipts)
+
+
+def _structured(command: str) -> tuple[object, ...]:
+    argv = command.split(" ")
+    return (
+        argv[0],
+        argv,
+        False,
+        1,
+        2,
+        3,
+        4,
+        4242,
+        0,
+        0,
+    )
 
 
 def _run_properties() -> dict[str, object]:
     return {
         "Id": RUN,
-        "FragmentPath": "/etc/systemd/system/scion-run@.service",
+        "FragmentPath": RUN_FRAGMENT,
         "DropInPaths": [],
         "LoadState": "loaded",
         "ActiveState": "inactive",
@@ -100,20 +267,39 @@ def _run_properties() -> dict[str, object]:
         "Transient": False,
         "Type": "exec",
         "User": "clawd",
-        "ExecStart": [
-            (
-                "/opt/scion/python",
-                ["/opt/scion/python", "/opt/scion/tool", "run"],
-                False,
-            )
-        ],
+        "Group": "clawd",
+        "UMask": 0o077,
+        "ExecStart": [_structured(RUN_START)],
+        "ExecStopPost": [_structured(RUN_STOP)],
+        "ExitType": "main",
+        "SendSIGKILL": True,
+        "OOMPolicy": "stop",
+        "NoNewPrivileges": True,
+        "PrivateTmp": True,
+        "PrivateMounts": True,
+        "ProtectSystem": "strict",
+        "ProtectHome": "read-only",
+        "ProtectControlGroups": False,
+        "ProtectProc": "invisible",
+        "ProcSubset": "all",
+        "ReadOnlyPaths": list(READ_ONLY),
+        "ReadWritePaths": list(READ_WRITE),
+        "Delegate": True,
+        "DelegateControllers": ["pids"],
+        "DelegateSubgroup": "supervisor",
+        "CollectMode": "inactive",
+        "Restart": "no",
+        "KillMode": "control-group",
+        "TimeoutStopUSec": (1 << 64) - 1,
+        "OnSuccess": [CLOSE],
+        "OnFailure": [CLOSE],
     }
 
 
 def _close_properties() -> dict[str, object]:
     return {
         "Id": CLOSE,
-        "FragmentPath": "/etc/systemd/system/scion-close@.service",
+        "FragmentPath": CLOSE_FRAGMENT,
         "DropInPaths": [],
         "LoadState": "loaded",
         "ActiveState": "inactive",
@@ -123,24 +309,199 @@ def _close_properties() -> dict[str, object]:
         "Transient": False,
         "Type": "oneshot",
         "User": "clawd",
-        "ExecStart": [
-            (
-                "/opt/scion/python",
-                ["/opt/scion/python", "/opt/scion/tool", "close"],
-                False,
-            )
-        ],
+        "Group": "clawd",
+        "UMask": 0o077,
+        "ExecStart": [_structured(CLOSE_START)],
+        "NoNewPrivileges": True,
+        "PrivateTmp": True,
+        "ProtectSystem": "strict",
+        "ProtectHome": "read-only",
+        "ReadOnlyPaths": list(READ_ONLY),
+        "ReadWritePaths": list(READ_WRITE),
+        "CollectMode": "inactive",
+        "Restart": "no",
+        "TimeoutStartUSec": (1 << 64) - 1,
+        "After": [RUN],
     }
 
 
-def test_root_phase_receipts_form_one_forward_no_replace_prefix() -> None:
-    partial = _phase_prefix(4)
-    complete = _phase_prefix(len(INSTALL_PHASES))
+def _configured_readback() -> ConfiguredPairReadback:
+    run_properties = _run_properties()
+    close_properties = _close_properties()
+    configured_pair = ConfiguredPairFact.create(
+        ConfiguredUnitProperties.from_receipts(
+            UnitRole.RUN,
+            RUN_DIRECTIVES,
+            {
+                "Id": RUN,
+                "Delegate": "yes",
+                "DelegateControllers": "pids",
+                "DelegateSubgroup": "supervisor",
+                "CollectMode": "inactive",
+                "Restart": "no",
+                "KillMode": "control-group",
+                "TimeoutStopUSec": "infinity",
+                "OnSuccess": CLOSE,
+                "OnFailure": CLOSE,
+            },
+            expected_unit=RUN,
+            expected_peer=CLOSE,
+        ),
+        ConfiguredUnitProperties.from_receipts(
+            UnitRole.CLOSER,
+            CLOSE_DIRECTIVES,
+            {
+                "Id": CLOSE,
+                "CollectMode": "inactive",
+                "Restart": "no",
+                "TimeoutStartUSec": "infinity",
+                "After": RUN,
+            },
+            expected_unit=CLOSE,
+            expected_peer=RUN,
+        ),
+    )
+    return ConfiguredPairReadback.create(
+        run_unit=RUN,
+        close_unit=CLOSE,
+        run_properties={name: run_properties[name] for name in RUN_CONFIGURED_NAMES},
+        close_properties={
+            name: close_properties[name] for name in CLOSE_CONFIGURED_NAMES
+        },
+        configured_pair=configured_pair,
+        run_wiring=RUN_WIRING,
+        close_wiring=CLOSE_WIRING,
+    )
 
-    assert classify_root_installation(()) is RootInstallationState.ABSENT
-    assert classify_root_installation(partial) is RootInstallationState.PARTIAL_HOLD
-    assert classify_root_installation(complete) is RootInstallationState.ACCEPTED
-    assert validate_forward_receipt_dag(tuple(reversed(complete))) == complete
+
+def _launch_pair() -> tuple[AcceptedLaunchAuthority, InstallationRecord]:
+    manifest = b"manifest\n"
+    manifest_sha = hashlib.sha256(manifest).hexdigest()
+    source_commit = "0123456789abcdef0123456789abcdef01234567"
+    authority = AcceptedLaunchAuthority.from_bytes(
+        _canonical(
+            {
+                "schema": "scion.generic-launch-authority.v1",
+                "problem_kind": "warehouse-w3",
+                "source_commit": source_commit,
+                "source_tree": "89abcdef0123456789abcdef0123456789abcdef",
+                "manifest": {
+                    "path": "control/manifest.json",
+                    "sha256": manifest_sha,
+                    "size_bytes": len(manifest),
+                },
+                "root_basename": "accepted-w3-root",
+                "nonce": "3" * 64,
+                "nonce_ledger_parent": ("/var/lib/scion/runs/w3/.nonce-ledger/claims"),
+                "expected_rows": 172,
+                "artifact_names": ["result.json"],
+                "scientific_design_sha256": "1" * 64,
+                "correction_design_sha256": "2" * 64,
+                "native_acceptance_contract_sha256": "3" * 64,
+                "native_acceptance_record_sha256": "4" * 64,
+                "sealed_store_aggregate_sha256": "5" * 64,
+                "environment_receipt_sha256": "6" * 64,
+                "run_template_sha256": hashlib.sha256(RUN_TEMPLATE_RAW).hexdigest(),
+                "close_template_sha256": hashlib.sha256(CLOSE_TEMPLATE_RAW).hexdigest(),
+                "guardian_source_sha256": "7" * 64,
+                "thin_tool_source_sha256": "8" * 64,
+                "closer_source_sha256": "9" * 64,
+                "inputs": [
+                    {
+                        "logical_path": "control/manifest.json",
+                        "sealed_path": "sealed/control/manifest.json",
+                        "sha256": manifest_sha,
+                        "size_bytes": len(manifest),
+                        "provenance": {
+                            "kind": "git_blob",
+                            "commit": source_commit,
+                            "path": "control/manifest.json",
+                            "blob_oid": "a" * 40,
+                        },
+                    }
+                ],
+                "retry": False,
+                "resume": False,
+                "reuse": False,
+            }
+        )
+    )
+    configured_pair = _configured_readback().configured_pair
+    installation = InstallationRecord.from_bytes(
+        _canonical(
+            {
+                "schema": "scion.generic-launch-installation.v1",
+                "launch_id": LAUNCH,
+                "authority_sha256": authority.authority_sha256,
+                "authority_path": (
+                    f"/var/lib/scion/authorities/w3/"
+                    f"{authority.authority_sha256}.json"
+                ),
+                "problem_kind": authority.problem_kind,
+                "manifest_sha256": authority.manifest_sha256,
+                "run_root": "/srv/accepted-w3-root",
+                "terminal_root": "/srv/accepted-w3-root/control/invocation",
+                "nonce": authority.nonce,
+                "nonce_ledger_parent": authority.nonce_ledger_parent,
+                "sealed_root": "/var/lib/scion/sealed/w3/fixture",
+                "sealed_store_aggregate_sha256": (
+                    authority.sealed_store_aggregate_sha256
+                ),
+                "environment_root": "/var/lib/scion/environments/w3/fixture",
+                "environment_receipt_sha256": (authority.environment_receipt_sha256),
+                "projection_root": f"/var/lib/scion/projections/w3/{LAUNCH}",
+                "run_template_sha256": authority.run_template_sha256,
+                "close_template_sha256": authority.close_template_sha256,
+                "run_unit": RUN,
+                "close_unit": CLOSE,
+                "configured_pair": configured_pair.to_mapping(),
+                "configured_pair_sha256": (configured_pair.configured_pair_sha256),
+                "retry": False,
+                "resume": False,
+                "reuse": False,
+            }
+        ),
+        authority,
+    )
+    return authority, installation
+
+
+def _unit_publication() -> UnitPublicationReceipt:
+    authority, installation = _launch_pair()
+    return UnitPublicationReceipt.create(
+        authority=authority,
+        installation=installation,
+        run_template_raw=RUN_TEMPLATE_RAW,
+        close_template_raw=CLOSE_TEMPLATE_RAW,
+        published_run_raw=RUN_TEMPLATE_RAW,
+        published_close_raw=CLOSE_TEMPLATE_RAW,
+    )
+
+
+def test_root_phase_receipts_form_one_forward_no_replace_prefix() -> None:
+    partial_intents, partial = _phase_prefix(4)
+    complete_intents, complete = _phase_prefix(len(INSTALL_PHASES))
+
+    assert classify_root_installation((), ()) is RootInstallationState.ABSENT
+    assert (
+        classify_root_installation(partial_intents, partial)
+        is RootInstallationState.PARTIAL_HOLD
+    )
+    assert (
+        classify_root_installation(complete_intents, complete)
+        is RootInstallationState.ACCEPTED
+    )
+    assert (
+        validate_forward_receipt_dag(
+            tuple(reversed(complete_intents)),
+            tuple(reversed(complete)),
+        )
+        == complete
+    )
+    assert (
+        RootPhaseIntentReceipt.from_bytes(complete_intents[-1].raw)
+        == complete_intents[-1]
+    )
     assert RootPhaseReceipt.from_bytes(complete[-1].raw) == complete[-1]
 
     writer = NoReplaceReceiptSet()
@@ -163,35 +524,142 @@ def test_durable_receipt_directory_is_no_replace_fsynced_and_reopened(
         writer.read("FACT.v1.json")
 
 
+def test_root_phase_owner_persists_intent_before_effect_and_commit_after_reopen() -> (
+    None
+):
+    writer = NoReplaceReceiptSet()
+    calls: list[tuple[object, ...]] = []
+
+    def effect() -> None:
+        calls.append(("effect", writer.write_order))
+
+    def reopen() -> bytes:
+        calls.append(("reopen", writer.write_order))
+        return b'{"observed":"stable"}\n'
+
+    intent, receipt = apply_root_phase(
+        launch_id=LAUNCH,
+        phase=INSTALL_PHASES[0],
+        effect_authority_sha256="7" * 64,
+        prior_intents=(),
+        prior_receipts=(),
+        writer=writer,
+        apply_effect=effect,
+        reopen_effect=reopen,
+    )
+
+    assert calls[0][0] == "effect"
+    assert calls[0][1] == ("00-root-staging-imported.intent.v1.json",)
+    assert calls[1][0] == "reopen"
+    assert writer.write_order == (
+        "00-root-staging-imported.intent.v1.json",
+        "00-root-staging-imported.commit.v2.json",
+    )
+    assert validate_root_transaction((intent,), (receipt,)) == (
+        (intent,),
+        (receipt,),
+    )
+
+
+def test_crash_after_root_intent_is_partial_hold_and_forbids_next_effect() -> None:
+    writer = NoReplaceReceiptSet()
+    with pytest.raises(RuntimeError, match="readback failed"):
+        apply_root_phase(
+            launch_id=LAUNCH,
+            phase=INSTALL_PHASES[0],
+            effect_authority_sha256="7" * 64,
+            prior_intents=(),
+            prior_receipts=(),
+            writer=writer,
+            apply_effect=lambda: None,
+            reopen_effect=lambda: (_ for _ in ()).throw(
+                RuntimeError("readback failed")
+            ),
+        )
+    intent = RootPhaseIntentReceipt.from_bytes(
+        writer.read("00-root-staging-imported.intent.v1.json")
+    )
+    assert (
+        classify_root_installation((intent,), ()) is RootInstallationState.PARTIAL_HOLD
+    )
+    with pytest.raises(ReceiptDagError, match="pending root intent"):
+        apply_root_phase(
+            launch_id=LAUNCH,
+            phase=INSTALL_PHASES[1],
+            effect_authority_sha256="8" * 64,
+            prior_intents=(intent,),
+            prior_receipts=(),
+            writer=writer,
+            apply_effect=lambda: None,
+            reopen_effect=lambda: b"unreachable\n",
+        )
+
+
+def test_root_phase_owner_rejects_mixed_launch_before_intent_or_effect() -> None:
+    intents, receipts = _phase_prefix(1)
+    writer = NoReplaceReceiptSet()
+    effects: list[str] = []
+
+    with pytest.raises(ReceiptDagError, match="before external effect"):
+        apply_root_phase(
+            launch_id="f" * 64,
+            phase=INSTALL_PHASES[1],
+            effect_authority_sha256="8" * 64,
+            prior_intents=intents,
+            prior_receipts=receipts,
+            writer=writer,
+            apply_effect=lambda: effects.append("effect"),
+            reopen_effect=lambda: b"unreachable\n",
+        )
+
+    assert effects == []
+    assert writer.names == ()
+
+
 def test_root_receipt_gap_or_wrong_predecessor_is_partial_hold() -> None:
-    first = _phase_prefix(1)[0]
-    wrong_second = RootPhaseReceipt.create(
+    first_intents, first_receipts = _phase_prefix(1)
+    wrong_intent = RootPhaseIntentReceipt.create(
         launch_id=LAUNCH,
         phase=INSTALL_PHASES[1],
         predecessor_sha256=("f" * 64,),
+        effect_authority_sha256="9" * 64,
+    )
+    wrong_second = RootPhaseReceipt.create(
+        intent=wrong_intent,
         effect_sha256="9" * 64,
     )
-    gapped = RootPhaseReceipt.create(
+    gapped_intent = RootPhaseIntentReceipt.create(
         launch_id=LAUNCH,
         phase=INSTALL_PHASES[2],
-        predecessor_sha256=(first.raw_sha256,),
-        effect_sha256="8" * 64,
+        predecessor_sha256=(first_receipts[0].raw_sha256,),
+        effect_authority_sha256="8" * 64,
     )
+    gapped = RootPhaseReceipt.create(intent=gapped_intent, effect_sha256="8" * 64)
 
     with pytest.raises(ReceiptDagError):
-        validate_forward_receipt_dag((first, wrong_second))
+        validate_forward_receipt_dag(
+            (*first_intents, wrong_intent),
+            (*first_receipts, wrong_second),
+        )
     assert (
-        classify_root_installation((first, wrong_second))
+        classify_root_installation(
+            (*first_intents, wrong_intent),
+            (*first_receipts, wrong_second),
+        )
         is RootInstallationState.PARTIAL_HOLD
     )
     assert (
-        classify_root_installation((first, gapped))
+        classify_root_installation(
+            (*first_intents, gapped_intent),
+            (*first_receipts, gapped),
+        )
         is RootInstallationState.PARTIAL_HOLD
     )
 
 
 def test_root_phase_parser_rejects_noncanonical_and_duplicate_fields() -> None:
-    receipt = _phase_prefix(1)[0]
+    _intents, receipts = _phase_prefix(1)
+    receipt = receipts[0]
     with pytest.raises(CanonicalReceiptError, match="not canonical"):
         RootPhaseReceipt.from_bytes(receipt.raw.rstrip(b"\n"))
 
@@ -203,15 +671,20 @@ def test_root_phase_parser_rejects_noncanonical_and_duplicate_fields() -> None:
         + decoded["effect_sha256"].encode()
         + b'","launch_id":"'
         + LAUNCH.encode()
+        + b'","effect_authority_sha256":"'
+        + decoded["effect_authority_sha256"].encode()
+        + b'","intent_sha256":"'
+        + decoded["intent_sha256"].encode()
         + b'","phase":"ROOT_STAGING_IMPORTED",'
-        + b'"predecessor_sha256":[],"schema":"scion.external-root-phase.v1"}\n'
+        + b'"predecessor_sha256":[],'
+        + b'"schema":"scion.external-root-phase-commit.v2"}\n'
     )
     with pytest.raises(CanonicalReceiptError, match="not canonical JSON"):
         RootPhaseReceipt.from_bytes(duplicate)
 
 
 def test_selection_and_installed_acceptance_are_closed_canonical_records() -> None:
-    phases = _phase_prefix(len(INSTALL_PHASES))
+    intents, phases = _phase_prefix(len(INSTALL_PHASES) - 1)
     source_candidate = DirectorySnapshot(
         device=1,
         inode=2,
@@ -245,6 +718,7 @@ def test_selection_and_installed_acceptance_are_closed_canonical_records() -> No
         launch_id=LAUNCH,
         authority_sha256="4" * 64,
         installation_sha256="5" * 64,
+        phase_intents=intents,
         phase_receipts=phases,
         subordinate_receipt_sha256={
             "root_selection": selection.raw_sha256,
@@ -272,6 +746,84 @@ def test_selection_and_installed_acceptance_are_closed_canonical_records() -> No
     drift["formal_jobs_started"] = 1
     with pytest.raises(CanonicalReceiptError, match="state differs"):
         InstalledAcceptance.from_bytes(_canonical(drift))
+
+
+def test_installation_acceptance_closes_without_a_final_phase_hash_cycle() -> None:
+    prefix_intents, prefix_receipts = _phase_prefix(len(INSTALL_PHASES) - 1)
+    accepted = InstalledAcceptance.create(
+        launch_id=LAUNCH,
+        authority_sha256="4" * 64,
+        installation_sha256="5" * 64,
+        phase_intents=prefix_intents,
+        phase_receipts=prefix_receipts,
+        subordinate_receipt_sha256={
+            "root_selection": "1" * 64,
+            "sealed_store": "2" * 64,
+            "environment_content": "3" * 64,
+            "environment_relocation": "4" * 64,
+            "projection": "5" * 64,
+            "units": "6" * 64,
+            "loaded_manager": "7" * 64,
+            "dry_root": "8" * 64,
+            "prestart_absence": "9" * 64,
+        },
+    )
+    writer = NoReplaceReceiptSet()
+
+    def publish_acceptance() -> None:
+        writer.write_no_replace("INSTALLATION_ACCEPTED.v3.json", accepted.raw)
+
+    final_intent, final_receipt = apply_root_phase(
+        launch_id=LAUNCH,
+        phase=INSTALL_PHASES[-1],
+        effect_authority_sha256=accepted.raw_sha256,
+        prior_intents=prefix_intents,
+        prior_receipts=prefix_receipts,
+        writer=writer,
+        apply_effect=publish_acceptance,
+        reopen_effect=lambda: writer.read("INSTALLATION_ACCEPTED.v3.json"),
+    )
+    full_intents = (*prefix_intents, final_intent)
+    full_receipts = (*prefix_receipts, final_receipt)
+
+    assert writer.write_order == (
+        "08-installation-accepted.intent.v1.json",
+        "INSTALLATION_ACCEPTED.v3.json",
+        "08-installation-accepted.commit.v2.json",
+    )
+    assert final_intent.effect_authority_sha256 == accepted.raw_sha256
+    assert final_receipt.effect_sha256 == accepted.raw_sha256
+    assert accepted.verify_phase_receipts(full_intents, full_receipts) == (
+        full_receipts
+    )
+    with pytest.raises(ReceiptDagError, match="acceptance phase DAG differs"):
+        accepted.verify_phase_receipts(prefix_intents, prefix_receipts)
+
+    wrong_authority_intent = RootPhaseIntentReceipt.create(
+        launch_id=LAUNCH,
+        phase=INSTALL_PHASES[-1],
+        predecessor_sha256=(prefix_receipts[-1].raw_sha256,),
+        effect_authority_sha256="a" * 64,
+    )
+    wrong_authority_receipt = RootPhaseReceipt.create(
+        intent=wrong_authority_intent,
+        effect_sha256=accepted.raw_sha256,
+    )
+    with pytest.raises(ReceiptDagError, match="acceptance phase DAG differs"):
+        accepted.verify_phase_receipts(
+            (*prefix_intents, wrong_authority_intent),
+            (*prefix_receipts, wrong_authority_receipt),
+        )
+
+    wrong_effect_receipt = RootPhaseReceipt.create(
+        intent=final_intent,
+        effect_sha256="b" * 64,
+    )
+    with pytest.raises(ReceiptDagError, match="acceptance phase DAG differs"):
+        accepted.verify_phase_receipts(
+            full_intents,
+            (*prefix_receipts, wrong_effect_receipt),
+        )
 
 
 def test_mountinfo_selected_row_has_canonical_digest_and_decodes_paths() -> None:
@@ -460,11 +1012,8 @@ def test_narrow_manager_acquisition_pins_reopens_and_unrefs_in_order() -> None:
 
     receipt = acquire_loaded_manager_receipt(
         manager,
-        run_unit=RUN,
-        close_unit=CLOSE,
-        expected_run_properties=_run_properties(),
-        expected_close_properties=_close_properties(),
-        configured_pair_sha256=PAIR,
+        configured_readback=_configured_readback(),
+        unit_publication=_unit_publication(),
         persist_and_reopen=persist,
     )
 
@@ -475,6 +1024,12 @@ def test_narrow_manager_acquisition_pins_reopens_and_unrefs_in_order() -> None:
     assert receipt.run_object_path == RUN_OBJECT
     assert receipt.close_object_path == CLOSE_OBJECT
     assert dict(receipt.run_properties)["InvocationID"] == "0" * 32
+    assert receipt.unit_publication_sha256 == _unit_publication().raw_sha256
+    assert receipt.configured_pair_readback_sha256 == _configured_readback().raw_sha256
+    assert (
+        receipt.configured_pair_sha256
+        == _configured_readback().configured_pair.configured_pair_sha256
+    )
     assert manager.calls[0] == ("reload",)
     assert ("ref", RUN) in manager.calls
     assert ("ref", CLOSE) in manager.calls
@@ -482,12 +1037,209 @@ def test_narrow_manager_acquisition_pins_reopens_and_unrefs_in_order() -> None:
     assert (
         LoadedManagerReceipt.from_bytes(
             receipt.raw,
-            expected_run_properties=_run_properties(),
-            expected_close_properties=_close_properties(),
-            expected_configured_pair_sha256=PAIR,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
         )
         == receipt
     )
+
+
+def test_unit_publication_binds_installation_paths_and_reopened_template_bytes() -> (
+    None
+):
+    authority, installation = _launch_pair()
+    receipt = _unit_publication()
+
+    assert receipt.run_fragment_path == RUN_FRAGMENT
+    assert receipt.close_fragment_path == CLOSE_FRAGMENT
+    assert receipt.configured_pair_sha256 == installation.configured_pair_sha256
+    assert (
+        UnitPublicationReceipt.from_bytes(
+            receipt.raw,
+            authority=authority,
+            installation=installation,
+            run_template_raw=RUN_TEMPLATE_RAW,
+            close_template_raw=CLOSE_TEMPLATE_RAW,
+        )
+        == receipt
+    )
+
+    with pytest.raises(ManagerAcceptanceError, match="published unit bytes"):
+        UnitPublicationReceipt.create(
+            authority=authority,
+            installation=installation,
+            run_template_raw=RUN_TEMPLATE_RAW,
+            close_template_raw=CLOSE_TEMPLATE_RAW,
+            published_run_raw=RUN_TEMPLATE_RAW + b"# drift\n",
+            published_close_raw=CLOSE_TEMPLATE_RAW,
+        )
+
+    changed = json.loads(receipt.raw)
+    changed["run_fragment_path"] = "/tmp/caller-selected.service"
+    with pytest.raises(ManagerAcceptanceError, match="authority differs"):
+        UnitPublicationReceipt.from_bytes(
+            _canonical(changed),
+            authority=authority,
+            installation=installation,
+            run_template_raw=RUN_TEMPLATE_RAW,
+            close_template_raw=CLOSE_TEMPLATE_RAW,
+        )
+
+
+def test_installation_rejects_units_from_another_launch_instance() -> None:
+    authority, installation = _launch_pair()
+    changed = json.loads(installation.raw)
+    changed["run_unit"] = f"scion-run@{'b' * 64}.service"
+    changed["close_unit"] = f"scion-close@{'b' * 64}.service"
+
+    with pytest.raises(
+        Exception,
+        match="configured launch instances",
+    ):
+        InstallationRecord.from_bytes(_canonical(changed), authority)
+
+
+def test_unit_publication_rederives_pair_from_exact_templates() -> None:
+    authority, installation = _launch_pair()
+    alternate_run = f"alternate-run@{LAUNCH}.service"
+    alternate_close = f"alternate-close@{LAUNCH}.service"
+    original_pair = installation.configured_pair
+    alternate_pair = ConfiguredPairFact.create(
+        replace(
+            original_pair.run,
+            unit=alternate_run,
+            peer_unit=alternate_close,
+            configured_directives=tuple(
+                sorted(
+                    {
+                        **dict(original_pair.run.configured_directives),
+                        "OnSuccess": alternate_close,
+                        "OnFailure": alternate_close,
+                    }.items()
+                )
+            ),
+            on_success=(alternate_close,),
+            on_failure=(alternate_close,),
+        ),
+        replace(
+            original_pair.closer,
+            unit=alternate_close,
+            peer_unit=alternate_run,
+            configured_directives=tuple(
+                sorted(
+                    {
+                        **dict(original_pair.closer.configured_directives),
+                        "After": alternate_run,
+                    }.items()
+                )
+            ),
+            after=(alternate_run,),
+        ),
+    )
+    changed = json.loads(installation.raw)
+    changed["run_unit"] = alternate_run
+    changed["close_unit"] = alternate_close
+    changed["configured_pair"] = alternate_pair.to_mapping()
+    changed["configured_pair_sha256"] = alternate_pair.configured_pair_sha256
+    alternate_installation = InstallationRecord.from_bytes(
+        _canonical(changed),
+        authority,
+    )
+
+    with pytest.raises(
+        ManagerAcceptanceError,
+        match="exact template",
+    ):
+        UnitPublicationReceipt.create(
+            authority=authority,
+            installation=alternate_installation,
+            run_template_raw=RUN_TEMPLATE_RAW,
+            close_template_raw=CLOSE_TEMPLATE_RAW,
+            published_run_raw=RUN_TEMPLATE_RAW,
+            published_close_raw=CLOSE_TEMPLATE_RAW,
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "unit_publication_sha256",
+        "configured_pair_readback_sha256",
+        "configured_pair_sha256",
+    ),
+)
+def test_loaded_manager_receipt_rejects_split_configured_authority(
+    field: str,
+) -> None:
+    receipt = acquire_loaded_manager_receipt(
+        _Manager(),
+        configured_readback=_configured_readback(),
+        unit_publication=_unit_publication(),
+        persist_and_reopen=lambda raw: raw,
+    )
+    changed = json.loads(receipt.raw)
+    changed[field] = "0" * 64
+
+    with pytest.raises(ManagerAcceptanceError, match="digest differs"):
+        LoadedManagerReceipt.from_bytes(
+            _canonical(changed),
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+        )
+
+
+@pytest.mark.parametrize(
+    ("unit", "field", "value"),
+    (
+        (RUN, "NoNewPrivileges", 1),
+        (RUN, "ProtectControlGroups", 0),
+        (CLOSE, "PrivateTmp", 1),
+    ),
+)
+def test_loaded_manager_rejects_boolean_integer_type_aliases(
+    unit: str,
+    field: str,
+    value: int,
+) -> None:
+    manager = _Manager()
+    manager.values[unit][field] = value
+
+    with pytest.raises(ManagerAcceptanceError, match="property mapping differs"):
+        acquire_loaded_manager_receipt(
+            manager,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+            persist_and_reopen=lambda raw: raw,
+        )
+
+
+def test_loaded_manager_rejects_nested_type_alias_and_parser_tamper() -> None:
+    manager = _Manager()
+    command = list(manager.values[RUN]["ExecStart"][0])
+    command[2] = 0
+    manager.values[RUN]["ExecStart"] = [tuple(command)]
+    with pytest.raises(ManagerAcceptanceError, match="property mapping differs"):
+        acquire_loaded_manager_receipt(
+            manager,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+            persist_and_reopen=lambda raw: raw,
+        )
+
+    receipt = acquire_loaded_manager_receipt(
+        _Manager(),
+        configured_readback=_configured_readback(),
+        unit_publication=_unit_publication(),
+        persist_and_reopen=lambda raw: raw,
+    )
+    changed = json.loads(receipt.raw)
+    changed["run_properties"]["NoNewPrivileges"] = 1
+    with pytest.raises(ManagerAcceptanceError, match="properties differ"):
+        LoadedManagerReceipt.from_bytes(
+            _canonical(changed),
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+        )
 
 
 def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> None:
@@ -496,11 +1248,8 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
     with pytest.raises(ManagerAcceptanceError, match="identity changed"):
         acquire_loaded_manager_receipt(
             owner_drift,
-            run_unit=RUN,
-            close_unit=CLOSE,
-            expected_run_properties=_run_properties(),
-            expected_close_properties=_close_properties(),
-            configured_pair_sha256=PAIR,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -509,11 +1258,8 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
     with pytest.raises(ManagerAcceptanceError, match="property mapping differs"):
         acquire_loaded_manager_receipt(
             property_drift,
-            run_unit=RUN,
-            close_unit=CLOSE,
-            expected_run_properties=_run_properties(),
-            expected_close_properties=_close_properties(),
-            configured_pair_sha256=PAIR,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -529,11 +1275,8 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
     with pytest.raises(ManagerAcceptanceError, match="object paths differ"):
         acquire_loaded_manager_receipt(
             path_drift,
-            run_unit=RUN,
-            close_unit=CLOSE,
-            expected_run_properties=_run_properties(),
-            expected_close_properties=_close_properties(),
-            configured_pair_sha256=PAIR,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -542,32 +1285,35 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
     with pytest.raises(ManagerAcceptanceError, match="object paths must differ"):
         acquire_loaded_manager_receipt(
             same_paths,
-            run_unit=RUN,
-            close_unit=CLOSE,
-            expected_run_properties=_run_properties(),
-            expected_close_properties=_close_properties(),
-            configured_pair_sha256=PAIR,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
             persist_and_reopen=lambda raw: raw,
         )
 
 
-@pytest.mark.parametrize("transient", (True, None))
-def test_loaded_manager_rejects_transient_or_missing_fragment(
-    transient: object,
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("Transient", True),
+        ("Transient", None),
+        ("FragmentPath", "/tmp/caller-selected.service"),
+        ("FragmentPath", None),
+    ),
+)
+def test_loaded_manager_rejects_transient_or_fragment_drift(
+    field: str,
+    value: object,
 ) -> None:
     manager = _Manager()
-    if transient is None:
-        manager.values[RUN].pop("Transient")
+    if value is None:
+        manager.values[RUN].pop(field)
     else:
-        manager.values[RUN]["Transient"] = transient
+        manager.values[RUN][field] = value
     with pytest.raises(ManagerAcceptanceError):
         acquire_loaded_manager_receipt(
             manager,
-            run_unit=RUN,
-            close_unit=CLOSE,
-            expected_run_properties=_run_properties(),
-            expected_close_properties=_close_properties(),
-            configured_pair_sha256=PAIR,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -590,11 +1336,8 @@ def test_loaded_manager_requires_strict_empty_invocation_ay(
     with pytest.raises(ManagerAcceptanceError):
         acquire_loaded_manager_receipt(
             manager,
-            run_unit=RUN,
-            close_unit=CLOSE,
-            expected_run_properties=_run_properties(),
-            expected_close_properties=_close_properties(),
-            configured_pair_sha256=PAIR,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -607,11 +1350,8 @@ def test_loaded_manager_mutation_requires_root_before_reload(
     with pytest.raises(PermissionError, match="effective UID 0"):
         acquire_loaded_manager_receipt(
             manager,
-            run_unit=RUN,
-            close_unit=CLOSE,
-            expected_run_properties=_run_properties(),
-            expected_close_properties=_close_properties(),
-            configured_pair_sha256=PAIR,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
             persist_and_reopen=lambda raw: raw,
         )
     assert manager.calls == []
@@ -827,14 +1567,16 @@ def _start_bundle() -> tuple[
     StartAuthorizationReceipt,
     InstalledAcceptance,
     StartIssueReceipt,
+    tuple[RootPhaseIntentReceipt, ...],
     tuple[RootPhaseReceipt, ...],
 ]:
-    phases = _phase_prefix(len(INSTALL_PHASES))
+    prefix_intents, prefix_phases = _phase_prefix(len(INSTALL_PHASES) - 1)
     installed = InstalledAcceptance.create(
         launch_id=LAUNCH,
         authority_sha256="9" * 64,
         installation_sha256=INSTALLATION,
-        phase_receipts=phases,
+        phase_intents=prefix_intents,
+        phase_receipts=prefix_phases,
         subordinate_receipt_sha256={
             "root_selection": "1" * 64,
             "sealed_store": "2" * 64,
@@ -847,6 +1589,18 @@ def _start_bundle() -> tuple[
             "prestart_absence": "a" * 64,
         },
     )
+    final_intent = RootPhaseIntentReceipt.create(
+        launch_id=LAUNCH,
+        phase=INSTALL_PHASES[-1],
+        predecessor_sha256=(prefix_phases[-1].raw_sha256,),
+        effect_authority_sha256=installed.raw_sha256,
+    )
+    final_receipt = RootPhaseReceipt.create(
+        intent=final_intent,
+        effect_sha256=installed.raw_sha256,
+    )
+    intents = (*prefix_intents, final_intent)
+    phases = (*prefix_phases, final_receipt)
     authorization = StartAuthorizationReceipt.create(
         launch_id=LAUNCH,
         authority_sha256=installed.authority_sha256,
@@ -871,7 +1625,7 @@ def _start_bundle() -> tuple[
             version=VERSION,
         ),
     )
-    return authorization, installed, issue, phases
+    return authorization, installed, issue, intents, phases
 
 
 def _reacquire_prestart(
@@ -881,6 +1635,75 @@ def _reacquire_prestart(
     assert type(authorization) is StartAuthorizationReceipt
     assert type(installed_acceptance) is InstalledAcceptance
     return PRESTART_RAW
+
+
+def test_installed_acceptance_and_start_permit_reject_alternate_complete_dag() -> None:
+    authorization, installed, issue, _intents, _phases = _start_bundle()
+    alternate_intents: list[RootPhaseIntentReceipt] = []
+    alternate_phases: list[RootPhaseReceipt] = []
+    for index, phase in enumerate(INSTALL_PHASES):
+        intent = RootPhaseIntentReceipt.create(
+            launch_id=LAUNCH,
+            phase=phase,
+            predecessor_sha256=(
+                () if index == 0 else (alternate_phases[-1].raw_sha256,)
+            ),
+            effect_authority_sha256=hashlib.sha256(
+                f"alternate-authority:{phase.value}".encode()
+            ).hexdigest(),
+        )
+        receipt = RootPhaseReceipt.create(
+            intent=intent,
+            effect_sha256=hashlib.sha256(
+                f"alternate-effect:{phase.value}".encode()
+            ).hexdigest(),
+        )
+        alternate_intents.append(intent)
+        alternate_phases.append(receipt)
+    alternate_dag = (
+        tuple(alternate_intents),
+        tuple(alternate_phases),
+    )
+
+    assert validate_root_transaction(*alternate_dag) == alternate_dag
+    assert (
+        tuple(intent.raw_sha256 for intent in alternate_dag[0][:-1])
+        != installed.phase_intent_sha256
+    )
+    assert (
+        tuple(receipt.raw_sha256 for receipt in alternate_dag[1][:-1])
+        != installed.phase_receipt_sha256
+    )
+    with pytest.raises(ReceiptDagError, match="acceptance phase DAG differs"):
+        installed.verify_phase_receipts(*alternate_dag)
+
+    manager = _StartManager("returned")
+    writer = NoReplaceReceiptSet()
+    reacquire_calls: list[str] = []
+
+    def reacquire(
+        current_authorization: StartAuthorizationReceipt,
+        current_installed: InstalledAcceptance,
+    ) -> bytes:
+        del current_authorization, current_installed
+        reacquire_calls.append("read")
+        return PRESTART_RAW
+
+    with pytest.raises(ReceiptDagError, match="acceptance phase DAG differs"):
+        StartPermitOwner(
+            authorization=authorization,
+            installed_acceptance=installed,
+            phase_intents=alternate_dag[0],
+            phase_receipts=alternate_dag[1],
+            issue=issue,
+            manager=manager,
+            reacquire_prestart=reacquire,
+            writer=writer,
+        )
+
+    assert reacquire_calls == []
+    assert manager.calls == []
+    assert writer.names == ()
 
 
 def test_start_authorization_closes_prospective_and_installed_identity() -> None:
@@ -921,12 +1744,13 @@ def test_start_permit_is_one_shot_and_persists_issue_before_exact_dispatch(
     state: StartDispatchState,
     terminal_name: str,
 ) -> None:
-    authorization, installed, issue, phases = _start_bundle()
+    authorization, installed, issue, intents, phases = _start_bundle()
     manager = _StartManager(outcome)
     writer = NoReplaceReceiptSet()
     owner = StartPermitOwner(
         authorization=authorization,
         installed_acceptance=installed,
+        phase_intents=intents,
         phase_receipts=phases,
         issue=issue,
         manager=manager,
@@ -964,7 +1788,7 @@ def test_start_permit_is_one_shot_and_persists_issue_before_exact_dispatch(
 
 
 def test_issue_only_crash_classifies_unknown_and_never_absent() -> None:
-    _authorization, _installed, issue, _phases = _start_bundle()
+    _authorization, _installed, issue, _intents, _phases = _start_bundle()
 
     assert classify_start_dispatch(None, ()) is None
     assert classify_start_dispatch(issue, ()) is StartDispatchState.UNKNOWN
@@ -981,12 +1805,13 @@ def test_issue_only_crash_classifies_unknown_and_never_absent() -> None:
 
 
 def test_definite_error_before_start_is_unknown_not_start_rejected() -> None:
-    authorization, installed, issue, phases = _start_bundle()
+    authorization, installed, issue, intents, phases = _start_bundle()
     manager = _StartManager("ref-rejected")
     writer = NoReplaceReceiptSet()
     result = StartPermitOwner(
         authorization=authorization,
         installed_acceptance=installed,
+        phase_intents=intents,
         phase_receipts=phases,
         issue=issue,
         manager=manager,
@@ -1001,13 +1826,14 @@ def test_definite_error_before_start_is_unknown_not_start_rejected() -> None:
 
 @pytest.mark.parametrize("outcome", ("drift-before-start", "drift-after-start"))
 def test_start_manager_identity_drift_is_unknown(outcome: str) -> None:
-    authorization, installed, issue, phases = _start_bundle()
+    authorization, installed, issue, intents, phases = _start_bundle()
     manager = _StartManager(outcome)
     writer = NoReplaceReceiptSet()
 
     result = StartPermitOwner(
         authorization=authorization,
         installed_acceptance=installed,
+        phase_intents=intents,
         phase_receipts=phases,
         issue=issue,
         manager=manager,
@@ -1020,7 +1846,7 @@ def test_start_manager_identity_drift_is_unknown(outcome: str) -> None:
 
 
 def test_start_manager_identity_mismatch_refuses_before_issue() -> None:
-    authorization, installed, issue, phases = _start_bundle()
+    authorization, installed, issue, intents, phases = _start_bundle()
     manager = _StartManager("returned")
     manager.owner = ":1.99"
     writer = NoReplaceReceiptSet()
@@ -1029,6 +1855,7 @@ def test_start_manager_identity_mismatch_refuses_before_issue() -> None:
         StartPermitOwner(
             authorization=authorization,
             installed_acceptance=installed,
+            phase_intents=intents,
             phase_receipts=phases,
             issue=issue,
             manager=manager,
@@ -1042,7 +1869,7 @@ def test_start_manager_identity_mismatch_refuses_before_issue() -> None:
 
 @pytest.mark.parametrize("mode", ("drift", "error"))
 def test_start_permit_reacquires_prestart_before_manager_or_issue(mode: str) -> None:
-    authorization, installed, issue, phases = _start_bundle()
+    authorization, installed, issue, intents, phases = _start_bundle()
     manager = _StartManager("returned")
     writer = NoReplaceReceiptSet()
 
@@ -1060,6 +1887,7 @@ def test_start_permit_reacquires_prestart_before_manager_or_issue(mode: str) -> 
         StartPermitOwner(
             authorization=authorization,
             installed_acceptance=installed,
+            phase_intents=intents,
             phase_receipts=phases,
             issue=issue,
             manager=manager,
@@ -1074,12 +1902,13 @@ def test_start_permit_reacquires_prestart_before_manager_or_issue(mode: str) -> 
 def test_start_permit_requires_root_and_existing_issue_name_prevents_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    authorization, installed, issue, phases = _start_bundle()
+    authorization, installed, issue, intents, phases = _start_bundle()
     manager = _StartManager("returned")
     writer = NoReplaceReceiptSet()
     unprivileged = StartPermitOwner(
         authorization=authorization,
         installed_acceptance=installed,
+        phase_intents=intents,
         phase_receipts=phases,
         issue=issue,
         manager=manager,
@@ -1097,6 +1926,7 @@ def test_start_permit_requires_root_and_existing_issue_name_prevents_call(
     collision = StartPermitOwner(
         authorization=authorization,
         installed_acceptance=installed,
+        phase_intents=intents,
         phase_receipts=phases,
         issue=issue,
         manager=collision_manager,

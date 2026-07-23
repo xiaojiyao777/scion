@@ -136,25 +136,24 @@ pair readback, exact template-derived installation pair, private W3 tool
 packaging and service package data. The exact accepted native ELF is reproduced
 at `3d747973...803fc`.
 
-A production-unwired installation source candidate is pushed at exact commit
-`eee9e0f6916e1b4e5505a599e345a263911881f2`. It adds environment inventory and
-staging facades, candidate receipts, Linux mutation primitives,
-manager/start contracts and prospective authorization binding. Focused
-contracts pass exact `90` on Python 3.12 and 3.13; the Python 3.12 execution
-regression passes `1798 / 1 skipped`. Final reviews report
-`P0=0 / P1=6 / P2=0`: the six P1s are still-binding artifact/root acceptance
-blockers, not waivers. There is no double-built wheel or complete
-environment/relocation receipt, candidate dry-root/absence gate, production
-live-prestart owner, root intent/commit DAG, configured-pair manager closure,
-thin CLI or installed acceptance. Exact checkpoint evidence is in
-`v04-w3-root-installation-source-candidate-checkpoint-20260723.md`.
+The dormant candidate-artifact source closure is now accepted. It adds the
+fixed non-injected double-wheel builder and live verifier, semantic
+environment/external-runtime evidence, simulated relocation, complete
+candidate/dry-root/absence acquisition, Git replacement-object rejection and
+an unambiguous nine-phase root transaction. Main dual-version gates pass exact
+`142`; the Python 3.12 execution regression passes `1815 / 1 skipped`.
+Independent fixed-hash review reports `P0=0 / P1=0 / P2=0`. Exact evidence is
+in `v04-w3-candidate-artifact-source-acceptance-20260723.md`.
 
-No root installation, mount, manager mutation, nonce or formal job occurred.
-Next is candidate artifact closure: double-wheel/member/native evidence,
-semantic environment and relocation receipts, and dry-root/absence
-verification. Root application remains forbidden. The user's prospective
-`StartUnit` authorization is usable only for the unique exact candidate later
-selected in the root-owned selection ledger after every fixed gate passes.
+This is source acceptance, not a production artifact or installation. No root
+installation, mount, manager mutation, nonce or formal job occurred. Next is
+the concrete root composition slice: split manager reload from loaded-instance
+acquisition, add typed store/authority/projection/reload/installed-state
+receipts, complete live pre-start reacquisition and expose the four fixed root
+CLI surfaces. Root application remains forbidden until that source and one
+actual candidate close at P0=0/P1=0. The user's prospective `StartUnit`
+authorization is usable only for the unique exact candidate later selected in
+the root-owned selection ledger after every fixed gate passes.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
@@ -1008,11 +1007,14 @@ scientific and lineage-owning artifacts remain in place.
      accepted problem root remains exact `43 / 172 / 0 formal` and read-only.
      Formal launch still requires a separate root-owned installation and
      loaded-manager acceptance plus explicit human `StartUnit` authorization.
-     A production-unwired root-installation source candidate is now pushed at
-     `eee9e0f6`; its final reviews are `P0=0 / P1=6 / P2=0`. The open P1s lock
-     root use until double-wheel/environment/candidate closure, the durable
-     root intent/commit owner, full live-prestart verification and configured-
-     pair manager binding are implemented and independently accepted.
+     The candidate-artifact source built on `eee9e0f6` is now accepted with
+     dual-version `142` gates, Python 3.12 execution `1815 / 1 skipped`, and
+     independent `P0=0 / P1=0 / P2=0`. This closes double-wheel, semantic
+     environment/relocation, candidate/dry-root/absence acquisition and the
+     nine-phase root intent/commit DAG. Root use remains locked until the
+     concrete composition/partial-hold owner, typed aggregate receipts,
+     separated manager reload/load acquisition, full installed/live-prestart
+     verification and fixed thin CLI are independently accepted.
      The rejected W3 lifecycle stays excluded, B1 no longer occupies the host,
      and no sandbox, retry, budget, truncation or new research gate is added.
 3. [Design frozen] Implement fresh D2b.0b dormant primitives and isolated

@@ -698,6 +698,19 @@ class InstallationRecord:
         )
         if configured_pair.configured_pair_sha256 != configured_pair_sha256:
             raise LaunchAuthorityError("installation configured pair digest differs")
+        run_unit = _unit(value["run_unit"], field="installation.run_unit")
+        close_unit = _unit(value["close_unit"], field="installation.close_unit")
+        expected_instance_suffix = f"@{launch_id}.service"
+        if (
+            run_unit == close_unit
+            or configured_pair.run.unit != run_unit
+            or configured_pair.closer.unit != close_unit
+            or not run_unit.endswith(expected_instance_suffix)
+            or not close_unit.endswith(expected_instance_suffix)
+        ):
+            raise LaunchAuthorityError(
+                "installation units are not the configured launch instances"
+            )
         return cls(
             launch_id=launch_id,
             authority_sha256=authority_sha256,
@@ -714,8 +727,8 @@ class InstallationRecord:
             projection_root=projection_root,
             run_template_sha256=authority.run_template_sha256,
             close_template_sha256=authority.close_template_sha256,
-            run_unit=_unit(value["run_unit"], field="installation.run_unit"),
-            close_unit=_unit(value["close_unit"], field="installation.close_unit"),
+            run_unit=run_unit,
+            close_unit=close_unit,
             configured_pair=configured_pair,
             configured_pair_sha256=configured_pair_sha256,
             installation_sha256=hashlib.sha256(raw).hexdigest(),

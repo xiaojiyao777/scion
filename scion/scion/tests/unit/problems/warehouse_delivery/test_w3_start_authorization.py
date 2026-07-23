@@ -21,6 +21,8 @@ from scion.runtime.execution.external_installation import (
     INSTALL_PHASES,
     DirectorySnapshot,
     InstalledAcceptance,
+    ReceiptDagError,
+    RootPhaseIntentReceipt,
     RootPhaseReceipt,
     SelectionReceipt,
     StartAuthorizationReceipt,
@@ -110,36 +112,60 @@ def _root_selection(
 
 def _installed(
     selection: SelectionReceipt,
-) -> tuple[InstalledAcceptance, tuple[RootPhaseReceipt, ...]]:
-    phases = []
-    for index, phase in enumerate(INSTALL_PHASES):
-        receipt = RootPhaseReceipt.create(
+) -> tuple[
+    InstalledAcceptance,
+    tuple[RootPhaseIntentReceipt, ...],
+    tuple[RootPhaseReceipt, ...],
+]:
+    intents = []
+    receipts = []
+    for phase in INSTALL_PHASES[:-1]:
+        intent = RootPhaseIntentReceipt.create(
             launch_id=LAUNCH,
             phase=phase,
-            predecessor_sha256=(() if index == 0 else (phases[-1].raw_sha256,)),
+            predecessor_sha256=(() if not receipts else (receipts[-1].raw_sha256,)),
+            effect_authority_sha256=hashlib.sha256(
+                f"{phase.value}:authority".encode()
+            ).hexdigest(),
+        )
+        receipt = RootPhaseReceipt.create(
+            intent=intent,
             effect_sha256=hashlib.sha256(phase.value.encode()).hexdigest(),
         )
-        phases.append(receipt)
-    phase_tuple = tuple(phases)
+        intents.append(intent)
+        receipts.append(receipt)
+    installed = InstalledAcceptance.create(
+        launch_id=LAUNCH,
+        authority_sha256=AUTHORITY,
+        installation_sha256=INSTALLATION,
+        phase_intents=tuple(intents),
+        phase_receipts=tuple(receipts),
+        subordinate_receipt_sha256={
+            "root_selection": selection.raw_sha256,
+            "sealed_store": "1" * 64,
+            "environment_content": "2" * 64,
+            "environment_relocation": "3" * 64,
+            "projection": "4" * 64,
+            "units": "5" * 64,
+            "loaded_manager": "6" * 64,
+            "dry_root": "7" * 64,
+            "prestart_absence": "8" * 64,
+        },
+    )
+    final_intent = RootPhaseIntentReceipt.create(
+        launch_id=LAUNCH,
+        phase=INSTALL_PHASES[-1],
+        predecessor_sha256=(receipts[-1].raw_sha256,),
+        effect_authority_sha256=installed.raw_sha256,
+    )
+    final_receipt = RootPhaseReceipt.create(
+        intent=final_intent,
+        effect_sha256=installed.raw_sha256,
+    )
     return (
-        InstalledAcceptance.create(
-            launch_id=LAUNCH,
-            authority_sha256=AUTHORITY,
-            installation_sha256=INSTALLATION,
-            phase_receipts=phase_tuple,
-            subordinate_receipt_sha256={
-                "root_selection": selection.raw_sha256,
-                "sealed_store": "1" * 64,
-                "environment_content": "2" * 64,
-                "environment_relocation": "3" * 64,
-                "projection": "4" * 64,
-                "units": "5" * 64,
-                "loaded_manager": "6" * 64,
-                "dry_root": "7" * 64,
-                "prestart_absence": "8" * 64,
-            },
-        ),
-        phase_tuple,
+        installed,
+        (*intents, final_intent),
+        (*receipts, final_receipt),
     )
 
 
@@ -149,7 +175,7 @@ def test_prospective_intent_binds_only_after_exact_root_selection(
     prospective = ProspectiveStartAuthorizationIntent.from_bytes(_prospective_raw())
     intent, commit = _preparation(tmp_path)
     selection = _root_selection(intent, commit)
-    installed, phases = _installed(selection)
+    installed, phase_intents, phase_receipts = _installed(selection)
 
     authorization = bind_start_authorization(
         prospective,
@@ -157,7 +183,8 @@ def test_prospective_intent_binds_only_after_exact_root_selection(
         preparation_commit=commit,
         root_selection=selection,
         installed_acceptance=installed,
-        phase_receipts=phases,
+        phase_intents=phase_intents,
+        phase_receipts=phase_receipts,
         recorded_at_utc="2026-07-23T17:00:00Z",
         unit=RUN_UNIT,
     )
@@ -190,7 +217,7 @@ def test_prospective_parser_and_binding_reject_drift(tmp_path: Path) -> None:
     prospective = ProspectiveStartAuthorizationIntent.from_bytes(raw)
     intent, commit = _preparation(tmp_path)
     selection = _root_selection(intent, commit)
-    installed, phases = _installed(selection)
+    installed, phase_intents, phase_receipts = _installed(selection)
     other = SelectionReceipt.from_bytes(
         selection.raw.replace(
             f'"authority_sha256":"{AUTHORITY}"'.encode(),
@@ -207,7 +234,8 @@ def test_prospective_parser_and_binding_reject_drift(tmp_path: Path) -> None:
             preparation_commit=commit,
             root_selection=other,
             installed_acceptance=installed,
-            phase_receipts=phases,
+            phase_intents=phase_intents,
+            phase_receipts=phase_receipts,
             recorded_at_utc="2026-07-23T17:00:00Z",
             unit=RUN_UNIT,
         )
@@ -226,7 +254,70 @@ def test_prospective_parser_and_binding_reject_drift(tmp_path: Path) -> None:
             preparation_commit=other_commit,
             root_selection=selection,
             installed_acceptance=installed,
-            phase_receipts=phases,
+            phase_intents=phase_intents,
+            phase_receipts=phase_receipts,
             recorded_at_utc="2026-07-23T17:00:00Z",
             unit=RUN_UNIT,
         )
+
+
+def test_binding_rejects_alternate_complete_dag_before_authorization_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prospective = ProspectiveStartAuthorizationIntent.from_bytes(_prospective_raw())
+    preparation_intent, preparation_commit = _preparation(tmp_path)
+    selection = _root_selection(preparation_intent, preparation_commit)
+    installed, _phase_intents, _phase_receipts = _installed(selection)
+    alternate_intents: list[RootPhaseIntentReceipt] = []
+    alternate_receipts: list[RootPhaseReceipt] = []
+    for phase in INSTALL_PHASES:
+        intent = RootPhaseIntentReceipt.create(
+            launch_id=LAUNCH,
+            phase=phase,
+            predecessor_sha256=(
+                () if not alternate_receipts else (alternate_receipts[-1].raw_sha256,)
+            ),
+            effect_authority_sha256=hashlib.sha256(
+                f"alternate:{phase.value}:authority".encode()
+            ).hexdigest(),
+        )
+        alternate_intents.append(intent)
+        alternate_receipts.append(
+            RootPhaseReceipt.create(
+                intent=intent,
+                effect_sha256=hashlib.sha256(
+                    f"alternate:{phase.value}:effect".encode()
+                ).hexdigest(),
+            )
+        )
+
+    called = False
+
+    def unexpected_create(
+        cls: type[StartAuthorizationReceipt],
+        **_kwargs: object,
+    ) -> StartAuthorizationReceipt:
+        nonlocal called
+        del cls
+        called = True
+        raise AssertionError("authorization creation must not be reached")
+
+    monkeypatch.setattr(
+        StartAuthorizationReceipt,
+        "create",
+        classmethod(unexpected_create),
+    )
+    with pytest.raises(ReceiptDagError, match="phase DAG differs"):
+        bind_start_authorization(
+            prospective,
+            preparation_intent=preparation_intent,
+            preparation_commit=preparation_commit,
+            root_selection=selection,
+            installed_acceptance=installed,
+            phase_intents=tuple(alternate_intents),
+            phase_receipts=tuple(alternate_receipts),
+            recorded_at_utc="2026-07-23T17:00:00Z",
+            unit=RUN_UNIT,
+        )
+    assert called is False
