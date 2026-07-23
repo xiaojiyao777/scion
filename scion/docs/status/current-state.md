@@ -75,13 +75,25 @@ source foundation is also accepted: strict real systemd-255
 `InvocationID: ay`, canonical configured-pair readback, exact problem-template
 pair derivation, W3 tool packaging and both service templates in the wheel.
 The accepted native extension SHA `3d747973...803fc` is reproducible with the
-frozen builder. No `/var/lib/scion`, unit fragment, mount, manager mutation,
-nonce or formal job was created. The active next slice is implementation and
-fixed-source acceptance of `environment_integrity`, generic
-`external_installation`, the Warehouse candidate adapter and thin install CLI;
-only then may one clean pushed candidate enter root quarantine and selection.
-The current shell has no passwordless sudo, so the later root apply/start phase
-will require an interactive root shell rather than code invoking sudo.
+frozen builder.
+
+A production-unwired source candidate is pushed at exact
+`eee9e0f6916e1b4e5505a599e345a263911881f2`. Environment inventory/staging,
+candidate receipts, FD-pinned Linux primitives, manager/start contracts and
+prospective intent binding now have dormant owners. Focused gates pass exact
+`90` on Python 3.12 and 3.13, and the Python 3.12 execution suite passes
+`1798 / 1 skipped`. Independent final reviews report
+`P0=0 / P1=6 / P2=0`; the P1s explicitly block production use. No complete
+double-wheel/environment-relocation/candidate gate, live-prestart owner, root
+intent/commit DAG, configured-pair manager binding, CLI or installed
+acceptance exists.
+
+No `/var/lib/scion`, unit fragment, mount, manager mutation, nonce or formal
+job was created. The active next slice is candidate artifact closure, followed
+by root transaction/DAG acceptance and only then thin CLI wiring. Root
+apply/start remains forbidden. The current shell has no passwordless sudo, so
+the later accepted root phase will require an interactive root shell rather
+than code invoking sudo.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`
@@ -1165,10 +1177,14 @@ actual-journal-handle design is frozen and accepted.
    launch-readiness source is accepted at `82d5394b`, including exact external
    authority/installation records, nonce, read-only systemd acquisition and
    run/`ExecStopPost`/close wiring. Keep it dormant. Next, perform the separate
-   root-owned installation and loaded-manager acceptance; do not authorize a
-   job without that evidence and an explicit human `StartUnit` decision. F1's
-   dormant materializer is accepted, but neither W3 nor F1 has formal launch
-   authority.
+   candidate artifact closure on the pushed `eee9e0f6` source foundation:
+   double-wheel/native/member evidence, semantic environment/relocation
+   receipts and dry-root/absence verification. Then implement and accept the
+   root intent/commit DAG, full live-prestart owner and configured-pair manager
+   binding before wiring the thin CLI. Do not perform root installation or
+   authorize a job without those gates and the exact bound human `StartUnit`
+   decision. F1's dormant materializer is accepted, but neither W3 nor F1 has
+   formal launch authority.
 3. Keep Checkpoints A and B dormant. Implement only the frozen E1 acceptance
    slice after the W3 generic boundary is accepted; retain the deterministic
    staging capability boundary and add no unlink, SQLite import, receipt writer,
