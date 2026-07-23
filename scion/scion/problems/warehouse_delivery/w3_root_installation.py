@@ -1,0 +1,1304 @@
+"""Canonical Warehouse W3 aggregates for reopened root-installation facts.
+
+This module is deliberately capability-free.  It accepts only exact producer
+receipt objects, reopens those objects from their canonical bytes, and closes
+the Warehouse-specific role and path inventory.  It performs no filesystem,
+mount, manager, or receipt-store mutation.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from dataclasses import dataclass
+from pathlib import PurePosixPath
+import re
+import stat
+from typing import Mapping
+
+from scion.problems.warehouse_delivery.w3_candidate_gate import CandidateGateReceipt
+from scion.problems.warehouse_delivery.w3_environment_receipts import (
+    EnvironmentRelocationReceipt,
+    WarehouseEnvironmentContentReceipt,
+    derive_final_environment_path,
+)
+from scion.problems.warehouse_delivery.w3_installation import (
+    ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+    SealedStoreReceipt,
+)
+from scion.runtime.execution.external_installation import (
+    MountBindingReceipt,
+    PublishedDirectoryReceipt,
+    PublishedRegularFileReceipt,
+    PublishedTreeReceipt,
+)
+from scion.runtime.execution.external_linux import (
+    FileIdentity,
+    ImmutableTreeImportReceipt,
+    MountNamespacePair,
+)
+from scion.runtime.execution.launch_authority import (
+    AcceptedLaunchAuthority,
+    InstallationRecord,
+)
+
+_SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
+_BOOT_ID_RE = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-" r"[0-9a-f]{4}-[0-9a-f]{12}\Z"
+)
+
+_STAGED_SCHEMA = "scion.w3-root-staged-candidate.v1"
+_STORES_SCHEMA = "scion.w3-root-stores-published.v1"
+_AUTHORITY_SCHEMA = "scion.w3-root-authority-published.v1"
+_PROJECTION_SCHEMA = "scion.w3-root-projection.v1"
+
+_SEALED_ROLE = "sealed"
+_ENVIRONMENT_ROLE = "environment"
+_AUTHORITY_ROLE = "authority"
+_INSTALLATION_ROLE = "installation"
+_NONCE_CLAIMS_ROLE = "nonce-claims"
+_RUN_ROLE = "run"
+_PROJECTION_PARENT_ROLE = "projection-parent"
+_PROJECTION_ROOT_ROLE = "projection-root"
+
+
+class WarehouseW3RootInstallationError(RuntimeError):
+    """One root-installation aggregate differs from its exact producer facts."""
+
+
+def _canonical_json(value: object) -> bytes:
+    try:
+        return (
+            json.dumps(
+                value,
+                ensure_ascii=False,
+                allow_nan=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise WarehouseW3RootInstallationError(
+            "root-installation aggregate is not canonical JSON data"
+        ) from exc
+
+
+def _decode_canonical(raw: bytes, *, label: str) -> dict[str, object]:
+    if type(raw) is not bytes:
+        raise TypeError(f"{label} must be exact bytes")
+
+    def mapping(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        value: dict[str, object] = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError(f"{label} contains a duplicate field")
+            value[key] = item
+        return value
+
+    try:
+        value = json.loads(
+            raw.decode("utf-8", "strict"),
+            object_pairs_hook=mapping,
+            parse_float=lambda _value: (_ for _ in ()).throw(
+                ValueError(f"{label} contains a floating-point value")
+            ),
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"{label} contains {token}")
+            ),
+        )
+    except (UnicodeError, ValueError, TypeError) as exc:
+        raise WarehouseW3RootInstallationError(
+            f"{label} is not canonical JSON"
+        ) from exc
+    if type(value) is not dict or _canonical_json(value) != raw:
+        raise WarehouseW3RootInstallationError(f"{label} bytes are not canonical")
+    return value
+
+
+def _exact_fields(
+    value: object,
+    expected: frozenset[str],
+    *,
+    label: str,
+) -> dict[str, object]:
+    if (
+        type(value) is not dict
+        or frozenset(value) != expected
+        or any(type(key) is not str for key in value)
+    ):
+        raise WarehouseW3RootInstallationError(f"{label} fields differ")
+    return value
+
+
+def _sha256(value: object, *, field: str) -> str:
+    if type(value) is not str or _SHA256_RE.fullmatch(value) is None:
+        raise WarehouseW3RootInstallationError(f"{field} is not canonical SHA-256")
+    return value
+
+
+def _boot_id(value: object) -> str:
+    if type(value) is not str or _BOOT_ID_RE.fullmatch(value) is None:
+        raise WarehouseW3RootInstallationError("boot_id is not canonical")
+    return value
+
+
+def _absolute_path(value: object, *, field: str) -> str:
+    if type(value) is not str or not value:
+        raise WarehouseW3RootInstallationError(f"{field} is not exact text")
+    path = PurePosixPath(value)
+    if (
+        not path.is_absolute()
+        or value == "/"
+        or value.startswith("//")
+        or str(path) != value
+        or ".." in path.parts
+    ):
+        raise WarehouseW3RootInstallationError(
+            f"{field} is not a canonical absolute path"
+        )
+    return value
+
+
+def _false_controls(value: Mapping[str, object], *, label: str) -> None:
+    if any(value.get(name) is not False for name in ("retry", "resume", "reuse")):
+        raise WarehouseW3RootInstallationError(
+            f"{label} enables retry, resume, or reuse"
+        )
+
+
+def _identity_mapping(identity: FileIdentity) -> dict[str, int]:
+    return identity.to_mapping()
+
+
+def _reopen_candidate(receipt: CandidateGateReceipt) -> CandidateGateReceipt:
+    if type(receipt) is not CandidateGateReceipt:
+        raise TypeError("candidate_gate must be exact CandidateGateReceipt")
+    reopened = CandidateGateReceipt.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("candidate gate object differs")
+    return reopened
+
+
+def _reopen_import(
+    receipt: ImmutableTreeImportReceipt,
+) -> ImmutableTreeImportReceipt:
+    if type(receipt) is not ImmutableTreeImportReceipt:
+        raise TypeError("tree_import must be exact ImmutableTreeImportReceipt")
+    reopened = ImmutableTreeImportReceipt.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("tree import object differs")
+    return reopened
+
+
+def _reopen_authority_pair(
+    authority: AcceptedLaunchAuthority,
+    installation: InstallationRecord,
+) -> tuple[AcceptedLaunchAuthority, InstallationRecord]:
+    if type(authority) is not AcceptedLaunchAuthority:
+        raise TypeError("authority must be exact AcceptedLaunchAuthority")
+    if type(installation) is not InstallationRecord:
+        raise TypeError("installation must be exact InstallationRecord")
+    reopened_authority = AcceptedLaunchAuthority.from_bytes(authority.raw)
+    reopened_installation = InstallationRecord.from_bytes(
+        installation.raw,
+        reopened_authority,
+    )
+    if reopened_authority != authority or reopened_installation != installation:
+        raise WarehouseW3RootInstallationError(
+            "authority or installation object differs"
+        )
+    return reopened_authority, reopened_installation
+
+
+def _reopen_sealed(receipt: SealedStoreReceipt) -> SealedStoreReceipt:
+    if type(receipt) is not SealedStoreReceipt:
+        raise TypeError("sealed_store must be exact SealedStoreReceipt")
+    reopened = SealedStoreReceipt.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("sealed-store object differs")
+    return reopened
+
+
+def _reopen_semantic(
+    receipt: WarehouseEnvironmentContentReceipt,
+) -> WarehouseEnvironmentContentReceipt:
+    if type(receipt) is not WarehouseEnvironmentContentReceipt:
+        raise TypeError(
+            "environment_content must be exact WarehouseEnvironmentContentReceipt"
+        )
+    reopened = WarehouseEnvironmentContentReceipt.from_bytes(
+        receipt.raw,
+        generic_receipt=receipt.generic_receipt,
+        wheel_receipt=receipt.wheel_receipt,
+    )
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError(
+            "Warehouse environment content object differs"
+        )
+    return reopened
+
+
+def _reopen_relocation(
+    receipt: EnvironmentRelocationReceipt,
+    *,
+    content: WarehouseEnvironmentContentReceipt,
+) -> EnvironmentRelocationReceipt:
+    if type(receipt) is not EnvironmentRelocationReceipt:
+        raise TypeError(
+            "environment_relocation must be exact EnvironmentRelocationReceipt"
+        )
+    reopened = EnvironmentRelocationReceipt.from_bytes(
+        receipt.raw,
+        content_receipt=content,
+    )
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("environment relocation object differs")
+    return reopened
+
+
+def _reopen_tree(receipt: PublishedTreeReceipt) -> PublishedTreeReceipt:
+    if type(receipt) is not PublishedTreeReceipt:
+        raise TypeError("published tree must be exact PublishedTreeReceipt")
+    reopened = PublishedTreeReceipt.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("published tree object differs")
+    return reopened
+
+
+def _reopen_file(
+    receipt: PublishedRegularFileReceipt,
+) -> PublishedRegularFileReceipt:
+    if type(receipt) is not PublishedRegularFileReceipt:
+        raise TypeError("published file must be exact PublishedRegularFileReceipt")
+    reopened = PublishedRegularFileReceipt.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("published file object differs")
+    return reopened
+
+
+def _reopen_directory(
+    receipt: PublishedDirectoryReceipt,
+) -> PublishedDirectoryReceipt:
+    if type(receipt) is not PublishedDirectoryReceipt:
+        raise TypeError("published directory must be exact PublishedDirectoryReceipt")
+    reopened = PublishedDirectoryReceipt.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("published directory object differs")
+    return reopened
+
+
+def _reopen_mount(receipt: MountBindingReceipt) -> MountBindingReceipt:
+    if type(receipt) is not MountBindingReceipt:
+        raise TypeError("mount binding must be exact MountBindingReceipt")
+    reopened = MountBindingReceipt.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("mount binding object differs")
+    return reopened
+
+
+def _require_candidate_installation_binding(
+    candidate: CandidateGateReceipt,
+    authority: AcceptedLaunchAuthority,
+    installation: InstallationRecord,
+) -> None:
+    if (
+        candidate.launch_id != installation.launch_id
+        or candidate.authority_sha256 != authority.authority_sha256
+        or candidate.installation_sha256 != installation.installation_sha256
+        or installation.authority_sha256 != authority.authority_sha256
+        or candidate.nonce != authority.nonce
+    ):
+        raise WarehouseW3RootInstallationError(
+            "candidate, authority, and installation binding differs"
+        )
+
+
+def _expected_installation_path(installation: InstallationRecord) -> str:
+    return f"/var/lib/scion/installations/w3/{installation.launch_id}.json"
+
+
+def _require_exact_value(
+    raw: bytes,
+    *,
+    expected: dict[str, object],
+    fields: frozenset[str],
+    label: str,
+) -> dict[str, object]:
+    value = _exact_fields(_decode_canonical(raw, label=label), fields, label=label)
+    _false_controls(value, label=label)
+    if _canonical_json(value) != _canonical_json(expected):
+        raise WarehouseW3RootInstallationError(f"{label} producer binding differs")
+    return value
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class WarehouseW3StagedCandidateReceipt:
+    selection_key: str
+    launch_id: str
+    authority_sha256: str
+    installation_sha256: str
+    candidate_gate_sha256: str
+    tree_import_sha256: str
+    candidate_root: str
+    source_identity: FileIdentity
+    staging_leaf: str
+    destination_identity: FileIdentity
+    imported_tree_aggregate_sha256: str
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "WarehouseW3StagedCandidateReceipt":
+        del cls
+        raise TypeError(
+            "WarehouseW3StagedCandidateReceipt must be parsed from exact bytes"
+        )
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("WarehouseW3StagedCandidateReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        candidate_gate: CandidateGateReceipt,
+        tree_import: ImmutableTreeImportReceipt,
+    ) -> "WarehouseW3StagedCandidateReceipt":
+        candidate = _reopen_candidate(candidate_gate)
+        imported = _reopen_import(tree_import)
+        expected = cls._expected(candidate, imported)
+        return cls.from_bytes(
+            _canonical_json(expected),
+            candidate_gate=candidate,
+            tree_import=imported,
+        )
+
+    @staticmethod
+    def _expected(
+        candidate: CandidateGateReceipt,
+        imported: ImmutableTreeImportReceipt,
+    ) -> dict[str, object]:
+        source = imported.source_root
+        candidate_identity = candidate.candidate_root_identity
+        if (
+            (
+                source.device,
+                source.inode,
+                stat.S_IMODE(source.mode),
+                source.uid,
+                source.gid,
+                source.link_count,
+            )
+            != (
+                candidate_identity.device,
+                candidate_identity.inode,
+                candidate_identity.mode,
+                candidate_identity.uid,
+                candidate_identity.gid,
+                candidate_identity.nlink,
+            )
+            or imported.target_uid != 0
+            or imported.target_gid != 0
+            or stat.S_IMODE(imported.staging_root.mode) != 0o555
+            or imported.staging_root.uid != 0
+            or imported.staging_root.gid != 0
+        ):
+            raise WarehouseW3RootInstallationError(
+                "staged candidate source or destination identity differs"
+            )
+        return {
+            "schema": _STAGED_SCHEMA,
+            "state": "ROOT_STAGING_IMPORTED",
+            "plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+            "selection_key": candidate.selection_key,
+            "launch_id": candidate.launch_id,
+            "authority_sha256": candidate.authority_sha256,
+            "installation_sha256": candidate.installation_sha256,
+            "candidate_gate_sha256": candidate.raw_sha256,
+            "tree_import_sha256": imported.raw_sha256,
+            "candidate_root": candidate.candidate_root,
+            "source_identity": _identity_mapping(source),
+            "staging_leaf": imported.staging_leaf,
+            "destination_identity": _identity_mapping(imported.staging_root),
+            "imported_tree_aggregate_sha256": imported.tree_sha256,
+            "retry": False,
+            "resume": False,
+            "reuse": False,
+        }
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        candidate_gate: CandidateGateReceipt,
+        tree_import: ImmutableTreeImportReceipt,
+    ) -> "WarehouseW3StagedCandidateReceipt":
+        candidate = _reopen_candidate(candidate_gate)
+        imported = _reopen_import(tree_import)
+        expected = cls._expected(candidate, imported)
+        _require_exact_value(
+            raw,
+            expected=expected,
+            fields=frozenset(expected),
+            label="W3 staged candidate receipt",
+        )
+        instance = object.__new__(cls)
+        for field, item in (
+            ("selection_key", candidate.selection_key),
+            ("launch_id", candidate.launch_id),
+            ("authority_sha256", candidate.authority_sha256),
+            ("installation_sha256", candidate.installation_sha256),
+            ("candidate_gate_sha256", candidate.raw_sha256),
+            ("tree_import_sha256", imported.raw_sha256),
+            ("candidate_root", candidate.candidate_root),
+            ("source_identity", imported.source_root),
+            ("staging_leaf", imported.staging_leaf),
+            ("destination_identity", imported.staging_root),
+            ("imported_tree_aggregate_sha256", imported.tree_sha256),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class WarehouseW3StoresPublishedReceipt:
+    selection_key: str
+    launch_id: str
+    authority_sha256: str
+    installation_sha256: str
+    candidate_gate_sha256: str
+    sealed_store_sha256: str
+    environment_content_sha256: str
+    sealed_publication_sha256: str
+    environment_publication_sha256: str
+    environment_relocation_sha256: str
+    sealed_path: str
+    environment_path: str
+    sealed_tree_aggregate_sha256: str
+    environment_tree_aggregate_sha256: str
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "WarehouseW3StoresPublishedReceipt":
+        del cls
+        raise TypeError(
+            "WarehouseW3StoresPublishedReceipt must be parsed from exact bytes"
+        )
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("WarehouseW3StoresPublishedReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        candidate_gate: CandidateGateReceipt,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        sealed_store: SealedStoreReceipt,
+        environment_content: WarehouseEnvironmentContentReceipt,
+        sealed_publication: PublishedTreeReceipt,
+        environment_publication: PublishedTreeReceipt,
+        environment_relocation: EnvironmentRelocationReceipt,
+    ) -> "WarehouseW3StoresPublishedReceipt":
+        dependencies = cls._dependencies(
+            candidate_gate=candidate_gate,
+            authority=authority,
+            installation=installation,
+            sealed_store=sealed_store,
+            environment_content=environment_content,
+            sealed_publication=sealed_publication,
+            environment_publication=environment_publication,
+            environment_relocation=environment_relocation,
+        )
+        expected = cls._expected(*dependencies)
+        return cls.from_bytes(
+            _canonical_json(expected),
+            candidate_gate=dependencies[0],
+            authority=dependencies[1],
+            installation=dependencies[2],
+            sealed_store=dependencies[3],
+            environment_content=dependencies[4],
+            sealed_publication=dependencies[5],
+            environment_publication=dependencies[6],
+            environment_relocation=dependencies[7],
+        )
+
+    @staticmethod
+    def _dependencies(
+        *,
+        candidate_gate: CandidateGateReceipt,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        sealed_store: SealedStoreReceipt,
+        environment_content: WarehouseEnvironmentContentReceipt,
+        sealed_publication: PublishedTreeReceipt,
+        environment_publication: PublishedTreeReceipt,
+        environment_relocation: EnvironmentRelocationReceipt,
+    ) -> tuple[
+        CandidateGateReceipt,
+        AcceptedLaunchAuthority,
+        InstallationRecord,
+        SealedStoreReceipt,
+        WarehouseEnvironmentContentReceipt,
+        PublishedTreeReceipt,
+        PublishedTreeReceipt,
+        EnvironmentRelocationReceipt,
+    ]:
+        candidate = _reopen_candidate(candidate_gate)
+        authority_value, installation_value = _reopen_authority_pair(
+            authority,
+            installation,
+        )
+        sealed = _reopen_sealed(sealed_store)
+        content = _reopen_semantic(environment_content)
+        sealed_tree = _reopen_tree(sealed_publication)
+        environment_tree = _reopen_tree(environment_publication)
+        relocation = _reopen_relocation(
+            environment_relocation,
+            content=content,
+        )
+        _require_candidate_installation_binding(
+            candidate,
+            authority_value,
+            installation_value,
+        )
+        return (
+            candidate,
+            authority_value,
+            installation_value,
+            sealed,
+            content,
+            sealed_tree,
+            environment_tree,
+            relocation,
+        )
+
+    @staticmethod
+    def _expected(
+        candidate: CandidateGateReceipt,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        sealed: SealedStoreReceipt,
+        content: WarehouseEnvironmentContentReceipt,
+        sealed_tree: PublishedTreeReceipt,
+        environment_tree: PublishedTreeReceipt,
+        relocation: EnvironmentRelocationReceipt,
+    ) -> dict[str, object]:
+        sealed_path = f"/var/lib/scion/sealed/w3/{installation.manifest_sha256}"
+        environment_path = str(derive_final_environment_path(content))
+        if (
+            installation.sealed_root != sealed_path
+            or installation.environment_root != environment_path
+            or authority.sealed_store_aggregate_sha256 != sealed.aggregate_sha256
+            or installation.sealed_store_aggregate_sha256 != sealed.aggregate_sha256
+            or authority.environment_receipt_sha256 != content.generic_receipt_sha256
+            or installation.environment_receipt_sha256 != content.generic_receipt_sha256
+            or candidate.semantic_environment_receipt_sha256 != content.raw_sha256
+            or candidate.environment_content_receipt_sha256
+            != content.generic_receipt_sha256
+            or sealed_tree.role != _SEALED_ROLE
+            or sealed_tree.path != sealed_path
+            or sealed_tree.source_receipt_sha256 != sealed.raw_sha256
+            or sealed_tree.expected_tree_sha256 != sealed.aggregate_sha256
+            or sealed_tree.reopened_tree_sha256 != sealed.aggregate_sha256
+            or environment_tree.role != _ENVIRONMENT_ROLE
+            or environment_tree.path != environment_path
+            or environment_tree.source_receipt_sha256 != content.generic_receipt_sha256
+            or environment_tree.expected_tree_sha256
+            != content.environment_inventory_sha256
+            or environment_tree.reopened_tree_sha256
+            != content.environment_inventory_sha256
+            or relocation.content_receipt_sha256 != content.raw_sha256
+            or relocation.final_environment_path != environment_path
+        ):
+            raise WarehouseW3RootInstallationError(
+                "published store role, path, or content binding differs"
+            )
+        return {
+            "schema": _STORES_SCHEMA,
+            "state": "STORES_PUBLISHED",
+            "plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+            "selection_key": candidate.selection_key,
+            "launch_id": installation.launch_id,
+            "authority_sha256": authority.authority_sha256,
+            "installation_sha256": installation.installation_sha256,
+            "candidate_gate_sha256": candidate.raw_sha256,
+            "sealed_store_sha256": sealed.raw_sha256,
+            "environment_content_sha256": content.raw_sha256,
+            "sealed_publication_sha256": sealed_tree.raw_sha256,
+            "environment_publication_sha256": environment_tree.raw_sha256,
+            "environment_relocation_sha256": relocation.raw_sha256,
+            "stores": [
+                {
+                    "role": _ENVIRONMENT_ROLE,
+                    "path": environment_path,
+                    "source_receipt_sha256": content.generic_receipt_sha256,
+                    "tree_aggregate_sha256": content.environment_inventory_sha256,
+                    "publication_sha256": environment_tree.raw_sha256,
+                },
+                {
+                    "role": _SEALED_ROLE,
+                    "path": sealed_path,
+                    "source_receipt_sha256": sealed.raw_sha256,
+                    "tree_aggregate_sha256": sealed.aggregate_sha256,
+                    "publication_sha256": sealed_tree.raw_sha256,
+                },
+            ],
+            "retry": False,
+            "resume": False,
+            "reuse": False,
+        }
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        candidate_gate: CandidateGateReceipt,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        sealed_store: SealedStoreReceipt,
+        environment_content: WarehouseEnvironmentContentReceipt,
+        sealed_publication: PublishedTreeReceipt,
+        environment_publication: PublishedTreeReceipt,
+        environment_relocation: EnvironmentRelocationReceipt,
+    ) -> "WarehouseW3StoresPublishedReceipt":
+        dependencies = cls._dependencies(
+            candidate_gate=candidate_gate,
+            authority=authority,
+            installation=installation,
+            sealed_store=sealed_store,
+            environment_content=environment_content,
+            sealed_publication=sealed_publication,
+            environment_publication=environment_publication,
+            environment_relocation=environment_relocation,
+        )
+        expected = cls._expected(*dependencies)
+        _require_exact_value(
+            raw,
+            expected=expected,
+            fields=frozenset(expected),
+            label="W3 stores-published receipt",
+        )
+        (
+            candidate,
+            authority_value,
+            installation_value,
+            sealed,
+            content,
+            sealed_tree,
+            environment_tree,
+            relocation,
+        ) = dependencies
+        instance = object.__new__(cls)
+        for field, item in (
+            ("selection_key", candidate.selection_key),
+            ("launch_id", installation_value.launch_id),
+            ("authority_sha256", authority_value.authority_sha256),
+            ("installation_sha256", installation_value.installation_sha256),
+            ("candidate_gate_sha256", candidate.raw_sha256),
+            ("sealed_store_sha256", sealed.raw_sha256),
+            ("environment_content_sha256", content.raw_sha256),
+            ("sealed_publication_sha256", sealed_tree.raw_sha256),
+            ("environment_publication_sha256", environment_tree.raw_sha256),
+            ("environment_relocation_sha256", relocation.raw_sha256),
+            ("sealed_path", sealed_tree.path),
+            ("environment_path", environment_tree.path),
+            ("sealed_tree_aggregate_sha256", sealed.aggregate_sha256),
+            (
+                "environment_tree_aggregate_sha256",
+                content.environment_inventory_sha256,
+            ),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class WarehouseW3AuthorityPublishedReceipt:
+    launch_id: str
+    authority_sha256: str
+    installation_sha256: str
+    authority_publication_sha256: str
+    installation_publication_sha256: str
+    nonce_directory_sha256: str
+    authority_path: str
+    installation_path: str
+    nonce_ledger_parent: str
+    nonce_uid: int
+    nonce_gid: int
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "WarehouseW3AuthorityPublishedReceipt":
+        del cls
+        raise TypeError(
+            "WarehouseW3AuthorityPublishedReceipt must be parsed from exact bytes"
+        )
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("WarehouseW3AuthorityPublishedReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        authority_publication: PublishedRegularFileReceipt,
+        installation_publication: PublishedRegularFileReceipt,
+        nonce_directory: PublishedDirectoryReceipt,
+    ) -> "WarehouseW3AuthorityPublishedReceipt":
+        dependencies = cls._dependencies(
+            authority=authority,
+            installation=installation,
+            authority_publication=authority_publication,
+            installation_publication=installation_publication,
+            nonce_directory=nonce_directory,
+        )
+        expected = cls._expected(*dependencies)
+        return cls.from_bytes(
+            _canonical_json(expected),
+            authority=dependencies[0],
+            installation=dependencies[1],
+            authority_publication=dependencies[2],
+            installation_publication=dependencies[3],
+            nonce_directory=dependencies[4],
+        )
+
+    @staticmethod
+    def _dependencies(
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        authority_publication: PublishedRegularFileReceipt,
+        installation_publication: PublishedRegularFileReceipt,
+        nonce_directory: PublishedDirectoryReceipt,
+    ) -> tuple[
+        AcceptedLaunchAuthority,
+        InstallationRecord,
+        PublishedRegularFileReceipt,
+        PublishedRegularFileReceipt,
+        PublishedDirectoryReceipt,
+    ]:
+        authority_value, installation_value = _reopen_authority_pair(
+            authority,
+            installation,
+        )
+        return (
+            authority_value,
+            installation_value,
+            _reopen_file(authority_publication),
+            _reopen_file(installation_publication),
+            _reopen_directory(nonce_directory),
+        )
+
+    @staticmethod
+    def _expected(
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        authority_file: PublishedRegularFileReceipt,
+        installation_file: PublishedRegularFileReceipt,
+        nonce_directory: PublishedDirectoryReceipt,
+    ) -> dict[str, object]:
+        installation_path = _expected_installation_path(installation)
+        if (
+            authority_file.role != _AUTHORITY_ROLE
+            or authority_file.path != installation.authority_path
+            or authority_file.content_sha256 != authority.authority_sha256
+            or authority_file.size_bytes != len(authority.raw)
+            or installation_file.role != _INSTALLATION_ROLE
+            or installation_file.path != installation_path
+            or installation_file.content_sha256 != installation.installation_sha256
+            or installation_file.size_bytes != len(installation.raw)
+            or nonce_directory.role != _NONCE_CLAIMS_ROLE
+            or nonce_directory.path != installation.nonce_ledger_parent
+            or nonce_directory.expected_mode != 0o700
+            or nonce_directory.mode != 0o700
+            or nonce_directory.uid != nonce_directory.expected_uid
+            or nonce_directory.gid != nonce_directory.expected_gid
+        ):
+            raise WarehouseW3RootInstallationError(
+                "authority publication role, path, bytes, or ownership differs"
+            )
+        # This aggregate seals the root producer's exact numeric ownership
+        # fact.  Matching it to the caller-configured runtime owner belongs to
+        # the later prestart aggregate, which consumes that configuration.
+        return {
+            "schema": _AUTHORITY_SCHEMA,
+            "state": "AUTHORITY_PUBLISHED",
+            "plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+            "launch_id": installation.launch_id,
+            "authority_sha256": authority.authority_sha256,
+            "installation_sha256": installation.installation_sha256,
+            "authority_publication_sha256": authority_file.raw_sha256,
+            "installation_publication_sha256": installation_file.raw_sha256,
+            "nonce_directory_sha256": nonce_directory.raw_sha256,
+            "files": [
+                {
+                    "role": _AUTHORITY_ROLE,
+                    "path": installation.authority_path,
+                    "content_sha256": authority.authority_sha256,
+                    "size_bytes": len(authority.raw),
+                    "publication_sha256": authority_file.raw_sha256,
+                },
+                {
+                    "role": _INSTALLATION_ROLE,
+                    "path": installation_path,
+                    "content_sha256": installation.installation_sha256,
+                    "size_bytes": len(installation.raw),
+                    "publication_sha256": installation_file.raw_sha256,
+                },
+            ],
+            "nonce_ledger": {
+                "role": _NONCE_CLAIMS_ROLE,
+                "path": installation.nonce_ledger_parent,
+                "mode": 0o700,
+                "uid": nonce_directory.uid,
+                "gid": nonce_directory.gid,
+                "publication_sha256": nonce_directory.raw_sha256,
+            },
+            "retry": False,
+            "resume": False,
+            "reuse": False,
+        }
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        authority_publication: PublishedRegularFileReceipt,
+        installation_publication: PublishedRegularFileReceipt,
+        nonce_directory: PublishedDirectoryReceipt,
+    ) -> "WarehouseW3AuthorityPublishedReceipt":
+        dependencies = cls._dependencies(
+            authority=authority,
+            installation=installation,
+            authority_publication=authority_publication,
+            installation_publication=installation_publication,
+            nonce_directory=nonce_directory,
+        )
+        expected = cls._expected(*dependencies)
+        _require_exact_value(
+            raw,
+            expected=expected,
+            fields=frozenset(expected),
+            label="W3 authority-published receipt",
+        )
+        authority_value, installation_value, authority_file, install_file, nonce = (
+            dependencies
+        )
+        instance = object.__new__(cls)
+        for field, item in (
+            ("launch_id", installation_value.launch_id),
+            ("authority_sha256", authority_value.authority_sha256),
+            ("installation_sha256", installation_value.installation_sha256),
+            ("authority_publication_sha256", authority_file.raw_sha256),
+            ("installation_publication_sha256", install_file.raw_sha256),
+            ("nonce_directory_sha256", nonce.raw_sha256),
+            ("authority_path", authority_file.path),
+            ("installation_path", install_file.path),
+            ("nonce_ledger_parent", nonce.path),
+            ("nonce_uid", nonce.uid),
+            ("nonce_gid", nonce.gid),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class WarehouseW3ProjectionReceipt:
+    launch_id: str
+    authority_sha256: str
+    installation_sha256: str
+    boot_id: str
+    namespace_pair: MountNamespacePair
+    parent_chain_sha256: tuple[str, ...]
+    authority_publication_sha256: str
+    installation_publication_sha256: str
+    run_mount_sha256: str
+    sealed_mount_sha256: str
+    environment_mount_sha256: str
+    nonce_claims_mount_sha256: str
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "WarehouseW3ProjectionReceipt":
+        del cls
+        raise TypeError("WarehouseW3ProjectionReceipt must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("WarehouseW3ProjectionReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        namespace_pair: MountNamespacePair,
+        destination_parent_chain: tuple[PublishedDirectoryReceipt, ...],
+        boot_id: str,
+        run_mount: MountBindingReceipt,
+        sealed_mount: MountBindingReceipt,
+        environment_mount: MountBindingReceipt,
+        nonce_claims_mount: MountBindingReceipt,
+        authority_publication: PublishedRegularFileReceipt,
+        installation_publication: PublishedRegularFileReceipt,
+    ) -> "WarehouseW3ProjectionReceipt":
+        dependencies = cls._dependencies(
+            authority=authority,
+            installation=installation,
+            namespace_pair=namespace_pair,
+            destination_parent_chain=destination_parent_chain,
+            boot_id=boot_id,
+            run_mount=run_mount,
+            sealed_mount=sealed_mount,
+            environment_mount=environment_mount,
+            nonce_claims_mount=nonce_claims_mount,
+            authority_publication=authority_publication,
+            installation_publication=installation_publication,
+        )
+        expected = cls._expected(*dependencies)
+        return cls.from_bytes(
+            _canonical_json(expected),
+            authority=dependencies[0],
+            installation=dependencies[1],
+            namespace_pair=dependencies[2],
+            destination_parent_chain=dependencies[3],
+            boot_id=dependencies[4],
+            run_mount=dependencies[5],
+            sealed_mount=dependencies[6],
+            environment_mount=dependencies[7],
+            nonce_claims_mount=dependencies[8],
+            authority_publication=dependencies[9],
+            installation_publication=dependencies[10],
+        )
+
+    @staticmethod
+    def _dependencies(
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        namespace_pair: MountNamespacePair,
+        destination_parent_chain: tuple[PublishedDirectoryReceipt, ...],
+        boot_id: str,
+        run_mount: MountBindingReceipt,
+        sealed_mount: MountBindingReceipt,
+        environment_mount: MountBindingReceipt,
+        nonce_claims_mount: MountBindingReceipt,
+        authority_publication: PublishedRegularFileReceipt,
+        installation_publication: PublishedRegularFileReceipt,
+    ) -> tuple[
+        AcceptedLaunchAuthority,
+        InstallationRecord,
+        MountNamespacePair,
+        tuple[PublishedDirectoryReceipt, ...],
+        str,
+        MountBindingReceipt,
+        MountBindingReceipt,
+        MountBindingReceipt,
+        MountBindingReceipt,
+        PublishedRegularFileReceipt,
+        PublishedRegularFileReceipt,
+    ]:
+        authority_value, installation_value = _reopen_authority_pair(
+            authority,
+            installation,
+        )
+        if type(namespace_pair) is not MountNamespacePair:
+            raise TypeError("namespace_pair must be exact MountNamespacePair")
+        if not namespace_pair.matches:
+            raise WarehouseW3RootInstallationError(
+                "self and PID 1 mount namespaces differ"
+            )
+        if type(destination_parent_chain) is not tuple or any(
+            type(item) is not PublishedDirectoryReceipt
+            for item in destination_parent_chain
+        ):
+            raise TypeError(
+                "destination_parent_chain must be an exact "
+                "PublishedDirectoryReceipt tuple"
+            )
+        reopened_chain = tuple(
+            _reopen_directory(item) for item in destination_parent_chain
+        )
+        return (
+            authority_value,
+            installation_value,
+            namespace_pair,
+            reopened_chain,
+            _boot_id(boot_id),
+            _reopen_mount(run_mount),
+            _reopen_mount(sealed_mount),
+            _reopen_mount(environment_mount),
+            _reopen_mount(nonce_claims_mount),
+            _reopen_file(authority_publication),
+            _reopen_file(installation_publication),
+        )
+
+    @staticmethod
+    def _expected(
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        namespace_pair: MountNamespacePair,
+        parent_chain: tuple[PublishedDirectoryReceipt, ...],
+        boot_id: str,
+        run_mount: MountBindingReceipt,
+        sealed_mount: MountBindingReceipt,
+        environment_mount: MountBindingReceipt,
+        nonce_mount: MountBindingReceipt,
+        authority_file: PublishedRegularFileReceipt,
+        installation_file: PublishedRegularFileReceipt,
+    ) -> dict[str, object]:
+        projection_parts = PurePosixPath(installation.projection_root).parts
+        expected_parent_paths = tuple(
+            str(PurePosixPath(*projection_parts[:index]))
+            for index in range(2, len(projection_parts) + 1)
+        )
+        if (
+            tuple(item.path for item in parent_chain) != expected_parent_paths
+            or any(
+                item.role
+                != (
+                    _PROJECTION_ROOT_ROLE
+                    if index == len(parent_chain) - 1
+                    else _PROJECTION_PARENT_ROLE
+                )
+                for index, item in enumerate(parent_chain)
+            )
+            or any(
+                item.uid != 0
+                or item.gid != 0
+                or item.expected_uid != 0
+                or item.expected_gid != 0
+                or item.mode != 0o755
+                or item.expected_mode != 0o755
+                for item in parent_chain
+            )
+        ):
+            raise WarehouseW3RootInstallationError(
+                "projection destination parent chain differs"
+            )
+        mount_expectations = (
+            (
+                _ENVIRONMENT_ROLE,
+                environment_mount,
+                installation.projected_environment_root,
+                True,
+            ),
+            (
+                _NONCE_CLAIMS_ROLE,
+                nonce_mount,
+                installation.projected_nonce_ledger_parent,
+                False,
+            ),
+            (_RUN_ROLE, run_mount, installation.projected_run_root, False),
+            (_SEALED_ROLE, sealed_mount, installation.projected_sealed_root, True),
+        )
+        # Published source-directory receipts are not dependencies of this
+        # aggregate.  Each mount receipt is therefore bound exactly below, but
+        # source_identity-to-publication cross-binding belongs to the later
+        # prestart aggregate that consumes both fact sets.
+        if any(
+            receipt.mount_point != path or receipt.read_only is not read_only
+            for _role, receipt, path, read_only in mount_expectations
+        ):
+            raise WarehouseW3RootInstallationError(
+                "projection mount path or read-only policy differs"
+            )
+        authority_path = f"{installation.projection_root}/authority.json"
+        installation_path = f"{installation.projection_root}/installation.json"
+        if (
+            authority_file.role != _AUTHORITY_ROLE
+            or authority_file.path != authority_path
+            or authority_file.content_sha256 != authority.authority_sha256
+            or authority_file.size_bytes != len(authority.raw)
+            or installation_file.role != _INSTALLATION_ROLE
+            or installation_file.path != installation_path
+            or installation_file.content_sha256 != installation.installation_sha256
+            or installation_file.size_bytes != len(installation.raw)
+        ):
+            raise WarehouseW3RootInstallationError(
+                "projection regular-file role, path, or bytes differ"
+            )
+        inventory = [
+            {
+                "role": _AUTHORITY_ROLE,
+                "kind": "regular",
+                "path": authority_path,
+                "read_only": True,
+                "receipt_sha256": authority_file.raw_sha256,
+            },
+            *(
+                {
+                    "role": role,
+                    "kind": "mount",
+                    "path": path,
+                    "read_only": read_only,
+                    "receipt_sha256": receipt.raw_sha256,
+                }
+                for role, receipt, path, read_only in mount_expectations[:1]
+            ),
+            {
+                "role": _INSTALLATION_ROLE,
+                "kind": "regular",
+                "path": installation_path,
+                "read_only": True,
+                "receipt_sha256": installation_file.raw_sha256,
+            },
+            *(
+                {
+                    "role": role,
+                    "kind": "mount",
+                    "path": path,
+                    "read_only": read_only,
+                    "receipt_sha256": receipt.raw_sha256,
+                }
+                for role, receipt, path, read_only in mount_expectations[1:]
+            ),
+        ]
+        roles = tuple(item["role"] for item in inventory)
+        if roles != (
+            _AUTHORITY_ROLE,
+            _ENVIRONMENT_ROLE,
+            _INSTALLATION_ROLE,
+            _NONCE_CLAIMS_ROLE,
+            _RUN_ROLE,
+            _SEALED_ROLE,
+        ):
+            raise AssertionError("projection inventory order is not closed")
+        return {
+            "schema": _PROJECTION_SCHEMA,
+            "state": "PROJECTION_MOUNTED",
+            "plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+            "launch_id": installation.launch_id,
+            "authority_sha256": authority.authority_sha256,
+            "installation_sha256": installation.installation_sha256,
+            "boot_id": boot_id,
+            "mount_namespaces": {
+                "self": {
+                    "device": namespace_pair.self_namespace.device,
+                    "inode": namespace_pair.self_namespace.inode,
+                },
+                "pid1": {
+                    "device": namespace_pair.pid1_namespace.device,
+                    "inode": namespace_pair.pid1_namespace.inode,
+                },
+            },
+            "destination_parent_chain": [
+                {
+                    "role": item.role,
+                    "path": item.path,
+                    "device": item.device,
+                    "inode": item.inode,
+                    "mode": item.mode,
+                    "uid": item.uid,
+                    "gid": item.gid,
+                    "nlink": item.nlink,
+                    "receipt_sha256": item.raw_sha256,
+                }
+                for item in parent_chain
+            ],
+            "inventory": inventory,
+            "retry": False,
+            "resume": False,
+            "reuse": False,
+        }
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        authority: AcceptedLaunchAuthority,
+        installation: InstallationRecord,
+        namespace_pair: MountNamespacePair,
+        destination_parent_chain: tuple[PublishedDirectoryReceipt, ...],
+        boot_id: str,
+        run_mount: MountBindingReceipt,
+        sealed_mount: MountBindingReceipt,
+        environment_mount: MountBindingReceipt,
+        nonce_claims_mount: MountBindingReceipt,
+        authority_publication: PublishedRegularFileReceipt,
+        installation_publication: PublishedRegularFileReceipt,
+    ) -> "WarehouseW3ProjectionReceipt":
+        dependencies = cls._dependencies(
+            authority=authority,
+            installation=installation,
+            namespace_pair=namespace_pair,
+            destination_parent_chain=destination_parent_chain,
+            boot_id=boot_id,
+            run_mount=run_mount,
+            sealed_mount=sealed_mount,
+            environment_mount=environment_mount,
+            nonce_claims_mount=nonce_claims_mount,
+            authority_publication=authority_publication,
+            installation_publication=installation_publication,
+        )
+        expected = cls._expected(*dependencies)
+        _require_exact_value(
+            raw,
+            expected=expected,
+            fields=frozenset(expected),
+            label="W3 projection receipt",
+        )
+        (
+            authority_value,
+            installation_value,
+            namespaces,
+            parent_chain,
+            boot,
+            run,
+            sealed,
+            environment,
+            nonce,
+            authority_file,
+            installation_file,
+        ) = dependencies
+        instance = object.__new__(cls)
+        for field, item in (
+            ("launch_id", installation_value.launch_id),
+            ("authority_sha256", authority_value.authority_sha256),
+            ("installation_sha256", installation_value.installation_sha256),
+            ("boot_id", boot),
+            ("namespace_pair", namespaces),
+            (
+                "parent_chain_sha256",
+                tuple(item.raw_sha256 for item in parent_chain),
+            ),
+            ("authority_publication_sha256", authority_file.raw_sha256),
+            ("installation_publication_sha256", installation_file.raw_sha256),
+            ("run_mount_sha256", run.raw_sha256),
+            ("sealed_mount_sha256", sealed.raw_sha256),
+            ("environment_mount_sha256", environment.raw_sha256),
+            ("nonce_claims_mount_sha256", nonce.raw_sha256),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+__all__ = [
+    "WarehouseW3AuthorityPublishedReceipt",
+    "WarehouseW3ProjectionReceipt",
+    "WarehouseW3RootInstallationError",
+    "WarehouseW3StagedCandidateReceipt",
+    "WarehouseW3StoresPublishedReceipt",
+]
