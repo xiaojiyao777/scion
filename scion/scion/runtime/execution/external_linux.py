@@ -36,6 +36,7 @@ _SYS_OPEN_TREE = 428
 _SYS_MOVE_MOUNT = 429
 _COPY_CHUNK = 1024 * 1024
 _FDINFO_LIMIT = 64 * 1024
+_ROOT_REGULAR_PUBLICATION_LIMIT = 16 * 1024 * 1024
 
 
 class ExternalLinuxError(RuntimeError):
@@ -56,6 +57,18 @@ class TreeImportHold(ExternalLinuxError):
 
 class LinuxMutationHold(ExternalLinuxError):
     """An external mutation may have happened and must not be retried."""
+
+
+class RootHierarchyHold(LinuxMutationHold):
+    """A fresh hierarchy is partial or drifted and must not be repaired."""
+
+    def __init__(self, *, operation: str, role: str, leaf: str) -> None:
+        self.operation = _text(operation, field="root hierarchy hold operation")
+        self.role = _text(role, field="root hierarchy hold role")
+        self.leaf = _leaf(leaf, field="root hierarchy hold leaf")
+        super().__init__(
+            f"root hierarchy {self.operation} is held at {self.role}:{self.leaf}"
+        )
 
 
 def _canonical_json(value: object) -> bytes:
@@ -361,14 +374,35 @@ class PinnedDirectory:
     def components(self) -> tuple[PinnedComponent, ...]:
         return self._components
 
-    def revalidate(self) -> None:
+    def _revalidate(self, *, mutable_leaf_contents: bool) -> None:
         if self._closed:
             raise ExternalLinuxError("pinned directory is closed")
+        if type(mutable_leaf_contents) is not bool:
+            raise TypeError("mutable_leaf_contents must be exact bool")
+        final_index = len(self._components) - 1
         for index, (descriptor, component) in enumerate(
             zip(self._fds, self._components, strict=True)
         ):
             current = FileIdentity.from_stat(os.fstat(descriptor))
-            if not _same_directory_identity(component.identity, current):
+            same_open = (
+                (
+                    component.identity.device,
+                    component.identity.inode,
+                    component.identity.mode,
+                    component.identity.uid,
+                    component.identity.gid,
+                )
+                == (
+                    current.device,
+                    current.inode,
+                    current.mode,
+                    current.uid,
+                    current.gid,
+                )
+                if mutable_leaf_contents and index == final_index
+                else _same_directory_identity(component.identity, current)
+            )
+            if not same_open:
                 raise ExternalLinuxError("retained directory identity drifted")
             if index:
                 parent_fd = self._fds[index - 1]
@@ -379,8 +413,57 @@ class PinnedDirectory:
                         follow_symlinks=False,
                     )
                 )
-                if not _same_directory_identity(component.identity, entry):
+                same_named = (
+                    (
+                        component.identity.device,
+                        component.identity.inode,
+                        component.identity.mode,
+                        component.identity.uid,
+                        component.identity.gid,
+                    )
+                    == (
+                        entry.device,
+                        entry.inode,
+                        entry.mode,
+                        entry.uid,
+                        entry.gid,
+                    )
+                    if mutable_leaf_contents and index == final_index
+                    else _same_directory_identity(component.identity, entry)
+                )
+                if not same_named:
                     raise ExternalLinuxError("current directory chain drifted")
+
+    def revalidate(self) -> None:
+        self._revalidate(mutable_leaf_contents=False)
+
+    def revalidate_mutable_leaf(self) -> None:
+        """Revalidate the full named chain while allowing leaf content changes."""
+
+        self._revalidate(mutable_leaf_contents=True)
+
+    def duplicate(self) -> "PinnedDirectory":
+        """Duplicate the complete retained chain without re-resolving its path."""
+
+        self.revalidate()
+        duplicated: list[int] = []
+        try:
+            for descriptor in self._fds:
+                duplicated.append(os.dup(descriptor))
+            result = PinnedDirectory(
+                path=self._path,
+                fds=tuple(duplicated),
+                components=self._components,
+            )
+            result.revalidate()
+            return result
+        except Exception:
+            for descriptor in reversed(duplicated):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+            raise
 
     def close(self) -> None:
         if self._closed:
@@ -968,6 +1051,859 @@ def import_root_owned_tree(
         raise TreeImportHold(_leaf(staging_leaf, field="staging_leaf")) from exc
 
 
+def _role(value: object, *, field: str) -> str:
+    role = _text(value, field=field)
+    if "/" in role or "\x00" in role:
+        raise ExternalLinuxError(f"{field} is not one canonical role")
+    return role
+
+
+def _directory_publication_mode(value: object, *, field: str) -> int:
+    mode = _mode(value, field=field)
+    if mode & 0o7022 or mode & 0o500 != 0o500:
+        raise ExternalLinuxError(
+            f"{field} must be owner-readable/searchable without special or "
+            "group/world write bits"
+        )
+    return mode
+
+
+def _linux_owner_id(value: object, *, field: str) -> int:
+    owner_id = _uint(value, field=field)
+    if owner_id > (1 << 32) - 2:
+        raise ExternalLinuxError(
+            f"{field} is outside Linux uid_t/gid_t or is the no-change sentinel"
+        )
+    return owner_id
+
+
+@dataclass(frozen=True, slots=True)
+class FreshDirectorySpec:
+    """One directory created below the retained anchor or an earlier role."""
+
+    role: str
+    parent_role: str | None
+    leaf: str
+    mode: int
+    uid: int
+    gid: int
+
+    def __post_init__(self) -> None:
+        _role(self.role, field="fresh directory role")
+        if self.parent_role is not None:
+            parent_role = _role(
+                self.parent_role,
+                field="fresh directory parent role",
+            )
+            if parent_role == self.role:
+                raise ExternalLinuxError("fresh directory cannot parent itself")
+        _leaf(self.leaf, field="fresh directory leaf")
+        _directory_publication_mode(self.mode, field="fresh directory mode")
+        _linux_owner_id(self.uid, field="fresh directory uid")
+        _linux_owner_id(self.gid, field="fresh directory gid")
+
+
+@dataclass(frozen=True, slots=True)
+class RegularPublicationSpec:
+    """One bounded immutable regular file published below a directory role."""
+
+    role: str
+    parent_role: str
+    leaf: str
+    raw: bytes
+    maximum: int
+
+    def __post_init__(self) -> None:
+        _role(self.role, field="regular publication role")
+        _role(self.parent_role, field="regular publication parent role")
+        _leaf(self.leaf, field="regular publication leaf")
+        if type(self.raw) is not bytes or not self.raw:
+            raise ExternalLinuxError(
+                "regular publication payload must be nonempty exact bytes"
+            )
+        maximum = _uint(
+            self.maximum,
+            field="regular publication maximum",
+            positive=True,
+        )
+        if maximum > _ROOT_REGULAR_PUBLICATION_LIMIT:
+            raise ExternalLinuxError("regular publication maximum is too large")
+        if len(self.raw) > maximum:
+            raise ExternalLinuxError("regular publication payload exceeds maximum")
+
+
+@dataclass(frozen=True, slots=True)
+class DirectoryObservation:
+    """Immutable observation of one retained hierarchy directory."""
+
+    role: str
+    parent_role: str | None
+    leaf: str
+    identity: FileIdentity
+    sealed: bool
+
+    def __post_init__(self) -> None:
+        _role(self.role, field="directory observation role")
+        if self.parent_role is not None:
+            _role(
+                self.parent_role,
+                field="directory observation parent role",
+            )
+        _leaf(self.leaf, field="directory observation leaf")
+        if type(self.identity) is not FileIdentity or not stat.S_ISDIR(
+            self.identity.mode
+        ):
+            raise ExternalLinuxError(
+                "directory observation identity is not a directory"
+            )
+        if type(self.sealed) is not bool:
+            raise TypeError("directory observation sealed must be exact bool")
+
+
+@dataclass(frozen=True, slots=True)
+class RegularPublicationObservation:
+    """Immutable observation of one no-replace regular publication."""
+
+    role: str
+    parent_role: str
+    leaf: str
+    sha256: str
+    identity: FileIdentity
+
+    def __post_init__(self) -> None:
+        _role(self.role, field="regular publication observation role")
+        _role(
+            self.parent_role,
+            field="regular publication observation parent role",
+        )
+        _leaf(self.leaf, field="regular publication observation leaf")
+        _sha256(self.sha256, field="regular publication observation sha256")
+        if (
+            type(self.identity) is not FileIdentity
+            or not stat.S_ISREG(self.identity.mode)
+            or stat.S_IMODE(self.identity.mode) != 0o444
+            or self.identity.link_count != 1
+            or self.identity.size < 1
+        ):
+            raise ExternalLinuxError("regular publication observation identity differs")
+
+
+def _validate_fresh_directory_specs(
+    specs: object,
+) -> tuple[FreshDirectorySpec, ...]:
+    if (
+        type(specs) is not tuple
+        or not specs
+        or any(type(spec) is not FreshDirectorySpec for spec in specs)
+    ):
+        raise TypeError(
+            "fresh directory specs must be a nonempty exact tuple of exact specs"
+        )
+    roles: set[str] = set()
+    locations: set[tuple[str | None, str]] = set()
+    for spec in specs:
+        _role(spec.role, field="fresh directory role")
+        if spec.parent_role is not None:
+            _role(
+                spec.parent_role,
+                field="fresh directory parent role",
+            )
+        _leaf(spec.leaf, field="fresh directory leaf")
+        _directory_publication_mode(
+            spec.mode,
+            field="fresh directory mode",
+        )
+        _linux_owner_id(spec.uid, field="fresh directory uid")
+        _linux_owner_id(spec.gid, field="fresh directory gid")
+        if spec.role in roles:
+            raise ExternalLinuxError("fresh directory roles are not unique")
+        if spec.parent_role is not None and spec.parent_role not in roles:
+            raise ExternalLinuxError(
+                "fresh directory specs are not in parent-first topological order"
+            )
+        location = (spec.parent_role, spec.leaf)
+        if location in locations:
+            raise ExternalLinuxError("fresh directory locations are not unique")
+        roles.add(spec.role)
+        locations.add(location)
+    return specs
+
+
+def _validate_regular_publication_specs(
+    specs: object,
+    *,
+    directory_specs: tuple[FreshDirectorySpec, ...],
+) -> tuple[RegularPublicationSpec, ...]:
+    if type(specs) is not tuple or any(
+        type(spec) is not RegularPublicationSpec for spec in specs
+    ):
+        raise TypeError(
+            "regular publication specs must be an exact tuple of exact specs"
+        )
+    directory_roles = {spec.role for spec in directory_specs}
+    locations = {(spec.parent_role, spec.leaf) for spec in directory_specs}
+    roles = set(directory_roles)
+    for spec in specs:
+        _role(spec.role, field="regular publication role")
+        _role(spec.parent_role, field="regular publication parent role")
+        _leaf(spec.leaf, field="regular publication leaf")
+        if type(spec.raw) is not bytes or not spec.raw:
+            raise ExternalLinuxError(
+                "regular publication payload must be nonempty exact bytes"
+            )
+        maximum = _uint(
+            spec.maximum,
+            field="regular publication maximum",
+            positive=True,
+        )
+        if maximum > _ROOT_REGULAR_PUBLICATION_LIMIT:
+            raise ExternalLinuxError("regular publication maximum is too large")
+        if len(spec.raw) > maximum:
+            raise ExternalLinuxError("regular publication payload exceeds maximum")
+        if spec.parent_role not in directory_roles:
+            raise ExternalLinuxError(
+                "regular publication parent role is not a directory"
+            )
+        if spec.role in roles:
+            raise ExternalLinuxError("publication roles are not unique")
+        location = (spec.parent_role, spec.leaf)
+        if location in locations:
+            raise ExternalLinuxError("publication locations are not unique")
+        roles.add(spec.role)
+        locations.add(location)
+    return specs
+
+
+def _read_bounded_regular(descriptor: int, *, maximum: int) -> bytes:
+    chunks: list[bytes] = []
+    byte_count = 0
+    while True:
+        remaining = maximum + 1 - byte_count
+        if remaining <= 0:
+            raise ExternalLinuxError("regular publication exceeds maximum")
+        chunk = os.read(descriptor, min(_COPY_CHUNK, remaining))
+        if not chunk:
+            break
+        chunks.append(chunk)
+        byte_count += len(chunk)
+    raw = b"".join(chunks)
+    if not raw:
+        raise ExternalLinuxError("regular publication is empty")
+    return raw
+
+
+class RootDirectoryHierarchy:
+    """Descriptor-owned, no-repair root hierarchy publication capability."""
+
+    __slots__ = (
+        "_anchor",
+        "_closed",
+        "_directory_by_role",
+        "_directory_fds",
+        "_directory_specs",
+        "_held",
+        "_regular_observations",
+        "_regular_specs",
+        "_sealed_roles",
+    )
+
+    def __new__(cls) -> "RootDirectoryHierarchy":
+        del cls
+        raise TypeError("RootDirectoryHierarchy must be created or reopened")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("RootDirectoryHierarchy is final")
+
+    @classmethod
+    def _allocate(
+        cls,
+        *,
+        anchor: PinnedDirectory,
+        directory_specs: tuple[FreshDirectorySpec, ...],
+    ) -> "RootDirectoryHierarchy":
+        instance = object.__new__(cls)
+        instance._anchor = anchor
+        instance._closed = False
+        instance._directory_by_role = {spec.role: spec for spec in directory_specs}
+        instance._directory_fds: dict[str, int] = {}
+        instance._directory_specs = directory_specs
+        instance._held = False
+        instance._regular_observations: dict[str, RegularPublicationObservation] = {}
+        instance._regular_specs: dict[str, RegularPublicationSpec] = {}
+        instance._sealed_roles: set[str] = set()
+        return instance
+
+    @classmethod
+    def create_fresh(
+        cls,
+        anchor: PinnedDirectory,
+        specs: tuple[FreshDirectorySpec, ...],
+    ) -> "RootDirectoryHierarchy":
+        """Create the fully prevalidated directory topology without repair."""
+
+        directory_specs = _validate_fresh_directory_specs(specs)
+        if type(anchor) is not PinnedDirectory:
+            raise TypeError("anchor must be exact PinnedDirectory")
+        _require_root()
+        anchor.revalidate()
+        retained_anchor = anchor.duplicate()
+        instance = cls._allocate(
+            anchor=retained_anchor,
+            directory_specs=directory_specs,
+        )
+        started = False
+        active_spec = directory_specs[0]
+        try:
+            for spec in directory_specs:
+                active_spec = spec
+                parent_fd = instance._parent_fd(spec.parent_role)
+                started = True
+                os.mkdir(spec.leaf, 0o700, dir_fd=parent_fd)
+                descriptor = _open_directory_at(parent_fd, spec.leaf)
+                instance._directory_fds[spec.role] = descriptor
+                metadata = os.fstat(descriptor)
+                _require_directory(metadata, field=f"fresh directory {spec.role}")
+                if metadata.st_dev != os.fstat(parent_fd).st_dev:
+                    raise ExternalLinuxError(
+                        f"fresh directory {spec.role} crosses a filesystem"
+                    )
+                os.fchown(descriptor, spec.uid, spec.gid)
+                os.fsync(descriptor)
+                os.fsync(parent_fd)
+            for spec in reversed(directory_specs):
+                active_spec = spec
+                descriptor = instance._directory_fds[spec.role]
+                os.fchmod(descriptor, spec.mode)
+                os.fsync(descriptor)
+            instance._verify_anchor()
+            for spec in directory_specs:
+                active_spec = spec
+                instance._observe_directory(spec.role)
+                instance._verify_exact_inventory(spec.role)
+            instance._verify_all_directory_bindings()
+            return instance
+        except Exception as exc:
+            instance._held = started
+            try:
+                instance.close()
+            except OSError:
+                pass
+            if started:
+                raise RootHierarchyHold(
+                    operation="create",
+                    role=active_spec.role,
+                    leaf=active_spec.leaf,
+                ) from exc
+            raise
+
+    @classmethod
+    def reopen_exact(
+        cls,
+        anchor: PinnedDirectory,
+        specs: tuple[FreshDirectorySpec, ...],
+        *,
+        directory_observations: tuple[DirectoryObservation, ...],
+        regular_specs: tuple[RegularPublicationSpec, ...] = (),
+        regular_observations: tuple[RegularPublicationObservation, ...] = (),
+    ) -> "RootDirectoryHierarchy":
+        """Acquire one exact hierarchy without mutation.
+
+        The caller owns transaction-state classification.  A PARTIAL_HOLD must
+        never be reopened as authority to resume mutation; later accepted
+        phases may use the returned capability and still pass every mutation's
+        effective-UID and exact-binding checks.
+        """
+
+        directory_specs = _validate_fresh_directory_specs(specs)
+        publications = _validate_regular_publication_specs(
+            regular_specs,
+            directory_specs=directory_specs,
+        )
+        if (
+            type(directory_observations) is not tuple
+            or len(directory_observations) != len(directory_specs)
+            or any(
+                type(item) is not DirectoryObservation
+                for item in directory_observations
+            )
+        ):
+            raise TypeError("directory observations differ")
+        if (
+            type(regular_observations) is not tuple
+            or len(regular_observations) != len(publications)
+            or any(
+                type(item) is not RegularPublicationObservation
+                for item in regular_observations
+            )
+        ):
+            raise TypeError("regular publication observations differ")
+        if type(anchor) is not PinnedDirectory:
+            raise TypeError("anchor must be exact PinnedDirectory")
+        for spec, observation in zip(
+            directory_specs,
+            directory_observations,
+            strict=True,
+        ):
+            if (
+                type(observation.identity) is not FileIdentity
+                or type(observation.sealed) is not bool
+            ):
+                raise TypeError("directory observation shape differs")
+            if (
+                observation.role != spec.role
+                or observation.parent_role != spec.parent_role
+                or observation.leaf != spec.leaf
+                or observation.identity.uid != spec.uid
+                or observation.identity.gid != spec.gid
+                or stat.S_IMODE(observation.identity.mode)
+                != (0o555 if observation.sealed else spec.mode)
+            ):
+                raise ExternalLinuxError("directory observation binding differs")
+        observation_by_role = {
+            observation.role: observation for observation in directory_observations
+        }
+        if any(
+            observation.sealed
+            and any(
+                not observation_by_role[child.role].sealed
+                for child in directory_specs
+                if child.parent_role == observation.role
+            )
+            for observation in directory_observations
+        ):
+            raise ExternalLinuxError(
+                "a sealed directory has an unsealed child directory"
+            )
+        for spec, observation in zip(
+            publications,
+            regular_observations,
+            strict=True,
+        ):
+            if (
+                type(observation.identity) is not FileIdentity
+                or type(observation.sha256) is not str
+            ):
+                raise TypeError("regular publication observation shape differs")
+            if (
+                observation.role != spec.role
+                or observation.parent_role != spec.parent_role
+                or observation.leaf != spec.leaf
+                or observation.sha256 != hashlib.sha256(spec.raw).hexdigest()
+            ):
+                raise ExternalLinuxError(
+                    "regular publication observation binding differs"
+                )
+        anchor.revalidate()
+        retained_anchor = anchor.duplicate()
+        instance = cls._allocate(
+            anchor=retained_anchor,
+            directory_specs=directory_specs,
+        )
+        try:
+            for spec, observation in zip(
+                directory_specs,
+                directory_observations,
+                strict=True,
+            ):
+                parent_fd = instance._parent_fd(spec.parent_role)
+                descriptor = _open_directory_at(parent_fd, spec.leaf)
+                instance._directory_fds[spec.role] = descriptor
+                if observation.sealed:
+                    instance._sealed_roles.add(spec.role)
+                current = instance._observe_directory(spec.role)
+                if current.identity != observation.identity:
+                    raise ExternalLinuxError(
+                        f"directory observation {spec.role} drifted"
+                    )
+            instance._regular_specs = {spec.role: spec for spec in publications}
+            instance._regular_observations = {
+                observation.role: observation for observation in regular_observations
+            }
+            for spec, observation in zip(
+                publications,
+                regular_observations,
+                strict=True,
+            ):
+                if instance._observe_regular(spec.role, expected=spec) != observation:
+                    raise ExternalLinuxError(f"regular publication {spec.role} drifted")
+            for spec in directory_specs:
+                instance._verify_exact_inventory(spec.role)
+            instance._verify_all_directory_bindings()
+            return instance
+        except Exception:
+            try:
+                instance.close()
+            except OSError:
+                pass
+            raise
+
+    @property
+    def directory_specs(self) -> tuple[FreshDirectorySpec, ...]:
+        return self._directory_specs
+
+    @property
+    def held(self) -> bool:
+        return self._held
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise ExternalLinuxError("root directory hierarchy is closed")
+
+    def _ensure_mutable(self) -> None:
+        self._ensure_open()
+        if self._held:
+            raise RootHierarchyHold(
+                operation="reuse",
+                role=self._directory_specs[0].role,
+                leaf=self._directory_specs[0].leaf,
+            )
+        _require_root()
+
+    def _verify_anchor(self) -> None:
+        self._ensure_open()
+        self._anchor.revalidate_mutable_leaf()
+
+    def _verify_all_directory_bindings(self) -> None:
+        self._verify_anchor()
+        for spec in self._directory_specs:
+            self._observe_directory(spec.role)
+
+    def _parent_fd(self, parent_role: str | None) -> int:
+        self._ensure_open()
+        if parent_role is None:
+            return self._anchor.fd
+        try:
+            return self._directory_fds[parent_role]
+        except KeyError as exc:
+            raise ExternalLinuxError(
+                f"directory parent role {parent_role} is not retained"
+            ) from exc
+
+    def _expected_names(self, role: str) -> tuple[str, ...]:
+        child_names = [
+            spec.leaf for spec in self._directory_specs if spec.parent_role == role
+        ]
+        child_names.extend(
+            spec.leaf
+            for spec in self._regular_specs.values()
+            if spec.parent_role == role
+        )
+        return tuple(sorted(child_names, key=lambda item: item.encode("utf-8")))
+
+    def _verify_exact_inventory(self, role: str) -> None:
+        descriptor = self._directory_fds[role]
+        names = os.listdir(descriptor)
+        if any(type(name) is not str for name in names) or len(set(names)) != len(
+            names
+        ):
+            raise ExternalLinuxError(f"directory inventory {role} differs")
+        current = tuple(sorted(names, key=lambda item: item.encode("utf-8")))
+        if current != self._expected_names(role):
+            raise ExternalLinuxError(f"directory inventory {role} differs")
+
+    def _verify_owned_children(self, role: str) -> None:
+        self._verify_exact_inventory(role)
+        for child in self._directory_specs:
+            if child.parent_role == role:
+                self._observe_directory(child.role)
+        for publication in self._regular_specs.values():
+            if publication.parent_role == role:
+                current = self._observe_regular(
+                    publication.role,
+                    expected=publication,
+                )
+                expected = self._regular_observations.get(publication.role)
+                if expected is not None and current != expected:
+                    raise ExternalLinuxError(
+                        f"regular publication {publication.role} drifted"
+                    )
+
+    def _observe_directory(self, role: str) -> DirectoryObservation:
+        self._ensure_open()
+        try:
+            spec = self._directory_by_role[role]
+            descriptor = self._directory_fds[role]
+        except KeyError as exc:
+            raise ExternalLinuxError(f"directory role {role} is not retained") from exc
+        parent_fd = self._parent_fd(spec.parent_role)
+        descriptor_identity = FileIdentity.from_stat(os.fstat(descriptor))
+        entry_identity = FileIdentity.from_stat(
+            os.stat(spec.leaf, dir_fd=parent_fd, follow_symlinks=False)
+        )
+        if descriptor_identity != entry_identity:
+            raise ExternalLinuxError(f"directory role {role} identity drifted")
+        sealed = role in self._sealed_roles
+        expected_mode = 0o555 if sealed else spec.mode
+        if (
+            not stat.S_ISDIR(descriptor_identity.mode)
+            or stat.S_IMODE(descriptor_identity.mode) != expected_mode
+            or descriptor_identity.uid != spec.uid
+            or descriptor_identity.gid != spec.gid
+        ):
+            raise ExternalLinuxError(f"directory role {role} metadata drifted")
+        return DirectoryObservation(
+            role=role,
+            parent_role=spec.parent_role,
+            leaf=spec.leaf,
+            identity=descriptor_identity,
+            sealed=sealed,
+        )
+
+    def directory_observation(self, role: str) -> DirectoryObservation:
+        """Observe one exact retained directory without path traversal."""
+
+        canonical_role = _role(role, field="directory role")
+        self._verify_all_directory_bindings()
+        observation = self._observe_directory(canonical_role)
+        self._verify_all_directory_bindings()
+        return observation
+
+    def _observe_regular(
+        self,
+        role: str,
+        *,
+        expected: RegularPublicationSpec,
+    ) -> RegularPublicationObservation:
+        parent_fd = self._directory_fds[expected.parent_role]
+        descriptor = os.open(
+            expected.leaf,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+            dir_fd=parent_fd,
+        )
+        try:
+            before = FileIdentity.from_stat(os.fstat(descriptor))
+            named_before = FileIdentity.from_stat(
+                os.stat(
+                    expected.leaf,
+                    dir_fd=parent_fd,
+                    follow_symlinks=False,
+                )
+            )
+            raw = _read_bounded_regular(descriptor, maximum=expected.maximum)
+            after = FileIdentity.from_stat(os.fstat(descriptor))
+            named_after = FileIdentity.from_stat(
+                os.stat(
+                    expected.leaf,
+                    dir_fd=parent_fd,
+                    follow_symlinks=False,
+                )
+            )
+            parent_spec = self._directory_by_role[expected.parent_role]
+            if (
+                before != after
+                or before != named_before
+                or before != named_after
+                or not stat.S_ISREG(before.mode)
+                or stat.S_IMODE(before.mode) != 0o444
+                or before.uid != parent_spec.uid
+                or before.gid != parent_spec.gid
+                or before.link_count != 1
+                or before.size != len(expected.raw)
+                or raw != expected.raw
+            ):
+                raise ExternalLinuxError(f"regular publication {expected.role} drifted")
+            return RegularPublicationObservation(
+                role=expected.role,
+                parent_role=expected.parent_role,
+                leaf=expected.leaf,
+                sha256=hashlib.sha256(raw).hexdigest(),
+                identity=before,
+            )
+        finally:
+            os.close(descriptor)
+
+    def regular_observation(self, role: str) -> RegularPublicationObservation:
+        """Reopen and verify one exact immutable regular publication."""
+
+        canonical_role = _role(role, field="regular publication role")
+        try:
+            spec = self._regular_specs[canonical_role]
+            expected_observation = self._regular_observations[canonical_role]
+        except KeyError as exc:
+            raise ExternalLinuxError(
+                f"regular publication role {canonical_role} is unknown"
+            ) from exc
+        self._verify_all_directory_bindings()
+        observation = self._observe_regular(canonical_role, expected=spec)
+        self._verify_all_directory_bindings()
+        if observation != expected_observation:
+            raise ExternalLinuxError(
+                f"regular publication {canonical_role} identity drifted"
+            )
+        return observation
+
+    def publish_regular_noreplace(
+        self,
+        spec: RegularPublicationSpec,
+    ) -> RegularPublicationObservation:
+        """Publish one bounded immutable file exactly once below a retained FD."""
+
+        if type(spec) is not RegularPublicationSpec:
+            raise TypeError("regular publication spec must be exact")
+        _validate_regular_publication_specs(
+            (spec,),
+            directory_specs=self._directory_specs,
+        )
+        self._ensure_mutable()
+        if spec.parent_role not in self._directory_by_role:
+            raise ExternalLinuxError(
+                "regular publication parent role is not a directory"
+            )
+        if spec.parent_role in self._sealed_roles:
+            raise ExternalLinuxError("cannot publish below a sealed directory")
+        if spec.role in self._directory_by_role or spec.role in self._regular_specs:
+            raise ExternalLinuxError("regular publication role already exists")
+        if spec.leaf in self._expected_names(spec.parent_role):
+            raise ExternalLinuxError("regular publication location already exists")
+        parent_spec = self._directory_by_role[spec.parent_role]
+        parent_fd = self._directory_fds[spec.parent_role]
+        started = False
+        descriptor = -1
+        try:
+            started = True
+            self._verify_all_directory_bindings()
+            self._verify_exact_inventory(spec.parent_role)
+            descriptor = os.open(
+                spec.leaf,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
+                0o600,
+                dir_fd=parent_fd,
+            )
+            _write_all(descriptor, spec.raw)
+            os.fchown(descriptor, parent_spec.uid, parent_spec.gid)
+            os.fchmod(descriptor, 0o444)
+            os.fsync(descriptor)
+            created_identity = FileIdentity.from_stat(os.fstat(descriptor))
+            os.close(descriptor)
+            descriptor = -1
+            os.fsync(parent_fd)
+            observation = self._observe_regular(spec.role, expected=spec)
+            if observation.identity != created_identity:
+                raise ExternalLinuxError(
+                    f"regular publication {spec.role} identity drifted"
+                )
+            self._regular_specs[spec.role] = spec
+            self._verify_exact_inventory(spec.parent_role)
+            final_observation = self._observe_regular(spec.role, expected=spec)
+            if final_observation != observation:
+                raise ExternalLinuxError(
+                    f"regular publication {spec.role} identity drifted"
+                )
+            self._regular_observations[spec.role] = final_observation
+            self._verify_all_directory_bindings()
+            return final_observation
+        except Exception as exc:
+            if descriptor >= 0:
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+            if started:
+                self._held = True
+                raise RootHierarchyHold(
+                    operation="publish",
+                    role=spec.role,
+                    leaf=spec.leaf,
+                ) from exc
+            raise
+
+    def seal(
+        self,
+        role: str,
+        expected_names: tuple[str, ...],
+        *,
+        final_mode: int = 0o555,
+    ) -> DirectoryObservation:
+        """Seal one exact retained directory inventory without path mutation."""
+
+        canonical_role = _role(role, field="seal directory role")
+        if type(expected_names) is not tuple or any(
+            type(name) is not str for name in expected_names
+        ):
+            raise TypeError("expected_names must be an exact tuple of exact text")
+        canonical_names = tuple(
+            sorted(
+                (
+                    _leaf(name, field="expected inventory leaf")
+                    for name in expected_names
+                ),
+                key=lambda item: item.encode("utf-8"),
+            )
+        )
+        if canonical_names != expected_names or len(set(expected_names)) != len(
+            expected_names
+        ):
+            raise ExternalLinuxError("expected_names must be unique and byte-sorted")
+        if final_mode != 0o555 or type(final_mode) is not int:
+            raise ExternalLinuxError("final sealed directory mode must be exact 0555")
+        self._ensure_mutable()
+        if canonical_role not in self._directory_by_role:
+            raise ExternalLinuxError("seal directory role is unknown")
+        spec = self._directory_by_role[canonical_role]
+        if canonical_role in self._sealed_roles:
+            raise ExternalLinuxError("directory role is already sealed")
+        if any(
+            child.parent_role == canonical_role and child.role not in self._sealed_roles
+            for child in self._directory_specs
+        ):
+            raise ExternalLinuxError(
+                "cannot seal a directory with an unsealed child directory"
+            )
+        if canonical_names != self._expected_names(canonical_role):
+            raise ExternalLinuxError(
+                "expected_names differ from capability-owned inventory"
+            )
+        descriptor = self._directory_fds[canonical_role]
+        try:
+            self._verify_all_directory_bindings()
+            self._verify_owned_children(canonical_role)
+            os.fchmod(descriptor, final_mode)
+            os.fsync(descriptor)
+            os.fsync(self._parent_fd(spec.parent_role))
+            self._sealed_roles.add(canonical_role)
+            observation = self._observe_directory(canonical_role)
+            self._verify_owned_children(canonical_role)
+            self._verify_all_directory_bindings()
+            return observation
+        except Exception as exc:
+            self._held = True
+            raise RootHierarchyHold(
+                operation="seal",
+                role=canonical_role,
+                leaf=spec.leaf,
+            ) from exc
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        first_error: OSError | None = None
+        descriptors = list(reversed(tuple(self._directory_fds.values())))
+        for descriptor in descriptors:
+            try:
+                os.close(descriptor)
+            except OSError as exc:
+                if first_error is None:
+                    first_error = exc
+        self._directory_fds.clear()
+        try:
+            self._anchor.close()
+        except OSError as exc:
+            if first_error is None:
+                first_error = exc
+        if first_error is not None:
+            raise first_error
+
+    def __enter__(self) -> "RootDirectoryHierarchy":
+        self._ensure_open()
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        del args
+        self.close()
+
+
 @dataclass(frozen=True, slots=True)
 class NamespaceIdentity:
     device: int
@@ -1360,8 +2296,10 @@ def acquire_mount_namespace_pair(
 __all__ = [
     "AttachedMount",
     "CanonicalImportReceiptError",
+    "DirectoryObservation",
     "ExternalLinuxError",
     "FileIdentity",
+    "FreshDirectorySpec",
     "ImmutableTreeImportReceipt",
     "ImportEntry",
     "LinuxMountAdapter",
@@ -1371,6 +2309,10 @@ __all__ = [
     "NamespaceIdentity",
     "PinnedComponent",
     "PinnedDirectory",
+    "RegularPublicationObservation",
+    "RegularPublicationSpec",
+    "RootDirectoryHierarchy",
+    "RootHierarchyHold",
     "TreeImportHold",
     "acquire_mount_namespace_pair",
     "attach_cloned_mount",
