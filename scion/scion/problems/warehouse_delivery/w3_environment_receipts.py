@@ -2063,7 +2063,7 @@ def derive_final_environment_path(
     receipt: WarehouseEnvironmentContentReceipt,
 ) -> Path:
     content = _validated_content(receipt)
-    return Path(str(FINAL_ENVIRONMENT_PARENT / content.raw_sha256))
+    return Path(str(FINAL_ENVIRONMENT_PARENT / content.generic_receipt_sha256))
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -2734,7 +2734,7 @@ def _is_simulated_final_path(
     content: WarehouseEnvironmentContentReceipt,
 ) -> bool:
     parts = PurePosixPath(str(path)).parts
-    expected = (*_FINAL_SUFFIX_PARTS, content.raw_sha256)
+    expected = (*_FINAL_SUFFIX_PARTS, content.generic_receipt_sha256)
     return len(parts) > len(expected) and tuple(parts[-len(expected) :]) == expected
 
 

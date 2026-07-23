@@ -716,6 +716,7 @@ class CandidateSimulatedRelocationRef:
     authority_sha256: str
     installation_sha256: str
     semantic_environment_receipt_sha256: str
+    environment_content_receipt_sha256: str
     candidate_probe_sha256: str
     simulated_final_probe_sha256: str
     candidate_environment_root: str
@@ -757,10 +758,22 @@ class CandidateSimulatedRelocationRef:
             or type(simulated_final_probe) is not EnvironmentProbeFact
         ):
             raise TypeError("probes must be exact EnvironmentProbeFact")
+        _validate_probe(
+            candidate_probe,
+            phase="candidate",
+            content=semantic_environment,
+            expected_root=Path(candidate_probe.environment_root),
+        )
+        _validate_probe(
+            simulated_final_probe,
+            phase="simulated_final",
+            content=semantic_environment,
+            expected_root=Path(simulated_final_probe.environment_root),
+        )
         return cls.from_bytes(
             _canonical_json(
                 {
-                    "schema": "scion.w3-candidate-simulated-relocation-ref.v1",
+                    "schema": "scion.w3-candidate-simulated-relocation-ref.v2",
                     "evidence_receipt_sha256": evidence_receipt_sha256,
                     "selection_key": selection_key,
                     "launch_id": launch_id,
@@ -768,6 +781,9 @@ class CandidateSimulatedRelocationRef:
                     "installation_sha256": installation_sha256,
                     "semantic_environment_receipt_sha256": (
                         semantic_environment.raw_sha256
+                    ),
+                    "environment_content_receipt_sha256": (
+                        semantic_environment.generic_receipt_sha256
                     ),
                     "candidate_probe_sha256": candidate_probe.raw_sha256,
                     "simulated_final_probe_sha256": (simulated_final_probe.raw_sha256),
@@ -777,11 +793,22 @@ class CandidateSimulatedRelocationRef:
                     ),
                     "filesystem_mutated": False,
                 }
-            )
+            ),
+            semantic_environment=semantic_environment,
         )
 
     @classmethod
-    def from_bytes(cls, raw: bytes) -> "CandidateSimulatedRelocationRef":
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        semantic_environment: WarehouseEnvironmentContentReceipt,
+    ) -> "CandidateSimulatedRelocationRef":
+        if type(semantic_environment) is not WarehouseEnvironmentContentReceipt:
+            raise TypeError(
+                "semantic_environment must be exact "
+                "WarehouseEnvironmentContentReceipt"
+            )
         value = _exact_fields(
             _decode_canonical(raw, label="candidate simulated-relocation reference"),
             frozenset(
@@ -793,6 +820,7 @@ class CandidateSimulatedRelocationRef:
                     "authority_sha256",
                     "installation_sha256",
                     "semantic_environment_receipt_sha256",
+                    "environment_content_receipt_sha256",
                     "candidate_probe_sha256",
                     "simulated_final_probe_sha256",
                     "candidate_environment_root",
@@ -803,7 +831,7 @@ class CandidateSimulatedRelocationRef:
             label="candidate simulated-relocation reference",
         )
         if (
-            value["schema"] != "scion.w3-candidate-simulated-relocation-ref.v1"
+            value["schema"] != "scion.w3-candidate-simulated-relocation-ref.v2"
             or value["filesystem_mutated"] is not False
         ):
             raise WarehouseW3CandidateGateError(
@@ -818,10 +846,20 @@ class CandidateSimulatedRelocationRef:
                 "authority_sha256",
                 "installation_sha256",
                 "semantic_environment_receipt_sha256",
+                "environment_content_receipt_sha256",
                 "candidate_probe_sha256",
                 "simulated_final_probe_sha256",
             )
         }
+        if (
+            fields["semantic_environment_receipt_sha256"]
+            != semantic_environment.raw_sha256
+            or fields["environment_content_receipt_sha256"]
+            != semantic_environment.generic_receipt_sha256
+        ):
+            raise WarehouseW3CandidateGateError(
+                "candidate simulated-relocation environment binding differs"
+            )
         candidate_root = _absolute_path(
             value["candidate_environment_root"],
             field="candidate environment root",
@@ -832,7 +870,7 @@ class CandidateSimulatedRelocationRef:
         )
         expected_suffix = (
             *_SIMULATED_FINAL_SUFFIX,
-            fields["semantic_environment_receipt_sha256"],
+            fields["environment_content_receipt_sha256"],
         )
         simulated_parts = PurePosixPath(simulated_root).parts
         root_final = f"/{'/'.join(expected_suffix)}"
@@ -1718,6 +1756,18 @@ class CandidateGateReceipt:
         inspection: CandidateCompositionInspection,
         absence_facts: CandidateAbsenceFacts,
     ) -> "CandidateGateReceipt":
+        if (
+            semantic_environment.generic_receipt != environment_content
+            or simulated_relocation.semantic_environment_receipt_sha256
+            != semantic_environment.raw_sha256
+            or simulated_relocation.environment_content_receipt_sha256
+            != semantic_environment.generic_receipt_sha256
+            or simulated_relocation.environment_content_receipt_sha256
+            != environment_content.raw_sha256
+        ):
+            raise WarehouseW3CandidateGateError(
+                "candidate gate environment relocation binding differs"
+            )
         return cls.from_bytes(
             _canonical_json(
                 {
@@ -1969,7 +2019,8 @@ def close_candidate_gate(
             wheel_receipt=double_wheel,
         )
         parsed_relocation = CandidateSimulatedRelocationRef.from_bytes(
-            simulated_relocation.raw
+            simulated_relocation.raw,
+            semantic_environment=parsed_semantic,
         )
     except Exception as exc:
         raise WarehouseW3CandidateGateError(
@@ -2069,6 +2120,10 @@ def close_candidate_gate(
         or simulated_relocation.launch_id != expected_launch_id
         or simulated_relocation.semantic_environment_receipt_sha256
         != semantic_environment.raw_sha256
+        or simulated_relocation.environment_content_receipt_sha256
+        != semantic_environment.generic_receipt_sha256
+        or simulated_relocation.environment_content_receipt_sha256
+        != environment_content.raw_sha256
         or simulated_relocation.candidate_probe_sha256 != candidate_probe.raw_sha256
         or simulated_relocation.simulated_final_probe_sha256
         != simulated_final_probe.raw_sha256

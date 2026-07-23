@@ -622,7 +622,8 @@ def _bundle(tmp_path: Path) -> dict[str, object]:
         root=candidate_root / "environment",
     )
     simulated_root = Path(
-        f"{tmp_path}/simulated/var/lib/scion/environments/w3/" f"{semantic.raw_sha256}"
+        f"{tmp_path}/simulated/var/lib/scion/environments/w3/"
+        f"{semantic.generic_receipt_sha256}"
     )
     simulated_probe = _probe(
         semantic,
@@ -948,6 +949,16 @@ def test_candidate_gate_closes_exact_artifacts_dry_root_and_absence(
     assert receipt.source_receipt_sha256 == _sha("source")
     assert receipt.candidate_root == str(bundle["candidate_root"])
     assert receipt.accepted_root_read_only is True
+    semantic = bundle["semantic_environment"]
+    generic = bundle["environment_content"]
+    relocation = bundle["simulated_relocation"]
+    assert type(semantic) is WarehouseEnvironmentContentReceipt
+    assert type(generic) is EnvironmentContentReceipt
+    assert type(relocation) is CandidateSimulatedRelocationRef
+    assert semantic.raw_sha256 != generic.raw_sha256
+    assert semantic.generic_receipt_sha256 == generic.raw_sha256
+    assert relocation.environment_content_receipt_sha256 == generic.raw_sha256
+    assert Path(relocation.simulated_final_environment_root).name == generic.raw_sha256
 
 
 def test_candidate_gate_reverifies_complete_candidate_after_inspection(
@@ -1039,7 +1050,8 @@ def test_gate_rejects_mixed_selection_authority_and_receipt_replay(
 
     value["selection_key"] = _sha("replayed-selection")
     bundle["simulated_relocation"] = CandidateSimulatedRelocationRef.from_bytes(
-        _canonical(value)
+        _canonical(value),
+        semantic_environment=bundle["semantic_environment"],
     )
     with pytest.raises(WarehouseW3CandidateGateError, match="binding differs"):
         close_candidate_gate(**bundle)
@@ -1050,7 +1062,8 @@ def test_gate_rejects_mixed_selection_authority_and_receipt_replay(
     value = json.loads(relocation.raw)
     value["authority_sha256"] = _sha("replayed-authority")
     bundle["simulated_relocation"] = CandidateSimulatedRelocationRef.from_bytes(
-        _canonical(value)
+        _canonical(value),
+        semantic_environment=bundle["semantic_environment"],
     )
     with pytest.raises(WarehouseW3CandidateGateError, match="binding differs"):
         close_candidate_gate(**bundle)
@@ -1061,7 +1074,8 @@ def test_gate_rejects_mixed_selection_authority_and_receipt_replay(
     value = json.loads(relocation.raw)
     value["candidate_probe_sha256"] = _sha("replayed-probe")
     bundle["simulated_relocation"] = CandidateSimulatedRelocationRef.from_bytes(
-        _canonical(value)
+        _canonical(value),
+        semantic_environment=bundle["semantic_environment"],
     )
     with pytest.raises(WarehouseW3CandidateGateError, match="binding differs"):
         close_candidate_gate(**bundle)
@@ -1081,13 +1095,63 @@ def test_gate_rejects_mixed_absence_and_root_final_relocation_semantics(
     value = json.loads(relocation.raw)
     value["simulated_final_environment_root"] = (
         f"/var/lib/scion/environments/w3/"
-        f"{relocation.semantic_environment_receipt_sha256}"
+        f"{relocation.environment_content_receipt_sha256}"
     )
     with pytest.raises(
         WarehouseW3CandidateGateError,
         match="non-root relocation projection",
     ):
-        CandidateSimulatedRelocationRef.from_bytes(_canonical(value))
+        CandidateSimulatedRelocationRef.from_bytes(
+            _canonical(value),
+            semantic_environment=bundle["semantic_environment"],
+        )
+
+
+def test_simulated_relocation_v2_rejects_old_schema_semantic_suffix_and_generic_drift(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(tmp_path)
+    relocation = bundle["simulated_relocation"]
+    semantic = bundle["semantic_environment"]
+    assert type(relocation) is CandidateSimulatedRelocationRef
+    assert type(semantic) is WarehouseEnvironmentContentReceipt
+    assert semantic.raw_sha256 != semantic.generic_receipt_sha256
+    value = json.loads(relocation.raw)
+    assert value["schema"] == "scion.w3-candidate-simulated-relocation-ref.v2"
+
+    old_v1 = dict(value)
+    old_v1["schema"] = "scion.w3-candidate-simulated-relocation-ref.v1"
+    old_v1.pop("environment_content_receipt_sha256")
+    with pytest.raises(WarehouseW3CandidateGateError, match="fields differ"):
+        CandidateSimulatedRelocationRef.from_bytes(
+            _canonical(old_v1),
+            semantic_environment=semantic,
+        )
+
+    semantic_suffix = dict(value)
+    semantic_suffix["simulated_final_environment_root"] = (
+        f"{tmp_path}/semantic-suffix/var/lib/scion/environments/w3/"
+        f"{semantic.raw_sha256}"
+    )
+    with pytest.raises(
+        WarehouseW3CandidateGateError,
+        match="non-root relocation projection",
+    ):
+        CandidateSimulatedRelocationRef.from_bytes(
+            _canonical(semantic_suffix),
+            semantic_environment=semantic,
+        )
+
+    generic_drift = dict(value)
+    generic_drift["environment_content_receipt_sha256"] = _sha("generic-drift")
+    with pytest.raises(
+        WarehouseW3CandidateGateError,
+        match="environment binding differs",
+    ):
+        CandidateSimulatedRelocationRef.from_bytes(
+            _canonical(generic_drift),
+            semantic_environment=semantic,
+        )
 
 
 def test_gate_rejects_double_wheel_and_semantic_environment_mix(
@@ -1119,7 +1183,9 @@ def test_gate_requires_exact_candidate_environment_root_and_identity(
     bundle = _bundle(tmp_path / "probe")
     semantic = bundle["semantic_environment"]
     assert type(semantic) is WarehouseEnvironmentContentReceipt
-    final_root = Path(f"/var/lib/scion/environments/w3/{semantic.raw_sha256}")
+    final_root = Path(
+        f"/var/lib/scion/environments/w3/{semantic.generic_receipt_sha256}"
+    )
     bad_probe = _probe(
         semantic,
         phase="candidate",

@@ -967,7 +967,7 @@ def _relocation_inputs(
         / "scion"
         / "environments"
         / "w3"
-        / content.raw_sha256
+        / content.generic_receipt_sha256
     )
     return candidate, simulated
 
@@ -1027,8 +1027,9 @@ def test_relocation_owner_derives_final_path_and_binds_all_probe_rehash_facts(
     candidate, simulated = _relocation_inputs(semantic_inputs, content)
     probe = _ProbeReader()
     receipt = _relocation_receipt(content, candidate, simulated, probe_reader=probe)
-    final = Path("/var/lib/scion/environments/w3") / content.raw_sha256
+    final = Path("/var/lib/scion/environments/w3") / content.generic_receipt_sha256
 
+    assert content.raw_sha256 != content.generic_receipt_sha256
     assert derive_final_environment_path(content) == final
     assert receipt.final_environment_path == str(final)
     assert probe.calls == [
