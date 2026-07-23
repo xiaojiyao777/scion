@@ -164,6 +164,8 @@ def _candidate_gate(
     semantic_sha256: str,
     generic_sha256: str,
     source_identity: FileIdentity,
+    accepted_root_device: int = 8,
+    accepted_root_inode: int = 9,
 ) -> CandidateGateReceipt:
     value = {
         "schema": "scion.w3-candidate-gate.v2",
@@ -193,8 +195,8 @@ def _candidate_gate(
         },
         "accepted_root": installation.run_root,
         "accepted_root_identity": {
-            "device": 8,
-            "inode": 9,
+            "device": accepted_root_device,
+            "inode": accepted_root_inode,
             "mode": 0o555,
             "uid": 1000,
             "gid": 1000,
@@ -278,11 +280,12 @@ def _published_directory(
     mode: int = 0o755,
     uid: int = 0,
     gid: int = 0,
+    device: int = 1,
 ) -> PublishedDirectoryReceipt:
     return PublishedDirectoryReceipt.create(
         role=role,
         path=path,
-        device=1,
+        device=device,
         inode=inode,
         mode=mode,
         uid=uid,
@@ -461,11 +464,11 @@ def test_stores_round_trip_closes_exact_roles_paths_and_aggregates(
     )
 
 
-def _root_tree_identity(inode: int):
+def _root_tree_identity(inode: int, *, device: int = 1):
     from scion.runtime.execution.external_installation import DirectorySnapshot
 
     return DirectorySnapshot(
-        device=1,
+        device=device,
         inode=inode,
         mode=0o555,
         uid=0,
@@ -652,6 +655,42 @@ def test_authority_publication_round_trip_and_rejects_role_or_nonce_mode() -> No
 
 def _projection_inputs(authority, installation):
     projection = installation.projection_root
+    source_device = os.makedev(8, 1)
+    imported = _tree_import()
+    candidate = _candidate_gate(
+        authority=authority,
+        installation=installation,
+        semantic_sha256="7" * 64,
+        generic_sha256="6" * 64,
+        source_identity=imported.source_root,
+        accepted_root_device=source_device,
+        accepted_root_inode=61,
+    )
+    sealed_source = PublishedTreeReceipt.create(
+        role="sealed",
+        path=installation.sealed_root,
+        source_receipt_sha256="1" * 64,
+        expected_tree_sha256="2" * 64,
+        reopened_tree_sha256="2" * 64,
+        identity=_root_tree_identity(62, device=source_device),
+    )
+    environment_source = PublishedTreeReceipt.create(
+        role="environment",
+        path=installation.environment_root,
+        source_receipt_sha256="3" * 64,
+        expected_tree_sha256="4" * 64,
+        reopened_tree_sha256="4" * 64,
+        identity=_root_tree_identity(63, device=source_device),
+    )
+    nonce_source = _published_directory(
+        role="nonce-claims",
+        path=installation.nonce_ledger_parent,
+        inode=64,
+        mode=0o700,
+        uid=1000,
+        gid=1000,
+        device=source_device,
+    )
     authority_file = _published_file(
         role="authority",
         path=f"{projection}/authority.json",
@@ -667,6 +706,10 @@ def _projection_inputs(authority, installation):
     return {
         "authority": authority,
         "installation": installation,
+        "candidate_gate": candidate,
+        "sealed_publication": sealed_source,
+        "environment_publication": environment_source,
+        "nonce_directory": nonce_source,
         "namespace_pair": MountNamespacePair(
             self_namespace=NamespaceIdentity(device=1, inode=2),
             pid1_namespace=NamespaceIdentity(device=1, inode=2),
@@ -711,6 +754,8 @@ def test_projection_round_trip_closes_six_roles_namespace_and_parent_chain() -> 
 
     assert len(json.loads(receipt.raw)["inventory"]) == 6
     assert receipt.namespace_pair.matches
+    assert receipt.run_source_fact_sha256 == inputs["candidate_gate"].raw_sha256
+    assert receipt.sealed_source_fact_sha256 == inputs["sealed_publication"].raw_sha256
     assert len(receipt.parent_chain_sha256) == len(inputs["destination_parent_chain"])
     assert WarehouseW3ProjectionReceipt.from_bytes(receipt.raw, **inputs) == receipt
 
@@ -770,6 +815,42 @@ def test_projection_rejects_namespace_path_policy_or_incomplete_parent_chain() -
         WarehouseW3ProjectionReceipt.create(**wrong_path)
 
 
+@pytest.mark.parametrize(
+    "mount_name,path_name,read_only,inode,mount_id",
+    (
+        ("run_mount", "projected_run_root", False, 161, 201),
+        ("sealed_mount", "projected_sealed_root", True, 162, 202),
+        ("environment_mount", "projected_environment_root", True, 163, 203),
+        (
+            "nonce_claims_mount",
+            "projected_nonce_ledger_parent",
+            False,
+            164,
+            204,
+        ),
+    ),
+)
+def test_projection_rejects_each_mount_source_identity_drift(
+    mount_name: str,
+    path_name: str,
+    read_only: bool,
+    inode: int,
+    mount_id: int,
+) -> None:
+    sealed = _sealed_store()
+    authority, installation = _launch_pair(sealed, "6" * 64)
+    inputs = _projection_inputs(authority, installation)
+    inputs[mount_name] = _mount(
+        getattr(installation, path_name),
+        read_only=read_only,
+        inode=inode,
+        mount_id=mount_id,
+    )
+
+    with pytest.raises(WarehouseW3RootInstallationError, match="source identity"):
+        WarehouseW3ProjectionReceipt.create(**inputs)
+
+
 def test_aggregate_parser_rejects_unknown_field_and_mixed_exact_producer() -> None:
     sealed = _sealed_store()
     authority, installation = _launch_pair(sealed, "6" * 64)
@@ -802,9 +883,36 @@ def test_aggregate_parser_rejects_unknown_field_and_mixed_exact_producer() -> No
     )
     with pytest.raises(
         WarehouseW3RootInstallationError,
-        match="producer binding differs",
+        match="source identity differs",
     ):
         WarehouseW3ProjectionReceipt.from_bytes(receipt.raw, **alternate_mount)
+
+    alternate_source = dict(inputs)
+    original_source = inputs["sealed_publication"]
+    alternate_source["sealed_publication"] = PublishedTreeReceipt.create(
+        role="sealed",
+        path=installation.sealed_root,
+        source_receipt_sha256="5" * 64,
+        expected_tree_sha256=original_source.expected_tree_sha256,
+        reopened_tree_sha256=original_source.reopened_tree_sha256,
+        identity=original_source.identity,
+    )
+    with pytest.raises(
+        WarehouseW3RootInstallationError,
+        match="producer binding differs",
+    ):
+        WarehouseW3ProjectionReceipt.from_bytes(receipt.raw, **alternate_source)
+
+    source_fact_drift = json.loads(receipt.raw)
+    source_fact_drift["inventory"][1]["source_fact_sha256"] = "f" * 64
+    with pytest.raises(
+        WarehouseW3RootInstallationError,
+        match="producer binding differs",
+    ):
+        WarehouseW3ProjectionReceipt.from_bytes(
+            _canonical(source_fact_drift),
+            **inputs,
+        )
 
 
 def test_candidate_gate_fixture_remains_exact() -> None:

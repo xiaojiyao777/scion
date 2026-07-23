@@ -934,6 +934,10 @@ class WarehouseW3ProjectionReceipt:
     sealed_mount_sha256: str
     environment_mount_sha256: str
     nonce_claims_mount_sha256: str
+    run_source_fact_sha256: str
+    sealed_source_fact_sha256: str
+    environment_source_fact_sha256: str
+    nonce_claims_source_fact_sha256: str
     raw: bytes
     raw_sha256: str
 
@@ -951,6 +955,10 @@ class WarehouseW3ProjectionReceipt:
         *,
         authority: AcceptedLaunchAuthority,
         installation: InstallationRecord,
+        candidate_gate: CandidateGateReceipt,
+        sealed_publication: PublishedTreeReceipt,
+        environment_publication: PublishedTreeReceipt,
+        nonce_directory: PublishedDirectoryReceipt,
         namespace_pair: MountNamespacePair,
         destination_parent_chain: tuple[PublishedDirectoryReceipt, ...],
         boot_id: str,
@@ -964,6 +972,10 @@ class WarehouseW3ProjectionReceipt:
         dependencies = cls._dependencies(
             authority=authority,
             installation=installation,
+            candidate_gate=candidate_gate,
+            sealed_publication=sealed_publication,
+            environment_publication=environment_publication,
+            nonce_directory=nonce_directory,
             namespace_pair=namespace_pair,
             destination_parent_chain=destination_parent_chain,
             boot_id=boot_id,
@@ -979,15 +991,19 @@ class WarehouseW3ProjectionReceipt:
             _canonical_json(expected),
             authority=dependencies[0],
             installation=dependencies[1],
-            namespace_pair=dependencies[2],
-            destination_parent_chain=dependencies[3],
-            boot_id=dependencies[4],
-            run_mount=dependencies[5],
-            sealed_mount=dependencies[6],
-            environment_mount=dependencies[7],
-            nonce_claims_mount=dependencies[8],
-            authority_publication=dependencies[9],
-            installation_publication=dependencies[10],
+            candidate_gate=dependencies[2],
+            sealed_publication=dependencies[3],
+            environment_publication=dependencies[4],
+            nonce_directory=dependencies[5],
+            namespace_pair=dependencies[6],
+            destination_parent_chain=dependencies[7],
+            boot_id=dependencies[8],
+            run_mount=dependencies[9],
+            sealed_mount=dependencies[10],
+            environment_mount=dependencies[11],
+            nonce_claims_mount=dependencies[12],
+            authority_publication=dependencies[13],
+            installation_publication=dependencies[14],
         )
 
     @staticmethod
@@ -995,6 +1011,10 @@ class WarehouseW3ProjectionReceipt:
         *,
         authority: AcceptedLaunchAuthority,
         installation: InstallationRecord,
+        candidate_gate: CandidateGateReceipt,
+        sealed_publication: PublishedTreeReceipt,
+        environment_publication: PublishedTreeReceipt,
+        nonce_directory: PublishedDirectoryReceipt,
         namespace_pair: MountNamespacePair,
         destination_parent_chain: tuple[PublishedDirectoryReceipt, ...],
         boot_id: str,
@@ -1007,6 +1027,10 @@ class WarehouseW3ProjectionReceipt:
     ) -> tuple[
         AcceptedLaunchAuthority,
         InstallationRecord,
+        CandidateGateReceipt,
+        PublishedTreeReceipt,
+        PublishedTreeReceipt,
+        PublishedDirectoryReceipt,
         MountNamespacePair,
         tuple[PublishedDirectoryReceipt, ...],
         str,
@@ -1020,6 +1044,12 @@ class WarehouseW3ProjectionReceipt:
         authority_value, installation_value = _reopen_authority_pair(
             authority,
             installation,
+        )
+        candidate = _reopen_candidate(candidate_gate)
+        _require_candidate_installation_binding(
+            candidate,
+            authority_value,
+            installation_value,
         )
         if type(namespace_pair) is not MountNamespacePair:
             raise TypeError("namespace_pair must be exact MountNamespacePair")
@@ -1041,6 +1071,10 @@ class WarehouseW3ProjectionReceipt:
         return (
             authority_value,
             installation_value,
+            candidate,
+            _reopen_tree(sealed_publication),
+            _reopen_tree(environment_publication),
+            _reopen_directory(nonce_directory),
             namespace_pair,
             reopened_chain,
             _boot_id(boot_id),
@@ -1056,6 +1090,10 @@ class WarehouseW3ProjectionReceipt:
     def _expected(
         authority: AcceptedLaunchAuthority,
         installation: InstallationRecord,
+        candidate: CandidateGateReceipt,
+        sealed_source: PublishedTreeReceipt,
+        environment_source: PublishedTreeReceipt,
+        nonce_source: PublishedDirectoryReceipt,
         namespace_pair: MountNamespacePair,
         parent_chain: tuple[PublishedDirectoryReceipt, ...],
         boot_id: str,
@@ -1095,32 +1133,87 @@ class WarehouseW3ProjectionReceipt:
             raise WarehouseW3RootInstallationError(
                 "projection destination parent chain differs"
             )
+        if (
+            environment_source.role != _ENVIRONMENT_ROLE
+            or environment_source.path != installation.environment_root
+            or nonce_source.role != _NONCE_CLAIMS_ROLE
+            or nonce_source.path != installation.nonce_ledger_parent
+            or candidate.accepted_root != installation.run_root
+            or candidate.accepted_root_read_only is not True
+            or sealed_source.role != _SEALED_ROLE
+            or sealed_source.path != installation.sealed_root
+        ):
+            raise WarehouseW3RootInstallationError(
+                "projection mount source role or path differs"
+            )
         mount_expectations = (
             (
                 _ENVIRONMENT_ROLE,
                 environment_mount,
                 installation.projected_environment_root,
                 True,
+                environment_source,
+                environment_source.identity.device,
+                environment_source.identity.inode,
             ),
             (
                 _NONCE_CLAIMS_ROLE,
                 nonce_mount,
                 installation.projected_nonce_ledger_parent,
                 False,
+                nonce_source,
+                nonce_source.device,
+                nonce_source.inode,
             ),
-            (_RUN_ROLE, run_mount, installation.projected_run_root, False),
-            (_SEALED_ROLE, sealed_mount, installation.projected_sealed_root, True),
+            (
+                _RUN_ROLE,
+                run_mount,
+                installation.projected_run_root,
+                False,
+                candidate,
+                candidate.accepted_root_identity.device,
+                candidate.accepted_root_identity.inode,
+            ),
+            (
+                _SEALED_ROLE,
+                sealed_mount,
+                installation.projected_sealed_root,
+                True,
+                sealed_source,
+                sealed_source.identity.device,
+                sealed_source.identity.inode,
+            ),
         )
-        # Published source-directory receipts are not dependencies of this
-        # aggregate.  Each mount receipt is therefore bound exactly below, but
-        # source_identity-to-publication cross-binding belongs to the later
-        # prestart aggregate that consumes both fact sets.
         if any(
             receipt.mount_point != path or receipt.read_only is not read_only
-            for _role, receipt, path, read_only in mount_expectations
+            for (
+                _role,
+                receipt,
+                path,
+                read_only,
+                _source,
+                _source_device,
+                _source_inode,
+            ) in mount_expectations
         ):
             raise WarehouseW3RootInstallationError(
                 "projection mount path or read-only policy differs"
+            )
+        if any(
+            receipt.source_identity.device != source_device
+            or receipt.source_identity.inode != source_inode
+            for (
+                _role,
+                receipt,
+                _path,
+                _read_only,
+                _source,
+                source_device,
+                source_inode,
+            ) in mount_expectations
+        ):
+            raise WarehouseW3RootInstallationError(
+                "projection mount source identity differs"
             )
         authority_path = f"{installation.projection_root}/authority.json"
         installation_path = f"{installation.projection_root}/installation.json"
@@ -1152,8 +1245,21 @@ class WarehouseW3ProjectionReceipt:
                     "path": path,
                     "read_only": read_only,
                     "receipt_sha256": receipt.raw_sha256,
+                    "source_fact_sha256": source.raw_sha256,
+                    "source_identity": {
+                        "device": source_device,
+                        "inode": source_inode,
+                    },
                 }
-                for role, receipt, path, read_only in mount_expectations[:1]
+                for (
+                    role,
+                    receipt,
+                    path,
+                    read_only,
+                    source,
+                    source_device,
+                    source_inode,
+                ) in mount_expectations[:1]
             ),
             {
                 "role": _INSTALLATION_ROLE,
@@ -1169,8 +1275,21 @@ class WarehouseW3ProjectionReceipt:
                     "path": path,
                     "read_only": read_only,
                     "receipt_sha256": receipt.raw_sha256,
+                    "source_fact_sha256": source.raw_sha256,
+                    "source_identity": {
+                        "device": source_device,
+                        "inode": source_inode,
+                    },
                 }
-                for role, receipt, path, read_only in mount_expectations[1:]
+                for (
+                    role,
+                    receipt,
+                    path,
+                    read_only,
+                    source,
+                    source_device,
+                    source_inode,
+                ) in mount_expectations[1:]
             ),
         ]
         roles = tuple(item["role"] for item in inventory)
@@ -1228,6 +1347,10 @@ class WarehouseW3ProjectionReceipt:
         *,
         authority: AcceptedLaunchAuthority,
         installation: InstallationRecord,
+        candidate_gate: CandidateGateReceipt,
+        sealed_publication: PublishedTreeReceipt,
+        environment_publication: PublishedTreeReceipt,
+        nonce_directory: PublishedDirectoryReceipt,
         namespace_pair: MountNamespacePair,
         destination_parent_chain: tuple[PublishedDirectoryReceipt, ...],
         boot_id: str,
@@ -1241,6 +1364,10 @@ class WarehouseW3ProjectionReceipt:
         dependencies = cls._dependencies(
             authority=authority,
             installation=installation,
+            candidate_gate=candidate_gate,
+            sealed_publication=sealed_publication,
+            environment_publication=environment_publication,
+            nonce_directory=nonce_directory,
             namespace_pair=namespace_pair,
             destination_parent_chain=destination_parent_chain,
             boot_id=boot_id,
@@ -1261,6 +1388,10 @@ class WarehouseW3ProjectionReceipt:
         (
             authority_value,
             installation_value,
+            candidate,
+            sealed_source,
+            environment_source,
+            nonce_source,
             namespaces,
             parent_chain,
             boot,
@@ -1288,6 +1419,13 @@ class WarehouseW3ProjectionReceipt:
             ("sealed_mount_sha256", sealed.raw_sha256),
             ("environment_mount_sha256", environment.raw_sha256),
             ("nonce_claims_mount_sha256", nonce.raw_sha256),
+            ("run_source_fact_sha256", candidate.raw_sha256),
+            ("sealed_source_fact_sha256", sealed_source.raw_sha256),
+            (
+                "environment_source_fact_sha256",
+                environment_source.raw_sha256,
+            ),
+            ("nonce_claims_source_fact_sha256", nonce_source.raw_sha256),
             ("raw", raw),
             ("raw_sha256", hashlib.sha256(raw).hexdigest()),
         ):
