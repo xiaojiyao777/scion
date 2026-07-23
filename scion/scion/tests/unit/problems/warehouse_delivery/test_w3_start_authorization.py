@@ -130,7 +130,11 @@ def _installed(
         )
         receipt = RootPhaseReceipt.create(
             intent=intent,
-            effect_sha256=hashlib.sha256(phase.value.encode()).hexdigest(),
+            effect_sha256=(
+                selection.raw_sha256
+                if phase.value == "CANDIDATE_SELECTED"
+                else hashlib.sha256(phase.value.encode()).hexdigest()
+            ),
         )
         intents.append(intent)
         receipts.append(receipt)
@@ -140,17 +144,8 @@ def _installed(
         installation_sha256=INSTALLATION,
         phase_intents=tuple(intents),
         phase_receipts=tuple(receipts),
-        subordinate_receipt_sha256={
-            "root_selection": selection.raw_sha256,
-            "sealed_store": "1" * 64,
-            "environment_content": "2" * 64,
-            "environment_relocation": "3" * 64,
-            "projection": "4" * 64,
-            "units": "5" * 64,
-            "loaded_manager": "6" * 64,
-            "dry_root": "7" * 64,
-            "prestart_absence": "8" * 64,
-        },
+        problem_state_schema="scion.w3-prestart-evidence.v1",
+        problem_state_sha256=receipts[-1].effect_sha256,
     )
     final_intent = RootPhaseIntentReceipt.create(
         launch_id=LAUNCH,

@@ -196,7 +196,7 @@ def bind_start_authorization(
         phase_intents,
         phase_receipts,
     )
-    subordinate = dict(installed_acceptance.subordinate_receipt_sha256)
+    phase_effects = dict(installed_acceptance.phase_effect_sha256)
     candidate_identity = preparation_commit.candidate_root_identity
     selected_identity = root_selection.source_candidate_identity
     if (
@@ -224,7 +224,7 @@ def bind_start_authorization(
             candidate_identity.gid,
             candidate_identity.nlink,
         )
-        or subordinate["root_selection"] != root_selection.raw_sha256
+        or phase_effects["CANDIDATE_SELECTED"] != root_selection.raw_sha256
         or installed_acceptance.launch_id != root_selection.launch_id
         or installed_acceptance.authority_sha256 != root_selection.authority_sha256
         or unit != f"scion-w3@{installed_acceptance.launch_id}.service"
