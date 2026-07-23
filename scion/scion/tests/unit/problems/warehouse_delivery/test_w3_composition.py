@@ -17,6 +17,7 @@ from scion.problems.warehouse_delivery.w3_composition import (
     EXPECTED_SOURCE_COMMIT,
     EXPECTED_SCIENTIFIC_DESIGN_SHA256,
     WarehouseW3CompositionError,
+    configured_pair_for_installation,
     dispatch_installed_launch,
     inspect_w3_launch_readiness,
     prepare_w3_invocation,
@@ -25,7 +26,10 @@ from scion.runtime.execution.systemd255 import (
     ConfiguredUnitProperties,
     UnitRole,
 )
-from scion.runtime.execution.systemd_acquisition import ConfiguredPairFact
+from scion.runtime.execution.systemd_acquisition import (
+    ConfiguredPairFact,
+    parse_unit_template,
+)
 
 ACCEPTED_ROOT = Path(
     "/home/clawd/research/scion-experiments/"
@@ -110,6 +114,20 @@ def _pair() -> ConfiguredPairFact:
         expected_peer=run_unit,
     )
     return ConfiguredPairFact.create(run, closer)
+
+
+def test_configured_pair_is_derived_from_exact_unit_templates() -> None:
+    run_template, close_template = _templates()
+
+    pair = configured_pair_for_installation(
+        LAUNCH_ID,
+        parse_unit_template(run_template),
+        parse_unit_template(close_template),
+    )
+
+    assert pair == _pair()
+    assert pair.run.unit == f"scion-w3@{LAUNCH_ID}.service"
+    assert pair.closer.unit == f"scion-w3-close@{LAUNCH_ID}.service"
 
 
 def _records(

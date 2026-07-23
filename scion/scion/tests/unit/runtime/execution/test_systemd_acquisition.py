@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 
 import pytest
 
 from scion.runtime.execution.systemd_acquisition import (
+    ConfiguredPairReadback,
     Systemd255Acquirer,
     SystemdAcquisitionError,
     parse_unit_template,
@@ -130,7 +133,7 @@ class _Reader:
                 "TimeoutStopUSec": (1 << 64) - 1,
                 "OnSuccess": [CLOSE],
                 "OnFailure": [CLOSE],
-                "InvocationID": INVOCATION,
+                "InvocationID": list(bytes.fromhex(INVOCATION)),
                 "ControlGroup": CONTROL_GROUP,
                 "MainPID": 4242,
                 "LoadState": "loaded",
@@ -292,6 +295,141 @@ def test_configured_pair_uses_fixed_read_only_property_sets(
     assert not hasattr(acquirer, "stop_unit")
 
 
+def test_configured_pair_readback_is_canonical_and_reopenable(
+    tmp_path: Path,
+) -> None:
+    acquirer, reader, _proc, _cgroup = _acquirer(tmp_path)
+    acquisition = acquirer.acquire_configured_pair_readback(
+        run_unit=RUN,
+        close_unit=CLOSE,
+        run_directives=RUN_DIRECTIVES,
+        close_directives=CLOSE_DIRECTIVES,
+        run_wiring=RUN_WIRING,
+        close_wiring=CLOSE_WIRING,
+    )
+
+    decoded = json.loads(acquisition.raw)
+    assert decoded["schema"] == "scion.systemd255-configured-pair-readback.v1"
+    assert decoded["run_unit"] == RUN
+    assert decoded["close_unit"] == CLOSE
+    expected_run = {
+        name: reader.values[RUN][name] for name in decoded["run_properties"]
+    }
+    expected_close = {
+        name: reader.values[CLOSE][name] for name in decoded["close_properties"]
+    }
+    assert decoded["run_properties"] == json.loads(json.dumps(expected_run))
+    assert decoded["close_properties"] == json.loads(json.dumps(expected_close))
+    assert (
+        decoded["configured_pair_sha256"]
+        == acquisition.configured_pair.configured_pair_sha256
+    )
+    assert acquisition.raw_sha256 == hashlib.sha256(acquisition.raw).hexdigest()
+    assert tuple(dict(acquisition.run_properties)) != ()
+    assert (
+        ConfiguredPairReadback.from_bytes(
+            acquisition.raw,
+            expected_run_wiring=RUN_WIRING,
+            expected_close_wiring=CLOSE_WIRING,
+        )
+        == acquisition
+    )
+    with pytest.raises(TypeError, match="parsed from exact bytes"):
+        ConfiguredPairReadback()
+    with pytest.raises(TypeError, match="final"):
+        type("Derived", (type(acquisition),), {})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("run_unit", CLOSE),
+        ("close_unit", RUN),
+        ("configured_pair_sha256", "0" * 64),
+    ),
+)
+def test_configured_pair_readback_rejects_identity_drift(
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
+    acquirer, _reader, _proc, _cgroup = _acquirer(tmp_path)
+    acquisition = acquirer.acquire_configured_pair_readback(
+        run_unit=RUN,
+        close_unit=CLOSE,
+        run_directives=RUN_DIRECTIVES,
+        close_directives=CLOSE_DIRECTIVES,
+        run_wiring=RUN_WIRING,
+        close_wiring=CLOSE_WIRING,
+    )
+    decoded = json.loads(acquisition.raw)
+    decoded[field] = value
+
+    with pytest.raises(SystemdAcquisitionError):
+        ConfiguredPairReadback.from_bytes(
+            (
+                json.dumps(decoded, sort_keys=True, separators=(",", ":")) + "\n"
+            ).encode(),
+            expected_run_wiring=RUN_WIRING,
+            expected_close_wiring=CLOSE_WIRING,
+        )
+
+
+def test_configured_pair_readback_rejects_noncanonical_bytes(
+    tmp_path: Path,
+) -> None:
+    acquirer, _reader, _proc, _cgroup = _acquirer(tmp_path)
+    acquisition = acquirer.acquire_configured_pair_readback(
+        run_unit=RUN,
+        close_unit=CLOSE,
+        run_directives=RUN_DIRECTIVES,
+        close_directives=CLOSE_DIRECTIVES,
+        run_wiring=RUN_WIRING,
+        close_wiring=CLOSE_WIRING,
+    )
+
+    with pytest.raises(SystemdAcquisitionError, match="not canonical"):
+        ConfiguredPairReadback.from_bytes(
+            acquisition.raw.rstrip(b"\n"),
+            expected_run_wiring=RUN_WIRING,
+            expected_close_wiring=CLOSE_WIRING,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("Type", "notify"),
+        ("ExecStart", "not-a-dbus-command"),
+        ("UMask", -1),
+    ),
+)
+def test_configured_pair_readback_rejects_raw_wiring_drift(
+    tmp_path: Path,
+    field: str,
+    value: object,
+) -> None:
+    acquirer, _reader, _proc, _cgroup = _acquirer(tmp_path)
+    acquisition = acquirer.acquire_configured_pair_readback(
+        run_unit=RUN,
+        close_unit=CLOSE,
+        run_directives=RUN_DIRECTIVES,
+        close_directives=CLOSE_DIRECTIVES,
+        run_wiring=RUN_WIRING,
+        close_wiring=CLOSE_WIRING,
+    )
+    decoded = json.loads(acquisition.raw)
+    decoded["run_properties"][field] = value
+    raw = (json.dumps(decoded, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+    with pytest.raises(SystemdAcquisitionError):
+        ConfiguredPairReadback.from_bytes(
+            raw,
+            expected_run_wiring=RUN_WIRING,
+            expected_close_wiring=CLOSE_WIRING,
+        )
+
+
 def test_configured_pair_rejects_manager_or_directive_drift(
     tmp_path: Path,
 ) -> None:
@@ -398,6 +536,59 @@ def test_lineage_and_stop_post_topology_are_descriptor_bound(
     assert topology.job_cgroups == ()
 
 
+def test_manager_invocation_id_byte_array_is_normalized(
+    tmp_path: Path,
+) -> None:
+    acquirer, reader, _proc, _cgroup = _acquirer(tmp_path)
+    reader.values[RUN]["InvocationID"] = list(bytes.fromhex(INVOCATION))
+
+    lineage = acquirer.acquire_self_lineage(
+        expected_unit=RUN,
+        expected_invocation_id=INVOCATION,
+        expected_main_pid=4242,
+    )
+
+    assert lineage.invocation_id == INVOCATION
+
+
+def test_empty_manager_invocation_id_is_not_active_lineage(
+    tmp_path: Path,
+) -> None:
+    acquirer, reader, _proc, _cgroup = _acquirer(tmp_path)
+    reader.values[RUN]["InvocationID"] = [0] * 16
+
+    with pytest.raises(SystemdAcquisitionError, match="empty manager invocation"):
+        acquirer.acquire_self_lineage(
+            expected_unit=RUN,
+            expected_invocation_id="0" * 32,
+            expected_main_pid=4242,
+        )
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        INVOCATION,
+        [1] * 15,
+        [1] * 15 + [256],
+        [1] * 15 + [True],
+    ),
+)
+def test_manager_invocation_id_rejects_malformed_byte_array(
+    tmp_path: Path,
+    value: object,
+) -> None:
+    acquirer, reader, _proc, _cgroup = _acquirer(tmp_path)
+    reader.values[RUN]["InvocationID"] = value
+
+    with pytest.raises(SystemdAcquisitionError, match="manager invocation id"):
+        acquirer.acquire_self_lineage(
+            expected_unit=RUN,
+            expected_invocation_id=INVOCATION,
+            expected_main_pid=4242,
+        )
+
+
 def test_stop_post_topology_rejects_residual_job_cgroup(
     tmp_path: Path,
 ) -> None:
@@ -442,6 +633,7 @@ def test_final_acquisition_retains_structured_exec_stop_post(
     tmp_path: Path,
 ) -> None:
     acquirer, reader, _proc, _cgroup = _acquirer(tmp_path)
+    reader.values[RUN]["InvocationID"] = tuple(bytes.fromhex(INVOCATION))
     expected_argv = (
         PYTHON,
         "-B",

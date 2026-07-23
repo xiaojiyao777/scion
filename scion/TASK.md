@@ -125,7 +125,22 @@ and full execution gates pass exact `132 / 1723`, with unchanged H11
 `43 / 172 / 0 formal`. Exact evidence is in
 `v04-w3-composition-launch-readiness-acceptance-20260723.md`. Formal launch
 remains locked pending a separate root-owned installation/loaded-manager
-acceptance and explicit human `StartUnit` authorization.
+acceptance and binding the supplied prospective human `StartUnit`
+authorization to the unique exact root-selected candidate.
+
+The independent root-installation/loaded-manager/one-shot-launch implementation
+contract is now accepted at fixed raw SHA `49196769...81eb6`; three independent
+reviews close with no open P0/P1. Its dormant source foundation also closes
+with no open P0/P1: strict systemd-255 `InvocationID: ay`, canonical configured
+pair readback, exact template-derived installation pair, private W3 tool
+packaging and service package data. The exact accepted native ELF is reproduced
+at `3d747973...803fc`. No root installation, mount, manager mutation, nonce or
+formal job occurred. Next is implementation of the capability-free environment
+verifier, generic root transaction/manager/start owner and Warehouse candidate
+adapter, followed by a clean pushed launch commit and independent candidate
+acceptance. The user's prospective `StartUnit` authorization is usable only
+for the unique exact candidate later selected in the root-owned selection
+ledger after all fixed gates pass.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction

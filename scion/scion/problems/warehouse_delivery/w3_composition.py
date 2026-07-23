@@ -51,6 +51,10 @@ from scion.runtime.execution.spawn_backend import (
     SettledJob,
     SpawnBackend,
 )
+from scion.runtime.execution.systemd255 import (
+    ConfiguredUnitProperties,
+    UnitRole,
+)
 from scion.runtime.execution.systemd_acquisition import (
     ConfiguredPairFact,
     Systemd255Acquirer,
@@ -374,6 +378,82 @@ def _require_template(
 
 def _expanded(value: str, launch_id: str) -> str:
     return value.replace("%i", launch_id)
+
+
+def configured_pair_for_installation(
+    launch_id: str,
+    run_template: UnitTemplate,
+    close_template: UnitTemplate,
+) -> ConfiguredPairFact:
+    """Derive the one installation-bound configured pair from exact templates."""
+
+    if _SHA256_RE.fullmatch(launch_id) is None:
+        raise WarehouseW3CompositionError("launch id is not one SHA-256 value")
+    if (
+        type(run_template) is not UnitTemplate
+        or type(close_template) is not UnitTemplate
+    ):
+        raise TypeError("run_template and close_template must be exact UnitTemplate")
+    _require_template(
+        run_template,
+        unit_section=_RUN_UNIT_SECTION,
+        service_section=_RUN_SERVICE_SECTION,
+        label="run",
+    )
+    _require_template(
+        close_template,
+        unit_section=_CLOSE_UNIT_SECTION,
+        service_section=_CLOSE_SERVICE_SECTION,
+        label="closer",
+    )
+    run_unit = f"scion-w3@{launch_id}.service"
+    close_unit = f"scion-w3-close@{launch_id}.service"
+    run = ConfiguredUnitProperties.from_receipts(
+        UnitRole.RUN,
+        {
+            "Delegate": "pids",
+            "DelegateSubgroup": "supervisor",
+            "CollectMode": "inactive",
+            "Restart": "no",
+            "KillMode": "control-group",
+            "TimeoutStopSec": "infinity",
+            "OnSuccess": close_unit,
+            "OnFailure": close_unit,
+        },
+        {
+            "Id": run_unit,
+            "Delegate": "yes",
+            "DelegateControllers": "pids",
+            "DelegateSubgroup": "supervisor",
+            "CollectMode": "inactive",
+            "Restart": "no",
+            "KillMode": "control-group",
+            "TimeoutStopUSec": "infinity",
+            "OnSuccess": close_unit,
+            "OnFailure": close_unit,
+        },
+        expected_unit=run_unit,
+        expected_peer=close_unit,
+    )
+    closer = ConfiguredUnitProperties.from_receipts(
+        UnitRole.CLOSER,
+        {
+            "CollectMode": "inactive",
+            "Restart": "no",
+            "TimeoutStartSec": "infinity",
+            "After": run_unit,
+        },
+        {
+            "Id": close_unit,
+            "CollectMode": "inactive",
+            "Restart": "no",
+            "TimeoutStartUSec": "infinity",
+            "After": run_unit,
+        },
+        expected_unit=close_unit,
+        expected_peer=run_unit,
+    )
+    return ConfiguredPairFact.create(run, closer)
 
 
 def _require_configured_pair(
@@ -1345,6 +1425,7 @@ __all__ = [
     "EXPECTED_SOURCE_COMMIT",
     "WarehouseW3CompositionError",
     "WarehouseW3LaunchReadyFact",
+    "configured_pair_for_installation",
     "dispatch_installed_launch",
     "inspect_w3_launch_readiness",
     "prepare_w3_invocation",

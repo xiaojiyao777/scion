@@ -65,8 +65,23 @@ accepted dormant owners. Composition and full execution gates pass exact
 The accepted dry root remained read-only at exact `43 cells / 172 jobs /
 0 formal`. No external W3 authority, installation, projection or loaded
 manager receipt exists. Formal launch remains locked pending separate
-root-owned installation/manager acceptance and explicit human `StartUnit`
-authorization.
+root-owned installation/manager acceptance and binding the supplied prospective
+human `StartUnit` authorization to the unique exact root-selected candidate.
+
+The root-owned W3 installation, loaded-manager and one-shot `StartUnit` design
+is now accepted at exact raw SHA `49196769...81eb6`, with final architecture,
+host-feasibility and root-transaction reviews at P0=0/P1=0. Its first dormant
+source foundation is also accepted: strict real systemd-255
+`InvocationID: ay`, canonical configured-pair readback, exact problem-template
+pair derivation, W3 tool packaging and both service templates in the wheel.
+The accepted native extension SHA `3d747973...803fc` is reproducible with the
+frozen builder. No `/var/lib/scion`, unit fragment, mount, manager mutation,
+nonce or formal job was created. The active next slice is implementation and
+fixed-source acceptance of `environment_integrity`, generic
+`external_installation`, the Warehouse candidate adapter and thin install CLI;
+only then may one clean pushed candidate enter root quarantine and selection.
+The current shell has no passwordless sudo, so the later root apply/start phase
+will require an interactive root shell rather than code invoking sudo.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`

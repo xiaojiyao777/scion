@@ -26,6 +26,7 @@ from .systemd255 import (
 
 _UNIT_RE = re.compile(r"[A-Za-z0-9:_.@-]+\.service\Z")
 _INVOCATION_RE = re.compile(r"[0-9a-f]{32}\Z")
+_EMPTY_INVOCATION_ID = "0" * 32
 _BOOT_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-" r"[0-9a-f]{4}-[0-9a-f]{12}\Z"
 )
@@ -291,6 +292,34 @@ def _canonical_json(value: object) -> bytes:
         ) from exc
 
 
+def _decode_canonical_json(raw: bytes, *, label: str) -> object:
+    if type(raw) is not bytes:
+        raise TypeError(f"{label} must be exact bytes")
+    try:
+        text = raw.decode("utf-8", "strict")
+
+        def mapping(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            value: dict[str, object] = {}
+            for key, item in pairs:
+                if key in value:
+                    raise ValueError(f"{label} contains a duplicate field")
+                value[key] = item
+            return value
+
+        value = json.loads(
+            text,
+            object_pairs_hook=mapping,
+            parse_constant=lambda token: (_ for _ in ()).throw(
+                ValueError(f"{label} contains {token}")
+            ),
+        )
+    except (UnicodeError, ValueError, TypeError) as exc:
+        raise SystemdAcquisitionError(f"{label} is not canonical JSON") from exc
+    if _canonical_json(value) != raw:
+        raise SystemdAcquisitionError(f"{label} bytes are not canonical")
+    return value
+
+
 def _json_value(value: object) -> object:
     if isinstance(value, Enum):
         return value.value
@@ -298,6 +327,22 @@ def _json_value(value: object) -> object:
         return [_json_value(item) for item in value]
     if type(value) is dict:
         return {key: _json_value(item) for key, item in value.items()}
+    return value
+
+
+def _freeze_manager_value(value: object) -> object:
+    if type(value) in {str, int, bool}:
+        return value
+    if type(value) in {tuple, list}:
+        return tuple(_freeze_manager_value(item) for item in value)
+    raise SystemdAcquisitionError(
+        f"manager property contains unsupported {type(value).__name__}"
+    )
+
+
+def _thaw_manager_value(value: object) -> object:
+    if type(value) is tuple:
+        return [_thaw_manager_value(item) for item in value]
     return value
 
 
@@ -325,6 +370,21 @@ def _invocation_id(value: object, *, field: str) -> str:
     if _INVOCATION_RE.fullmatch(text) is None:
         raise SystemdAcquisitionError(f"{field} is not a canonical invocation id")
     return text
+
+
+def _manager_invocation_id(value: object, *, field: str) -> str:
+    """Normalize systemd's D-Bus ``ay`` InvocationID to canonical hex."""
+
+    if type(value) not in {tuple, list} or len(value) != 16:
+        raise SystemdAcquisitionError(f"{field} is not a 16-byte manager invocation id")
+    octets = bytearray()
+    for item in value:
+        if type(item) is not int or not 0 <= item <= 255:
+            raise SystemdAcquisitionError(
+                f"{field} is not a 16-byte manager invocation id"
+            )
+        octets.append(item)
+    return bytes(octets).hex()
 
 
 def _uint(
@@ -360,7 +420,13 @@ def _manager_mapping(
         type(key) is not str for key in copied
     ):
         raise SystemdAcquisitionError("manager property inventory differs")
-    return {name: copied[name] for name in names}
+    normalized = {name: copied[name] for name in names}
+    if "InvocationID" in normalized:
+        normalized["InvocationID"] = _manager_invocation_id(
+            normalized["InvocationID"],
+            field=f"{unit}.InvocationID",
+        )
+    return normalized
 
 
 def _manager_bool(value: object, *, field: str) -> str:
@@ -537,6 +603,408 @@ class ConfiguredPairFact:
             "run": _json_value(asdict(self.run)),
             "closer": _json_value(asdict(self.closer)),
         }
+
+
+@dataclass(frozen=True, slots=True, init=False)
+class ConfiguredPairReadback:
+    """Exact configured-property readback; not loaded-unit acceptance."""
+
+    run_unit: str
+    close_unit: str
+    run_properties: tuple[tuple[str, object], ...]
+    close_properties: tuple[tuple[str, object], ...]
+    configured_pair: ConfiguredPairFact
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "ConfiguredPairReadback":
+        del cls
+        raise TypeError("ConfiguredPairReadback must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("ConfiguredPairReadback is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        run_unit: str,
+        close_unit: str,
+        run_properties: Mapping[str, object],
+        close_properties: Mapping[str, object],
+        configured_pair: ConfiguredPairFact,
+        run_wiring: Mapping[str, str],
+        close_wiring: Mapping[str, str],
+    ) -> "ConfiguredPairReadback":
+        if type(configured_pair) is not ConfiguredPairFact:
+            raise TypeError("configured_pair must be exact ConfiguredPairFact")
+        run_name = _unit(run_unit, field="run_unit")
+        close_name = _unit(close_unit, field="close_unit")
+        if frozenset(run_properties) != frozenset(_RUN_EXPANDED) or frozenset(
+            close_properties
+        ) != frozenset(_CLOSE_EXPANDED):
+            raise SystemdAcquisitionError(
+                "loaded configured-pair property inventory differs"
+            )
+        frozen_run = tuple(
+            (name, _freeze_manager_value(run_properties[name]))
+            for name in _RUN_EXPANDED
+        )
+        frozen_close = tuple(
+            (name, _freeze_manager_value(close_properties[name]))
+            for name in _CLOSE_EXPANDED
+        )
+        value = {
+            "schema": "scion.systemd255-configured-pair-readback.v1",
+            "run_unit": run_name,
+            "close_unit": close_name,
+            "run_properties": {
+                name: _thaw_manager_value(item) for name, item in frozen_run
+            },
+            "close_properties": {
+                name: _thaw_manager_value(item) for name, item in frozen_close
+            },
+            "configured_pair": configured_pair.to_mapping(),
+            "configured_pair_sha256": configured_pair.configured_pair_sha256,
+        }
+        raw = _canonical_json(value)
+        return cls.from_bytes(
+            raw,
+            expected_run_wiring=run_wiring,
+            expected_close_wiring=close_wiring,
+        )
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        expected_run_wiring: Mapping[str, str],
+        expected_close_wiring: Mapping[str, str],
+    ) -> "ConfiguredPairReadback":
+        value = _decode_canonical_json(raw, label="configured-pair readback")
+        if type(value) is not dict or frozenset(value) != frozenset(
+            {
+                "schema",
+                "run_unit",
+                "close_unit",
+                "run_properties",
+                "close_properties",
+                "configured_pair",
+                "configured_pair_sha256",
+            }
+        ):
+            raise SystemdAcquisitionError("configured-pair readback fields differ")
+        if value["schema"] != "scion.systemd255-configured-pair-readback.v1":
+            raise SystemdAcquisitionError("configured-pair readback schema differs")
+        run_name = _unit(value["run_unit"], field="readback.run_unit")
+        close_name = _unit(value["close_unit"], field="readback.close_unit")
+        run_properties = value["run_properties"]
+        close_properties = value["close_properties"]
+        if (
+            type(run_properties) is not dict
+            or frozenset(run_properties) != frozenset(_RUN_EXPANDED)
+            or type(close_properties) is not dict
+            or frozenset(close_properties) != frozenset(_CLOSE_EXPANDED)
+        ):
+            raise SystemdAcquisitionError(
+                "configured-pair readback property inventory differs"
+            )
+        frozen_run = tuple(
+            (name, _freeze_manager_value(run_properties[name]))
+            for name in _RUN_EXPANDED
+        )
+        frozen_close = tuple(
+            (name, _freeze_manager_value(close_properties[name]))
+            for name in _CLOSE_EXPANDED
+        )
+        expected_run = _configured_mapping(
+            expected_run_wiring,
+            frozenset(
+                {
+                    "Type",
+                    "User",
+                    "Group",
+                    "UMask",
+                    "ExecStart",
+                    "ExecStopPost",
+                    "ExitType",
+                    "SendSIGKILL",
+                    "OOMPolicy",
+                    "NoNewPrivileges",
+                    "PrivateTmp",
+                    "PrivateMounts",
+                    "ProtectSystem",
+                    "ProtectHome",
+                    "ProtectControlGroups",
+                    "ProtectProc",
+                    "ProcSubset",
+                    "ReadOnlyPaths",
+                    "ReadWritePaths",
+                }
+            ),
+            label="expected run wiring",
+        )
+        expected_close = _configured_mapping(
+            expected_close_wiring,
+            frozenset(
+                {
+                    "Type",
+                    "User",
+                    "Group",
+                    "UMask",
+                    "ExecStart",
+                    "NoNewPrivileges",
+                    "PrivateTmp",
+                    "ProtectSystem",
+                    "ProtectHome",
+                    "ReadOnlyPaths",
+                    "ReadWritePaths",
+                }
+            ),
+            label="expected closer wiring",
+        )
+        actual_run = {
+            "Type": _text(
+                run_properties["Type"],
+                field="readback.run.Type",
+            ),
+            "User": _text(
+                run_properties["User"],
+                field="readback.run.User",
+            ),
+            "Group": _text(
+                run_properties["Group"],
+                field="readback.run.Group",
+            ),
+            "UMask": _manager_umask(
+                run_properties["UMask"],
+                field="readback.run.UMask",
+            ),
+            "ExecStart": _manager_command(
+                run_properties["ExecStart"],
+                field="readback.run.ExecStart",
+            ),
+            "ExecStopPost": _manager_command(
+                run_properties["ExecStopPost"],
+                field="readback.run.ExecStopPost",
+            ),
+            "ExitType": _text(
+                run_properties["ExitType"],
+                field="readback.run.ExitType",
+            ),
+            "SendSIGKILL": _manager_bool(
+                run_properties["SendSIGKILL"],
+                field="readback.run.SendSIGKILL",
+            ),
+            "OOMPolicy": _text(
+                run_properties["OOMPolicy"],
+                field="readback.run.OOMPolicy",
+            ),
+            "NoNewPrivileges": _manager_bool(
+                run_properties["NoNewPrivileges"],
+                field="readback.run.NoNewPrivileges",
+            ),
+            "PrivateTmp": _manager_bool(
+                run_properties["PrivateTmp"],
+                field="readback.run.PrivateTmp",
+            ),
+            "PrivateMounts": _manager_bool(
+                run_properties["PrivateMounts"],
+                field="readback.run.PrivateMounts",
+            ),
+            "ProtectSystem": _text(
+                run_properties["ProtectSystem"],
+                field="readback.run.ProtectSystem",
+            ),
+            "ProtectHome": _text(
+                run_properties["ProtectHome"],
+                field="readback.run.ProtectHome",
+            ),
+            "ProtectControlGroups": _manager_bool(
+                run_properties["ProtectControlGroups"],
+                field="readback.run.ProtectControlGroups",
+            ),
+            "ProtectProc": _text(
+                run_properties["ProtectProc"],
+                field="readback.run.ProtectProc",
+            ),
+            "ProcSubset": _text(
+                run_properties["ProcSubset"],
+                field="readback.run.ProcSubset",
+            ),
+            "ReadOnlyPaths": _manager_path_list(
+                run_properties["ReadOnlyPaths"],
+                field="readback.run.ReadOnlyPaths",
+            ),
+            "ReadWritePaths": _manager_path_list(
+                run_properties["ReadWritePaths"],
+                field="readback.run.ReadWritePaths",
+            ),
+        }
+        actual_close = {
+            "Type": _text(
+                close_properties["Type"],
+                field="readback.closer.Type",
+            ),
+            "User": _text(
+                close_properties["User"],
+                field="readback.closer.User",
+            ),
+            "Group": _text(
+                close_properties["Group"],
+                field="readback.closer.Group",
+            ),
+            "UMask": _manager_umask(
+                close_properties["UMask"],
+                field="readback.closer.UMask",
+            ),
+            "ExecStart": _manager_command(
+                close_properties["ExecStart"],
+                field="readback.closer.ExecStart",
+            ),
+            "NoNewPrivileges": _manager_bool(
+                close_properties["NoNewPrivileges"],
+                field="readback.closer.NoNewPrivileges",
+            ),
+            "PrivateTmp": _manager_bool(
+                close_properties["PrivateTmp"],
+                field="readback.closer.PrivateTmp",
+            ),
+            "ProtectSystem": _text(
+                close_properties["ProtectSystem"],
+                field="readback.closer.ProtectSystem",
+            ),
+            "ProtectHome": _text(
+                close_properties["ProtectHome"],
+                field="readback.closer.ProtectHome",
+            ),
+            "ReadOnlyPaths": _manager_path_list(
+                close_properties["ReadOnlyPaths"],
+                field="readback.closer.ReadOnlyPaths",
+            ),
+            "ReadWritePaths": _manager_path_list(
+                close_properties["ReadWritePaths"],
+                field="readback.closer.ReadWritePaths",
+            ),
+        }
+        if actual_run != expected_run or actual_close != expected_close:
+            raise SystemdAcquisitionError("configured-pair readback wiring differs")
+        configured_pair = ConfiguredPairFact.from_mapping(value["configured_pair"])
+        if (
+            type(value["configured_pair_sha256"]) is not str
+            or value["configured_pair_sha256"] != configured_pair.configured_pair_sha256
+        ):
+            raise SystemdAcquisitionError("configured-pair readback digest differs")
+        if (
+            configured_pair.run.unit != run_name
+            or configured_pair.closer.unit != close_name
+            or run_properties["Id"] != run_name
+            or close_properties["Id"] != close_name
+        ):
+            raise SystemdAcquisitionError(
+                "configured-pair readback unit identities differ"
+            )
+        run_expanded = {
+            "Id": _unit(run_properties["Id"], field="readback.run.Id"),
+            "Delegate": _manager_bool(
+                run_properties["Delegate"],
+                field="readback.run.Delegate",
+            ),
+            "DelegateControllers": _manager_tokens(
+                run_properties["DelegateControllers"],
+                field="readback.run.DelegateControllers",
+            ),
+            "DelegateSubgroup": _text(
+                run_properties["DelegateSubgroup"],
+                field="readback.run.DelegateSubgroup",
+            ),
+            "CollectMode": _text(
+                run_properties["CollectMode"],
+                field="readback.run.CollectMode",
+            ),
+            "Restart": _text(
+                run_properties["Restart"],
+                field="readback.run.Restart",
+            ),
+            "KillMode": _text(
+                run_properties["KillMode"],
+                field="readback.run.KillMode",
+            ),
+            "TimeoutStopUSec": _manager_timeout(
+                run_properties["TimeoutStopUSec"],
+                field="readback.run.TimeoutStopUSec",
+            ),
+            "OnSuccess": _manager_units(
+                run_properties["OnSuccess"],
+                field="readback.run.OnSuccess",
+            ),
+            "OnFailure": _manager_units(
+                run_properties["OnFailure"],
+                field="readback.run.OnFailure",
+            ),
+        }
+        close_expanded = {
+            "Id": _unit(
+                close_properties["Id"],
+                field="readback.closer.Id",
+            ),
+            "CollectMode": _text(
+                close_properties["CollectMode"],
+                field="readback.closer.CollectMode",
+            ),
+            "Restart": _text(
+                close_properties["Restart"],
+                field="readback.closer.Restart",
+            ),
+            "TimeoutStartUSec": _manager_timeout(
+                close_properties["TimeoutStartUSec"],
+                field="readback.closer.TimeoutStartUSec",
+            ),
+            "After": _manager_units(
+                close_properties["After"],
+                field="readback.closer.After",
+            ),
+        }
+        try:
+            derived = ConfiguredPairFact.create(
+                ConfiguredUnitProperties.from_receipts(
+                    UnitRole.RUN,
+                    dict(configured_pair.run.configured_directives),
+                    run_expanded,
+                    expected_unit=run_name,
+                    expected_peer=close_name,
+                ),
+                ConfiguredUnitProperties.from_receipts(
+                    UnitRole.CLOSER,
+                    dict(configured_pair.closer.configured_directives),
+                    close_expanded,
+                    expected_unit=close_name,
+                    expected_peer=run_name,
+                ),
+            )
+        except Systemd255ContractError as exc:
+            raise SystemdAcquisitionError(
+                "configured-pair readback cannot be rederived"
+            ) from exc
+        if derived != configured_pair:
+            raise SystemdAcquisitionError(
+                "configured-pair readback semantic binding differs"
+            )
+        instance = object.__new__(cls)
+        object.__setattr__(instance, "run_unit", run_name)
+        object.__setattr__(instance, "close_unit", close_name)
+        object.__setattr__(instance, "run_properties", frozen_run)
+        object.__setattr__(instance, "close_properties", frozen_close)
+        object.__setattr__(instance, "configured_pair", configured_pair)
+        object.__setattr__(instance, "raw", raw)
+        object.__setattr__(
+            instance,
+            "raw_sha256",
+            hashlib.sha256(raw).hexdigest(),
+        )
+        return instance
 
 
 @dataclass(frozen=True, slots=True)
@@ -922,7 +1390,7 @@ class Systemd255Acquirer:
         del kwargs
         raise TypeError("Systemd255Acquirer is final")
 
-    def acquire_configured_pair(
+    def acquire_configured_pair_readback(
         self,
         *,
         run_unit: str,
@@ -931,7 +1399,7 @@ class Systemd255Acquirer:
         close_directives: Mapping[str, str],
         run_wiring: Mapping[str, str],
         close_wiring: Mapping[str, str],
-    ) -> ConfiguredPairFact:
+    ) -> ConfiguredPairReadback:
         run_unit = _unit(run_unit, field="run_unit")
         close_unit = _unit(close_unit, field="close_unit")
         run_configured = _configured_mapping(
@@ -1145,7 +1613,34 @@ class Systemd255Acquirer:
             validate_run_close_pair(run, closer)
         except Systemd255ContractError as exc:
             raise SystemdAcquisitionError("configured run/closer pair differs") from exc
-        return ConfiguredPairFact.create(run, closer)
+        return ConfiguredPairReadback.create(
+            run_unit=run_unit,
+            close_unit=close_unit,
+            run_properties=run_raw,
+            close_properties=close_raw,
+            configured_pair=ConfiguredPairFact.create(run, closer),
+            run_wiring=expected_run_wiring,
+            close_wiring=expected_close_wiring,
+        )
+
+    def acquire_configured_pair(
+        self,
+        *,
+        run_unit: str,
+        close_unit: str,
+        run_directives: Mapping[str, str],
+        close_directives: Mapping[str, str],
+        run_wiring: Mapping[str, str],
+        close_wiring: Mapping[str, str],
+    ) -> ConfiguredPairFact:
+        return self.acquire_configured_pair_readback(
+            run_unit=run_unit,
+            close_unit=close_unit,
+            run_directives=run_directives,
+            close_directives=close_directives,
+            run_wiring=run_wiring,
+            close_wiring=close_wiring,
+        ).configured_pair
 
     def acquire_self_lineage(
         self,
@@ -1159,6 +1654,10 @@ class Systemd255Acquirer:
             expected_invocation_id,
             field="expected_invocation_id",
         )
+        if expected_invocation_id == _EMPTY_INVOCATION_ID:
+            raise SystemdAcquisitionError(
+                "active lineage cannot use the empty manager invocation id"
+            )
         pid = (
             os.getpid()
             if expected_main_pid is None
@@ -1349,6 +1848,10 @@ class Systemd255Acquirer:
             expected_invocation_id,
             field="expected_invocation_id",
         )
+        if expected_invocation_id == _EMPTY_INVOCATION_ID:
+            raise SystemdAcquisitionError(
+                "final acquisition cannot use the empty manager invocation id"
+            )
         expected_exec_path = _text(
             expected_exec_path,
             field="expected_exec_path",
@@ -1417,6 +1920,7 @@ class Systemd255Acquirer:
 
 __all__ = [
     "ConfiguredPairFact",
+    "ConfiguredPairReadback",
     "StructuredExecCommand",
     "Systemd255Acquirer",
     "SystemdAcquisitionError",
