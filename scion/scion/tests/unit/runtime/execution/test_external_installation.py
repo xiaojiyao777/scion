@@ -22,6 +22,8 @@ from scion.runtime.execution.external_installation import (
     InstalledAcceptance,
     LoadedManagerReceipt,
     ManagerAcceptanceError,
+    ManagerIdentity,
+    ManagerReloadReceipt,
     MountBindingReceipt,
     MountInfoError,
     NoReplaceReceiptSet,
@@ -38,8 +40,9 @@ from scion.runtime.execution.external_installation import (
     StartPermitOwner,
     SystemdExternalManager,
     UnitPublicationReceipt,
-    apply_root_phase,
     acquire_loaded_manager_receipt,
+    apply_manager_reload,
+    apply_root_phase,
     classify_root_installation,
     classify_start_dispatch,
     parse_selected_mountinfo,
@@ -1002,7 +1005,96 @@ class _Manager:
         return result
 
 
-def test_narrow_manager_acquisition_pins_reopens_and_unrefs_in_order() -> None:
+def _manager_reload_receipt(
+    *,
+    owner: str = ":1.42",
+    boot: str = BOOT,
+    version: str = VERSION,
+) -> ManagerReloadReceipt:
+    return ManagerReloadReceipt.create(
+        manager_identity=ManagerIdentity(
+            unique_owner=owner,
+            boot_id=boot,
+            version=version,
+        ),
+        configured_readback=_configured_readback(),
+        unit_publication=_unit_publication(),
+    )
+
+
+def test_manager_reload_is_separate_and_reacquires_only_manager_facts() -> None:
+    manager = _Manager()
+    persisted: list[bytes] = []
+
+    receipt = apply_manager_reload(
+        manager,
+        configured_readback=_configured_readback(),
+        unit_publication=_unit_publication(),
+        persist_and_reopen=lambda raw: persisted.append(raw) or bytes(raw),
+    )
+
+    assert persisted == [receipt.raw]
+    assert receipt.manager_identity == ManagerIdentity(
+        unique_owner=":1.42",
+        boot_id=BOOT,
+        version=VERSION,
+    )
+    assert receipt.unit_publication_sha256 == _unit_publication().raw_sha256
+    assert receipt.configured_pair_readback_sha256 == _configured_readback().raw_sha256
+    assert (
+        receipt.configured_pair_sha256
+        == _configured_readback().configured_pair.configured_pair_sha256
+    )
+    assert [call[0] for call in manager.calls] == [
+        "owner",
+        "boot",
+        "version",
+        "reload",
+        "owner",
+        "boot",
+        "version",
+        "owner",
+        "boot",
+        "version",
+    ]
+    assert (
+        ManagerReloadReceipt.from_bytes(
+            receipt.raw,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+        )
+        == receipt
+    )
+
+
+def test_manager_reload_rejects_identity_drift_without_loaded_acquisition() -> None:
+    manager = _Manager()
+
+    def drift_after_reload() -> None:
+        manager.calls.append(("reload",))
+        manager.owner = ":1.99"
+
+    manager.reload = drift_after_reload  # type: ignore[method-assign]
+    with pytest.raises(ManagerAcceptanceError, match="identity changed across reload"):
+        apply_manager_reload(
+            manager,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+            persist_and_reopen=lambda raw: raw,
+        )
+
+    assert [call[0] for call in manager.calls] == [
+        "owner",
+        "boot",
+        "version",
+        "reload",
+        "owner",
+        "boot",
+        "version",
+    ]
+
+
+def test_narrow_manager_acquisition_pins_reopens_and_unrefs_without_reload() -> None:
     manager = _Manager()
     persisted: list[bytes] = []
 
@@ -1014,6 +1106,7 @@ def test_narrow_manager_acquisition_pins_reopens_and_unrefs_in_order() -> None:
         manager,
         configured_readback=_configured_readback(),
         unit_publication=_unit_publication(),
+        manager_reload=_manager_reload_receipt(),
         persist_and_reopen=persist,
     )
 
@@ -1030,7 +1123,42 @@ def test_narrow_manager_acquisition_pins_reopens_and_unrefs_in_order() -> None:
         receipt.configured_pair_sha256
         == _configured_readback().configured_pair.configured_pair_sha256
     )
-    assert manager.calls[0] == ("reload",)
+    assert receipt.manager_reload_sha256 == _manager_reload_receipt().raw_sha256
+    assert [call[0] for call in manager.calls] == [
+        "owner",
+        "boot",
+        "version",
+        "ref",
+        "ref",
+        "load",
+        "get",
+        "load",
+        "get",
+        "owner",
+        "boot",
+        "version",
+        "read",
+        "owner",
+        "boot",
+        "version",
+        "read",
+        "owner",
+        "boot",
+        "version",
+        "owner",
+        "boot",
+        "version",
+        "unref",
+        "unref",
+    ]
+    assert manager.calls[3:9] == [
+        ("ref", RUN),
+        ("ref", CLOSE),
+        ("load", RUN),
+        ("get", RUN),
+        ("load", CLOSE),
+        ("get", CLOSE),
+    ]
     assert ("ref", RUN) in manager.calls
     assert ("ref", CLOSE) in manager.calls
     assert manager.calls[-2:] == [("unref", CLOSE), ("unref", RUN)]
@@ -1039,9 +1167,25 @@ def test_narrow_manager_acquisition_pins_reopens_and_unrefs_in_order() -> None:
             receipt.raw,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
         )
         == receipt
     )
+
+
+def test_loaded_acquisition_rejects_another_reload_identity_before_ref() -> None:
+    manager = _Manager()
+
+    with pytest.raises(ManagerAcceptanceError, match="identity changed after reload"):
+        acquire_loaded_manager_receipt(
+            manager,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(owner=":1.99"),
+            persist_and_reopen=lambda raw: raw,
+        )
+
+    assert [call[0] for call in manager.calls] == ["owner", "boot", "version"]
 
 
 def test_unit_publication_binds_installation_paths_and_reopened_template_bytes() -> (
@@ -1168,6 +1312,30 @@ def test_unit_publication_rederives_pair_from_exact_templates() -> None:
         "configured_pair_sha256",
     ),
 )
+def test_manager_reload_receipt_rejects_split_configured_authority(
+    field: str,
+) -> None:
+    receipt = _manager_reload_receipt()
+    changed = json.loads(receipt.raw)
+    changed[field] = "0" * 64
+
+    with pytest.raises(ManagerAcceptanceError, match="digest differs"):
+        ManagerReloadReceipt.from_bytes(
+            _canonical(changed),
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+        )
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "unit_publication_sha256",
+        "configured_pair_readback_sha256",
+        "configured_pair_sha256",
+        "manager_reload_sha256",
+    ),
+)
 def test_loaded_manager_receipt_rejects_split_configured_authority(
     field: str,
 ) -> None:
@@ -1175,6 +1343,7 @@ def test_loaded_manager_receipt_rejects_split_configured_authority(
         _Manager(),
         configured_readback=_configured_readback(),
         unit_publication=_unit_publication(),
+        manager_reload=_manager_reload_receipt(),
         persist_and_reopen=lambda raw: raw,
     )
     changed = json.loads(receipt.raw)
@@ -1185,6 +1354,7 @@ def test_loaded_manager_receipt_rejects_split_configured_authority(
             _canonical(changed),
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
         )
 
 
@@ -1209,6 +1379,7 @@ def test_loaded_manager_rejects_boolean_integer_type_aliases(
             manager,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -1223,6 +1394,7 @@ def test_loaded_manager_rejects_nested_type_alias_and_parser_tamper() -> None:
             manager,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -1230,6 +1402,7 @@ def test_loaded_manager_rejects_nested_type_alias_and_parser_tamper() -> None:
         _Manager(),
         configured_readback=_configured_readback(),
         unit_publication=_unit_publication(),
+        manager_reload=_manager_reload_receipt(),
         persist_and_reopen=lambda raw: raw,
     )
     changed = json.loads(receipt.raw)
@@ -1239,6 +1412,7 @@ def test_loaded_manager_rejects_nested_type_alias_and_parser_tamper() -> None:
             _canonical(changed),
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
         )
 
 
@@ -1250,6 +1424,7 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
             owner_drift,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -1260,6 +1435,7 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
             property_drift,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -1277,6 +1453,7 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
             path_drift,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -1287,6 +1464,7 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
             same_paths,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -1298,9 +1476,11 @@ def test_manager_acquisition_rejects_owner_property_and_object_path_drift() -> N
         ("Transient", None),
         ("FragmentPath", "/tmp/caller-selected.service"),
         ("FragmentPath", None),
+        ("DropInPaths", ["/etc/systemd/system/scion-run@.service.d/override.conf"]),
+        ("DropInPaths", None),
     ),
 )
-def test_loaded_manager_rejects_transient_or_fragment_drift(
+def test_loaded_manager_rejects_transient_fragment_or_dropin_drift(
     field: str,
     value: object,
 ) -> None:
@@ -1314,6 +1494,7 @@ def test_loaded_manager_rejects_transient_or_fragment_drift(
             manager,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
 
@@ -1338,20 +1519,29 @@ def test_loaded_manager_requires_strict_empty_invocation_ay(
             manager,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
 
 
-def test_loaded_manager_mutation_requires_root_before_reload(
+def test_reload_and_loaded_acquisition_require_root_before_manager_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager = _Manager()
     monkeypatch.setattr(external_installation.os, "geteuid", lambda: 1001)
     with pytest.raises(PermissionError, match="effective UID 0"):
+        apply_manager_reload(
+            manager,
+            configured_readback=_configured_readback(),
+            unit_publication=_unit_publication(),
+            persist_and_reopen=lambda raw: raw,
+        )
+    with pytest.raises(PermissionError, match="effective UID 0"):
         acquire_loaded_manager_receipt(
             manager,
             configured_readback=_configured_readback(),
             unit_publication=_unit_publication(),
+            manager_reload=_manager_reload_receipt(),
             persist_and_reopen=lambda raw: raw,
         )
     assert manager.calls == []

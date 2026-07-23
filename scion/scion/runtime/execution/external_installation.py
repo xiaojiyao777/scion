@@ -2044,16 +2044,24 @@ class ManagerIdentity:
         _manager_version(self.version)
 
 
-class NarrowInstallationManager(Protocol):
-    """Only the manager methods permitted during loaded acquisition."""
-
-    def reload(self) -> None: ...
+class NarrowManagerIdentityReader(Protocol):
+    """Only the manager identity facts shared by reload and acquisition."""
 
     def get_unique_owner(self) -> str: ...
 
     def get_boot_id(self) -> str: ...
 
     def get_version(self) -> str: ...
+
+
+class NarrowReloadManager(NarrowManagerIdentityReader, Protocol):
+    """Only the manager methods permitted while owning one reload."""
+
+    def reload(self) -> None: ...
+
+
+class NarrowInstallationManager(NarrowManagerIdentityReader, Protocol):
+    """Only the manager methods permitted during loaded-pair acquisition."""
 
     def ref_unit(self, unit: str) -> None: ...
 
@@ -2616,7 +2624,7 @@ class SystemdExternalManager:
             ) from exc
 
 
-def _read_manager_identity(manager: NarrowInstallationManager) -> ManagerIdentity:
+def _read_manager_identity(manager: NarrowManagerIdentityReader) -> ManagerIdentity:
     return ManagerIdentity(
         unique_owner=manager.get_unique_owner(),
         boot_id=manager.get_boot_id(),
@@ -2633,6 +2641,137 @@ def _read_start_manager_identity(manager: NarrowStartManager) -> ManagerIdentity
 
 
 @dataclass(frozen=True, slots=True, init=False)
+class ManagerReloadReceipt:
+    manager_identity: ManagerIdentity
+    unit_publication_sha256: str
+    configured_pair_readback_sha256: str
+    configured_pair_sha256: str
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "ManagerReloadReceipt":
+        del cls
+        raise TypeError("ManagerReloadReceipt must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("ManagerReloadReceipt is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        manager_identity: ManagerIdentity,
+        configured_readback: ConfiguredPairReadback,
+        unit_publication: UnitPublicationReceipt,
+    ) -> "ManagerReloadReceipt":
+        if type(manager_identity) is not ManagerIdentity:
+            raise TypeError("manager_identity must be exact ManagerIdentity")
+        if type(configured_readback) is not ConfiguredPairReadback:
+            raise TypeError("configured_readback must be exact ConfiguredPairReadback")
+        if type(unit_publication) is not UnitPublicationReceipt:
+            raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+        _expected_loaded_properties(
+            configured_readback,
+            unit_publication,
+            role="run",
+        )
+        _expected_loaded_properties(
+            configured_readback,
+            unit_publication,
+            role="closer",
+        )
+        value = {
+            "schema": "scion.manager-reload.v1",
+            "manager": {
+                "unique_owner": manager_identity.unique_owner,
+                "boot_id": manager_identity.boot_id,
+                "version": manager_identity.version,
+            },
+            "unit_publication_sha256": unit_publication.raw_sha256,
+            "configured_pair_readback_sha256": configured_readback.raw_sha256,
+            "configured_pair_sha256": (
+                configured_readback.configured_pair.configured_pair_sha256
+            ),
+        }
+        return cls.from_bytes(
+            _canonical_json(value),
+            configured_readback=configured_readback,
+            unit_publication=unit_publication,
+        )
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        configured_readback: ConfiguredPairReadback,
+        unit_publication: UnitPublicationReceipt,
+    ) -> "ManagerReloadReceipt":
+        if type(configured_readback) is not ConfiguredPairReadback:
+            raise TypeError("configured_readback must be exact ConfiguredPairReadback")
+        if type(unit_publication) is not UnitPublicationReceipt:
+            raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+        _expected_loaded_properties(
+            configured_readback,
+            unit_publication,
+            role="run",
+        )
+        _expected_loaded_properties(
+            configured_readback,
+            unit_publication,
+            role="closer",
+        )
+        value = _exact_fields(
+            _decode_canonical_json(raw, label="manager reload receipt"),
+            frozenset(
+                {
+                    "schema",
+                    "manager",
+                    "unit_publication_sha256",
+                    "configured_pair_readback_sha256",
+                    "configured_pair_sha256",
+                }
+            ),
+            label="manager reload receipt",
+        )
+        if value["schema"] != "scion.manager-reload.v1":
+            raise CanonicalReceiptError("manager reload receipt schema differs")
+        manager_value = _exact_fields(
+            value["manager"],
+            frozenset({"unique_owner", "boot_id", "version"}),
+            label="manager reload identity",
+        )
+        identity = ManagerIdentity(
+            unique_owner=manager_value["unique_owner"],
+            boot_id=manager_value["boot_id"],
+            version=manager_value["version"],
+        )
+        expected_publication_sha = unit_publication.raw_sha256
+        if value["unit_publication_sha256"] != expected_publication_sha:
+            raise ManagerAcceptanceError("reload unit publication digest differs")
+        expected_readback_sha = configured_readback.raw_sha256
+        if value["configured_pair_readback_sha256"] != expected_readback_sha:
+            raise ManagerAcceptanceError(
+                "reload configured pair readback digest differs"
+            )
+        expected_pair_sha = configured_readback.configured_pair.configured_pair_sha256
+        if value["configured_pair_sha256"] != expected_pair_sha:
+            raise ManagerAcceptanceError("reload configured pair digest differs")
+        instance = object.__new__(cls)
+        for field, item in (
+            ("manager_identity", identity),
+            ("unit_publication_sha256", expected_publication_sha),
+            ("configured_pair_readback_sha256", expected_readback_sha),
+            ("configured_pair_sha256", expected_pair_sha),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+@dataclass(frozen=True, slots=True, init=False)
 class LoadedManagerReceipt:
     run_unit: str
     close_unit: str
@@ -2644,6 +2783,7 @@ class LoadedManagerReceipt:
     unit_publication_sha256: str
     configured_pair_readback_sha256: str
     configured_pair_sha256: str
+    manager_reload_sha256: str
     raw: bytes
     raw_sha256: str
 
@@ -2666,6 +2806,7 @@ class LoadedManagerReceipt:
         close_properties: Mapping[str, object],
         configured_readback: ConfiguredPairReadback,
         unit_publication: UnitPublicationReceipt,
+        manager_reload: ManagerReloadReceipt,
     ) -> "LoadedManagerReceipt":
         if type(manager_identity) is not ManagerIdentity:
             raise TypeError("manager_identity must be exact ManagerIdentity")
@@ -2673,6 +2814,17 @@ class LoadedManagerReceipt:
             raise TypeError("configured_readback must be exact ConfiguredPairReadback")
         if type(unit_publication) is not UnitPublicationReceipt:
             raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+        if type(manager_reload) is not ManagerReloadReceipt:
+            raise TypeError("manager_reload must be exact ManagerReloadReceipt")
+        reopened_reload = ManagerReloadReceipt.from_bytes(
+            manager_reload.raw,
+            configured_readback=configured_readback,
+            unit_publication=unit_publication,
+        )
+        if reopened_reload != manager_reload:
+            raise ManagerAcceptanceError("manager reload object differs")
+        if manager_identity != manager_reload.manager_identity:
+            raise ManagerAcceptanceError("loaded manager identity differs from reload")
         run_name = _unit(configured_readback.run_unit, field="run_unit")
         close_name = _unit(configured_readback.close_unit, field="close_unit")
         if run_name == close_name:
@@ -2727,7 +2879,7 @@ class LoadedManagerReceipt:
         ) or not _exact_manager_properties_equal(actual_close, expected_close):
             raise ManagerAcceptanceError("loaded manager property mapping differs")
         value = {
-            "schema": "scion.loaded-manager-acceptance.v3",
+            "schema": "scion.loaded-manager-acceptance.v4",
             "run_unit": run_name,
             "close_unit": close_name,
             "manager": {
@@ -2744,11 +2896,13 @@ class LoadedManagerReceipt:
             "configured_pair_sha256": (
                 configured_readback.configured_pair.configured_pair_sha256
             ),
+            "manager_reload_sha256": manager_reload.raw_sha256,
         }
         return cls.from_bytes(
             _canonical_json(value),
             configured_readback=configured_readback,
             unit_publication=unit_publication,
+            manager_reload=manager_reload,
         )
 
     @classmethod
@@ -2758,11 +2912,21 @@ class LoadedManagerReceipt:
         *,
         configured_readback: ConfiguredPairReadback,
         unit_publication: UnitPublicationReceipt,
+        manager_reload: ManagerReloadReceipt,
     ) -> "LoadedManagerReceipt":
         if type(configured_readback) is not ConfiguredPairReadback:
             raise TypeError("configured_readback must be exact ConfiguredPairReadback")
         if type(unit_publication) is not UnitPublicationReceipt:
             raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+        if type(manager_reload) is not ManagerReloadReceipt:
+            raise TypeError("manager_reload must be exact ManagerReloadReceipt")
+        reopened_reload = ManagerReloadReceipt.from_bytes(
+            manager_reload.raw,
+            configured_readback=configured_readback,
+            unit_publication=unit_publication,
+        )
+        if reopened_reload != manager_reload:
+            raise ManagerAcceptanceError("manager reload object differs")
         value = _exact_fields(
             _decode_canonical_json(raw, label="loaded manager receipt"),
             frozenset(
@@ -2778,11 +2942,12 @@ class LoadedManagerReceipt:
                     "unit_publication_sha256",
                     "configured_pair_readback_sha256",
                     "configured_pair_sha256",
+                    "manager_reload_sha256",
                 }
             ),
             label="loaded manager receipt",
         )
-        if value["schema"] != "scion.loaded-manager-acceptance.v3":
+        if value["schema"] != "scion.loaded-manager-acceptance.v4":
             raise CanonicalReceiptError("loaded manager receipt schema differs")
         manager_value = _exact_fields(
             value["manager"],
@@ -2794,6 +2959,8 @@ class LoadedManagerReceipt:
             boot_id=manager_value["boot_id"],
             version=manager_value["version"],
         )
+        if identity != manager_reload.manager_identity:
+            raise ManagerAcceptanceError("loaded manager identity differs from reload")
         run_name = _unit(value["run_unit"], field="run_unit")
         close_name = _unit(value["close_unit"], field="close_unit")
         if run_name == close_name:
@@ -2859,6 +3026,8 @@ class LoadedManagerReceipt:
         expected_pair_sha = configured_readback.configured_pair.configured_pair_sha256
         if value["configured_pair_sha256"] != expected_pair_sha:
             raise ManagerAcceptanceError("configured pair digest differs")
+        if value["manager_reload_sha256"] != manager_reload.raw_sha256:
+            raise ManagerAcceptanceError("manager reload digest differs")
         instance = object.__new__(cls)
         for field, item in (
             ("run_unit", run_name),
@@ -2877,6 +3046,7 @@ class LoadedManagerReceipt:
             ("unit_publication_sha256", expected_unit_publication_sha),
             ("configured_pair_readback_sha256", expected_readback_sha),
             ("configured_pair_sha256", expected_pair_sha),
+            ("manager_reload_sha256", manager_reload.raw_sha256),
             ("raw", raw),
             ("raw_sha256", hashlib.sha256(raw).hexdigest()),
         ):
@@ -2890,14 +3060,14 @@ def _require_root() -> None:
         raise PermissionError("external manager mutation requires effective UID 0")
 
 
-def acquire_loaded_manager_receipt(
-    manager: NarrowInstallationManager,
+def apply_manager_reload(
+    manager: NarrowReloadManager,
     *,
     configured_readback: ConfiguredPairReadback,
     unit_publication: UnitPublicationReceipt,
     persist_and_reopen: Callable[[bytes], bytes],
-) -> LoadedManagerReceipt:
-    """Acquire one mocked/narrow loaded-manager receipt under one identity."""
+) -> ManagerReloadReceipt:
+    """Own exactly one reload and reacquire its stable manager identity."""
 
     _require_root()
     if not callable(persist_and_reopen):
@@ -2906,6 +3076,64 @@ def acquire_loaded_manager_receipt(
         raise TypeError("configured_readback must be exact ConfiguredPairReadback")
     if type(unit_publication) is not UnitPublicationReceipt:
         raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+    _expected_loaded_properties(
+        configured_readback,
+        unit_publication,
+        role="run",
+    )
+    _expected_loaded_properties(
+        configured_readback,
+        unit_publication,
+        role="closer",
+    )
+    identity = _read_manager_identity(manager)
+    result = manager.reload()
+    if result is not None:
+        raise ManagerAcceptanceError("manager reload returned an ambiguous result")
+    if _read_manager_identity(manager) != identity:
+        raise ManagerAcceptanceError("manager identity changed across reload")
+    receipt = ManagerReloadReceipt.create(
+        manager_identity=identity,
+        configured_readback=configured_readback,
+        unit_publication=unit_publication,
+    )
+    reopened_raw = persist_and_reopen(receipt.raw)
+    reopened = ManagerReloadReceipt.from_bytes(
+        reopened_raw,
+        configured_readback=configured_readback,
+        unit_publication=unit_publication,
+    )
+    if reopened != receipt or _read_manager_identity(manager) != identity:
+        raise ManagerAcceptanceError("durable reload receipt or identity differs")
+    return reopened
+
+
+def acquire_loaded_manager_receipt(
+    manager: NarrowInstallationManager,
+    *,
+    configured_readback: ConfiguredPairReadback,
+    unit_publication: UnitPublicationReceipt,
+    manager_reload: ManagerReloadReceipt,
+    persist_and_reopen: Callable[[bytes], bytes],
+) -> LoadedManagerReceipt:
+    """Acquire one loaded pair after, and separately from, an exact reload."""
+
+    _require_root()
+    if not callable(persist_and_reopen):
+        raise TypeError("persist_and_reopen must be callable")
+    if type(configured_readback) is not ConfiguredPairReadback:
+        raise TypeError("configured_readback must be exact ConfiguredPairReadback")
+    if type(unit_publication) is not UnitPublicationReceipt:
+        raise TypeError("unit_publication must be exact UnitPublicationReceipt")
+    if type(manager_reload) is not ManagerReloadReceipt:
+        raise TypeError("manager_reload must be exact ManagerReloadReceipt")
+    reopened_reload = ManagerReloadReceipt.from_bytes(
+        manager_reload.raw,
+        configured_readback=configured_readback,
+        unit_publication=unit_publication,
+    )
+    if reopened_reload != manager_reload:
+        raise ManagerAcceptanceError("manager reload object differs")
     run_name = _unit(configured_readback.run_unit, field="run_unit")
     close_name = _unit(configured_readback.close_unit, field="close_unit")
     if run_name == close_name:
@@ -2930,8 +3158,9 @@ def acquire_loaded_manager_receipt(
         raise ManagerAcceptanceError("expected loaded property inventory differs")
     run_names = tuple(sorted(run_inventory))
     close_names = tuple(sorted(close_inventory))
-    manager.reload()
     identity = _read_manager_identity(manager)
+    if identity != manager_reload.manager_identity:
+        raise ManagerAcceptanceError("manager identity changed after reload")
     manager.ref_unit(run_name)
     run_referenced = True
     close_referenced = False
@@ -2974,12 +3203,14 @@ def acquire_loaded_manager_receipt(
             close_properties=close_properties,
             configured_readback=configured_readback,
             unit_publication=unit_publication,
+            manager_reload=manager_reload,
         )
         reopened_raw = persist_and_reopen(receipt.raw)
         reopened = LoadedManagerReceipt.from_bytes(
             reopened_raw,
             configured_readback=configured_readback,
             unit_publication=unit_publication,
+            manager_reload=manager_reload,
         )
         if reopened != receipt or _read_manager_identity(manager) != identity:
             raise ManagerAcceptanceError("durable manager receipt or identity differs")
@@ -3683,10 +3914,13 @@ __all__ = [
     "LoadedManagerReceipt",
     "ManagerAcceptanceError",
     "ManagerIdentity",
+    "ManagerReloadReceipt",
     "MountBindingReceipt",
     "MountInfoError",
     "MountInfoRow",
     "NarrowInstallationManager",
+    "NarrowManagerIdentityReader",
+    "NarrowReloadManager",
     "NarrowStartManager",
     "NoReplaceReceiptWriter",
     "NoReplaceReceiptSet",
@@ -3707,6 +3941,7 @@ __all__ = [
     "SystemdExternalManager",
     "UnitPublicationReceipt",
     "acquire_loaded_manager_receipt",
+    "apply_manager_reload",
     "apply_root_phase",
     "classify_root_installation",
     "classify_start_dispatch",
