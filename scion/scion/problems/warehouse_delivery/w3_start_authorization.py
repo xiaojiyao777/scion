@@ -8,6 +8,7 @@ import re
 from dataclasses import dataclass
 
 from scion.runtime.execution.external_installation import (
+    INSTALL_PHASES,
     InstalledAcceptance,
     RootPhaseIntentReceipt,
     RootPhaseReceipt,
@@ -15,6 +16,10 @@ from scion.runtime.execution.external_installation import (
     StartAuthorizationReceipt,
 )
 
+from .w3_root_installation import (
+    WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA,
+    WarehouseW3PreStartEvidence,
+)
 from .w3_installation import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
     CandidateSelectionCommit,
@@ -52,15 +57,15 @@ def _canonical_json(value: object) -> bytes:
         ) from exc
 
 
-def _decode(raw: bytes) -> dict[str, object]:
+def _decode(raw: bytes, *, label: str) -> dict[str, object]:
     if type(raw) is not bytes:
-        raise TypeError("prospective intent must be exact bytes")
+        raise TypeError(f"{label} must be exact bytes")
 
     def mapping(pairs: list[tuple[str, object]]) -> dict[str, object]:
         result: dict[str, object] = {}
         for key, value in pairs:
             if key in result:
-                raise ValueError("duplicate prospective intent field")
+                raise ValueError(f"duplicate {label} field")
             result[key] = value
         return result
 
@@ -69,17 +74,15 @@ def _decode(raw: bytes) -> dict[str, object]:
             raw.decode("utf-8", "strict"),
             object_pairs_hook=mapping,
             parse_constant=lambda token: (_ for _ in ()).throw(
-                ValueError(f"nonfinite prospective value: {token}")
+                ValueError(f"nonfinite {label} value: {token}")
             ),
         )
     except (UnicodeError, ValueError, TypeError) as exc:
         raise WarehouseW3StartAuthorizationError(
-            "prospective intent is not canonical JSON"
+            f"{label} is not canonical JSON"
         ) from exc
     if type(value) is not dict or _canonical_json(value) != raw:
-        raise WarehouseW3StartAuthorizationError(
-            "prospective intent bytes are not canonical"
-        )
+        raise WarehouseW3StartAuthorizationError(f"{label} bytes are not canonical")
     return value
 
 
@@ -114,7 +117,7 @@ class ProspectiveStartAuthorizationIntent:
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> "ProspectiveStartAuthorizationIntent":
-        value = _decode(raw)
+        value = _decode(raw, label="prospective intent")
         if frozenset(value) != frozenset(
             {
                 "schema",
@@ -168,12 +171,84 @@ class ProspectiveStartAuthorizationIntent:
         return instance
 
 
+def _reopen_prestart_evidence(
+    evidence: WarehouseW3PreStartEvidence,
+) -> WarehouseW3PreStartEvidence:
+    if type(evidence) is not WarehouseW3PreStartEvidence:
+        raise TypeError("prestart_evidence must be exact WarehouseW3PreStartEvidence")
+    if (
+        type(evidence.raw) is not bytes
+        or hashlib.sha256(evidence.raw).hexdigest() != evidence.raw_sha256
+    ):
+        raise WarehouseW3StartAuthorizationError(
+            "pre-start evidence raw identity differs"
+        )
+    value = _decode(evidence.raw, label="pre-start evidence")
+    if frozenset(value) != frozenset(
+        {
+            "schema",
+            "state",
+            "plan_sha256",
+            "launch_id",
+            "authority_sha256",
+            "installation_sha256",
+            "pending_intent_sha256",
+            "predecessor_phase_receipt_sha256",
+            "phase_effect_sha256",
+            "producer_receipt_sha256",
+            "formal_jobs_started",
+            "retry",
+            "resume",
+            "reuse",
+        }
+    ):
+        raise WarehouseW3StartAuthorizationError("pre-start evidence fields differ")
+    expected_effect_keys = frozenset(phase.value for phase in INSTALL_PHASES[:7])
+    raw_effects = value["phase_effect_sha256"]
+    raw_producers = value["producer_receipt_sha256"]
+    if (
+        type(raw_effects) is not dict
+        or frozenset(raw_effects) != expected_effect_keys
+        or type(raw_producers) is not dict
+        or frozenset(raw_producers)
+        != frozenset(
+            {
+                "candidate_gate",
+                "dry_root",
+                "environment_rehash",
+                "loaded_manager",
+                "prestart_absence",
+                "runtime_account",
+            }
+        )
+        or value["schema"] != WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA
+        or value["state"] != "PRESTART_GATES_REACQUIRED_NOT_STARTED"
+        or value["plan_sha256"] != ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
+        or value["formal_jobs_started"] != 0
+        or type(value["formal_jobs_started"]) is not int
+        or value["retry"] is not False
+        or value["resume"] is not False
+        or value["reuse"] is not False
+        or value["launch_id"] != evidence.launch_id
+        or value["authority_sha256"] != evidence.authority_sha256
+        or value["installation_sha256"] != evidence.installation_sha256
+        or value["pending_intent_sha256"] != evidence.pending_intent_sha256
+        or value["predecessor_phase_receipt_sha256"]
+        != evidence.predecessor_phase_receipt_sha256
+        or raw_effects != dict(evidence.phase_effect_sha256)
+        or raw_producers != dict(evidence.producer_receipt_sha256)
+    ):
+        raise WarehouseW3StartAuthorizationError("pre-start evidence authority differs")
+    return evidence
+
+
 def bind_start_authorization(
     prospective: ProspectiveStartAuthorizationIntent,
     *,
     preparation_intent: CandidateSelectionIntent,
     preparation_commit: CandidateSelectionCommit,
     root_selection: SelectionReceipt,
+    prestart_evidence: WarehouseW3PreStartEvidence,
     installed_acceptance: InstalledAcceptance,
     phase_intents: tuple[RootPhaseIntentReceipt, ...],
     phase_receipts: tuple[RootPhaseReceipt, ...],
@@ -190,6 +265,7 @@ def bind_start_authorization(
         raise TypeError("preparation_commit must be exact CandidateSelectionCommit")
     if type(root_selection) is not SelectionReceipt:
         raise TypeError("root_selection must be exact SelectionReceipt")
+    evidence = _reopen_prestart_evidence(prestart_evidence)
     if type(installed_acceptance) is not InstalledAcceptance:
         raise TypeError("installed_acceptance must be exact InstalledAcceptance")
     installed_acceptance.verify_phase_receipts(
@@ -197,6 +273,7 @@ def bind_start_authorization(
         phase_receipts,
     )
     phase_effects = dict(installed_acceptance.phase_effect_sha256)
+    evidence_effects = dict(evidence.phase_effect_sha256)
     candidate_identity = preparation_commit.candidate_root_identity
     selected_identity = root_selection.source_candidate_identity
     if (
@@ -225,6 +302,16 @@ def bind_start_authorization(
             candidate_identity.nlink,
         )
         or phase_effects["CANDIDATE_SELECTED"] != root_selection.raw_sha256
+        or evidence_effects["CANDIDATE_SELECTED"] != root_selection.raw_sha256
+        or tuple(installed_acceptance.phase_effect_sha256[:7])
+        != evidence.phase_effect_sha256
+        or phase_effects["INSTANCES_LOADED"] != evidence.raw_sha256
+        or installed_acceptance.problem_state_schema
+        != WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA
+        or installed_acceptance.problem_state_sha256 != evidence.raw_sha256
+        or evidence.launch_id != root_selection.launch_id
+        or evidence.authority_sha256 != root_selection.authority_sha256
+        or evidence.installation_sha256 != installed_acceptance.installation_sha256
         or installed_acceptance.launch_id != root_selection.launch_id
         or installed_acceptance.authority_sha256 != root_selection.authority_sha256
         or unit != f"scion-w3@{installed_acceptance.launch_id}.service"
