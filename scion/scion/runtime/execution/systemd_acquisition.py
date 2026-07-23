@@ -27,6 +27,7 @@ from .systemd255 import (
 _UNIT_RE = re.compile(r"[A-Za-z0-9:_.@-]+\.service\Z")
 _INVOCATION_RE = re.compile(r"[0-9a-f]{32}\Z")
 _EMPTY_INVOCATION_ID = "0" * 32
+_UNIQUE_OWNER_RE = re.compile(r":[0-9]+\.[0-9]+\Z")
 _BOOT_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-" r"[0-9a-f]{4}-[0-9a-f]{12}\Z"
 )
@@ -104,6 +105,11 @@ _UNIT_INTERFACE = "org.freedesktop.systemd1.Unit"
 _SERVICE_INTERFACE = "org.freedesktop.systemd1.Service"
 _PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
 _MANAGER_INTERFACE = "org.freedesktop.systemd1.Manager"
+_DBUS_DESTINATION = "org.freedesktop.DBus"
+_DBUS_PATH = "/org/freedesktop/DBus"
+_DBUS_INTERFACE = "org.freedesktop.DBus"
+_SYSTEMD_DESTINATION = "org.freedesktop.systemd1"
+_MANAGER_PATH = "/org/freedesktop/systemd1"
 _UNIT_PROPERTY_NAMES = frozenset(
     {
         "Id",
@@ -169,22 +175,30 @@ class SystemdPropertyReader(Protocol):
         """Copy exactly the requested properties for one already-known unit."""
 
 
+class SystemdManagerIdentityReader(Protocol):
+    """The additional read-only surface for stable manager identity."""
+
+    def get_unique_owner(self) -> str: ...
+
+    def get_manager_version(self, expected_owner: str) -> str: ...
+
+
 class SystemdDbusPropertyReader:
     """Read-only dbus-python adapter; it exposes no manager mutation method."""
 
-    __slots__ = ("_dbus", "_manager", "_bus")
+    __slots__ = ("_dbus", "_bus", "_daemon")
 
     def __init__(self) -> None:
         try:
             dbus = importlib.import_module("dbus")
             bus = dbus.SystemBus()
-            manager_object = bus.get_object(
-                "org.freedesktop.systemd1",
-                "/org/freedesktop/systemd1",
+            daemon_object = bus.get_object(
+                _DBUS_DESTINATION,
+                _DBUS_PATH,
             )
-            manager = dbus.Interface(
-                manager_object,
-                dbus_interface=_MANAGER_INTERFACE,
+            daemon = dbus.Interface(
+                daemon_object,
+                dbus_interface=_DBUS_INTERFACE,
             )
         except Exception as exc:
             raise SystemdAcquisitionError(
@@ -192,7 +206,7 @@ class SystemdDbusPropertyReader:
             ) from exc
         self._dbus = dbus
         self._bus = bus
-        self._manager = manager
+        self._daemon = daemon
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         del kwargs
@@ -229,6 +243,38 @@ class SystemdDbusPropertyReader:
             f"unsupported D-Bus property value {type(value).__name__}"
         )
 
+    def get_unique_owner(self) -> str:
+        try:
+            return _manager_unique_owner(
+                str(self._daemon.GetNameOwner(_SYSTEMD_DESTINATION))
+            )
+        except SystemdAcquisitionError:
+            raise
+        except Exception as exc:
+            raise SystemdAcquisitionError(
+                "cannot acquire systemd manager unique owner"
+            ) from exc
+
+    def get_manager_version(self, expected_owner: str) -> str:
+        owner = _manager_unique_owner(expected_owner)
+        try:
+            manager_object = self._bus.get_object(owner, _MANAGER_PATH)
+            properties = self._dbus.Interface(
+                manager_object,
+                dbus_interface=_PROPERTIES_INTERFACE,
+            )
+            value = properties.Get(_MANAGER_INTERFACE, "Version")
+        except Exception as exc:
+            raise SystemdAcquisitionError(
+                "cannot acquire systemd manager version"
+            ) from exc
+        decoded = self._decode(value)
+        if type(decoded) is not str:
+            raise SystemdAcquisitionError(
+                "systemd manager version is not an exact string property"
+            )
+        return _systemd_manager_version(decoded)
+
     def read_properties(
         self,
         unit: str,
@@ -248,10 +294,19 @@ class SystemdDbusPropertyReader:
                 "D-Bus property request is outside the fixed allowlist"
             )
         try:
-            unit_path = self._manager.GetUnit(unit)
+            owner_before = self.get_unique_owner()
+            manager_object = self._bus.get_object(
+                owner_before,
+                _MANAGER_PATH,
+            )
+            manager = self._dbus.Interface(
+                manager_object,
+                dbus_interface=_MANAGER_INTERFACE,
+            )
+            unit_path = manager.GetUnit(unit)
             unit_object = self._bus.get_object(
-                "org.freedesktop.systemd1",
-                unit_path,
+                owner_before,
+                str(unit_path),
             )
             properties = self._dbus.Interface(
                 unit_object,
@@ -265,6 +320,10 @@ class SystemdDbusPropertyReader:
                     else _SERVICE_INTERFACE
                 )
                 copied[name] = self._decode(properties.Get(interface, name))
+            if self.get_unique_owner() != owner_before:
+                raise SystemdAcquisitionError(
+                    "systemd manager unique owner changed during property acquisition"
+                )
             return copied
         except SystemdAcquisitionError:
             raise
@@ -356,6 +415,47 @@ def _text(value: object, *, field: str, allow_empty: bool = False) -> str:
     if any(byte < 0x20 or byte == 0x7F for byte in encoded):
         raise SystemdAcquisitionError(f"{field} contains a control character")
     return value
+
+
+def _manager_unique_owner(value: object) -> str:
+    text = _text(value, field="systemd manager unique owner")
+    if _UNIQUE_OWNER_RE.fullmatch(text) is None:
+        raise SystemdAcquisitionError("systemd manager unique owner is not canonical")
+    return text
+
+
+def _boot_id(value: object) -> str:
+    text = _text(value, field="boot id")
+    if _BOOT_RE.fullmatch(text) is None:
+        raise SystemdAcquisitionError("boot id is not canonical")
+    return text
+
+
+def _systemd_manager_version(value: object) -> str:
+    text = _text(value, field="systemd manager version")
+    if len(text.encode("utf-8")) > 256:
+        raise SystemdAcquisitionError("systemd manager version exceeds its bound")
+    if re.match(r"255(?:\D|$)", text) is None:
+        raise SystemdAcquisitionError("systemd manager major version is not 255")
+    return text
+
+
+@dataclass(frozen=True, slots=True)
+class SystemdManagerIdentityFact:
+    """One stable read-only systemd manager/boot identity observation."""
+
+    unique_owner: str
+    boot_id: str
+    version: str
+
+    def __post_init__(self) -> None:
+        _manager_unique_owner(self.unique_owner)
+        _boot_id(self.boot_id)
+        _systemd_manager_version(self.version)
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("SystemdManagerIdentityFact is final")
 
 
 def _unit(value: object, *, field: str) -> str:
@@ -1210,7 +1310,14 @@ def _open_child_directory(parent_fd: int, name: str) -> int:
         raise SystemdAcquisitionError(f"cannot pin child directory {name}") from exc
 
 
-def _read_regular(parent_fd: int, name: str) -> bytes:
+def _read_regular(
+    parent_fd: int,
+    name: str,
+    *,
+    maximum: int = 4 * 1024 * 1024,
+) -> bytes:
+    if type(maximum) is not int or maximum <= 0:
+        raise TypeError("regular acquisition maximum must be a positive exact integer")
     try:
         descriptor = os.open(
             name,
@@ -1223,34 +1330,44 @@ def _read_regular(parent_fd: int, name: str) -> bytes:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode):
             raise SystemdAcquisitionError(f"acquired file is not regular: {name}")
+        if before.st_size > maximum:
+            raise SystemdAcquisitionError(f"acquired file exceeds its bound: {name}")
         chunks: list[bytes] = []
+        total = 0
         while True:
-            chunk = os.read(descriptor, 64 * 1024)
+            chunk = os.read(
+                descriptor,
+                min(64 * 1024, maximum + 1 - total),
+            )
             if not chunk:
                 break
             chunks.append(chunk)
+            total += len(chunk)
+            if total > maximum:
+                raise SystemdAcquisitionError(
+                    f"acquired file exceeds its bound: {name}"
+                )
         after = os.fstat(descriptor)
         named = os.stat(name, dir_fd=parent_fd, follow_symlinks=False)
     except OSError as exc:
         raise SystemdAcquisitionError(f"cannot read acquired file {name}") from exc
     finally:
         os.close(descriptor)
+    identity = lambda item: (
+        item.st_dev,
+        item.st_ino,
+        item.st_mode,
+        item.st_uid,
+        item.st_gid,
+        item.st_nlink,
+        item.st_size,
+        item.st_mtime_ns,
+        item.st_ctime_ns,
+    )
     if (
-        (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
-        != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns)
-        or (
-            after.st_dev,
-            after.st_ino,
-            after.st_size,
-            after.st_mtime_ns,
-        )
-        != (
-            named.st_dev,
-            named.st_ino,
-            named.st_size,
-            named.st_mtime_ns,
-        )
-        or sum(len(chunk) for chunk in chunks) != after.st_size
+        identity(before) != identity(after)
+        or identity(after) != identity(named)
+        or (after.st_size != 0 and total != after.st_size)
     ):
         raise SystemdAcquisitionError(f"acquired file changed while read: {name}")
     return b"".join(chunks)
@@ -1389,6 +1506,52 @@ class Systemd255Acquirer:
     def __init_subclass__(cls, **kwargs: object) -> None:
         del kwargs
         raise TypeError("Systemd255Acquirer is final")
+
+    def _acquire_boot_id(self) -> str:
+        parent_fd = _open_directory(self._boot_id_path.parent)
+        try:
+            raw = _read_regular(
+                parent_fd,
+                self._boot_id_path.name,
+                maximum=64,
+            )
+        finally:
+            os.close(parent_fd)
+        try:
+            text = raw.decode("ascii", "strict")
+        except UnicodeError as exc:
+            raise SystemdAcquisitionError("boot id is not ASCII") from exc
+        if not text.endswith("\n") or text.count("\n") != 1:
+            raise SystemdAcquisitionError("boot id bytes are not canonical")
+        return _boot_id(text[:-1])
+
+    def acquire_manager_identity(self) -> SystemdManagerIdentityFact:
+        """Acquire one manager owner/version/boot batch without mutation."""
+
+        owner_reader = getattr(self._reader, "get_unique_owner", None)
+        version_reader = getattr(self._reader, "get_manager_version", None)
+        if not callable(owner_reader) or not callable(version_reader):
+            raise TypeError("reader lacks manager identity acquisition")
+        try:
+            owner_before = _manager_unique_owner(owner_reader())
+            version = _systemd_manager_version(version_reader(owner_before))
+            boot_id = self._acquire_boot_id()
+            owner_after = _manager_unique_owner(owner_reader())
+        except SystemdAcquisitionError:
+            raise
+        except Exception as exc:
+            raise SystemdAcquisitionError(
+                "systemd manager identity acquisition failed"
+            ) from exc
+        if owner_after != owner_before:
+            raise SystemdAcquisitionError(
+                "systemd manager unique owner changed during identity acquisition"
+            )
+        return SystemdManagerIdentityFact(
+            unique_owner=owner_before,
+            boot_id=boot_id,
+            version=version,
+        )
 
     def acquire_configured_pair_readback(
         self,
@@ -1682,7 +1845,6 @@ class Systemd255Acquirer:
         components = _control_components(raw["ControlGroup"])
         proc_fd = _open_directory(self._proc_root)
         cgroup_fd = _open_directory(self._cgroup_root)
-        boot_parent_fd = _open_directory(self._boot_id_path.parent)
         service_fd = supervisor_fd = -1
         try:
             starttime = _proc_starttime(proc_fd, pid)
@@ -1699,24 +1861,14 @@ class Systemd255Acquirer:
             )
             service_identity = os.fstat(service_fd)
             supervisor_identity = os.fstat(supervisor_fd)
-            boot_raw = _read_regular(
-                boot_parent_fd,
-                self._boot_id_path.name,
-            )
+            boot_id = self._acquire_boot_id()
         finally:
             if supervisor_fd >= 0:
                 os.close(supervisor_fd)
             if service_fd >= 0:
                 os.close(service_fd)
-            os.close(boot_parent_fd)
             os.close(cgroup_fd)
             os.close(proc_fd)
-        try:
-            boot_id = boot_raw.decode("ascii", "strict").strip()
-        except UnicodeError as exc:
-            raise SystemdAcquisitionError("boot id is not ASCII") from exc
-        if _BOOT_RE.fullmatch(boot_id) is None:
-            raise SystemdAcquisitionError("boot id is not canonical")
         try:
             return InvocationLineage.from_properties(
                 {
@@ -1925,6 +2077,8 @@ __all__ = [
     "Systemd255Acquirer",
     "SystemdAcquisitionError",
     "SystemdDbusPropertyReader",
+    "SystemdManagerIdentityFact",
+    "SystemdManagerIdentityReader",
     "SystemdPropertyReader",
     "UnitFinalAcquisition",
     "UnitSection",

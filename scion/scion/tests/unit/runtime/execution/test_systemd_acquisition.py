@@ -6,16 +6,21 @@ from pathlib import Path
 
 import pytest
 
+import scion.runtime.execution.systemd_acquisition as systemd_acquisition
 from scion.runtime.execution.systemd_acquisition import (
     ConfiguredPairReadback,
     Systemd255Acquirer,
     SystemdAcquisitionError,
+    SystemdDbusPropertyReader,
+    SystemdManagerIdentityFact,
     parse_unit_template,
 )
 
 RUN = "scion-w3@fixture.service"
 CLOSE = "scion-w3-close@fixture.service"
 INVOCATION = "1" * 32
+BOOT = "00000000-0000-0000-0000-000000000001"
+VERSION = "255.4-1ubuntu8.16"
 CONTROL_GROUP = f"/system.slice/{RUN}"
 PYTHON = "/var/lib/scion/projections/w3/fixture/environment/bin/python"
 TOOL = "/var/lib/scion/projections/w3/fixture/" "sealed/bin/scion-w3-tool"
@@ -173,6 +178,30 @@ class _Reader:
         return {name: self.values[unit][name] for name in names}
 
 
+class _IdentityReader(_Reader):
+    def __init__(
+        self,
+        events: list[tuple[str, ...]],
+        *,
+        owners: tuple[str, ...] = (":1.42", ":1.42"),
+        version: str = VERSION,
+    ) -> None:
+        super().__init__()
+        self.events = events
+        self.owners = list(owners)
+        self.version = version
+
+    def get_unique_owner(self) -> str:
+        self.events.append(("owner",))
+        if not self.owners:
+            raise AssertionError("unexpected owner read")
+        return self.owners.pop(0)
+
+    def get_manager_version(self, expected_owner: str) -> str:
+        self.events.append(("version", expected_owner))
+        return self.version
+
+
 def _proc_stat(pid: int, starttime: int) -> bytes:
     after_name = ["S"] + ["1"] * 18 + [str(starttime)]
     return f"{pid} (scion fixture) {' '.join(after_name)}\n".encode("ascii")
@@ -189,7 +218,7 @@ def _filesystem(tmp_path: Path) -> tuple[Path, Path, Path]:
     supervisor.mkdir(parents=True)
     boot.parent.mkdir(parents=True)
     boot.write_text(
-        "00000000-0000-0000-0000-000000000001\n",
+        f"{BOOT}\n",
         encoding="ascii",
     )
     (process / "stat").write_bytes(_proc_stat(4242, 700))
@@ -216,6 +245,364 @@ def _acquirer(
         proc,
         cgroup,
     )
+
+
+def test_manager_identity_fact_preserves_full_systemd_version() -> None:
+    fact = SystemdManagerIdentityFact(
+        unique_owner=":1.42",
+        boot_id=BOOT,
+        version=VERSION,
+    )
+
+    assert fact.unique_owner == ":1.42"
+    assert fact.boot_id == BOOT
+    assert fact.version == "255.4-1ubuntu8.16"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("unique_owner", "org.freedesktop.systemd1", "unique owner"),
+        ("unique_owner", ":1", "unique owner"),
+        ("unique_owner", "", "unique owner"),
+        (
+            "boot_id",
+            "ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB",
+            "boot id",
+        ),
+        ("boot_id", "0" * 32, "boot id"),
+        ("version", "", "version"),
+        ("version", "254.9", "major version"),
+        ("version", "256.1", "major version"),
+        ("version", "255\nforged", "control"),
+        ("version", "255." + "x" * 253, "exceeds"),
+    ),
+)
+def test_manager_identity_fact_rejects_noncanonical_fields(
+    field: str,
+    value: str,
+    message: str,
+) -> None:
+    values = {
+        "unique_owner": ":1.42",
+        "boot_id": BOOT,
+        "version": VERSION,
+    }
+    values[field] = value
+
+    with pytest.raises(SystemdAcquisitionError, match=message):
+        SystemdManagerIdentityFact(**values)
+
+
+def test_manager_identity_acquisition_has_one_stable_owner_batch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    proc, cgroup, boot = _filesystem(tmp_path)
+    events: list[tuple[str, ...]] = []
+    reader = _IdentityReader(events)
+    acquirer = Systemd255Acquirer(
+        reader,
+        proc_root=proc,
+        cgroup_root=cgroup,
+        boot_id_path=boot,
+    )
+    real_read = systemd_acquisition._read_regular
+
+    def tracked_read(
+        parent_fd: int,
+        name: str,
+        *,
+        maximum: int = 4 * 1024 * 1024,
+    ) -> bytes:
+        if name == "boot_id":
+            events.append(("boot", name))
+        return real_read(parent_fd, name, maximum=maximum)
+
+    monkeypatch.setattr(systemd_acquisition, "_read_regular", tracked_read)
+    fact = acquirer.acquire_manager_identity()
+
+    assert fact == SystemdManagerIdentityFact(":1.42", BOOT, VERSION)
+    assert events == [
+        ("owner",),
+        ("version", ":1.42"),
+        ("boot", "boot_id"),
+        ("owner",),
+    ]
+
+
+def test_manager_identity_acquisition_rejects_owner_drift(
+    tmp_path: Path,
+) -> None:
+    proc, cgroup, boot = _filesystem(tmp_path)
+    events: list[tuple[str, ...]] = []
+    reader = _IdentityReader(
+        events,
+        owners=(":1.42", ":1.99"),
+    )
+    acquirer = Systemd255Acquirer(
+        reader,
+        proc_root=proc,
+        cgroup_root=cgroup,
+        boot_id_path=boot,
+    )
+
+    with pytest.raises(SystemdAcquisitionError, match="unique owner changed"):
+        acquirer.acquire_manager_identity()
+    assert events == [
+        ("owner",),
+        ("version", ":1.42"),
+        ("owner",),
+    ]
+
+
+def test_manager_identity_rejects_noncanonical_boot_bytes(
+    tmp_path: Path,
+) -> None:
+    proc, cgroup, boot = _filesystem(tmp_path)
+    boot.write_text(f" {BOOT}\n", encoding="ascii")
+    reader = _IdentityReader([])
+    acquirer = Systemd255Acquirer(
+        reader,
+        proc_root=proc,
+        cgroup_root=cgroup,
+        boot_id_path=boot,
+    )
+
+    with pytest.raises(SystemdAcquisitionError, match="boot id"):
+        acquirer.acquire_manager_identity()
+
+
+def test_manager_identity_reads_linux_zero_size_boot_pseudofile() -> None:
+    boot = Path("/proc/sys/kernel/random/boot_id")
+    if not boot.exists() or boot.stat().st_size != 0:
+        pytest.skip("Linux zero-size boot-id pseudo-file is unavailable")
+    events: list[tuple[str, ...]] = []
+    reader = _IdentityReader(events)
+    fact = Systemd255Acquirer(reader).acquire_manager_identity()
+
+    assert fact.unique_owner == ":1.42"
+    assert fact.version == VERSION
+    assert len(fact.boot_id) == 36
+
+
+def test_property_only_reader_cannot_acquire_manager_identity(
+    tmp_path: Path,
+) -> None:
+    acquirer, reader, _proc, _cgroup = _acquirer(tmp_path)
+
+    with pytest.raises(TypeError, match="lacks manager identity"):
+        acquirer.acquire_manager_identity()
+    assert reader.calls == []
+
+
+def test_dbus_reader_uses_unique_owner_for_version_and_property_batch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[tuple[object, ...]] = []
+
+    class _Integer(int):
+        pass
+
+    class _String(str):
+        pass
+
+    class _Boolean:
+        def __init__(self, value: bool) -> None:
+            self.value = value
+
+        def __bool__(self) -> bool:
+            return self.value
+
+    class _Struct(tuple):
+        pass
+
+    class _Array(list):
+        pass
+
+    class _Daemon:
+        def GetNameOwner(self, name: str) -> _String:
+            events.append(("owner", name))
+            return _String(":1.42")
+
+    class _ManagerObject:
+        def __init__(self) -> None:
+            self.version: object = _String(VERSION)
+
+        def GetUnit(self, unit: str) -> _String:
+            events.append(("get-unit", unit))
+            return _String("/org/freedesktop/systemd1/unit/fixture")
+
+        def Get(self, interface: str, name: str) -> object:
+            events.append(("get-version", interface, name))
+            return self.version
+
+    class _UnitObject:
+        def Get(self, interface: str, name: str) -> object:
+            events.append(("get-property", interface, name))
+            return {
+                "Id": _String(RUN),
+                "MainPID": _Integer(4242),
+            }[name]
+
+    daemon = _Daemon()
+    manager = _ManagerObject()
+    unit = _UnitObject()
+
+    class _Bus:
+        def get_object(self, destination: str, path: str) -> object:
+            events.append(("get-object", destination, path))
+            if destination == "org.freedesktop.DBus":
+                return daemon
+            if path == "/org/freedesktop/systemd1":
+                return manager
+            assert path == "/org/freedesktop/systemd1/unit/fixture"
+            return unit
+
+    bus = _Bus()
+
+    class _Dbus:
+        Boolean = _Boolean
+        Byte = _Integer
+        Int16 = _Integer
+        UInt16 = _Integer
+        Int32 = _Integer
+        UInt32 = _Integer
+        Int64 = _Integer
+        UInt64 = _Integer
+        String = _String
+        ObjectPath = _String
+        Signature = _String
+        Struct = _Struct
+        Array = _Array
+
+        @staticmethod
+        def SystemBus() -> _Bus:
+            events.append(("system-bus",))
+            return bus
+
+        @staticmethod
+        def Interface(value: object, *, dbus_interface: str) -> object:
+            events.append(("interface", dbus_interface))
+            return value
+
+    monkeypatch.setattr(
+        systemd_acquisition.importlib,
+        "import_module",
+        lambda name: _Dbus if name == "dbus" else None,
+    )
+
+    reader = SystemdDbusPropertyReader()
+    constructor_events = tuple(events)
+    assert not any(
+        event[:1] == ("owner",)
+        or (event[:1] == ("get-object",) and event[2] == "/org/freedesktop/systemd1")
+        for event in constructor_events
+    )
+    assert reader.get_unique_owner() == ":1.42"
+    assert reader.get_manager_version(":1.42") == VERSION
+    manager.version = _Integer(255)
+    with pytest.raises(SystemdAcquisitionError, match="exact string property"):
+        reader.get_manager_version(":1.42")
+    manager.version = _String(VERSION)
+    assert reader.read_properties(RUN, ("Id", "MainPID")) == {
+        "Id": RUN,
+        "MainPID": 4242,
+    }
+    systemd_objects = [
+        event
+        for event in events
+        if event[:1] == ("get-object",) and event[2] != "/org/freedesktop/DBus"
+    ]
+    assert systemd_objects
+    assert all(event[1] == ":1.42" for event in systemd_objects)
+    assert not any(event[1] == "org.freedesktop.systemd1" for event in systemd_objects)
+
+
+def test_dbus_property_batch_rejects_unique_owner_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owners = iter((":1.42", ":1.99"))
+
+    class _String(str):
+        pass
+
+    class _Integer(int):
+        pass
+
+    class _Daemon:
+        def GetNameOwner(self, name: str) -> _String:
+            assert name == "org.freedesktop.systemd1"
+            return _String(next(owners))
+
+    class _Manager:
+        def GetUnit(self, unit: str) -> _String:
+            assert unit == RUN
+            return _String("/org/freedesktop/systemd1/unit/fixture")
+
+    class _Unit:
+        def Get(self, interface: str, name: str) -> _String:
+            assert interface == "org.freedesktop.systemd1.Unit"
+            assert name == "Id"
+            return _String(RUN)
+
+    class _Bus:
+        def get_object(self, destination: str, path: str) -> object:
+            if destination == "org.freedesktop.DBus":
+                return _Daemon()
+            assert destination == ":1.42"
+            return _Manager() if path == "/org/freedesktop/systemd1" else _Unit()
+
+    class _Dbus:
+        Boolean = bool
+        Byte = _Integer
+        Int16 = _Integer
+        UInt16 = _Integer
+        Int32 = _Integer
+        UInt32 = _Integer
+        Int64 = _Integer
+        UInt64 = _Integer
+        String = _String
+        ObjectPath = _String
+        Signature = _String
+        Struct = tuple
+        Array = list
+
+        @staticmethod
+        def SystemBus() -> _Bus:
+            return _Bus()
+
+        @staticmethod
+        def Interface(value: object, *, dbus_interface: str) -> object:
+            assert dbus_interface
+            return value
+
+    monkeypatch.setattr(
+        systemd_acquisition.importlib,
+        "import_module",
+        lambda name: _Dbus if name == "dbus" else None,
+    )
+
+    reader = SystemdDbusPropertyReader()
+    with pytest.raises(SystemdAcquisitionError, match="unique owner changed"):
+        reader.read_properties(RUN, ("Id",))
+
+
+def test_systemd_acquisition_source_has_no_manager_mutation_surface() -> None:
+    source = Path(systemd_acquisition.__file__).read_text(encoding="utf-8")
+
+    for forbidden in (
+        "StartUnit",
+        "StopUnit",
+        "RestartUnit",
+        "Reload",
+        "LoadUnit",
+        "RefUnit",
+        "UnrefUnit",
+        "subprocess",
+        "sudo",
+    ):
+        assert forbidden not in source
 
 
 def test_configured_pair_uses_fixed_read_only_property_sets(
