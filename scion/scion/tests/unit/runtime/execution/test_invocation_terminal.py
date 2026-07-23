@@ -53,6 +53,7 @@ def _policy(
     *,
     expected_rows: int = 2,
     artifact_names: tuple[str, ...] = ("analysis.bin", "summary.json"),
+    nonce_claim_sha256: str | None = None,
 ) -> TerminalPolicy:
     return TerminalPolicy(
         authority_sha256=AUTHORITY_SHA256,
@@ -60,6 +61,7 @@ def _policy(
         invocation_nonce=NONCE,
         expected_rows=expected_rows,
         artifact_names=artifact_names,
+        nonce_claim_sha256=nonce_claim_sha256,
     )
 
 
@@ -275,6 +277,111 @@ def test_complete_positive_chain_and_read_only_inspection(
     assert inspection.row_count == 2
     assert inspection.filesystem_mutated is False
     assert after == before
+
+
+def test_claim_bound_terminal_retains_exact_claim_through_closed(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path)
+    claim = b'{"external_first":true,"schema":"claim-fixture.v1"}\n'
+    policy = _policy(
+        expected_rows=1,
+        nonce_claim_sha256=hashlib.sha256(claim).hexdigest(),
+    )
+    assert inspect_terminal(root, policy).state == "PREPARED_UNCLAIMED"
+    with pytest.raises(InvocationTerminalError, match="requires open_claimed"):
+        InvocationWriter.open_fresh(root, policy)
+
+    claim_path = root / "control" / "invocation_claimed.v1.json"
+    claim_path.write_bytes(claim)
+    assert inspect_terminal(root, policy).state == "CLAIMED_PRESTART"
+    writer = InvocationWriter.open_claimed(root, policy)
+    assert inspect_terminal(root, policy).state == "STARTED_AWAITING_LINEAGE"
+    writer.bind_invocation_lineage(_lineage())
+    observation = _observation(0)
+    writer.record_observation(0, observation)
+    writer.commit_opaque_row(
+        0,
+        observation.observation_sha256,
+        b"claimed-row",
+    )
+    writer.finish_raw()
+    wrong_lineage = dataclasses.replace(
+        _lineage(),
+        invocation_id="f" * 32,
+    )
+    with pytest.raises(
+        InvocationTerminalError,
+        match="durable invocation lineage",
+    ):
+        seal_unit_drained(
+            root,
+            policy,
+            wrong_lineage,
+            dataclasses.replace(
+                _stop_post(),
+                invocation_id="f" * 32,
+            ),
+            _topology(),
+        )
+    drained = seal_unit_drained(
+        root,
+        policy,
+        _lineage(),
+        _stop_post(),
+        _topology(),
+    )
+    final = observe_unit_final(root, policy, _handoff())
+    assert final.unit_drained_sha256 == drained.unit_drained_sha256
+    complete = accept_invocation(
+        root,
+        policy,
+        PROBLEM_ACCEPTANCE_SHA256,
+    )
+    publish_opaque_artifact_bundle(
+        root,
+        policy,
+        complete,
+        (
+            ("analysis.bin", b"analysis"),
+            ("summary.json", b"summary"),
+        ),
+    )
+    assert inspect_terminal(root, policy).state == "CLOSED"
+    assert claim_path.read_bytes() == claim
+    assert "invocation_claimed.v1.json" in {
+        path.name for path in (root / "control").iterdir()
+    }
+
+
+def test_claimed_open_rejects_missing_or_drifted_claim(
+    tmp_path: Path,
+) -> None:
+    root = _root(tmp_path)
+    claim = b"claim\n"
+    policy = _policy(nonce_claim_sha256=hashlib.sha256(claim).hexdigest())
+    with pytest.raises(InvocationTerminalError, match="directories are not empty"):
+        InvocationWriter.open_claimed(root, policy)
+    (root / "control" / "invocation_claimed.v1.json").write_bytes(b"wrong\n")
+    assert inspect_terminal(root, policy).state == "UNKNOWN_INTEGRITY_HOLD"
+    with pytest.raises(InvocationTerminalError, match="digest differs"):
+        InvocationWriter.open_claimed(root, policy)
+
+
+def test_prepare_terminal_root_is_exact_and_no_replace(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "prepared"
+    terminal.prepare_terminal_root(root)
+    assert tuple(sorted(path.name for path in root.iterdir())) == (
+        "artifacts",
+        "control",
+        "evidence",
+        "raw",
+    )
+    assert inspect_terminal(root, _policy()).state == "PREPARED"
+    with pytest.raises(InvocationTerminalError, match="without repair"):
+        terminal.prepare_terminal_root(root)
 
 
 def test_writer_rejects_gap_digest_type_and_resume(tmp_path: Path) -> None:

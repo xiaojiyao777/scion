@@ -1324,9 +1324,10 @@ def _make_cleanup_permit_surface() -> Tuple[type, object]:
     return _Permit, issue
 
 
-_SettledJobCleanupPermit, _issue_cleanup_permit_for_tests = (
+_SettledJobCleanupPermit, _issue_cleanup_permit = (
     _make_cleanup_permit_surface()
 )
+_issue_cleanup_permit_for_tests = _issue_cleanup_permit
 del _make_cleanup_permit_surface
 
 
@@ -3138,6 +3139,95 @@ class SpawnBackend:
             cleanup_guard.restore()
             _failstop()
         cleanup_guard.restore()
+
+    def remove_after_opaque_commit(
+        self,
+        settled: SettledJob,
+        opaque_commit: object,
+    ) -> None:
+        """Remove one empty job cgroup only after its exact opaque row commit."""
+
+        from .invocation_terminal import (
+            InvocationTerminalError,
+            OpaqueRowCommit,
+            _consume_opaque_cleanup_authority,
+        )
+
+        if type(settled) is not SettledJob:
+            raise TypeError("settled must be exact SettledJob")
+        if type(opaque_commit) is not OpaqueRowCommit:
+            raise TypeError("opaque_commit must be exact OpaqueRowCommit")
+        self._require_state(self._SETTLED_PENDING_CLEANUP)
+        settled._require_open()
+        expected = settled._cleanup_identity()
+        if (
+            opaque_commit.job_ordinal != expected.job_key.ordinal
+            or opaque_commit.observation_sha256
+            != expected.observation_sha256
+        ):
+            raise BackendStateError(
+                "opaque row commit does not bind the settled job"
+            )
+        try:
+            _consume_opaque_cleanup_authority(opaque_commit)
+        except InvocationTerminalError as exc:
+            raise BackendStateError(
+                "opaque row commit lacks terminal authority"
+            ) from exc
+        permit = _issue_cleanup_permit(expected)
+        self.remove_after_durable_cleanup(settled, permit)
+
+    def remove_after_incomplete_commit(
+        self,
+        settled: SettledJob,
+        observation_commit: object,
+        incomplete_fact: object,
+    ) -> None:
+        """Remove after durable evidence is terminally sealed INCOMPLETE."""
+
+        from .invocation_terminal import (
+            IncompleteFact,
+            InvocationTerminalError,
+            ObservationCommit,
+            _consume_incomplete_cleanup_authority,
+        )
+
+        if type(settled) is not SettledJob:
+            raise TypeError("settled must be exact SettledJob")
+        if type(observation_commit) is not ObservationCommit:
+            raise TypeError(
+                "observation_commit must be exact ObservationCommit"
+            )
+        if type(incomplete_fact) is not IncompleteFact:
+            raise TypeError(
+                "incomplete_fact must be exact IncompleteFact"
+            )
+        self._require_state(self._SETTLED_PENDING_CLEANUP)
+        settled._require_open()
+        expected = settled._cleanup_identity()
+        if (
+            observation_commit.job_ordinal != expected.job_key.ordinal
+            or observation_commit.observation_sha256
+            != expected.observation_sha256
+            or incomplete_fact.evidence_count
+            != observation_commit.job_ordinal + 1
+            or incomplete_fact.row_count
+            != observation_commit.job_ordinal
+        ):
+            raise BackendStateError(
+                "incomplete commit does not bind the settled job"
+            )
+        try:
+            _consume_incomplete_cleanup_authority(
+                observation_commit,
+                incomplete_fact,
+            )
+        except InvocationTerminalError as exc:
+            raise BackendStateError(
+                "incomplete commit lacks terminal authority"
+            ) from exc
+        permit = _issue_cleanup_permit(expected)
+        self.remove_after_durable_cleanup(settled, permit)
 
     def close_idle(self) -> None:
         self._require_state(self._IDLE)

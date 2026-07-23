@@ -122,7 +122,13 @@ from scion.runtime.execution.model import (  # noqa: E402
     StreamAvailability,
     _CleanupPermitIdentity,
 )
-
+from scion.runtime.execution.invocation_terminal import (  # noqa: E402
+    IncompleteFact,
+    ObservationCommit,
+    OpaqueRowCommit,
+    _issue_incomplete_cleanup_for_tests,
+    _issue_opaque_row_commit_for_tests,
+)
 
 _SERVICE = "scion-test.service"
 _EVENTS = CgroupEventsFact.decode(b"populated 0\nfrozen 0\n")
@@ -414,9 +420,7 @@ class _ScriptedPoll:
     def poll(self) -> list[tuple[int, int]]:
         while self._steps:
             ready = [
-                (fd, mask)
-                for fd, mask in self._steps.pop(0)
-                if fd in self.registered
+                (fd, mask) for fd, mask in self._steps.pop(0) if fd in self.registered
             ]
             if ready:
                 self.registration_snapshots.append(dict(self.registered))
@@ -450,11 +454,7 @@ class _FreshPoll:
         self.poll_calls += 1
         if self.poll_calls != 1:
             raise AssertionError("a poll object must represent one fresh snapshot")
-        return [
-            (fd, mask)
-            for fd, mask in self._ready
-            if fd in self.registered
-        ]
+        return [(fd, mask) for fd, mask in self._ready if fd in self.registered]
 
 
 class _FreshPollFactory:
@@ -570,19 +570,16 @@ def _dispose_blocked(
 
 
 def test_issuer_signal_guard_restores_exact_prior_mask() -> None:
-    prior = frozenset(
-        signal.pthread_sigmask(signal.SIG_BLOCK, set())
-    )
+    prior = frozenset(signal.pthread_sigmask(signal.SIG_BLOCK, set()))
     guard = spawn_backend._IssuerSignalGuard()
     try:
         guard.block()
-        assert frozenset(
-            signal.pthread_sigmask(signal.SIG_BLOCK, set())
-        ) == prior | spawn_backend._CATCHABLE_SIGNALS
+        assert (
+            frozenset(signal.pthread_sigmask(signal.SIG_BLOCK, set()))
+            == prior | spawn_backend._CATCHABLE_SIGNALS
+        )
         assert guard.restore() is False
-        assert frozenset(
-            signal.pthread_sigmask(signal.SIG_BLOCK, set())
-        ) == prior
+        assert frozenset(signal.pthread_sigmask(signal.SIG_BLOCK, set())) == prior
     finally:
         signal.pthread_sigmask(signal.SIG_SETMASK, prior)
 
@@ -606,9 +603,7 @@ def test_issuer_signal_guard_double_restore_failstops(
 def test_issuer_signal_guard_reports_only_new_pending_signal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    prior = frozenset(
-        signal.pthread_sigmask(signal.SIG_BLOCK, set())
-    )
+    prior = frozenset(signal.pthread_sigmask(signal.SIG_BLOCK, set()))
     pending = iter(
         (
             frozenset({signal.SIGUSR2}),
@@ -620,9 +615,7 @@ def test_issuer_signal_guard_reports_only_new_pending_signal(
     try:
         guard.block()
         assert guard.restore() is True
-        assert frozenset(
-            signal.pthread_sigmask(signal.SIG_BLOCK, set())
-        ) == prior
+        assert frozenset(signal.pthread_sigmask(signal.SIG_BLOCK, set())) == prior
     finally:
         signal.pthread_sigmask(signal.SIG_SETMASK, prior)
 
@@ -704,7 +697,9 @@ def test_open_duplicates_and_pins_capture_directory_identity(
             device=supplied_stat.st_dev,
             inode=supplied_stat.st_ino,
         )
-        assert fcntl.fcntl(owner._capture_directory_fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
+        assert (
+            fcntl.fcntl(owner._capture_directory_fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
+        )
         _assert_not_copyable(owner)
     finally:
         owner.close_idle()
@@ -715,7 +710,9 @@ def test_open_duplicates_and_pins_capture_directory_identity(
         owner.close_idle()
 
 
-def test_open_rejects_regular_file_and_closes_consumed_authority(tmp_path: Path) -> None:
+def test_open_rejects_regular_file_and_closes_consumed_authority(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "not-a-directory"
     path.write_bytes(b"capture")
     fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
@@ -1430,12 +1427,11 @@ def test_recorded_assembly_interruption_explicitly_settles(
     monkeypatch.setattr(spawn_backend, "_single_threaded", lambda: True)
     monkeypatch.setattr(spawn_backend.native, "BlockedChild", _SuccessfulBlockedChild)
     monkeypatch.setattr(spawn_backend.native, "spawn_blocked", lambda *_args: child)
-    monkeypatch.setattr(
-        spawn_backend.select, "poll", lambda: _AllRegisteredReadyPoll()
-    )
+    monkeypatch.setattr(spawn_backend.select, "poll", lambda: _AllRegisteredReadyPoll())
     interrupted = False
 
     if recorded_boundary == "backend_commit":
+
         def backend_setattr(self: object, name: str, value: object) -> None:
             nonlocal interrupted
             object.__setattr__(self, name, value)
@@ -1447,10 +1443,9 @@ def test_recorded_assembly_interruption_explicitly_settles(
                 interrupted = True
                 raise _InjectedIssuerBase
 
-        monkeypatch.setattr(
-            spawn_backend.SpawnBackend, "__setattr__", backend_setattr
-        )
+        monkeypatch.setattr(spawn_backend.SpawnBackend, "__setattr__", backend_setattr)
     else:
+
         def ledger_setattr(self: object, name: str, value: object) -> None:
             nonlocal interrupted
             object.__setattr__(self, name, value)
@@ -1488,9 +1483,7 @@ def test_wrapper_real_restore_then_next_boundary_base_settles_blocked(
     monkeypatch.setattr(spawn_backend, "_single_threaded", lambda: True)
     monkeypatch.setattr(spawn_backend.native, "BlockedChild", _SuccessfulBlockedChild)
     monkeypatch.setattr(spawn_backend.native, "spawn_blocked", lambda *_args: child)
-    monkeypatch.setattr(
-        spawn_backend.select, "poll", lambda: _AllRegisteredReadyPoll()
-    )
+    monkeypatch.setattr(spawn_backend.select, "poll", lambda: _AllRegisteredReadyPoll())
     injected = False
 
     def assembly_getattribute(self: object, name: str) -> object:
@@ -1589,9 +1582,7 @@ def test_settle_active_kills_drains_reaps_and_poison_closes_every_alias(
         monkeypatch, _independent_completion_steps(blocked, job)
     )
 
-    result = owner.settle_blocked(
-        blocked, ContainedSpawnReason.ACTIVE_NOT_DURABLE
-    )
+    result = owner.settle_blocked(blocked, ContainedSpawnReason.ACTIVE_NOT_DURABLE)
     assert type(result) is ContainedSpawnFailure
     assert result.phase is ContainedSpawnPhase.BLOCKED
     assert result.reason is ContainedSpawnReason.ACTIVE_NOT_DURABLE
@@ -1647,9 +1638,7 @@ def test_release_nonzero_is_positive_pending_then_exact_cleanup_allows_next(
     assert set(event_masks) == {
         spawn_backend.select.POLLPRI | spawn_backend.select.POLLERR
     }
-    assert all(
-        not (mask & spawn_backend.select.POLLIN) for mask in event_masks
-    )
+    assert all(not (mask & spawn_backend.select.POLLIN) for mask in event_masks)
     assert owner.state == "SETTLED_PENDING_CLEANUP"
     with pytest.raises(spawn_backend.BackendStateError, match="expected IDLE"):
         owner.start_blocked(_key(1), _spec())
@@ -1669,13 +1658,28 @@ def test_release_nonzero_is_positive_pending_then_exact_cleanup_allows_next(
     assert settled.observation.stdout.data == b"\x00binary\xffstdout"
     assert owner.state == "SETTLED_PENDING_CLEANUP"
 
-    cleanup_identity = settled._cleanup_identity()
-    permit = spawn_backend._issue_cleanup_permit_for_tests(cleanup_identity)
-    owner.remove_after_durable_cleanup(settled, permit)
+    wrong_commit = OpaqueRowCommit(
+        job_ordinal=1,
+        observation_sha256=settled.observation.observation_sha256,
+        evidence_sha256="e" * 64,
+        row_sha256="f" * 64,
+        row_size_bytes=1,
+    )
+    with pytest.raises(spawn_backend.BackendStateError, match="does not bind"):
+        owner.remove_after_opaque_commit(settled, wrong_commit)
+    durable_commit = OpaqueRowCommit(
+        job_ordinal=0,
+        observation_sha256=settled.observation.observation_sha256,
+        evidence_sha256="e" * 64,
+        row_sha256="f" * 64,
+        row_size_bytes=1,
+    )
+    owner.remove_after_opaque_commit(
+        settled,
+        _issue_opaque_row_commit_for_tests(durable_commit),
+    )
     assert job.removed is True
     assert owner.state == "IDLE"
-    with pytest.raises(spawn_backend.BackendStateError, match="consumed"):
-        _ = permit.identity
     with pytest.raises(spawn_backend.BackendStateError, match="consumed"):
         _ = settled.observation
 
@@ -1691,6 +1695,61 @@ def test_release_nonzero_is_positive_pending_then_exact_cleanup_allows_next(
     )
     assert type(next_failure) is ContainedSpawnFailure
     assert authority.created_keys == [_key(), _key(1)]
+
+
+def test_incomplete_cleanup_requires_writer_issued_evidence_and_terminal(
+    capture_directory: int,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner, authority = _open_backend(capture_directory)
+    blocked = _start_child(
+        owner,
+        _SuccessfulBlockedChild(exit_code=3),
+        monkeypatch,
+    )
+    job = authority.last_job
+    assert job is not None
+    _install_poll_steps(
+        monkeypatch,
+        _independent_completion_steps(blocked, job),
+    )
+    settled = owner.release_and_collect(blocked)
+    assert type(settled) is spawn_backend.SettledJob
+    observation = ObservationCommit(
+        job_ordinal=0,
+        observation_sha256=(settled.observation.observation_sha256),
+        evidence_sha256="e" * 64,
+        evidence_size_bytes=1,
+    )
+    incomplete = IncompleteFact(
+        policy_sha256="a" * 64,
+        reason_code="WAREHOUSE_VALIDATION_FAILED",
+        evidence_count=1,
+        row_count=0,
+        incomplete_sha256="f" * 64,
+    )
+    with pytest.raises(
+        spawn_backend.BackendStateError,
+        match="terminal authority",
+    ):
+        owner.remove_after_incomplete_commit(
+            settled,
+            observation,
+            incomplete,
+        )
+
+    observation, incomplete = _issue_incomplete_cleanup_for_tests(
+        observation,
+        incomplete,
+    )
+    owner.remove_after_incomplete_commit(
+        settled,
+        observation,
+        incomplete,
+    )
+    assert job.removed is True
+    assert owner.state == "IDLE"
+    owner.close_idle()
 
 
 def test_drain_uses_fresh_exact_poll_sets_and_processes_complete_snapshot_fairly(
@@ -1751,9 +1810,7 @@ def test_drain_uses_fresh_exact_poll_sets_and_processes_complete_snapshot_fairly
     assert poll_pidfd not in second
     assert events_fd not in second
 
-    permit = spawn_backend._issue_cleanup_permit_for_tests(
-        settled._cleanup_identity()
-    )
+    permit = spawn_backend._issue_cleanup_permit_for_tests(settled._cleanup_identity())
     owner.remove_after_durable_cleanup(settled, permit)
     owner.close_idle()
 
@@ -1842,10 +1899,9 @@ def test_terminal_ledger_resumes_after_phase_commit_before_reap_without_repeek(
         nonlocal injected
         value = object.__getattribute__(self, name)
         if name == "reaped" and value is False and not injected:
-            if (
-                object.__getattribute__(self, "fact_assigned")
-                and object.__getattribute__(self, "phase_committed")
-            ):
+            if object.__getattribute__(
+                self, "fact_assigned"
+            ) and object.__getattribute__(self, "phase_committed"):
                 injected = True
                 raise _InjectedIssuerBase
         return value
@@ -2247,11 +2303,7 @@ def test_stream_storage_failure_commit_next_boundary_base_keeps_capture_first(
     def interrupt_after_storage_failure(stream: object) -> tuple[bool, bool]:
         nonlocal injected
         value = real_snapshot(stream)
-        if (
-            not injected
-            and stream.name == "stdout"
-            and stream.storage_failed
-        ):
+        if not injected and stream.name == "stdout" and stream.storage_failed:
             assert value[1] is True
             injected = True
             raise _InjectedIssuerBase
@@ -2370,6 +2422,7 @@ def test_positive_recorded_fact_next_boundary_base_is_leader_reaped_contained(
     injected = False
 
     if recorded_boundary == "final_empty":
+
         def interrupt_before_observation(
             _cls: type,
             **_kwargs: object,
@@ -2384,6 +2437,7 @@ def test_positive_recorded_fact_next_boundary_base_is_leader_reaped_contained(
             classmethod(interrupt_before_observation),
         )
     else:
+
         def positive_setattr(self: object, name: str, value: object) -> None:
             nonlocal injected
             object.__setattr__(self, name, value)
@@ -2630,9 +2684,7 @@ def test_cleanup_restore_interruption_commits_remove_and_all_consumptions(
     _install_poll_steps(monkeypatch, _independent_completion_steps(blocked, job))
     settled = owner.release_and_collect(blocked)
     assert type(settled) is spawn_backend.SettledJob
-    permit = spawn_backend._issue_cleanup_permit_for_tests(
-        settled._cleanup_identity()
-    )
+    permit = spawn_backend._issue_cleanup_permit_for_tests(settled._cleanup_identity())
 
     class _ReportedInterruptedGuard:
         def block(self) -> None:
@@ -2641,9 +2693,7 @@ def test_cleanup_restore_interruption_commits_remove_and_all_consumptions(
         def restore(self) -> bool:
             return True
 
-    monkeypatch.setattr(
-        spawn_backend, "_IssuerSignalGuard", _ReportedInterruptedGuard
-    )
+    monkeypatch.setattr(spawn_backend, "_IssuerSignalGuard", _ReportedInterruptedGuard)
     owner.remove_after_durable_cleanup(settled, permit)
     assert job.removed is True
     assert owner.state == "IDLE"
@@ -2667,9 +2717,7 @@ def test_cleanup_direct_interruption_before_remove_consumes_nothing(
     _install_poll_steps(monkeypatch, _independent_completion_steps(blocked, job))
     settled = owner.release_and_collect(blocked)
     assert type(settled) is spawn_backend.SettledJob
-    permit = spawn_backend._issue_cleanup_permit_for_tests(
-        settled._cleanup_identity()
-    )
+    permit = spawn_backend._issue_cleanup_permit_for_tests(settled._cleanup_identity())
     original_remove = job.remove_empty
 
     def interrupted_remove() -> None:
@@ -2813,15 +2861,15 @@ def test_terminal_leader_with_populated_descendant_kills_then_waits_for_empty(
     poller = _install_poll_steps(
         monkeypatch,
         [
-                [(blocked._poll_pidfd, spawn_backend.select.POLLIN)],
-                [(blocked._stdout_fd, spawn_backend.select.POLLIN)],
-                [(blocked._stdout_fd, spawn_backend.select.POLLHUP)],
-                [(job._events_fileno(), spawn_backend.select.POLLPRI)],
-                [(blocked._stderr_fd, spawn_backend.select.POLLIN)],
-                [(blocked._stderr_fd, spawn_backend.select.POLLHUP)],
-                [(blocked._exec_error_fd, spawn_backend.select.POLLIN)],
-                [(blocked._exec_error_fd, spawn_backend.select.POLLHUP)],
-            ],
+            [(blocked._poll_pidfd, spawn_backend.select.POLLIN)],
+            [(blocked._stdout_fd, spawn_backend.select.POLLIN)],
+            [(blocked._stdout_fd, spawn_backend.select.POLLHUP)],
+            [(job._events_fileno(), spawn_backend.select.POLLPRI)],
+            [(blocked._stderr_fd, spawn_backend.select.POLLIN)],
+            [(blocked._stderr_fd, spawn_backend.select.POLLHUP)],
+            [(blocked._exec_error_fd, spawn_backend.select.POLLIN)],
+            [(blocked._exec_error_fd, spawn_backend.select.POLLHUP)],
+        ],
     )
     result = owner.release_and_collect(blocked)
     assert type(result) is ContainedSpawnFailure
@@ -2881,9 +2929,7 @@ def test_active_not_durable_remains_first_reason_when_stdout_becomes_unavailable
 
     monkeypatch.setattr(spawn_backend, "_write_spool", fail_stdout)
     _install_poll_steps(monkeypatch, _independent_completion_steps(blocked, job))
-    result = owner.settle_blocked(
-        blocked, ContainedSpawnReason.ACTIVE_NOT_DURABLE
-    )
+    result = owner.settle_blocked(blocked, ContainedSpawnReason.ACTIVE_NOT_DURABLE)
     assert type(result) is ContainedSpawnFailure
     assert result.reason is ContainedSpawnReason.ACTIVE_NOT_DURABLE
     assert result.phase is ContainedSpawnPhase.BLOCKED
@@ -2989,9 +3035,7 @@ def test_spool_readback_none_ledger_next_boundary_base_keeps_capture_first(
             raise _InjectedIssuerBase
         return real_read(spool, result_ledger)
 
-    monkeypatch.setattr(
-        spawn_backend, "_read_spool", recorded_none_then_interrupt
-    )
+    monkeypatch.setattr(spawn_backend, "_read_spool", recorded_none_then_interrupt)
     _install_poll_steps(monkeypatch, _independent_completion_steps(blocked, job))
     result = owner.release_and_collect(blocked)
     assert injected is True
@@ -3022,9 +3066,7 @@ def test_non_eagain_pipe_read_error_failstops_in_same_ready_snapshot(
             raise OSError(errno.EIO, "channel state is unknowable")
         return real_read(fd, size)
 
-    factory = _FreshPollFactory(
-        [[(blocked._stdout_fd, spawn_backend.select.POLLIN)]]
-    )
+    factory = _FreshPollFactory([[(blocked._stdout_fd, spawn_backend.select.POLLIN)]])
     monkeypatch.setattr(spawn_backend.os, "read", injected_read)
     monkeypatch.setattr(spawn_backend.select, "poll", factory)
     with pytest.raises(_FailstopSentinel, match="isolated fail-stop"):
@@ -3045,11 +3087,7 @@ def test_pidfd_or_cgroup_hup_is_immediate_authority_failstop(
     blocked = _start_child(owner, child, monkeypatch)
     job = authority.last_job
     assert job is not None
-    fd = (
-        blocked._poll_pidfd
-        if authority_name == "pidfd"
-        else job._events_fileno()
-    )
+    fd = blocked._poll_pidfd if authority_name == "pidfd" else job._events_fileno()
     factory = _FreshPollFactory([[(fd, spawn_backend.select.POLLHUP)]])
     monkeypatch.setattr(spawn_backend.select, "poll", factory)
     with pytest.raises(_FailstopSentinel, match="isolated fail-stop"):
@@ -3163,8 +3201,7 @@ def test_production_boundary_has_no_forbidden_launch_or_policy_imports() -> None
         for path in sorted(execution_root.rglob("*.py"))
     }
     trees = {
-        path: ast.parse(source, filename=str(path))
-        for path, source in sources.items()
+        path: ast.parse(source, filename=str(path)) for path, source in sources.items()
     }
     assert all("NotImplemented" not in source for source in sources.values())
     imported_roots: set[str] = set()
@@ -3205,10 +3242,7 @@ def test_production_boundary_has_no_forbidden_launch_or_policy_imports() -> None
                 and node.func.attr in forbidden_call_names
             ):
                 forbidden_calls.append((path, node.func.attr, node.lineno))
-            if (
-                isinstance(node.func, ast.Name)
-                and node.func.id in forbidden_call_names
-            ):
+            if isinstance(node.func, ast.Name) and node.func.id in forbidden_call_names:
                 forbidden_calls.append((path, node.func.id, node.lineno))
             for keyword in node.keywords:
                 assert keyword.arg not in {
@@ -3291,9 +3325,7 @@ def test_forked_noncreator_rejects_live_wrapper_and_only_closes_child_fds(
         value = object.__new__(spawn_backend.SpawnBackend)
         value._state = spawn_backend.SpawnBackend._IDLE
         value._creator_pid = creator_pid
-        value._capture_directory_fd = os.open(
-            "/dev/null", os.O_RDONLY | os.O_CLOEXEC
-        )
+        value._capture_directory_fd = os.open("/dev/null", os.O_RDONLY | os.O_CLOEXEC)
         owned_fds.append(value._capture_directory_fd)
     elif wrapper_name == "blocked":
         value = object.__new__(spawn_backend.BlockedSpawn)
@@ -3354,10 +3386,6 @@ def test_forked_noncreator_rejects_live_wrapper_and_only_closes_child_fds(
         for fd in owned_fds:
             assert fcntl.fcntl(fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
     finally:
-        value._state = (
-            value._CLOSED
-            if wrapper_name == "backend"
-            else value._CONSUMED
-        )
+        value._state = value._CLOSED if wrapper_name == "backend" else value._CONSUMED
         for fd in owned_fds:
             os.close(fd)

@@ -3334,7 +3334,7 @@ def test_fixture_ast_has_no_forbidden_runtime_or_bounded_output_policy() -> None
         _FIXTURE.read_text(encoding="utf-8")
     ) == frozenset()
     assert hashlib.sha256(_SPAWN_BACKEND.read_bytes()).hexdigest() == (
-        "9c25defcf383046b39e0638f6f3841fca9c47572506a5cd4c3a9fb9c3232f938"
+        "e0b2fab727e4474959c0bd67d8c4a9968f1c4bee5c4f87f9ce73f433b3124b7d"
     )
 
 

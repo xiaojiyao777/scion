@@ -1,0 +1,31 @@
+[Unit]
+Description=Scion Warehouse W3 fixed-arm run %i
+OnSuccess=scion-w3-close@%i.service
+OnFailure=scion-w3-close@%i.service
+CollectMode=inactive
+
+[Service]
+Type=exec
+User=clawd
+Group=clawd
+UMask=0077
+ExecStart=/var/lib/scion/projections/w3/%i/environment/bin/python -B -s /var/lib/scion/projections/w3/%i/sealed/bin/scion-w3-tool run %i
+ExecStopPost=/var/lib/scion/projections/w3/%i/environment/bin/python -B -s /var/lib/scion/projections/w3/%i/sealed/bin/scion-w3-tool seal-unit-drained %i
+Restart=no
+ExitType=main
+KillMode=control-group
+SendSIGKILL=yes
+TimeoutStopSec=infinity
+OOMPolicy=stop
+Delegate=pids
+DelegateSubgroup=supervisor
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateMounts=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectControlGroups=no
+ProtectProc=invisible
+ProcSubset=all
+ReadOnlyPaths=/var/lib/scion/projections/w3/%i/installation.json /var/lib/scion/projections/w3/%i/authority.json /var/lib/scion/projections/w3/%i/sealed /var/lib/scion/projections/w3/%i/environment
+ReadWritePaths=/var/lib/scion/projections/w3/%i/run /var/lib/scion/projections/w3/%i/nonce-claims

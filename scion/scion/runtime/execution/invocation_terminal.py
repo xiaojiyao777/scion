@@ -27,6 +27,7 @@ _ARTIFACT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _REASON_RE = re.compile(r"[A-Z][A-Z0-9_]{0,63}\Z")
 _ROW_RE = re.compile(r"([0-9]{6})\.opaque\Z")
 _EVIDENCE_RE = re.compile(r"([0-9]{6})\.json\Z")
+_CLAIM_NAME = "invocation_claimed.v1.json"
 _AT_FDCWD = -100
 _AT_EMPTY_PATH = 0x1000
 _AT_SYMLINK_FOLLOW = 0x400
@@ -105,6 +106,7 @@ class TerminalPolicy:
     invocation_nonce: str
     expected_rows: int
     artifact_names: tuple[str, ...]
+    nonce_claim_sha256: str | None = None
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         del kwargs
@@ -126,6 +128,11 @@ class TerminalPolicy:
                 raise InvocationTerminalError(f"invalid artifact name: {name!r}")
         if len(set(self.artifact_names)) != len(self.artifact_names):
             raise InvocationTerminalError("artifact_names contains a duplicate")
+        if self.nonce_claim_sha256 is not None:
+            _sha256(
+                self.nonce_claim_sha256,
+                field="nonce_claim_sha256",
+            )
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -134,6 +141,7 @@ class TerminalPolicy:
             "invocation_nonce": self.invocation_nonce,
             "expected_rows": self.expected_rows,
             "artifact_names": list(self.artifact_names),
+            "nonce_claim_sha256": self.nonce_claim_sha256,
             "retry": False,
             "resume": False,
             "reuse": False,
@@ -181,6 +189,71 @@ class IncompleteFact:
     incomplete_sha256: str
 
 
+_ISSUED_OBSERVATION_COMMITS: dict[int, ObservationCommit] = {}
+_ISSUED_OPAQUE_ROW_COMMITS: dict[int, OpaqueRowCommit] = {}
+_ISSUED_INCOMPLETE_FACTS: dict[int, IncompleteFact] = {}
+
+
+def _register_cleanup_authority(value: object) -> object:
+    registry: dict[int, object]
+    if type(value) is ObservationCommit:
+        registry = _ISSUED_OBSERVATION_COMMITS
+    elif type(value) is OpaqueRowCommit:
+        registry = _ISSUED_OPAQUE_ROW_COMMITS
+    elif type(value) is IncompleteFact:
+        registry = _ISSUED_INCOMPLETE_FACTS
+    else:
+        raise TypeError("unknown terminal cleanup authority")
+    registry[id(value)] = value
+    return value
+
+
+def _consume_opaque_cleanup_authority(
+    value: OpaqueRowCommit,
+) -> None:
+    if _ISSUED_OPAQUE_ROW_COMMITS.get(id(value)) is not value:
+        raise InvocationTerminalError(
+            "opaque row commit was not issued by InvocationWriter"
+        )
+    del _ISSUED_OPAQUE_ROW_COMMITS[id(value)]
+
+
+def _consume_incomplete_cleanup_authority(
+    observation: ObservationCommit,
+    incomplete: IncompleteFact,
+) -> None:
+    if (
+        _ISSUED_OBSERVATION_COMMITS.get(id(observation)) is not observation
+        or _ISSUED_INCOMPLETE_FACTS.get(id(incomplete)) is not incomplete
+    ):
+        raise InvocationTerminalError(
+            "incomplete cleanup facts were not issued by InvocationWriter"
+        )
+    del _ISSUED_OBSERVATION_COMMITS[id(observation)]
+    del _ISSUED_INCOMPLETE_FACTS[id(incomplete)]
+
+
+def _issue_opaque_row_commit_for_tests(
+    value: OpaqueRowCommit,
+) -> OpaqueRowCommit:
+    if type(value) is not OpaqueRowCommit:
+        raise TypeError("value must be exact OpaqueRowCommit")
+    return _register_cleanup_authority(value)  # type: ignore[return-value]
+
+
+def _issue_incomplete_cleanup_for_tests(
+    observation: ObservationCommit,
+    incomplete: IncompleteFact,
+) -> tuple[ObservationCommit, IncompleteFact]:
+    if type(observation) is not ObservationCommit:
+        raise TypeError("observation must be exact ObservationCommit")
+    if type(incomplete) is not IncompleteFact:
+        raise TypeError("incomplete must be exact IncompleteFact")
+    _register_cleanup_authority(observation)
+    _register_cleanup_authority(incomplete)
+    return observation, incomplete
+
+
 @dataclass(frozen=True, slots=True)
 class UnitDrainedFact:
     policy_sha256: str
@@ -223,6 +296,44 @@ class TerminalInspection:
     evidence_count: int
     row_count: int
     filesystem_mutated: bool = False
+
+
+def prepare_terminal_root(root: Path) -> None:
+    """Create one exact empty terminal root without replacement or cleanup."""
+
+    absolute = Path(os.path.abspath(root))
+    if absolute == Path(absolute.anchor) or absolute.name in {"", ".", ".."}:
+        raise InvocationTerminalError("invalid terminal root path")
+    parent_fd = _open_directory(absolute.parent)
+    root_fd = -1
+    opened: list[int] = []
+    try:
+        os.mkdir(absolute.name, 0o700, dir_fd=parent_fd)
+        os.fsync(parent_fd)
+        root_fd = os.open(
+            absolute.name,
+            os.O_RDONLY
+            | os.O_DIRECTORY
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0),
+            dir_fd=parent_fd,
+        )
+        for name in _ROOT_NAMES:
+            os.mkdir(name, 0o700, dir_fd=root_fd)
+            descriptor = _open_child_directory(root_fd, name)
+            opened.append(descriptor)
+            os.fsync(descriptor)
+        os.fsync(root_fd)
+    except OSError as exc:
+        raise InvocationTerminalError(
+            "terminal root preparation failed without repair"
+        ) from exc
+    finally:
+        for descriptor in reversed(opened):
+            os.close(descriptor)
+        if root_fd >= 0:
+            os.close(root_fd)
+        os.close(parent_fd)
 
 
 def _open_directory(path: Path) -> int:
@@ -514,6 +625,36 @@ def _require_control_inventory(control_fd: int, expected: frozenset[str]) -> Non
         raise InvocationTerminalError("terminal control inventory differs")
 
 
+def _control_inventory(
+    policy: TerminalPolicy,
+    *dynamic_names: str,
+) -> frozenset[str]:
+    names = {"invocation_started.v1.json", *dynamic_names}
+    if policy.nonce_claim_sha256 is not None:
+        names.add(_CLAIM_NAME)
+    return frozenset(names)
+
+
+def _execution_inventory(
+    policy: TerminalPolicy,
+    *dynamic_names: str,
+) -> frozenset[str]:
+    names = set(_control_inventory(policy, *dynamic_names))
+    if policy.nonce_claim_sha256 is not None:
+        names.add("invocation_lineage.v1.json")
+    return frozenset(names)
+
+
+def _require_nonce_claim(control_fd: int, policy: TerminalPolicy) -> bytes:
+    expected = policy.nonce_claim_sha256
+    if expected is None:
+        raise InvocationTerminalError("terminal policy is not claim-bound")
+    raw = _read_regular(control_fd, _CLAIM_NAME)
+    if _digest_bytes(raw) != expected:
+        raise InvocationTerminalError("invocation nonce claim digest differs")
+    return raw
+
+
 def _expected_prefix(names: tuple[str, ...], suffix: str) -> int | None:
     pattern = _EVIDENCE_RE if suffix == "json" else _ROW_RE
     ordinals: list[int] = []
@@ -542,6 +683,7 @@ class InvocationWriter:
         "_raw_fd",
         "_artifacts_fd",
         "_policy",
+        "_lineage",
         "_pending",
         "_rows",
     )
@@ -551,7 +693,9 @@ class InvocationWriter:
 
     def __init__(self, *_args: object, **_kwargs: object) -> None:
         del _args, _kwargs
-        raise TypeError("InvocationWriter is created only by open_fresh")
+        raise TypeError(
+            "InvocationWriter is created only by open_fresh or open_claimed"
+        )
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         del kwargs
@@ -561,6 +705,30 @@ class InvocationWriter:
     def open_fresh(cls, root: Path, policy: TerminalPolicy) -> "InvocationWriter":
         if type(policy) is not TerminalPolicy:
             raise TypeError("policy must be exact TerminalPolicy")
+        if policy.nonce_claim_sha256 is not None:
+            raise InvocationTerminalError("claim-bound policy requires open_claimed")
+        return cls._open(root, policy, claimed=False)
+
+    @classmethod
+    def open_claimed(
+        cls,
+        root: Path,
+        policy: TerminalPolicy,
+    ) -> "InvocationWriter":
+        if type(policy) is not TerminalPolicy:
+            raise TypeError("policy must be exact TerminalPolicy")
+        if policy.nonce_claim_sha256 is None:
+            raise InvocationTerminalError("open_claimed requires a claim-bound policy")
+        return cls._open(root, policy, claimed=True)
+
+    @classmethod
+    def _open(
+        cls,
+        root: Path,
+        policy: TerminalPolicy,
+        *,
+        claimed: bool,
+    ) -> "InvocationWriter":
         root_fd = _open_directory(root)
         opened: list[int] = [root_fd]
         try:
@@ -571,13 +739,17 @@ class InvocationWriter:
             raw_fd = _open_child_directory(root_fd, "raw")
             artifacts_fd = _open_child_directory(root_fd, "artifacts")
             opened.extend((control_fd, evidence_fd, raw_fd, artifacts_fd))
-            if any(
+            control_names = _directory_names(control_fd)
+            expected_control = (_CLAIM_NAME,) if claimed else ()
+            if control_names != expected_control or any(
                 _directory_names(descriptor)
-                for descriptor in (control_fd, evidence_fd, raw_fd, artifacts_fd)
+                for descriptor in (evidence_fd, raw_fd, artifacts_fd)
             ):
                 raise InvocationTerminalError(
                     "fresh terminal directories are not empty"
                 )
+            if claimed:
+                _require_nonce_claim(control_fd, policy)
             identity = os.fstat(root_fd)
             started = {
                 "schema": "scion.generic-invocation-started.v1",
@@ -601,6 +773,7 @@ class InvocationWriter:
             value._raw_fd = raw_fd
             value._artifacts_fd = artifacts_fd
             value._policy = policy
+            value._lineage = None
             value._pending = None
             value._rows = []
             opened.clear()
@@ -619,6 +792,13 @@ class InvocationWriter:
         self, job_ordinal: int, observation: ClosedSpawnObservation
     ) -> ObservationCommit:
         self._require_open()
+        if (
+            self._policy.nonce_claim_sha256 is not None
+            and type(self._lineage) is not InvocationLineage
+        ):
+            raise InvocationTerminalError(
+                "claim-bound invocation lacks durable lineage"
+            )
         if type(observation) is not ClosedSpawnObservation:
             raise TypeError("observation must be exact ClosedSpawnObservation")
         expected = len(self._rows)
@@ -632,14 +812,45 @@ class InvocationWriter:
         digest, size = _publish_no_replace(
             self._evidence_fd, _ordinal_name(job_ordinal, "json"), data
         )
-        fact = ObservationCommit(
-            job_ordinal=job_ordinal,
-            observation_sha256=observation.observation_sha256,
-            evidence_sha256=digest,
-            evidence_size_bytes=size,
+        fact = _register_cleanup_authority(
+            ObservationCommit(
+                job_ordinal=job_ordinal,
+                observation_sha256=(observation.observation_sha256),
+                evidence_sha256=digest,
+                evidence_size_bytes=size,
+            )
         )
+        assert type(fact) is ObservationCommit
         self._pending = fact
         return fact
+
+    def bind_invocation_lineage(
+        self,
+        lineage: InvocationLineage,
+    ) -> InvocationLineage:
+        self._require_open()
+        if type(lineage) is not InvocationLineage:
+            raise TypeError("lineage must be exact InvocationLineage")
+        if self._lineage is not None or self._pending is not None or self._rows:
+            raise InvocationTerminalError(
+                "invocation lineage is not the first post-start fact"
+            )
+        _require_control_inventory(
+            self._control_fd,
+            _control_inventory(self._policy),
+        )
+        value = {
+            "schema": "scion.generic-invocation-lineage.v1",
+            "policy_sha256": self._policy.policy_sha256,
+            "lineage": _systemd_mapping(lineage),
+        }
+        _publish_no_replace(
+            self._control_fd,
+            "invocation_lineage.v1.json",
+            _canonical_json(value),
+        )
+        self._lineage = lineage
+        return lineage
 
     def commit_opaque_row(
         self,
@@ -659,13 +870,16 @@ class InvocationWriter:
         row_digest, row_size = _publish_no_replace(
             self._raw_fd, _ordinal_name(job_ordinal, "opaque"), raw
         )
-        fact = OpaqueRowCommit(
-            job_ordinal=job_ordinal,
-            observation_sha256=pending.observation_sha256,
-            evidence_sha256=pending.evidence_sha256,
-            row_sha256=row_digest,
-            row_size_bytes=row_size,
+        fact = _register_cleanup_authority(
+            OpaqueRowCommit(
+                job_ordinal=job_ordinal,
+                observation_sha256=pending.observation_sha256,
+                evidence_sha256=pending.evidence_sha256,
+                row_sha256=row_digest,
+                row_size_bytes=row_size,
+            )
         )
+        assert type(fact) is OpaqueRowCommit
         self._rows.append(fact)
         self._pending = None
         return fact
@@ -676,9 +890,7 @@ class InvocationWriter:
             raise InvocationTerminalError(
                 "RAW_COMPLETE requires the exact complete row prefix"
             )
-        _require_control_inventory(
-            self._control_fd, frozenset({"invocation_started.v1.json"})
-        )
+        _require_control_inventory(self._control_fd, _execution_inventory(self._policy))
         identities = [row.to_mapping() for row in self._rows]
         aggregate = _domain_digest(
             "scion.generic-ordered-row-identities.v1", identities
@@ -710,9 +922,12 @@ class InvocationWriter:
         self._require_open()
         if type(reason_code) is not str or _REASON_RE.fullmatch(reason_code) is None:
             raise InvocationTerminalError("reason_code is not canonical")
-        _require_control_inventory(
-            self._control_fd, frozenset({"invocation_started.v1.json"})
-        )
+        actual_control = frozenset(_directory_names(self._control_fd))
+        allowed = {_control_inventory(self._policy)}
+        if self._policy.nonce_claim_sha256 is not None:
+            allowed.add(_execution_inventory(self._policy))
+        if actual_control not in allowed:
+            raise InvocationTerminalError("terminal control inventory differs")
         evidence_count = len(self._rows) + (1 if self._pending is not None else 0)
         value = {
             "schema": "scion.generic-invocation-incomplete.v1",
@@ -727,13 +942,16 @@ class InvocationWriter:
         digest, _size = _publish_no_replace(
             self._control_fd, "incomplete.v1.json", _canonical_json(value)
         )
-        fact = IncompleteFact(
-            policy_sha256=self._policy.policy_sha256,
-            reason_code=reason_code,
-            evidence_count=evidence_count,
-            row_count=len(self._rows),
-            incomplete_sha256=digest,
+        fact = _register_cleanup_authority(
+            IncompleteFact(
+                policy_sha256=self._policy.policy_sha256,
+                reason_code=reason_code,
+                evidence_count=evidence_count,
+                row_count=len(self._rows),
+                incomplete_sha256=digest,
+            )
         )
+        assert type(fact) is IncompleteFact
         self._close_descriptors()
         return fact
 
@@ -799,6 +1017,8 @@ def _close_many(descriptors: Sequence[int]) -> None:
 def _require_started(
     root_fd: int, control_fd: int, policy: TerminalPolicy
 ) -> tuple[dict[str, object], bytes]:
+    if policy.nonce_claim_sha256 is not None:
+        _require_nonce_claim(control_fd, policy)
     started, raw = _load_canonical_mapping(control_fd, "invocation_started.v1.json")
     _require_exact_keys(
         started,
@@ -1054,6 +1274,50 @@ def _decode_systemd_fact(
         ) from exc
 
 
+def _bound_invocation_lineage(
+    control_fd: int,
+    policy: TerminalPolicy,
+) -> InvocationLineage:
+    value, _raw = _load_canonical_mapping(
+        control_fd,
+        "invocation_lineage.v1.json",
+    )
+    _require_exact_keys(
+        value,
+        frozenset({"schema", "policy_sha256", "lineage"}),
+        fact="invocation-lineage",
+    )
+    lineage = _decode_systemd_fact(
+        value.get("lineage"),
+        InvocationLineage,
+    )
+    if (
+        value.get("schema") != "scion.generic-invocation-lineage.v1"
+        or value.get("policy_sha256") != policy.policy_sha256
+    ):
+        raise InvocationTerminalError("invocation-lineage fact differs from policy")
+    return lineage
+
+
+def load_invocation_lineage(
+    root: Path,
+    policy: TerminalPolicy,
+) -> InvocationLineage:
+    """Read the durable pre-job invocation lineage without mutation."""
+
+    if type(policy) is not TerminalPolicy:
+        raise TypeError("policy must be exact TerminalPolicy")
+    descriptors = _open_terminal_directories(root)
+    root_fd, control_fd, _evidence_fd, _raw_fd, _artifacts_fd = descriptors
+    try:
+        _require_started(root_fd, control_fd, policy)
+        if "invocation_lineage.v1.json" not in _directory_names(control_fd):
+            raise InvocationTerminalError("durable invocation lineage is absent")
+        return _bound_invocation_lineage(control_fd, policy)
+    finally:
+        _close_many(descriptors)
+
+
 def _require_drained_success(
     lineage: InvocationLineage,
     stop_post: StopPostEnvironment,
@@ -1091,11 +1355,18 @@ def seal_unit_drained(
         _require_started(root_fd, control_fd, policy)
         _require_control_inventory(
             control_fd,
-            frozenset({"invocation_started.v1.json", "raw_complete.v1.json"}),
+            _execution_inventory(policy, "raw_complete.v1.json"),
         )
         raw_fact, _raw_value, _raw_bytes = _raw_complete(
             control_fd, evidence_fd, raw_fd, policy
         )
+        if (
+            policy.nonce_claim_sha256 is not None
+            and _bound_invocation_lineage(control_fd, policy) != lineage
+        ):
+            raise InvocationTerminalError(
+                "UNIT_DRAINED lineage differs from durable invocation lineage"
+            )
         _require_drained_success(lineage, stop_post, topology)
         value = {
             "schema": "scion.generic-unit-drained.v1",
@@ -1177,12 +1448,10 @@ def observe_unit_final(
         _require_started(root_fd, control_fd, policy)
         _require_control_inventory(
             control_fd,
-            frozenset(
-                {
-                    "invocation_started.v1.json",
-                    "raw_complete.v1.json",
-                    "unit_drained.v1.json",
-                }
+            _execution_inventory(
+                policy,
+                "raw_complete.v1.json",
+                "unit_drained.v1.json",
             ),
         )
         raw_fact, _raw_value, _raw_bytes = _raw_complete(
@@ -1275,13 +1544,11 @@ def accept_invocation(
         _require_started(root_fd, control_fd, policy)
         _require_control_inventory(
             control_fd,
-            frozenset(
-                {
-                    "invocation_started.v1.json",
-                    "raw_complete.v1.json",
-                    "unit_drained.v1.json",
-                    "unit_final.v1.json",
-                }
+            _execution_inventory(
+                policy,
+                "raw_complete.v1.json",
+                "unit_drained.v1.json",
+                "unit_final.v1.json",
             ),
         )
         raw_fact, _raw_value, _raw_bytes = _raw_complete(
@@ -1414,14 +1681,12 @@ def publish_opaque_artifact_bundle(
         _require_started(root_fd, control_fd, policy)
         _require_control_inventory(
             control_fd,
-            frozenset(
-                {
-                    "invocation_started.v1.json",
-                    "raw_complete.v1.json",
-                    "unit_drained.v1.json",
-                    "unit_final.v1.json",
-                    "complete.v1.json",
-                }
+            _execution_inventory(
+                policy,
+                "raw_complete.v1.json",
+                "unit_drained.v1.json",
+                "unit_final.v1.json",
+                "complete.v1.json",
             ),
         )
         raw_fact, _raw_value, _raw_bytes = _raw_complete(
@@ -1597,22 +1862,78 @@ def inspect_terminal(root: Path, policy: TerminalPolicy) -> TerminalInspection:
             return TerminalInspection("UNKNOWN_INTEGRITY_HOLD", 0, 0)
         if not control_names:
             state = (
-                "PREPARED"
+                (
+                    "PREPARED_UNCLAIMED"
+                    if policy.nonce_claim_sha256 is not None
+                    else "PREPARED"
+                )
                 if not evidence_names and not row_names and not artifact_names
                 else "UNKNOWN_INTEGRITY_HOLD"
             )
             return TerminalInspection(state, evidence_count, row_count)
         control_set = frozenset(control_names)
-        started = frozenset({"invocation_started.v1.json"})
+        started = _control_inventory(policy)
+        if "invocation_started.v1.json" not in control_set:
+            if (
+                policy.nonce_claim_sha256 is not None
+                and control_set == frozenset({_CLAIM_NAME})
+                and not evidence_names
+                and not row_names
+                and not artifact_names
+            ):
+                try:
+                    _require_nonce_claim(control_fd, policy)
+                except (InvocationTerminalError, OSError):
+                    return TerminalInspection(
+                        "UNKNOWN_INTEGRITY_HOLD",
+                        evidence_count,
+                        row_count,
+                    )
+                return TerminalInspection(
+                    "CLAIMED_PRESTART",
+                    evidence_count,
+                    row_count,
+                )
+            return TerminalInspection(
+                "UNKNOWN_INTEGRITY_HOLD",
+                evidence_count,
+                row_count,
+            )
         try:
             _require_started(root_fd, control_fd, policy)
             if "incomplete.v1.json" in control_set:
-                if control_set != started | {"incomplete.v1.json"} or artifact_names:
+                allowed_incomplete = {started | {"incomplete.v1.json"}}
+                if policy.nonce_claim_sha256 is not None:
+                    allowed_incomplete.add(
+                        _execution_inventory(policy) | {"incomplete.v1.json"}
+                    )
+                if control_set not in allowed_incomplete or artifact_names:
                     raise InvocationTerminalError(
                         "INCOMPLETE control inventory differs"
                     )
                 _incomplete(control_fd, evidence_fd, raw_fd, policy)
                 return TerminalInspection("INCOMPLETE", evidence_count, row_count)
+            if (
+                policy.nonce_claim_sha256 is not None
+                and "invocation_lineage.v1.json" not in control_set
+            ):
+                if (
+                    control_set != started
+                    or evidence_names
+                    or row_names
+                    or artifact_names
+                ):
+                    raise InvocationTerminalError(
+                        "pre-lineage control inventory differs"
+                    )
+                return TerminalInspection(
+                    "STARTED_AWAITING_LINEAGE",
+                    evidence_count,
+                    row_count,
+                )
+            if policy.nonce_claim_sha256 is not None:
+                _bound_invocation_lineage(control_fd, policy)
+                started = _execution_inventory(policy)
             if "raw_complete.v1.json" not in control_set:
                 if (
                     control_set != started
@@ -1722,7 +2043,9 @@ __all__ = [
     "UnitFinalFact",
     "accept_invocation",
     "inspect_terminal",
+    "load_invocation_lineage",
     "observe_unit_final",
+    "prepare_terminal_root",
     "publish_opaque_artifact_bundle",
     "seal_unit_drained",
 ]
