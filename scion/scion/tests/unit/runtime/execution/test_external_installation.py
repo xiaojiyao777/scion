@@ -221,12 +221,14 @@ def _canonical(value: object) -> bytes:
 
 def _phase_prefix(
     length: int,
+    *,
+    launch_id: str = LAUNCH,
 ) -> tuple[tuple[RootPhaseIntentReceipt, ...], tuple[RootPhaseReceipt, ...]]:
     intents: list[RootPhaseIntentReceipt] = []
     receipts: list[RootPhaseReceipt] = []
     for index, phase in enumerate(INSTALL_PHASES[:length]):
         intent = RootPhaseIntentReceipt.create(
-            launch_id=LAUNCH,
+            launch_id=launch_id,
             phase=phase,
             predecessor_sha256=(
                 () if index == 0 else (receipts[index - 1].raw_sha256,)
@@ -941,23 +943,22 @@ def test_selection_and_installed_acceptance_are_closed_canonical_records() -> No
         installation_sha256="5" * 64,
         phase_intents=intents,
         phase_receipts=phases,
-        subordinate_receipt_sha256={
-            "root_selection": selection.raw_sha256,
-            "sealed_store": "1" * 64,
-            "environment_content": "2" * 64,
-            "environment_relocation": "3" * 64,
-            "projection": "4" * 64,
-            "units": "5" * 64,
-            "loaded_manager": "6" * 64,
-            "dry_root": "7" * 64,
-            "prestart_absence": "8" * 64,
-        },
+        problem_state_schema="scion.test-problem-state.v1",
+        problem_state_sha256=phases[-1].effect_sha256,
     )
 
     assert SelectionReceipt.from_bytes(selection.raw) == selection
     assert selection.source_candidate_identity == source_candidate
     assert InstalledAcceptance.from_bytes(accepted.raw) == accepted
-    assert json.loads(accepted.raw)["formal_jobs_started"] == 0
+    accepted_value = json.loads(accepted.raw)
+    assert accepted_value["schema"] == "scion.external-installed-acceptance.v4"
+    assert accepted_value["formal_jobs_started"] == 0
+    assert accepted.phase_effect_sha256 == tuple(
+        (receipt.phase.value, receipt.effect_sha256) for receipt in phases
+    )
+    assert accepted_value["phase_effect_sha256"] == dict(accepted.phase_effect_sha256)
+    assert accepted.problem_state_schema == "scion.test-problem-state.v1"
+    assert accepted.problem_state_sha256 == phases[-1].effect_sha256
     with pytest.raises(TypeError, match="parsed from exact bytes"):
         SelectionReceipt()
     with pytest.raises(TypeError, match="parsed from exact bytes"):
@@ -969,6 +970,159 @@ def test_selection_and_installed_acceptance_are_closed_canonical_records() -> No
         InstalledAcceptance.from_bytes(_canonical(drift))
 
 
+def test_installed_acceptance_v4_rejects_v3_and_field_inventory_drift() -> None:
+    intents, receipts = _phase_prefix(len(INSTALL_PHASES) - 1)
+    accepted = InstalledAcceptance.create(
+        launch_id=LAUNCH,
+        authority_sha256="4" * 64,
+        installation_sha256="5" * 64,
+        phase_intents=intents,
+        phase_receipts=receipts,
+        problem_state_schema="scion.test-problem-state.v1",
+        problem_state_sha256=receipts[-1].effect_sha256,
+    )
+    value = json.loads(accepted.raw)
+
+    legacy_schema = dict(value)
+    legacy_schema["schema"] = "scion.external-installed-acceptance.v3"
+    with pytest.raises(CanonicalReceiptError, match="state differs"):
+        InstalledAcceptance.from_bytes(_canonical(legacy_schema))
+
+    old_subordinate = dict(value)
+    old_subordinate.pop("phase_effect_sha256")
+    old_subordinate.pop("problem_state_schema")
+    old_subordinate.pop("problem_state_sha256")
+    old_subordinate["subordinate_receipt_sha256"] = {
+        "root_selection": "1" * 64,
+    }
+    with pytest.raises(CanonicalReceiptError, match="fields differ"):
+        InstalledAcceptance.from_bytes(_canonical(old_subordinate))
+
+    extra = dict(value)
+    extra["unexpected"] = "6" * 64
+    with pytest.raises(CanonicalReceiptError, match="fields differ"):
+        InstalledAcceptance.from_bytes(_canonical(extra))
+
+    missing = dict(value)
+    missing.pop("problem_state_schema")
+    with pytest.raises(CanonicalReceiptError, match="fields differ"):
+        InstalledAcceptance.from_bytes(_canonical(missing))
+
+    for mutate in ("missing", "extra"):
+        effect_key_drift = json.loads(accepted.raw)
+        effects = effect_key_drift["phase_effect_sha256"]
+        if mutate == "missing":
+            effects.pop(INSTALL_PHASES[0].value)
+        else:
+            effects[INSTALL_PHASES[-1].value] = "7" * 64
+        with pytest.raises(
+            CanonicalReceiptError,
+            match="phase effects fields differ",
+        ):
+            InstalledAcceptance.from_bytes(_canonical(effect_key_drift))
+
+
+def test_installed_acceptance_v4_rejects_prefix_and_problem_state_drift() -> None:
+    intents, receipts = _phase_prefix(len(INSTALL_PHASES) - 1)
+    with pytest.raises(
+        ExternalInstallationError,
+        match="exact pre-acceptance phase DAG",
+    ):
+        InstalledAcceptance.create(
+            launch_id=LAUNCH,
+            authority_sha256="4" * 64,
+            installation_sha256="5" * 64,
+            phase_intents=intents[:-1],
+            phase_receipts=receipts[:-1],
+            problem_state_schema="scion.test-problem-state.v1",
+            problem_state_sha256=receipts[-2].effect_sha256,
+        )
+
+    other_intents, other_receipts = _phase_prefix(
+        len(INSTALL_PHASES) - 1,
+        launch_id="f" * 64,
+    )
+    with pytest.raises(
+        ExternalInstallationError,
+        match="exact pre-acceptance phase DAG",
+    ):
+        InstalledAcceptance.create(
+            launch_id=LAUNCH,
+            authority_sha256="4" * 64,
+            installation_sha256="5" * 64,
+            phase_intents=other_intents,
+            phase_receipts=other_receipts,
+            problem_state_schema="scion.test-problem-state.v1",
+            problem_state_sha256=other_receipts[-1].effect_sha256,
+        )
+
+    with pytest.raises(ExternalInstallationError, match="problem state differs"):
+        InstalledAcceptance.create(
+            launch_id=LAUNCH,
+            authority_sha256="4" * 64,
+            installation_sha256="5" * 64,
+            phase_intents=intents,
+            phase_receipts=receipts,
+            problem_state_schema="scion.test-problem-state.v1",
+            problem_state_sha256="0" * 64,
+        )
+    with pytest.raises(ExternalInstallationError, match="exceeds 256 bytes"):
+        InstalledAcceptance.create(
+            launch_id=LAUNCH,
+            authority_sha256="4" * 64,
+            installation_sha256="5" * 64,
+            phase_intents=intents,
+            phase_receipts=receipts,
+            problem_state_schema="s" * 257,
+            problem_state_sha256=receipts[-1].effect_sha256,
+        )
+
+
+def test_installed_acceptance_v4_rejects_stored_effect_swap_or_mismatch() -> None:
+    prefix_intents, prefix_receipts = _phase_prefix(len(INSTALL_PHASES) - 1)
+    accepted = InstalledAcceptance.create(
+        launch_id=LAUNCH,
+        authority_sha256="4" * 64,
+        installation_sha256="5" * 64,
+        phase_intents=prefix_intents,
+        phase_receipts=prefix_receipts,
+        problem_state_schema="scion.test-problem-state.v1",
+        problem_state_sha256=prefix_receipts[-1].effect_sha256,
+    )
+    final_intent = RootPhaseIntentReceipt.create(
+        launch_id=LAUNCH,
+        phase=INSTALL_PHASES[-1],
+        predecessor_sha256=(prefix_receipts[-1].raw_sha256,),
+        effect_authority_sha256=accepted.raw_sha256,
+    )
+    final_receipt = RootPhaseReceipt.create(
+        intent=final_intent,
+        effect_sha256=accepted.raw_sha256,
+    )
+    full_intents = (*prefix_intents, final_intent)
+    full_receipts = (*prefix_receipts, final_receipt)
+
+    swapped = json.loads(accepted.raw)
+    effects = swapped["phase_effect_sha256"]
+    first = INSTALL_PHASES[0].value
+    second = INSTALL_PHASES[1].value
+    effects[first], effects[second] = effects[second], effects[first]
+    swapped_acceptance = InstalledAcceptance.from_bytes(_canonical(swapped))
+    with pytest.raises(ReceiptDagError, match="acceptance phase DAG differs"):
+        swapped_acceptance.verify_phase_receipts(full_intents, full_receipts)
+
+    mismatched = json.loads(accepted.raw)
+    mismatched["phase_effect_sha256"][first] = "f" * 64
+    mismatched_acceptance = InstalledAcceptance.from_bytes(_canonical(mismatched))
+    with pytest.raises(ReceiptDagError, match="acceptance phase DAG differs"):
+        mismatched_acceptance.verify_phase_receipts(full_intents, full_receipts)
+
+    wrong_problem_state = json.loads(accepted.raw)
+    wrong_problem_state["problem_state_sha256"] = "e" * 64
+    with pytest.raises(CanonicalReceiptError, match="problem state differs"):
+        InstalledAcceptance.from_bytes(_canonical(wrong_problem_state))
+
+
 def test_installation_acceptance_closes_without_a_final_phase_hash_cycle() -> None:
     prefix_intents, prefix_receipts = _phase_prefix(len(INSTALL_PHASES) - 1)
     accepted = InstalledAcceptance.create(
@@ -977,22 +1131,13 @@ def test_installation_acceptance_closes_without_a_final_phase_hash_cycle() -> No
         installation_sha256="5" * 64,
         phase_intents=prefix_intents,
         phase_receipts=prefix_receipts,
-        subordinate_receipt_sha256={
-            "root_selection": "1" * 64,
-            "sealed_store": "2" * 64,
-            "environment_content": "3" * 64,
-            "environment_relocation": "4" * 64,
-            "projection": "5" * 64,
-            "units": "6" * 64,
-            "loaded_manager": "7" * 64,
-            "dry_root": "8" * 64,
-            "prestart_absence": "9" * 64,
-        },
+        problem_state_schema="scion.test-problem-state.v1",
+        problem_state_sha256=prefix_receipts[-1].effect_sha256,
     )
     writer = NoReplaceReceiptSet()
 
     def publish_acceptance() -> None:
-        writer.write_no_replace("INSTALLATION_ACCEPTED.v3.json", accepted.raw)
+        writer.write_no_replace("INSTALLATION_ACCEPTED.v4.json", accepted.raw)
 
     final_intent, final_receipt = apply_root_phase(
         launch_id=LAUNCH,
@@ -1002,14 +1147,14 @@ def test_installation_acceptance_closes_without_a_final_phase_hash_cycle() -> No
         prior_receipts=prefix_receipts,
         writer=writer,
         apply_effect=publish_acceptance,
-        reopen_effect=lambda: writer.read("INSTALLATION_ACCEPTED.v3.json"),
+        reopen_effect=lambda: writer.read("INSTALLATION_ACCEPTED.v4.json"),
     )
     full_intents = (*prefix_intents, final_intent)
     full_receipts = (*prefix_receipts, final_receipt)
 
     assert writer.write_order == (
         "08-installation-accepted.intent.v1.json",
-        "INSTALLATION_ACCEPTED.v3.json",
+        "INSTALLATION_ACCEPTED.v4.json",
         "08-installation-accepted.commit.v2.json",
     )
     assert final_intent.effect_authority_sha256 == accepted.raw_sha256
@@ -1044,6 +1189,15 @@ def test_installation_acceptance_closes_without_a_final_phase_hash_cycle() -> No
         accepted.verify_phase_receipts(
             full_intents,
             (*prefix_receipts, wrong_effect_receipt),
+        )
+
+    wrong_commit_value = json.loads(final_receipt.raw)
+    wrong_commit_value["effect_authority_sha256"] = "c" * 64
+    wrong_authority_commit = RootPhaseReceipt.from_bytes(_canonical(wrong_commit_value))
+    with pytest.raises(ReceiptDagError, match="does not bind its intent"):
+        accepted.verify_phase_receipts(
+            full_intents,
+            (*prefix_receipts, wrong_authority_commit),
         )
 
 
@@ -1985,17 +2139,8 @@ def _start_bundle() -> tuple[
         installation_sha256=INSTALLATION,
         phase_intents=prefix_intents,
         phase_receipts=prefix_phases,
-        subordinate_receipt_sha256={
-            "root_selection": "1" * 64,
-            "sealed_store": "2" * 64,
-            "environment_content": "3" * 64,
-            "environment_relocation": "4" * 64,
-            "projection": "5" * 64,
-            "units": "6" * 64,
-            "loaded_manager": "7" * 64,
-            "dry_root": "8" * 64,
-            "prestart_absence": "a" * 64,
-        },
+        problem_state_schema="scion.test-problem-state.v1",
+        problem_state_sha256=prefix_phases[-1].effect_sha256,
     )
     final_intent = RootPhaseIntentReceipt.create(
         launch_id=LAUNCH,

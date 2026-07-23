@@ -1335,7 +1335,9 @@ class InstalledAcceptance:
     installation_sha256: str
     phase_intent_sha256: tuple[str, ...]
     phase_receipt_sha256: tuple[str, ...]
-    subordinate_receipt_sha256: tuple[tuple[str, str], ...]
+    phase_effect_sha256: tuple[tuple[str, str], ...]
+    problem_state_schema: str
+    problem_state_sha256: str
     raw: bytes
     raw_sha256: str
 
@@ -1356,7 +1358,8 @@ class InstalledAcceptance:
         installation_sha256: str,
         phase_intents: tuple[RootPhaseIntentReceipt, ...],
         phase_receipts: tuple[RootPhaseReceipt, ...],
-        subordinate_receipt_sha256: Mapping[str, str],
+        problem_state_schema: str,
+        problem_state_sha256: str,
     ) -> "InstalledAcceptance":
         ordered_intents, ordered = validate_root_transaction(
             phase_intents,
@@ -1379,36 +1382,22 @@ class InstalledAcceptance:
             )
         intents = tuple(intent.raw_sha256 for intent in ordered_intents)
         phases = tuple(receipt.raw_sha256 for receipt in ordered)
-        required_subordinates = frozenset(
-            {
-                "root_selection",
-                "sealed_store",
-                "environment_content",
-                "environment_relocation",
-                "projection",
-                "units",
-                "loaded_manager",
-                "dry_root",
-                "prestart_absence",
-            }
+        effects = {receipt.phase.value: receipt.effect_sha256 for receipt in ordered}
+        schema = _bounded_text(
+            problem_state_schema,
+            field="problem_state_schema",
+            maximum=256,
         )
-        if (
-            not isinstance(subordinate_receipt_sha256, Mapping)
-            or frozenset(subordinate_receipt_sha256) != required_subordinates
-            or any(type(name) is not str for name in subordinate_receipt_sha256)
-        ):
+        problem_state = _sha256(
+            problem_state_sha256,
+            field="problem_state_sha256",
+        )
+        if ordered[-1].effect_sha256 != problem_state:
             raise ExternalInstallationError(
-                "installed acceptance subordinate inventory differs"
+                "installed acceptance problem state differs from final prefix effect"
             )
-        subordinates = {
-            name: _sha256(
-                subordinate_receipt_sha256[name],
-                field=f"subordinate_receipt_sha256.{name}",
-            )
-            for name in sorted(required_subordinates)
-        }
         value = {
-            "schema": "scion.external-installed-acceptance.v3",
+            "schema": "scion.external-installed-acceptance.v4",
             "state": "INSTALLATION_ACCEPTED_NOT_STARTED",
             "formal_jobs_started": 0,
             "launch_id": normalized_launch_id,
@@ -1422,7 +1411,9 @@ class InstalledAcceptance:
             ),
             "phase_intent_sha256": list(intents),
             "phase_receipt_sha256": list(phases),
-            "subordinate_receipt_sha256": subordinates,
+            "phase_effect_sha256": effects,
+            "problem_state_schema": schema,
+            "problem_state_sha256": problem_state,
         }
         return cls.from_bytes(_canonical_json(value))
 
@@ -1440,13 +1431,15 @@ class InstalledAcceptance:
                     "installation_sha256",
                     "phase_intent_sha256",
                     "phase_receipt_sha256",
-                    "subordinate_receipt_sha256",
+                    "phase_effect_sha256",
+                    "problem_state_schema",
+                    "problem_state_sha256",
                 }
             ),
             label="installed acceptance",
         )
         if (
-            value["schema"] != "scion.external-installed-acceptance.v3"
+            value["schema"] != "scion.external-installed-acceptance.v4"
             or value["state"] != "INSTALLATION_ACCEPTED_NOT_STARTED"
             or type(value["formal_jobs_started"]) is not int
             or value["formal_jobs_started"] != 0
@@ -1482,40 +1475,44 @@ class InstalledAcceptance:
             or len(set(phases)) != len(phases)
         ):
             raise CanonicalReceiptError("installed acceptance phase inventory differs")
-        raw_subordinates = _exact_fields(
-            value["subordinate_receipt_sha256"],
-            frozenset(
-                {
-                    "root_selection",
-                    "sealed_store",
-                    "environment_content",
-                    "environment_relocation",
-                    "projection",
-                    "units",
-                    "loaded_manager",
-                    "dry_root",
-                    "prestart_absence",
-                }
-            ),
-            label="installed acceptance subordinates",
+        effect_keys = frozenset(phase.value for phase in INSTALL_PHASES[:-1])
+        raw_effects = _exact_fields(
+            value["phase_effect_sha256"],
+            effect_keys,
+            label="installed acceptance phase effects",
         )
-        subordinates = tuple(
+        effects = tuple(
             (
-                name,
+                phase.value,
                 _sha256(
-                    raw_subordinates[name],
-                    field=f"subordinate_receipt_sha256.{name}",
+                    raw_effects[phase.value],
+                    field=f"phase_effect_sha256.{phase.value}",
                 ),
             )
-            for name in sorted(raw_subordinates)
+            for phase in INSTALL_PHASES[:-1]
         )
+        problem_state_schema = _bounded_text(
+            value["problem_state_schema"],
+            field="problem_state_schema",
+            maximum=256,
+        )
+        problem_state_sha256 = _sha256(
+            value["problem_state_sha256"],
+            field="problem_state_sha256",
+        )
+        if effects[-1][1] != problem_state_sha256:
+            raise CanonicalReceiptError(
+                "installed acceptance problem state differs from final prefix effect"
+            )
         object.__setattr__(instance, "phase_intent_sha256", intents)
         object.__setattr__(instance, "phase_receipt_sha256", phases)
         object.__setattr__(
             instance,
-            "subordinate_receipt_sha256",
-            subordinates,
+            "phase_effect_sha256",
+            effects,
         )
+        object.__setattr__(instance, "problem_state_schema", problem_state_schema)
+        object.__setattr__(instance, "problem_state_sha256", problem_state_sha256)
         object.__setattr__(instance, "raw", raw)
         object.__setattr__(instance, "raw_sha256", hashlib.sha256(raw).hexdigest())
         return instance
@@ -1548,6 +1545,12 @@ class InstalledAcceptance:
                 receipt.raw_sha256 for receipt in ordered[: len(acceptance_prefix)]
             )
             != self.phase_receipt_sha256
+            or tuple(
+                (receipt.phase.value, receipt.effect_sha256)
+                for receipt in ordered[: len(acceptance_prefix)]
+            )
+            != self.phase_effect_sha256
+            or ordered[-2].effect_sha256 != self.problem_state_sha256
             or ordered_intents[-1].effect_authority_sha256 != self.raw_sha256
             or ordered[-1].effect_authority_sha256 != self.raw_sha256
             or ordered[-1].effect_sha256 != self.raw_sha256
