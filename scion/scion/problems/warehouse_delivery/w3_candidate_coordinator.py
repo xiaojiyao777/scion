@@ -386,6 +386,8 @@ def _create_git_archive(
         completed = subprocess.run(
             (
                 "git",
+                "-c",
+                "tar.umask=0022",
                 "archive",
                 "--format=tar",
                 launch_commit,

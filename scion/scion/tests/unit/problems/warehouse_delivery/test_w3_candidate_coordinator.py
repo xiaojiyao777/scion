@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import hashlib
 import subprocess
+import tarfile
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import scion.problems.warehouse_delivery.w3_candidate_coordinator as coordinator
+import scion.problems.warehouse_delivery.w3_wheel as w3_wheel
 from scion.problems.warehouse_delivery.w3_candidate_coordinator import (
     WarehouseW3CandidateCoordinatorError,
     prepare_w3_candidate,
@@ -15,6 +17,7 @@ from scion.problems.warehouse_delivery.w3_candidate_coordinator import (
 from scion.problems.warehouse_delivery.w3_candidate_gate import (
     derive_namespace_probe_evidence_sha256,
 )
+from scion.problems.warehouse_delivery.w3_installation import GitSourceAcquirer
 
 COMMIT = "1" * 40
 
@@ -171,6 +174,76 @@ def test_launch_inventory_maps_one_real_nested_git_project(
 
     assert paths == (
         "pyproject.toml",
+        "scion/tools/scion_w3_install.py",
+        "scion/tools/scion_w3_tool.py",
+    )
+    branch = (
+        subprocess.check_output(
+            ("git", "symbolic-ref", "--short", "HEAD"),
+            cwd=repository,
+        )
+        .decode("ascii")
+        .strip()
+    )
+    subprocess.run(
+        ("git", "remote", "add", "origin", str(repository)),
+        cwd=repository,
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        (
+            "git",
+            "fetch",
+            "-q",
+            "origin",
+            f"refs/heads/{branch}:refs/remotes/origin/{branch}",
+        ),
+        cwd=repository,
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    source = GitSourceAcquirer(project).acquire(
+        launch_commit=launch_commit,
+        remote_name="origin",
+        remote_ref=f"refs/heads/{branch}",
+        logical_paths=paths,
+    )
+    archive = coordinator._create_git_archive(
+        project,
+        launch_commit=launch_commit,
+        logical_paths=paths,
+        destination=tmp_path / "source.tar",
+        source=source,
+    )
+
+    with tarfile.open(archive.path, mode="r:") as stream:
+        members = {item.name: item for item in stream.getmembers()}
+    assert tuple(members) == (
+        "pyproject.toml",
+        "scion",
+        "scion/tools",
+        "scion/tools/scion_w3_install.py",
+        "scion/tools/scion_w3_tool.py",
+    )
+    assert all(
+        item.mode == (0o755 if item.isdir() else 0o644) for item in members.values()
+    )
+    source_date_epoch = int(
+        subprocess.check_output(
+            ("git", "show", "-s", "--format=%ct", launch_commit),
+            cwd=repository,
+        ).decode("ascii")
+    )
+    inventory, _aggregate, _identity = w3_wheel._archive_inventory(
+        archive,
+        source_date_epoch=source_date_epoch,
+    )
+    assert tuple(item.path for item in inventory) == (
+        ".",
+        "pyproject.toml",
+        "scion",
+        "scion/tools",
         "scion/tools/scion_w3_install.py",
         "scion/tools/scion_w3_tool.py",
     )
