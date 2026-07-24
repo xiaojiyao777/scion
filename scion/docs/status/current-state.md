@@ -87,16 +87,34 @@ execution suite passes `1815 / 1 skipped`. Independent fixed-hash review
 reports `P0=0 / P1=0 / P2=0`. Exact evidence is in
 `v04-w3-candidate-artifact-source-acceptance-20260723.md`.
 
-No `/var/lib/scion`, unit fragment, mount, manager mutation, nonce or formal
-job was created. This is source acceptance, not a production candidate,
-installation or installed acceptance. The active next slice is the concrete
-root composition/partial-hold owner: separate manager reload from loaded-pair
-acquisition, add typed store/authority/projection/reload/installed-state
-receipts, complete live pre-start reacquisition and expose the four fixed root
-CLI surfaces. Root apply/start remains forbidden until that source and one
-actual candidate independently close at P0=0/P1=0. The current shell has no
-passwordless sudo, so the later accepted root phase will require an
-interactive root shell rather than code invoking sudo.
+The concrete root-composition and one-shot-launch source candidate is pushed
+at `5d3efd5e`. It implements K0-K8 crash-reopen ownership; root store,
+authority, projection and unit publication; distinct reload and pinned
+loaded-pair acquisition; deep installed replay; fresh pre-start revalidation;
+durable one-shot `StartUnit(unit, "fail")` spend/outcomes; typed pre-claim
+status `70-73`; and problem-owned terminal inspection/acceptance. The exact
+eight-command administrative surface is now real rather than placeholder:
+`prepare-candidate`, `verify-candidate`, `apply-root`, `verify-installed`,
+`record-start-authorization`, `start`, `inspect-terminal`, and
+`accept-terminal`. EUID checks precede action and no code path invokes sudo.
+
+Final-byte Python 3.12 gates pass exact `245` Warehouse W3 problem/tool tests.
+The full execution directory collects `1903` and closes as `1902 passed /
+1 skipped`, including exact H11 `456` and systemd formal `862 / 1 skipped`.
+Python 3.13 focused candidate/terminal/CLI tests pass `28`; compileall, Black,
+source scans, and diff-check pass. The two local CPython native extensions are
+untracked test products and were not committed. Exact evidence is in
+`v04-w3-root-composition-launch-source-candidate-20260723.md`.
+
+No `/var/lib/scion`, production candidate, root selection, unit fragment,
+mount, manager mutation, nonce or formal job exists. This is a pushed source
+candidate, not fixed-source acceptance: two independent exact-source reviews
+must still report P0=0/P1=0. Only then may the non-root
+`prepare-candidate`/`verify-candidate` pair run against the accepted dry root
+and native record. Root apply/start remains forbidden until the actual
+candidate also closes P0=0/P1=0. The current shell has no passwordless sudo;
+the later accepted root phase therefore requires an interactive root shell,
+never code invoking sudo.
 
 Fresh eight-round R11c is terminal and read-only at
 `/home/clawd/research/scion-experiments/v04-cvrp-direct-longitudinal-r11c-8r-gpt56sol-8r-gpt56sol-20260716T132422Z-claw`

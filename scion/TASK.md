@@ -145,15 +145,34 @@ an unambiguous nine-phase root transaction. Main dual-version gates pass exact
 Independent fixed-hash review reports `P0=0 / P1=0 / P2=0`. Exact evidence is
 in `v04-w3-candidate-artifact-source-acceptance-20260723.md`.
 
-This is source acceptance, not a production artifact or installation. No root
-installation, mount, manager mutation, nonce or formal job occurred. Next is
-the concrete root composition slice: split manager reload from loaded-instance
-acquisition, add typed store/authority/projection/reload/installed-state
-receipts, complete live pre-start reacquisition and expose the four fixed root
-CLI surfaces. Root application remains forbidden until that source and one
-actual candidate close at P0=0/P1=0. The user's prospective `StartUnit`
-authorization is usable only for the unique exact candidate later selected in
-the root-owned selection ledger after every fixed gate passes.
+The root-composition and one-shot-launch source candidate is now pushed at
+`5d3efd5e`. It closes the concrete K0-K8 transaction, external store and
+authority publication, FD-bound projections, split reload/loaded-instance
+acquisition, full installed replay, fresh pre-start reacquisition, durable
+one-shot start spend/outcomes, typed pre-claim status `70-73`, and
+problem-owned terminal replay/acceptance. The exact administrative surface is
+`prepare-candidate / verify-candidate / apply-root / verify-installed /
+record-start-authorization / start / inspect-terminal / accept-terminal`;
+the first two reject root, the five mutating installed commands require root,
+and inspection remains non-root read-only apart from exact unit reference
+pinning. Final-byte Python 3.12 gates pass exact `245` problem/tool tests and
+the full `1903` execution tests as `1902 passed / 1 skipped`, including H11
+`456` and official systemd `862 / 1 skipped`; Python 3.13 focused gates pass
+`28`. Compileall, Black, source scans and `git diff --check` pass. Exact
+evidence is in
+`v04-w3-root-composition-launch-source-candidate-20260723.md`.
+
+This is a pushed source candidate, not yet fixed-source acceptance or a
+production candidate. Two independent reviews of the exact source closure
+must still close at P0=0/P1=0. No `/var/lib/scion`, unit fragment, mount,
+manager mutation, root selection, nonce or formal job occurred. After review
+closure, the next non-root step is one exact `prepare-candidate` followed by
+independent `verify-candidate` against the accepted dry root and native
+record. Root apply remains forbidden until that candidate also closes
+P0=0/P1=0; later root operations require an interactive root shell and never
+code-invoked `sudo`. The prospective `StartUnit` authorization remains usable
+only for the unique exact candidate selected no-replace by the root ledger
+after every installed gate passes.
 
 Warehouse's effective-research process is resolved, but retained improvement is
 not proven. The direct loop generated substantive operators, adapted direction
