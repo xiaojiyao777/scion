@@ -55,6 +55,7 @@ W3_CLOSE_TEMPLATE_LOGICAL_PATH = (
     "scion/problems/warehouse_delivery/systemd/scion-w3-close@.service"
 )
 W3_NATIVE_RECORD_LOGICAL_PATH = "external/native-acceptance-record.v1.json"
+W3_PROJECT_GIT_TREE_PREFIX = "scion/"
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_OID_RE = re.compile(r"[0-9a-f]{40}\Z")
@@ -198,6 +199,19 @@ def _relative_path(value: object, *, field: str) -> str:
     ):
         raise WarehouseW3InstallationError(f"{field} is not a canonical relative path")
     return value
+
+
+def w3_project_git_tree_path(logical_path: object) -> str:
+    """Map one project-relative source path to the fixed repository subtree."""
+
+    relative = _relative_path(logical_path, field="logical_path")
+    return f"{W3_PROJECT_GIT_TREE_PREFIX}{relative}"
+
+
+def w3_project_git_pathspec(logical_path: object) -> str:
+    """Return one top-anchored literal pathspec for the fixed project subtree."""
+
+    return f":(top,literal){w3_project_git_tree_path(logical_path)}"
 
 
 def _absolute_path(value: object, *, field: str) -> str:
@@ -1535,6 +1549,7 @@ class GitSourceAcquirer:
 
         facts: list[GitBlobFact] = []
         for logical_path in paths:
+            git_tree_path = w3_project_git_tree_path(logical_path)
             entry_raw = self._run(
                 (
                     "git",
@@ -1543,7 +1558,7 @@ class GitSourceAcquirer:
                     "--full-tree",
                     commit,
                     "--",
-                    logical_path,
+                    w3_project_git_pathspec(logical_path),
                 )
             )
             if not entry_raw.endswith(b"\0") or entry_raw.count(b"\0") != 1:
@@ -1563,7 +1578,7 @@ class GitSourceAcquirer:
                     f"Git tree entry is malformed: {logical_path}"
                 ) from exc
             if (
-                actual_path != logical_path
+                actual_path != git_tree_path
                 or kind != "blob"
                 or mode
                 not in {

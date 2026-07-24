@@ -165,6 +165,7 @@ def _source_fixture(
     }
     for path, raw in blobs.items():
         oid = _blob_oid(raw)
+        git_tree_path = installation_module.w3_project_git_tree_path(path)
         responses[
             (
                 "git",
@@ -173,10 +174,10 @@ def _source_fixture(
                 "--full-tree",
                 COMMIT,
                 "--",
-                path,
+                installation_module.w3_project_git_pathspec(path),
             )
         ] = (
-            f"100644 blob {oid}\t{path}".encode() + b"\0"
+            f"100644 blob {oid}\t{git_tree_path}".encode() + b"\0"
         )
         responses[("git", "cat-file", "-s", oid)] = f"{len(raw)}\n".encode()
         responses[("git", "cat-file", "blob", oid)] = (

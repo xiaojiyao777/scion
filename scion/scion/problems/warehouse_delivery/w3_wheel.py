@@ -27,6 +27,8 @@ from typing import BinaryIO, Mapping, Protocol
 from scion.problems.warehouse_delivery.w3_installation import (
     GitSourceReceipt,
     GitSourceSnapshot,
+    w3_project_git_pathspec,
+    w3_project_git_tree_path,
 )
 
 ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256 = (
@@ -542,6 +544,7 @@ def _acquire_local_git_authority(
         )
         blobs: dict[str, bytes] = {}
         for item in source_receipt.blobs:
+            git_tree_path = w3_project_git_tree_path(item.logical_path)
             entry_raw = read(
                 (
                     "git",
@@ -550,7 +553,7 @@ def _acquire_local_git_authority(
                     "--full-tree",
                     commit,
                     "--",
-                    item.logical_path,
+                    w3_project_git_pathspec(item.logical_path),
                 ),
                 maximum=16_384,
             )
@@ -570,7 +573,7 @@ def _acquire_local_git_authority(
                     f"local Git tree entry is malformed: {item.logical_path}"
                 ) from exc
             if (
-                actual_path != item.logical_path
+                actual_path != git_tree_path
                 or mode != item.mode
                 or kind != "blob"
                 or oid != item.blob_oid

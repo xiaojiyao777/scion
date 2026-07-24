@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -21,9 +22,11 @@ COMMIT = "1" * 40
 class _GitInventory:
     def __init__(self, raw: bytes) -> None:
         self.raw = raw
+        self.calls: list[tuple[str, ...]] = []
 
     def run(self, argv, *, cwd):
-        del argv, cwd
+        del cwd
+        self.calls.append(argv)
         return self.raw
 
 
@@ -37,17 +40,21 @@ def test_launch_inventory_is_sorted_regular_and_excludes_tests(
 ) -> None:
     raw = b"".join(
         (
-            _entry("100644", "scion/tools/scion_w3_tool.py"),
-            _entry("100644", "scion/tests/test_hidden.py"),
-            _entry("100644", "pyproject.toml"),
-            _entry("100644", "scion/tools/scion_w3_install.py"),
-            _entry("100644", "scion/problems/warehouse_delivery/module.py"),
+            _entry("100644", "scion/scion/tools/scion_w3_tool.py"),
+            _entry("100644", "scion/scion/tests/test_hidden.py"),
+            _entry("100644", "scion/pyproject.toml"),
+            _entry("100644", "scion/scion/tools/scion_w3_install.py"),
+            _entry(
+                "100644",
+                "scion/scion/problems/warehouse_delivery/module.py",
+            ),
         )
     )
+    inventory = _GitInventory(raw)
     monkeypatch.setattr(
         coordinator,
         "SubprocessGitRunner",
-        lambda: _GitInventory(raw),
+        lambda: inventory,
     )
 
     paths = coordinator._tracked_launch_paths(tmp_path, COMMIT)
@@ -55,6 +62,18 @@ def test_launch_inventory_is_sorted_regular_and_excludes_tests(
     assert paths == tuple(sorted(paths))
     assert "scion/tests/test_hidden.py" not in paths
     assert "scion/tools/scion_w3_install.py" in paths
+    assert inventory.calls == [
+        (
+            "git",
+            "ls-tree",
+            "-rz",
+            "--full-tree",
+            COMMIT,
+            "--",
+            ":(top,literal)scion/pyproject.toml",
+            ":(top,literal)scion/scion",
+        )
+    ]
 
 
 def test_launch_inventory_rejects_symlink_blob(
@@ -63,10 +82,10 @@ def test_launch_inventory_rejects_symlink_blob(
 ) -> None:
     raw = b"".join(
         (
-            _entry("100644", "pyproject.toml"),
-            _entry("100644", "scion/tools/scion_w3_tool.py"),
-            _entry("100644", "scion/tools/scion_w3_install.py"),
-            _entry("120000", "scion/link"),
+            _entry("100644", "scion/pyproject.toml"),
+            _entry("100644", "scion/scion/tools/scion_w3_tool.py"),
+            _entry("100644", "scion/scion/tools/scion_w3_install.py"),
+            _entry("120000", "scion/scion/link"),
         )
     )
     monkeypatch.setattr(
@@ -80,6 +99,81 @@ def test_launch_inventory_rejects_symlink_blob(
         match="non-regular",
     ):
         coordinator._tracked_launch_paths(tmp_path, COMMIT)
+
+
+def test_launch_inventory_rejects_path_outside_fixed_project_subtree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        coordinator,
+        "SubprocessGitRunner",
+        lambda: _GitInventory(_entry("100644", "pyproject.toml")),
+    )
+
+    with pytest.raises(
+        WarehouseW3CandidateCoordinatorError,
+        match="escapes the fixed project subtree",
+    ):
+        coordinator._tracked_launch_paths(tmp_path, COMMIT)
+
+
+def test_launch_inventory_maps_one_real_nested_git_project(
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    project = repository / "scion"
+    package = project / "scion" / "tools"
+    tests = project / "scion" / "tests"
+    package.mkdir(parents=True)
+    tests.mkdir()
+    (project / "pyproject.toml").write_text("[project]\nname='fixture'\n")
+    (package / "scion_w3_tool.py").write_text('"""tool"""\n')
+    (package / "scion_w3_install.py").write_text('"""installer"""\n')
+    (tests / "test_hidden.py").write_text('"""excluded"""\n')
+    subprocess.run(
+        ("git", "init", "-q"),
+        cwd=repository,
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        ("git", "add", "--", "scion"),
+        cwd=repository,
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    subprocess.run(
+        (
+            "git",
+            "-c",
+            "user.name=Scion Test",
+            "-c",
+            "user.email=scion.test@example.invalid",
+            "commit",
+            "-qm",
+            "fixture",
+        ),
+        cwd=repository,
+        check=True,
+        stdin=subprocess.DEVNULL,
+    )
+    launch_commit = (
+        subprocess.check_output(
+            ("git", "rev-parse", "HEAD"),
+            cwd=repository,
+        )
+        .decode("ascii")
+        .strip()
+    )
+
+    paths = coordinator._tracked_launch_paths(project, launch_commit)
+
+    assert paths == (
+        "pyproject.toml",
+        "scion/tools/scion_w3_install.py",
+        "scion/tools/scion_w3_tool.py",
+    )
 
 
 def test_namespace_evidence_digest_binds_all_four_inputs() -> None:

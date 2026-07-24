@@ -313,7 +313,8 @@ class FakeLocalGitReader:
             for item in archive.source_receipt.blobs
         }
         self.entries = {
-            item.logical_path: item for item in archive.source_receipt.blobs
+            w3_wheel.w3_project_git_pathspec(item.logical_path): item
+            for item in archive.source_receipt.blobs
         }
 
     def read(self, argv: tuple[str, ...], *, repo_root: Path) -> bytes:
@@ -330,7 +331,8 @@ class FakeLocalGitReader:
         if argv[1:4] == ("ls-tree", "-z", "--full-tree"):
             item = self.entries[argv[-1]]
             return (
-                f"{item.mode} blob {item.blob_oid}\t" f"{item.logical_path}\0"
+                f"{item.mode} blob {item.blob_oid}\t"
+                f"{w3_wheel.w3_project_git_tree_path(item.logical_path)}\0"
             ).encode()
         if argv[1:3] == ("cat-file", "blob"):
             return self.blobs[argv[3]]

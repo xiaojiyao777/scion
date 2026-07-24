@@ -51,6 +51,7 @@ from .w3_environment_receipts import (
 from .w3_installation import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
     W3_NATIVE_RECORD_LOGICAL_PATH,
+    W3_PROJECT_GIT_TREE_PREFIX,
     CandidateSelectionIntent,
     GitSourceAcquirer,
     GitSourceSnapshot,
@@ -60,6 +61,7 @@ from .w3_installation import (
     derive_candidate_paths,
     prepare_candidate,
     verify_candidate,
+    w3_project_git_pathspec,
 )
 from .w3_source_acceptance import (
     RootFixedSourceAcceptanceAuthority,
@@ -256,8 +258,8 @@ def _tracked_launch_paths(repo_root: Path, launch_commit: str) -> tuple[str, ...
             "--full-tree",
             launch_commit,
             "--",
-            "pyproject.toml",
-            "scion",
+            w3_project_git_pathspec("pyproject.toml"),
+            w3_project_git_pathspec("scion"),
         ),
         cwd=repo_root,
     )
@@ -272,11 +274,16 @@ def _tracked_launch_paths(repo_root: Path, launch_commit: str) -> tuple[str, ...
             mode_raw, kind_raw, _oid_raw = header.split(b" ", 2)
             mode = mode_raw.decode("ascii", "strict")
             kind = kind_raw.decode("ascii", "strict")
-            path = path_raw.decode("utf-8", "strict")
+            git_tree_path = path_raw.decode("utf-8", "strict")
         except (ValueError, UnicodeError) as exc:
             raise WarehouseW3CandidateCoordinatorError(
                 "launch Git inventory entry is malformed"
             ) from exc
+        if not git_tree_path.startswith(W3_PROJECT_GIT_TREE_PREFIX):
+            raise WarehouseW3CandidateCoordinatorError(
+                "launch Git inventory escapes the fixed project subtree"
+            )
+        path = git_tree_path.removeprefix(W3_PROJECT_GIT_TREE_PREFIX)
         pure = PurePosixPath(path)
         if (
             kind != "blob"
