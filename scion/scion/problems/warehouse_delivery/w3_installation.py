@@ -3138,6 +3138,32 @@ def _verify_sealed_store(
         )
 
 
+def reverify_sealed_store(
+    sealed_root: Path,
+    receipt: SealedStoreReceipt,
+) -> None:
+    """Reopen one published sealed store and verify its complete inventory."""
+
+    if not isinstance(sealed_root, Path):
+        raise TypeError("sealed_root must be Path")
+    if type(receipt) is not SealedStoreReceipt:
+        raise TypeError("receipt must be exact SealedStoreReceipt")
+    root = Path(_absolute_path(str(sealed_root), field="sealed_root"))
+    descriptor, opened = _opened_directory(root, label="sealed root")
+    try:
+        if (
+            stat.S_IMODE(opened.st_mode) != _DIRECTORY_MODE
+            or opened.st_uid != 0
+            or opened.st_gid != 0
+        ):
+            raise WarehouseW3InstallationError(
+                "published sealed root ownership or mode differs"
+            )
+        _verify_sealed_store(descriptor, receipt)
+    finally:
+        os.close(descriptor)
+
+
 def _candidate_content_inventory(root_fd: int) -> tuple[CandidateContentEntry, ...]:
     facts = {item.path: item for item in _scan_tree_at(root_fd)}
     entries: list[CandidateContentEntry] = []
@@ -3831,5 +3857,6 @@ __all__ = [
     "derive_launch_id",
     "derive_selection_key",
     "prepare_candidate",
+    "reverify_sealed_store",
     "verify_candidate",
 ]

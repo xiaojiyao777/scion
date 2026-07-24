@@ -17,6 +17,9 @@ import stat
 from typing import Mapping
 
 from scion.problems.warehouse_delivery.w3_candidate_gate import CandidateGateReceipt
+from scion.problems.warehouse_delivery.w3_candidate_ingress import (
+    CandidateGateIngressFact,
+)
 from scion.problems.warehouse_delivery.w3_environment_receipts import (
     EnvironmentRelocationReceipt,
     LiveEnvironmentRehashFact,
@@ -33,6 +36,9 @@ from scion.problems.warehouse_delivery.w3_prestart_facts import (
     WarehouseW3PreStartAbsenceReceipt,
     WarehouseW3RuntimeAccountReceipt,
 )
+from scion.problems.warehouse_delivery.w3_root_staging import (
+    WarehouseW3RootStagingVerification,
+)
 from scion.runtime.execution.external_installation import (
     INSTALL_PHASES,
     LoadedManagerReceipt,
@@ -41,6 +47,7 @@ from scion.runtime.execution.external_installation import (
     PublishedDirectoryReceipt,
     PublishedRegularFileReceipt,
     PublishedTreeReceipt,
+    RootPhase,
     RootPhaseIntentReceipt,
     RootPhaseReceipt,
     SelectionReceipt,
@@ -62,7 +69,7 @@ _BOOT_ID_RE = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-" r"[0-9a-f]{4}-[0-9a-f]{12}\Z"
 )
 
-_STAGED_SCHEMA = "scion.w3-root-staged-candidate.v1"
+_STAGED_SCHEMA = "scion.w3-root-staged-candidate.v2"
 _STORES_SCHEMA = "scion.w3-root-stores-published.v1"
 _AUTHORITY_SCHEMA = "scion.w3-root-authority-published.v1"
 _PROJECTION_SCHEMA = "scion.w3-root-projection.v1"
@@ -203,6 +210,52 @@ def _reopen_import(
     reopened = ImmutableTreeImportReceipt.from_bytes(receipt.raw)
     if reopened != receipt:
         raise WarehouseW3RootInstallationError("tree import object differs")
+    return reopened
+
+
+def _reopen_candidate_ingress(
+    receipt: CandidateGateIngressFact,
+) -> CandidateGateIngressFact:
+    if type(receipt) is not CandidateGateIngressFact:
+        raise TypeError("candidate_gate_ingress must be exact CandidateGateIngressFact")
+    reopened = CandidateGateIngressFact.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError("candidate gate ingress object differs")
+    return reopened
+
+
+def _reopen_root_staging_verification(
+    receipt: WarehouseW3RootStagingVerification,
+    *,
+    candidate_gate: CandidateGateReceipt,
+    candidate_gate_ingress: CandidateGateIngressFact,
+    tree_import: ImmutableTreeImportReceipt,
+) -> WarehouseW3RootStagingVerification:
+    if type(receipt) is not WarehouseW3RootStagingVerification:
+        raise TypeError(
+            "root_staging_verification must be exact "
+            "WarehouseW3RootStagingVerification"
+        )
+    reopened = WarehouseW3RootStagingVerification.from_bytes(
+        receipt.raw,
+        candidate_gate=candidate_gate,
+        candidate_gate_closure=receipt.candidate_gate_closure,
+        candidate_gate_ingress=candidate_gate_ingress,
+        tree_import=tree_import,
+        candidate_receipt=receipt.candidate_receipt,
+        candidate_verification=receipt.candidate_verification,
+        source_receipt=receipt.source_receipt,
+        sealed_store_receipt=receipt.sealed_store_receipt,
+        environment_receipt=receipt.environment_receipt,
+        authority=receipt.authority,
+        installation=receipt.installation,
+        selection_intent=receipt.selection_intent,
+        selection_commit=receipt.selection_commit,
+    )
+    if reopened != receipt:
+        raise WarehouseW3RootInstallationError(
+            "root staging verification object differs"
+        )
     return reopened
 
 
@@ -404,7 +457,15 @@ class WarehouseW3StagedCandidateReceipt:
     authority_sha256: str
     installation_sha256: str
     candidate_gate_sha256: str
+    candidate_gate_closure_sha256: str
+    candidate_gate_ingress_fact_sha256: str
     tree_import_sha256: str
+    root_staging_verification_sha256: str
+    candidate_verification_sha256: str
+    candidate_content_aggregate_sha256: str
+    candidate_gate_ingress: CandidateGateIngressFact
+    tree_import: ImmutableTreeImportReceipt
+    root_staging_verification: WarehouseW3RootStagingVerification
     candidate_root: str
     source_identity: FileIdentity
     staging_leaf: str
@@ -428,21 +489,34 @@ class WarehouseW3StagedCandidateReceipt:
         cls,
         *,
         candidate_gate: CandidateGateReceipt,
+        candidate_gate_ingress: CandidateGateIngressFact,
         tree_import: ImmutableTreeImportReceipt,
+        root_staging_verification: WarehouseW3RootStagingVerification,
     ) -> "WarehouseW3StagedCandidateReceipt":
         candidate = _reopen_candidate(candidate_gate)
+        ingress = _reopen_candidate_ingress(candidate_gate_ingress)
         imported = _reopen_import(tree_import)
-        expected = cls._expected(candidate, imported)
+        verification = _reopen_root_staging_verification(
+            root_staging_verification,
+            candidate_gate=candidate,
+            candidate_gate_ingress=ingress,
+            tree_import=imported,
+        )
+        expected = cls._expected(candidate, ingress, imported, verification)
         return cls.from_bytes(
             _canonical_json(expected),
             candidate_gate=candidate,
+            candidate_gate_ingress=ingress,
             tree_import=imported,
+            root_staging_verification=verification,
         )
 
     @staticmethod
     def _expected(
         candidate: CandidateGateReceipt,
+        ingress: CandidateGateIngressFact,
         imported: ImmutableTreeImportReceipt,
+        verification: WarehouseW3RootStagingVerification,
     ) -> dict[str, object]:
         source = imported.source_root
         candidate_identity = candidate.candidate_root_identity
@@ -468,20 +542,42 @@ class WarehouseW3StagedCandidateReceipt:
             or stat.S_IMODE(imported.staging_root.mode) != 0o555
             or imported.staging_root.uid != 0
             or imported.staging_root.gid != 0
+            or ingress.selection_key != candidate.selection_key
+            or ingress.candidate_root != candidate.candidate_root
+            or ingress.candidate_identity != imported.source_root
+            or ingress.gate_receipt_sha256 != candidate.raw_sha256
+            or ingress.closure_sha256 != verification.candidate_gate_closure_sha256
+            or verification.selection_key != candidate.selection_key
+            or verification.launch_id != candidate.launch_id
+            or verification.candidate_gate_sha256 != candidate.raw_sha256
+            or verification.candidate_gate_ingress_fact_sha256 != ingress.raw_sha256
+            or verification.tree_import_sha256 != imported.raw_sha256
+            or verification.imported_tree_aggregate_sha256 != imported.tree_sha256
         ):
             raise WarehouseW3RootInstallationError(
                 "staged candidate source or destination identity differs"
             )
         return {
             "schema": _STAGED_SCHEMA,
-            "state": "ROOT_STAGING_IMPORTED",
+            "state": "ROOT_STAGING_REVERIFIED",
             "plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
             "selection_key": candidate.selection_key,
             "launch_id": candidate.launch_id,
             "authority_sha256": candidate.authority_sha256,
             "installation_sha256": candidate.installation_sha256,
             "candidate_gate_sha256": candidate.raw_sha256,
+            "candidate_gate_closure_sha256": (
+                verification.candidate_gate_closure_sha256
+            ),
+            "candidate_gate_ingress_fact_sha256": ingress.raw_sha256,
             "tree_import_sha256": imported.raw_sha256,
+            "root_staging_verification_sha256": verification.raw_sha256,
+            "candidate_verification_sha256": (
+                verification.candidate_verification_sha256
+            ),
+            "candidate_content_aggregate_sha256": (
+                verification.candidate_content_aggregate_sha256
+            ),
             "candidate_root": candidate.candidate_root,
             "source_identity": _identity_mapping(source),
             "staging_leaf": imported.staging_leaf,
@@ -498,11 +594,20 @@ class WarehouseW3StagedCandidateReceipt:
         raw: bytes,
         *,
         candidate_gate: CandidateGateReceipt,
+        candidate_gate_ingress: CandidateGateIngressFact,
         tree_import: ImmutableTreeImportReceipt,
+        root_staging_verification: WarehouseW3RootStagingVerification,
     ) -> "WarehouseW3StagedCandidateReceipt":
         candidate = _reopen_candidate(candidate_gate)
+        ingress = _reopen_candidate_ingress(candidate_gate_ingress)
         imported = _reopen_import(tree_import)
-        expected = cls._expected(candidate, imported)
+        verification = _reopen_root_staging_verification(
+            root_staging_verification,
+            candidate_gate=candidate,
+            candidate_gate_ingress=ingress,
+            tree_import=imported,
+        )
+        expected = cls._expected(candidate, ingress, imported, verification)
         _require_exact_value(
             raw,
             expected=expected,
@@ -516,7 +621,24 @@ class WarehouseW3StagedCandidateReceipt:
             ("authority_sha256", candidate.authority_sha256),
             ("installation_sha256", candidate.installation_sha256),
             ("candidate_gate_sha256", candidate.raw_sha256),
+            (
+                "candidate_gate_closure_sha256",
+                verification.candidate_gate_closure_sha256,
+            ),
+            ("candidate_gate_ingress_fact_sha256", ingress.raw_sha256),
             ("tree_import_sha256", imported.raw_sha256),
+            ("root_staging_verification_sha256", verification.raw_sha256),
+            (
+                "candidate_verification_sha256",
+                verification.candidate_verification_sha256,
+            ),
+            (
+                "candidate_content_aggregate_sha256",
+                verification.candidate_content_aggregate_sha256,
+            ),
+            ("candidate_gate_ingress", ingress),
+            ("tree_import", imported),
+            ("root_staging_verification", verification),
             ("candidate_root", candidate.candidate_root),
             ("source_identity", imported.source_root),
             ("staging_leaf", imported.staging_leaf),
@@ -1498,6 +1620,263 @@ class WarehouseW3ProjectionReceipt:
         return instance
 
 
+def _effect_authority_predecessor(
+    receipt: RootPhaseReceipt,
+    *,
+    phase: RootPhase,
+) -> RootPhaseReceipt:
+    if type(receipt) is not RootPhaseReceipt:
+        raise TypeError("predecessor must be exact RootPhaseReceipt")
+    reopened = RootPhaseReceipt.from_bytes(receipt.raw)
+    if reopened != receipt or receipt.phase is not phase:
+        raise WarehouseW3RootInstallationError("effect-authority predecessor differs")
+    return reopened
+
+
+def _effect_authority_sha256(value: dict[str, object]) -> str:
+    return hashlib.sha256(_canonical_json(value)).hexdigest()
+
+
+def derive_w3_stores_effect_authority_sha256(
+    *,
+    predecessor: RootPhaseReceipt,
+    candidate_gate: CandidateGateReceipt,
+    authority: AcceptedLaunchAuthority,
+    installation: InstallationRecord,
+    sealed_store: SealedStoreReceipt,
+    environment_content: WarehouseEnvironmentContentReceipt,
+) -> str:
+    """Derive K2 authority only from facts fixed before store publication."""
+
+    prior = _effect_authority_predecessor(
+        predecessor,
+        phase=RootPhase.CANDIDATE_SELECTED,
+    )
+    candidate = _reopen_candidate(candidate_gate)
+    authority_value, installation_value = _reopen_authority_pair(
+        authority,
+        installation,
+    )
+    sealed = _reopen_sealed(sealed_store)
+    content = _reopen_semantic(environment_content)
+    _require_candidate_installation_binding(
+        candidate,
+        authority_value,
+        installation_value,
+    )
+    if (
+        prior.launch_id != installation_value.launch_id
+        or authority_value.sealed_store_aggregate_sha256 != sealed.aggregate_sha256
+        or authority_value.environment_receipt_sha256 != content.generic_receipt_sha256
+    ):
+        raise WarehouseW3RootInstallationError("K2 authority inputs differ")
+    return _effect_authority_sha256(
+        {
+            "schema": "scion.w3-stores-effect-authority.v1",
+            "phase": RootPhase.STORES_PUBLISHED.value,
+            "launch_id": installation_value.launch_id,
+            "predecessor_phase_receipt_sha256": prior.raw_sha256,
+            "candidate_gate_sha256": candidate.raw_sha256,
+            "authority_sha256": authority_value.authority_sha256,
+            "installation_sha256": installation_value.installation_sha256,
+            "sealed_store_receipt_sha256": sealed.raw_sha256,
+            "environment_content_sha256": content.raw_sha256,
+            "sealed_path": installation_value.sealed_root,
+            "environment_path": installation_value.environment_root,
+        }
+    )
+
+
+def derive_w3_authority_effect_authority_sha256(
+    *,
+    predecessor: RootPhaseReceipt,
+    stores_published: WarehouseW3StoresPublishedReceipt,
+    authority: AcceptedLaunchAuthority,
+    installation: InstallationRecord,
+    runtime_account: WarehouseW3RuntimeAccountReceipt,
+) -> str:
+    """Derive K3 authority for regular records and the nonce claims root."""
+
+    prior = _effect_authority_predecessor(
+        predecessor,
+        phase=RootPhase.STORES_PUBLISHED,
+    )
+    if type(stores_published) is not WarehouseW3StoresPublishedReceipt:
+        raise TypeError("stores_published must be exact")
+    if type(runtime_account) is not WarehouseW3RuntimeAccountReceipt:
+        raise TypeError("runtime_account must be exact")
+    authority_value, installation_value = _reopen_authority_pair(
+        authority,
+        installation,
+    )
+    if (
+        prior.launch_id != installation_value.launch_id
+        or prior.effect_sha256 != stores_published.raw_sha256
+        or stores_published.launch_id != installation_value.launch_id
+        or stores_published.authority_sha256 != authority_value.authority_sha256
+        or runtime_account.name != "clawd"
+        or runtime_account.uid == 0
+        or runtime_account.gid == 0
+    ):
+        raise WarehouseW3RootInstallationError("K3 authority inputs differ")
+    return _effect_authority_sha256(
+        {
+            "schema": "scion.w3-authority-effect-authority.v1",
+            "phase": RootPhase.AUTHORITY_PUBLISHED.value,
+            "launch_id": installation_value.launch_id,
+            "predecessor_phase_receipt_sha256": prior.raw_sha256,
+            "stores_published_sha256": stores_published.raw_sha256,
+            "authority_sha256": authority_value.authority_sha256,
+            "installation_sha256": installation_value.installation_sha256,
+            "authority_path": installation_value.authority_path,
+            "installation_path": _expected_installation_path(installation_value),
+            "nonce_ledger_parent": installation_value.nonce_ledger_parent,
+            "runtime_account_sha256": runtime_account.raw_sha256,
+            "runtime_uid": runtime_account.uid,
+            "runtime_gid": runtime_account.gid,
+        }
+    )
+
+
+def derive_w3_projection_effect_authority_sha256(
+    *,
+    predecessor: RootPhaseReceipt,
+    candidate_gate: CandidateGateReceipt,
+    stores_published: WarehouseW3StoresPublishedReceipt,
+    authority_published: WarehouseW3AuthorityPublishedReceipt,
+    installation: InstallationRecord,
+    namespace_pair: MountNamespacePair,
+    boot_id: str,
+) -> str:
+    """Derive K4 authority before any cloned mount is attached."""
+
+    prior = _effect_authority_predecessor(
+        predecessor,
+        phase=RootPhase.AUTHORITY_PUBLISHED,
+    )
+    candidate = _reopen_candidate(candidate_gate)
+    if type(stores_published) is not WarehouseW3StoresPublishedReceipt:
+        raise TypeError("stores_published must be exact")
+    if type(authority_published) is not WarehouseW3AuthorityPublishedReceipt:
+        raise TypeError("authority_published must be exact")
+    if type(installation) is not InstallationRecord:
+        raise TypeError("installation must be exact")
+    if type(namespace_pair) is not MountNamespacePair:
+        raise TypeError("namespace_pair must be exact")
+    boot = _boot_id(boot_id)
+    if (
+        prior.launch_id != installation.launch_id
+        or prior.effect_sha256 != authority_published.raw_sha256
+        or candidate.launch_id != installation.launch_id
+        or stores_published.launch_id != installation.launch_id
+        or authority_published.launch_id != installation.launch_id
+        or namespace_pair.self_namespace != namespace_pair.pid1_namespace
+    ):
+        raise WarehouseW3RootInstallationError("K4 authority inputs differ")
+    return _effect_authority_sha256(
+        {
+            "schema": "scion.w3-projection-effect-authority.v1",
+            "phase": RootPhase.PROJECTION_MOUNTED.value,
+            "launch_id": installation.launch_id,
+            "predecessor_phase_receipt_sha256": prior.raw_sha256,
+            "candidate_gate_sha256": candidate.raw_sha256,
+            "stores_published_sha256": stores_published.raw_sha256,
+            "authority_published_sha256": authority_published.raw_sha256,
+            "projection_root": installation.projection_root,
+            "projected_run_root": installation.projected_run_root,
+            "projected_sealed_root": installation.projected_sealed_root,
+            "projected_environment_root": installation.projected_environment_root,
+            "projected_nonce_ledger_parent": (
+                installation.projected_nonce_ledger_parent
+            ),
+            "boot_id": boot,
+            "mount_namespace_device": namespace_pair.self_namespace.device,
+            "mount_namespace_inode": namespace_pair.self_namespace.inode,
+        }
+    )
+
+
+def derive_w3_units_effect_authority_sha256(
+    *,
+    predecessor: RootPhaseReceipt,
+    projection: WarehouseW3ProjectionReceipt,
+    authority: AcceptedLaunchAuthority,
+    installation: InstallationRecord,
+) -> str:
+    """Derive K5 authority for the two fixed unit-fragment targets."""
+
+    prior = _effect_authority_predecessor(
+        predecessor,
+        phase=RootPhase.PROJECTION_MOUNTED,
+    )
+    if type(projection) is not WarehouseW3ProjectionReceipt:
+        raise TypeError("projection must be exact")
+    authority_value, installation_value = _reopen_authority_pair(
+        authority,
+        installation,
+    )
+    if (
+        prior.launch_id != installation_value.launch_id
+        or prior.effect_sha256 != projection.raw_sha256
+        or projection.launch_id != installation_value.launch_id
+        or projection.authority_sha256 != authority_value.authority_sha256
+    ):
+        raise WarehouseW3RootInstallationError("K5 authority inputs differ")
+    return _effect_authority_sha256(
+        {
+            "schema": "scion.w3-units-effect-authority.v1",
+            "phase": RootPhase.UNITS_PUBLISHED.value,
+            "launch_id": installation_value.launch_id,
+            "predecessor_phase_receipt_sha256": prior.raw_sha256,
+            "projection_sha256": projection.raw_sha256,
+            "configured_pair_sha256": installation_value.configured_pair_sha256,
+            "run_unit": installation_value.run_unit,
+            "close_unit": installation_value.close_unit,
+            "run_fragment_path": (
+                f"/etc/systemd/system/{installation_value.run_unit.split('@', 1)[0]}"
+                "@.service"
+            ),
+            "close_fragment_path": (
+                f"/etc/systemd/system/{installation_value.close_unit.split('@', 1)[0]}"
+                "@.service"
+            ),
+            "run_template_sha256": authority_value.run_template_sha256,
+            "close_template_sha256": authority_value.close_template_sha256,
+        }
+    )
+
+
+def derive_w3_reload_effect_authority_sha256(
+    *,
+    predecessor: RootPhaseReceipt,
+    unit_publication: UnitPublicationReceipt,
+) -> str:
+    """Derive K6 authority for exactly one manager Reload."""
+
+    prior = _effect_authority_predecessor(
+        predecessor,
+        phase=RootPhase.UNITS_PUBLISHED,
+    )
+    if type(unit_publication) is not UnitPublicationReceipt:
+        raise TypeError("unit_publication must be exact")
+    if (
+        prior.launch_id != unit_publication.launch_id
+        or prior.effect_sha256 != unit_publication.raw_sha256
+    ):
+        raise WarehouseW3RootInstallationError("K6 authority inputs differ")
+    return _effect_authority_sha256(
+        {
+            "schema": "scion.w3-reload-effect-authority.v1",
+            "phase": RootPhase.MANAGER_RELOADED.value,
+            "launch_id": unit_publication.launch_id,
+            "predecessor_phase_receipt_sha256": prior.raw_sha256,
+            "unit_publication_sha256": unit_publication.raw_sha256,
+            "configured_pair_sha256": unit_publication.configured_pair_sha256,
+            "method": "Reload",
+        }
+    )
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class WarehouseW3PreStartEvidence:
     launch_id: str
@@ -1526,7 +1905,7 @@ class WarehouseW3PreStartEvidence:
         installation: InstallationRecord,
         candidate_gate: CandidateGateReceipt,
         staged_candidate: WarehouseW3StagedCandidateReceipt,
-        selection: SelectionReceipt,
+        selection: "WarehouseW3RootSelectionReceipt",
         stores_published: WarehouseW3StoresPublishedReceipt,
         authority_published: WarehouseW3AuthorityPublishedReceipt,
         projection: WarehouseW3ProjectionReceipt,
@@ -1587,7 +1966,7 @@ class WarehouseW3PreStartEvidence:
         installation: InstallationRecord,
         candidate_gate: CandidateGateReceipt,
         staged_candidate: WarehouseW3StagedCandidateReceipt,
-        selection: SelectionReceipt,
+        selection: "WarehouseW3RootSelectionReceipt",
         stores_published: WarehouseW3StoresPublishedReceipt,
         authority_published: WarehouseW3AuthorityPublishedReceipt,
         projection: WarehouseW3ProjectionReceipt,
@@ -1606,11 +1985,35 @@ class WarehouseW3PreStartEvidence:
             installation,
         )
         candidate = _reopen_candidate(candidate_gate)
-        if type(selection) is not SelectionReceipt:
-            raise TypeError("selection must be exact SelectionReceipt")
-        selection_value = SelectionReceipt.from_bytes(selection.raw)
-        if selection_value != selection:
-            raise WarehouseW3RootInstallationError("selection object differs")
+        if type(staged_candidate) is not WarehouseW3StagedCandidateReceipt:
+            raise TypeError(
+                "staged_candidate must be exact WarehouseW3StagedCandidateReceipt"
+            )
+        reopened_staged = WarehouseW3StagedCandidateReceipt.from_bytes(
+            staged_candidate.raw,
+            candidate_gate=candidate,
+            candidate_gate_ingress=staged_candidate.candidate_gate_ingress,
+            tree_import=staged_candidate.tree_import,
+            root_staging_verification=(staged_candidate.root_staging_verification),
+        )
+        if reopened_staged != staged_candidate:
+            raise WarehouseW3RootInstallationError(
+                "staged candidate dependency replay differs"
+            )
+        from scion.problems.warehouse_delivery.w3_root_selection import (
+            WarehouseW3RootSelectionReceipt,
+        )
+
+        if type(selection) is not WarehouseW3RootSelectionReceipt:
+            raise TypeError("selection must be exact WarehouseW3RootSelectionReceipt")
+        root_selection = WarehouseW3RootSelectionReceipt.from_bytes(
+            selection.raw,
+            selection=selection.selection,
+            staged_candidate=reopened_staged,
+        )
+        if root_selection != selection:
+            raise WarehouseW3RootInstallationError("W3 root selection object differs")
+        selection_value = root_selection.selection
         staged_raw = _require_exact_receipt_object(
             staged_candidate,
             expected_type=WarehouseW3StagedCandidateReceipt,
@@ -1625,7 +2028,12 @@ class WarehouseW3PreStartEvidence:
                     "authority_sha256",
                     "installation_sha256",
                     "candidate_gate_sha256",
+                    "candidate_gate_closure_sha256",
+                    "candidate_gate_ingress_fact_sha256",
                     "tree_import_sha256",
+                    "root_staging_verification_sha256",
+                    "candidate_verification_sha256",
+                    "candidate_content_aggregate_sha256",
                     "candidate_root",
                     "source_identity",
                     "staging_leaf",
@@ -1748,11 +2156,10 @@ class WarehouseW3PreStartEvidence:
                     "schema",
                     "manager",
                     "unit_publication_sha256",
-                    "configured_pair_readback_sha256",
                     "configured_pair_sha256",
                 }
             ),
-            schema="scion.manager-reload.v1",
+            schema="scion.manager-reload.v2",
         )
         loaded_raw = _require_exact_receipt_object(
             loaded_manager,
@@ -1915,7 +2322,22 @@ class WarehouseW3PreStartEvidence:
             "authority_sha256": staged_candidate.authority_sha256,
             "installation_sha256": staged_candidate.installation_sha256,
             "candidate_gate_sha256": staged_candidate.candidate_gate_sha256,
+            "candidate_gate_closure_sha256": (
+                staged_candidate.candidate_gate_closure_sha256
+            ),
+            "candidate_gate_ingress_fact_sha256": (
+                staged_candidate.candidate_gate_ingress_fact_sha256
+            ),
             "tree_import_sha256": staged_candidate.tree_import_sha256,
+            "root_staging_verification_sha256": (
+                staged_candidate.root_staging_verification_sha256
+            ),
+            "candidate_verification_sha256": (
+                staged_candidate.candidate_verification_sha256
+            ),
+            "candidate_content_aggregate_sha256": (
+                staged_candidate.candidate_content_aggregate_sha256
+            ),
             "candidate_root": staged_candidate.candidate_root,
             "source_identity": _identity_mapping(staged_candidate.source_identity),
             "staging_leaf": staged_candidate.staging_leaf,
@@ -1979,9 +2401,6 @@ class WarehouseW3PreStartEvidence:
         }
         reload_raw_binding = {
             "unit_publication_sha256": manager_reload.unit_publication_sha256,
-            "configured_pair_readback_sha256": (
-                manager_reload.configured_pair_readback_sha256
-            ),
             "configured_pair_sha256": manager_reload.configured_pair_sha256,
         }
         loaded_raw_binding = {
@@ -2002,7 +2421,7 @@ class WarehouseW3PreStartEvidence:
                 or value.get("reuse") is not False
                 or value.get("state") != expected_state
                 for value, expected_state in (
-                    (staged_raw, "ROOT_STAGING_IMPORTED"),
+                    (staged_raw, "ROOT_STAGING_REVERIFIED"),
                     (stores_raw, "STORES_PUBLISHED"),
                     (authority_raw, "AUTHORITY_PUBLISHED"),
                     (projection_raw, "PROJECTION_MOUNTED"),
@@ -2140,8 +2559,6 @@ class WarehouseW3PreStartEvidence:
             or loaded_manager.run_unit != installation_value.run_unit
             or loaded_manager.close_unit != installation_value.close_unit
             or loaded_manager.unit_publication_sha256 != unit_publication.raw_sha256
-            or loaded_manager.configured_pair_readback_sha256
-            != manager_reload.configured_pair_readback_sha256
             or loaded_manager.configured_pair_sha256 != configured_pair_sha
             or loaded_manager.manager_reload_sha256 != manager_reload.raw_sha256
             or loaded_manager.manager_identity != manager_reload.manager_identity
@@ -2190,7 +2607,7 @@ class WarehouseW3PreStartEvidence:
             )
         effect_producers = (
             staged_candidate,
-            selection_value,
+            root_selection,
             stores_published,
             authority_published,
             projection,
@@ -2208,6 +2625,51 @@ class WarehouseW3PreStartEvidence:
             raise WarehouseW3RootInstallationError(
                 "pre-start committed phase effect differs"
             )
+        expected_effect_authorities = (
+            derive_w3_stores_effect_authority_sha256(
+                predecessor=ordered_receipts[1],
+                candidate_gate=candidate,
+                authority=authority_value,
+                installation=installation_value,
+                sealed_store=(
+                    staged_candidate.root_staging_verification.sealed_store_receipt
+                ),
+                environment_content=(
+                    staged_candidate.root_staging_verification.candidate_gate_closure.semantic_environment
+                ),
+            ),
+            derive_w3_authority_effect_authority_sha256(
+                predecessor=ordered_receipts[2],
+                stores_published=stores_published,
+                authority=authority_value,
+                installation=installation_value,
+                runtime_account=reopened_account,
+            ),
+            derive_w3_projection_effect_authority_sha256(
+                predecessor=ordered_receipts[3],
+                candidate_gate=candidate,
+                stores_published=stores_published,
+                authority_published=authority_published,
+                installation=installation_value,
+                namespace_pair=projection.namespace_pair,
+                boot_id=projection.boot_id,
+            ),
+            derive_w3_units_effect_authority_sha256(
+                predecessor=ordered_receipts[4],
+                projection=projection,
+                authority=authority_value,
+                installation=installation_value,
+            ),
+            derive_w3_reload_effect_authority_sha256(
+                predecessor=ordered_receipts[5],
+                unit_publication=unit_publication,
+            ),
+        )
+        if (
+            tuple(intent.effect_authority_sha256 for intent in ordered_intents[2:7])
+            != expected_effect_authorities
+        ):
+            raise WarehouseW3RootInstallationError("K2-K6 effect authority differs")
         phase_effects = {
             receipt.phase.value: receipt.effect_sha256 for receipt in ordered_receipts
         }
@@ -2245,7 +2707,7 @@ class WarehouseW3PreStartEvidence:
         installation: InstallationRecord,
         candidate_gate: CandidateGateReceipt,
         staged_candidate: WarehouseW3StagedCandidateReceipt,
-        selection: SelectionReceipt,
+        selection: "WarehouseW3RootSelectionReceipt",
         stores_published: WarehouseW3StoresPublishedReceipt,
         authority_published: WarehouseW3AuthorityPublishedReceipt,
         projection: WarehouseW3ProjectionReceipt,
@@ -2329,4 +2791,9 @@ __all__ = [
     "WarehouseW3RootInstallationError",
     "WarehouseW3StagedCandidateReceipt",
     "WarehouseW3StoresPublishedReceipt",
+    "derive_w3_authority_effect_authority_sha256",
+    "derive_w3_projection_effect_authority_sha256",
+    "derive_w3_reload_effect_authority_sha256",
+    "derive_w3_stores_effect_authority_sha256",
+    "derive_w3_units_effect_authority_sha256",
 ]

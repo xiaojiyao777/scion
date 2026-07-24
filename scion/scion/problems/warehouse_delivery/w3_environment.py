@@ -1,8 +1,8 @@
 """Non-root Warehouse W3 candidate-environment preparation.
 
-This module is intentionally not wired into production.  It owns only the
-fixed, offline venv/install/copy/normalization sequence and delegates command
-execution and smoke acquisition to narrow caller-supplied seams.
+This module owns only the fixed offline venv/install/copy/normalization
+sequence.  Its production entrypoint uses fixed command and probe adapters;
+the lower-level builder retains narrow caller-supplied seams for tests.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import io
 import os
 import re
 import stat
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Protocol
@@ -58,6 +59,111 @@ class EnvironmentSmokeProbe(Protocol):
 
     def probe(self, environment_root: Path, *, phase: str) -> None:
         """Verify one exact environment at staging, candidate, or relocation."""
+
+
+class SubprocessEnvironmentCommandRunner:
+    """Final no-shell, no-network runner for the two fixed build commands."""
+
+    __slots__ = ()
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("SubprocessEnvironmentCommandRunner is final")
+
+    def run(self, argv: tuple[str, ...]) -> None:
+        if type(argv) is not tuple or any(
+            type(item) is not str or not item for item in argv
+        ):
+            raise TypeError("environment command argv differs")
+        if len(argv) == 6 and argv[:5] == (
+            RUNTIME_PYTHON,
+            "-m",
+            "venv",
+            "--without-pip",
+            "--copies",
+        ):
+            _absolute_path(Path(argv[5]), field="venv destination")
+        elif len(argv) == 10 and argv[:4] == (
+            RUNTIME_PYTHON,
+            "-m",
+            "pip",
+            "--python",
+        ):
+            environment_python = Path(
+                _absolute_path(Path(argv[4]), field="pip environment Python")
+            )
+            wheel = Path(_absolute_path(Path(argv[9]), field="pip wheel"))
+            if (
+                environment_python.name != "python"
+                or environment_python.parent.name != "bin"
+                or argv[5:9]
+                != (
+                    "install",
+                    "--no-compile",
+                    "--no-deps",
+                    "--no-index",
+                )
+            ):
+                raise WarehouseW3EnvironmentError(
+                    "fixed environment install command differs"
+                )
+        else:
+            raise WarehouseW3EnvironmentError("environment command is not fixed")
+        bwrap = Path("/usr/bin/bwrap")
+        try:
+            metadata = os.lstat(bwrap)
+        except OSError as exc:
+            raise WarehouseW3EnvironmentError(
+                "fixed bubblewrap runner is unavailable"
+            ) from exc
+        if (
+            stat.S_ISLNK(metadata.st_mode)
+            or not stat.S_ISREG(metadata.st_mode)
+            or metadata.st_uid != 0
+            or metadata.st_mode & 0o111 == 0
+        ):
+            raise WarehouseW3EnvironmentError(
+                "fixed bubblewrap runner identity differs"
+            )
+        try:
+            completed = subprocess.run(
+                (
+                    str(bwrap),
+                    "--unshare-net",
+                    "--die-with-parent",
+                    "--bind",
+                    "/",
+                    "/",
+                    "--",
+                    *argv,
+                ),
+                env={
+                    "HOME": "/nonexistent",
+                    "LANG": "C.UTF-8",
+                    "LC_ALL": "C.UTF-8",
+                    "PATH": "/usr/bin:/bin",
+                    "PIP_CONFIG_FILE": "/dev/null",
+                    "PIP_DISABLE_PIP_VERSION_CHECK": "1",
+                    "PIP_NO_INDEX": "1",
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                    "PYTHONNOUSERSITE": "1",
+                    "TMPDIR": "/tmp",
+                    "TZ": "UTC",
+                },
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=False,
+                check=False,
+                timeout=300,
+                umask=0o077,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise WarehouseW3EnvironmentError(
+                "fixed environment command could not run"
+            ) from exc
+        if completed.returncode != 0:
+            raise WarehouseW3EnvironmentError("fixed environment command failed")
 
 
 def _absolute_path(path: Path, *, field: str) -> str:
@@ -690,19 +796,41 @@ class WarehouseEnvironmentBuild:
         raise TypeError("WarehouseEnvironmentBuild is final")
 
 
-def prepare_warehouse_environment(
+@dataclass(frozen=True, slots=True)
+class ProductionWarehouseEnvironmentBuild:
+    """A production-built environment plus its discovered external closure."""
+
+    build: WarehouseEnvironmentBuild
+    external_runtime_paths: tuple[Path, ...]
+
+    def __post_init__(self) -> None:
+        if type(self.build) is not WarehouseEnvironmentBuild:
+            raise TypeError("build must be exact WarehouseEnvironmentBuild")
+        if (
+            type(self.external_runtime_paths) is not tuple
+            or not self.external_runtime_paths
+            or any(not isinstance(path, Path) for path in self.external_runtime_paths)
+        ):
+            raise TypeError(
+                "external_runtime_paths must be one nonempty exact Path tuple"
+            )
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("ProductionWarehouseEnvironmentBuild is final")
+
+
+def _materialize_warehouse_environment(
     environment_root: Path,
     *,
     wheel_path: Path,
     wheel_sha256: str,
     runtime_sources: WarehouseRuntimeSources,
-    external_runtime_paths: tuple[Path, ...],
     candidate_root: Path,
     selection_root: Path,
     runner: EnvironmentCommandRunner,
-    smoke_probe: EnvironmentSmokeProbe,
-) -> WarehouseEnvironmentBuild:
-    """Build and freeze one exact non-root W3 staging environment."""
+) -> tuple[str, tuple[str, ...], tuple[str, ...]]:
+    """Execute the fixed build and return its exact command facts."""
 
     _require_non_root()
     environment_text = _absolute_path(environment_root, field="environment_root")
@@ -724,8 +852,6 @@ def prepare_warehouse_environment(
     )
     if _hash_regular(wheel_path) != expected_wheel_sha256:
         raise WarehouseW3EnvironmentError("wheel SHA-256 differs")
-    if type(external_runtime_paths) is not tuple or not external_runtime_paths:
-        raise TypeError("external_runtime_paths must be one nonempty exact tuple")
     runtime_sources.validate()
     venv_argv = (
         RUNTIME_PYTHON,
@@ -752,6 +878,34 @@ def prepare_warehouse_environment(
     _copy_runtime_sources(environment_root, runtime_sources)
     _purge_generated_paths(environment_root)
     _normalize_modes(environment_root)
+    return expected_wheel_sha256, venv_argv, install_argv
+
+
+def prepare_warehouse_environment(
+    environment_root: Path,
+    *,
+    wheel_path: Path,
+    wheel_sha256: str,
+    runtime_sources: WarehouseRuntimeSources,
+    external_runtime_paths: tuple[Path, ...],
+    candidate_root: Path,
+    selection_root: Path,
+    runner: EnvironmentCommandRunner,
+    smoke_probe: EnvironmentSmokeProbe,
+) -> WarehouseEnvironmentBuild:
+    """Build and freeze one exact non-root W3 staging environment."""
+
+    if type(external_runtime_paths) is not tuple or not external_runtime_paths:
+        raise TypeError("external_runtime_paths must be one nonempty exact tuple")
+    expected_wheel_sha256, venv_argv, install_argv = _materialize_warehouse_environment(
+        environment_root,
+        wheel_path=wheel_path,
+        wheel_sha256=wheel_sha256,
+        runtime_sources=runtime_sources,
+        candidate_root=candidate_root,
+        selection_root=selection_root,
+        runner=runner,
+    )
     try:
         receipt = EnvironmentContentReceipt.create(
             environment_root,
@@ -782,6 +936,115 @@ def prepare_warehouse_environment(
         install_argv=install_argv,
         receipt=receipt,
     )
+
+
+def prepare_production_warehouse_environment(
+    environment_root: Path,
+    *,
+    wheel_path: Path,
+    wheel_sha256: str,
+    runtime_sources: WarehouseRuntimeSources,
+    candidate_root: Path,
+    selection_root: Path,
+    runtime_python: Path,
+) -> ProductionWarehouseEnvironmentBuild:
+    """Build through fixed runners and discover the exact live external closure."""
+
+    if not isinstance(runtime_python, Path):
+        raise TypeError("runtime_python must be Path")
+    if _absolute_path(runtime_python, field="runtime_python") != RUNTIME_PYTHON:
+        raise WarehouseW3EnvironmentError("runtime_python differs from fixed runtime")
+    expected_wheel_sha256, venv_argv, install_argv = _materialize_warehouse_environment(
+        environment_root,
+        wheel_path=wheel_path,
+        wheel_sha256=wheel_sha256,
+        runtime_sources=runtime_sources,
+        candidate_root=candidate_root,
+        selection_root=selection_root,
+        runner=SubprocessEnvironmentCommandRunner(),
+    )
+    from .w3_environment_receipts import SubprocessEnvironmentProbeReader
+
+    reader = SubprocessEnvironmentProbeReader()
+    external_runtime_paths = reader.discover_external_runtime_paths(environment_root)
+    try:
+        receipt = EnvironmentContentReceipt.create(
+            environment_root,
+            external_runtime_paths=external_runtime_paths,
+            candidate_root=candidate_root,
+            selection_root=selection_root,
+        )
+        verify_environment_content(
+            environment_root,
+            receipt,
+            external_runtime_paths=external_runtime_paths,
+            candidate_root=candidate_root,
+            selection_root=selection_root,
+        )
+        reader._observe(environment_root)
+        verify_environment_content(
+            environment_root,
+            receipt,
+            external_runtime_paths=external_runtime_paths,
+            candidate_root=candidate_root,
+            selection_root=selection_root,
+        )
+    except EnvironmentIntegrityError as exc:
+        raise WarehouseW3EnvironmentError(
+            "production environment integrity differs"
+        ) from exc
+    build = WarehouseEnvironmentBuild(
+        environment_root=environment_root,
+        wheel_sha256=expected_wheel_sha256,
+        venv_argv=venv_argv,
+        install_argv=install_argv,
+        receipt=receipt,
+    )
+    return ProductionWarehouseEnvironmentBuild(
+        build=build,
+        external_runtime_paths=external_runtime_paths,
+    )
+
+
+def materialize_simulated_warehouse_environment(
+    source_root: Path,
+    destination_root: Path,
+    receipt: EnvironmentContentReceipt,
+    *,
+    external_runtime_paths: tuple[Path, ...],
+    candidate_root: Path,
+    selection_root: Path,
+) -> None:
+    """No-follow copy one frozen environment to its non-root simulated path."""
+
+    _require_non_root()
+    _absolute_path(source_root, field="source_root")
+    _absolute_path(destination_root, field="destination_root")
+    if os.path.lexists(destination_root):
+        raise WarehouseW3EnvironmentError(
+            "simulated environment destination already exists"
+        )
+    try:
+        verify_environment_content(
+            source_root,
+            receipt,
+            external_runtime_paths=external_runtime_paths,
+            candidate_root=candidate_root,
+            selection_root=selection_root,
+        )
+        _copy_tree(source_root, destination_root)
+        _normalize_modes(destination_root)
+        verify_environment_content(
+            destination_root,
+            receipt,
+            external_runtime_paths=external_runtime_paths,
+            candidate_root=candidate_root,
+            selection_root=selection_root,
+        )
+    except EnvironmentIntegrityError as exc:
+        raise WarehouseW3EnvironmentError(
+            "simulated environment integrity differs"
+        ) from exc
 
 
 def verify_warehouse_environment(
@@ -838,10 +1101,14 @@ def verify_warehouse_environment(
 __all__ = [
     "EnvironmentCommandRunner",
     "EnvironmentSmokeProbe",
+    "ProductionWarehouseEnvironmentBuild",
     "RUNTIME_PYTHON",
+    "SubprocessEnvironmentCommandRunner",
     "WarehouseEnvironmentBuild",
     "WarehouseRuntimeSources",
     "WarehouseW3EnvironmentError",
+    "materialize_simulated_warehouse_environment",
+    "prepare_production_warehouse_environment",
     "prepare_warehouse_environment",
     "verify_warehouse_environment",
 ]

@@ -12,9 +12,27 @@ import json
 import re
 from dataclasses import dataclass
 
+from .w3_candidate_gate import CandidateGateReceipt
+from .w3_environment_receipts import LiveEnvironmentRehashFact
+from .w3_installation import CandidateRootIdentity
+from .w3_installed_replay import (
+    WarehouseW3InstalledReplayError,
+    WarehouseW3InstalledReplayInputs,
+    verify_w3_installed_replay,
+)
+from .w3_start_authorization import ProspectiveStartAuthorizationIntent
 from .w3_prestart_facts import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+    PreStartAbsenceObservation,
     WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA,
+    WarehouseW3DryRootReadinessReceipt,
+    WarehouseW3PreStartAbsenceReceipt,
+    WarehouseW3RuntimeAccountReceipt,
+)
+from .w3_root_selection import (
+    WarehouseW3RootSelectionError,
+    WarehouseW3SelectionReplayInputs,
+    verify_w3_selected_candidate_chain,
 )
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
@@ -44,25 +62,7 @@ _PRESTART_PRODUCERS = frozenset(
         "runtime_account",
     }
 )
-_SELECTION_FIELDS = frozenset(
-    {
-        "schema",
-        "selection_key",
-        "launch_id",
-        "nonce",
-        "authority_sha256",
-        "candidate_sha256",
-        "preparation_intent_sha256",
-        "preparation_commit_sha256",
-        "import_receipt_sha256",
-        "imported_staging_aggregate_sha256",
-        "source_candidate_identity",
-        "source_selection_identity",
-    }
-)
-_DIRECTORY_IDENTITY_FIELDS = frozenset(
-    {"device", "inode", "mode", "uid", "gid", "nlink"}
-)
+_MAX_PRESTART_PRODUCER_BYTES = 64 * 1024 * 1024
 
 
 class WarehouseW3StartPermitRefused(RuntimeError):
@@ -234,52 +234,6 @@ def _uint(
     return value
 
 
-def _validate_directory_identity(
-    value: object,
-    *,
-    field: str,
-) -> None:
-    identity = _exact(
-        value,
-        _DIRECTORY_IDENTITY_FIELDS,
-        label=field,
-        error_type=WarehouseW3InstalledIdentityRefused,
-    )
-    _uint(
-        identity["device"],
-        field=f"{field}.device",
-        positive=False,
-        error_type=WarehouseW3InstalledIdentityRefused,
-    )
-    _uint(
-        identity["inode"],
-        field=f"{field}.inode",
-        positive=True,
-        error_type=WarehouseW3InstalledIdentityRefused,
-    )
-    mode = _uint(
-        identity["mode"],
-        field=f"{field}.mode",
-        positive=False,
-        error_type=WarehouseW3InstalledIdentityRefused,
-    )
-    if mode > 0o7777:
-        raise WarehouseW3InstalledIdentityRefused(f"{field}.mode differs")
-    for name in ("uid", "gid"):
-        _uint(
-            identity[name],
-            field=f"{field}.{name}",
-            positive=False,
-            error_type=WarehouseW3InstalledIdentityRefused,
-        )
-    _uint(
-        identity["nlink"],
-        field=f"{field}.nlink",
-        positive=True,
-        error_type=WarehouseW3InstalledIdentityRefused,
-    )
-
-
 def _digest(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
@@ -296,6 +250,10 @@ class WarehouseW3IssuedStartGate:
     prestart_evidence_sha256: str
     candidate_selected_receipt_sha256: str
     root_selection_sha256: str
+    staged_candidate_sha256: str
+    root_staging_verification_sha256: str
+    candidate_gate_ingress_fact_sha256: str
+    candidate_gate_closure_sha256: str
     manager_unique_owner: str
     boot_id: str
     manager_version: str
@@ -305,20 +263,182 @@ class WarehouseW3IssuedStartGate:
         raise TypeError("WarehouseW3IssuedStartGate is final")
 
 
+@dataclass(frozen=True, slots=True)
+class WarehouseW3PreStartProducerReplayInputs:
+    candidate_gate_raw: bytes
+    dry_root_raw: bytes
+    environment_rehash_raw: bytes
+    loaded_manager_raw: bytes
+    prestart_absence_raw: bytes
+    runtime_account_raw: bytes
+
+    def __post_init__(self) -> None:
+        for name in self.__dataclass_fields__:
+            raw = getattr(self, name)
+            if (
+                type(raw) is not bytes
+                or not raw
+                or len(raw) > _MAX_PRESTART_PRODUCER_BYTES
+            ):
+                raise TypeError(f"{name} must be bounded exact bytes")
+
+
+def _verify_prestart_producers(
+    inputs: WarehouseW3PreStartProducerReplayInputs,
+    *,
+    selected_chain: object,
+    expected_sha256: dict[str, str],
+    issue_manager_unique_owner: str,
+    issue_boot_id: str,
+    issue_manager_version: str,
+    evidence_effects: dict[str, str],
+) -> None:
+    if type(inputs) is not WarehouseW3PreStartProducerReplayInputs:
+        raise TypeError(
+            "prestart_producer_replay_inputs must be exact "
+            "WarehouseW3PreStartProducerReplayInputs"
+        )
+    chain = selected_chain
+    try:
+        candidate = CandidateGateReceipt.from_bytes(inputs.candidate_gate_raw)
+        if candidate != chain.closure.gate:
+            raise ValueError("candidate gate differs")
+        dry_value = _decode(
+            inputs.dry_root_raw,
+            label="W3 dry-root readiness",
+            error_type=WarehouseW3InstalledIdentityRefused,
+        )
+        dry_identity = CandidateRootIdentity.from_mapping(dry_value["identity"])
+        dry_root = WarehouseW3DryRootReadinessReceipt.from_bytes(
+            inputs.dry_root_raw,
+            candidate_gate=candidate,
+            installation=chain.root_staging_verification.installation,
+            observed_identity=dry_identity,
+            observed_inventory_sha256=dry_value["inventory_sha256"],
+            observed_inventory_count=dry_value["inventory_count"],
+            observed_read_only=dry_value["read_only"],
+            composition_state=dry_value["composition_state"],
+        )
+        rehash = LiveEnvironmentRehashFact.from_bytes(inputs.environment_rehash_raw)
+        absence_value = _decode(
+            inputs.prestart_absence_raw,
+            label="W3 pre-start absence",
+            error_type=WarehouseW3InstalledIdentityRefused,
+        )
+        raw_observations = absence_value["observations"]
+        if type(raw_observations) is not list:
+            raise ValueError("absence observations differ")
+        observations = tuple(
+            PreStartAbsenceObservation.from_mapping(item) for item in raw_observations
+        )
+        absence = WarehouseW3PreStartAbsenceReceipt.from_bytes(
+            inputs.prestart_absence_raw,
+            authority=chain.root_staging_verification.authority,
+            installation=chain.root_staging_verification.installation,
+            observations=observations,
+        )
+        account_value = _decode(
+            inputs.runtime_account_raw,
+            label="W3 runtime account",
+            error_type=WarehouseW3InstalledIdentityRefused,
+        )
+        account = WarehouseW3RuntimeAccountReceipt.from_bytes(
+            inputs.runtime_account_raw,
+            observed_name=account_value["name"],
+            observed_uid=account_value["uid"],
+            observed_gid=account_value["gid"],
+        )
+        loaded = _exact(
+            _decode(
+                inputs.loaded_manager_raw,
+                label="loaded manager",
+                error_type=WarehouseW3InstalledIdentityRefused,
+            ),
+            frozenset(
+                {
+                    "schema",
+                    "run_unit",
+                    "close_unit",
+                    "manager",
+                    "run_object_path",
+                    "close_object_path",
+                    "run_properties",
+                    "close_properties",
+                    "unit_publication_sha256",
+                    "configured_pair_readback_sha256",
+                    "configured_pair_sha256",
+                    "manager_reload_sha256",
+                }
+            ),
+            label="loaded manager",
+            error_type=WarehouseW3InstalledIdentityRefused,
+        )
+        loaded_manager = _exact(
+            loaded["manager"],
+            frozenset({"unique_owner", "boot_id", "version"}),
+            label="loaded manager identity",
+            error_type=WarehouseW3InstalledIdentityRefused,
+        )
+        installation = chain.root_staging_verification.installation
+        semantic = chain.closure.semantic_environment
+        if (
+            rehash.phase != "preclaim"
+            or rehash.content_receipt_sha256 != semantic.raw_sha256
+            or rehash.generic_receipt_sha256 != semantic.generic_receipt_sha256
+            or rehash.environment_root != installation.environment_root
+            or rehash.observed_generic_receipt != chain.closure.environment_content
+            or loaded["schema"] != "scion.loaded-manager-acceptance.v4"
+            or loaded["run_unit"] != installation.run_unit
+            or loaded["close_unit"] != installation.close_unit
+            or loaded["configured_pair_sha256"] != installation.configured_pair_sha256
+            or loaded["manager_reload_sha256"] != evidence_effects["MANAGER_RELOADED"]
+            or loaded["unit_publication_sha256"] != evidence_effects["UNITS_PUBLISHED"]
+            or loaded_manager
+            != {
+                "unique_owner": issue_manager_unique_owner,
+                "boot_id": issue_boot_id,
+                "version": issue_manager_version,
+            }
+            or account.uid == 0
+            or account.gid == 0
+            or dry_root.launch_id != installation.launch_id
+            or absence.installation_sha256 != installation.installation_sha256
+        ):
+            raise ValueError("pre-start producer semantics differ")
+        actual_sha256 = {
+            "candidate_gate": _digest(inputs.candidate_gate_raw),
+            "dry_root": _digest(inputs.dry_root_raw),
+            "environment_rehash": _digest(inputs.environment_rehash_raw),
+            "loaded_manager": _digest(inputs.loaded_manager_raw),
+            "prestart_absence": _digest(inputs.prestart_absence_raw),
+            "runtime_account": _digest(inputs.runtime_account_raw),
+        }
+        if actual_sha256 != expected_sha256:
+            raise ValueError("pre-start producer hashes differ")
+    except WarehouseW3InstalledIdentityRefused:
+        raise
+    except Exception as exc:
+        raise WarehouseW3InstalledIdentityRefused(
+            "W3 pre-start producer replay differs"
+        ) from exc
+
+
 def verify_w3_issued_start_gate(
     *,
     issue_raw: bytes,
     authorization_raw: bytes,
+    prospective_intent_raw: bytes,
     installed_acceptance_raw: bytes,
     prestart_evidence_raw: bytes,
-    candidate_selected_receipt_raw: bytes,
-    root_selection_raw: bytes,
+    prestart_producer_replay_inputs: WarehouseW3PreStartProducerReplayInputs,
+    installed_replay_inputs: WarehouseW3InstalledReplayInputs,
+    selection_replay_inputs: WarehouseW3SelectionReplayInputs,
     expected_launch_id: str,
     expected_authority_sha256: str,
     expected_installation_sha256: str,
     expected_unit: str,
 ) -> WarehouseW3IssuedStartGate:
-    """Close ``START_ISSUED -> authorization -> A/W/K1/selection``."""
+    """Close ``START_ISSUED -> authorization -> A/W/K0/staged/K1``."""
 
     launch_id = _sha(
         expected_launch_id,
@@ -345,6 +465,50 @@ def verify_w3_issued_start_gate(
         raise WarehouseW3StartPermitRefused(
             "expected_unit is not a canonical service unit"
         )
+    try:
+        prospective = ProspectiveStartAuthorizationIntent.from_bytes(
+            prospective_intent_raw
+        )
+    except Exception as exc:
+        raise WarehouseW3StartPermitRefused(
+            "prospective authorization intent differs"
+        ) from exc
+    try:
+        selected_chain = verify_w3_selected_candidate_chain(selection_replay_inputs)
+    except WarehouseW3RootSelectionError as exc:
+        raise WarehouseW3InstalledIdentityRefused(
+            "W3 selected candidate producer replay differs"
+        ) from exc
+    try:
+        installed_chain = verify_w3_installed_replay(
+            installed_replay_inputs,
+            selection_replay_inputs,
+        )
+    except WarehouseW3InstalledReplayError as exc:
+        raise WarehouseW3InstalledIdentityRefused(
+            "W3 installed acceptance producer replay differs"
+        ) from exc
+    if (
+        installed_chain.selected_candidate != selected_chain
+        or installed_chain.installed_acceptance.raw != installed_acceptance_raw
+        or installed_chain.prestart_evidence.raw != prestart_evidence_raw
+        or installed_chain.loaded_manager.raw
+        != prestart_producer_replay_inputs.loaded_manager_raw
+        or installed_chain.environment_rehash.raw
+        != prestart_producer_replay_inputs.environment_rehash_raw
+        or installed_chain.dry_root.raw != prestart_producer_replay_inputs.dry_root_raw
+        or installed_chain.prestart_absence.raw
+        != prestart_producer_replay_inputs.prestart_absence_raw
+        or installed_chain.runtime_account.raw
+        != prestart_producer_replay_inputs.runtime_account_raw
+        or selected_chain.closure.gate.raw
+        != prestart_producer_replay_inputs.candidate_gate_raw
+    ):
+        raise WarehouseW3InstalledIdentityRefused(
+            "installed replay bundle aliases different producer bytes"
+        )
+    candidate_selected_receipt_raw = selected_chain.candidate_selected_receipt.raw
+    root_selection_raw = selected_chain.root_selection.raw
 
     issue = _exact(
         _decode(
@@ -477,16 +641,8 @@ def verify_w3_issued_start_gate(
         label="K1 candidate-selected receipt",
         error_type=WarehouseW3InstalledIdentityRefused,
     )
-    selection = _exact(
-        _decode(
-            root_selection_raw,
-            label="root selection",
-            error_type=WarehouseW3InstalledIdentityRefused,
-        ),
-        _SELECTION_FIELDS,
-        label="root selection",
-        error_type=WarehouseW3InstalledIdentityRefused,
-    )
+    root_selection = selected_chain.root_selection
+    generic_selection = selected_chain.generic_selection
 
     authorization_sha256 = _digest(authorization_raw)
     acceptance_sha256 = _digest(installed_acceptance_raw)
@@ -581,8 +737,10 @@ def verify_w3_issued_start_gate(
         or authorization["authority_sha256"] != authority_sha256
         or authorization["installation_sha256"] != installation_sha256
         or authorization["installed_acceptance_sha256"] != acceptance_sha256
+        or authorization["prospective_intent_sha256"] != prospective.raw_sha256
         or authorization["plan_sha256"] != ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
         or authorization["root_selection_sha256"] != selection_sha256
+        or authorization["user_statement"] != prospective.statement
         or authorization["unit"] != unit
         or authorization["method"] != "StartUnit"
         or authorization["mode"] != "fail"
@@ -616,11 +774,20 @@ def verify_w3_issued_start_gate(
         keys=frozenset(_INSTALL_PHASES[:7]),
         error_type=WarehouseW3InstalledIdentityRefused,
     )
-    _sha_mapping(
+    producer_sha256 = _sha_mapping(
         evidence["producer_receipt_sha256"],
         field="W3 pre-start producer receipts",
         keys=_PRESTART_PRODUCERS,
         error_type=WarehouseW3InstalledIdentityRefused,
+    )
+    _verify_prestart_producers(
+        prestart_producer_replay_inputs,
+        selected_chain=selected_chain,
+        expected_sha256=producer_sha256,
+        issue_manager_unique_owner=manager_unique_owner,
+        issue_boot_id=boot_id,
+        issue_manager_version=manager_version,
+        evidence_effects=evidence_effects,
     )
     for value, field in (
         (acceptance["authority_sha256"], "acceptance.authority_sha256"),
@@ -665,6 +832,12 @@ def verify_w3_issued_start_gate(
         != tuple((phase, evidence_effects[phase]) for phase in _INSTALL_PHASES[:7])
         or evidence["pending_intent_sha256"] != intent_sha256[7]
         or evidence["predecessor_phase_receipt_sha256"] != receipt_sha256[6]
+        or intent_sha256[0] != selected_chain.root_staging_intent.raw_sha256
+        or receipt_sha256[0] != selected_chain.root_staging_receipt.raw_sha256
+        or acceptance_effects["ROOT_STAGING_IMPORTED"]
+        != selected_chain.staged_candidate.raw_sha256
+        or evidence_effects["ROOT_STAGING_IMPORTED"]
+        != selected_chain.staged_candidate.raw_sha256
     ):
         raise WarehouseW3InstalledIdentityRefused(
             "installed acceptance and W3 pre-start evidence differ"
@@ -694,6 +867,9 @@ def verify_w3_issued_start_gate(
         or candidate_predecessors != (receipt_sha256[0],)
         or candidate_selected["effect_sha256"] != selection_sha256
         or candidate_selected_sha256 != receipt_sha256[1]
+        or candidate_selected_sha256
+        != selected_chain.candidate_selected_receipt.raw_sha256
+        or intent_sha256[1] != selected_chain.candidate_selected_intent.raw_sha256
         or acceptance_effects["CANDIDATE_SELECTED"] != selection_sha256
         or evidence_effects["CANDIDATE_SELECTED"] != selection_sha256
     ):
@@ -701,40 +877,17 @@ def verify_w3_issued_start_gate(
             "K1 candidate selection binding differs"
         )
 
-    for field in (
-        "nonce",
-        "authority_sha256",
-        "candidate_sha256",
-        "preparation_intent_sha256",
-        "preparation_commit_sha256",
-        "import_receipt_sha256",
-        "imported_staging_aggregate_sha256",
-    ):
-        _sha(
-            selection[field],
-            field=f"root selection.{field}",
-            error_type=WarehouseW3InstalledIdentityRefused,
-        )
-    _sha(
-        selection["selection_key"],
-        field="root selection.selection_key",
-        error_type=WarehouseW3InstalledIdentityRefused,
-    )
-    _validate_directory_identity(
-        selection["source_candidate_identity"],
-        field="root selection.source_candidate_identity",
-    )
-    _validate_directory_identity(
-        selection["source_selection_identity"],
-        field="root selection.source_selection_identity",
-    )
     if (
-        selection["schema"] != "scion.external-selection.v1"
-        or selection["launch_id"] != launch_id
-        or selection["authority_sha256"] != authority_sha256
-        or selection["selection_key"] != authorization["selection_key"]
-        or selection["preparation_commit_sha256"]
+        root_selection.launch_id != launch_id
+        or root_selection.authority_sha256 != authority_sha256
+        or root_selection.installation_sha256 != installation_sha256
+        or root_selection.selection_key != authorization["selection_key"]
+        or root_selection.preparation_commit_sha256
         != authorization["preparation_commit_sha256"]
+        or selected_chain.root_staging_verification.selection_intent.task_event_identity
+        != authorization["task_event_identity"]
+        or generic_selection.preparation_commit_sha256
+        != root_selection.preparation_commit_sha256
     ):
         raise WarehouseW3InstalledIdentityRefused("root selection authority differs")
 
@@ -749,6 +902,12 @@ def verify_w3_issued_start_gate(
         prestart_evidence_sha256=evidence_sha256,
         candidate_selected_receipt_sha256=candidate_selected_sha256,
         root_selection_sha256=selection_sha256,
+        staged_candidate_sha256=(selected_chain.staged_candidate.raw_sha256),
+        root_staging_verification_sha256=(
+            selected_chain.root_staging_verification.raw_sha256
+        ),
+        candidate_gate_ingress_fact_sha256=(selected_chain.ingress.raw_sha256),
+        candidate_gate_closure_sha256=(selected_chain.closure.raw_sha256),
         manager_unique_owner=manager_unique_owner,
         boot_id=boot_id,
         manager_version=manager_version,
@@ -759,6 +918,7 @@ __all__ = [
     "WarehouseW3EnvironmentIntegrityRefused",
     "WarehouseW3InstalledIdentityRefused",
     "WarehouseW3IssuedStartGate",
+    "WarehouseW3PreStartProducerReplayInputs",
     "WarehouseW3StartPermitRefused",
     "WarehouseW3SystemdLineageRefused",
     "verify_w3_issued_start_gate",

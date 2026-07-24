@@ -218,8 +218,32 @@ def _required_launch_inputs() -> dict[str, str]:
     package_root = Path(__file__).resolve().parents[2]
     project_root = package_root.parent
     paths = (
+        package_root / "problems" / "warehouse_delivery" / "w2_preservation.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_counter_fixtures.py",
         package_root / "problems" / "warehouse_delivery" / "w3_composition.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_candidate_gate.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_candidate_ingress.py",
+        package_root
+        / "problems"
+        / "warehouse_delivery"
+        / "w3_candidate_coordinator.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_environment.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_environment_receipts.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_installation.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_installed_replay.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_prestart_facts.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_root_coordinator.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_root_installation.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_root_selection.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_root_staging.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_start_authorization.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_start_gate.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_start_store.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_terminal_acceptance.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_terminal_manager.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_wheel.py",
         package_root / "tools" / "scion_w3_tool.py",
+        package_root / "tools" / "scion_w3_install.py",
         package_root
         / "problems"
         / "warehouse_delivery"
@@ -235,6 +259,9 @@ def _required_launch_inputs() -> dict[str, str]:
         package_root / "runtime" / "execution" / "invocation_terminal.py",
         package_root / "runtime" / "execution" / "spawn_backend.py",
         package_root / "runtime" / "execution" / "cgroup_v2.py",
+        package_root / "runtime" / "execution" / "environment_integrity.py",
+        package_root / "runtime" / "execution" / "external_installation.py",
+        package_root / "runtime" / "execution" / "external_linux.py",
         package_root / "runtime" / "execution" / "systemd255.py",
         package_root / "runtime" / "execution" / "model.py",
         package_root / "problems" / "warehouse_delivery" / "w3_fixed_arm.py",
@@ -1093,24 +1120,190 @@ def _mark_run_incomplete(
             )
 
 
+def _require_live_issued_start_gate(
+    materials: _InstalledMaterials,
+    acquirer: Systemd255Acquirer,
+    lineage: object,
+) -> object:
+    """Consume the fixed root-owned issued gate before any nonce publication."""
+
+    # Local import avoids a module cycle: the W3 receipt replay modules use the
+    # fixed composition constants as their problem-owned inventory authority.
+    from .w3_start_gate import (
+        WarehouseW3EnvironmentIntegrityRefused,
+        WarehouseW3InstalledIdentityRefused,
+        WarehouseW3StartPermitRefused,
+        WarehouseW3SystemdLineageRefused,
+    )
+    from .w3_start_store import acquire_w3_issued_start_gate
+
+    try:
+        manager = acquirer.acquire_manager_identity()
+    except Exception as exc:
+        raise WarehouseW3SystemdLineageRefused(
+            "live systemd manager identity cannot be acquired"
+        ) from exc
+    try:
+        context = acquire_w3_issued_start_gate(
+            expected_launch_id=materials.installation.launch_id,
+            expected_authority_sha256=materials.authority.authority_sha256,
+            expected_installation_sha256=(materials.installation.installation_sha256),
+            expected_unit=materials.installation.run_unit,
+        )
+    except (
+        WarehouseW3EnvironmentIntegrityRefused,
+        WarehouseW3InstalledIdentityRefused,
+        WarehouseW3StartPermitRefused,
+        WarehouseW3SystemdLineageRefused,
+    ):
+        raise
+    except Exception as exc:
+        raise WarehouseW3InstalledIdentityRefused(
+            "fixed root-owned issued start identity differs"
+        ) from exc
+    try:
+        gate = context.gate
+    except AttributeError as exc:
+        raise WarehouseW3InstalledIdentityRefused(
+            "fixed root-owned start context differs"
+        ) from exc
+    try:
+        lineage_boot_id = lineage.boot_id
+    except AttributeError as exc:
+        raise WarehouseW3SystemdLineageRefused(
+            "installed invocation lineage lacks a boot identity"
+        ) from exc
+    if (
+        gate.manager_unique_owner != manager.unique_owner
+        or gate.boot_id != manager.boot_id
+        or gate.manager_version != manager.version
+        or gate.boot_id != lineage_boot_id
+    ):
+        raise WarehouseW3SystemdLineageRefused(
+            "issued start gate differs from the live systemd manager"
+        )
+    return context
+
+
+def _revalidate_live_start_context(
+    start_context: object,
+    acquirer: Systemd255Acquirer,
+    lineage: object,
+) -> None:
+    """Recheck manager and environment immediately before nonce publication."""
+
+    from .w3_start_gate import (
+        WarehouseW3EnvironmentIntegrityRefused,
+        WarehouseW3InstalledIdentityRefused,
+        WarehouseW3SystemdLineageRefused,
+    )
+
+    try:
+        gate = start_context.gate
+        current = acquirer.acquire_manager_identity()
+        lineage_boot_id = lineage.boot_id
+    except WarehouseW3EnvironmentIntegrityRefused:
+        raise
+    except Exception as exc:
+        raise WarehouseW3SystemdLineageRefused(
+            "live systemd manager identity cannot be reacquired"
+        ) from exc
+    if (
+        current.unique_owner != gate.manager_unique_owner
+        or current.boot_id != gate.boot_id
+        or current.version != gate.manager_version
+        or current.boot_id != lineage_boot_id
+    ):
+        raise WarehouseW3SystemdLineageRefused(
+            "systemd manager identity changed before nonce claim"
+        )
+    try:
+        start_context.verify_environment("preclaim")
+    except WarehouseW3EnvironmentIntegrityRefused:
+        raise
+    except Exception as exc:
+        raise WarehouseW3InstalledIdentityRefused(
+            "installed start context cannot revalidate the environment"
+        ) from exc
+
+
+def _complete_installed_run(
+    writer: InvocationWriter,
+    backend: SpawnBackend,
+    start_context: object,
+) -> None:
+    """Commit raw completion only after the final environment rehash."""
+
+    try:
+        start_context.verify_environment("completion")
+    except Exception as exc:
+        _mark_run_incomplete(
+            writer,
+            backend,
+            "ENVIRONMENT_COMPLETION_REFUSED",
+        )
+        raise WarehouseW3CompositionError(
+            "completion environment integrity differs"
+        ) from exc
+    writer.finish_raw()
+    backend.close_idle()
+
+
 def _run_installed(materials: _InstalledMaterials) -> None:
+    from .w3_start_gate import (
+        WarehouseW3InstalledIdentityRefused,
+        WarehouseW3SystemdLineageRefused,
+    )
+
     reader = SystemdDbusPropertyReader()
     acquirer = Systemd255Acquirer(reader)
-    live_pair = _live_configured_pair(materials, acquirer)
-    invocation_id = _systemd_environment("INVOCATION_ID")["INVOCATION_ID"]
-    lineage = acquirer.acquire_self_lineage(
-        expected_unit=materials.installation.run_unit,
-        expected_invocation_id=invocation_id,
+    try:
+        live_pair = _live_configured_pair(materials, acquirer)
+    except Exception as exc:
+        raise WarehouseW3InstalledIdentityRefused(
+            "live configured unit pair differs"
+        ) from exc
+    try:
+        invocation_id = _systemd_environment("INVOCATION_ID")["INVOCATION_ID"]
+        lineage = acquirer.acquire_self_lineage(
+            expected_unit=materials.installation.run_unit,
+            expected_invocation_id=invocation_id,
+        )
+    except Exception as exc:
+        raise WarehouseW3SystemdLineageRefused(
+            "installed invocation lineage differs"
+        ) from exc
+    start_context = _require_live_issued_start_gate(
+        materials,
+        acquirer,
+        lineage,
     )
-    readiness = inspect_w3_launch_readiness(
-        Path(materials.installation.run_root),
-        materials.authority.raw,
-        materials.installation.raw,
-        materials.run_template_raw,
-        materials.close_template_raw,
-        live_configured_pair=live_pair,
-    )
-    writer = prepare_w3_invocation(readiness)
+    try:
+        readiness = inspect_w3_launch_readiness(
+            Path(materials.installation.run_root),
+            materials.authority.raw,
+            materials.installation.raw,
+            materials.run_template_raw,
+            materials.close_template_raw,
+            live_configured_pair=live_pair,
+        )
+    except Exception as exc:
+        start_context.close()
+        raise WarehouseW3InstalledIdentityRefused(
+            "installed launch readiness differs"
+        ) from exc
+    try:
+        _revalidate_live_start_context(start_context, acquirer, lineage)
+    except Exception:
+        start_context.close()
+        raise
+    try:
+        writer = prepare_w3_invocation(readiness)
+    except Exception as exc:
+        start_context.close()
+        raise WarehouseW3CompositionError(
+            "installed invocation claim could not be prepared"
+        ) from exc
     backend: SpawnBackend | None = None
     service: ServiceCgroup | None = None
     try:
@@ -1274,12 +1467,13 @@ def _run_installed(materials: _InstalledMaterials) -> None:
                 settled,
                 row_commit,
             )
-        writer.finish_raw()
-        backend.close_idle()
+        _complete_installed_run(writer, backend, start_context)
     except Exception:
         if service is not None:
             service.close_unconsumed()
         raise
+    finally:
+        start_context.close()
 
 
 def _seal_installed_unit_drained(
@@ -1401,16 +1595,28 @@ def dispatch_installed_launch(command: str, launch_id: str) -> None:
         raise WarehouseW3CompositionError(
             "launch id is not 64 lowercase hexadecimal characters"
         )
-    materials = _installed_materials(
-        launch_id,
-        require_claim=command != "run",
-    )
     if command == "run":
+        from .w3_start_gate import WarehouseW3InstalledIdentityRefused
+
+        try:
+            materials = _installed_materials(
+                launch_id,
+                require_claim=False,
+            )
+        except WarehouseW3CompositionError as exc:
+            raise WarehouseW3InstalledIdentityRefused(
+                "fixed installed launch materials differ"
+            ) from exc
         _run_installed(materials)
-    elif command == "seal-unit-drained":
-        _seal_installed_unit_drained(materials)
     else:
-        _close_installed(materials)
+        materials = _installed_materials(
+            launch_id,
+            require_claim=True,
+        )
+        if command == "seal-unit-drained":
+            _seal_installed_unit_drained(materials)
+        else:
+            _close_installed(materials)
 
 
 __all__ = [

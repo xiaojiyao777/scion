@@ -9,8 +9,12 @@ import stat
 import pytest
 
 from scion.problems.warehouse_delivery.w3_candidate_gate import (
+    CandidateGateClosureBundle,
     CandidateGateReceipt,
     WarehouseW3CandidateGateError,
+)
+from scion.problems.warehouse_delivery.w3_candidate_ingress import (
+    CandidateGateIngressFact,
 )
 from scion.problems.warehouse_delivery.w3_composition import (
     EXPECTED_MANIFEST_NAME,
@@ -18,6 +22,15 @@ from scion.problems.warehouse_delivery.w3_composition import (
     EXPECTED_SOURCE_TREE_IDENTITY_SHA256,
 )
 from scion.problems.warehouse_delivery.w3_installation import (
+    CandidateContentEntry,
+    CandidateReceipt,
+    CandidateRootIdentity,
+    CandidateSelectionCommit,
+    CandidateSelectionIntent,
+    CandidateVerificationReceipt,
+    EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256,
+    GitBlobIdentity,
+    GitSourceReceipt,
     SealedStoreObject,
     SealedStoreReceipt,
     build_warehouse_installation,
@@ -39,6 +52,21 @@ from scion.problems.warehouse_delivery.w3_root_installation import (
     WarehouseW3RootInstallationError,
     WarehouseW3StagedCandidateReceipt,
     WarehouseW3StoresPublishedReceipt,
+    derive_w3_authority_effect_authority_sha256,
+    derive_w3_projection_effect_authority_sha256,
+    derive_w3_reload_effect_authority_sha256,
+    derive_w3_stores_effect_authority_sha256,
+    derive_w3_units_effect_authority_sha256,
+)
+from scion.problems.warehouse_delivery.w3_root_staging import (
+    WarehouseW3RootStagingError,
+    WarehouseW3RootStagingVerification,
+)
+from scion.problems.warehouse_delivery.w3_root_selection import (
+    WarehouseW3RootSelectionError,
+    WarehouseW3RootSelectionReceipt,
+    derive_root_selection_effect_authority_sha256,
+    derive_root_staging_effect_authority_sha256,
 )
 from scion.runtime.execution.external_installation import (
     INSTALL_PHASES,
@@ -60,6 +88,7 @@ from scion.runtime.execution.external_installation import (
 from scion.runtime.execution.external_linux import (
     FileIdentity,
     ImmutableTreeImportReceipt,
+    ImportEntry,
     MountNamespacePair,
     NamespaceIdentity,
 )
@@ -73,6 +102,9 @@ from scion.tests.unit.problems.warehouse_delivery.test_w3_environment_receipts i
     _relocation_receipt,
     _semantic,
     semantic_inputs,
+)
+from scion.tests.unit.problems.warehouse_delivery.w3_candidate_gate_support import (
+    make_candidate_gate_closure,
 )
 
 
@@ -187,17 +219,26 @@ def _candidate_gate(
     source_identity: FileIdentity,
     accepted_root_device: int = 8,
     accepted_root_inode: int = 9,
+    selection_key: str = "a" * 64,
+    candidate_root: str | None = None,
+    source_receipt_sha256: str = "b" * 64,
+    candidate_verification_sha256: str = "c" * 64,
 ) -> CandidateGateReceipt:
+    root = (
+        f"/tmp/v04-w3-launch-{selection_key}-claw"
+        if candidate_root is None
+        else candidate_root
+    )
     value = {
         "schema": "scion.w3-candidate-gate.v2",
         "state": "CANDIDATE_ACCEPTED_INSTALLATION_ABSENT",
-        "selection_key": "a" * 64,
+        "selection_key": selection_key,
         "launch_id": installation.launch_id,
         "nonce": authority.nonce,
         "authority_sha256": authority.authority_sha256,
         "installation_sha256": installation.installation_sha256,
-        "source_receipt_sha256": "b" * 64,
-        "candidate_verification_sha256": "c" * 64,
+        "source_receipt_sha256": source_receipt_sha256,
+        "candidate_verification_sha256": candidate_verification_sha256,
         "double_wheel_receipt_sha256": "d" * 64,
         "semantic_environment_receipt_sha256": semantic_sha256,
         "environment_content_receipt_sha256": generic_sha256,
@@ -205,7 +246,7 @@ def _candidate_gate(
         "simulated_final_probe_sha256": "f" * 64,
         "simulated_relocation_ref_sha256": "1" * 64,
         "simulated_relocation_evidence_sha256": "2" * 64,
-        "candidate_root": "/tmp/w3-candidate",
+        "candidate_root": root,
         "candidate_root_identity": {
             "device": source_identity.device,
             "inode": source_identity.inode,
@@ -270,6 +311,361 @@ def _tree_import(
         ),
         entries=(),
     )
+
+
+def _candidate_ingress_fact(
+    candidate: CandidateGateReceipt,
+    closure: CandidateGateClosureBundle,
+    imported: ImmutableTreeImportReceipt,
+) -> CandidateGateIngressFact:
+    directory = FileIdentity(
+        device=imported.source_root.device,
+        inode=31,
+        mode=stat.S_IFDIR | 0o755,
+        uid=imported.source_root.uid,
+        gid=imported.source_root.gid,
+        link_count=2,
+        size=4096,
+    )
+    ingress = FileIdentity(
+        device=imported.source_root.device,
+        inode=32,
+        mode=stat.S_IFDIR | 0o555,
+        uid=imported.source_root.uid,
+        gid=imported.source_root.gid,
+        link_count=2,
+        size=4096,
+    )
+    intent = FileIdentity(
+        device=imported.source_root.device,
+        inode=33,
+        mode=stat.S_IFREG | 0o444,
+        uid=imported.source_root.uid,
+        gid=imported.source_root.gid,
+        link_count=1,
+        size=128,
+    )
+    gate = FileIdentity(
+        device=imported.source_root.device,
+        inode=34,
+        mode=stat.S_IFREG | 0o444,
+        uid=imported.source_root.uid,
+        gid=imported.source_root.gid,
+        link_count=1,
+        size=len(candidate.raw),
+    )
+    closure_identity = FileIdentity(
+        device=imported.source_root.device,
+        inode=35,
+        mode=stat.S_IFREG | 0o444,
+        uid=imported.source_root.uid,
+        gid=imported.source_root.gid,
+        link_count=1,
+        size=len(closure.raw),
+    )
+    return CandidateGateIngressFact.create(
+        candidate_root=Path(candidate.candidate_root),
+        selection_key=candidate.selection_key,
+        experiment_parent_identity=directory,
+        ingress_parent_identity=directory,
+        candidate_identity=imported.source_root,
+        ingress_identity=ingress,
+        intent_identity=intent,
+        gate_identity=gate,
+        closure_identity=closure_identity,
+        intent_sha256="f" * 64,
+        gate_sha256=candidate.raw_sha256,
+        gate_receipt_sha256=candidate.raw_sha256,
+        closure_sha256=closure.raw_sha256,
+    )
+
+
+def _staging_bundle(
+    *,
+    authority: AcceptedLaunchAuthority,
+    installation,
+    sealed: SealedStoreReceipt,
+    semantic,
+    imported: ImmutableTreeImportReceipt,
+    accepted_root_device: int = 8,
+    accepted_root_inode: int = 9,
+):
+    intent = CandidateSelectionIntent.create(
+        experiment_parent=Path("/tmp"),
+        task_event_identity="test:root-staging",
+        launch_commit="0123456789abcdef0123456789abcdef01234567",
+        launch_tree="89abcdef0123456789abcdef0123456789abcdef",
+        dry_root_manifest_sha256=EXPECTED_MANIFEST_SHA256,
+        native_record_sha256=EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256,
+    )
+    root_identity = CandidateRootIdentity(
+        device=imported.source_root.device,
+        inode=imported.source_root.inode,
+        mode=stat.S_IMODE(imported.source_root.mode),
+        uid=imported.source_root.uid,
+        gid=imported.source_root.gid,
+        nlink=imported.source_root.link_count,
+    )
+    commit = CandidateSelectionCommit.create(
+        intent=intent,
+        candidate_root_identity=root_identity,
+        nonce=authority.nonce,
+        authority_sha256=authority.authority_sha256,
+    )
+    source = GitSourceReceipt.create(
+        source_commit="0123456789abcdef0123456789abcdef01234567",
+        source_tree="89abcdef0123456789abcdef0123456789abcdef",
+        remote_name="origin",
+        remote_url="ssh://example.invalid/scion.git",
+        remote_ref="refs/heads/v0.4-dev",
+        remote_tracking_ref="refs/remotes/origin/v0.4-dev",
+        blobs=(
+            GitBlobIdentity(
+                logical_path="fixture.txt",
+                mode="100644",
+                blob_oid="abcdef0123456789abcdef0123456789abcdef01",
+                sha256=hashlib.sha256(b"sealed fixture\n").hexdigest(),
+                size_bytes=len(b"sealed fixture\n"),
+            ),
+        ),
+    )
+    run_template = (
+        Path(__file__).resolve().parents[4]
+        / "problems"
+        / "warehouse_delivery"
+        / "systemd"
+        / "scion-w3@.service"
+    ).read_bytes()
+    close_template = (
+        Path(__file__).resolve().parents[4]
+        / "problems"
+        / "warehouse_delivery"
+        / "systemd"
+        / "scion-w3-close@.service"
+    ).read_bytes()
+
+    def regular(path: str, raw: bytes) -> CandidateContentEntry:
+        return CandidateContentEntry(
+            path=path,
+            kind="regular",
+            mode=0o444,
+            size_bytes=len(raw),
+            sha256=hashlib.sha256(raw).hexdigest(),
+        )
+
+    def directory(path: str) -> CandidateContentEntry:
+        return CandidateContentEntry(
+            path=path,
+            kind="directory",
+            mode=0o555,
+            size_bytes=0,
+            sha256=None,
+        )
+
+    content = (
+        regular("authority.json", authority.raw),
+        regular("installation.json", installation.raw),
+        directory("sealed-store"),
+        directory("environment"),
+        regular("units/scion-w3@.service", run_template),
+        regular("units/scion-w3-close@.service", close_template),
+        regular("receipts/source.v1.json", source.raw),
+        regular("receipts/sealed-store.v1.json", sealed.raw),
+        regular("receipts/environment.v1.json", semantic.generic_receipt.raw),
+        regular("receipts/selection-intent.v1.json", intent.raw),
+        regular("receipts/selection-committed.v1.json", commit.raw),
+    )
+    candidate_receipt = CandidateReceipt.create(
+        intent=intent,
+        content_inventory=content,
+        sealed_store_receipt=sealed,
+        environment_receipt=semantic.generic_receipt,
+        authority=authority,
+        installation=installation,
+        selection_commit=commit,
+    )
+    candidate_verification = CandidateVerificationReceipt.create(
+        intent=intent,
+        selection_commit=commit,
+        source_receipt=source,
+        sealed_store_receipt=sealed,
+        environment_receipt=semantic.generic_receipt,
+        authority=authority,
+        installation=installation,
+        candidate_receipt=candidate_receipt,
+    )
+
+    tree_facts: dict[str, tuple[str, int, int, str | None]] = {
+        "authority.json": (
+            "file",
+            0o444,
+            len(authority.raw),
+            hashlib.sha256(authority.raw).hexdigest(),
+        ),
+        "candidate.v1.json": (
+            "file",
+            0o444,
+            len(candidate_receipt.raw),
+            candidate_receipt.raw_sha256,
+        ),
+        "environment": ("directory", 0o555, 0, None),
+        "installation.json": (
+            "file",
+            0o444,
+            len(installation.raw),
+            hashlib.sha256(installation.raw).hexdigest(),
+        ),
+        "receipts": ("directory", 0o555, 0, None),
+        "sealed-store": ("directory", 0o555, 0, None),
+        "units": ("directory", 0o555, 0, None),
+        "units/scion-w3@.service": (
+            "file",
+            0o444,
+            len(run_template),
+            hashlib.sha256(run_template).hexdigest(),
+        ),
+        "units/scion-w3-close@.service": (
+            "file",
+            0o444,
+            len(close_template),
+            hashlib.sha256(close_template).hexdigest(),
+        ),
+        "receipts/source.v1.json": (
+            "file",
+            0o444,
+            len(source.raw),
+            source.raw_sha256,
+        ),
+        "receipts/sealed-store.v1.json": (
+            "file",
+            0o444,
+            len(sealed.raw),
+            sealed.raw_sha256,
+        ),
+        "receipts/environment.v1.json": (
+            "file",
+            0o444,
+            len(semantic.generic_receipt.raw),
+            semantic.generic_receipt.raw_sha256,
+        ),
+        "receipts/candidate-verification.v1.json": (
+            "file",
+            0o444,
+            len(candidate_verification.raw),
+            candidate_verification.raw_sha256,
+        ),
+        "receipts/selection-intent.v1.json": (
+            "file",
+            0o444,
+            len(intent.raw),
+            intent.raw_sha256,
+        ),
+        "receipts/selection-committed.v1.json": (
+            "file",
+            0o444,
+            len(commit.raw),
+            commit.raw_sha256,
+        ),
+    }
+    for prefix, inventory in (
+        ("sealed-store", sealed.inventory),
+        ("environment", semantic.generic_receipt.environment_inventory),
+    ):
+        for item in inventory:
+            path = prefix if item.path == "." else f"{prefix}/{item.path}"
+            tree_facts[path] = (
+                "directory" if item.kind == "directory" else "file",
+                item.mode,
+                item.size_bytes,
+                item.sha256,
+            )
+
+    import_entries = []
+    for ordinal, (path, fact) in enumerate(
+        sorted(tree_facts.items(), key=lambda item: item[0].encode("utf-8")),
+        start=1,
+    ):
+        kind, mode, size_bytes, digest = fact
+        file_type = stat.S_IFDIR if kind == "directory" else stat.S_IFREG
+        import_entries.append(
+            ImportEntry(
+                path=path,
+                kind=kind,
+                mode=mode,
+                size=size_bytes,
+                sha256=digest,
+                source_identity=FileIdentity(
+                    device=imported.source_root.device,
+                    inode=1000 + ordinal,
+                    mode=file_type | mode,
+                    uid=imported.source_root.uid,
+                    gid=imported.source_root.gid,
+                    link_count=2 if kind == "directory" else 1,
+                    size=4096 if kind == "directory" else size_bytes,
+                ),
+                destination_identity=FileIdentity(
+                    device=imported.staging_root.device,
+                    inode=2000 + ordinal,
+                    mode=file_type | mode,
+                    uid=imported.target_uid,
+                    gid=imported.target_gid,
+                    link_count=2 if kind == "directory" else 1,
+                    size=4096 if kind == "directory" else size_bytes,
+                ),
+            )
+        )
+    imported = ImmutableTreeImportReceipt.create(
+        staging_leaf=imported.staging_leaf,
+        target_uid=imported.target_uid,
+        target_gid=imported.target_gid,
+        source_root=imported.source_root,
+        staging_root=imported.staging_root,
+        entries=tuple(import_entries),
+    )
+    closure = make_candidate_gate_closure(
+        candidate=candidate_verification,
+        candidate_root=Path(intent.candidate_root),
+        accepted_root=Path(installation.run_root),
+        nonce=authority.nonce,
+        manifest_sha256=EXPECTED_MANIFEST_SHA256,
+        wheel=semantic.wheel_receipt,
+        semantic=semantic,
+        environment=semantic.generic_receipt,
+        accepted_root_identity=CandidateRootIdentity(
+            device=accepted_root_device,
+            inode=accepted_root_inode,
+            mode=0o555,
+            uid=1000,
+            gid=1000,
+            nlink=2,
+        ),
+        accepted_root_inventory_sha256="3" * 64,
+        accepted_root_inventory_count=57,
+    )
+    candidate = closure.gate
+    ingress = _candidate_ingress_fact(candidate, closure, imported)
+    verification = WarehouseW3RootStagingVerification._create(
+        candidate_gate=candidate,
+        candidate_gate_closure=closure,
+        candidate_gate_ingress=ingress,
+        tree_import=imported,
+        candidate_receipt=candidate_receipt,
+        candidate_verification=candidate_verification,
+        source_receipt=source,
+        sealed_store_receipt=sealed,
+        environment_receipt=semantic.generic_receipt,
+        authority=authority,
+        installation=installation,
+        selection_intent=intent,
+        selection_commit=commit,
+    )
+    staged = WarehouseW3StagedCandidateReceipt.create(
+        candidate_gate=candidate,
+        candidate_gate_ingress=ingress,
+        tree_import=imported,
+        root_staging_verification=verification,
+    )
+    return candidate, ingress, verification, staged
 
 
 def _published_file(
@@ -525,7 +921,6 @@ def _manager_bundle(
     )
     manager_reload = ManagerReloadReceipt.create(
         manager_identity=identity,
-        configured_readback=configured_readback,
         unit_publication=unit_publication,
     )
     loaded_fields = {
@@ -555,7 +950,18 @@ def _manager_bundle(
         unit_publication=unit_publication,
         manager_reload=manager_reload,
     )
-    return unit_publication, manager_reload, loaded_manager
+    return (
+        unit_publication,
+        manager_reload,
+        loaded_manager,
+        {
+            "configured_readback": configured_readback,
+            "run_template_raw": run_template,
+            "close_template_raw": close_template,
+            "run_publication": run_publication,
+            "close_publication": close_publication,
+        },
+    )
 
 
 def _selection_receipt(
@@ -583,8 +989,12 @@ def _selection_receipt(
         candidate_sha256=(
             candidate.raw_sha256 if candidate_sha256 is None else candidate_sha256
         ),
-        preparation_intent_sha256="8" * 64,
-        preparation_commit_sha256="9" * 64,
+        preparation_intent_sha256=(
+            staged.root_staging_verification.selection_intent.raw_sha256
+        ),
+        preparation_commit_sha256=(
+            staged.root_staging_verification.selection_commit.raw_sha256
+        ),
         import_receipt_sha256=staged.tree_import_sha256,
         imported_staging_aggregate_sha256=(staged.imported_tree_aggregate_sha256),
         source_candidate_identity=DirectorySnapshot(
@@ -634,20 +1044,86 @@ def _prestart_phase_prefix(
     effect_producers: tuple[object, ...],
     manager_reload: ManagerReloadReceipt,
     *,
+    runtime_account: WarehouseW3RuntimeAccountReceipt,
     drift_index: int | None = None,
+    authority_drift_index: int | None = None,
 ):
     intents: list[RootPhaseIntentReceipt] = []
     receipts: list[RootPhaseReceipt] = []
     for index, (phase, producer) in enumerate(
         zip(INSTALL_PHASES[:7], effect_producers, strict=True)
     ):
+        if index == 0:
+            effect_authority_sha256 = derive_root_staging_effect_authority_sha256(
+                producer.root_staging_verification.candidate_gate_closure,
+                producer.candidate_gate_ingress,
+                producer.tree_import,
+            )
+        elif index == 1:
+            effect_authority_sha256 = derive_root_selection_effect_authority_sha256(
+                producer
+            )
+        elif drift_index is not None and drift_index < index:
+            effect_authority_sha256 = hashlib.sha256(
+                f"invalid-after-drift:{phase.value}".encode()
+            ).hexdigest()
+        elif index == 2:
+            staged = effect_producers[0]
+            verification = staged.root_staging_verification
+            effect_authority_sha256 = derive_w3_stores_effect_authority_sha256(
+                predecessor=receipts[1],
+                candidate_gate=verification.candidate_gate_closure.gate,
+                authority=verification.authority,
+                installation=verification.installation,
+                sealed_store=verification.sealed_store_receipt,
+                environment_content=(
+                    verification.candidate_gate_closure.semantic_environment
+                ),
+            )
+        elif index == 3:
+            staged = effect_producers[0]
+            verification = staged.root_staging_verification
+            effect_authority_sha256 = derive_w3_authority_effect_authority_sha256(
+                predecessor=receipts[2],
+                stores_published=effect_producers[2],
+                authority=verification.authority,
+                installation=verification.installation,
+                runtime_account=runtime_account,
+            )
+        elif index == 4:
+            staged = effect_producers[0]
+            verification = staged.root_staging_verification
+            projection = effect_producers[4]
+            effect_authority_sha256 = derive_w3_projection_effect_authority_sha256(
+                predecessor=receipts[3],
+                candidate_gate=verification.candidate_gate_closure.gate,
+                stores_published=effect_producers[2],
+                authority_published=effect_producers[3],
+                installation=verification.installation,
+                namespace_pair=projection.namespace_pair,
+                boot_id=projection.boot_id,
+            )
+        elif index == 5:
+            staged = effect_producers[0]
+            verification = staged.root_staging_verification
+            effect_authority_sha256 = derive_w3_units_effect_authority_sha256(
+                predecessor=receipts[4],
+                projection=effect_producers[4],
+                authority=verification.authority,
+                installation=verification.installation,
+            )
+        else:
+            effect_authority_sha256 = derive_w3_reload_effect_authority_sha256(
+                predecessor=receipts[5],
+                unit_publication=effect_producers[5],
+            )
+        if index == authority_drift_index:
+            effect_authority_sha256 = "f" * 64
         intent = RootPhaseIntentReceipt.create(
             launch_id=launch_id,
             phase=phase,
             predecessor_sha256=(() if index == 0 else (receipts[-1].raw_sha256,)),
-            effect_authority_sha256=hashlib.sha256(
-                f"prestart-authority:{phase.value}".encode()
-            ).hexdigest(),
+            effect_authority_sha256=effect_authority_sha256,
         )
         receipt = RootPhaseReceipt.create(
             intent=intent,
@@ -677,20 +1153,19 @@ def _prestart_inputs(semantic_inputs: dict[str, object]) -> dict[str, object]:
     )
     imported = _tree_import()
     source_device = os.makedev(8, 1)
-    candidate = _candidate_gate(
+    candidate, _ingress, _verification, staged = _staging_bundle(
         authority=authority,
         installation=installation,
-        semantic_sha256=semantic.raw_sha256,
-        generic_sha256=semantic.generic_receipt_sha256,
-        source_identity=imported.source_root,
+        sealed=sealed,
+        semantic=semantic,
+        imported=imported,
         accepted_root_device=source_device,
         accepted_root_inode=61,
     )
-    staged = WarehouseW3StagedCandidateReceipt.create(
-        candidate_gate=candidate,
-        tree_import=imported,
+    selection = WarehouseW3RootSelectionReceipt._create_for_test(
+        selection=_selection_receipt(candidate, staged),
+        staged_candidate=staged,
     )
-    selection = _selection_receipt(candidate, staged)
     sealed_publication = PublishedTreeReceipt.create(
         role="sealed",
         path=installation.sealed_root,
@@ -746,6 +1221,47 @@ def _prestart_inputs(semantic_inputs: dict[str, object]) -> dict[str, object]:
         nonce_directory=nonce_directory,
     )
     projection_root = installation.projection_root
+    namespace_pair = MountNamespacePair(
+        self_namespace=NamespaceIdentity(device=1, inode=2),
+        pid1_namespace=NamespaceIdentity(device=1, inode=2),
+    )
+    projection_parent_chain = _projection_chain(projection_root)
+    run_mount = _mount(
+        installation.projected_run_root,
+        read_only=False,
+        inode=61,
+        mount_id=101,
+    )
+    sealed_mount = _mount(
+        installation.projected_sealed_root,
+        read_only=True,
+        inode=62,
+        mount_id=102,
+    )
+    environment_mount = _mount(
+        installation.projected_environment_root,
+        read_only=True,
+        inode=63,
+        mount_id=103,
+    )
+    nonce_claims_mount = _mount(
+        installation.projected_nonce_ledger_parent,
+        read_only=False,
+        inode=64,
+        mount_id=104,
+    )
+    projection_authority_file = _published_file(
+        role="authority",
+        path=f"{projection_root}/authority.json",
+        raw=authority.raw,
+        inode=51,
+    )
+    projection_installation_file = _published_file(
+        role="installation",
+        path=f"{projection_root}/installation.json",
+        raw=installation.raw,
+        inode=52,
+    )
     projection = WarehouseW3ProjectionReceipt.create(
         authority=authority,
         installation=installation,
@@ -753,50 +1269,22 @@ def _prestart_inputs(semantic_inputs: dict[str, object]) -> dict[str, object]:
         sealed_publication=sealed_publication,
         environment_publication=environment_publication,
         nonce_directory=nonce_directory,
-        namespace_pair=MountNamespacePair(
-            self_namespace=NamespaceIdentity(device=1, inode=2),
-            pid1_namespace=NamespaceIdentity(device=1, inode=2),
-        ),
-        destination_parent_chain=_projection_chain(projection_root),
+        namespace_pair=namespace_pair,
+        destination_parent_chain=projection_parent_chain,
         boot_id="12345678-1234-1234-1234-123456789abc",
-        run_mount=_mount(
-            installation.projected_run_root,
-            read_only=False,
-            inode=61,
-            mount_id=101,
-        ),
-        sealed_mount=_mount(
-            installation.projected_sealed_root,
-            read_only=True,
-            inode=62,
-            mount_id=102,
-        ),
-        environment_mount=_mount(
-            installation.projected_environment_root,
-            read_only=True,
-            inode=63,
-            mount_id=103,
-        ),
-        nonce_claims_mount=_mount(
-            installation.projected_nonce_ledger_parent,
-            read_only=False,
-            inode=64,
-            mount_id=104,
-        ),
-        authority_publication=_published_file(
-            role="authority",
-            path=f"{projection_root}/authority.json",
-            raw=authority.raw,
-            inode=51,
-        ),
-        installation_publication=_published_file(
-            role="installation",
-            path=f"{projection_root}/installation.json",
-            raw=installation.raw,
-            inode=52,
-        ),
+        run_mount=run_mount,
+        sealed_mount=sealed_mount,
+        environment_mount=environment_mount,
+        nonce_claims_mount=nonce_claims_mount,
+        authority_publication=projection_authority_file,
+        installation_publication=projection_installation_file,
     )
-    unit_publication, manager_reload, loaded_manager = _manager_bundle(
+    (
+        unit_publication,
+        manager_reload,
+        loaded_manager,
+        manager_dependencies,
+    ) = _manager_bundle(
         authority,
         installation,
         boot_id=projection.boot_id,
@@ -835,6 +1323,7 @@ def _prestart_inputs(semantic_inputs: dict[str, object]) -> dict[str, object]:
         installation.launch_id,
         effect_producers,
         manager_reload,
+        runtime_account=runtime_account,
     )
     return {
         "authority": authority,
@@ -854,33 +1343,59 @@ def _prestart_inputs(semantic_inputs: dict[str, object]) -> dict[str, object]:
         "runtime_account": runtime_account,
         "phase_intents": phase_intents,
         "phase_receipts": phase_receipts,
+        "_replay_dependencies": {
+            "sealed_publication": sealed_publication,
+            "environment_publication": environment_publication,
+            "environment_relocation": relocation,
+            "authority_publication": authority_file,
+            "installation_publication": installation_file,
+            "nonce_directory": nonce_directory,
+            "projection_parent_chain": projection_parent_chain,
+            "run_mount": run_mount,
+            "sealed_mount": sealed_mount,
+            "environment_mount": environment_mount,
+            "nonce_claims_mount": nonce_claims_mount,
+            "projection_authority_publication": projection_authority_file,
+            "projection_installation_publication": (projection_installation_file),
+            **manager_dependencies,
+        },
     }
 
 
-def test_staged_candidate_round_trip_binds_exact_source_and_import() -> None:
+def _evidence_kwargs(values: dict[str, object]) -> dict[str, object]:
+    return {
+        name: value for name, value in values.items() if name != "_replay_dependencies"
+    }
+
+
+def test_staged_candidate_round_trip_binds_exact_source_and_import(
+    semantic_inputs: dict[str, object],
+) -> None:
+    semantic = _semantic(semantic_inputs)
     imported = _tree_import()
     sealed = _sealed_store()
-    authority, installation = _launch_pair(sealed, "6" * 64)
-    candidate = _candidate_gate(
+    authority, installation = _launch_pair(
+        sealed,
+        semantic.generic_receipt_sha256,
+    )
+    candidate, ingress, verification, receipt = _staging_bundle(
         authority=authority,
         installation=installation,
-        semantic_sha256="7" * 64,
-        generic_sha256="6" * 64,
-        source_identity=imported.source_root,
+        sealed=sealed,
+        semantic=semantic,
+        imported=imported,
     )
 
-    receipt = WarehouseW3StagedCandidateReceipt.create(
-        candidate_gate=candidate,
-        tree_import=imported,
-    )
-
+    imported = receipt.tree_import
     assert receipt.imported_tree_aggregate_sha256 == imported.tree_sha256
     assert receipt.source_identity == imported.source_root
     assert (
         WarehouseW3StagedCandidateReceipt.from_bytes(
             receipt.raw,
             candidate_gate=candidate,
+            candidate_gate_ingress=ingress,
             tree_import=imported,
+            root_staging_verification=verification,
         )
         == receipt
     )
@@ -888,32 +1403,55 @@ def test_staged_candidate_round_trip_binds_exact_source_and_import() -> None:
         WarehouseW3StagedCandidateReceipt()
 
 
-def test_staged_candidate_rejects_source_identity_or_canonical_drift() -> None:
+def test_staged_candidate_rejects_source_identity_or_canonical_drift(
+    semantic_inputs: dict[str, object],
+) -> None:
+    semantic = _semantic(semantic_inputs)
     imported = _tree_import()
     sealed = _sealed_store()
-    authority, installation = _launch_pair(sealed, "6" * 64)
-    candidate = _candidate_gate(
+    authority, installation = _launch_pair(
+        sealed,
+        semantic.generic_receipt_sha256,
+    )
+    candidate, ingress, verification, receipt = _staging_bundle(
         authority=authority,
         installation=installation,
-        semantic_sha256="7" * 64,
-        generic_sha256="6" * 64,
-        source_identity=imported.source_root,
+        sealed=sealed,
+        semantic=semantic,
+        imported=imported,
     )
-    receipt = WarehouseW3StagedCandidateReceipt.create(
-        candidate_gate=candidate,
-        tree_import=imported,
-    )
+    imported = receipt.tree_import
 
-    with pytest.raises(WarehouseW3RootInstallationError, match="identity differs"):
-        WarehouseW3StagedCandidateReceipt.create(
+    drifted_import = _tree_import(source_inode=12)
+    drifted_ingress = _candidate_ingress_fact(
+        candidate,
+        verification.candidate_gate_closure,
+        drifted_import,
+    )
+    with pytest.raises(WarehouseW3RootStagingError, match="binding differs"):
+        WarehouseW3RootStagingVerification.from_bytes(
+            verification.raw,
             candidate_gate=candidate,
-            tree_import=_tree_import(source_inode=12),
+            candidate_gate_closure=verification.candidate_gate_closure,
+            candidate_gate_ingress=drifted_ingress,
+            tree_import=drifted_import,
+            candidate_receipt=verification.candidate_receipt,
+            candidate_verification=verification.candidate_verification,
+            source_receipt=verification.source_receipt,
+            sealed_store_receipt=verification.sealed_store_receipt,
+            environment_receipt=verification.environment_receipt,
+            authority=verification.authority,
+            installation=verification.installation,
+            selection_intent=verification.selection_intent,
+            selection_commit=verification.selection_commit,
         )
     with pytest.raises(WarehouseW3RootInstallationError, match="not canonical"):
         WarehouseW3StagedCandidateReceipt.from_bytes(
             receipt.raw.rstrip(b"\n"),
             candidate_gate=candidate,
+            candidate_gate_ingress=ingress,
             tree_import=imported,
+            root_staging_verification=verification,
         )
 
 
@@ -1468,7 +2006,7 @@ def test_prestart_evidence_round_trip_closes_exact_pending_gate(
 ) -> None:
     inputs = _prestart_inputs(semantic_inputs)
 
-    evidence = WarehouseW3PreStartEvidence.create(**inputs)
+    evidence = WarehouseW3PreStartEvidence.create(**_evidence_kwargs(inputs))
     value = json.loads(evidence.raw)
 
     assert value["schema"] == WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA
@@ -1513,15 +2051,24 @@ def test_prestart_evidence_round_trip_closes_exact_pending_gate(
         "timestamp",
     }
     assert forbidden.isdisjoint(value)
-    assert inputs["selection"].candidate_sha256 == inputs["candidate_gate"].raw_sha256
     assert (
-        inputs["selection"].source_selection_identity.device,
-        inputs["selection"].source_selection_identity.inode,
+        inputs["selection"].selection.candidate_sha256
+        == inputs["candidate_gate"].raw_sha256
+    )
+    assert (
+        inputs["selection"].selection.source_selection_identity.device,
+        inputs["selection"].selection.source_selection_identity.inode,
     ) != (
         inputs["staged_candidate"].destination_identity.device,
         inputs["staged_candidate"].destination_identity.inode,
     )
-    assert WarehouseW3PreStartEvidence.from_bytes(evidence.raw, **inputs) == evidence
+    assert (
+        WarehouseW3PreStartEvidence.from_bytes(
+            evidence.raw,
+            **_evidence_kwargs(inputs),
+        )
+        == evidence
+    )
     with pytest.raises(TypeError, match="parsed from exact bytes"):
         WarehouseW3PreStartEvidence()
 
@@ -1537,7 +2084,7 @@ def test_prestart_evidence_requires_pending_i7_not_committed_k7(
         WarehouseW3RootInstallationError,
         match="pending I7 transaction",
     ):
-        WarehouseW3PreStartEvidence.create(**missing_pending)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(missing_pending))
 
     committed = RootPhaseReceipt.create(
         intent=inputs["phase_intents"][-1],
@@ -1549,7 +2096,7 @@ def test_prestart_evidence_requires_pending_i7_not_committed_k7(
         WarehouseW3RootInstallationError,
         match="pending I7 transaction",
     ):
-        WarehouseW3PreStartEvidence.create(**committed_k7)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(committed_k7))
 
     wrong_pending = RootPhaseIntentReceipt.create(
         launch_id=inputs["installation"].launch_id,
@@ -1566,7 +2113,7 @@ def test_prestart_evidence_requires_pending_i7_not_committed_k7(
         WarehouseW3RootInstallationError,
         match="effect authority differs",
     ):
-        WarehouseW3PreStartEvidence.create(**wrong_authority)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(wrong_authority))
 
 
 @pytest.mark.parametrize("phase_index", tuple(range(7)))
@@ -1579,6 +2126,7 @@ def test_prestart_evidence_rejects_every_committed_phase_effect_drift(
         inputs["installation"].launch_id,
         _prestart_effect_producers(inputs),
         inputs["manager_reload"],
+        runtime_account=inputs["runtime_account"],
         drift_index=phase_index,
     )
     drifted = {
@@ -1591,7 +2139,33 @@ def test_prestart_evidence_rejects_every_committed_phase_effect_drift(
         WarehouseW3RootInstallationError,
         match="phase effect differs",
     ):
-        WarehouseW3PreStartEvidence.create(**drifted)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(drifted))
+
+
+@pytest.mark.parametrize("phase_index", tuple(range(2, 7)))
+def test_prestart_evidence_rejects_k2_k6_effect_authority_drift(
+    semantic_inputs: dict[str, object],
+    phase_index: int,
+) -> None:
+    inputs = _prestart_inputs(semantic_inputs)
+    phase_intents, phase_receipts = _prestart_phase_prefix(
+        inputs["installation"].launch_id,
+        _prestart_effect_producers(inputs),
+        inputs["manager_reload"],
+        runtime_account=inputs["runtime_account"],
+        authority_drift_index=phase_index,
+    )
+    drifted = {
+        **inputs,
+        "phase_intents": phase_intents,
+        "phase_receipts": phase_receipts,
+    }
+
+    with pytest.raises(
+        WarehouseW3RootInstallationError,
+        match="K2-K6 effect authority differs",
+    ):
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(drifted))
 
 
 def test_prestart_evidence_defines_selection_candidate_as_closed_gate(
@@ -1603,25 +2177,14 @@ def test_prestart_evidence_defines_selection_candidate_as_closed_gate(
         inputs["staged_candidate"],
         candidate_sha256=inputs["candidate_gate"].source_receipt_sha256,
     )
-    effect_producers = list(_prestart_effect_producers(inputs))
-    effect_producers[1] = alternate
-    phase_intents, phase_receipts = _prestart_phase_prefix(
-        inputs["installation"].launch_id,
-        tuple(effect_producers),
-        inputs["manager_reload"],
-    )
-    drifted = {
-        **inputs,
-        "selection": alternate,
-        "phase_intents": phase_intents,
-        "phase_receipts": phase_receipts,
-    }
-
     with pytest.raises(
-        WarehouseW3RootInstallationError,
-        match="selection binding differs",
+        WarehouseW3RootSelectionError,
+        match="generic selection differs",
     ):
-        WarehouseW3PreStartEvidence.create(**drifted)
+        WarehouseW3RootSelectionReceipt._create_for_test(
+            selection=alternate,
+            staged_candidate=inputs["staged_candidate"],
+        )
 
 
 def test_prestart_evidence_rejects_projection_source_fact_drift(
@@ -1714,6 +2277,7 @@ def test_prestart_evidence_rejects_projection_source_fact_drift(
         installation.launch_id,
         tuple(effect_producers),
         inputs["manager_reload"],
+        runtime_account=inputs["runtime_account"],
     )
     drifted = {
         **inputs,
@@ -1726,7 +2290,7 @@ def test_prestart_evidence_rejects_projection_source_fact_drift(
         WarehouseW3RootInstallationError,
         match="projection source fact binding differs",
     ):
-        WarehouseW3PreStartEvidence.create(**drifted)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(drifted))
 
 
 def test_prestart_evidence_rejects_manager_boot_live_phase_and_account_drift(
@@ -1734,7 +2298,7 @@ def test_prestart_evidence_rejects_manager_boot_live_phase_and_account_drift(
 ) -> None:
     inputs = _prestart_inputs(semantic_inputs)
 
-    unit, reload_receipt, loaded = _manager_bundle(
+    unit, reload_receipt, loaded, _manager_dependencies = _manager_bundle(
         inputs["authority"],
         inputs["installation"],
         boot_id="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -1746,6 +2310,7 @@ def test_prestart_evidence_rejects_manager_boot_live_phase_and_account_drift(
         inputs["installation"].launch_id,
         tuple(effect_producers),
         reload_receipt,
+        runtime_account=inputs["runtime_account"],
     )
     manager_drift = {
         **inputs,
@@ -1759,7 +2324,7 @@ def test_prestart_evidence_rejects_manager_boot_live_phase_and_account_drift(
         WarehouseW3RootInstallationError,
         match="identity, or boot binding differs",
     ):
-        WarehouseW3PreStartEvidence.create(**manager_drift)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(manager_drift))
 
     changed_rehash = json.loads(inputs["environment_rehash"].raw)
     changed_rehash["phase"] = "completion"
@@ -1773,7 +2338,7 @@ def test_prestart_evidence_rejects_manager_boot_live_phase_and_account_drift(
         WarehouseW3RootInstallationError,
         match="live preclaim environment binding differs",
     ):
-        WarehouseW3PreStartEvidence.create(**live_drift)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(live_drift))
 
     account_drift = {
         **inputs,
@@ -1787,7 +2352,7 @@ def test_prestart_evidence_rejects_manager_boot_live_phase_and_account_drift(
         WarehouseW3RootInstallationError,
         match="nonce directory ownership differ",
     ):
-        WarehouseW3PreStartEvidence.create(**account_drift)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(account_drift))
 
     root_account = {
         **inputs,
@@ -1801,7 +2366,7 @@ def test_prestart_evidence_rejects_manager_boot_live_phase_and_account_drift(
         WarehouseW3RootInstallationError,
         match="nonce directory ownership differ",
     ):
-        WarehouseW3PreStartEvidence.create(**root_account)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(root_account))
 
 
 def test_prestart_evidence_rejects_forged_exact_class_raw_attribute_split(
@@ -1827,7 +2392,7 @@ def test_prestart_evidence_rejects_forged_exact_class_raw_attribute_split(
         WarehouseW3RootInstallationError,
         match="object differs from canonical raw",
     ):
-        WarehouseW3PreStartEvidence.create(**forged_inputs)
+        WarehouseW3PreStartEvidence.create(**_evidence_kwargs(forged_inputs))
 
 
 def test_prestart_evidence_rejects_forged_unit_publication_raw_binding(
@@ -1871,14 +2436,14 @@ def test_prestart_evidence_rejects_forged_unit_publication_raw_binding(
             WarehouseW3RootInstallationError,
             match="dependency object differs",
         ):
-            WarehouseW3PreStartEvidence.create(**forged_inputs)
+            WarehouseW3PreStartEvidence.create(**_evidence_kwargs(forged_inputs))
 
 
 def test_prestart_evidence_parser_rejects_extra_or_forbidden_fields(
     semantic_inputs: dict[str, object],
 ) -> None:
     inputs = _prestart_inputs(semantic_inputs)
-    evidence = WarehouseW3PreStartEvidence.create(**inputs)
+    evidence = WarehouseW3PreStartEvidence.create(**_evidence_kwargs(inputs))
 
     for field in ("unknown", "authorization_sha256", "start_issue_sha256"):
         changed = json.loads(evidence.raw)
@@ -1889,5 +2454,5 @@ def test_prestart_evidence_parser_rejects_extra_or_forbidden_fields(
         ):
             WarehouseW3PreStartEvidence.from_bytes(
                 _canonical(changed),
-                **inputs,
+                **_evidence_kwargs(inputs),
             )

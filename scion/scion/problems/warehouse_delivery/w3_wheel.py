@@ -1,4 +1,4 @@
-"""Production-unwired offline double-wheel evidence for Warehouse W3.
+"""Offline double-wheel evidence for Warehouse W3 candidate preparation.
 
 The owner consumes two immutable Git-archive files for one launch commit,
 extracts each into an independent disposable source tree, invokes one fixed
@@ -61,15 +61,38 @@ FIXED_REQUIRED_WHEEL_MEMBERS = (
     "scion/core/research_surface_index.py",
     "scion/problems/__init__.py",
     "scion/problems/warehouse_delivery/__init__.py",
+    "scion/problems/warehouse_delivery/w2_preservation.py",
     "scion/problems/warehouse_delivery/w3_analysis.py",
+    "scion/problems/warehouse_delivery/w3_candidate_coordinator.py",
+    "scion/problems/warehouse_delivery/w3_candidate_gate.py",
+    "scion/problems/warehouse_delivery/w3_candidate_ingress.py",
     "scion/problems/warehouse_delivery/w3_composition.py",
+    "scion/problems/warehouse_delivery/w3_counter_fixtures.py",
+    "scion/problems/warehouse_delivery/w3_environment.py",
+    "scion/problems/warehouse_delivery/w3_environment_receipts.py",
     "scion/problems/warehouse_delivery/w3_fixed_arm.py",
+    "scion/problems/warehouse_delivery/w3_installation.py",
+    "scion/problems/warehouse_delivery/w3_installed_replay.py",
+    "scion/problems/warehouse_delivery/w3_prestart_facts.py",
+    "scion/problems/warehouse_delivery/w3_root_coordinator.py",
+    "scion/problems/warehouse_delivery/w3_root_installation.py",
+    "scion/problems/warehouse_delivery/w3_root_selection.py",
+    "scion/problems/warehouse_delivery/w3_root_staging.py",
+    "scion/problems/warehouse_delivery/w3_start_authorization.py",
+    "scion/problems/warehouse_delivery/w3_start_gate.py",
+    "scion/problems/warehouse_delivery/w3_start_store.py",
+    "scion/problems/warehouse_delivery/w3_terminal_acceptance.py",
+    "scion/problems/warehouse_delivery/w3_terminal_manager.py",
     "scion/problems/warehouse_delivery/w3_validation.py",
+    "scion/problems/warehouse_delivery/w3_wheel.py",
     W3_CLOSE_TEMPLATE_MEMBER,
     W3_RUN_TEMPLATE_MEMBER,
     "scion/runtime/__init__.py",
     "scion/runtime/execution/__init__.py",
     "scion/runtime/execution/cgroup_v2.py",
+    "scion/runtime/execution/environment_integrity.py",
+    "scion/runtime/execution/external_installation.py",
+    "scion/runtime/execution/external_linux.py",
     "scion/runtime/execution/invocation_terminal.py",
     "scion/runtime/execution/launch_authority.py",
     "scion/runtime/execution/model.py",
@@ -81,6 +104,7 @@ FIXED_REQUIRED_WHEEL_MEMBERS = (
     "scion/runtime/subprocess_runner.py",
     "scion/runtime/workspace.py",
     "scion/tools/__init__.py",
+    "scion/tools/scion_w3_install.py",
     W3_TOOL_MEMBER,
 )
 
@@ -2025,6 +2049,50 @@ def verify_offline_double_wheel_artifact(
     )
 
 
+def reopen_offline_double_wheel_artifact(
+    archives: tuple[ImmutableGitArchive, ImmutableGitArchive],
+    *,
+    repo_root: Path,
+    work_root: Path,
+    receipt: OfflineDoubleWheelReceipt,
+) -> OfflineDoubleWheelArtifact:
+    """Reconstruct and fully reverify one fixed-path production build."""
+
+    if (
+        type(archives) is not tuple
+        or len(archives) != 2
+        or any(type(item) is not ImmutableGitArchive for item in archives)
+    ):
+        raise TypeError("archives must be two exact ImmutableGitArchive values")
+    if type(receipt) is not OfflineDoubleWheelReceipt:
+        raise TypeError("receipt must be exact OfflineDoubleWheelReceipt")
+    if OfflineDoubleWheelReceipt.from_bytes(receipt.raw) != receipt:
+        raise WarehouseW3WheelError("offline double-wheel receipt object differs")
+    _absolute_path(repo_root, field="repo_root")
+    _absolute_path(work_root, field="work_root")
+    wheel_paths = (
+        work_root / "build-1" / "wheel" / receipt.wheel_filename,
+        work_root / "build-2" / "wheel" / receipt.wheel_filename,
+    )
+    evidence = _OfflineDoubleWheelBuildEvidence(
+        repo_root=repo_root,
+        archives=archives,
+        wheel_paths=wheel_paths,
+        wheel_identities=receipt.wheel_identities,
+        receipt=receipt,
+        build_argv=(
+            BUILDER_ARGV_TEMPLATE[:8] + (str(work_root / "build-1" / "wheel"), "."),
+            BUILDER_ARGV_TEMPLATE[:8] + (str(work_root / "build-2" / "wheel"), "."),
+        ),
+    )
+    production = object.__new__(_ProductionOfflineDoubleWheelBuildEvidence)
+    object.__setattr__(production, "evidence", evidence)
+    artifact = OfflineDoubleWheelArtifact._from_production_build(production)
+    if verify_offline_double_wheel_artifact(artifact) != receipt:
+        raise WarehouseW3WheelError("reopened offline double-wheel receipt differs")
+    return artifact
+
+
 def _verify_offline_double_wheel_artifact_for_test(
     artifact: _TestOfflineDoubleWheelArtifact,
     *,
@@ -2405,5 +2473,6 @@ __all__ = [
     "WheelCommandRunner",
     "WheelMember",
     "build_offline_double_wheel",
+    "reopen_offline_double_wheel_artifact",
     "verify_offline_double_wheel_artifact",
 ]

@@ -76,6 +76,11 @@ import sys
 
 for _name in (
     "scion.tools.scion_w3_tool",
+    "scion.problems.warehouse_delivery.w2_preservation",
+    "scion.problems.warehouse_delivery.w3_counter_fixtures",
+    "scion.problems.warehouse_delivery.w3_installed_replay",
+    "scion.problems.warehouse_delivery.w3_root_coordinator",
+    "scion.problems.warehouse_delivery.w3_start_store",
     "scion.runtime.native._spawn_into_cgroup",
     "dbus",
     "_dbus_bindings",
@@ -2452,6 +2457,23 @@ def _validate_probe(
     _sys_path_shape(fact.sys_path, root=root, content=content)
 
 
+def validate_environment_probe_fact(
+    fact: EnvironmentProbeFact,
+    *,
+    phase: str,
+    root: Path,
+    content: WarehouseEnvironmentContentReceipt,
+) -> None:
+    """Reopen and validate one exact problem-owned environment probe fact."""
+
+    _validate_probe(
+        fact,
+        phase=phase,
+        root=root,
+        content=content,
+    )
+
+
 def _sys_path_shape(
     values: tuple[str, ...],
     *,
@@ -3126,5 +3148,6 @@ __all__ = [
     "acquire_warehouse_environment_content_for_test",
     "discover_environment_external_runtime_paths",
     "derive_final_environment_path",
+    "validate_environment_probe_fact",
     "verify_live_environment",
 ]

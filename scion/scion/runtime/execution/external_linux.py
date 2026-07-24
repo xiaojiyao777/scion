@@ -37,6 +37,7 @@ _SYS_MOVE_MOUNT = 429
 _COPY_CHUNK = 1024 * 1024
 _FDINFO_LIMIT = 64 * 1024
 _ROOT_REGULAR_PUBLICATION_LIMIT = 16 * 1024 * 1024
+_IMPORT_RECEIPT_LIMIT = 128 * 1024 * 1024
 
 
 class ExternalLinuxError(RuntimeError):
@@ -53,6 +54,116 @@ class TreeImportHold(ExternalLinuxError):
     def __init__(self, staging_leaf: str) -> None:
         self.staging_leaf = staging_leaf
         super().__init__(f"immutable tree import is held at {staging_leaf}")
+
+
+class _TreeImportLimitExceeded(ExternalLinuxError):
+    """A fixed production import budget was exceeded."""
+
+    def __init__(
+        self,
+        *,
+        dimension: str,
+        path: str,
+        limit: int,
+        observed: int,
+    ) -> None:
+        self.dimension = dimension
+        self.path = path
+        self.limit = limit
+        self.observed = observed
+        super().__init__(
+            f"immutable tree {dimension} limit exceeded at {path}: "
+            f"{observed} > {limit}"
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class _ImportLimits:
+    max_entries: int
+    max_depth: int
+    max_file_bytes: int
+    max_total_bytes: int
+
+
+_IMPORT_LIMITS = _ImportLimits(
+    max_entries=65_536,
+    max_depth=128,
+    max_file_bytes=1024 * 1024 * 1024,
+    max_total_bytes=4 * 1024 * 1024 * 1024,
+)
+
+
+@dataclass(slots=True)
+class _ImportBudget:
+    limits: _ImportLimits
+    entry_count: int = 0
+    reserved_bytes: int = 0
+    copied_bytes: int = 0
+
+    def remaining_entries(self) -> int:
+        return self.limits.max_entries - self.entry_count
+
+    def admit_entry(self, *, path: str, depth: int) -> None:
+        next_count = self.entry_count + 1
+        if next_count > self.limits.max_entries:
+            raise _TreeImportLimitExceeded(
+                dimension="entry-count",
+                path=path,
+                limit=self.limits.max_entries,
+                observed=next_count,
+            )
+        if depth > self.limits.max_depth:
+            raise _TreeImportLimitExceeded(
+                dimension="depth",
+                path=path,
+                limit=self.limits.max_depth,
+                observed=depth,
+            )
+        self.entry_count = next_count
+
+    def reserve_file(self, *, path: str, size: int) -> None:
+        if size > self.limits.max_file_bytes:
+            raise _TreeImportLimitExceeded(
+                dimension="file-bytes",
+                path=path,
+                limit=self.limits.max_file_bytes,
+                observed=size,
+            )
+        next_total = self.reserved_bytes + size
+        if next_total > self.limits.max_total_bytes:
+            raise _TreeImportLimitExceeded(
+                dimension="total-bytes",
+                path=path,
+                limit=self.limits.max_total_bytes,
+                observed=next_total,
+            )
+        self.reserved_bytes = next_total
+
+    def admit_chunk(
+        self,
+        *,
+        path: str,
+        file_bytes: int,
+        declared_size: int,
+        chunk_bytes: int,
+    ) -> None:
+        next_file = file_bytes + chunk_bytes
+        if next_file > declared_size or next_file > self.limits.max_file_bytes:
+            raise _TreeImportLimitExceeded(
+                dimension="file-bytes",
+                path=path,
+                limit=min(declared_size, self.limits.max_file_bytes),
+                observed=next_file,
+            )
+        next_total = self.copied_bytes + chunk_bytes
+        if next_total > self.limits.max_total_bytes:
+            raise _TreeImportLimitExceeded(
+                dimension="total-bytes",
+                path=path,
+                limit=self.limits.max_total_bytes,
+                observed=next_total,
+            )
+        self.copied_bytes = next_total
 
 
 class LinuxMutationHold(ExternalLinuxError):
@@ -465,6 +576,48 @@ class PinnedDirectory:
                     pass
             raise
 
+    def open_child_directory(self, leaf: str) -> "PinnedDirectory":
+        """Pin one named child through this retained parent descriptor."""
+
+        child_name = _leaf(leaf, field="child directory leaf")
+        self.revalidate()
+        duplicated: list[int] = []
+        try:
+            for descriptor in self._fds:
+                duplicated.append(os.dup(descriptor))
+            child_fd = _open_directory_at(self.fd, child_name)
+            duplicated.append(child_fd)
+            metadata = os.fstat(child_fd)
+            _require_directory(metadata, field="child directory")
+            identity = FileIdentity.from_stat(metadata)
+            named = FileIdentity.from_stat(
+                os.stat(
+                    child_name,
+                    dir_fd=self.fd,
+                    follow_symlinks=False,
+                )
+            )
+            if identity != named:
+                raise ExternalLinuxError("child directory identity drifted")
+            child_path = str(PurePosixPath(self._path) / child_name)
+            result = PinnedDirectory(
+                path=child_path,
+                fds=tuple(duplicated),
+                components=(
+                    *self._components,
+                    PinnedComponent(name=child_name, identity=identity),
+                ),
+            )
+            result.revalidate()
+            return result
+        except Exception:
+            for descriptor in reversed(duplicated):
+                try:
+                    os.close(descriptor)
+                except OSError:
+                    pass
+            raise
+
     def close(self) -> None:
         if self._closed:
             return
@@ -608,6 +761,28 @@ class ImportEntry:
         )
 
 
+def _require_import_entry_limits(
+    entries: tuple[ImportEntry, ...],
+    *,
+    canonical: bool,
+) -> None:
+    try:
+        budget = _ImportBudget(_IMPORT_LIMITS)
+        for entry in entries:
+            budget.admit_entry(
+                path=entry.path,
+                depth=len(PurePosixPath(entry.path).parts),
+            )
+            if entry.kind == "file":
+                budget.reserve_file(path=entry.path, size=entry.size)
+    except _TreeImportLimitExceeded as exc:
+        if canonical:
+            raise CanonicalImportReceiptError(
+                "immutable tree import receipt exceeds fixed limits"
+            ) from exc
+        raise
+
+
 @dataclass(frozen=True, slots=True, init=False)
 class ImmutableTreeImportReceipt:
     staging_leaf: str
@@ -649,6 +824,7 @@ class ImmutableTreeImportReceipt:
         ordered = tuple(sorted(entries, key=lambda item: item.path.encode("utf-8")))
         if ordered != entries or len({entry.path for entry in entries}) != len(entries):
             raise ExternalLinuxError("import entries are not unique and byte-sorted")
+        _require_import_entry_limits(entries, canonical=False)
         inventory = {
             "schema": "scion.immutable-tree-inventory.v1",
             "entries": [entry.to_mapping() for entry in entries],
@@ -668,6 +844,12 @@ class ImmutableTreeImportReceipt:
 
     @classmethod
     def from_bytes(cls, raw: bytes) -> "ImmutableTreeImportReceipt":
+        if type(raw) is not bytes:
+            raise TypeError("immutable tree import receipt must be exact bytes")
+        if len(raw) > _IMPORT_RECEIPT_LIMIT:
+            raise CanonicalImportReceiptError(
+                "immutable tree import receipt exceeds its byte limit"
+            )
         value = _exact_fields(
             _decode_canonical_json(raw, label="immutable tree import receipt"),
             frozenset(
@@ -696,6 +878,7 @@ class ImmutableTreeImportReceipt:
             raise CanonicalImportReceiptError(
                 "immutable tree entries are not unique and byte-sorted"
             )
+        _require_import_entry_limits(entries, canonical=True)
         inventory = {
             "schema": "scion.immutable-tree-inventory.v1",
             "entries": [entry.to_mapping() for entry in entries],
@@ -802,6 +985,33 @@ def _target_mode(source_mode: int, *, directory: bool) -> int:
     return mode
 
 
+def _bounded_directory_names(
+    source_fd: int,
+    *,
+    budget: _ImportBudget,
+    prefix: str,
+) -> tuple[str, ...]:
+    remaining = budget.remaining_entries()
+    names: list[str] = []
+    with os.scandir(source_fd) as iterator:
+        for item in iterator:
+            name = item.name
+            if type(name) is not str:
+                raise ExternalLinuxError("source directory entries differ")
+            names.append(name)
+            if len(names) > remaining:
+                path = name if not prefix else f"{prefix}/{name}"
+                raise _TreeImportLimitExceeded(
+                    dimension="entry-count",
+                    path=path,
+                    limit=budget.limits.max_entries,
+                    observed=budget.limits.max_entries + 1,
+                )
+    if len(set(names)) != len(names):
+        raise ExternalLinuxError("source directory entries differ")
+    return tuple(sorted(names, key=lambda item: item.encode("utf-8")))
+
+
 def _copy_tree(
     source_fd: int,
     destination_fd: int,
@@ -812,6 +1022,8 @@ def _copy_tree(
     source_device: int,
     entries: list[ImportEntry],
     observer: Callable[[str, str], None] | None,
+    budget: _ImportBudget,
+    depth: int,
 ) -> None:
     source_before = _StableStat.from_stat(os.fstat(source_fd))
     _require_directory(
@@ -819,13 +1031,17 @@ def _copy_tree(
         field=f"source directory {prefix or '.'}",
     )
     _target_mode(os.fstat(source_fd).st_mode, directory=True)
-    names = os.listdir(source_fd)
-    if any(type(name) is not str for name in names) or len(set(names)) != len(names):
-        raise ExternalLinuxError("source directory entries differ")
-    for name in sorted(names, key=lambda item: item.encode("utf-8")):
+    names = _bounded_directory_names(
+        source_fd,
+        budget=budget,
+        prefix=prefix,
+    )
+    for name in names:
         leaf = _leaf(name, field="source entry")
         relative = leaf if not prefix else f"{prefix}/{leaf}"
         _relative_path(relative, field="source relative path")
+        child_depth = depth + 1
+        budget.admit_entry(path=relative, depth=child_depth)
         before_metadata = os.stat(leaf, dir_fd=source_fd, follow_symlinks=False)
         before = _StableStat.from_stat(before_metadata)
         if before_metadata.st_dev != source_device:
@@ -851,6 +1067,8 @@ def _copy_tree(
                     source_device=source_device,
                     entries=entries,
                     observer=observer,
+                    budget=budget,
+                    depth=child_depth,
                 )
                 target_mode = _target_mode(before_metadata.st_mode, directory=True)
                 os.fchmod(child_destination_fd, target_mode)
@@ -896,6 +1114,10 @@ def _copy_tree(
                 os.fstat(source_file_fd),
                 field=f"source file {relative}",
             )
+            budget.reserve_file(
+                path=relative,
+                size=before.identity.size,
+            )
             destination_file_fd = os.open(
                 leaf,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW | os.O_CLOEXEC,
@@ -908,6 +1130,12 @@ def _copy_tree(
                 chunk = os.read(source_file_fd, _COPY_CHUNK)
                 if not chunk:
                     break
+                budget.admit_chunk(
+                    path=relative,
+                    file_bytes=byte_count,
+                    declared_size=before.identity.size,
+                    chunk_bytes=len(chunk),
+                )
                 digest.update(chunk)
                 byte_count += len(chunk)
                 _write_all(destination_file_fd, chunk)
@@ -980,6 +1208,7 @@ def _import_immutable_tree(
         if os.fstat(staging_fd).st_dev != staging_parent_metadata.st_dev:
             raise ExternalLinuxError("staging root is not on the parent filesystem")
         entries: list[ImportEntry] = []
+        budget = _ImportBudget(_IMPORT_LIMITS)
         _copy_tree(
             source_fd,
             staging_fd,
@@ -989,7 +1218,11 @@ def _import_immutable_tree(
             source_device=source_metadata.st_dev,
             entries=entries,
             observer=observer,
+            budget=budget,
+            depth=0,
         )
+        if budget.copied_bytes != budget.reserved_bytes:
+            raise ExternalLinuxError("immutable tree copy byte budget differs")
         _same_snapshot(
             source_before,
             os.fstat(source_fd),
@@ -1043,12 +1276,160 @@ def import_root_owned_tree(
             target_gid=0,
         )
         source.revalidate()
-        staging_parent.revalidate()
+        staging_parent.revalidate_mutable_leaf()
         return receipt
     except TreeImportHold:
         raise
     except Exception as exc:
         raise TreeImportHold(_leaf(staging_leaf, field="staging_leaf")) from exc
+
+
+def _verify_imported_directory(
+    descriptor: int,
+    *,
+    prefix: str,
+    expected: dict[str, ImportEntry],
+    seen: set[str],
+) -> None:
+    before = _StableStat.from_stat(os.fstat(descriptor))
+    names = os.listdir(descriptor)
+    if any(type(name) is not str for name in names) or len(set(names)) != len(names):
+        raise ExternalLinuxError("imported directory entries differ")
+    for name in sorted(names, key=lambda item: item.encode("utf-8")):
+        leaf = _leaf(name, field="imported entry")
+        relative = leaf if not prefix else f"{prefix}/{leaf}"
+        _relative_path(relative, field="imported relative path")
+        entry = expected.get(relative)
+        if entry is None or relative in seen:
+            raise ExternalLinuxError(
+                f"imported staging contains an unexpected entry: {relative}"
+            )
+        seen.add(relative)
+        named_before = os.stat(leaf, dir_fd=descriptor, follow_symlinks=False)
+        if FileIdentity.from_stat(named_before) != entry.destination_identity:
+            raise ExternalLinuxError(f"imported staging identity differs: {relative}")
+        if entry.kind == "directory":
+            child = _open_directory_at(descriptor, leaf)
+            try:
+                if (
+                    FileIdentity.from_stat(os.fstat(child))
+                    != entry.destination_identity
+                ):
+                    raise ExternalLinuxError(
+                        f"imported directory identity differs: {relative}"
+                    )
+                _verify_imported_directory(
+                    child,
+                    prefix=relative,
+                    expected=expected,
+                    seen=seen,
+                )
+                if (
+                    FileIdentity.from_stat(os.fstat(child))
+                    != entry.destination_identity
+                ):
+                    raise ExternalLinuxError(
+                        f"imported directory changed while read: {relative}"
+                    )
+            finally:
+                os.close(child)
+        else:
+            file_fd = os.open(
+                leaf,
+                os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                dir_fd=descriptor,
+            )
+            digest = hashlib.sha256()
+            byte_count = 0
+            try:
+                if (
+                    FileIdentity.from_stat(os.fstat(file_fd))
+                    != entry.destination_identity
+                ):
+                    raise ExternalLinuxError(
+                        f"imported file identity differs: {relative}"
+                    )
+                while True:
+                    chunk = os.read(file_fd, _COPY_CHUNK)
+                    if not chunk:
+                        break
+                    digest.update(chunk)
+                    byte_count += len(chunk)
+                if (
+                    FileIdentity.from_stat(os.fstat(file_fd))
+                    != entry.destination_identity
+                    or byte_count != entry.size
+                    or digest.hexdigest() != entry.sha256
+                ):
+                    raise ExternalLinuxError(
+                        f"imported file content differs: {relative}"
+                    )
+            finally:
+                os.close(file_fd)
+        named_after = os.stat(leaf, dir_fd=descriptor, follow_symlinks=False)
+        if FileIdentity.from_stat(named_after) != entry.destination_identity:
+            raise ExternalLinuxError(
+                f"imported staging entry changed while read: {relative}"
+            )
+    _same_snapshot(
+        before,
+        os.fstat(descriptor),
+        field=f"imported directory {prefix or '.'}",
+    )
+
+
+def reopen_imported_tree(
+    staging_parent: PinnedDirectory,
+    receipt: ImmutableTreeImportReceipt,
+) -> ImmutableTreeImportReceipt:
+    """Reopen every imported destination byte and exact destination identity."""
+
+    if type(staging_parent) is not PinnedDirectory:
+        raise TypeError("staging_parent must be exact PinnedDirectory")
+    if type(receipt) is not ImmutableTreeImportReceipt:
+        raise TypeError("receipt must be exact ImmutableTreeImportReceipt")
+    reopened = ImmutableTreeImportReceipt.from_bytes(receipt.raw)
+    if reopened != receipt:
+        raise ExternalLinuxError("immutable import receipt object differs")
+    staging_parent.revalidate_mutable_leaf()
+    named_before = FileIdentity.from_stat(
+        os.stat(
+            receipt.staging_leaf,
+            dir_fd=staging_parent.fd,
+            follow_symlinks=False,
+        )
+    )
+    if named_before != receipt.staging_root:
+        raise ExternalLinuxError("imported staging root identity differs")
+    staging_fd = _open_directory_at(staging_parent.fd, receipt.staging_leaf)
+    try:
+        if FileIdentity.from_stat(os.fstat(staging_fd)) != receipt.staging_root:
+            raise ExternalLinuxError("imported staging root identity differs")
+        expected = {entry.path: entry for entry in receipt.entries}
+        seen: set[str] = set()
+        _verify_imported_directory(
+            staging_fd,
+            prefix="",
+            expected=expected,
+            seen=seen,
+        )
+        if seen != set(expected):
+            raise ExternalLinuxError("imported staging inventory is incomplete")
+        if FileIdentity.from_stat(os.fstat(staging_fd)) != receipt.staging_root:
+            raise ExternalLinuxError("imported staging root changed while reopened")
+    finally:
+        os.close(staging_fd)
+    named_after = FileIdentity.from_stat(
+        os.stat(
+            receipt.staging_leaf,
+            dir_fd=staging_parent.fd,
+            follow_symlinks=False,
+        )
+    )
+    if named_after != receipt.staging_root:
+        raise ExternalLinuxError("imported staging root changed while reopened")
+    staging_parent.revalidate_mutable_leaf()
+    return reopened
 
 
 def _role(value: object, *, field: str) -> str:
@@ -2320,4 +2701,5 @@ __all__ = [
     "parse_fdinfo_mount_id",
     "pin_absolute_directory",
     "publish_noreplace",
+    "reopen_imported_tree",
 ]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from dataclasses import dataclass
 
@@ -12,18 +13,21 @@ from scion.runtime.execution.external_installation import (
     InstalledAcceptance,
     RootPhaseIntentReceipt,
     RootPhaseReceipt,
-    SelectionReceipt,
     StartAuthorizationReceipt,
 )
 
 from .w3_prestart_facts import WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA
+from .w3_installed_replay import RootInstalledAcceptanceAuthority
 from .w3_root_installation import (
     WarehouseW3PreStartEvidence,
 )
-from .w3_installation import (
-    ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
-    CandidateSelectionCommit,
-    CandidateSelectionIntent,
+from .w3_installation import ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
+from .w3_root_selection import (
+    RootSelectedCandidateAuthority,
+    WarehouseW3RootSelectionError,
+    WarehouseW3SelectedCandidateChain,
+    WarehouseW3SelectionReplayInputs,
+    verify_w3_selected_candidate_chain,
 )
 
 _DATE_RE = re.compile(
@@ -245,9 +249,52 @@ def _reopen_prestart_evidence(
 def bind_start_authorization(
     prospective: ProspectiveStartAuthorizationIntent,
     *,
-    preparation_intent: CandidateSelectionIntent,
-    preparation_commit: CandidateSelectionCommit,
-    root_selection: SelectionReceipt,
+    root_selection_authority: RootSelectedCandidateAuthority,
+    installed_acceptance_authority: RootInstalledAcceptanceAuthority,
+    recorded_at_utc: str,
+    unit: str,
+) -> StartAuthorizationReceipt:
+    """Bind prior intent through retained root selection and installation."""
+
+    if type(prospective) is not ProspectiveStartAuthorizationIntent:
+        raise TypeError("prospective must be exact ProspectiveStartAuthorizationIntent")
+    if type(root_selection_authority) is not RootSelectedCandidateAuthority:
+        raise TypeError(
+            "root_selection_authority must be exact " "RootSelectedCandidateAuthority"
+        )
+    if type(installed_acceptance_authority) is not RootInstalledAcceptanceAuthority:
+        raise TypeError(
+            "installed_acceptance_authority must be exact "
+            "RootInstalledAcceptanceAuthority"
+        )
+    if os.geteuid() != 0:
+        raise PermissionError("start authorization binding requires effective UID zero")
+    root_selection_authority.revalidate()
+    installed_acceptance_authority.revalidate()
+    installed_chain = installed_acceptance_authority.chain
+    if installed_chain.selected_candidate != root_selection_authority.chain:
+        raise WarehouseW3StartAuthorizationError(
+            "root selection and installed acceptance authorities differ"
+        )
+    receipt = _bind_start_authorization_from_chain(
+        prospective,
+        selected_chain=root_selection_authority.chain,
+        prestart_evidence=installed_chain.prestart_evidence,
+        installed_acceptance=installed_chain.installed_acceptance,
+        phase_intents=installed_chain.phase_intents,
+        phase_receipts=installed_chain.phase_receipts,
+        recorded_at_utc=recorded_at_utc,
+        unit=unit,
+    )
+    root_selection_authority.revalidate()
+    installed_acceptance_authority.revalidate()
+    return receipt
+
+
+def _bind_start_authorization_for_test(
+    prospective: ProspectiveStartAuthorizationIntent,
+    *,
+    selection_replay_inputs: WarehouseW3SelectionReplayInputs,
     prestart_evidence: WarehouseW3PreStartEvidence,
     installed_acceptance: InstalledAcceptance,
     phase_intents: tuple[RootPhaseIntentReceipt, ...],
@@ -255,16 +302,46 @@ def bind_start_authorization(
     recorded_at_utc: str,
     unit: str,
 ) -> StartAuthorizationReceipt:
-    """Bind the prior statement only after exact root and installed acceptance."""
-
     if type(prospective) is not ProspectiveStartAuthorizationIntent:
         raise TypeError("prospective must be exact ProspectiveStartAuthorizationIntent")
-    if type(preparation_intent) is not CandidateSelectionIntent:
-        raise TypeError("preparation_intent must be exact CandidateSelectionIntent")
-    if type(preparation_commit) is not CandidateSelectionCommit:
-        raise TypeError("preparation_commit must be exact CandidateSelectionCommit")
-    if type(root_selection) is not SelectionReceipt:
-        raise TypeError("root_selection must be exact SelectionReceipt")
+    try:
+        selected_chain = verify_w3_selected_candidate_chain(selection_replay_inputs)
+    except WarehouseW3RootSelectionError as exc:
+        raise WarehouseW3StartAuthorizationError(
+            "root selection producer replay differs"
+        ) from exc
+    return _bind_start_authorization_from_chain(
+        prospective,
+        selected_chain=selected_chain,
+        prestart_evidence=prestart_evidence,
+        installed_acceptance=installed_acceptance,
+        phase_intents=phase_intents,
+        phase_receipts=phase_receipts,
+        recorded_at_utc=recorded_at_utc,
+        unit=unit,
+    )
+
+
+def _bind_start_authorization_from_chain(
+    prospective: ProspectiveStartAuthorizationIntent,
+    *,
+    selected_chain: WarehouseW3SelectedCandidateChain,
+    prestart_evidence: WarehouseW3PreStartEvidence,
+    installed_acceptance: InstalledAcceptance,
+    phase_intents: tuple[RootPhaseIntentReceipt, ...],
+    phase_receipts: tuple[RootPhaseReceipt, ...],
+    recorded_at_utc: str,
+    unit: str,
+) -> StartAuthorizationReceipt:
+    if type(selected_chain) is not WarehouseW3SelectedCandidateChain:
+        raise TypeError(
+            "selected_chain must be exact WarehouseW3SelectedCandidateChain"
+        )
+    root_selection = selected_chain.root_selection
+    generic_selection = selected_chain.generic_selection
+    verification = selected_chain.root_staging_verification
+    preparation_intent = verification.selection_intent
+    preparation_commit = verification.selection_commit
     evidence = _reopen_prestart_evidence(prestart_evidence)
     if type(installed_acceptance) is not InstalledAcceptance:
         raise TypeError("installed_acceptance must be exact InstalledAcceptance")
@@ -275,7 +352,7 @@ def bind_start_authorization(
     phase_effects = dict(installed_acceptance.phase_effect_sha256)
     evidence_effects = dict(evidence.phase_effect_sha256)
     candidate_identity = preparation_commit.candidate_root_identity
-    selected_identity = root_selection.source_candidate_identity
+    selected_identity = generic_selection.source_candidate_identity
     if (
         preparation_commit.intent_sha256 != preparation_intent.raw_sha256
         or preparation_commit.selection_key != preparation_intent.selection_key
@@ -302,7 +379,21 @@ def bind_start_authorization(
             candidate_identity.nlink,
         )
         or phase_effects["CANDIDATE_SELECTED"] != root_selection.raw_sha256
+        or phase_effects["ROOT_STAGING_IMPORTED"]
+        != selected_chain.staged_candidate.raw_sha256
         or evidence_effects["CANDIDATE_SELECTED"] != root_selection.raw_sha256
+        or evidence_effects["ROOT_STAGING_IMPORTED"]
+        != selected_chain.staged_candidate.raw_sha256
+        or tuple(phase_receipts[:2])
+        != (
+            selected_chain.root_staging_receipt,
+            selected_chain.candidate_selected_receipt,
+        )
+        or tuple(phase_intents[:2])
+        != (
+            selected_chain.root_staging_intent,
+            selected_chain.candidate_selected_intent,
+        )
         or tuple(installed_acceptance.phase_effect_sha256[:7])
         != evidence.phase_effect_sha256
         or phase_effects["INSTANCES_LOADED"] != evidence.raw_sha256

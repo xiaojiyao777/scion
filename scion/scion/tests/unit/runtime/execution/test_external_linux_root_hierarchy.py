@@ -136,6 +136,30 @@ def test_create_requires_real_root_by_default_before_mutation(
     assert tuple(anchor_path.iterdir()) == ()
 
 
+def test_pinned_directory_opens_child_through_retained_parent(
+    tmp_path: Path,
+) -> None:
+    parent_path = tmp_path / "parent"
+    child_path = parent_path / "child"
+    parent_path.mkdir()
+    child_path.mkdir()
+
+    with pin_absolute_directory(str(parent_path)) as parent:
+        child = parent.open_child_directory("child")
+    try:
+        assert child.path == str(child_path)
+        assert child.components[-1].name == "child"
+        child.revalidate()
+
+        moved = parent_path / "moved"
+        child_path.rename(moved)
+        child_path.mkdir()
+        with pytest.raises(ExternalLinuxError, match="directory identity drifted"):
+            child.revalidate()
+    finally:
+        child.close()
+
+
 def test_production_hierarchy_rechecks_root_for_each_mutation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

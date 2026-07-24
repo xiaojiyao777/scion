@@ -34,6 +34,7 @@ from scion.problems.warehouse_delivery.w3_composition import (
 from scion.problems.warehouse_delivery.w3_environment_receipts import (
     EnvironmentProbeFact,
     WarehouseEnvironmentContentReceipt,
+    validate_environment_probe_fact,
 )
 from scion.problems.warehouse_delivery.w3_installation import (
     CandidateRootIdentity,
@@ -490,6 +491,16 @@ def _readonly_tree_inventory(
     return identity, aggregate, len(entries)
 
 
+def reverify_w3_accepted_root(
+    accepted_root: Path,
+) -> tuple[CandidateRootIdentity, str, int]:
+    """Reacquire one stable read-only accepted-root identity and inventory."""
+
+    if not isinstance(accepted_root, Path):
+        raise TypeError("accepted_root must be Path")
+    return _readonly_tree_inventory(accepted_root)
+
+
 def _stable_regular_bytes(
     path: Path,
     *,
@@ -670,40 +681,17 @@ def _validate_probe(
     content: WarehouseEnvironmentContentReceipt,
     expected_root: Path,
 ) -> None:
-    if type(fact) is not EnvironmentProbeFact:
-        raise TypeError("probe must be exact EnvironmentProbeFact")
-    if EnvironmentProbeFact.from_bytes(fact.raw) != fact:
-        raise WarehouseW3CandidateGateError("environment probe object differs")
-    root = Path(fact.environment_root)
-    expected_native = tuple(
-        sorted(
-            (str(root / item.path) if item.scope == "environment" else item.path)
-            for item in content.evidence.import_table
-            if item.kind == "native_extension"
+    try:
+        validate_environment_probe_fact(
+            fact,
+            phase=phase,
+            root=expected_root,
+            content=content,
         )
-    )
-    expected_shared = tuple(
-        sorted(
-            (str(root / item.path) if item.scope == "environment" else item.path)
-            for item in content.evidence.import_table
-            if item.kind == "shared_library"
-        )
-    )
-    if (
-        fact.phase != phase
-        or fact.environment_root != str(expected_root)
-        or fact.content_receipt_sha256 != content.raw_sha256
-        or fact.sys_executable != f"{fact.environment_root}/bin/python"
-        or fact.sys_prefix != fact.environment_root
-        or fact.import_table_sha256 != content.import_table_sha256
-        or fact.native_loaded_paths != expected_native
-        or fact.shared_library_paths != expected_shared
-        or fact.dbus_acquired is not True
-        or fact.dispatcher_argv[0] != fact.sys_executable
-    ):
+    except Exception as exc:
         raise WarehouseW3CandidateGateError(
             f"{phase} environment probe is not cross-bound"
-        )
+        ) from exc
 
 
 @dataclass(frozen=True, slots=True, init=False)
@@ -1947,7 +1935,273 @@ class CandidateGateReceipt:
         return _new(cls, fields)  # type: ignore[return-value]
 
 
-def close_candidate_gate(
+@dataclass(frozen=True, slots=True, init=False)
+class CandidateGateClosureBundle:
+    """Exact producer bundle required to carry one gate across privilege."""
+
+    gate: CandidateGateReceipt
+    candidate_verification: CandidateVerificationReceipt
+    double_wheel: OfflineDoubleWheelReceipt
+    semantic_environment: WarehouseEnvironmentContentReceipt
+    environment_content: EnvironmentContentReceipt
+    candidate_probe: EnvironmentProbeFact
+    simulated_final_probe: EnvironmentProbeFact
+    simulated_relocation: CandidateSimulatedRelocationRef
+    inspection: CandidateCompositionInspection
+    absence_facts: CandidateAbsenceFacts
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "CandidateGateClosureBundle":
+        del cls
+        raise TypeError("CandidateGateClosureBundle must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("CandidateGateClosureBundle is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        gate: CandidateGateReceipt,
+        candidate_verification: CandidateVerificationReceipt,
+        double_wheel: OfflineDoubleWheelReceipt,
+        semantic_environment: WarehouseEnvironmentContentReceipt,
+        environment_content: EnvironmentContentReceipt,
+        candidate_probe: EnvironmentProbeFact,
+        simulated_final_probe: EnvironmentProbeFact,
+        simulated_relocation: CandidateSimulatedRelocationRef,
+        inspection: CandidateCompositionInspection,
+        absence_facts: CandidateAbsenceFacts,
+    ) -> "CandidateGateClosureBundle":
+        dependencies = (
+            gate,
+            candidate_verification,
+            double_wheel,
+            semantic_environment,
+            environment_content,
+            candidate_probe,
+            simulated_final_probe,
+            simulated_relocation,
+            inspection,
+            absence_facts,
+        )
+        if any(type(item.raw) is not bytes for item in dependencies):
+            raise TypeError("candidate gate closure dependency raw bytes differ")
+        return cls.from_bytes(
+            _canonical_json(
+                {
+                    "schema": "scion.w3-candidate-gate-closure.v1",
+                    "gate": gate.raw.decode("utf-8", "strict"),
+                    "candidate_verification": (
+                        candidate_verification.raw.decode("utf-8", "strict")
+                    ),
+                    "double_wheel": double_wheel.raw.decode("utf-8", "strict"),
+                    "semantic_environment": (
+                        semantic_environment.raw.decode("utf-8", "strict")
+                    ),
+                    "environment_content": (
+                        environment_content.raw.decode("utf-8", "strict")
+                    ),
+                    "candidate_probe": candidate_probe.raw.decode("utf-8", "strict"),
+                    "simulated_final_probe": (
+                        simulated_final_probe.raw.decode("utf-8", "strict")
+                    ),
+                    "simulated_relocation": (
+                        simulated_relocation.raw.decode("utf-8", "strict")
+                    ),
+                    "inspection": inspection.raw.decode("utf-8", "strict"),
+                    "absence_facts": absence_facts.raw.decode("utf-8", "strict"),
+                }
+            )
+        )
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "CandidateGateClosureBundle":
+        value = _exact_fields(
+            _decode_canonical(raw, label="candidate gate closure bundle"),
+            frozenset(
+                {
+                    "schema",
+                    "gate",
+                    "candidate_verification",
+                    "double_wheel",
+                    "semantic_environment",
+                    "environment_content",
+                    "candidate_probe",
+                    "simulated_final_probe",
+                    "simulated_relocation",
+                    "inspection",
+                    "absence_facts",
+                }
+            ),
+            label="candidate gate closure bundle",
+        )
+        if value["schema"] != "scion.w3-candidate-gate-closure.v1":
+            raise WarehouseW3CandidateGateError("candidate gate closure schema differs")
+
+        def nested(name: str) -> bytes:
+            item = value[name]
+            if type(item) is not str:
+                raise WarehouseW3CandidateGateError(
+                    f"candidate gate closure {name} is not exact text"
+                )
+            try:
+                return item.encode("utf-8", "strict")
+            except UnicodeError as exc:
+                raise WarehouseW3CandidateGateError(
+                    f"candidate gate closure {name} is not UTF-8"
+                ) from exc
+
+        gate = CandidateGateReceipt.from_bytes(nested("gate"))
+        candidate = CandidateVerificationReceipt.from_bytes(
+            nested("candidate_verification")
+        )
+        wheel = OfflineDoubleWheelReceipt.from_bytes(nested("double_wheel"))
+        environment = EnvironmentContentReceipt.from_bytes(
+            nested("environment_content")
+        )
+        semantic = WarehouseEnvironmentContentReceipt.from_bytes(
+            nested("semantic_environment"),
+            generic_receipt=environment,
+            wheel_receipt=wheel,
+        )
+        candidate_probe = EnvironmentProbeFact.from_bytes(nested("candidate_probe"))
+        simulated_probe = EnvironmentProbeFact.from_bytes(
+            nested("simulated_final_probe")
+        )
+        relocation = CandidateSimulatedRelocationRef.from_bytes(
+            nested("simulated_relocation"),
+            semantic_environment=semantic,
+        )
+        _validate_probe(
+            candidate_probe,
+            phase="candidate",
+            content=semantic,
+            expected_root=Path(relocation.candidate_environment_root),
+        )
+        _validate_probe(
+            simulated_probe,
+            phase="simulated_final",
+            content=semantic,
+            expected_root=Path(relocation.simulated_final_environment_root),
+        )
+        inspection = CandidateCompositionInspection.from_bytes(nested("inspection"))
+        absence = CandidateAbsenceFacts.from_bytes(nested("absence_facts"))
+        shared = (
+            gate.selection_key,
+            gate.launch_id,
+            gate.authority_sha256,
+            gate.installation_sha256,
+        )
+        bindings = {
+            "candidate_verification_sha256": candidate.raw_sha256,
+            "double_wheel_receipt_sha256": wheel.raw_sha256,
+            "semantic_environment_receipt_sha256": semantic.raw_sha256,
+            "candidate_probe_sha256": candidate_probe.raw_sha256,
+            "simulated_final_probe_sha256": simulated_probe.raw_sha256,
+            "simulated_relocation_ref_sha256": relocation.raw_sha256,
+            "simulated_relocation_evidence_sha256": (
+                relocation.evidence_receipt_sha256
+            ),
+        }
+        if (
+            (
+                candidate.selection_key,
+                relocation.launch_id,
+                candidate.authority_sha256,
+                candidate.installation_sha256,
+            )
+            != shared
+            or (
+                relocation.selection_key,
+                relocation.launch_id,
+                relocation.authority_sha256,
+                relocation.installation_sha256,
+            )
+            != shared
+            or (
+                inspection.selection_key,
+                inspection.launch_id,
+                inspection.authority_sha256,
+                inspection.installation_sha256,
+            )
+            != shared
+            or (
+                absence.selection_key,
+                absence.launch_id,
+                absence.authority_sha256,
+                absence.installation_sha256,
+            )
+            != shared
+            or gate.nonce != inspection.nonce
+            or gate.nonce != absence.nonce
+            or derive_launch_id(candidate.authority_sha256, gate.nonce)
+            != gate.launch_id
+            or gate.source_receipt_sha256 != candidate.source_receipt_sha256
+            or gate.candidate_root_identity != candidate.candidate_root_identity
+            or gate.candidate_verification_sha256 != candidate.raw_sha256
+            or gate.double_wheel_receipt_sha256 != wheel.raw_sha256
+            or gate.semantic_environment_receipt_sha256 != semantic.raw_sha256
+            or gate.environment_content_receipt_sha256 != environment.raw_sha256
+            or gate.candidate_probe_sha256 != candidate_probe.raw_sha256
+            or gate.simulated_final_probe_sha256 != simulated_probe.raw_sha256
+            or gate.simulated_relocation_ref_sha256 != relocation.raw_sha256
+            or gate.simulated_relocation_evidence_sha256
+            != relocation.evidence_receipt_sha256
+            or gate.composition_inspection_sha256 != inspection.raw_sha256
+            or gate.absence_facts_sha256 != absence.raw_sha256
+            or inspection.absence_facts_sha256 != absence.raw_sha256
+            or gate.manifest_sha256 != inspection.manifest_sha256
+            or gate.source_tree_identity_sha256
+            != inspection.source_tree_identity_sha256
+            or semantic.generic_receipt_sha256 != environment.raw_sha256
+            or candidate.environment_receipt_sha256 != environment.raw_sha256
+            or semantic.wheel_receipt_sha256 != wheel.raw_sha256
+            or absence.environment_receipt_sha256 != environment.raw_sha256
+            or relocation.semantic_environment_receipt_sha256 != semantic.raw_sha256
+            or relocation.environment_content_receipt_sha256 != environment.raw_sha256
+            or relocation.candidate_probe_sha256 != candidate_probe.raw_sha256
+            or relocation.simulated_final_probe_sha256 != simulated_probe.raw_sha256
+            or candidate_probe.phase != "candidate"
+            or simulated_probe.phase != "simulated_final"
+            or candidate_probe.content_receipt_sha256 != semantic.raw_sha256
+            or simulated_probe.content_receipt_sha256 != semantic.raw_sha256
+            or any(
+                getattr(inspection, name) != expected
+                or getattr(absence, name) != expected
+                for name, expected in bindings.items()
+            )
+            or gate.accepted_root != inspection.accepted_root
+            or gate.accepted_root != absence.accepted_root
+            or gate.accepted_root_identity != inspection.accepted_root_identity
+            or gate.accepted_root_inventory_sha256
+            != inspection.accepted_root_inventory_sha256
+        ):
+            raise WarehouseW3CandidateGateError(
+                "candidate gate closure dependency binding differs"
+            )
+        instance = object.__new__(cls)
+        for field, item in (
+            ("gate", gate),
+            ("candidate_verification", candidate),
+            ("double_wheel", wheel),
+            ("semantic_environment", semantic),
+            ("environment_content", environment),
+            ("candidate_probe", candidate_probe),
+            ("simulated_final_probe", simulated_probe),
+            ("simulated_relocation", relocation),
+            ("inspection", inspection),
+            ("absence_facts", absence),
+            ("raw", raw),
+            ("raw_sha256", hashlib.sha256(raw).hexdigest()),
+        ):
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+def _close_candidate_gate_closure(
     *,
     candidate_verification: CandidateVerificationReceipt,
     double_wheel_artifact: OfflineDoubleWheelArtifact,
@@ -1961,7 +2215,7 @@ def close_candidate_gate(
     nonce: str,
     accepted_manifest_sha256: str,
     inspector: FilesystemCandidateCompositionInspector | None = None,
-) -> CandidateGateReceipt:
+) -> CandidateGateClosureBundle:
     """Close one exact candidate while external installation remains absent."""
 
     exact_types = (
@@ -2246,7 +2500,7 @@ def close_candidate_gate(
         raise WarehouseW3CandidateGateError(
             "candidate_root changed during candidate gate closure"
         )
-    return CandidateGateReceipt.create(
+    gate = CandidateGateReceipt.create(
         candidate=candidate,
         nonce=nonce_value,
         candidate_root=Path(candidate_root_text),
@@ -2260,6 +2514,84 @@ def close_candidate_gate(
         inspection=inspection,
         absence_facts=absence,
     )
+    return CandidateGateClosureBundle.create(
+        gate=gate,
+        candidate_verification=candidate,
+        double_wheel=double_wheel,
+        semantic_environment=semantic_environment,
+        environment_content=environment_content,
+        candidate_probe=candidate_probe,
+        simulated_final_probe=simulated_final_probe,
+        simulated_relocation=simulated_relocation,
+        inspection=inspection,
+        absence_facts=absence,
+    )
+
+
+def close_candidate_gate_closure(
+    *,
+    candidate_verification: CandidateVerificationReceipt,
+    double_wheel_artifact: OfflineDoubleWheelArtifact,
+    semantic_environment: WarehouseEnvironmentContentReceipt,
+    environment_content: EnvironmentContentReceipt,
+    candidate_probe: EnvironmentProbeFact,
+    simulated_final_probe: EnvironmentProbeFact,
+    simulated_relocation: CandidateSimulatedRelocationRef,
+    candidate_root: Path,
+    accepted_root: Path,
+    nonce: str,
+    accepted_manifest_sha256: str,
+    inspector: FilesystemCandidateCompositionInspector | None = None,
+) -> CandidateGateClosureBundle:
+    """Close and retain every exact producer required by privileged ingress."""
+
+    return _close_candidate_gate_closure(
+        candidate_verification=candidate_verification,
+        double_wheel_artifact=double_wheel_artifact,
+        semantic_environment=semantic_environment,
+        environment_content=environment_content,
+        candidate_probe=candidate_probe,
+        simulated_final_probe=simulated_final_probe,
+        simulated_relocation=simulated_relocation,
+        candidate_root=candidate_root,
+        accepted_root=accepted_root,
+        nonce=nonce,
+        accepted_manifest_sha256=accepted_manifest_sha256,
+        inspector=inspector,
+    )
+
+
+def close_candidate_gate(
+    *,
+    candidate_verification: CandidateVerificationReceipt,
+    double_wheel_artifact: OfflineDoubleWheelArtifact,
+    semantic_environment: WarehouseEnvironmentContentReceipt,
+    environment_content: EnvironmentContentReceipt,
+    candidate_probe: EnvironmentProbeFact,
+    simulated_final_probe: EnvironmentProbeFact,
+    simulated_relocation: CandidateSimulatedRelocationRef,
+    candidate_root: Path,
+    accepted_root: Path,
+    nonce: str,
+    accepted_manifest_sha256: str,
+    inspector: FilesystemCandidateCompositionInspector | None = None,
+) -> CandidateGateReceipt:
+    """Compatibility view; privileged ingress requires the closure bundle."""
+
+    return close_candidate_gate_closure(
+        candidate_verification=candidate_verification,
+        double_wheel_artifact=double_wheel_artifact,
+        semantic_environment=semantic_environment,
+        environment_content=environment_content,
+        candidate_probe=candidate_probe,
+        simulated_final_probe=simulated_final_probe,
+        simulated_relocation=simulated_relocation,
+        candidate_root=candidate_root,
+        accepted_root=accepted_root,
+        nonce=nonce,
+        accepted_manifest_sha256=accepted_manifest_sha256,
+        inspector=inspector,
+    ).gate
 
 
 __all__ = [
@@ -2268,10 +2600,13 @@ __all__ = [
     "CandidateCompositionInspection",
     "CandidateCompositionInspector",
     "FilesystemCandidateCompositionInspector",
+    "CandidateGateClosureBundle",
     "CandidateGateReceipt",
     "CandidateSimulatedRelocationRef",
     "EXPECTED_CANDIDATE_COMPOSITION_STATE",
     "EXPECTED_CELL_COUNT",
     "WarehouseW3CandidateGateError",
     "close_candidate_gate",
+    "close_candidate_gate_closure",
+    "reverify_w3_accepted_root",
 ]

@@ -26,7 +26,7 @@ _SHA256_LENGTH = 64
 _DRY_ROOT_SCHEMA = "scion.w3-dry-root-readiness.v1"
 _ABSENCE_SCHEMA = "scion.w3-prestart-absence.v1"
 _ACCOUNT_SCHEMA = "scion.w3-runtime-account.v1"
-WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA = "scion.w3-prestart-evidence.v1"
+WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA = "scion.w3-prestart-evidence.v2"
 _ABSENCE_ROLES = tuple(
     sorted(
         {

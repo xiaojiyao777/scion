@@ -3,10 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import scion.problems.warehouse_delivery.w3_composition as composition
+import scion.tools.scion_w3_tool as installed_tool
 from scion.problems.warehouse_delivery.w3_composition import (
     EXPECTED_ARTIFACT_NAMES,
     EXPECTED_CORRECTION_DESIGN_SHA256,
@@ -21,6 +23,12 @@ from scion.problems.warehouse_delivery.w3_composition import (
     dispatch_installed_launch,
     inspect_w3_launch_readiness,
     prepare_w3_invocation,
+)
+from scion.problems.warehouse_delivery.w3_start_gate import (
+    WarehouseW3EnvironmentIntegrityRefused,
+    WarehouseW3InstalledIdentityRefused,
+    WarehouseW3StartPermitRefused,
+    WarehouseW3SystemdLineageRefused,
 )
 from scion.runtime.execution.systemd255 import (
     ConfiguredUnitProperties,
@@ -151,8 +159,32 @@ def _records(
     package_root = Path(__file__).resolve().parents[4]
     project_root = package_root.parent
     launch_paths = (
+        package_root / "problems" / "warehouse_delivery" / "w2_preservation.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_counter_fixtures.py",
         package_root / "problems" / "warehouse_delivery" / "w3_composition.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_candidate_gate.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_candidate_ingress.py",
+        package_root
+        / "problems"
+        / "warehouse_delivery"
+        / "w3_candidate_coordinator.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_environment.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_environment_receipts.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_installation.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_installed_replay.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_prestart_facts.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_root_coordinator.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_root_installation.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_root_selection.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_root_staging.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_start_authorization.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_start_gate.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_start_store.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_terminal_acceptance.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_terminal_manager.py",
+        package_root / "problems" / "warehouse_delivery" / "w3_wheel.py",
         package_root / "tools" / "scion_w3_tool.py",
+        package_root / "tools" / "scion_w3_install.py",
         package_root
         / "problems"
         / "warehouse_delivery"
@@ -168,6 +200,9 @@ def _records(
         package_root / "runtime" / "execution" / "invocation_terminal.py",
         package_root / "runtime" / "execution" / "spawn_backend.py",
         package_root / "runtime" / "execution" / "cgroup_v2.py",
+        package_root / "runtime" / "execution" / "environment_integrity.py",
+        package_root / "runtime" / "execution" / "external_installation.py",
+        package_root / "runtime" / "execution" / "external_linux.py",
         package_root / "runtime" / "execution" / "systemd255.py",
         package_root / "runtime" / "execution" / "model.py",
         package_root / "problems" / "warehouse_delivery" / "w3_fixed_arm.py",
@@ -355,8 +390,28 @@ def test_thin_dispatch_has_closed_command_and_launch_id_surface() -> None:
     with pytest.raises(WarehouseW3CompositionError, match="launch id"):
         dispatch_installed_launch("run", "not-a-launch")
     with pytest.raises(
-        WarehouseW3CompositionError,
-        match="installation acceptance",
+        WarehouseW3InstalledIdentityRefused,
+        match="installed launch materials",
+    ):
+        dispatch_installed_launch("run", LAUNCH_ID)
+
+
+def test_run_material_loader_failure_maps_to_installed_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(
+        _launch_id: str,
+        *,
+        require_claim: bool,
+    ) -> object:
+        assert require_claim is False
+        raise WarehouseW3CompositionError("drifted material")
+
+    monkeypatch.setattr(composition, "_installed_materials", fail)
+
+    with pytest.raises(
+        WarehouseW3InstalledIdentityRefused,
+        match="installed launch materials",
     ):
         dispatch_installed_launch("run", LAUNCH_ID)
 
@@ -405,3 +460,349 @@ def test_thin_dispatch_routes_only_three_fixed_installed_commands(
         ("load-claimed", materials),
         ("close", materials),
     ]
+
+
+def test_live_issued_gate_binds_fixed_store_to_current_manager(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scion.problems.warehouse_delivery.w3_start_store as start_store
+
+    materials = SimpleNamespace(
+        authority=SimpleNamespace(authority_sha256="1" * 64),
+        installation=SimpleNamespace(
+            launch_id=LAUNCH_ID,
+            installation_sha256="2" * 64,
+            run_unit=f"scion-w3@{LAUNCH_ID}.service",
+        ),
+    )
+    manager = SimpleNamespace(
+        unique_owner=":1.42",
+        boot_id="12345678-1234-1234-1234-123456789abc",
+        version="255.4-1ubuntu8",
+    )
+    acquirer = SimpleNamespace(acquire_manager_identity=lambda: manager)
+    gate = SimpleNamespace(
+        manager_unique_owner=manager.unique_owner,
+        boot_id=manager.boot_id,
+        manager_version=manager.version,
+    )
+    observed: dict[str, object] = {}
+
+    context = SimpleNamespace(gate=gate)
+
+    def acquire(**kwargs: object) -> object:
+        observed.update(kwargs)
+        return context
+
+    monkeypatch.setattr(start_store, "acquire_w3_issued_start_gate", acquire)
+
+    result = composition._require_live_issued_start_gate(
+        materials,
+        acquirer,
+        SimpleNamespace(boot_id=manager.boot_id),
+    )
+
+    assert result is context
+    assert observed == {
+        "expected_launch_id": LAUNCH_ID,
+        "expected_authority_sha256": "1" * 64,
+        "expected_installation_sha256": "2" * 64,
+        "expected_unit": f"scion-w3@{LAUNCH_ID}.service",
+    }
+
+    gate.manager_unique_owner = ":1.99"
+    with pytest.raises(
+        WarehouseW3SystemdLineageRefused,
+        match="live systemd manager",
+    ):
+        composition._require_live_issued_start_gate(
+            materials,
+            acquirer,
+            SimpleNamespace(boot_id=manager.boot_id),
+        )
+
+
+def test_installed_run_consumes_issued_gate_before_nonce_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class GateStop(RuntimeError):
+        pass
+
+    events: list[str] = []
+    lineage = SimpleNamespace(boot_id="12345678-1234-1234-1234-123456789abc")
+    acquirer = SimpleNamespace(acquire_self_lineage=lambda **_kwargs: lineage)
+    materials = SimpleNamespace(
+        installation=SimpleNamespace(
+            run_unit=f"scion-w3@{LAUNCH_ID}.service",
+        )
+    )
+    monkeypatch.setattr(
+        composition,
+        "SystemdDbusPropertyReader",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        composition,
+        "Systemd255Acquirer",
+        lambda _reader: acquirer,
+    )
+    monkeypatch.setattr(
+        composition,
+        "_live_configured_pair",
+        lambda *_args: object(),
+    )
+    monkeypatch.setattr(
+        composition,
+        "_systemd_environment",
+        lambda *_args: {"INVOCATION_ID": "a" * 32},
+    )
+
+    def stop_at_gate(*_args: object) -> None:
+        events.append("issued-gate")
+        raise GateStop
+
+    monkeypatch.setattr(
+        composition,
+        "_require_live_issued_start_gate",
+        stop_at_gate,
+    )
+    monkeypatch.setattr(
+        composition,
+        "inspect_w3_launch_readiness",
+        lambda *_args, **_kwargs: events.append("readiness"),
+    )
+    monkeypatch.setattr(
+        composition,
+        "prepare_w3_invocation",
+        lambda *_args: events.append("nonce"),
+    )
+
+    with pytest.raises(GateStop):
+        composition._run_installed(materials)
+
+    assert events == ["issued-gate"]
+
+
+def test_installed_run_does_not_classify_prepare_mutation_failure_as_72(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = SimpleNamespace(
+        unique_owner=":1.42",
+        boot_id="12345678-1234-1234-1234-123456789abc",
+        version="255.4-1ubuntu8",
+    )
+    lineage = SimpleNamespace(
+        boot_id=manager.boot_id,
+        invocation_id="a" * 32,
+    )
+    context = SimpleNamespace(
+        gate=SimpleNamespace(
+            manager_unique_owner=manager.unique_owner,
+            boot_id=manager.boot_id,
+            manager_version=manager.version,
+        ),
+        verify_environment=lambda _phase: None,
+        close=lambda: None,
+    )
+    acquirer = SimpleNamespace(
+        acquire_manager_identity=lambda: manager,
+        acquire_self_lineage=lambda **_kwargs: lineage,
+    )
+    materials = SimpleNamespace(
+        authority=SimpleNamespace(raw=b"authority"),
+        installation=SimpleNamespace(
+            raw=b"installation",
+            run_root="/run/scion",
+            run_unit=f"scion-w3@{LAUNCH_ID}.service",
+        ),
+        run_template_raw=b"run",
+        close_template_raw=b"close",
+    )
+    monkeypatch.setattr(
+        composition,
+        "SystemdDbusPropertyReader",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        composition,
+        "Systemd255Acquirer",
+        lambda _reader: acquirer,
+    )
+    monkeypatch.setattr(
+        composition,
+        "_live_configured_pair",
+        lambda *_args: object(),
+    )
+    monkeypatch.setattr(
+        composition,
+        "_systemd_environment",
+        lambda *_args: {"INVOCATION_ID": lineage.invocation_id},
+    )
+    monkeypatch.setattr(
+        composition,
+        "_require_live_issued_start_gate",
+        lambda *_args: context,
+    )
+    monkeypatch.setattr(
+        composition,
+        "inspect_w3_launch_readiness",
+        lambda *_args, **_kwargs: object(),
+    )
+    monkeypatch.setattr(
+        composition,
+        "prepare_w3_invocation",
+        lambda _readiness: (_ for _ in ()).throw(OSError("claim failed")),
+    )
+
+    with pytest.raises(
+        WarehouseW3CompositionError,
+        match="claim could not be prepared",
+    ) as captured:
+        composition._run_installed(materials)
+
+    assert not isinstance(
+        captured.value,
+        WarehouseW3InstalledIdentityRefused,
+    )
+
+
+def test_live_start_context_revalidation_reacquires_manager_and_environment() -> None:
+    phases: list[str] = []
+    manager = SimpleNamespace(
+        unique_owner=":1.42",
+        boot_id="12345678-1234-1234-1234-123456789abc",
+        version="255.4-1ubuntu8",
+    )
+    context = SimpleNamespace(
+        gate=SimpleNamespace(
+            manager_unique_owner=manager.unique_owner,
+            boot_id=manager.boot_id,
+            manager_version=manager.version,
+        ),
+        verify_environment=lambda phase: phases.append(phase),
+    )
+
+    composition._revalidate_live_start_context(
+        context,
+        SimpleNamespace(acquire_manager_identity=lambda: manager),
+        SimpleNamespace(boot_id=manager.boot_id),
+    )
+
+    assert phases == ["preclaim"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("unique_owner", ":1.99"),
+        ("boot_id", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+        ("version", "256"),
+    ),
+)
+def test_live_start_context_revalidation_rejects_manager_drift(
+    field: str,
+    value: str,
+) -> None:
+    expected = SimpleNamespace(
+        unique_owner=":1.42",
+        boot_id="12345678-1234-1234-1234-123456789abc",
+        version="255.4-1ubuntu8",
+    )
+    current = SimpleNamespace(
+        unique_owner=expected.unique_owner,
+        boot_id=expected.boot_id,
+        version=expected.version,
+    )
+    setattr(current, field, value)
+    context = SimpleNamespace(
+        gate=SimpleNamespace(
+            manager_unique_owner=expected.unique_owner,
+            boot_id=expected.boot_id,
+            manager_version=expected.version,
+        ),
+        verify_environment=lambda _phase: None,
+    )
+
+    with pytest.raises(
+        WarehouseW3SystemdLineageRefused,
+        match="changed before nonce",
+    ):
+        composition._revalidate_live_start_context(
+            context,
+            SimpleNamespace(acquire_manager_identity=lambda: current),
+            SimpleNamespace(boot_id=expected.boot_id),
+        )
+
+
+def test_completion_environment_drift_marks_incomplete_before_raw_complete() -> None:
+    events: list[str] = []
+
+    class Writer:
+        def mark_incomplete(self, reason: str) -> None:
+            events.append(f"incomplete:{reason}")
+
+        def finish_raw(self) -> None:
+            events.append("finish")
+
+    class Backend:
+        state = "IDLE"
+
+        def close_idle(self) -> None:
+            events.append("backend-close")
+
+    context = SimpleNamespace(
+        verify_environment=lambda phase: (
+            events.append(f"verify:{phase}"),
+            (_ for _ in ()).throw(RuntimeError("drift")),
+        )[-1],
+    )
+
+    with pytest.raises(
+        WarehouseW3CompositionError,
+        match="completion environment integrity",
+    ):
+        composition._complete_installed_run(
+            Writer(),
+            Backend(),
+            context,
+        )
+
+    assert events == [
+        "verify:completion",
+        "incomplete:ENVIRONMENT_COMPLETION_REFUSED",
+        "backend-close",
+    ]
+
+
+@pytest.mark.parametrize(
+    ("error_type", "status"),
+    (
+        (WarehouseW3StartPermitRefused, 70),
+        (WarehouseW3EnvironmentIntegrityRefused, 71),
+        (WarehouseW3InstalledIdentityRefused, 72),
+        (WarehouseW3SystemdLineageRefused, 73),
+    ),
+)
+def test_installed_tool_has_exact_preclaim_exit_status_abi(
+    monkeypatch: pytest.MonkeyPatch,
+    error_type: type[RuntimeError],
+    status: int,
+) -> None:
+    def refuse(_command: str, _launch_id: str) -> None:
+        raise error_type("refused")
+
+    monkeypatch.setattr(installed_tool, "dispatch_installed_launch", refuse)
+
+    assert installed_tool.main(["run", LAUNCH_ID]) == status
+
+
+def test_installed_tool_does_not_classify_unexpected_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail(_command: str, _launch_id: str) -> None:
+        raise WarehouseW3CompositionError("unexpected")
+
+    monkeypatch.setattr(installed_tool, "dispatch_installed_launch", fail)
+
+    with pytest.raises(WarehouseW3CompositionError, match="unexpected"):
+        installed_tool.main(["run", LAUNCH_ID])

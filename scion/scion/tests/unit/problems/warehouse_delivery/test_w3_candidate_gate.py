@@ -76,11 +76,13 @@ from scion.problems.warehouse_delivery.w3_candidate_gate import (
     CandidateAbsenceFacts,
     CandidateAbsenceObservation,
     CandidateCompositionInspection,
+    CandidateGateClosureBundle,
     CandidateGateReceipt,
     CandidateSimulatedRelocationRef,
     FilesystemCandidateCompositionInspector,
     WarehouseW3CandidateGateError,
     close_candidate_gate,
+    close_candidate_gate_closure,
 )
 from scion.problems.warehouse_delivery.w3_composition import (
     EXPECTED_MANIFEST_SHA256,
@@ -936,8 +938,11 @@ def test_candidate_gate_closes_exact_artifacts_dry_root_and_absence(
     tmp_path: Path,
 ) -> None:
     bundle = _bundle(tmp_path)
-    receipt = close_candidate_gate(**bundle)
+    closure = close_candidate_gate_closure(**bundle)
+    receipt = closure.gate
 
+    assert CandidateGateClosureBundle.from_bytes(closure.raw) == closure
+    assert close_candidate_gate(**bundle) == receipt
     assert CandidateGateReceipt.from_bytes(receipt.raw) == receipt
     assert receipt.state == "CANDIDATE_ACCEPTED_INSTALLATION_ABSENT"
     assert receipt.external_installation_required is True
@@ -1218,6 +1223,29 @@ def test_gate_requires_exact_candidate_environment_root_and_identity(
     with pytest.raises(
         WarehouseW3CandidateGateError,
         match="candidate cannot be reopened and reverified",
+    ):
+        close_candidate_gate(**bundle)
+
+
+@pytest.mark.parametrize("mutation", ("foreign-sys-path", "partial-import-table"))
+def test_gate_rejects_incomplete_environment_probe_semantics(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    bundle = _bundle(tmp_path / mutation)
+    probe = bundle["candidate_probe"]
+    assert type(probe) is EnvironmentProbeFact
+    value = json.loads(probe.raw)
+    if mutation == "foreign-sys-path":
+        value["sys_path"].append("/tmp/foreign-python")
+    else:
+        assert len(value["loaded_import_table"]) > 1
+        value["loaded_import_table"] = value["loaded_import_table"][:1]
+    bundle["candidate_probe"] = EnvironmentProbeFact.from_bytes(_canonical(value))
+
+    with pytest.raises(
+        WarehouseW3CandidateGateError,
+        match="candidate environment probe is not cross-bound",
     ):
         close_candidate_gate(**bundle)
 

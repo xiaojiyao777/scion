@@ -1776,22 +1776,38 @@ class MountInfoRow:
         return cls.from_mapping(value)
 
 
-def parse_selected_mountinfo(raw: bytes, *, mount_point: str) -> MountInfoRow:
+def _parse_mountinfo_rows(raw: bytes) -> tuple[MountInfoRow, ...]:
     if type(raw) is not bytes:
         raise TypeError("mountinfo must be exact bytes")
-    selected_point = _path(mount_point, field="selected mount point")
     try:
         text = raw.decode("ascii", "strict")
     except UnicodeError as exc:
         raise MountInfoError("mountinfo is not ASCII") from exc
     if not text.endswith("\n"):
         raise MountInfoError("mountinfo is not newline terminated")
-    rows = tuple(
+    return tuple(
         MountInfoRow._from_line(line) for line in text[:-1].split("\n") if line
     )
+
+
+def parse_selected_mountinfo(raw: bytes, *, mount_point: str) -> MountInfoRow:
+    selected_point = _path(mount_point, field="selected mount point")
+    rows = _parse_mountinfo_rows(raw)
     selected = tuple(row for row in rows if row.mount_point == selected_point)
     if len(selected) != 1:
         raise MountInfoError("selected mount point does not have exactly one row")
+    return selected[0]
+
+
+def parse_mountinfo_mount_id(raw: bytes, *, mount_id: int) -> MountInfoRow:
+    """Select the sole canonical mountinfo row with one retained FD mount ID."""
+
+    selected_id = _positive_int(mount_id, field="selected mount ID")
+    selected = tuple(
+        row for row in _parse_mountinfo_rows(raw) if row.mount_id == selected_id
+    )
+    if len(selected) != 1:
+        raise MountInfoError("selected mount ID does not have exactly one row")
     return selected[0]
 
 
@@ -3183,7 +3199,6 @@ def _read_start_manager_identity(manager: NarrowStartManager) -> ManagerIdentity
 class ManagerReloadReceipt:
     manager_identity: ManagerIdentity
     unit_publication_sha256: str
-    configured_pair_readback_sha256: str
     configured_pair_sha256: str
     raw: bytes
     raw_sha256: str
@@ -3201,41 +3216,24 @@ class ManagerReloadReceipt:
         cls,
         *,
         manager_identity: ManagerIdentity,
-        configured_readback: ConfiguredPairReadback,
         unit_publication: UnitPublicationReceipt,
     ) -> "ManagerReloadReceipt":
         if type(manager_identity) is not ManagerIdentity:
             raise TypeError("manager_identity must be exact ManagerIdentity")
-        if type(configured_readback) is not ConfiguredPairReadback:
-            raise TypeError("configured_readback must be exact ConfiguredPairReadback")
         if type(unit_publication) is not UnitPublicationReceipt:
             raise TypeError("unit_publication must be exact UnitPublicationReceipt")
-        _expected_loaded_properties(
-            configured_readback,
-            unit_publication,
-            role="run",
-        )
-        _expected_loaded_properties(
-            configured_readback,
-            unit_publication,
-            role="closer",
-        )
         value = {
-            "schema": "scion.manager-reload.v1",
+            "schema": "scion.manager-reload.v2",
             "manager": {
                 "unique_owner": manager_identity.unique_owner,
                 "boot_id": manager_identity.boot_id,
                 "version": manager_identity.version,
             },
             "unit_publication_sha256": unit_publication.raw_sha256,
-            "configured_pair_readback_sha256": configured_readback.raw_sha256,
-            "configured_pair_sha256": (
-                configured_readback.configured_pair.configured_pair_sha256
-            ),
+            "configured_pair_sha256": unit_publication.configured_pair_sha256,
         }
         return cls.from_bytes(
             _canonical_json(value),
-            configured_readback=configured_readback,
             unit_publication=unit_publication,
         )
 
@@ -3244,23 +3242,10 @@ class ManagerReloadReceipt:
         cls,
         raw: bytes,
         *,
-        configured_readback: ConfiguredPairReadback,
         unit_publication: UnitPublicationReceipt,
     ) -> "ManagerReloadReceipt":
-        if type(configured_readback) is not ConfiguredPairReadback:
-            raise TypeError("configured_readback must be exact ConfiguredPairReadback")
         if type(unit_publication) is not UnitPublicationReceipt:
             raise TypeError("unit_publication must be exact UnitPublicationReceipt")
-        _expected_loaded_properties(
-            configured_readback,
-            unit_publication,
-            role="run",
-        )
-        _expected_loaded_properties(
-            configured_readback,
-            unit_publication,
-            role="closer",
-        )
         value = _exact_fields(
             _decode_canonical_json(raw, label="manager reload receipt"),
             frozenset(
@@ -3268,13 +3253,12 @@ class ManagerReloadReceipt:
                     "schema",
                     "manager",
                     "unit_publication_sha256",
-                    "configured_pair_readback_sha256",
                     "configured_pair_sha256",
                 }
             ),
             label="manager reload receipt",
         )
-        if value["schema"] != "scion.manager-reload.v1":
+        if value["schema"] != "scion.manager-reload.v2":
             raise CanonicalReceiptError("manager reload receipt schema differs")
         manager_value = _exact_fields(
             value["manager"],
@@ -3289,19 +3273,13 @@ class ManagerReloadReceipt:
         expected_publication_sha = unit_publication.raw_sha256
         if value["unit_publication_sha256"] != expected_publication_sha:
             raise ManagerAcceptanceError("reload unit publication digest differs")
-        expected_readback_sha = configured_readback.raw_sha256
-        if value["configured_pair_readback_sha256"] != expected_readback_sha:
-            raise ManagerAcceptanceError(
-                "reload configured pair readback digest differs"
-            )
-        expected_pair_sha = configured_readback.configured_pair.configured_pair_sha256
+        expected_pair_sha = unit_publication.configured_pair_sha256
         if value["configured_pair_sha256"] != expected_pair_sha:
             raise ManagerAcceptanceError("reload configured pair digest differs")
         instance = object.__new__(cls)
         for field, item in (
             ("manager_identity", identity),
             ("unit_publication_sha256", expected_publication_sha),
-            ("configured_pair_readback_sha256", expected_readback_sha),
             ("configured_pair_sha256", expected_pair_sha),
             ("raw", raw),
             ("raw_sha256", hashlib.sha256(raw).hexdigest()),
@@ -3357,7 +3335,6 @@ class LoadedManagerReceipt:
             raise TypeError("manager_reload must be exact ManagerReloadReceipt")
         reopened_reload = ManagerReloadReceipt.from_bytes(
             manager_reload.raw,
-            configured_readback=configured_readback,
             unit_publication=unit_publication,
         )
         if reopened_reload != manager_reload:
@@ -3461,7 +3438,6 @@ class LoadedManagerReceipt:
             raise TypeError("manager_reload must be exact ManagerReloadReceipt")
         reopened_reload = ManagerReloadReceipt.from_bytes(
             manager_reload.raw,
-            configured_readback=configured_readback,
             unit_publication=unit_publication,
         )
         if reopened_reload != manager_reload:
@@ -3602,29 +3578,16 @@ def _require_root() -> None:
 def apply_manager_reload(
     manager: NarrowReloadManager,
     *,
-    configured_readback: ConfiguredPairReadback,
     unit_publication: UnitPublicationReceipt,
     persist_and_reopen: Callable[[bytes], bytes],
 ) -> ManagerReloadReceipt:
-    """Own exactly one reload and reacquire its stable manager identity."""
+    """Own exactly one Reload without claiming a later loaded-pair readback."""
 
     _require_root()
     if not callable(persist_and_reopen):
         raise TypeError("persist_and_reopen must be callable")
-    if type(configured_readback) is not ConfiguredPairReadback:
-        raise TypeError("configured_readback must be exact ConfiguredPairReadback")
     if type(unit_publication) is not UnitPublicationReceipt:
         raise TypeError("unit_publication must be exact UnitPublicationReceipt")
-    _expected_loaded_properties(
-        configured_readback,
-        unit_publication,
-        role="run",
-    )
-    _expected_loaded_properties(
-        configured_readback,
-        unit_publication,
-        role="closer",
-    )
     identity = _read_manager_identity(manager)
     result = manager.reload()
     if result is not None:
@@ -3633,13 +3596,11 @@ def apply_manager_reload(
         raise ManagerAcceptanceError("manager identity changed across reload")
     receipt = ManagerReloadReceipt.create(
         manager_identity=identity,
-        configured_readback=configured_readback,
         unit_publication=unit_publication,
     )
     reopened_raw = persist_and_reopen(receipt.raw)
     reopened = ManagerReloadReceipt.from_bytes(
         reopened_raw,
-        configured_readback=configured_readback,
         unit_publication=unit_publication,
     )
     if reopened != receipt or _read_manager_identity(manager) != identity:
@@ -3647,56 +3608,43 @@ def apply_manager_reload(
     return reopened
 
 
-def acquire_loaded_manager_receipt(
+def _acquire_loaded_manager_receipt(
     manager: NarrowInstallationManager,
     *,
-    configured_readback: ConfiguredPairReadback,
+    configured_readback: ConfiguredPairReadback | None,
+    acquire_configured_readback: Callable[[], ConfiguredPairReadback] | None,
     unit_publication: UnitPublicationReceipt,
     manager_reload: ManagerReloadReceipt,
-    persist_and_reopen: Callable[[bytes], bytes],
-) -> LoadedManagerReceipt:
-    """Acquire one loaded pair after, and separately from, an exact reload."""
-
-    _require_root()
-    if not callable(persist_and_reopen):
+    persist_and_reopen: Callable[[bytes], bytes] | None,
+) -> tuple[ConfiguredPairReadback, LoadedManagerReceipt]:
+    if persist_and_reopen is not None and not callable(persist_and_reopen):
         raise TypeError("persist_and_reopen must be callable")
-    if type(configured_readback) is not ConfiguredPairReadback:
+    if (configured_readback is None) == (acquire_configured_readback is None):
+        raise TypeError(
+            "exactly one configured readback or post-load acquirer is required"
+        )
+    if configured_readback is not None and (
+        type(configured_readback) is not ConfiguredPairReadback
+    ):
         raise TypeError("configured_readback must be exact ConfiguredPairReadback")
+    if acquire_configured_readback is not None and not callable(
+        acquire_configured_readback
+    ):
+        raise TypeError("configured readback acquirer must be callable")
     if type(unit_publication) is not UnitPublicationReceipt:
         raise TypeError("unit_publication must be exact UnitPublicationReceipt")
     if type(manager_reload) is not ManagerReloadReceipt:
         raise TypeError("manager_reload must be exact ManagerReloadReceipt")
     reopened_reload = ManagerReloadReceipt.from_bytes(
         manager_reload.raw,
-        configured_readback=configured_readback,
         unit_publication=unit_publication,
     )
     if reopened_reload != manager_reload:
         raise ManagerAcceptanceError("manager reload object differs")
-    run_name = _unit(configured_readback.run_unit, field="run_unit")
-    close_name = _unit(configured_readback.close_unit, field="close_unit")
+    run_name = _unit(unit_publication.run_unit, field="run_unit")
+    close_name = _unit(unit_publication.close_unit, field="close_unit")
     if run_name == close_name:
         raise ManagerAcceptanceError("run and closer units must differ")
-    expected_run_properties = _expected_loaded_properties(
-        configured_readback,
-        unit_publication,
-        role="run",
-    )
-    expected_close_properties = _expected_loaded_properties(
-        configured_readback,
-        unit_publication,
-        role="closer",
-    )
-    run_inventory = frozenset(expected_run_properties)
-    close_inventory = frozenset(expected_close_properties)
-    if (
-        not _LOADED_REQUIRED_PROPERTIES.issubset(run_inventory)
-        or not _LOADED_REQUIRED_PROPERTIES.issubset(close_inventory)
-        or any(type(name) is not str for name in run_inventory | close_inventory)
-    ):
-        raise ManagerAcceptanceError("expected loaded property inventory differs")
-    run_names = tuple(sorted(run_inventory))
-    close_names = tuple(sorted(close_inventory))
     identity = _read_manager_identity(manager)
     if identity != manager_reload.manager_identity:
         raise ManagerAcceptanceError("manager identity changed after reload")
@@ -3728,6 +3676,48 @@ def acquire_loaded_manager_receipt(
             raise ManagerAcceptanceError(
                 "manager identity changed before property read"
             )
+        readback = (
+            configured_readback
+            if configured_readback is not None
+            else acquire_configured_readback()
+        )
+        if type(readback) is not ConfiguredPairReadback:
+            raise ManagerAcceptanceError(
+                "post-load configured pair readback type differs"
+            )
+        if (
+            readback.run_unit != run_name
+            or readback.close_unit != close_name
+            or readback.configured_pair.configured_pair_sha256
+            != unit_publication.configured_pair_sha256
+        ):
+            raise ManagerAcceptanceError(
+                "post-load configured pair differs from unit publication"
+            )
+        if configured_readback is None and _read_manager_identity(manager) != identity:
+            raise ManagerAcceptanceError(
+                "manager identity changed across configured pair readback"
+            )
+        expected_run_properties = _expected_loaded_properties(
+            readback,
+            unit_publication,
+            role="run",
+        )
+        expected_close_properties = _expected_loaded_properties(
+            readback,
+            unit_publication,
+            role="closer",
+        )
+        run_inventory = frozenset(expected_run_properties)
+        close_inventory = frozenset(expected_close_properties)
+        if (
+            not _LOADED_REQUIRED_PROPERTIES.issubset(run_inventory)
+            or not _LOADED_REQUIRED_PROPERTIES.issubset(close_inventory)
+            or any(type(name) is not str for name in run_inventory | close_inventory)
+        ):
+            raise ManagerAcceptanceError("expected loaded property inventory differs")
+        run_names = tuple(sorted(run_inventory))
+        close_names = tuple(sorted(close_inventory))
         run_properties = manager.read_properties(run_name, run_names)
         if _read_manager_identity(manager) != identity:
             raise ManagerAcceptanceError("manager identity changed across run read")
@@ -3740,20 +3730,24 @@ def acquire_loaded_manager_receipt(
             close_object_path=close_loaded,
             run_properties=run_properties,
             close_properties=close_properties,
-            configured_readback=configured_readback,
+            configured_readback=readback,
             unit_publication=unit_publication,
             manager_reload=manager_reload,
         )
-        reopened_raw = persist_and_reopen(receipt.raw)
+        reopened_raw = (
+            receipt.raw
+            if persist_and_reopen is None
+            else persist_and_reopen(receipt.raw)
+        )
         reopened = LoadedManagerReceipt.from_bytes(
             reopened_raw,
-            configured_readback=configured_readback,
+            configured_readback=readback,
             unit_publication=unit_publication,
             manager_reload=manager_reload,
         )
         if reopened != receipt or _read_manager_identity(manager) != identity:
             raise ManagerAcceptanceError("durable manager receipt or identity differs")
-        return reopened
+        return readback, reopened
     finally:
         try:
             if close_referenced:
@@ -3761,6 +3755,76 @@ def acquire_loaded_manager_receipt(
         finally:
             if run_referenced:
                 manager.unref_unit(run_name)
+
+
+def acquire_loaded_manager_receipt(
+    manager: NarrowInstallationManager,
+    *,
+    configured_readback: ConfiguredPairReadback,
+    unit_publication: UnitPublicationReceipt,
+    manager_reload: ManagerReloadReceipt,
+    persist_and_reopen: Callable[[bytes], bytes],
+) -> LoadedManagerReceipt:
+    """Acquire, durably persist, and reopen one exact loaded pair."""
+
+    _require_root()
+    if not callable(persist_and_reopen):
+        raise TypeError("persist_and_reopen must be callable")
+    _configured_readback, receipt = _acquire_loaded_manager_receipt(
+        manager,
+        configured_readback=configured_readback,
+        acquire_configured_readback=None,
+        unit_publication=unit_publication,
+        manager_reload=manager_reload,
+        persist_and_reopen=persist_and_reopen,
+    )
+    return receipt
+
+
+def acquire_loaded_manager_pair(
+    manager: NarrowInstallationManager,
+    *,
+    acquire_configured_readback: Callable[[], ConfiguredPairReadback],
+    unit_publication: UnitPublicationReceipt,
+    manager_reload: ManagerReloadReceipt,
+    persist_and_reopen: Callable[[bytes], bytes],
+) -> tuple[ConfiguredPairReadback, LoadedManagerReceipt]:
+    """Load both units, then acquire their configured readback and acceptance."""
+
+    _require_root()
+    if not callable(acquire_configured_readback):
+        raise TypeError("configured readback acquirer must be callable")
+    if not callable(persist_and_reopen):
+        raise TypeError("persist_and_reopen must be callable")
+    return _acquire_loaded_manager_receipt(
+        manager,
+        configured_readback=None,
+        acquire_configured_readback=acquire_configured_readback,
+        unit_publication=unit_publication,
+        manager_reload=manager_reload,
+        persist_and_reopen=persist_and_reopen,
+    )
+
+
+def reacquire_loaded_manager_receipt(
+    manager: NarrowInstallationManager,
+    *,
+    configured_readback: ConfiguredPairReadback,
+    unit_publication: UnitPublicationReceipt,
+    manager_reload: ManagerReloadReceipt,
+) -> LoadedManagerReceipt:
+    """Read one exact loaded pair again without publishing another receipt."""
+
+    _require_root()
+    _configured_readback, receipt = _acquire_loaded_manager_receipt(
+        manager,
+        configured_readback=configured_readback,
+        acquire_configured_readback=None,
+        unit_publication=unit_publication,
+        manager_reload=manager_reload,
+        persist_and_reopen=None,
+    )
+    return receipt
 
 
 class StartDispatchState(str, Enum):
@@ -4482,11 +4546,14 @@ __all__ = [
     "StartPermitOwner",
     "SystemdExternalManager",
     "UnitPublicationReceipt",
+    "acquire_loaded_manager_pair",
     "acquire_loaded_manager_receipt",
+    "reacquire_loaded_manager_receipt",
     "apply_manager_reload",
     "apply_root_phase",
     "classify_root_installation",
     "classify_start_dispatch",
+    "parse_mountinfo_mount_id",
     "parse_selected_mountinfo",
     "validate_forward_receipt_dag",
     "validate_root_transaction",

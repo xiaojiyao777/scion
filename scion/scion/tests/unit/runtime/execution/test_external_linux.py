@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import inspect
 import json
 import os
 import stat
@@ -23,6 +24,7 @@ from scion.runtime.execution.external_linux import (
     parse_fdinfo_mount_id,
     pin_absolute_directory,
     publish_noreplace,
+    reopen_imported_tree,
 )
 
 
@@ -142,8 +144,43 @@ def test_nonprivileged_import_seam_copies_exact_immutable_tree_and_roundtrips(
         "tool",
     )
     assert ImmutableTreeImportReceipt.from_bytes(receipt.raw) == receipt
+
+    with pin_absolute_directory(str(staging_parent)) as pinned_staging:
+        assert reopen_imported_tree(pinned_staging, receipt) == receipt
     assert len(receipt.tree_sha256) == 64
     assert len(receipt.raw_sha256) == 64
+
+
+def test_reopen_imported_tree_rejects_content_and_inventory_drift(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "source"
+    staging_parent = tmp_path / "staging"
+    source.mkdir()
+    staging_parent.mkdir()
+    (source / "data").write_bytes(b"accepted")
+    receipt = _import_for_test(source, staging_parent, "hold")
+    imported = staging_parent / "hold"
+    data = imported / "data"
+
+    data.chmod(0o644)
+    data.write_bytes(b"drifted!")
+    data.chmod(0o444)
+    with pin_absolute_directory(str(staging_parent)) as pinned_staging:
+        with pytest.raises(ExternalLinuxError, match="content differs"):
+            reopen_imported_tree(pinned_staging, receipt)
+
+    data.chmod(0o644)
+    data.write_bytes(b"accepted")
+    data.chmod(0o444)
+    imported.chmod(0o755)
+    extra = imported / "extra"
+    extra.write_bytes(b"unexpected")
+    extra.chmod(0o444)
+    imported.chmod(0o555)
+    with pin_absolute_directory(str(staging_parent)) as pinned_staging:
+        with pytest.raises(ExternalLinuxError, match="unexpected entry"):
+            reopen_imported_tree(pinned_staging, receipt)
 
 
 def test_import_rejects_mutable_source_mode(tmp_path: Path) -> None:
@@ -252,6 +289,133 @@ def test_import_detects_source_identity_drift_and_leaves_partial_hold(
 
     assert captured.value.staging_leaf == "hold"
     assert (staging_parent / "hold" / "data").exists()
+
+
+def test_import_entry_limit_is_bounded_before_direct_child_mutation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    staging = tmp_path / "staging"
+    source.mkdir()
+    staging.mkdir()
+    for name in ("a", "b", "c"):
+        (source / name).write_bytes(name.encode())
+    monkeypatch.setattr(
+        external_linux,
+        "_IMPORT_LIMITS",
+        external_linux._ImportLimits(2, 8, 1024, 4096),
+    )
+
+    with pytest.raises(TreeImportHold) as captured:
+        _import_for_test(source, staging, "hold")
+
+    cause = captured.value.__cause__
+    assert type(cause) is external_linux._TreeImportLimitExceeded
+    assert cause.dimension == "entry-count"
+    assert tuple((staging / "hold").iterdir()) == ()
+
+
+def test_import_depth_limit_refuses_offending_leaf_before_creation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    staging = tmp_path / "staging"
+    nested = source / "one" / "two"
+    nested.mkdir(parents=True)
+    staging.mkdir()
+    (nested / "data").write_bytes(b"x")
+    monkeypatch.setattr(
+        external_linux,
+        "_IMPORT_LIMITS",
+        external_linux._ImportLimits(16, 1, 1024, 4096),
+    )
+
+    with pytest.raises(TreeImportHold) as captured:
+        _import_for_test(source, staging, "hold")
+
+    cause = captured.value.__cause__
+    assert type(cause) is external_linux._TreeImportLimitExceeded
+    assert cause.dimension == "depth"
+    assert (staging / "hold" / "one").is_dir()
+    assert not (staging / "hold" / "one" / "two").exists()
+
+
+@pytest.mark.parametrize(
+    ("limits", "expected_present", "dimension"),
+    (
+        ((16, 8, 2, 32), (), "file-bytes"),
+        ((16, 8, 8, 5), ("a",), "total-bytes"),
+    ),
+)
+def test_import_byte_limits_reserve_before_offending_destination_open(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    limits: tuple[int, int, int, int],
+    expected_present: tuple[str, ...],
+    dimension: str,
+) -> None:
+    source = tmp_path / "source"
+    staging = tmp_path / "staging"
+    source.mkdir()
+    staging.mkdir()
+    (source / "a").write_bytes(b"abc")
+    (source / "b").write_bytes(b"def")
+    monkeypatch.setattr(
+        external_linux,
+        "_IMPORT_LIMITS",
+        external_linux._ImportLimits(*limits),
+    )
+
+    with pytest.raises(TreeImportHold) as captured:
+        _import_for_test(source, staging, "hold")
+
+    cause = captured.value.__cause__
+    assert type(cause) is external_linux._TreeImportLimitExceeded
+    assert cause.dimension == dimension
+    assert (
+        tuple(sorted(path.name for path in (staging / "hold").iterdir()))
+        == expected_present
+    )
+
+
+def test_import_receipt_reapplies_fixed_limits_and_public_api_has_no_knob(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source"
+    staging = tmp_path / "staging"
+    source.mkdir()
+    staging.mkdir()
+    (source / "a").write_bytes(b"a")
+    (source / "b").write_bytes(b"b")
+    receipt = _import_for_test(source, staging, "accepted")
+    monkeypatch.setattr(
+        external_linux,
+        "_IMPORT_LIMITS",
+        external_linux._ImportLimits(1, 8, 1024, 4096),
+    )
+
+    with pytest.raises(CanonicalImportReceiptError, match="fixed limits"):
+        ImmutableTreeImportReceipt.from_bytes(receipt.raw)
+
+    assert (
+        "limits"
+        not in inspect.signature(external_linux._import_immutable_tree).parameters
+    )
+    assert (
+        "budget"
+        not in inspect.signature(external_linux._import_immutable_tree).parameters
+    )
+    assert (
+        "limits"
+        not in inspect.signature(external_linux.import_root_owned_tree).parameters
+    )
+    assert (
+        "budget"
+        not in inspect.signature(external_linux.import_root_owned_tree).parameters
+    )
 
 
 def test_public_root_import_checks_real_euid_before_creation(
