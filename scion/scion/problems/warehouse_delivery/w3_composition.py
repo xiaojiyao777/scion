@@ -104,16 +104,16 @@ _RUN_READ_WRITE = (
     "/var/lib/scion/projections/w3/%i/nonce-claims"
 )
 _RUN_EXEC = (
-    "/var/lib/scion/projections/w3/%i/environment/bin/python -B -s "
+    "/var/lib/scion/projections/w3/%i/environment/bin/python -I -B "
     "/var/lib/scion/projections/w3/%i/sealed/bin/scion-w3-tool run %i"
 )
 _STOP_EXEC = (
-    "/var/lib/scion/projections/w3/%i/environment/bin/python -B -s "
+    "/var/lib/scion/projections/w3/%i/environment/bin/python -I -B "
     "/var/lib/scion/projections/w3/%i/sealed/bin/scion-w3-tool "
     "seal-unit-drained %i"
 )
 _CLOSE_EXEC = (
-    "/var/lib/scion/projections/w3/%i/environment/bin/python -B -s "
+    "/var/lib/scion/projections/w3/%i/environment/bin/python -I -B "
     "/var/lib/scion/projections/w3/%i/sealed/bin/scion-w3-tool close %i"
 )
 _RUN_UNIT_SECTION = {

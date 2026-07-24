@@ -30,7 +30,8 @@ ROOT_FINAL_ABSENCE_LEAF = "ROOT_FINAL_ABSENCE.v1.json"
 
 _EXTRA_PATH_ROLES = (
     "acceptance_launch",
-    "nonce_ledger",
+    "nonce_ledger_parent",
+    "nonce_claims",
     "root_selection",
     "template_close_dropin",
     "template_run_dropin",
@@ -250,7 +251,10 @@ class WarehouseW3RootFinalAbsenceReceipt:
         subjects.update(
             {
                 "acceptance_launch": (f"/var/lib/scion/acceptances/w3/{launch_id}"),
-                "nonce_ledger": EXPECTED_NONCE_LEDGER_PARENT,
+                "nonce_ledger_parent": str(
+                    PurePosixPath(EXPECTED_NONCE_LEDGER_PARENT).parent
+                ),
+                "nonce_claims": EXPECTED_NONCE_LEDGER_PARENT,
                 "root_selection": (
                     f"/var/lib/scion/selections/w3/{selection_key}.json"
                 ),

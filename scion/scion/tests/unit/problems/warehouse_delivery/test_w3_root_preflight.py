@@ -51,6 +51,9 @@ def test_root_preflight_round_trip_binds_trace_to_expected_and_acquired_absence(
         == absence
     )
     assert trace.expected_root_final_absence_sha256 == absence.raw_sha256
+    subjects = {item.role: item.subject for item in absence.observations}
+    assert subjects["nonce_ledger_parent"] == ("/var/lib/scion/runs/w3/.nonce-ledger")
+    assert subjects["nonce_claims"] == ("/var/lib/scion/runs/w3/.nonce-ledger/claims")
 
 
 def test_root_transaction_trace_refuses_derived_path_substitution(

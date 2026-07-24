@@ -798,9 +798,9 @@ def _manager_bundle(
     projection = installation.projection_root
     python = f"{projection}/environment/bin/python"
     tool = f"{projection}/sealed/bin/scion-w3-tool"
-    run_start = f"{python} -B -s {tool} run {installation.launch_id}"
-    run_stop = f"{python} -B -s {tool} seal-unit-drained {installation.launch_id}"
-    close_start = f"{python} -B -s {tool} close {installation.launch_id}"
+    run_start = f"{python} -I -B {tool} run {installation.launch_id}"
+    run_stop = f"{python} -I -B {tool} seal-unit-drained {installation.launch_id}"
+    close_start = f"{python} -I -B {tool} close {installation.launch_id}"
     read_only = (
         f"{projection}/installation.json",
         f"{projection}/authority.json",

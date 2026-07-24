@@ -108,7 +108,7 @@ from scion.problems.warehouse_delivery.w3_wheel import (
 )
 from scion.runtime.execution.environment_integrity import EnvironmentContentReceipt
 
-PLAN_SHA = "8042f4aad34a3396e27e6cd0f1562f35b003f2603ec623d1092d16e78d660734"
+PLAN_SHA = "dad4372b6c72f86c740b4fab5feb2e84f78f9c498f48abfb4e3c36bd9a86ed55"
 SITE = "lib/python3.12/site-packages"
 NATIVE = (
     f"{SITE}/scion/runtime/native/_spawn_into_cgroup.cpython-312-x86_64-linux-gnu.so"

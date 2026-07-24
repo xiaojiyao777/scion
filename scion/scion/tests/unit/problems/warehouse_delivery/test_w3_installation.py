@@ -645,6 +645,7 @@ def _prepared_inputs(
         trusted_git_root=Path("/srv/scion/trusted-w3.git"),
         trusted_git_device=1,
         trusted_git_inode=2,
+        trusted_git_content_sha256="b" * 64,
         git_binary_sha256="a" * 64,
         remote_name=REMOTE,
         remote_ref=REMOTE_REF,

@@ -36,7 +36,7 @@ W3_SOURCE_ACCEPTANCE_SEALED_PATH = (
 FIXED_GIT = "/usr/bin/git"
 
 _REVIEW_SCHEMA = "scion.w3-fixed-source-review-closure.v1"
-_GIT_VERIFICATION_SCHEMA = "scion.w3-root-git-verification.v1"
+_GIT_VERIFICATION_SCHEMA = "scion.w3-root-git-verification.v2"
 _ACCEPTANCE_SCHEMA = "scion.w3-root-fixed-source-acceptance.v1"
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_OID_RE = re.compile(r"[0-9a-f]{40}\Z")
@@ -45,6 +45,17 @@ _IDENTITY_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}\Z")
 _TIME_RE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
 _REVIEW_SCOPES = frozenset({"root_installation", "launch_readiness"})
 _READ_LIMIT = 32 * 1024 * 1024
+_MAX_REPOSITORY_ENTRIES = 1_000_000
+_FORBIDDEN_REPOSITORY_PATHS = frozenset(
+    {
+        "commondir",
+        "gitdir",
+        "info/grafts",
+        "objects/info/alternates",
+        "objects/info/http-alternates",
+        "shallow",
+    }
+)
 
 
 class WarehouseW3SourceAcceptanceError(RuntimeError):
@@ -306,6 +317,7 @@ class RootGitVerificationReceipt:
     trusted_git_root: str
     trusted_git_device: int
     trusted_git_inode: int
+    trusted_git_content_sha256: str
     git_binary_sha256: str
     remote_name: str
     remote_ref: str
@@ -325,6 +337,7 @@ class RootGitVerificationReceipt:
         trusted_git_root: Path,
         trusted_git_device: int,
         trusted_git_inode: int,
+        trusted_git_content_sha256: str,
         git_binary_sha256: str,
         remote_name: str,
         remote_ref: str,
@@ -338,6 +351,7 @@ class RootGitVerificationReceipt:
                     "trusted_git_root": str(trusted_git_root),
                     "trusted_git_device": trusted_git_device,
                     "trusted_git_inode": trusted_git_inode,
+                    "trusted_git_content_sha256": trusted_git_content_sha256,
                     "git_binary_path": FIXED_GIT,
                     "git_binary_sha256": git_binary_sha256,
                     "remote_name": remote_name,
@@ -363,6 +377,7 @@ class RootGitVerificationReceipt:
                     "trusted_git_root",
                     "trusted_git_device",
                     "trusted_git_inode",
+                    "trusted_git_content_sha256",
                     "git_binary_path",
                     "git_binary_sha256",
                     "remote_name",
@@ -407,6 +422,13 @@ class RootGitVerificationReceipt:
             (
                 "trusted_git_inode",
                 _nonnegative(value["trusted_git_inode"], field="Git root inode"),
+            ),
+            (
+                "trusted_git_content_sha256",
+                _sha256(
+                    value["trusted_git_content_sha256"],
+                    field="Git repository content sha256",
+                ),
             ),
             (
                 "git_binary_sha256",
@@ -578,14 +600,16 @@ class RootFixedSourceAcceptanceReceipt:
         commit = _git_oid(value["source_commit"], field="accepted source commit")
         tree = _git_oid(value["source_tree"], field="accepted source tree")
         inventory = source_inventory_sha256(source)
-        identities = {(item.reviewer_identity, item.task_identity) for item in reviews}
+        reviewer_identities = {item.reviewer_identity for item in reviews}
+        task_identities = {item.task_identity for item in reviews}
         if (
             value["schema"] != _ACCEPTANCE_SCHEMA
             or value["plan_sha256"] != ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
             or value["state"] != "FIXED_SOURCE_ACCEPTED"
             or tuple(item.review_scope for item in reviews)
             != tuple(sorted(_REVIEW_SCOPES))
-            or len(identities) != 2
+            or len(reviewer_identities) != 2
+            or len(task_identities) != 2
             or any(
                 item.source_commit != commit
                 or item.source_tree != tree
@@ -729,7 +753,7 @@ def _hash_stable_regular(
     return digest.hexdigest(), named
 
 
-def _validate_root_owned_directory(path: Path, *, expected_uid: int) -> os.stat_result:
+def _open_root_owned_directory(path: Path, *, expected_uid: int) -> int:
     if not path.is_absolute() or str(PurePosixPath(str(path))) != str(path):
         raise WarehouseW3SourceAcceptanceError(
             "trusted Git root is not canonical absolute"
@@ -778,13 +802,239 @@ def _validate_root_owned_directory(path: Path, *, expected_uid: int) -> os.stat_
                 )
             os.close(descriptor)
             descriptor = child
-        return os.fstat(descriptor)
+        return descriptor
     except OSError as exc:
+        os.close(descriptor)
         raise WarehouseW3SourceAcceptanceError(
             "trusted Git root cannot be opened"
         ) from exc
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def _validate_root_owned_directory(path: Path, *, expected_uid: int) -> os.stat_result:
+    descriptor = _open_root_owned_directory(path, expected_uid=expected_uid)
+    try:
+        return os.fstat(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _root_owned_repository_content(
+    path: Path,
+    *,
+    expected_uid: int,
+    expected_gid: int = 0,
+) -> tuple[str, os.stat_result]:
+    """Hash one pinned, root-authoritative bare-repository filesystem tree."""
+
+    root = _open_root_owned_directory(path, expected_uid=expected_uid)
+    digest = hashlib.sha256(b"scion.w3-root-owned-git-content.v1\0")
+    entry_count = 0
+
+    def record(value: Mapping[str, object]) -> None:
+        digest.update(_canonical_json(value))
+
+    def walk(directory: int, prefix: str) -> None:
+        nonlocal entry_count
+        try:
+            names = os.listdir(directory)
+        except OSError as exc:
+            raise WarehouseW3SourceAcceptanceError(
+                "trusted Git repository cannot be listed"
+            ) from exc
+        try:
+            ordered = sorted(
+                names,
+                key=lambda item: item.encode("utf-8", "strict"),
+            )
+        except UnicodeError as exc:
+            raise WarehouseW3SourceAcceptanceError(
+                "trusted Git repository path is not UTF-8"
+            ) from exc
+        for name in ordered:
+            if not name or name in {".", ".."} or "/" in name or "\x00" in name:
+                raise WarehouseW3SourceAcceptanceError(
+                    "trusted Git repository contains an unsafe path"
+                )
+            logical = f"{prefix}/{name}" if prefix else name
+            entry_count += 1
+            if entry_count > _MAX_REPOSITORY_ENTRIES:
+                raise WarehouseW3SourceAcceptanceError(
+                    "trusted Git repository entry bound exceeded"
+                )
+            if logical in _FORBIDDEN_REPOSITORY_PATHS or (
+                logical.startswith("objects/pack/") and logical.endswith(".promisor")
+            ):
+                raise WarehouseW3SourceAcceptanceError(
+                    "trusted Git repository contains external object authority"
+                )
+            try:
+                named = os.stat(
+                    name,
+                    dir_fd=directory,
+                    follow_symlinks=False,
+                )
+            except OSError as exc:
+                raise WarehouseW3SourceAcceptanceError(
+                    "trusted Git repository entry cannot be stated"
+                ) from exc
+            if not (stat.S_ISDIR(named.st_mode) or stat.S_ISREG(named.st_mode)):
+                raise WarehouseW3SourceAcceptanceError(
+                    "trusted Git repository contains non-regular authority"
+                )
+            if (
+                named.st_uid != expected_uid
+                or named.st_gid != expected_gid
+                or stat.S_IMODE(named.st_mode) & 0o022
+            ):
+                raise WarehouseW3SourceAcceptanceError(
+                    "trusted Git repository content authority differs"
+                )
+            if stat.S_ISDIR(named.st_mode):
+                try:
+                    child = os.open(
+                        name,
+                        os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                        dir_fd=directory,
+                    )
+                except OSError as exc:
+                    raise WarehouseW3SourceAcceptanceError(
+                        "trusted Git repository directory cannot be pinned"
+                    ) from exc
+                try:
+                    opened = os.fstat(child)
+                    if _stat_signature(opened) != _stat_signature(named):
+                        raise WarehouseW3SourceAcceptanceError(
+                            "trusted Git repository directory drifted"
+                        )
+                    record(
+                        {
+                            "path": logical,
+                            "kind": "directory",
+                            "device": opened.st_dev,
+                            "inode": opened.st_ino,
+                            "mode": opened.st_mode,
+                            "uid": opened.st_uid,
+                            "gid": opened.st_gid,
+                            "nlink": opened.st_nlink,
+                            "size": opened.st_size,
+                            "mtime_ns": opened.st_mtime_ns,
+                            "ctime_ns": opened.st_ctime_ns,
+                        }
+                    )
+                    walk(child, logical)
+                    reopened = os.stat(
+                        name,
+                        dir_fd=directory,
+                        follow_symlinks=False,
+                    )
+                    if _stat_signature(os.fstat(child)) != _stat_signature(
+                        opened
+                    ) or _stat_signature(reopened) != _stat_signature(opened):
+                        raise WarehouseW3SourceAcceptanceError(
+                            "trusted Git repository directory changed"
+                        )
+                finally:
+                    os.close(child)
+                continue
+            if named.st_nlink != 1:
+                raise WarehouseW3SourceAcceptanceError(
+                    "trusted Git repository contains non-regular authority"
+                )
+            try:
+                descriptor = os.open(
+                    name,
+                    os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                    dir_fd=directory,
+                )
+            except OSError as exc:
+                raise WarehouseW3SourceAcceptanceError(
+                    "trusted Git repository file cannot be pinned"
+                ) from exc
+            file_digest = hashlib.sha256()
+            size = 0
+            try:
+                opened = os.fstat(descriptor)
+                if _stat_signature(opened) != _stat_signature(named):
+                    raise WarehouseW3SourceAcceptanceError(
+                        "trusted Git repository file drifted"
+                    )
+                while True:
+                    chunk = os.read(descriptor, 1024 * 1024)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    file_digest.update(chunk)
+                after = os.fstat(descriptor)
+                reopened = os.stat(
+                    name,
+                    dir_fd=directory,
+                    follow_symlinks=False,
+                )
+                if (
+                    size != opened.st_size
+                    or _stat_signature(after) != _stat_signature(opened)
+                    or _stat_signature(reopened) != _stat_signature(opened)
+                ):
+                    raise WarehouseW3SourceAcceptanceError(
+                        "trusted Git repository file changed"
+                    )
+                record(
+                    {
+                        "path": logical,
+                        "kind": "regular",
+                        "device": opened.st_dev,
+                        "inode": opened.st_ino,
+                        "mode": opened.st_mode,
+                        "uid": opened.st_uid,
+                        "gid": opened.st_gid,
+                        "nlink": opened.st_nlink,
+                        "size": size,
+                        "mtime_ns": opened.st_mtime_ns,
+                        "ctime_ns": opened.st_ctime_ns,
+                        "sha256": file_digest.hexdigest(),
+                    }
+                )
+            finally:
+                os.close(descriptor)
+
+    try:
+        root_before = os.fstat(root)
+        if (
+            not stat.S_ISDIR(root_before.st_mode)
+            or root_before.st_uid != expected_uid
+            or root_before.st_gid != expected_gid
+            or stat.S_IMODE(root_before.st_mode) & 0o022
+        ):
+            raise WarehouseW3SourceAcceptanceError(
+                "trusted Git repository root authority differs"
+            )
+        record(
+            {
+                "path": ".",
+                "kind": "directory",
+                "device": root_before.st_dev,
+                "inode": root_before.st_ino,
+                "mode": root_before.st_mode,
+                "uid": root_before.st_uid,
+                "gid": root_before.st_gid,
+                "nlink": root_before.st_nlink,
+                "size": root_before.st_size,
+                "mtime_ns": root_before.st_mtime_ns,
+                "ctime_ns": root_before.st_ctime_ns,
+            }
+        )
+        walk(root, "")
+        root_after = os.fstat(root)
+        if _stat_signature(root_after) != _stat_signature(root_before):
+            raise WarehouseW3SourceAcceptanceError(
+                "trusted Git repository root changed"
+            )
+        return digest.hexdigest(), root_after
+    finally:
+        os.close(root)
 
 
 def _one_line(raw: bytes, *, label: str) -> str:
@@ -797,6 +1047,37 @@ def _one_line(raw: bytes, *, label: str) -> str:
     if not value:
         raise WarehouseW3SourceAcceptanceError(f"{label} is empty")
     return value
+
+
+def _reject_external_git_configuration(raw: bytes) -> None:
+    if not raw or not raw.endswith(b"\0"):
+        raise WarehouseW3SourceAcceptanceError(
+            "trusted Git local configuration is absent or malformed"
+        )
+    for encoded in raw[:-1].split(b"\0"):
+        try:
+            key_raw, _value = encoded.split(b"\n", 1)
+            key = key_raw.decode("ascii", "strict").lower()
+        except (ValueError, UnicodeError) as exc:
+            raise WarehouseW3SourceAcceptanceError(
+                "trusted Git local configuration is malformed"
+            ) from exc
+        if (
+            key
+            in {
+                "core.alternaterefscommand",
+                "core.hookspath",
+                "core.worktree",
+                "extensions.partialclone",
+                "extensions.worktreeconfig",
+                "include.path",
+            }
+            or key.startswith("includeif.")
+            or (key.startswith("remote.") and key.endswith(".promisor"))
+        ):
+            raise WarehouseW3SourceAcceptanceError(
+                "trusted Git configuration delegates external authority"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -817,7 +1098,7 @@ class RootOwnedGitSourceVerifier:
         remote_name: str,
         remote_ref: str,
     ) -> tuple[GitSourceSnapshot, RootGitVerificationReceipt]:
-        root_identity = _validate_root_owned_directory(
+        repository_content_sha256, root_identity = _root_owned_repository_content(
             trusted_git_root,
             expected_uid=self.expected_uid,
         )
@@ -835,6 +1116,40 @@ class RootOwnedGitSourceVerifier:
         remote = _identity(remote_name, field="remote name")
         run = self.runner.run
         prefix = (FIXED_GIT, f"--git-dir={trusted_git_root}")
+        if (
+            _one_line(
+                run(
+                    (*prefix, "rev-parse", "--is-bare-repository"),
+                    git_root=trusted_git_root,
+                ),
+                label="trusted Git bare state",
+            )
+            != "true"
+            or _one_line(
+                run(
+                    (*prefix, "rev-parse", "--is-shallow-repository"),
+                    git_root=trusted_git_root,
+                ),
+                label="trusted Git shallow state",
+            )
+            != "false"
+        ):
+            raise WarehouseW3SourceAcceptanceError(
+                "trusted Git repository is not one complete bare mirror"
+            )
+        _reject_external_git_configuration(
+            run(
+                (*prefix, "config", "--local", "--null", "--list"),
+                git_root=trusted_git_root,
+            )
+        )
+        if run(
+            (*prefix, "for-each-ref", "--format=%(refname)", "refs/replace"),
+            git_root=trusted_git_root,
+        ):
+            raise WarehouseW3SourceAcceptanceError(
+                "trusted Git repository contains replacement refs"
+            )
         ref_commit = _git_oid(
             _one_line(
                 run(
@@ -973,7 +1288,7 @@ class RootOwnedGitSourceVerifier:
             receipt=receipt,
             blobs=tuple(item[1] for item in ordered),
         )
-        after = _validate_root_owned_directory(
+        repository_content_sha256_after, after = _root_owned_repository_content(
             trusted_git_root,
             expected_uid=self.expected_uid,
         )
@@ -985,7 +1300,7 @@ class RootOwnedGitSourceVerifier:
             Path(FIXED_GIT).parent,
             expected_uid=0,
         )
-        if (
+        if repository_content_sha256 != repository_content_sha256_after or (
             root_identity.st_dev,
             root_identity.st_ino,
             root_identity.st_mode,
@@ -1003,7 +1318,7 @@ class RootOwnedGitSourceVerifier:
             after.st_ctime_ns,
         ):
             raise WarehouseW3SourceAcceptanceError(
-                "trusted Git root changed during verification"
+                "trusted Git repository changed during verification"
             )
         if (
             git_sha256_after != git_sha256
@@ -1017,6 +1332,7 @@ class RootOwnedGitSourceVerifier:
             trusted_git_root=trusted_git_root,
             trusted_git_device=after.st_dev,
             trusted_git_inode=after.st_ino,
+            trusted_git_content_sha256=repository_content_sha256,
             git_binary_sha256=git_sha256,
             remote_name=remote,
             remote_ref=remote_ref,
