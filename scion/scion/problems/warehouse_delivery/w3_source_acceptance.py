@@ -1190,7 +1190,7 @@ class RootOwnedGitSourceVerifier:
                 "ls-tree",
                 "-rz",
                 "--full-tree",
-                commit,
+                f"{commit}:scion",
                 "--",
                 "pyproject.toml",
                 "scion",
