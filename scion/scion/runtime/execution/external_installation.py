@@ -4478,10 +4478,13 @@ class StartPermitOwner:
                 self._authorization,
                 self._installed_acceptance,
             )
-        except Exception as exc:
-            raise StartPermitError(
-                "adjacent loaded-manager pair could not be reacquired"
-            ) from exc
+        except Exception:
+            receipt = StartDispatchReceipt.create(
+                issue_sha256=self._issue.raw_sha256,
+                state=StartDispatchState.UNKNOWN,
+            )
+            self._writer.write_no_replace("START_DISPATCH_UNKNOWN", receipt.raw)
+            return receipt
         if (
             type(loaded_manager_raw) is not bytes
             or not loaded_manager_raw
@@ -4489,7 +4492,12 @@ class StartPermitOwner:
             or hashlib.sha256(loaded_manager_raw).hexdigest()
             != self._issue.loaded_manager_sha256
         ):
-            raise StartPermitError("adjacent loaded-manager receipt differs")
+            receipt = StartDispatchReceipt.create(
+                issue_sha256=self._issue.raw_sha256,
+                state=StartDispatchState.UNKNOWN,
+            )
+            self._writer.write_no_replace("START_DISPATCH_UNKNOWN", receipt.raw)
+            return receipt
         referenced = False
         try:
             try:

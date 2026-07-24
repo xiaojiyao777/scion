@@ -4221,12 +4221,17 @@ class _FixedStartAuthorizationAuthority:
     def acquire(
         cls,
         launch_id: str,
+        *,
+        require_unspent: bool = True,
     ) -> _FixedStartAuthorizationAuthority:
+        if type(require_unspent) is not bool:
+            raise TypeError("require_unspent must be exact bool")
         start = pin_absolute_directory(str(_ACCEPTANCE_ROOT / launch_id / "start"))
         try:
             return cls._acquire_from_start(
                 start,
                 require_root_owner=True,
+                require_unspent=require_unspent,
             )
         finally:
             start.close()
@@ -4237,11 +4242,14 @@ class _FixedStartAuthorizationAuthority:
         start: PinnedDirectory,
         *,
         require_root_owner: bool,
+        require_unspent: bool = True,
     ) -> _FixedStartAuthorizationAuthority:
         if type(start) is not PinnedDirectory:
             raise TypeError("start must be exact PinnedDirectory")
         if type(require_root_owner) is not bool:
             raise TypeError("require_root_owner must be exact bool")
+        if type(require_unspent) is not bool:
+            raise TypeError("require_unspent must be exact bool")
         if require_root_owner:
             _require_root_owned_chain(start)
         else:
@@ -4296,7 +4304,8 @@ class _FixedStartAuthorizationAuthority:
             descriptor = -1
             bundle_descriptor = -1
             instance.revalidate()
-            instance.require_unspent()
+            if require_unspent:
+                instance.require_unspent()
             return instance
         finally:
             if bundle_descriptor >= 0:
@@ -4342,8 +4351,9 @@ class _FixedStartAuthorizationAuthority:
                 "fixed START_AUTHORIZED authority drifted"
             )
 
-    def require_unspent(self) -> None:
+    def _spend_inventory(self) -> tuple[str, ...]:
         self.revalidate()
+        present: list[str] = []
         for leaf in _START_SPEND_LEAVES:
             try:
                 os.stat(
@@ -4357,6 +4367,14 @@ class _FixedStartAuthorizationAuthority:
                 raise WarehouseW3RootCoordinatorError(
                     "fixed start spend state is ambiguous"
                 ) from exc
+            present.append(leaf)
+        return tuple(present)
+
+    def is_spent(self) -> bool:
+        return bool(self._spend_inventory())
+
+    def require_unspent(self) -> None:
+        if self._spend_inventory():
             raise WarehouseW3RootCoordinatorError(
                 "fixed start authorization is already spent"
             )
@@ -4634,8 +4652,14 @@ def start_w3(launch_id: str) -> StartDispatchReceipt:
             "fixed W3 root installation is not accepted"
         )
     with _FixedStartAuthorizationAuthority.acquire(
-        normalized_launch_id
+        normalized_launch_id,
+        require_unspent=False,
     ) as authorization_authority:
+        if authorization_authority.is_spent():
+            authorization_authority.seal_start_directory()
+            raise WarehouseW3RootCoordinatorError(
+                "fixed start authorization is already spent"
+            )
         manager = SystemdExternalManager()
         installed_authority = RootInstalledAcceptanceAuthority.acquire(
             normalized_launch_id
@@ -4748,7 +4772,6 @@ def start_w3(launch_id: str) -> StartDispatchReceipt:
                 authorization_authority.revalidate()
                 installed_authority.revalidate()
                 _revalidate_installed_source_acceptance(installed_authority)
-            authorization_authority.seal_start_directory()
             return receipt
         except (
             PermissionError,
@@ -4760,7 +4783,11 @@ def start_w3(launch_id: str) -> StartDispatchReceipt:
                 "fixed installed W3 start could not be dispatched"
             ) from exc
         finally:
-            installed_authority.close()
+            try:
+                if authorization_authority.is_spent():
+                    authorization_authority.seal_start_directory()
+            finally:
+                installed_authority.close()
 
 
 __all__ = [

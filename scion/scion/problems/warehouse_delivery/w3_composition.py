@@ -1538,8 +1538,8 @@ def _close_installed(materials: _InstalledMaterials) -> None:
     tool = f"{projection}/sealed/bin/scion-w3-tool"
     expected_argv = (
         python,
+        "-I",
         "-B",
-        "-s",
         tool,
         "seal-unit-drained",
         materials.installation.launch_id,

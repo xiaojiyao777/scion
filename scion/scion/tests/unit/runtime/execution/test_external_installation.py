@@ -2693,21 +2693,21 @@ def test_start_permit_reacquires_loaded_manager_after_issue_before_ref() -> None
         calls.append("adjacent")
         raise RuntimeError("loaded manager changed")
 
-    with pytest.raises(StartPermitError, match="adjacent loaded-manager"):
-        StartPermitOwner(
-            authorization=authorization,
-            installed_acceptance=installed,
-            phase_intents=intents,
-            phase_receipts=phases,
-            issue=issue,
-            manager=manager,
-            reacquire_prestart=_reacquire_prestart,
-            reacquire_loaded_manager=reacquire_loaded,
-            writer=writer,
-        ).dispatch()
+    receipt = StartPermitOwner(
+        authorization=authorization,
+        installed_acceptance=installed,
+        phase_intents=intents,
+        phase_receipts=phases,
+        issue=issue,
+        manager=manager,
+        reacquire_prestart=_reacquire_prestart,
+        reacquire_loaded_manager=reacquire_loaded,
+        writer=writer,
+    ).dispatch()
 
     assert calls == ["adjacent"]
-    assert writer.names == ("START_ISSUED",)
+    assert receipt.state is StartDispatchState.UNKNOWN
+    assert writer.write_order == ("START_ISSUED", "START_DISPATCH_UNKNOWN")
     assert not any(call[0] in {"ref", "start"} for call in manager.calls)
 
 

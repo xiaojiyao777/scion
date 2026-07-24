@@ -1037,10 +1037,12 @@ def test_start_w3_rejects_partial_root_ledger_before_authority_or_manager(
         start_w3(launch_id)
 
 
-def test_start_w3_spends_one_authorization_and_dispatches_once(
+@pytest.mark.parametrize("adjacent_failure", [False, True])
+def test_start_w3_spends_and_seals_success_or_adjacent_unknown(
     tmp_path: Path,
     semantic_inputs: dict[str, object],
     monkeypatch: pytest.MonkeyPatch,
+    adjacent_failure: bool,
 ) -> None:
     values, replay, evidence, installed, intents, receipts = _installed_bundle(
         semantic_inputs
@@ -1138,13 +1140,17 @@ def test_start_w3_spends_one_authorization_and_dispatches_once(
         "verify_live_w3_publications",
         lambda *_args, **_kwargs: events.append("adjacent:publications"),
     )
+
+    def verify_adjacent_loaded(*_args: object, **_kwargs: object):
+        events.append("adjacent:loaded")
+        if adjacent_failure:
+            raise RuntimeError("adjacent loaded manager changed")
+        return installed_authority.chain.loaded_manager
+
     monkeypatch.setattr(
         coordinator,
         "verify_live_w3_loaded_manager",
-        lambda *_args, **_kwargs: (
-            events.append("adjacent:loaded"),
-            installed_authority.chain.loaded_manager,
-        )[-1],
+        verify_adjacent_loaded,
     )
     gate_results = (
         (
@@ -1202,12 +1208,16 @@ def test_start_w3_spends_one_authorization_and_dispatches_once(
     def acquire_authorization(
         cls: type[_FixedStartAuthorizationAuthority],
         requested: str,
+        *,
+        require_unspent: bool = True,
     ) -> _FixedStartAuthorizationAuthority:
         assert requested == launch_id
+        assert require_unspent is False
         with pin_absolute_directory(str(start)) as pinned_start:
             return cls._acquire_from_start(
                 pinned_start,
                 require_root_owner=False,
+                require_unspent=require_unspent,
             )
 
     monkeypatch.setattr(
@@ -1228,10 +1238,13 @@ def test_start_w3_spends_one_authorization_and_dispatches_once(
 
     receipt = start_w3(launch_id)
 
-    assert receipt.state is StartDispatchState.RETURNED
+    assert receipt.state is (
+        StartDispatchState.UNKNOWN if adjacent_failure else StartDispatchState.RETURNED
+    )
     assert json.loads((start / "START_ISSUED").read_bytes())["method"] == ("StartUnit")
-    assert (start / "START_RETURNED").read_bytes() == receipt.raw
-    assert events == [
+    outcome = "START_DISPATCH_UNKNOWN" if adjacent_failure else "START_RETURNED"
+    assert (start / outcome).read_bytes() == receipt.raw
+    expected_events = [
         "gate:publications",
         "gate:loaded",
         "gate:publications",
@@ -1244,8 +1257,22 @@ def test_start_w3_spends_one_authorization_and_dispatches_once(
         "gate:loaded",
         "adjacent:publications",
         "adjacent:loaded",
-        f"ref:{values['installation'].run_unit}",
-        f"start:{values['installation'].run_unit}:fail",
-        f"unref:{values['installation'].run_unit}",
-        "sealed",
     ]
+    if not adjacent_failure:
+        expected_events.extend(
+            [
+                f"ref:{values['installation'].run_unit}",
+                f"start:{values['installation'].run_unit}:fail",
+                f"unref:{values['installation'].run_unit}",
+            ]
+        )
+    expected_events.append("sealed")
+    assert events == expected_events
+    if adjacent_failure:
+        (start / outcome).unlink()
+        with pytest.raises(
+            WarehouseW3RootCoordinatorError,
+            match="already spent",
+        ):
+            start_w3(launch_id)
+        assert events == [*expected_events, "sealed"]

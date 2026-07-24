@@ -801,8 +801,8 @@ def _inspect_w3_terminal_pinned(
                     expected_exec_path=f"{projection}/environment/bin/python",
                     expected_argv=(
                         f"{projection}/environment/bin/python",
+                        "-I",
                         "-B",
-                        "-s",
                         f"{projection}/sealed/bin/scion-w3-tool",
                         "seal-unit-drained",
                         normalized,
