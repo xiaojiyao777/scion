@@ -10,14 +10,17 @@ from scion.problems.warehouse_delivery.w3_candidate_gate import (
     CandidateCompositionInspection,
     CandidateGateClosureBundle,
     CandidateGateReceipt,
-    CandidateSimulatedRelocationRef,
+    CandidateNamespaceFinalProbeRef,
+    derive_namespace_probe_evidence_sha256,
 )
 from scion.problems.warehouse_delivery.w3_composition import (
     EXPECTED_SOURCE_TREE_IDENTITY_SHA256,
 )
 from scion.problems.warehouse_delivery.w3_environment_receipts import (
     EnvironmentProbeFact,
+    NamespaceProbeExecutionFact,
     WarehouseEnvironmentContentReceipt,
+    derive_final_environment_path,
 )
 from scion.problems.warehouse_delivery.w3_installation import (
     CandidateRootIdentity,
@@ -94,39 +97,55 @@ def make_candidate_gate_closure(
         root=candidate_root / "environment",
     )
     launch_id = derive_launch_id(candidate.authority_sha256, nonce)
-    simulated_root = (
-        candidate_root.parent
-        / ".simulated-final"
-        / "var"
-        / "lib"
-        / "scion"
-        / "environments"
-        / "w3"
-        / environment.raw_sha256
+    physical_root = (
+        candidate_root.parent / ".namespace-physical" / environment.raw_sha256
     )
-    simulated_probe = _probe(
+    namespace_probe = _probe(
         semantic,
-        phase="simulated_final",
-        root=simulated_root,
+        phase="namespace_final",
+        root=derive_final_environment_path(semantic),
     )
-    relocation = CandidateSimulatedRelocationRef.create(
-        evidence_receipt_sha256=_sha(f"simulated-relocation:{candidate.selection_key}"),
+    namespace_execution = NamespaceProbeExecutionFact.create(
+        physical_environment_root=physical_root,
+        visible_environment_root=derive_final_environment_path(semantic),
+        environment_probe=namespace_probe,
+        producer_euid=1000,
+        producer_egid=1000,
+        no_new_privs=True,
+        parent_network_namespace="net:[1]",
+        child_network_namespace="net:[2]",
+        parent_mount_namespace="mnt:[3]",
+        child_mount_namespace="mnt:[4]",
+        bwrap_sha256=_sha("bwrap"),
+        bwrap_device=1,
+        bwrap_inode=2,
+        bwrap_size_bytes=3,
+        bwrap_mode=0o755,
+    )
+    relocation = CandidateNamespaceFinalProbeRef.create(
+        evidence_receipt_sha256=derive_namespace_probe_evidence_sha256(
+            semantic.raw,
+            candidate_probe.raw,
+            namespace_probe.raw,
+            namespace_execution.raw,
+        ),
         selection_key=candidate.selection_key,
         launch_id=launch_id,
         authority_sha256=candidate.authority_sha256,
         installation_sha256=candidate.installation_sha256,
         semantic_environment=semantic,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_probe,
+        namespace_final_probe=namespace_probe,
+        namespace_probe_execution=namespace_execution,
     )
     bindings = {
         "candidate_verification_sha256": candidate.raw_sha256,
         "double_wheel_receipt_sha256": wheel.raw_sha256,
         "semantic_environment_receipt_sha256": semantic.raw_sha256,
         "candidate_probe_sha256": candidate_probe.raw_sha256,
-        "simulated_final_probe_sha256": simulated_probe.raw_sha256,
-        "simulated_relocation_ref_sha256": relocation.raw_sha256,
-        "simulated_relocation_evidence_sha256": (relocation.evidence_receipt_sha256),
+        "namespace_final_probe_sha256": namespace_probe.raw_sha256,
+        "namespace_probe_ref_sha256": relocation.raw_sha256,
+        "namespace_probe_evidence_sha256": (relocation.evidence_receipt_sha256),
     }
     subjects = gate_module._derived_absence_subjects(
         accepted_root=str(accepted_root),
@@ -146,7 +165,7 @@ def make_candidate_gate_closure(
                 candidate_verification_sha256=candidate.raw_sha256,
                 double_wheel_receipt_sha256=wheel.raw_sha256,
                 semantic_environment_receipt_sha256=semantic.raw_sha256,
-                simulated_relocation_ref_sha256=relocation.raw_sha256,
+                namespace_probe_ref_sha256=relocation.raw_sha256,
             ),
             state="ABSENT",
         )
@@ -210,8 +229,9 @@ def make_candidate_gate_closure(
         semantic_environment=semantic,
         environment_content=environment,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_probe,
-        simulated_relocation=relocation,
+        namespace_final_probe=namespace_probe,
+        namespace_probe_execution=namespace_execution,
+        namespace_probe_ref=relocation,
         inspection=inspection,
         absence_facts=absence,
     )
@@ -222,8 +242,9 @@ def make_candidate_gate_closure(
         semantic_environment=semantic,
         environment_content=environment,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_probe,
-        simulated_relocation=relocation,
+        namespace_final_probe=namespace_probe,
+        namespace_probe_execution=namespace_execution,
+        namespace_probe_ref=relocation,
         inspection=inspection,
         absence_facts=absence,
     )

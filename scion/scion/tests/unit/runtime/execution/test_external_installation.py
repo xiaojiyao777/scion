@@ -73,6 +73,8 @@ AUTHORIZATION = "1" * 64
 INSTALLED = "2" * 64
 PRESTART_RAW = b'{"schema":"fixture.prestart.v1"}\n'
 PRESTART = hashlib.sha256(PRESTART_RAW).hexdigest()
+LOADED_MANAGER_RAW = b'{"schema":"fixture.loaded-manager.v1"}\n'
+LOADED_MANAGER = hashlib.sha256(LOADED_MANAGER_RAW).hexdigest()
 INSTALLATION = "4" * 64
 RUN = f"scion-run@{LAUNCH}.service"
 CLOSE = f"scion-close@{LAUNCH}.service"
@@ -1663,7 +1665,9 @@ def test_unit_publication_binds_installation_paths_and_reopened_template_bytes()
     assert receipt.configured_pair_sha256 == installation.configured_pair_sha256
     assert receipt.run_publication_sha256 == run_publication.raw_sha256
     assert receipt.close_publication_sha256 == close_publication.raw_sha256
-    assert json.loads(receipt.raw)["schema"] == "scion.unit-publication-acceptance.v3"
+    value = json.loads(receipt.raw)
+    assert value["schema"] == "scion.unit-publication-acceptance.v4"
+    assert len(value["dropin_absence_paths"]) == 4
     assert (
         UnitPublicationReceipt.from_bytes(
             receipt.raw,
@@ -2367,6 +2371,7 @@ def _start_bundle() -> tuple[
         selection_key=SELECTION,
         preparation_commit_sha256="6" * 64,
         root_selection_sha256="5" * 64,
+        external_source_acceptance_sha256="4" * 64,
         user_statement="authorized exact first dispatch",
         task_event_identity="thread:019f86f1",
         recorded_at_utc="2026-07-23T17:00:00Z",
@@ -2375,6 +2380,7 @@ def _start_bundle() -> tuple[
     issue = StartIssueReceipt.create_authorized(
         authorization,
         prestart_receipt_sha256=PRESTART,
+        loaded_manager_sha256=LOADED_MANAGER,
         manager_identity=external_installation.ManagerIdentity(
             unique_owner=":1.42",
             boot_id=BOOT,
@@ -2391,6 +2397,15 @@ def _reacquire_prestart(
     assert type(authorization) is StartAuthorizationReceipt
     assert type(installed_acceptance) is InstalledAcceptance
     return PRESTART_RAW
+
+
+def _reacquire_loaded_manager(
+    authorization: StartAuthorizationReceipt,
+    installed_acceptance: InstalledAcceptance,
+) -> bytes:
+    assert type(authorization) is StartAuthorizationReceipt
+    assert type(installed_acceptance) is InstalledAcceptance
+    return LOADED_MANAGER_RAW
 
 
 def test_installed_acceptance_and_start_permit_reject_alternate_complete_dag() -> None:
@@ -2454,6 +2469,7 @@ def test_installed_acceptance_and_start_permit_reject_alternate_complete_dag() -
             issue=issue,
             manager=manager,
             reacquire_prestart=reacquire,
+            reacquire_loaded_manager=_reacquire_loaded_manager,
             writer=writer,
         )
 
@@ -2473,6 +2489,7 @@ def test_start_authorization_closes_prospective_and_installed_identity() -> None
         selection_key=SELECTION,
         preparation_commit_sha256="6" * 64,
         root_selection_sha256="5" * 64,
+        external_source_acceptance_sha256="4" * 64,
         user_statement="authorized exact first dispatch",
         task_event_identity="thread:019f86f1",
         recorded_at_utc="2026-07-23T17:00:00Z",
@@ -2511,6 +2528,7 @@ def test_start_permit_is_one_shot_and_persists_issue_before_exact_dispatch(
         issue=issue,
         manager=manager,
         reacquire_prestart=_reacquire_prestart,
+        reacquire_loaded_manager=_reacquire_loaded_manager,
         writer=writer,
     )
 
@@ -2572,6 +2590,7 @@ def test_definite_error_before_start_is_unknown_not_start_rejected() -> None:
         issue=issue,
         manager=manager,
         reacquire_prestart=_reacquire_prestart,
+        reacquire_loaded_manager=_reacquire_loaded_manager,
         writer=writer,
     ).dispatch()
 
@@ -2594,6 +2613,7 @@ def test_start_manager_identity_drift_is_unknown(outcome: str) -> None:
         issue=issue,
         manager=manager,
         reacquire_prestart=_reacquire_prestart,
+        reacquire_loaded_manager=_reacquire_loaded_manager,
         writer=writer,
     ).dispatch()
 
@@ -2616,6 +2636,7 @@ def test_start_manager_identity_mismatch_refuses_before_issue() -> None:
             issue=issue,
             manager=manager,
             reacquire_prestart=_reacquire_prestart,
+            reacquire_loaded_manager=_reacquire_loaded_manager,
             writer=writer,
         ).dispatch()
 
@@ -2648,11 +2669,46 @@ def test_start_permit_reacquires_prestart_before_manager_or_issue(mode: str) -> 
             issue=issue,
             manager=manager,
             reacquire_prestart=reacquire,
+            reacquire_loaded_manager=_reacquire_loaded_manager,
             writer=writer,
         ).dispatch()
 
     assert manager.calls == []
     assert writer.names == ()
+
+
+def test_start_permit_reacquires_loaded_manager_after_issue_before_ref() -> None:
+    authorization, installed, issue, intents, phases = _start_bundle()
+    manager = _StartManager("returned")
+    writer = NoReplaceReceiptSet()
+    calls: list[str] = []
+
+    def reacquire_loaded(
+        current_authorization: StartAuthorizationReceipt,
+        current_installed: InstalledAcceptance,
+    ) -> bytes:
+        assert current_authorization is authorization
+        assert current_installed is installed
+        assert writer.names == ("START_ISSUED",)
+        calls.append("adjacent")
+        raise RuntimeError("loaded manager changed")
+
+    with pytest.raises(StartPermitError, match="adjacent loaded-manager"):
+        StartPermitOwner(
+            authorization=authorization,
+            installed_acceptance=installed,
+            phase_intents=intents,
+            phase_receipts=phases,
+            issue=issue,
+            manager=manager,
+            reacquire_prestart=_reacquire_prestart,
+            reacquire_loaded_manager=reacquire_loaded,
+            writer=writer,
+        ).dispatch()
+
+    assert calls == ["adjacent"]
+    assert writer.names == ("START_ISSUED",)
+    assert not any(call[0] in {"ref", "start"} for call in manager.calls)
 
 
 def test_start_permit_requires_root_and_existing_issue_name_prevents_call(
@@ -2669,6 +2725,7 @@ def test_start_permit_requires_root_and_existing_issue_name_prevents_call(
         issue=issue,
         manager=manager,
         reacquire_prestart=_reacquire_prestart,
+        reacquire_loaded_manager=_reacquire_loaded_manager,
         writer=writer,
     )
     monkeypatch.setattr(external_installation.os, "geteuid", lambda: 1001)
@@ -2687,6 +2744,7 @@ def test_start_permit_requires_root_and_existing_issue_name_prevents_call(
         issue=issue,
         manager=collision_manager,
         reacquire_prestart=_reacquire_prestart,
+        reacquire_loaded_manager=_reacquire_loaded_manager,
         writer=writer,
     )
     with pytest.raises(FileExistsError):

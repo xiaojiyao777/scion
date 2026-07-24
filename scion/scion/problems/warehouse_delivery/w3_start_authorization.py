@@ -223,6 +223,7 @@ def _reopen_prestart_evidence(
                 "loaded_manager",
                 "prestart_absence",
                 "runtime_account",
+                "source_acceptance",
             }
         )
         or value["schema"] != WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA
@@ -362,6 +363,10 @@ def _bind_start_authorization_from_chain(
         or root_selection.nonce != preparation_commit.nonce
         or root_selection.launch_id != preparation_commit.launch_id
         or root_selection.authority_sha256 != preparation_commit.authority_sha256
+        or root_selection.source_acceptance_sha256
+        != preparation_intent.source_acceptance_sha256
+        or dict(evidence.producer_receipt_sha256)["source_acceptance"]
+        != root_selection.source_acceptance_sha256
         or (
             selected_identity.device,
             selected_identity.inode,
@@ -420,6 +425,7 @@ def _bind_start_authorization_from_chain(
         selection_key=root_selection.selection_key,
         preparation_commit_sha256=(root_selection.preparation_commit_sha256),
         root_selection_sha256=root_selection.raw_sha256,
+        external_source_acceptance_sha256=(root_selection.source_acceptance_sha256),
         user_statement=prospective.statement,
         task_event_identity=preparation_intent.task_event_identity,
         recorded_at_utc=recorded_at_utc,

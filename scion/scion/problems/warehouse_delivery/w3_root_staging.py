@@ -6,7 +6,7 @@ candidate/gate ingress open while it reopens the root-owned imported tree,
 parses every candidate-local producer receipt, and independently rederives the
 candidate, authority, and installation chain.
 
-Facts outside the immutable candidate (double-wheel, simulated relocation,
+Facts outside the immutable candidate (double-wheel, namespace-final execution,
 dry-root inspection, and absence observations) cross privilege only in the
 fixed ingress closure bundle.  Root reparses that complete producer graph and
 binds its candidate verification to the independently replayed imported tree.
@@ -25,6 +25,7 @@ import stat
 from scion.problems.warehouse_delivery.w3_candidate_gate import (
     CandidateGateClosureBundle,
     CandidateGateReceipt,
+    W3_WHEEL_SEALED_PATH,
 )
 from scion.problems.warehouse_delivery.w3_candidate_ingress import (
     CandidateGateIngressFact,
@@ -47,6 +48,16 @@ from scion.problems.warehouse_delivery.w3_installation import (
     build_warehouse_installation,
     build_warehouse_launch_authority,
 )
+from scion.problems.warehouse_delivery.w3_wheel import (
+    verify_wheel_bytes_against_receipt,
+)
+from scion.problems.warehouse_delivery.w3_source_acceptance import (
+    RootFixedSourceAcceptanceReceipt,
+    W3_SOURCE_ACCEPTANCE_SEALED_PATH,
+)
+from scion.problems.warehouse_delivery.w3_environment_receipts import (
+    verify_namespace_probe_execution_binary,
+)
 from scion.runtime.execution.environment_integrity import EnvironmentContentReceipt
 from scion.runtime.execution.external_linux import (
     FileIdentity,
@@ -61,7 +72,7 @@ from scion.runtime.execution.launch_authority import (
 )
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
-_SCHEMA = "scion.w3-root-staging-verification.v1"
+_SCHEMA = "scion.w3-root-staging-verification.v2"
 _STATE = "ROOT_STAGING_REVERIFIED"
 _MAX_FIXED_RECEIPT_BYTES = 32 * 1024 * 1024
 _ROOT_INVENTORY = (
@@ -500,6 +511,7 @@ class WarehouseW3RootStagingVerification:
     candidate_receipt_sha256: str
     candidate_content_aggregate_sha256: str
     candidate_verification_sha256: str
+    source_acceptance_sha256: str
     source_receipt_sha256: str
     sealed_store_receipt_sha256: str
     sealed_store_aggregate_sha256: str
@@ -564,6 +576,9 @@ class WarehouseW3RootStagingVerification:
                 candidate_receipt.content_aggregate_sha256
             ),
             "candidate_verification_sha256": candidate_verification.raw_sha256,
+            "source_acceptance_sha256": (
+                candidate_verification.source_acceptance_sha256
+            ),
             "source_receipt_sha256": source_receipt.raw_sha256,
             "sealed_store_receipt_sha256": sealed_store_receipt.raw_sha256,
             "sealed_store_aggregate_sha256": sealed_store_receipt.aggregate_sha256,
@@ -677,6 +692,7 @@ class WarehouseW3RootStagingVerification:
                 "candidate_receipt_sha256",
                 "candidate_content_aggregate_sha256",
                 "candidate_verification_sha256",
+                "source_acceptance_sha256",
                 "source_receipt_sha256",
                 "sealed_store_receipt_sha256",
                 "sealed_store_aggregate_sha256",
@@ -707,6 +723,7 @@ class WarehouseW3RootStagingVerification:
             or value["imported_tree_aggregate_sha256"] != imported.tree_sha256
             or value["candidate_verification_sha256"]
             != gate.candidate_verification_sha256
+            or value["source_acceptance_sha256"] != gate.source_acceptance_sha256
             or value["source_receipt_sha256"] != gate.source_receipt_sha256
             or value["environment_receipt_sha256"]
             != gate.environment_content_receipt_sha256
@@ -737,6 +754,7 @@ class WarehouseW3RootStagingVerification:
             "candidate_receipt_sha256",
             "candidate_content_aggregate_sha256",
             "candidate_verification_sha256",
+            "source_acceptance_sha256",
             "source_receipt_sha256",
             "sealed_store_receipt_sha256",
             "sealed_store_aggregate_sha256",
@@ -784,6 +802,9 @@ class WarehouseW3RootStagingVerification:
             != candidate_local.content_aggregate_sha256
             or parsed["candidate_verification_sha256"]
             != candidate_verification_local.raw_sha256
+            or parsed["source_acceptance_sha256"]
+            != candidate_verification_local.source_acceptance_sha256
+            or parsed["source_acceptance_sha256"] != intent.source_acceptance_sha256
             or parsed["source_receipt_sha256"] != source.raw_sha256
             or parsed["sealed_store_receipt_sha256"] != sealed.raw_sha256
             or parsed["sealed_store_aggregate_sha256"] != sealed.aggregate_sha256
@@ -859,6 +880,7 @@ def _verify_imported_w3_candidate(
         ingress.revalidate()
         gate = ingress.gate
         closure = ingress.closure
+        verify_namespace_probe_execution_binary(closure.namespace_probe_execution)
         ingress_fact = ingress.fact
         if (
             imported.source_root != ingress_fact.candidate_identity
@@ -969,6 +991,22 @@ def _verify_imported_w3_candidate(
             )
             content = _candidate_content(entries, candidate)
             sealed_by_path = {item.path: item for item in sealed.inventory}
+            source_acceptance = RootFixedSourceAcceptanceReceipt.from_bytes(
+                _read_imported_regular(
+                    root_fd,
+                    entries,
+                    f"sealed-store/{W3_SOURCE_ACCEPTANCE_SEALED_PATH}",
+                )
+            )
+            if (
+                source_acceptance.raw_sha256 != intent.source_acceptance_sha256
+                or source_acceptance.raw_sha256 != verification.source_acceptance_sha256
+                or source_acceptance.raw_sha256 != closure.gate.source_acceptance_sha256
+                or source_acceptance.source_receipt != source
+            ):
+                raise WarehouseW3RootStagingError(
+                    "root fixed-source acceptance differs from imported candidate"
+                )
             blobs: list[GitBlobFact] = []
             for identity in source.blobs:
                 path = f"sealed/{identity.logical_path}"
@@ -994,6 +1032,16 @@ def _verify_imported_w3_candidate(
                     )
                 )
             snapshot = GitSourceSnapshot(receipt=source, blobs=tuple(blobs))
+            wheel_raw = _read_imported_regular(
+                root_fd,
+                entries,
+                f"sealed-store/{W3_WHEEL_SEALED_PATH}",
+            )
+            verify_wheel_bytes_against_receipt(
+                wheel_raw,
+                closure.double_wheel,
+                trusted_source_snapshot=snapshot,
+            )
             adapters = tuple(
                 AuthorityInputAdapter(
                     logical_path=item.logical_path,

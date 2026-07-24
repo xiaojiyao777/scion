@@ -56,7 +56,20 @@ def _prospective_raw() -> bytes:
         / "v0.4"
         / "v04-w3-prospective-start-authorization-intent-20260723.json"
     )
-    return path.read_bytes()
+    value = json.loads(path.read_bytes())
+    value["plan_sha256"] = (
+        start_authorization_module.ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
+    )
+    return (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    ).encode()
 
 
 def _installed_bundle(

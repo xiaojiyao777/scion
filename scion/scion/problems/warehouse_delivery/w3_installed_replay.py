@@ -501,6 +501,8 @@ class WarehouseW3InstalledReplayChain:
     nonce_claims_mount: MountBindingReceipt
     projection_authority_publication: PublishedRegularFileReceipt
     projection_installation_publication: PublishedRegularFileReceipt
+    run_unit_publication: PublishedRegularFileReceipt
+    close_unit_publication: PublishedRegularFileReceipt
     unit_publication: UnitPublicationReceipt
     configured_pair_readback: ConfiguredPairReadback
     manager_reload: ManagerReloadReceipt
@@ -783,6 +785,8 @@ def verify_w3_installed_replay(
         nonce_claims_mount=nonce_claims_mount,
         projection_authority_publication=(projection_authority_publication),
         projection_installation_publication=(projection_installation_publication),
+        run_unit_publication=run_publication,
+        close_unit_publication=close_publication,
         unit_publication=unit_publication,
         configured_pair_readback=configured_readback,
         manager_reload=manager_reload,
@@ -1276,6 +1280,43 @@ def _verify_live_regular_receipt(
         os.close(descriptor)
 
 
+def verify_live_w3_publications(
+    authority: RootInstalledAcceptanceAuthority,
+) -> UnitPublicationReceipt:
+    """Reopen the complete K3/K5 publication set and four drop-in absences."""
+
+    if type(authority) is not RootInstalledAcceptanceAuthority:
+        raise TypeError("authority must be exact RootInstalledAcceptanceAuthority")
+    authority.revalidate()
+    chain = authority.chain
+    try:
+        _verify_live_regular_receipt(chain.authority_publication)
+        _verify_live_regular_receipt(chain.installation_publication)
+        _verify_live_directory_receipt(chain.nonce_directory)
+        _verify_live_regular_receipt(chain.run_unit_publication)
+        _verify_live_regular_receipt(chain.close_unit_publication)
+        for subject in chain.unit_publication.dropin_absence_paths:
+            try:
+                os.stat(subject, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            except OSError as exc:
+                raise WarehouseW3InstalledReplayError(
+                    f"live unit drop-in absence is ambiguous: {subject}"
+                ) from exc
+            raise WarehouseW3InstalledReplayError(
+                f"live unit drop-in subject is present: {subject}"
+            )
+    except WarehouseW3InstalledReplayError:
+        raise
+    except Exception as exc:
+        raise WarehouseW3InstalledReplayError(
+            "live W3 K3/K5 publication reacquisition differs"
+        ) from exc
+    authority.revalidate()
+    return chain.unit_publication
+
+
 def _reacquire_mount(
     stored: MountBindingReceipt,
     *,
@@ -1515,12 +1556,16 @@ def reacquire_live_w3_prestart(
 
     if type(authority) is not RootInstalledAcceptanceAuthority:
         raise TypeError("authority must be exact RootInstalledAcceptanceAuthority")
+    verify_live_w3_publications(authority)
     verify_live_w3_loaded_manager(authority, manager)
+    verify_live_w3_publications(authority)
     verify_live_w3_projection(authority)
     verify_live_w3_environment(authority, phase="preclaim")
     verify_live_w3_dry_root(authority)
     verify_live_w3_prestart_absence(authority)
     verify_live_w3_runtime_account(authority)
+    verify_live_w3_publications(authority)
+    verify_live_w3_loaded_manager(authority, manager)
     authority.revalidate()
     return authority.chain.prestart_evidence.raw
 
@@ -1536,6 +1581,7 @@ __all__ = [
     "verify_live_w3_dry_root",
     "verify_live_w3_prestart_absence",
     "verify_live_w3_projection",
+    "verify_live_w3_publications",
     "verify_live_w3_runtime_account",
     "reacquire_live_w3_prestart",
     "verify_w3_installed_replay",

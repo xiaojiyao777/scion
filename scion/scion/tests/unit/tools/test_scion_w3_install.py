@@ -17,14 +17,28 @@ LAUNCH_ID = "1" * 64
 def _args(command: str):
     parser = cli._parser()
     values = {
+        "accept-fixed-source": (
+            f"--trusted-git-root /srv/scion/trusted-w3.git "
+            f"--source-commit {'2' * 40} --remote-name origin "
+            "--remote-ref refs/heads/test --review-one /tmp/review-one "
+            "--review-two /tmp/review-two "
+            "--accepted-at-utc 2026-07-23T00:00:00Z"
+        ),
         "prepare-candidate": (
             "--accepted-root /tmp/accepted --repo-root /tmp/repo "
             f"--launch-commit {'2' * 40} --remote-name origin "
             "--remote-ref refs/heads/test --native-record /tmp/native "
-            "--python /usr/bin/python3.12"
+            "--python /usr/bin/python3.12 "
+            "--source-acceptance /tmp/source-acceptance"
         ),
-        "verify-candidate": ("--candidate-root /tmp/candidate --repo-root /tmp/repo"),
-        "apply-root": "--candidate-root /tmp/candidate",
+        "verify-candidate": (
+            "--candidate-root /tmp/candidate --repo-root /tmp/repo "
+            "--source-acceptance /tmp/source-acceptance"
+        ),
+        "apply-root": (
+            "--candidate-root /tmp/candidate "
+            "--source-acceptance /tmp/source-acceptance"
+        ),
         "verify-installed": f"--launch-id {LAUNCH_ID}",
         "record-start-authorization": (
             f"--launch-id {LAUNCH_ID} --prospective-intent /tmp/intent "
@@ -37,10 +51,11 @@ def _args(command: str):
     return parser.parse_args([command, *values[command].split()])
 
 
-def test_parser_exposes_exact_eight_commands() -> None:
+def test_parser_exposes_exact_nine_commands() -> None:
     parser = cli._parser()
     action = next(item for item in parser._actions if item.dest == "command")
     assert frozenset(action.choices) == {
+        "accept-fixed-source",
         "prepare-candidate",
         "verify-candidate",
         "apply-root",
@@ -55,6 +70,7 @@ def test_parser_exposes_exact_eight_commands() -> None:
 @pytest.mark.parametrize(
     ("command", "effective_uid"),
     (
+        ("accept-fixed-source", 1001),
         ("prepare-candidate", 0),
         ("verify-candidate", 0),
         ("apply-root", 1001),

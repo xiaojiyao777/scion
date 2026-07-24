@@ -89,7 +89,6 @@ from .w3_environment_receipts import (
     EnvironmentRelocationReceipt,
     FilesystemLiveEnvironmentReader,
     LiveEnvironmentRehashFact,
-    SubprocessEnvironmentProbeReader,
     WarehouseEnvironmentContentReceipt,
     derive_final_environment_path,
     verify_live_environment,
@@ -104,6 +103,8 @@ from .w3_installed_replay import (
     WarehouseW3InstalledAcceptanceBundle,
     WarehouseW3InstalledReplayInputs,
     reacquire_live_w3_prestart,
+    verify_live_w3_loaded_manager,
+    verify_live_w3_publications,
     verify_w3_installed_replay,
 )
 from .w3_root_selection import RootSelectedCandidateAuthority
@@ -114,8 +115,16 @@ from .w3_root_selection import (
     derive_root_selection_effect_authority_sha256,
     derive_root_staging_import_authority_sha256,
     selection_replay_inputs_from_chain,
+    verify_w3_selected_candidate_chain,
 )
 from .w3_root_staging import verify_imported_w3_candidate
+from .w3_root_preflight import (
+    ROOT_FINAL_ABSENCE_LEAF,
+    WarehouseW3RootFinalAbsenceReceipt,
+    WarehouseW3RootTransactionTraceReceipt,
+    acquire_root_final_absence,
+    root_transaction_trace_leaf,
+)
 from .w3_root_installation import (
     WarehouseW3AuthorityPublishedReceipt,
     WarehouseW3PreStartEvidence,
@@ -134,6 +143,10 @@ from .w3_start_authorization import (
 )
 from .w3_start_gate import WarehouseW3PreStartProducerReplayInputs
 from .w3_start_store import WarehouseW3InstalledStartGateBundle
+from .w3_source_acceptance import (
+    RootFixedSourceAcceptanceAuthority,
+    source_acceptance_path as canonical_source_acceptance_path,
+)
 from .w3_prestart_facts import (
     WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA,
     PreStartAbsenceObservation,
@@ -289,6 +302,7 @@ def _w3_root_layout_specs(
         "runs",
         "sealed",
         "selections",
+        "source-acceptances",
     )
     return (
         FreshDirectorySpec(
@@ -395,6 +409,7 @@ def _verify_w3_root_layout_at(
                 "runs",
                 "sealed",
                 "selections",
+                "source-acceptances",
             )
         ),
         *(
@@ -409,6 +424,7 @@ def _verify_w3_root_layout_at(
                 "runs",
                 "sealed",
                 "selections",
+                "source-acceptances",
             )
         ),
     ):
@@ -458,6 +474,13 @@ def _ensure_w3_root_layout() -> None:
         raise WarehouseW3RootCoordinatorError(
             "fixed W3 root layout is a permanent hold"
         ) from exc
+
+
+def ensure_w3_root_layout() -> None:
+    """Root-only fixed-layout bootstrap used before source acceptance."""
+
+    _require_root()
+    _ensure_w3_root_layout()
 
 
 def _require_root_owned_chain(directory: PinnedDirectory) -> None:
@@ -556,6 +579,7 @@ def _read_install_ledger(
     *,
     launch_id: str,
     require_root_owner: bool,
+    expected_trace_sha256: str,
 ) -> WarehouseW3RootInstallationInspection:
     """Inspect one already pinned install directory without any mutation."""
 
@@ -646,6 +670,14 @@ def _read_install_ledger(
             bundle.installed_replay_inputs,
             bundle.selection_replay_inputs,
         )
+        if (
+            chain.selected_candidate.root_transaction_trace.raw_sha256
+            != expected_trace_sha256
+        ):
+            return _partial_inspection(
+                normalized_launch_id,
+                committed_phase_count=committed_count,
+            )
         effect_producers = (
             chain.selected_candidate.staged_candidate,
             chain.selected_candidate.root_selection,
@@ -728,19 +760,53 @@ def _read_install_ledger(
 
 def _inspect_w3_root_installation_at(
     acceptance_root: Path,
+    import_root: Path,
     launch_id: str,
     *,
     require_root_owner: bool,
 ) -> WarehouseW3RootInstallationInspection:
     """Test seam and fixed-root implementation for fail-closed classification."""
 
-    if not isinstance(acceptance_root, Path) or not acceptance_root.is_absolute():
-        raise TypeError("acceptance_root must be one absolute Path")
+    if (
+        not isinstance(acceptance_root, Path)
+        or not acceptance_root.is_absolute()
+        or not isinstance(import_root, Path)
+        or not import_root.is_absolute()
+    ):
+        raise TypeError("acceptance_root and import_root must be absolute Paths")
     normalized_launch_id = _launch_id(launch_id)
+    trace_leaf = root_transaction_trace_leaf(normalized_launch_id)
+    try:
+        import_parent = pin_absolute_directory(str(import_root))
+    except FileNotFoundError:
+        import_parent = None
+    except Exception:
+        return _partial_inspection(normalized_launch_id)
+    trace: WarehouseW3RootTransactionTraceReceipt | None = None
+    if import_parent is not None:
+        try:
+            descriptor, _identity, trace_raw = _acquire_fixed_receipt(
+                import_parent,
+                trace_leaf,
+                maximum=_MAX_RECEIPT_BYTES,
+                require_root_owner=require_root_owner,
+            )
+            os.close(descriptor)
+            trace = WarehouseW3RootTransactionTraceReceipt.from_bytes(trace_raw)
+            if trace.launch_id != normalized_launch_id:
+                return _partial_inspection(normalized_launch_id)
+        except FileNotFoundError:
+            trace = None
+        except Exception:
+            return _partial_inspection(normalized_launch_id)
+        finally:
+            import_parent.close()
     launch_root = acceptance_root / normalized_launch_id
     try:
         metadata = os.stat(launch_root, follow_symlinks=False)
     except FileNotFoundError:
+        if trace is not None:
+            return _partial_inspection(normalized_launch_id)
         return WarehouseW3RootInstallationInspection(
             launch_id=normalized_launch_id,
             state=RootInstallationState.ABSENT,
@@ -749,6 +815,8 @@ def _inspect_w3_root_installation_at(
             installed_replay_sha256=None,
         )
     except OSError:
+        return _partial_inspection(normalized_launch_id)
+    if trace is None:
         return _partial_inspection(normalized_launch_id)
     if not stat.S_ISDIR(metadata.st_mode):
         return _partial_inspection(normalized_launch_id)
@@ -780,6 +848,7 @@ def _inspect_w3_root_installation_at(
                 install,
                 launch_id=normalized_launch_id,
                 require_root_owner=require_root_owner,
+                expected_trace_sha256=trace.raw_sha256,
             )
         finally:
             install.close()
@@ -826,6 +895,7 @@ def inspect_w3_root_installation(
     _require_root()
     return _inspect_w3_root_installation_at(
         _ACCEPTANCE_ROOT,
+        _IMPORT_ROOT,
         _launch_id(launch_id),
         require_root_owner=True,
     )
@@ -835,6 +905,8 @@ def _close_w3_root_selection_prefix(
     *,
     closure: CandidateGateClosureBundle,
     ingress: CandidateGateIngressFact,
+    trace: WarehouseW3RootTransactionTraceReceipt,
+    root_final_absence: WarehouseW3RootFinalAbsenceReceipt,
     staging_leaf: str,
     writer: DurableReceiptDirectory,
     import_and_verify: Callable[[], WarehouseW3StagedCandidateReceipt],
@@ -854,6 +926,12 @@ def _close_w3_root_selection_prefix(
         raise TypeError("closure must be exact CandidateGateClosureBundle")
     if type(ingress) is not CandidateGateIngressFact:
         raise TypeError("ingress must be exact CandidateGateIngressFact")
+    if type(trace) is not WarehouseW3RootTransactionTraceReceipt:
+        raise TypeError("trace must be exact WarehouseW3RootTransactionTraceReceipt")
+    if type(root_final_absence) is not WarehouseW3RootFinalAbsenceReceipt:
+        raise TypeError(
+            "root_final_absence must be exact WarehouseW3RootFinalAbsenceReceipt"
+        )
     if type(writer) is not DurableReceiptDirectory:
         raise TypeError("writer must be exact DurableReceiptDirectory")
     if not all(
@@ -868,6 +946,8 @@ def _close_w3_root_selection_prefix(
         staging_leaf=staging_leaf,
         target_uid=0,
         target_gid=0,
+        trace=trace,
+        root_final_absence=root_final_absence,
     )
     observed: dict[str, object] = {}
 
@@ -951,6 +1031,8 @@ def _close_w3_root_selection_prefix(
     chain = WarehouseW3SelectedCandidateChain(
         closure=closure,
         ingress=ingress,
+        root_transaction_trace=trace,
+        root_final_absence=root_final_absence,
         tree_import=staged.tree_import,
         root_staging_verification=staged.root_staging_verification,
         staged_candidate=staged,
@@ -967,6 +1049,8 @@ def _close_w3_root_selection_prefix(
 
 def begin_w3_root_installation(
     candidate_root: Path,
+    *,
+    source_acceptance_path: Path,
 ) -> tuple[
     "WarehouseW3InstallPhaseLedger",
     WarehouseW3SelectionReplayInputs,
@@ -976,13 +1060,33 @@ def begin_w3_root_installation(
     _require_root()
     if not isinstance(candidate_root, Path) or not candidate_root.is_absolute():
         raise TypeError("candidate_root must be one absolute Path")
-    with pin_candidate_gate_ingress(candidate_root) as ingress:
+    with (
+        RootFixedSourceAcceptanceAuthority.open(
+            source_acceptance_path
+        ) as source_acceptance,
+        pin_candidate_gate_ingress(candidate_root) as ingress,
+    ):
         ingress.revalidate()
         gate = ingress.gate
         launch_id = _launch_id(gate.launch_id)
+        accepted_source = source_acceptance.receipt
+        if (
+            source_acceptance_path
+            != canonical_source_acceptance_path(accepted_source.source_commit)
+            or accepted_source.raw_sha256 != gate.source_acceptance_sha256
+            or accepted_source.raw_sha256
+            != ingress.closure.candidate_verification.source_acceptance_sha256
+            or accepted_source.source_receipt.raw_sha256 != gate.source_receipt_sha256
+            or accepted_source.source_receipt.raw_sha256
+            != ingress.closure.double_wheel.source_receipt_sha256
+        ):
+            raise WarehouseW3RootCoordinatorError(
+                "live root fixed-source acceptance differs from candidate"
+            )
         if (
             _inspect_w3_root_installation_at(
                 _ACCEPTANCE_ROOT,
+                _IMPORT_ROOT,
                 launch_id,
                 require_root_owner=True,
             ).state
@@ -1008,6 +1112,7 @@ def begin_w3_root_installation(
         quarantine: PinnedDirectory | None = None
         writer: DurableReceiptDirectory | None = None
         selection_writer: DurableReceiptDirectory | None = None
+        trace_writer: DurableReceiptDirectory | None = None
         authority: RootSelectedCandidateAuthority | None = None
         quarantine_started = False
         try:
@@ -1061,10 +1166,25 @@ def begin_w3_root_installation(
                     "source selection receipt ownership differs"
                 )
             source_selection.revalidate()
+            source_acceptance.revalidate()
             quarantine_leaf = (
                 ingress.closure.candidate_verification.candidate_receipt_sha256
             )
             _launch_id(quarantine_leaf)
+            root_final_absence = WarehouseW3RootFinalAbsenceReceipt.derive(
+                ingress.closure.absence_facts,
+                source_acceptance_sha256=accepted_source.raw_sha256,
+            )
+            trace = WarehouseW3RootTransactionTraceReceipt.create(
+                selection_key=gate.selection_key,
+                launch_id=launch_id,
+                candidate_gate_sha256=gate.raw_sha256,
+                candidate_gate_closure_sha256=ingress.closure.raw_sha256,
+                candidate_gate_ingress_sha256=ingress.fact.raw_sha256,
+                source_acceptance_sha256=accepted_source.raw_sha256,
+                quarantine_leaf=quarantine_leaf,
+                expected_root_final_absence_sha256=(root_final_absence.raw_sha256),
+            )
             for parent, leaf, label in (
                 (import_parent, quarantine_leaf, "root quarantine"),
                 (
@@ -1083,7 +1203,20 @@ def begin_w3_root_installation(
                     pass
                 else:
                     raise WarehouseW3RootCoordinatorError(f"{label} slot is not absent")
+            trace_writer = DurableReceiptDirectory(
+                _IMPORT_ROOT,
+                require_root=True,
+            )
+            trace_leaf = root_transaction_trace_leaf(launch_id)
+            trace_writer.write_no_replace(trace_leaf, trace.raw)
+            if trace_writer.read(trace_leaf) != trace.raw:
+                raise WarehouseW3RootCoordinatorError(
+                    "root transaction trace differs after reopen"
+                )
+            trace_writer.close()
+            trace_writer = None
             quarantine_started = True
+            source_acceptance.revalidate()
             os.mkdir(quarantine_leaf, 0o700, dir_fd=import_parent.fd)
             quarantine_fd = os.open(
                 quarantine_leaf,
@@ -1129,6 +1262,18 @@ def begin_w3_root_installation(
                 )
                 ingress.revalidate()
                 source_selection.revalidate()
+                acquired_absence = acquire_root_final_absence(
+                    root_final_absence,
+                    candidate_absence=ingress.closure.absence_facts,
+                )
+                writer.write_no_replace(
+                    ROOT_FINAL_ABSENCE_LEAF,
+                    acquired_absence.raw,
+                )
+                if writer.read(ROOT_FINAL_ABSENCE_LEAF) != acquired_absence.raw:
+                    raise WarehouseW3RootCoordinatorError(
+                        "root final-absence sidecar differs after reopen"
+                    )
                 return staged
 
             def build_selection(
@@ -1166,6 +1311,8 @@ def begin_w3_root_installation(
                 return WarehouseW3RootSelectionReceipt.create(
                     selection=generic,
                     staged_candidate=staged,
+                    trace=trace,
+                    root_final_absence=root_final_absence,
                 )
 
             def publish_selection(
@@ -1178,6 +1325,8 @@ def begin_w3_root_installation(
             chain, replay_inputs = _close_w3_root_selection_prefix(
                 closure=ingress.closure,
                 ingress=ingress.fact,
+                trace=trace,
+                root_final_absence=root_final_absence,
                 staging_leaf="candidate",
                 writer=writer,
                 import_and_verify=import_and_verify,
@@ -1198,6 +1347,7 @@ def begin_w3_root_installation(
                         _PHASE_INTENT_LEAVES[1],
                         _PHASE_COMMIT_LEAVES[1],
                         _PHASE_EFFECT_LEAVES[1],
+                        ROOT_FINAL_ABSENCE_LEAF,
                     ),
                     key=os.fsencode,
                 )
@@ -1214,6 +1364,7 @@ def begin_w3_root_installation(
             os.fsync(import_parent.fd)
             ingress.revalidate()
             source_selection.revalidate()
+            source_acceptance.revalidate()
             authority = RootSelectedCandidateAuthority._acquire_from_parent(
                 selection_parent,
                 replay_inputs,
@@ -1233,6 +1384,8 @@ def begin_w3_root_installation(
                 authority.close()
             if selection_writer is not None:
                 selection_writer.close()
+            if trace_writer is not None:
+                trace_writer.close()
             if writer is not None:
                 writer.close()
             if quarantine is not None:
@@ -1296,13 +1449,27 @@ def _publish_w3_selected_stores(
             raise WarehouseW3RootCoordinatorError(
                 "selected imported candidate differs before store publication"
             )
+        external_runtime_paths = tuple(
+            Path(item.path)
+            for item in environment_content.generic_receipt.external_runtime
+        )
+        source_candidate_root = Path(selected.ingress.candidate_root)
+        source_selection_root = derive_candidate_paths(
+            source_candidate_root.parent,
+            gate.selection_key,
+        ).selection_directory
+        live_reader = FilesystemLiveEnvironmentReader(
+            external_runtime_paths=external_runtime_paths,
+            candidate_root=source_candidate_root,
+            selection_root=source_selection_root,
+        )
         candidate_environment = candidate.open_child_directory("environment")
         candidate_environment_path = Path(candidate_environment.path)
-        probe_reader = SubprocessEnvironmentProbeReader()
-        candidate_probe = probe_reader.probe(
+        imported_candidate_rehash = live_reader.rehash(
             candidate_environment_path,
-            phase="candidate",
+            phase="imported_candidate",
             content_receipt=environment_content,
+            generic_receipt=environment_content.generic_receipt,
         )
         candidate_environment.revalidate()
         candidate_environment.close()
@@ -1337,30 +1504,11 @@ def _publish_w3_selected_stores(
             if stat.S_IMODE(identity.mode) != 0o555:
                 raise WarehouseW3RootCoordinatorError("published store mode differs")
         reverify_sealed_store(sealed_path, sealed_store)
-        external_runtime_paths = tuple(
-            Path(item.path)
-            for item in environment_content.generic_receipt.external_runtime
-        )
-        source_candidate_root = Path(selected.ingress.candidate_root)
-        source_selection_root = derive_candidate_paths(
-            source_candidate_root.parent,
-            gate.selection_key,
-        ).selection_directory
-        live_reader = FilesystemLiveEnvironmentReader(
-            external_runtime_paths=external_runtime_paths,
-            candidate_root=source_candidate_root,
-            selection_root=source_selection_root,
-        )
         relocation_pre = live_reader.rehash(
             environment_path,
             phase="relocation_pre",
             content_receipt=environment_content,
             generic_receipt=environment_content.generic_receipt,
-        )
-        final_probe = probe_reader.probe(
-            environment_path,
-            phase="final",
-            content_receipt=environment_content,
         )
         relocation_post = live_reader.rehash(
             environment_path,
@@ -1370,9 +1518,10 @@ def _publish_w3_selected_stores(
         )
         relocation = EnvironmentRelocationReceipt.create(
             environment_content,
-            candidate_probe=candidate_probe,
-            simulated_final_probe=closure.simulated_final_probe,
-            final_probe=final_probe,
+            candidate_probe=closure.candidate_probe,
+            namespace_final_probe=closure.namespace_final_probe,
+            namespace_probe_execution=closure.namespace_probe_execution,
+            imported_candidate_rehash=imported_candidate_rehash,
             relocation_pre_rehash=relocation_pre,
             relocation_post_rehash=relocation_post,
         )
@@ -3074,6 +3223,7 @@ class WarehouseW3InstallPhaseLedger:
     __slots__ = (
         "_acceptance_root",
         "_closed",
+        "_import_root",
         "_intents",
         "_launch_id",
         "_receipts",
@@ -3106,6 +3256,7 @@ class WarehouseW3InstallPhaseLedger:
         selection_authority.revalidate()
         instance = cls._create_at(
             _ACCEPTANCE_ROOT,
+            _IMPORT_ROOT,
             selection_authority.chain,
             require_root_owner=True,
         )
@@ -3117,12 +3268,18 @@ class WarehouseW3InstallPhaseLedger:
     def _create_at(
         cls,
         acceptance_root: Path,
+        import_root: Path,
         selected: WarehouseW3SelectedCandidateChain,
         *,
         require_root_owner: bool,
     ) -> "WarehouseW3InstallPhaseLedger":
-        if not isinstance(acceptance_root, Path) or not acceptance_root.is_absolute():
-            raise TypeError("acceptance_root must be one absolute Path")
+        if (
+            not isinstance(acceptance_root, Path)
+            or not acceptance_root.is_absolute()
+            or not isinstance(import_root, Path)
+            or not import_root.is_absolute()
+        ):
+            raise TypeError("acceptance_root and import_root must be absolute Paths")
         if type(selected) is not WarehouseW3SelectedCandidateChain:
             raise TypeError("selected must be exact WarehouseW3SelectedCandidateChain")
         if type(require_root_owner) is not bool:
@@ -3144,14 +3301,20 @@ class WarehouseW3InstallPhaseLedger:
             raise WarehouseW3RootCoordinatorError(
                 "root selection is not the exact K0/K1 prefix"
             )
-        initial = _inspect_w3_root_installation_at(
-            acceptance_root,
-            launch_id,
-            require_root_owner=require_root_owner,
+        trace_writer = DurableReceiptDirectory(
+            import_root,
+            require_root=require_root_owner,
         )
-        if initial.state is not RootInstallationState.ABSENT:
+        try:
+            trace_raw = trace_writer.read(root_transaction_trace_leaf(launch_id))
+        finally:
+            trace_writer.close()
+        if (
+            trace_raw != selected.root_transaction_trace.raw
+            or selected.root_transaction_trace.launch_id != launch_id
+        ):
             raise WarehouseW3RootCoordinatorError(
-                "root installation launch slot is not absent"
+                "root transaction trace differs before acceptance hierarchy"
             )
         parent = pin_absolute_directory(str(acceptance_root))
         launch_fd = -1
@@ -3244,6 +3407,7 @@ class WarehouseW3InstallPhaseLedger:
             instance = object.__new__(cls)
             instance._acceptance_root = acceptance_root
             instance._closed = False
+            instance._import_root = import_root
             instance._intents = list(reopened_intents)
             instance._launch_id = launch_id
             instance._receipts = list(reopened_receipts)
@@ -4010,6 +4174,7 @@ class WarehouseW3InstallPhaseLedger:
         self._closed = True
         inspection = _inspect_w3_root_installation_at(
             self._acceptance_root,
+            self._import_root,
             self._launch_id,
             require_root_owner=self._require_root_owner,
         )
@@ -4101,6 +4266,9 @@ class _FixedStartAuthorizationAuthority:
             prospective = ProspectiveStartAuthorizationIntent.from_bytes(
                 bundle.prospective_intent_raw
             )
+            selected = verify_w3_selected_candidate_chain(
+                bundle.selection_replay_inputs
+            )
             if (
                 bundle.prospective_intent_raw != prospective.raw
                 or authorization.prospective_intent_sha256 != prospective.raw_sha256
@@ -4110,6 +4278,8 @@ class _FixedStartAuthorizationAuthority:
                 != hashlib.sha256(
                     bundle.selection_replay_inputs.root_selection_raw
                 ).hexdigest()
+                or authorization.external_source_acceptance_sha256
+                != selected.root_selection.source_acceptance_sha256
             ):
                 raise WarehouseW3RootCoordinatorError(
                     "fixed start bundle differs from authorization"
@@ -4231,9 +4401,33 @@ def _verify_installed_authority(
     manager: NarrowInstallationManager,
 ) -> LoadedManagerReceipt:
     authority.revalidate()
+    _revalidate_installed_source_acceptance(authority)
     reacquire_live_w3_prestart(authority, manager)
+    _revalidate_installed_source_acceptance(authority)
     authority.revalidate()
     return authority.chain.loaded_manager
+
+
+def _revalidate_installed_source_acceptance(
+    authority: RootInstalledAcceptanceAuthority,
+) -> None:
+    authority.revalidate()
+    selected = authority.chain.selected_candidate
+    source = selected.root_staging_verification.source_receipt
+    expected_sha256 = selected.root_selection.source_acceptance_sha256
+    path = canonical_source_acceptance_path(source.source_commit)
+    with RootFixedSourceAcceptanceAuthority.open(path) as source_authority:
+        receipt = source_authority.receipt
+        if (
+            receipt.raw_sha256 != expected_sha256
+            or receipt.raw_sha256 != selected.closure.gate.source_acceptance_sha256
+            or receipt.source_receipt != source
+        ):
+            raise WarehouseW3RootCoordinatorError(
+                "live root fixed-source acceptance differs from installed chain"
+            )
+        source_authority.revalidate()
+    authority.revalidate()
 
 
 def verify_installed_w3(
@@ -4262,11 +4456,16 @@ def verify_installed_w3(
 
 def apply_w3_root_installation(
     candidate_root: Path,
+    *,
+    source_acceptance_path: Path,
 ) -> WarehouseW3RootInstallationInspection:
     """Run the sole K0-K8 composition and independent loaded-manager reopen."""
 
     _require_root()
-    ledger, selection_replay_inputs = begin_w3_root_installation(candidate_root)
+    ledger, selection_replay_inputs = begin_w3_root_installation(
+        candidate_root,
+        source_acceptance_path=source_acceptance_path,
+    )
     accepted_bundle: WarehouseW3InstalledAcceptanceBundle | None = None
     try:
         stores_published = ledger.publish_selected_stores()
@@ -4357,6 +4556,8 @@ def record_w3_start_authorization(
                 if (
                     authorization.launch_id != normalized_launch_id
                     or authorization.installed_acceptance_sha256 != installed.raw_sha256
+                    or authorization.external_source_acceptance_sha256
+                    != installed_chain.selected_candidate.root_selection.source_acceptance_sha256
                 ):
                     raise WarehouseW3RootCoordinatorError(
                         "bound start authorization differs from " "fixed installation"
@@ -4402,12 +4603,14 @@ def record_w3_start_authorization(
                     )
                     selection_authority.revalidate()
                     installed_authority.revalidate()
+                    _revalidate_installed_source_acceptance(installed_authority)
                 if reopened != authorization or reopened_bundle != start_bundle:
                     raise WarehouseW3RootCoordinatorError(
                         "durable START_AUTHORIZED differs after reopen"
                     )
                 selection_authority.revalidate()
                 installed_authority.revalidate()
+                _revalidate_installed_source_acceptance(installed_authority)
                 return reopened
     except (
         PermissionError,
@@ -4452,6 +4655,8 @@ def start_w3(launch_id: str) -> StartDispatchReceipt:
                 or authorization.authority_sha256 != installed.authority_sha256
                 or authorization.installation_sha256 != installed.installation_sha256
                 or authorization.installed_acceptance_sha256 != installed.raw_sha256
+                or authorization.external_source_acceptance_sha256
+                != chain.selected_candidate.root_selection.source_acceptance_sha256
                 or start_bundle.installed_acceptance_raw != installed.raw
                 or start_bundle.prestart_evidence_raw != chain.prestart_evidence.raw
                 or start_bundle.selection_replay_inputs
@@ -4472,6 +4677,7 @@ def start_w3(launch_id: str) -> StartDispatchReceipt:
             issue = StartIssueReceipt.create_authorized(
                 authorization,
                 prestart_receipt_sha256=chain.prestart_evidence.raw_sha256,
+                loaded_manager_sha256=chain.loaded_manager.raw_sha256,
                 manager_identity=loaded_manager.manager_identity,
             )
 
@@ -4488,19 +4694,45 @@ def start_w3(launch_id: str) -> StartDispatchReceipt:
                     )
                 authorization_authority.revalidate()
                 installed_authority.revalidate()
+                _revalidate_installed_source_acceptance(installed_authority)
                 raw = reacquire_live_w3_prestart(
                     installed_authority,
                     manager,
                 )
                 authorization_authority.revalidate()
                 installed_authority.revalidate()
+                _revalidate_installed_source_acceptance(installed_authority)
                 return raw
+
+            def reacquire_loaded_manager(
+                current_authorization: StartAuthorizationReceipt,
+                current_installed: object,
+            ) -> bytes:
+                if (
+                    current_authorization != authorization
+                    or current_installed is not installed
+                ):
+                    raise WarehouseW3RootCoordinatorError(
+                        "adjacent loaded-manager dependencies differ"
+                    )
+                authorization_authority.revalidate()
+                installed_authority.revalidate()
+                _revalidate_installed_source_acceptance(installed_authority)
+                verify_live_w3_publications(installed_authority)
+                current = verify_live_w3_loaded_manager(
+                    installed_authority,
+                    manager,
+                )
+                authorization_authority.revalidate()
+                installed_authority.revalidate()
+                return current.raw
 
             start_root = _ACCEPTANCE_ROOT / normalized_launch_id / "start"
             with DurableReceiptDirectory(start_root) as writer:
                 authorization_authority.revalidate()
                 authorization_authority.require_unspent()
                 installed_authority.revalidate()
+                _revalidate_installed_source_acceptance(installed_authority)
                 owner = StartPermitOwner(
                     authorization=authorization,
                     installed_acceptance=installed,
@@ -4509,11 +4741,13 @@ def start_w3(launch_id: str) -> StartDispatchReceipt:
                     issue=issue,
                     manager=manager,
                     reacquire_prestart=reacquire_prestart,
+                    reacquire_loaded_manager=reacquire_loaded_manager,
                     writer=writer,
                 )
                 receipt = owner.dispatch()
                 authorization_authority.revalidate()
                 installed_authority.revalidate()
+                _revalidate_installed_source_acceptance(installed_authority)
             authorization_authority.seal_start_directory()
             return receipt
         except (
@@ -4535,6 +4769,7 @@ __all__ = [
     "WarehouseW3RootCoordinatorError",
     "apply_w3_root_installation",
     "begin_w3_root_installation",
+    "ensure_w3_root_layout",
     "inspect_w3_root_installation",
     "record_w3_start_authorization",
     "start_w3",

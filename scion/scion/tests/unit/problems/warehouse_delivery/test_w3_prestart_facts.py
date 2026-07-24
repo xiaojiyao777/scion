@@ -117,22 +117,24 @@ def _candidate_gate(authority, installation) -> CandidateGateReceipt:
     return CandidateGateReceipt.from_bytes(
         _canonical(
             {
-                "schema": "scion.w3-candidate-gate.v2",
+                "schema": "scion.w3-candidate-gate.v4",
                 "state": "CANDIDATE_ACCEPTED_INSTALLATION_ABSENT",
                 "selection_key": "a" * 64,
                 "launch_id": installation.launch_id,
                 "nonce": authority.nonce,
                 "authority_sha256": authority.authority_sha256,
                 "installation_sha256": installation.installation_sha256,
+                "source_acceptance_sha256": "a" * 64,
                 "source_receipt_sha256": "b" * 64,
                 "candidate_verification_sha256": "c" * 64,
                 "double_wheel_receipt_sha256": "d" * 64,
                 "semantic_environment_receipt_sha256": "e" * 64,
                 "environment_content_receipt_sha256": "6" * 64,
                 "candidate_probe_sha256": "f" * 64,
-                "simulated_final_probe_sha256": "1" * 64,
-                "simulated_relocation_ref_sha256": "2" * 64,
-                "simulated_relocation_evidence_sha256": "3" * 64,
+                "namespace_final_probe_sha256": "1" * 64,
+                "namespace_probe_execution_sha256": "7" * 64,
+                "namespace_probe_ref_sha256": "2" * 64,
+                "namespace_probe_evidence_sha256": "3" * 64,
                 "candidate_root": "/tmp/w3-candidate",
                 "candidate_root_identity": {
                     "device": 7,

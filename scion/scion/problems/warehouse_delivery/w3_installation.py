@@ -43,7 +43,7 @@ from scion.runtime.execution.environment_integrity import (
 from scion.runtime.execution.systemd_acquisition import parse_unit_template
 
 ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256 = (
-    "49196769c0c70f56714791a80e6c683d31d547c5f4e47cc7216ea1b5fda81eb6"
+    "8042f4aad34a3396e27e6cd0f1562f35b003f2603ec623d1092d16e78d660734"
 )
 
 W3_COMPOSITION_LOGICAL_PATH = "scion/problems/warehouse_delivery/w3_composition.py"
@@ -63,13 +63,13 @@ _TASK_EVENT_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,255}\Z")
 _REF_RE = re.compile(r"refs/heads/[A-Za-z0-9][A-Za-z0-9._/-]{0,511}\Z")
 _MAX_GIT_TEXT_BYTES = 1024 * 1024
 _MAX_GIT_BLOB_BYTES = 32 * 1024 * 1024
-_SELECTION_KEY_SCHEMA = "scion.w3-candidate-selection-key.v1"
-_SELECTION_INTENT_SCHEMA = "scion.w3-candidate-selection-intent.v1"
+_SELECTION_KEY_SCHEMA = "scion.w3-candidate-selection-key.v2"
+_SELECTION_INTENT_SCHEMA = "scion.w3-candidate-selection-intent.v2"
 _SELECTION_COMMIT_SCHEMA = "scion.w3-candidate-selection-committed.v1"
 _SOURCE_RECEIPT_SCHEMA = "scion.w3-git-source.v1"
 _SEALED_STORE_SCHEMA = "scion.w3-sealed-store-content.v1"
 _CANDIDATE_SCHEMA = "scion.w3-candidate.v1"
-_CANDIDATE_VERIFICATION_SCHEMA = "scion.w3-candidate-verification.v1"
+_CANDIDATE_VERIFICATION_SCHEMA = "scion.w3-candidate-verification.v2"
 _DIRECTORY_MODE = 0o555
 _REGULAR_MODES = frozenset({0o444, 0o555})
 _READ_SIZE = 1024 * 1024
@@ -273,6 +273,7 @@ def derive_selection_key(
     launch_tree: str,
     dry_root_manifest_sha256: str,
     native_record_sha256: str,
+    source_acceptance_sha256: str,
 ) -> str:
     """Derive the one plan-bound candidate preparation key."""
 
@@ -284,6 +285,10 @@ def derive_selection_key(
         field="dry_root_manifest_sha256",
     )
     native = _sha256_text(native_record_sha256, field="native_record_sha256")
+    source_acceptance = _sha256_text(
+        source_acceptance_sha256,
+        field="source_acceptance_sha256",
+    )
     if manifest != EXPECTED_MANIFEST_SHA256:
         raise WarehouseW3InstallationError(
             "dry-root manifest is not the accepted Warehouse W3 manifest"
@@ -300,9 +305,10 @@ def derive_selection_key(
         "launch_tree": tree,
         "dry_root_manifest_sha256": manifest,
         "native_record_sha256": native,
+        "source_acceptance_sha256": source_acceptance,
     }
     return hashlib.sha256(
-        b"scion.w3-candidate-selection-key.v1\0" + _canonical_json(inputs)
+        b"scion.w3-candidate-selection-key.v2\0" + _canonical_json(inputs)
     ).hexdigest()
 
 
@@ -344,6 +350,7 @@ class CandidateSelectionIntent:
     launch_tree: str
     dry_root_manifest_sha256: str
     native_record_sha256: str
+    source_acceptance_sha256: str
     experiment_parent: str
     selection_directory: str
     candidate_root: str
@@ -364,6 +371,7 @@ class CandidateSelectionIntent:
         launch_tree: str,
         dry_root_manifest_sha256: str = EXPECTED_MANIFEST_SHA256,
         native_record_sha256: str = EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256,
+        source_acceptance_sha256: str,
     ) -> "CandidateSelectionIntent":
         key = derive_selection_key(
             task_event_identity=task_event_identity,
@@ -371,6 +379,7 @@ class CandidateSelectionIntent:
             launch_tree=launch_tree,
             dry_root_manifest_sha256=dry_root_manifest_sha256,
             native_record_sha256=native_record_sha256,
+            source_acceptance_sha256=source_acceptance_sha256,
         )
         paths = derive_candidate_paths(experiment_parent, key)
         value = {
@@ -382,6 +391,7 @@ class CandidateSelectionIntent:
             "launch_tree": launch_tree,
             "dry_root_manifest_sha256": dry_root_manifest_sha256,
             "native_record_sha256": native_record_sha256,
+            "source_acceptance_sha256": source_acceptance_sha256,
             "experiment_parent": str(paths.experiment_parent),
             "selection_directory": str(paths.selection_directory),
             "candidate_root": str(paths.candidate_root),
@@ -406,6 +416,7 @@ class CandidateSelectionIntent:
                     "launch_tree",
                     "dry_root_manifest_sha256",
                     "native_record_sha256",
+                    "source_acceptance_sha256",
                     "experiment_parent",
                     "selection_directory",
                     "candidate_root",
@@ -438,12 +449,17 @@ class CandidateSelectionIntent:
             value["native_record_sha256"],
             field="native_record_sha256",
         )
+        source_acceptance = _sha256_text(
+            value["source_acceptance_sha256"],
+            field="source_acceptance_sha256",
+        )
         key = derive_selection_key(
             task_event_identity=event,
             launch_commit=commit,
             launch_tree=tree,
             dry_root_manifest_sha256=manifest,
             native_record_sha256=native,
+            source_acceptance_sha256=source_acceptance,
         )
         if _sha256_text(value["selection_key"], field="selection_key") != key:
             raise WarehouseW3InstallationError("selection intent key differs")
@@ -469,6 +485,7 @@ class CandidateSelectionIntent:
             "launch_tree": tree,
             "dry_root_manifest_sha256": manifest,
             "native_record_sha256": native,
+            "source_acceptance_sha256": source_acceptance,
             "experiment_parent": str(parent),
             "selection_directory": str(paths.selection_directory),
             "candidate_root": str(paths.candidate_root),
@@ -2630,6 +2647,7 @@ class CandidateReceipt:
 @dataclass(frozen=True, slots=True, init=False)
 class CandidateVerificationReceipt:
     selection_key: str
+    source_acceptance_sha256: str
     candidate_root_identity: CandidateRootIdentity
     candidate_receipt_sha256: str
     content_aggregate_sha256: str
@@ -2664,6 +2682,7 @@ class CandidateVerificationReceipt:
             "schema": _CANDIDATE_VERIFICATION_SCHEMA,
             "fixed_plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
             "selection_key": intent.selection_key,
+            "source_acceptance_sha256": intent.source_acceptance_sha256,
             "candidate_root_identity": (
                 selection_commit.candidate_root_identity.to_mapping()
             ),
@@ -2692,6 +2711,7 @@ class CandidateVerificationReceipt:
                     "schema",
                     "fixed_plan_sha256",
                     "selection_key",
+                    "source_acceptance_sha256",
                     "candidate_root_identity",
                     "candidate_receipt_sha256",
                     "content_aggregate_sha256",
@@ -2726,6 +2746,10 @@ class CandidateVerificationReceipt:
                 "selection_key": _sha256_text(
                     value["selection_key"],
                     field="candidate verification selection_key",
+                ),
+                "source_acceptance_sha256": _sha256_text(
+                    value["source_acceptance_sha256"],
+                    field="candidate verification source_acceptance_sha256",
                 ),
                 "candidate_root_identity": CandidateRootIdentity.from_mapping(
                     value["candidate_root_identity"]

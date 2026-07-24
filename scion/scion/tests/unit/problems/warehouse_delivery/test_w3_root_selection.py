@@ -16,6 +16,10 @@ from scion.problems.warehouse_delivery.w3_root_selection import (
     selection_replay_inputs_from_chain,
     verify_w3_selected_candidate_chain,
 )
+from scion.problems.warehouse_delivery.w3_root_preflight import (
+    WarehouseW3RootFinalAbsenceReceipt,
+    WarehouseW3RootTransactionTraceReceipt,
+)
 from scion.runtime.execution.external_linux import pin_absolute_directory
 from scion.runtime.execution.external_installation import (
     RootPhase,
@@ -63,9 +67,12 @@ def _bundle(semantic_inputs: dict[str, object]):
         imported=_tree_import(),
     )
     generic = _selection_receipt(candidate, staged)
+    trace, root_final_absence = _preflight(staged)
     selected = WarehouseW3RootSelectionReceipt._create_for_test(
         selection=generic,
         staged_candidate=staged,
+        trace=trace,
+        root_final_absence=root_final_absence,
     )
     k0_intent = RootPhaseIntentReceipt.create(
         launch_id=selected.launch_id,
@@ -75,6 +82,8 @@ def _bundle(semantic_inputs: dict[str, object]):
             verification.candidate_gate_closure,
             ingress,
             staged.tree_import,
+            trace,
+            root_final_absence,
         ),
     )
     k0 = RootPhaseReceipt.create(
@@ -94,6 +103,26 @@ def _bundle(semantic_inputs: dict[str, object]):
     return selected, k0_intent, k0, k1_intent, k1
 
 
+def _preflight(staged):
+    closure = staged.root_staging_verification.candidate_gate_closure
+    gate = closure.gate
+    root_final_absence = WarehouseW3RootFinalAbsenceReceipt.derive(
+        closure.absence_facts,
+        source_acceptance_sha256=gate.source_acceptance_sha256,
+    )
+    trace = WarehouseW3RootTransactionTraceReceipt.create(
+        selection_key=gate.selection_key,
+        launch_id=gate.launch_id,
+        candidate_gate_sha256=gate.raw_sha256,
+        candidate_gate_closure_sha256=closure.raw_sha256,
+        candidate_gate_ingress_sha256=staged.candidate_gate_ingress.raw_sha256,
+        source_acceptance_sha256=gate.source_acceptance_sha256,
+        quarantine_leaf=(closure.candidate_verification.candidate_receipt_sha256),
+        expected_root_final_absence_sha256=root_final_absence.raw_sha256,
+    )
+    return trace, root_final_absence
+
+
 def _inputs(
     selected: WarehouseW3RootSelectionReceipt,
     k0_intent: RootPhaseIntentReceipt,
@@ -104,9 +133,12 @@ def _inputs(
 ) -> WarehouseW3SelectionReplayInputs:
     staged = selected.staged_candidate
     verification = staged.root_staging_verification
+    trace, root_final_absence = _preflight(staged)
     values = {
         "candidate_gate_closure_raw": (verification.candidate_gate_closure.raw),
         "candidate_gate_ingress_fact_raw": (staged.candidate_gate_ingress.raw),
+        "root_transaction_trace_raw": trace.raw,
+        "root_final_absence_raw": root_final_absence.raw,
         "tree_import_raw": staged.tree_import.raw,
         "candidate_receipt_raw": verification.candidate_receipt.raw,
         "source_receipt_raw": verification.source_receipt.raw,
@@ -133,12 +165,15 @@ def test_root_selection_round_trip_and_deep_k0_k1_replay(
     semantic_inputs: dict[str, object],
 ) -> None:
     selected, k0_intent, k0, k1_intent, k1 = _bundle(semantic_inputs)
+    trace, root_final_absence = _preflight(selected.staged_candidate)
 
     assert (
         WarehouseW3RootSelectionReceipt.from_bytes(
             selected.raw,
             selection=selected.selection,
             staged_candidate=selected.staged_candidate,
+            trace=trace,
+            root_final_absence=root_final_absence,
         )
         == selected
     )
@@ -161,6 +196,7 @@ def test_k0_authority_is_fully_known_before_tree_import(
 ) -> None:
     selected, k0_intent, _k0, _k1_intent, _k1 = _bundle(semantic_inputs)
     staged = selected.staged_candidate
+    trace, root_final_absence = _preflight(staged)
 
     assert k0_intent.effect_authority_sha256 == (
         derive_root_staging_import_authority_sha256(
@@ -169,6 +205,8 @@ def test_k0_authority_is_fully_known_before_tree_import(
             staging_leaf=staged.tree_import.staging_leaf,
             target_uid=0,
             target_gid=0,
+            trace=trace,
+            root_final_absence=root_final_absence,
         )
     )
     assert k0_intent.effect_authority_sha256 == (
@@ -176,6 +214,8 @@ def test_k0_authority_is_fully_known_before_tree_import(
             staged.root_staging_verification.candidate_gate_closure,
             staged.candidate_gate_ingress,
             staged.tree_import,
+            trace,
+            root_final_absence,
         )
     )
 
@@ -196,6 +236,7 @@ def test_k0_pre_effect_authority_rejects_non_root_plan(
 ) -> None:
     selected, _k0_intent, _k0, _k1_intent, _k1 = _bundle(semantic_inputs)
     staged = selected.staged_candidate
+    trace, root_final_absence = _preflight(staged)
     arguments = {
         "staging_leaf": staged.tree_import.staging_leaf,
         "target_uid": 0,
@@ -207,6 +248,8 @@ def test_k0_pre_effect_authority_rejects_non_root_plan(
         derive_root_staging_import_authority_sha256(
             staged.root_staging_verification.candidate_gate_closure,
             staged.candidate_gate_ingress,
+            trace=trace,
+            root_final_absence=root_final_absence,
             **arguments,
         )
 
@@ -215,11 +258,14 @@ def test_root_selection_construction_is_root_gated(
     semantic_inputs: dict[str, object],
 ) -> None:
     selected, _k0_intent, _k0, _k1_intent, _k1 = _bundle(semantic_inputs)
+    trace, root_final_absence = _preflight(selected.staged_candidate)
 
     with pytest.raises(PermissionError, match="effective UID zero"):
         WarehouseW3RootSelectionReceipt.create(
             selection=selected.selection,
             staged_candidate=selected.staged_candidate,
+            trace=trace,
+            root_final_absence=root_final_absence,
         )
 
 
@@ -262,6 +308,7 @@ def test_root_selection_rejects_each_explicit_producer_hash_drift(
     field: str,
 ) -> None:
     selected, _k0_intent, _k0, _k1_intent, _k1 = _bundle(semantic_inputs)
+    trace, root_final_absence = _preflight(selected.staged_candidate)
     value = json.loads(selected.raw)
     value[field] = "0" * 64
 
@@ -273,6 +320,8 @@ def test_root_selection_rejects_each_explicit_producer_hash_drift(
             _canonical(value),
             selection=selected.selection,
             staged_candidate=selected.staged_candidate,
+            trace=trace,
+            root_final_absence=root_final_absence,
         )
 
 

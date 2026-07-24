@@ -9,7 +9,10 @@ installation, manager, or launch capability.
 
 from __future__ import annotations
 
+import base64
+import csv
 import hashlib
+import io
 import json
 import os
 import re
@@ -21,10 +24,13 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Mapping, Protocol
 
-from scion.problems.warehouse_delivery.w3_installation import GitSourceReceipt
+from scion.problems.warehouse_delivery.w3_installation import (
+    GitSourceReceipt,
+    GitSourceSnapshot,
+)
 
 ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256 = (
-    "49196769c0c70f56714791a80e6c683d31d547c5f4e47cc7216ea1b5fda81eb6"
+    "8042f4aad34a3396e27e6cd0f1562f35b003f2603ec623d1092d16e78d660734"
 )
 ACCEPTED_NATIVE_ELF_SHA256 = (
     "3d747973bc2eb3b0f6fda68f288987c7b988820eb24df2ff617aa567071803fc"
@@ -108,7 +114,7 @@ FIXED_REQUIRED_WHEEL_MEMBERS = (
     W3_TOOL_MEMBER,
 )
 
-_SCHEMA = "scion.w3-offline-double-wheel.v2"
+_SCHEMA = "scion.w3-offline-double-wheel.v3"
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_OID_RE = re.compile(r"[0-9a-f]{40}\Z")
 _WHEEL_NAME_RE = re.compile(
@@ -118,6 +124,16 @@ _NATIVE_MEMBER_RE = re.compile(
     r"scion/runtime/native/_spawn_into_cgroup" r"\.cpython-312-[A-Za-z0-9_.-]+\.so\Z"
 )
 _DIST_WHEEL_RE = re.compile(r"scion-[A-Za-z0-9][A-Za-z0-9_.!+-]*\.dist-info/WHEEL\Z")
+_DIST_INFO_ROOT = "scion-0.1.0.dist-info"
+_DIST_INFO_MEMBERS = frozenset(
+    {
+        f"{_DIST_INFO_ROOT}/METADATA",
+        f"{_DIST_INFO_ROOT}/WHEEL",
+        f"{_DIST_INFO_ROOT}/entry_points.txt",
+        f"{_DIST_INFO_ROOT}/top_level.txt",
+        f"{_DIST_INFO_ROOT}/RECORD",
+    }
+)
 _ARCHIVE_MEMBER_LIMIT = 16_384
 _ARCHIVE_TOTAL_LIMIT = 1024 * 1024 * 1024
 _WHEEL_MEMBER_LIMIT = 16_384
@@ -1033,6 +1049,81 @@ def _member_inventory_sha256(members: tuple[WheelMember, ...]) -> str:
     ).hexdigest()
 
 
+def _validate_exact_wheel_member_paths(
+    members: tuple[WheelMember, ...],
+    *,
+    required_modules: tuple[str, ...],
+) -> None:
+    paths = frozenset(item.path for item in members)
+    native = tuple(path for path in paths if _NATIVE_MEMBER_RE.fullmatch(path))
+    allowed = frozenset(
+        {
+            *required_modules,
+            W3_RUN_TEMPLATE_MEMBER,
+            W3_CLOSE_TEMPLATE_MEMBER,
+            *_DIST_INFO_MEMBERS,
+            *native,
+        }
+    )
+    for path in paths:
+        parts = tuple(part.casefold() for part in PurePosixPath(path).parts)
+        if (
+            path.casefold().endswith(".pth")
+            or parts[-1] in {"sitecustomize.py", "usercustomize.py"}
+            or any(part.endswith(".data") for part in parts)
+        ):
+            raise WarehouseW3WheelError(
+                "wheel contains a Python-startup or installer-data member"
+            )
+    if len(native) != 1 or paths != allowed:
+        raise WarehouseW3WheelError("wheel member allowlist differs")
+
+
+def _validate_wheel_record(
+    record_raw: bytes,
+    members: tuple[WheelMember, ...],
+) -> None:
+    try:
+        rows = tuple(
+            csv.reader(
+                io.StringIO(
+                    record_raw.decode("utf-8", "strict"),
+                    newline="",
+                )
+            )
+        )
+    except (UnicodeError, csv.Error) as exc:
+        raise WarehouseW3WheelError("wheel RECORD is malformed") from exc
+    if any(len(row) != 3 for row in rows):
+        raise WarehouseW3WheelError("wheel RECORD row shape differs")
+    by_path = {item.path: item for item in members}
+    if (
+        len(rows) != len(members)
+        or len({row[0] for row in rows}) != len(rows)
+        or frozenset(row[0] for row in rows) != frozenset(by_path)
+    ):
+        raise WarehouseW3WheelError("wheel RECORD inventory differs")
+    for path, encoded_digest, encoded_size in rows:
+        member = by_path[path]
+        if path == f"{_DIST_INFO_ROOT}/RECORD":
+            if encoded_digest or encoded_size:
+                raise WarehouseW3WheelError("wheel RECORD self-entry is not empty")
+            continue
+        try:
+            algorithm, encoded = encoded_digest.split("=", 1)
+            padding = "=" * (-len(encoded) % 4)
+            digest = base64.urlsafe_b64decode(encoded + padding).hex()
+            size = int(encoded_size, 10)
+        except (ValueError, TypeError) as exc:
+            raise WarehouseW3WheelError("wheel RECORD identity is malformed") from exc
+        if (
+            algorithm != "sha256"
+            or digest != member.sha256
+            or size != member.size_bytes
+        ):
+            raise WarehouseW3WheelError("wheel RECORD member identity differs")
+
+
 def _wheel_inventory(
     wheel_stream: BinaryIO,
     *,
@@ -1047,6 +1138,7 @@ def _wheel_inventory(
     seen: set[str] = set()
     native_matches: list[tuple[str, str]] = []
     wheel_metadata: list[bytes] = []
+    selected_metadata: dict[str, bytes] = {}
     total = 0
     try:
         with zipfile.ZipFile(wheel_stream, mode="r") as archive:
@@ -1085,10 +1177,14 @@ def _wheel_inventory(
                         size += len(chunk)
                         if total + size > _WHEEL_TOTAL_LIMIT:
                             raise WarehouseW3WheelError("wheel content is too large")
-                        if _DIST_WHEEL_RE.fullmatch(path) is not None:
-                            if size > _WHEEL_METADATA_LIMIT:
+                        if path in _DIST_INFO_MEMBERS:
+                            if size > (
+                                4 * 1024 * 1024
+                                if path == f"{_DIST_INFO_ROOT}/RECORD"
+                                else _WHEEL_METADATA_LIMIT
+                            ):
                                 raise WarehouseW3WheelError(
-                                    "WHEEL metadata is too large"
+                                    "wheel metadata is too large"
                                 )
                             selected.extend(chunk)
                         leak_window = leak_carry + chunk
@@ -1108,6 +1204,8 @@ def _wheel_inventory(
                     native_matches.append((path, member_sha256))
                 if _DIST_WHEEL_RE.fullmatch(path) is not None:
                     wheel_metadata.append(bytes(selected))
+                if path in _DIST_INFO_MEMBERS:
+                    selected_metadata[path] = bytes(selected)
                 members.append(
                     WheelMember(
                         path=path,
@@ -1124,6 +1222,14 @@ def _wheel_inventory(
     except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
         raise WarehouseW3WheelError("cannot inspect built wheel") from exc
     ordered = tuple(sorted(members, key=lambda item: item.path.encode("utf-8")))
+    _validate_exact_wheel_member_paths(
+        ordered,
+        required_modules=required_modules,
+    )
+    record_raw = selected_metadata.get(f"{_DIST_INFO_ROOT}/RECORD")
+    if record_raw is None:
+        raise WarehouseW3WheelError("wheel RECORD is absent")
+    _validate_wheel_record(record_raw, ordered)
     paths = frozenset(item.path for item in ordered)
     if not frozenset(FIXED_REQUIRED_WHEEL_MEMBERS).issubset(paths):
         raise WarehouseW3WheelError("wheel lacks a fixed W3/runtime member")
@@ -1146,6 +1252,61 @@ def _wheel_inventory(
     ):
         raise WarehouseW3WheelError("wheel metadata ABI facts differ")
     return ordered, native_path, native_sha256
+
+
+def verify_wheel_bytes_against_receipt(
+    raw: bytes,
+    receipt: "OfflineDoubleWheelReceipt",
+    *,
+    trusted_source_snapshot: GitSourceSnapshot,
+) -> None:
+    """Reopen one actual wheel ZIP and compare it to the complete receipt."""
+
+    if type(raw) is not bytes or not raw or len(raw) > _WHEEL_TOTAL_LIMIT:
+        raise TypeError("wheel raw bytes must be one bounded nonempty bytes value")
+    if type(receipt) is not OfflineDoubleWheelReceipt:
+        raise TypeError("receipt must be exact OfflineDoubleWheelReceipt")
+    if type(trusted_source_snapshot) is not GitSourceSnapshot:
+        raise TypeError("trusted_source_snapshot must be exact GitSourceSnapshot")
+    parsed = OfflineDoubleWheelReceipt.from_bytes(receipt.raw)
+    if parsed != receipt or hashlib.sha256(raw).hexdigest() != receipt.wheel_sha256:
+        raise WarehouseW3WheelError("wheel bytes or receipt identity differs")
+    inventory, native_path, native_sha256 = _wheel_inventory(
+        io.BytesIO(raw),
+        wheel_filename=receipt.wheel_filename,
+        forbidden_paths=(),
+        required_modules=receipt.required_module_members,
+    )
+    if (
+        inventory != receipt.member_inventory
+        or native_path != receipt.native_member_path
+        or native_sha256 != ACCEPTED_NATIVE_ELF_SHA256
+    ):
+        raise WarehouseW3WheelError("wheel ZIP differs from its complete receipt")
+    source_by_path = {
+        item.identity.logical_path: item for item in trusted_source_snapshot.blobs
+    }
+    wheel_by_path = {item.path: item for item in inventory}
+    required_payload = frozenset(
+        {
+            *receipt.required_module_members,
+            W3_RUN_TEMPLATE_MEMBER,
+            W3_CLOSE_TEMPLATE_MEMBER,
+        }
+    )
+    if (
+        trusted_source_snapshot.receipt.raw_sha256 != receipt.source_receipt_sha256
+        or not required_payload.issubset(source_by_path)
+        or any(
+            wheel_by_path[path].sha256
+            != hashlib.sha256(source_by_path[path].raw).hexdigest()
+            or wheel_by_path[path].size_bytes != len(source_by_path[path].raw)
+            for path in required_payload
+        )
+    ):
+        raise WarehouseW3WheelError(
+            "wheel source payload differs from the trusted Git snapshot"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1356,6 +1517,8 @@ class OfflineDoubleWheelReceipt:
     wheel_identities: tuple[WheelFileIdentity, WheelFileIdentity]
     member_inventory: tuple[WheelMember, ...]
     member_inventory_sha256: str
+    allowed_member_inventory_sha256: str
+    record_sha256: str
     native_member_path: str
     native_elf_sha256: str
     raw: bytes
@@ -1536,6 +1699,17 @@ class OfflineDoubleWheelReceipt:
             "wheel_identities": [item.to_mapping() for item in wheel_identity_pair],
             "member_inventory": [item.to_mapping() for item in member_inventory],
             "member_inventory_sha256": _member_inventory_sha256(member_inventory),
+            "allowed_member_inventory_sha256": (
+                _member_inventory_sha256(member_inventory)
+            ),
+            "record_sha256": next(
+                (
+                    item.sha256
+                    for item in member_inventory
+                    if item.path == f"{_DIST_INFO_ROOT}/RECORD"
+                ),
+                "0" * 64,
+            ),
             "native_member_path": native_member_path,
             "native_elf_sha256": ACCEPTED_NATIVE_ELF_SHA256,
             "retry": False,
@@ -1571,6 +1745,8 @@ class OfflineDoubleWheelReceipt:
                     "wheel_identities",
                     "member_inventory",
                     "member_inventory_sha256",
+                    "allowed_member_inventory_sha256",
+                    "record_sha256",
                     "native_member_path",
                     "native_elf_sha256",
                     "retry",
@@ -1646,12 +1822,33 @@ class OfflineDoubleWheelReceipt:
         )
         if actual_source_payload != allowed_source_payload:
             raise WarehouseW3WheelError("wheel Python/template payload closure differs")
+        _validate_exact_wheel_member_paths(
+            members,
+            required_modules=required,
+        )
         inventory_sha256 = _sha256(
             value["member_inventory_sha256"],
             field="member_inventory_sha256",
         )
         if inventory_sha256 != _member_inventory_sha256(members):
             raise WarehouseW3WheelError("wheel member inventory SHA-256 differs")
+        allowed_inventory_sha256 = _sha256(
+            value["allowed_member_inventory_sha256"],
+            field="allowed_member_inventory_sha256",
+        )
+        record_sha256 = _sha256(value["record_sha256"], field="record_sha256")
+        record_member = next(
+            (item for item in members if item.path == f"{_DIST_INFO_ROOT}/RECORD"),
+            None,
+        )
+        if (
+            allowed_inventory_sha256 != inventory_sha256
+            or record_member is None
+            or record_sha256 != record_member.sha256
+        ):
+            raise WarehouseW3WheelError(
+                "wheel allowed inventory or RECORD identity differs"
+            )
         filename = value["wheel_filename"]
         if type(filename) is not str or _WHEEL_NAME_RE.fullmatch(filename) is None:
             raise WarehouseW3WheelError("wheel filename differs")
@@ -1714,6 +1911,8 @@ class OfflineDoubleWheelReceipt:
             "wheel_identities": wheel_identities,
             "member_inventory": members,
             "member_inventory_sha256": inventory_sha256,
+            "allowed_member_inventory_sha256": allowed_inventory_sha256,
+            "record_sha256": record_sha256,
             "native_member_path": native_path,
             "native_elf_sha256": ACCEPTED_NATIVE_ELF_SHA256,
             "raw": raw,
@@ -2475,4 +2674,5 @@ __all__ = [
     "build_offline_double_wheel",
     "reopen_offline_double_wheel_artifact",
     "verify_offline_double_wheel_artifact",
+    "verify_wheel_bytes_against_receipt",
 ]

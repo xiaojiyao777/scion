@@ -24,6 +24,9 @@ from scion.problems.warehouse_delivery.w3_root_coordinator import (
     _verify_w3_root_layout_at,
     start_w3,
 )
+from scion.problems.warehouse_delivery.w3_root_preflight import (
+    root_transaction_trace_leaf,
+)
 from scion.problems.warehouse_delivery.w3_start_authorization import (
     ProspectiveStartAuthorizationIntent,
     _bind_start_authorization_for_test,
@@ -155,6 +158,20 @@ def _write_install_phase_ledger(
         path.chmod(0o444)
 
 
+def _write_transaction_trace(
+    import_root: Path,
+    bundle: WarehouseW3InstalledAcceptanceBundle,
+) -> None:
+    chain = verify_w3_installed_replay(
+        bundle.installed_replay_inputs,
+        bundle.selection_replay_inputs,
+    )
+    trace = chain.selected_candidate.root_transaction_trace
+    path = import_root / root_transaction_trace_leaf(trace.launch_id)
+    path.write_bytes(trace.raw)
+    path.chmod(0o444)
+
+
 def test_root_installation_inspection_is_fail_closed_across_phase_windows(
     tmp_path: Path,
     semantic_inputs: dict[str, object],
@@ -174,11 +191,13 @@ def test_root_installation_inspection_is_fail_closed_across_phase_windows(
 
     absent = _inspect_w3_root_installation_at(
         tmp_path,
+        tmp_path,
         launch_id,
         require_root_owner=False,
     )
     assert absent.state is RootInstallationState.ABSENT
     assert absent.committed_phase_count == 0
+    _write_transaction_trace(tmp_path, bundle)
 
     launch = tmp_path / launch_id
     install = launch / "install"
@@ -190,6 +209,7 @@ def test_root_installation_inspection_is_fail_closed_across_phase_windows(
     (launch / "start").chmod(0o755)
     (launch / "terminal").chmod(0o755)
     empty = _inspect_w3_root_installation_at(
+        tmp_path,
         tmp_path,
         launch_id,
         require_root_owner=False,
@@ -206,6 +226,7 @@ def test_root_installation_inspection_is_fail_closed_across_phase_windows(
     ).stat().st_mode & 0o777 == 0o444
     pending = _inspect_w3_root_installation_at(
         tmp_path,
+        tmp_path,
         launch_id,
         require_root_owner=False,
     )
@@ -219,6 +240,7 @@ def test_root_installation_inspection_is_fail_closed_across_phase_windows(
         receipts=receipts[:1],
     )
     committed = _inspect_w3_root_installation_at(
+        tmp_path,
         tmp_path,
         launch_id,
         require_root_owner=False,
@@ -235,6 +257,7 @@ def test_root_installation_inspection_is_fail_closed_across_phase_windows(
     )
     install.chmod(0o555)
     accepted = _inspect_w3_root_installation_at(
+        tmp_path,
         tmp_path,
         launch_id,
         require_root_owner=False,
@@ -260,6 +283,7 @@ def test_root_installation_inspection_rejects_unknown_or_incomplete_inventory(
         intents,
         receipts,
     )
+    _write_transaction_trace(tmp_path, bundle)
     launch = tmp_path / installed.launch_id
     install = launch / "install"
     install.mkdir(parents=True)
@@ -277,6 +301,7 @@ def test_root_installation_inspection_rejects_unknown_or_incomplete_inventory(
 
     missing_terminal = _inspect_w3_root_installation_at(
         tmp_path,
+        tmp_path,
         installed.launch_id,
         require_root_owner=False,
     )
@@ -290,6 +315,7 @@ def test_root_installation_inspection_rejects_unknown_or_incomplete_inventory(
     (launch / "terminal").chmod(0o755)
     install.chmod(0o555)
     unknown = _inspect_w3_root_installation_at(
+        tmp_path,
         tmp_path,
         installed.launch_id,
         require_root_owner=False,
@@ -317,9 +343,11 @@ def test_install_phase_ledger_closes_exact_k0_k8_and_seals_accepted(
         bundle.installed_replay_inputs,
         bundle.selection_replay_inputs,
     )
+    _write_transaction_trace(tmp_path, bundle)
     monkeypatch.setattr(external_installation.os, "geteuid", lambda: 0)
     monkeypatch.setattr(coordinator.os, "geteuid", lambda: 0)
     ledger = WarehouseW3InstallPhaseLedger._create_at(
+        tmp_path,
         tmp_path,
         chain.selected_candidate,
         require_root_owner=False,
@@ -568,6 +596,7 @@ def test_install_phase_ledger_closes_exact_k0_k8_and_seals_accepted(
         assert receipt == chain.phase_receipts[8]
         before_bundle = _inspect_w3_root_installation_at(
             tmp_path,
+            tmp_path,
             installed.launch_id,
             require_root_owner=False,
         )
@@ -624,6 +653,8 @@ def test_root_selection_prefix_persists_each_intent_before_its_effect(
             closure=selected.staged_candidate.root_staging_verification.candidate_gate_closure,
             ingress=selected.staged_candidate.candidate_gate_ingress,
             staging_leaf=selected.staged_candidate.tree_import.staging_leaf,
+            trace=selected.root_transaction_trace,
+            root_final_absence=selected.root_final_absence,
             writer=writer,
             import_and_verify=import_and_verify,
             build_selection=build_selection,
@@ -661,6 +692,7 @@ def test_root_composition_runs_k0_k8_then_independent_loaded_reopen(
         bundle.installed_replay_inputs,
         bundle.selection_replay_inputs,
     )
+    _write_transaction_trace(tmp_path, bundle)
     events: list[str] = []
 
     class Manager:
@@ -749,7 +781,7 @@ def test_root_composition_runs_k0_k8_then_independent_loaded_reopen(
     monkeypatch.setattr(
         coordinator,
         "begin_w3_root_installation",
-        lambda _candidate: (
+        lambda _candidate, *, source_acceptance_path: (
             Ledger(),
             bundle.selection_replay_inputs,
         ),
@@ -765,7 +797,10 @@ def test_root_composition_runs_k0_k8_then_independent_loaded_reopen(
         ),
     )
 
-    result = coordinator.apply_w3_root_installation(tmp_path / "candidate")
+    result = coordinator.apply_w3_root_installation(
+        tmp_path / "candidate",
+        source_acceptance_path=tmp_path / "source-acceptance.json",
+    )
 
     assert result.state is RootInstallationState.ACCEPTED
     assert events == [
@@ -808,6 +843,7 @@ def test_root_layout_is_fresh_exact_and_collision_is_permanent_hold(
         "runs",
         "sealed",
         "selections",
+        "source-acceptances",
     }
     assert {path.name for path in scion_root.iterdir()} == expected
     assert all(
@@ -883,8 +919,10 @@ def test_install_phase_effect_failure_is_permanent_pending_hold(
         bundle.installed_replay_inputs,
         bundle.selection_replay_inputs,
     )
+    _write_transaction_trace(tmp_path, bundle)
     monkeypatch.setattr(external_installation.os, "geteuid", lambda: 0)
     ledger = WarehouseW3InstallPhaseLedger._create_at(
+        tmp_path,
         tmp_path,
         chain.selected_candidate,
         require_root_owner=False,
@@ -900,6 +938,7 @@ def test_install_phase_effect_failure_is_permanent_pending_hold(
 
     held = _inspect_w3_root_installation_at(
         tmp_path,
+        tmp_path,
         installed.launch_id,
         require_root_owner=False,
     )
@@ -911,6 +950,7 @@ def test_install_phase_effect_failure_is_permanent_pending_hold(
         match="launch slot is not absent",
     ):
         WarehouseW3InstallPhaseLedger._create_at(
+            tmp_path,
             tmp_path,
             chain.selected_candidate,
             require_root_owner=False,
@@ -1083,6 +1123,29 @@ def test_start_w3_spends_one_authorization_and_dispatches_once(
             else (_ for _ in ()).throw(AssertionError("manager differs"))
         ),
     )
+    monkeypatch.setattr(
+        coordinator,
+        "_revalidate_installed_source_acceptance",
+        lambda authority: None,
+    )
+    monkeypatch.setattr(
+        installed_replay,
+        "verify_live_w3_publications",
+        lambda *_args, **_kwargs: events.append("gate:publications"),
+    )
+    monkeypatch.setattr(
+        coordinator,
+        "verify_live_w3_publications",
+        lambda *_args, **_kwargs: events.append("adjacent:publications"),
+    )
+    monkeypatch.setattr(
+        coordinator,
+        "verify_live_w3_loaded_manager",
+        lambda *_args, **_kwargs: (
+            events.append("adjacent:loaded"),
+            installed_authority.chain.loaded_manager,
+        )[-1],
+    )
     gate_results = (
         (
             "loaded",
@@ -1169,12 +1232,18 @@ def test_start_w3_spends_one_authorization_and_dispatches_once(
     assert json.loads((start / "START_ISSUED").read_bytes())["method"] == ("StartUnit")
     assert (start / "START_RETURNED").read_bytes() == receipt.raw
     assert events == [
+        "gate:publications",
         "gate:loaded",
+        "gate:publications",
         "gate:projection",
         "gate:environment",
         "gate:dry-root",
         "gate:absence",
         "gate:account",
+        "gate:publications",
+        "gate:loaded",
+        "adjacent:publications",
+        "adjacent:loaded",
         f"ref:{values['installation'].run_unit}",
         f"start:{values['installation'].run_unit}:fail",
         f"unref:{values['installation'].run_unit}",

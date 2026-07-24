@@ -68,6 +68,10 @@ from scion.problems.warehouse_delivery.w3_root_selection import (
     derive_root_selection_effect_authority_sha256,
     derive_root_staging_effect_authority_sha256,
 )
+from scion.problems.warehouse_delivery.w3_root_preflight import (
+    WarehouseW3RootFinalAbsenceReceipt,
+    WarehouseW3RootTransactionTraceReceipt,
+)
 from scion.runtime.execution.external_installation import (
     INSTALL_PHASES,
     DirectoryIdentity,
@@ -230,22 +234,24 @@ def _candidate_gate(
         else candidate_root
     )
     value = {
-        "schema": "scion.w3-candidate-gate.v2",
+        "schema": "scion.w3-candidate-gate.v4",
         "state": "CANDIDATE_ACCEPTED_INSTALLATION_ABSENT",
         "selection_key": selection_key,
         "launch_id": installation.launch_id,
         "nonce": authority.nonce,
         "authority_sha256": authority.authority_sha256,
         "installation_sha256": installation.installation_sha256,
+        "source_acceptance_sha256": "d" * 64,
         "source_receipt_sha256": source_receipt_sha256,
         "candidate_verification_sha256": candidate_verification_sha256,
         "double_wheel_receipt_sha256": "d" * 64,
         "semantic_environment_receipt_sha256": semantic_sha256,
         "environment_content_receipt_sha256": generic_sha256,
         "candidate_probe_sha256": "e" * 64,
-        "simulated_final_probe_sha256": "f" * 64,
-        "simulated_relocation_ref_sha256": "1" * 64,
-        "simulated_relocation_evidence_sha256": "2" * 64,
+        "namespace_final_probe_sha256": "f" * 64,
+        "namespace_probe_execution_sha256": "6" * 64,
+        "namespace_probe_ref_sha256": "1" * 64,
+        "namespace_probe_evidence_sha256": "2" * 64,
         "candidate_root": root,
         "candidate_root_identity": {
             "device": source_identity.device,
@@ -395,6 +401,7 @@ def _staging_bundle(
         task_event_identity="test:root-staging",
         launch_commit="0123456789abcdef0123456789abcdef01234567",
         launch_tree="89abcdef0123456789abcdef0123456789abcdef",
+        source_acceptance_sha256="d" * 64,
         dry_root_manifest_sha256=EXPECTED_MANIFEST_SHA256,
         native_record_sha256=EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256,
     )
@@ -1054,10 +1061,13 @@ def _prestart_phase_prefix(
         zip(INSTALL_PHASES[:7], effect_producers, strict=True)
     ):
         if index == 0:
+            trace, root_final_absence = _root_preflight(producer)
             effect_authority_sha256 = derive_root_staging_effect_authority_sha256(
                 producer.root_staging_verification.candidate_gate_closure,
                 producer.candidate_gate_ingress,
                 producer.tree_import,
+                trace,
+                root_final_absence,
             )
         elif index == 1:
             effect_authority_sha256 = derive_root_selection_effect_authority_sha256(
@@ -1142,6 +1152,26 @@ def _prestart_phase_prefix(
     return tuple(intents), tuple(receipts)
 
 
+def _root_preflight(staged):
+    closure = staged.root_staging_verification.candidate_gate_closure
+    gate = closure.gate
+    root_final_absence = WarehouseW3RootFinalAbsenceReceipt.derive(
+        closure.absence_facts,
+        source_acceptance_sha256=gate.source_acceptance_sha256,
+    )
+    trace = WarehouseW3RootTransactionTraceReceipt.create(
+        selection_key=gate.selection_key,
+        launch_id=gate.launch_id,
+        candidate_gate_sha256=gate.raw_sha256,
+        candidate_gate_closure_sha256=closure.raw_sha256,
+        candidate_gate_ingress_sha256=staged.candidate_gate_ingress.raw_sha256,
+        source_acceptance_sha256=gate.source_acceptance_sha256,
+        quarantine_leaf=(closure.candidate_verification.candidate_receipt_sha256),
+        expected_root_final_absence_sha256=root_final_absence.raw_sha256,
+    )
+    return trace, root_final_absence
+
+
 def _prestart_inputs(semantic_inputs: dict[str, object]) -> dict[str, object]:
     semantic = _semantic(semantic_inputs)
     candidate_path, simulated_path = _relocation_inputs(semantic_inputs, semantic)
@@ -1162,9 +1192,12 @@ def _prestart_inputs(semantic_inputs: dict[str, object]) -> dict[str, object]:
         accepted_root_device=source_device,
         accepted_root_inode=61,
     )
+    trace, root_final_absence = _root_preflight(staged)
     selection = WarehouseW3RootSelectionReceipt._create_for_test(
         selection=_selection_receipt(candidate, staged),
         staged_candidate=staged,
+        trace=trace,
+        root_final_absence=root_final_absence,
     )
     sealed_publication = PublishedTreeReceipt.create(
         role="sealed",
@@ -2029,10 +2062,12 @@ def test_prestart_evidence_round_trip_closes_exact_pending_gate(
             "dry_root",
             "prestart_absence",
             "runtime_account",
+            "source_acceptance",
         }
     )
     unit_value = json.loads(inputs["unit_publication"].raw)
-    assert unit_value["schema"] == "scion.unit-publication-acceptance.v3"
+    assert unit_value["schema"] == "scion.unit-publication-acceptance.v4"
+    assert len(unit_value["dropin_absence_paths"]) == 4
     assert unit_value["run_publication_sha256"] == (
         inputs["unit_publication"].run_publication_sha256
     )
@@ -2177,6 +2212,7 @@ def test_prestart_evidence_defines_selection_candidate_as_closed_gate(
         inputs["staged_candidate"],
         candidate_sha256=inputs["candidate_gate"].source_receipt_sha256,
     )
+    trace, root_final_absence = _root_preflight(inputs["staged_candidate"])
     with pytest.raises(
         WarehouseW3RootSelectionError,
         match="generic selection differs",
@@ -2184,6 +2220,8 @@ def test_prestart_evidence_defines_selection_candidate_as_closed_gate(
         WarehouseW3RootSelectionReceipt._create_for_test(
             selection=alternate,
             staged_candidate=inputs["staged_candidate"],
+            trace=trace,
+            root_final_absence=root_final_absence,
         )
 
 

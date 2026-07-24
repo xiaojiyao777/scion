@@ -60,6 +60,7 @@ _PRESTART_PRODUCERS = frozenset(
         "loaded_manager",
         "prestart_absence",
         "runtime_account",
+        "source_acceptance",
     }
 )
 _MAX_PRESTART_PRODUCER_BYTES = 64 * 1024 * 1024
@@ -248,8 +249,10 @@ class WarehouseW3IssuedStartGate:
     authorization_sha256: str
     installed_acceptance_sha256: str
     prestart_evidence_sha256: str
+    loaded_manager_sha256: str
     candidate_selected_receipt_sha256: str
     root_selection_sha256: str
+    source_acceptance_sha256: str
     staged_candidate_sha256: str
     root_staging_verification_sha256: str
     candidate_gate_ingress_fact_sha256: str
@@ -412,6 +415,7 @@ def _verify_prestart_producers(
             "loaded_manager": _digest(inputs.loaded_manager_raw),
             "prestart_absence": _digest(inputs.prestart_absence_raw),
             "runtime_account": _digest(inputs.runtime_account_raw),
+            "source_acceptance": (chain.root_selection.source_acceptance_sha256),
         }
         if actual_sha256 != expected_sha256:
             raise ValueError("pre-start producer hashes differ")
@@ -524,6 +528,7 @@ def verify_w3_issued_start_gate(
                 "installation_sha256",
                 "installed_acceptance_sha256",
                 "prestart_receipt_sha256",
+                "loaded_manager_sha256",
                 "manager_unique_owner",
                 "boot_id",
                 "manager_version",
@@ -556,6 +561,7 @@ def verify_w3_issued_start_gate(
                 "selection_key",
                 "preparation_commit_sha256",
                 "root_selection_sha256",
+                "external_source_acceptance_sha256",
                 "user_statement",
                 "task_event_identity",
                 "recorded_at_utc",
@@ -655,6 +661,7 @@ def verify_w3_issued_start_gate(
         "installation_sha256",
         "installed_acceptance_sha256",
         "prestart_receipt_sha256",
+        "loaded_manager_sha256",
     ):
         _sha(
             issue[field],
@@ -680,12 +687,13 @@ def verify_w3_issued_start_gate(
         error_type=WarehouseW3StartPermitRefused,
     )
     if (
-        issue["schema"] != "scion.start-issued.v1"
+        issue["schema"] != "scion.start-issued.v2"
         or issue["launch_id"] != launch_id
         or issue["authorization_sha256"] != authorization_sha256
         or issue["installation_sha256"] != installation_sha256
         or issue["installed_acceptance_sha256"] != acceptance_sha256
         or issue["prestart_receipt_sha256"] != evidence_sha256
+        or issue["loaded_manager_sha256"] != installed_chain.loaded_manager.raw_sha256
         or issue["unit"] != unit
         or issue["method"] != "StartUnit"
         or issue["mode"] != "fail"
@@ -707,6 +715,7 @@ def verify_w3_issued_start_gate(
         "selection_key",
         "preparation_commit_sha256",
         "root_selection_sha256",
+        "external_source_acceptance_sha256",
     ):
         _sha(
             authorization[field],
@@ -732,7 +741,7 @@ def verify_w3_issued_start_gate(
         error_type=WarehouseW3StartPermitRefused,
     )
     if (
-        authorization["schema"] != "scion.start-authorization.v1"
+        authorization["schema"] != "scion.start-authorization.v2"
         or authorization["launch_id"] != launch_id
         or authorization["authority_sha256"] != authority_sha256
         or authorization["installation_sha256"] != installation_sha256
@@ -740,6 +749,8 @@ def verify_w3_issued_start_gate(
         or authorization["prospective_intent_sha256"] != prospective.raw_sha256
         or authorization["plan_sha256"] != ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
         or authorization["root_selection_sha256"] != selection_sha256
+        or authorization["external_source_acceptance_sha256"]
+        != root_selection.source_acceptance_sha256
         or authorization["user_statement"] != prospective.statement
         or authorization["unit"] != unit
         or authorization["method"] != "StartUnit"
@@ -884,6 +895,8 @@ def verify_w3_issued_start_gate(
         or root_selection.selection_key != authorization["selection_key"]
         or root_selection.preparation_commit_sha256
         != authorization["preparation_commit_sha256"]
+        or root_selection.source_acceptance_sha256
+        != authorization["external_source_acceptance_sha256"]
         or selected_chain.root_staging_verification.selection_intent.task_event_identity
         != authorization["task_event_identity"]
         or generic_selection.preparation_commit_sha256
@@ -900,8 +913,10 @@ def verify_w3_issued_start_gate(
         authorization_sha256=authorization_sha256,
         installed_acceptance_sha256=acceptance_sha256,
         prestart_evidence_sha256=evidence_sha256,
+        loaded_manager_sha256=installed_chain.loaded_manager.raw_sha256,
         candidate_selected_receipt_sha256=candidate_selected_sha256,
         root_selection_sha256=selection_sha256,
+        source_acceptance_sha256=root_selection.source_acceptance_sha256,
         staged_candidate_sha256=(selected_chain.staged_candidate.raw_sha256),
         root_staging_verification_sha256=(
             selected_chain.root_staging_verification.raw_sha256

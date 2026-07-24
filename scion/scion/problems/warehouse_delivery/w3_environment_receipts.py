@@ -35,9 +35,10 @@ from scion.runtime.execution.environment_integrity import (
 FINAL_ENVIRONMENT_PARENT = PurePosixPath("/var/lib/scion/environments/w3")
 
 _SEMANTIC_SCHEMA = "scion.w3-environment-semantic-content.v2"
-_PROBE_SCHEMA = "scion.w3-environment-probe.v2"
+_PROBE_SCHEMA = "scion.w3-environment-probe.v3"
+_NAMESPACE_PROBE_SCHEMA = "scion.w3-namespace-probe-execution.v1"
 _LIVE_REHASH_SCHEMA = "scion.w3-environment-live-rehash.v2"
-_RELOCATION_SCHEMA = "scion.w3-environment-relocation.v2"
+_RELOCATION_SCHEMA = "scion.w3-environment-relocation.v3"
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _SUBJECT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.:+-]{0,255}\Z")
 _IMPORT_KINDS = frozenset(
@@ -50,20 +51,26 @@ _IMPORT_KINDS = frozenset(
     }
 )
 _IMPORT_SCOPES = frozenset({"environment", "external_runtime"})
-_PROBE_PHASES = frozenset({"candidate", "simulated_final", "final"})
+_PROBE_PHASES = frozenset({"candidate", "namespace_final"})
 _LIVE_PHASES = frozenset(
-    {"relocation_pre", "relocation_post", "preclaim", "completion"}
+    {
+        "imported_candidate",
+        "relocation_pre",
+        "relocation_post",
+        "preclaim",
+        "completion",
+    }
 )
-_FINAL_SUFFIX_PARTS = ("var", "lib", "scion", "environments", "w3")
 _DBUS_PACKAGE_SUBJECT = "dbus"
 _DBUS_BINDINGS_SUBJECT = "_dbus_bindings"
 _DBUS_GLIB_BINDINGS_SUBJECT = "_dbus_glib_bindings"
 _DBUS_DISTRIBUTION_NAME = "dbus-python"
 _WHEEL_INSTALLATION_MANIFEST_SCHEMA = "scion.w3-wheel-installation-map.v1"
 _WHEEL_INSTALLATION_MANIFEST_PATH = ".scion/w3-wheel-installation.json"
-_RUNTIME_OBSERVATION_SCHEMA = "scion.w3-environment-runtime-observation.v1"
+_RUNTIME_OBSERVATION_SCHEMA = "scion.w3-environment-runtime-observation.v2"
 _ELF_MAGIC = b"\x7fELF"
 _PROBE_TIMEOUT_SECONDS = 60
+_BWRAP = "/usr/bin/bwrap"
 
 # The target environment executes this fixed, repository-reviewed helper with
 # ``bin/python -I -B -c``.  It performs no network operation: SystemBus uses the
@@ -119,7 +126,7 @@ with open("/proc/self/maps", "r", encoding="utf-8", errors="strict") as _stream:
             _mapped.add(_path)
 
 _value = {
-    "schema": "scion.w3-environment-runtime-observation.v1",
+    "schema": "scion.w3-environment-runtime-observation.v2",
     "sys_executable": os.path.realpath(sys.executable),
     "sys_prefix": os.path.realpath(sys.prefix),
     "sys_path": [os.path.realpath(_path) for _path in sys.path if _path],
@@ -127,6 +134,20 @@ _value = {
     "mapped_shared_libraries": sorted(_mapped),
     "dbus_acquired": True,
     "dbus_unique_name": _unique_name,
+    "effective_uid": os.geteuid(),
+    "effective_gid": os.getegid(),
+    "no_new_privs": next(
+        int(_line.split(":", 1)[1].strip())
+        for _line in open(
+            "/proc/self/status",
+            "r",
+            encoding="utf-8",
+            errors="strict",
+        )
+        if _line.startswith("NoNewPrivs:")
+    ),
+    "network_namespace": os.readlink("/proc/self/ns/net"),
+    "mount_namespace": os.readlink("/proc/self/ns/mnt"),
 }
 sys.stdout.buffer.write(
     (json.dumps(
@@ -331,6 +352,11 @@ class _RuntimeObservation:
     mapped_shared_libraries: tuple[str, ...]
     dbus_acquired: bool
     dbus_unique_name: str
+    effective_uid: int
+    effective_gid: int
+    no_new_privs: int
+    network_namespace: str
+    mount_namespace: str
     raw: bytes
     raw_sha256: str
 
@@ -348,6 +374,11 @@ class _RuntimeObservation:
                     "mapped_shared_libraries",
                     "dbus_acquired",
                     "dbus_unique_name",
+                    "effective_uid",
+                    "effective_gid",
+                    "no_new_privs",
+                    "network_namespace",
+                    "mount_namespace",
                 }
             ),
             label="environment runtime observation",
@@ -427,6 +458,28 @@ class _RuntimeObservation:
             mapped_shared_libraries=mapped,
             dbus_acquired=True,
             dbus_unique_name=unique_name,
+            effective_uid=_uint(
+                value["effective_uid"],
+                field="runtime effective_uid",
+            ),
+            effective_gid=_uint(
+                value["effective_gid"],
+                field="runtime effective_gid",
+            ),
+            no_new_privs=_uint(
+                value["no_new_privs"],
+                field="runtime no_new_privs",
+            ),
+            network_namespace=_text(
+                value["network_namespace"],
+                field="runtime network namespace",
+                maximum=128,
+            ),
+            mount_namespace=_text(
+                value["mount_namespace"],
+                field="runtime mount namespace",
+                maximum=128,
+            ),
             raw=raw,
             raw_sha256=hashlib.sha256(raw).hexdigest(),
         )
@@ -464,6 +517,16 @@ def _validated_generic(
         raise WarehouseW3EnvironmentReceiptError(
             "generic environment receipt object differs"
         )
+    for entry in receipt.environment_inventory:
+        parts = tuple(part.casefold() for part in PurePosixPath(entry.path).parts)
+        if (
+            (parts and parts[-1].endswith(".pth"))
+            or (parts and parts[-1] in {"sitecustomize.py", "usercustomize.py"})
+            or any(part.endswith(".data") for part in parts)
+        ):
+            raise WarehouseW3EnvironmentReceiptError(
+                "environment contains a Python-startup or installer-data payload"
+            )
     return receipt
 
 
@@ -1471,6 +1534,10 @@ def _verify_observed_elf_files(
 class SubprocessEnvironmentProbeReader:
     """Fixed local subprocess producer for actual target-interpreter facts."""
 
+    def __post_init__(self) -> None:
+        if os.geteuid() == 0:
+            raise PermissionError("environment probe reader rejects effective UID zero")
+
     def __init_subclass__(cls, **kwargs: object) -> None:
         del kwargs
         raise TypeError("SubprocessEnvironmentProbeReader is final")
@@ -2331,6 +2398,493 @@ class EnvironmentProbeFact:
         return instance
 
 
+@dataclass(frozen=True, slots=True, init=False)
+class NamespaceProbeExecutionFact:
+    """Exact non-root bubblewrap execution boundary for a future-path probe."""
+
+    physical_environment_root: str
+    visible_environment_root: str
+    environment_probe_sha256: str
+    producer_euid: int
+    producer_egid: int
+    no_new_privs: bool
+    parent_network_namespace: str
+    child_network_namespace: str
+    parent_mount_namespace: str
+    child_mount_namespace: str
+    bwrap_path: str
+    bwrap_sha256: str
+    bwrap_device: int
+    bwrap_inode: int
+    bwrap_size_bytes: int
+    bwrap_mode: int
+    host_root_read_only: bool
+    network_unshared: bool
+    writable_host_bind_count: int
+    raw: bytes
+    raw_sha256: str
+
+    def __new__(cls) -> "NamespaceProbeExecutionFact":
+        del cls
+        raise TypeError("NamespaceProbeExecutionFact must be parsed from exact bytes")
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("NamespaceProbeExecutionFact is final")
+
+    @classmethod
+    def create(
+        cls,
+        *,
+        physical_environment_root: Path,
+        visible_environment_root: Path,
+        environment_probe: EnvironmentProbeFact,
+        producer_euid: int,
+        producer_egid: int,
+        no_new_privs: bool,
+        parent_network_namespace: str,
+        child_network_namespace: str,
+        parent_mount_namespace: str,
+        child_mount_namespace: str,
+        bwrap_sha256: str,
+        bwrap_device: int,
+        bwrap_inode: int,
+        bwrap_size_bytes: int,
+        bwrap_mode: int,
+    ) -> "NamespaceProbeExecutionFact":
+        value = {
+            "schema": _NAMESPACE_PROBE_SCHEMA,
+            "physical_environment_root": str(physical_environment_root),
+            "visible_environment_root": str(visible_environment_root),
+            "environment_probe_sha256": environment_probe.raw_sha256,
+            "producer_euid": producer_euid,
+            "producer_egid": producer_egid,
+            "no_new_privs": no_new_privs,
+            "parent_network_namespace": parent_network_namespace,
+            "child_network_namespace": child_network_namespace,
+            "parent_mount_namespace": parent_mount_namespace,
+            "child_mount_namespace": child_mount_namespace,
+            "bwrap_path": _BWRAP,
+            "bwrap_sha256": bwrap_sha256,
+            "bwrap_device": bwrap_device,
+            "bwrap_inode": bwrap_inode,
+            "bwrap_size_bytes": bwrap_size_bytes,
+            "bwrap_mode": bwrap_mode,
+            "host_root_read_only": True,
+            "network_unshared": True,
+            "writable_host_bind_count": 0,
+        }
+        return cls.from_bytes(
+            _canonical_json(value),
+            environment_probe=environment_probe,
+        )
+
+    @classmethod
+    def from_bytes(
+        cls,
+        raw: bytes,
+        *,
+        environment_probe: EnvironmentProbeFact,
+    ) -> "NamespaceProbeExecutionFact":
+        if type(environment_probe) is not EnvironmentProbeFact:
+            raise TypeError("environment_probe must be exact EnvironmentProbeFact")
+        value = _exact_fields(
+            _decode_canonical(raw, label="namespace probe execution fact"),
+            frozenset(
+                {
+                    "schema",
+                    "physical_environment_root",
+                    "visible_environment_root",
+                    "environment_probe_sha256",
+                    "producer_euid",
+                    "producer_egid",
+                    "no_new_privs",
+                    "parent_network_namespace",
+                    "child_network_namespace",
+                    "parent_mount_namespace",
+                    "child_mount_namespace",
+                    "bwrap_path",
+                    "bwrap_sha256",
+                    "bwrap_device",
+                    "bwrap_inode",
+                    "bwrap_size_bytes",
+                    "bwrap_mode",
+                    "host_root_read_only",
+                    "network_unshared",
+                    "writable_host_bind_count",
+                }
+            ),
+            label="namespace probe execution fact",
+        )
+        physical = _absolute_path(
+            value["physical_environment_root"],
+            field="namespace physical environment root",
+        )
+        visible = _absolute_path(
+            value["visible_environment_root"],
+            field="namespace visible environment root",
+        )
+        namespace_pattern = re.compile(r"(?:net|mnt):\[[0-9]+\]\Z")
+        parent_net = _text(
+            value["parent_network_namespace"],
+            field="parent network namespace",
+            maximum=128,
+        )
+        child_net = _text(
+            value["child_network_namespace"],
+            field="child network namespace",
+            maximum=128,
+        )
+        parent_mount = _text(
+            value["parent_mount_namespace"],
+            field="parent mount namespace",
+            maximum=128,
+        )
+        child_mount = _text(
+            value["child_mount_namespace"],
+            field="child mount namespace",
+            maximum=128,
+        )
+        euid = _uint(value["producer_euid"], field="namespace producer_euid")
+        egid = _uint(value["producer_egid"], field="namespace producer_egid")
+        bwrap_mode = _uint(value["bwrap_mode"], field="bwrap mode")
+        if (
+            value["schema"] != _NAMESPACE_PROBE_SCHEMA
+            or physical == visible
+            or visible != environment_probe.environment_root
+            or environment_probe.phase != "namespace_final"
+            or value["environment_probe_sha256"] != environment_probe.raw_sha256
+            or euid == 0
+            or value["no_new_privs"] is not True
+            or namespace_pattern.fullmatch(parent_net) is None
+            or namespace_pattern.fullmatch(child_net) is None
+            or namespace_pattern.fullmatch(parent_mount) is None
+            or namespace_pattern.fullmatch(child_mount) is None
+            or parent_net == child_net
+            or parent_mount == child_mount
+            or value["bwrap_path"] != _BWRAP
+            or bwrap_mode != 0o755
+            or value["host_root_read_only"] is not True
+            or value["network_unshared"] is not True
+            or value["writable_host_bind_count"] != 0
+        ):
+            raise WarehouseW3EnvironmentReceiptError(
+                "namespace probe execution boundary differs"
+            )
+        fields = {
+            "physical_environment_root": physical,
+            "visible_environment_root": visible,
+            "environment_probe_sha256": environment_probe.raw_sha256,
+            "producer_euid": euid,
+            "producer_egid": egid,
+            "no_new_privs": True,
+            "parent_network_namespace": parent_net,
+            "child_network_namespace": child_net,
+            "parent_mount_namespace": parent_mount,
+            "child_mount_namespace": child_mount,
+            "bwrap_path": _BWRAP,
+            "bwrap_sha256": _sha256(
+                value["bwrap_sha256"],
+                field="bwrap sha256",
+            ),
+            "bwrap_device": _uint(value["bwrap_device"], field="bwrap device"),
+            "bwrap_inode": _uint(value["bwrap_inode"], field="bwrap inode"),
+            "bwrap_size_bytes": _uint(
+                value["bwrap_size_bytes"],
+                field="bwrap size_bytes",
+            ),
+            "bwrap_mode": bwrap_mode,
+            "host_root_read_only": True,
+            "network_unshared": True,
+            "writable_host_bind_count": 0,
+            "raw": raw,
+            "raw_sha256": hashlib.sha256(raw).hexdigest(),
+        }
+        instance = object.__new__(cls)
+        for field, item in fields.items():
+            object.__setattr__(instance, field, item)
+        return instance
+
+
+def _read_root_owned_bwrap_identity() -> tuple[str, os.stat_result]:
+    try:
+        descriptor = os.open(
+            _BWRAP,
+            os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+        )
+    except OSError as exc:
+        raise WarehouseW3EnvironmentReceiptError(
+            "cannot open fixed bubblewrap executable"
+        ) from exc
+    digest = hashlib.sha256()
+    try:
+        before = os.fstat(descriptor)
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+        after = os.fstat(descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        named = os.stat(_BWRAP, follow_symlinks=False)
+    except OSError as exc:
+        raise WarehouseW3EnvironmentReceiptError(
+            "cannot reopen fixed bubblewrap executable"
+        ) from exc
+    identity = lambda item: (
+        item.st_dev,
+        item.st_ino,
+        item.st_mode,
+        item.st_nlink,
+        item.st_uid,
+        item.st_gid,
+        item.st_size,
+        item.st_mtime_ns,
+        item.st_ctime_ns,
+    )
+    if (
+        identity(before) != identity(after)
+        or identity(after) != identity(named)
+        or not stat.S_ISREG(named.st_mode)
+        or named.st_uid != 0
+        or named.st_gid != 0
+        or named.st_nlink != 1
+        or stat.S_IMODE(named.st_mode) != 0o755
+    ):
+        raise WarehouseW3EnvironmentReceiptError(
+            "fixed bubblewrap executable identity differs"
+        )
+    return digest.hexdigest(), named
+
+
+def verify_namespace_probe_execution_binary(
+    fact: NamespaceProbeExecutionFact,
+) -> NamespaceProbeExecutionFact:
+    """Reopen fixed bubblewrap and match the candidate execution fact."""
+
+    if type(fact) is not NamespaceProbeExecutionFact:
+        raise TypeError("fact must be exact NamespaceProbeExecutionFact")
+    digest, identity = _read_root_owned_bwrap_identity()
+    if (
+        fact.bwrap_path != _BWRAP
+        or fact.bwrap_sha256 != digest
+        or fact.bwrap_device != identity.st_dev
+        or fact.bwrap_inode != identity.st_ino
+        or fact.bwrap_size_bytes != identity.st_size
+        or fact.bwrap_mode != stat.S_IMODE(identity.st_mode)
+    ):
+        raise WarehouseW3EnvironmentReceiptError(
+            "live bubblewrap identity differs from namespace probe execution"
+        )
+    return fact
+
+
+@dataclass(frozen=True, slots=True)
+class NonRootNamespaceEnvironmentProbeReader:
+    """Run the target interpreter non-root at its exact future visible path."""
+
+    def __post_init__(self) -> None:
+        if os.geteuid() == 0:
+            raise PermissionError(
+                "namespace environment probe rejects effective UID zero"
+            )
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("NonRootNamespaceEnvironmentProbeReader is final")
+
+    def probe(
+        self,
+        physical_environment_root: Path,
+        *,
+        content_receipt: WarehouseEnvironmentContentReceipt,
+    ) -> tuple[EnvironmentProbeFact, NamespaceProbeExecutionFact]:
+        content = _validated_content(content_receipt)
+        physical = Path(
+            _absolute_path(
+                str(physical_environment_root),
+                field="namespace physical environment root",
+            )
+        )
+        visible = derive_final_environment_path(content)
+        if physical == visible:
+            raise WarehouseW3EnvironmentReceiptError(
+                "namespace probe physical and visible roots are equal"
+            )
+        bwrap_sha256, bwrap_identity = _read_root_owned_bwrap_identity()
+        parent_net = os.readlink("/proc/self/ns/net")
+        parent_mount = os.readlink("/proc/self/ns/mnt")
+        argv = (
+            _BWRAP,
+            "--unshare-net",
+            "--unshare-pid",
+            "--die-with-parent",
+            "--new-session",
+            "--clearenv",
+            "--ro-bind",
+            "/",
+            "/",
+            "--tmpfs",
+            "/var/lib",
+            "--dir",
+            "/var/lib/scion",
+            "--dir",
+            "/var/lib/scion/environments",
+            "--dir",
+            "/var/lib/scion/environments/w3",
+            "--ro-bind",
+            str(physical),
+            str(visible),
+            "--proc",
+            "/proc",
+            "--chdir",
+            str(visible),
+            "--setenv",
+            "DBUS_SYSTEM_BUS_ADDRESS",
+            "unix:path=/run/dbus/system_bus_socket",
+            "--setenv",
+            "HOME",
+            "/nonexistent",
+            "--setenv",
+            "LANG",
+            "C.UTF-8",
+            "--setenv",
+            "LC_ALL",
+            "C.UTF-8",
+            "--setenv",
+            "PATH",
+            "/usr/bin:/bin",
+            "--setenv",
+            "TMPDIR",
+            "/tmp",
+            "--",
+            f"{visible}/bin/python",
+            "-I",
+            "-B",
+            "-c",
+            _FIXED_PROBE_HELPER,
+        )
+        try:
+            completed = subprocess.run(
+                argv,
+                cwd=physical,
+                env={
+                    "HOME": "/nonexistent",
+                    "LANG": "C.UTF-8",
+                    "LC_ALL": "C.UTF-8",
+                    "PATH": "/usr/bin:/bin",
+                },
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+                timeout=_PROBE_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise WarehouseW3EnvironmentReceiptError(
+                "namespace environment probe could not execute"
+            ) from exc
+        if (
+            completed.returncode != 0
+            or type(completed.stdout) is not bytes
+            or not completed.stdout
+            or len(completed.stdout) > 4 * 1024 * 1024
+            or type(completed.stderr) is not bytes
+            or completed.stderr
+        ):
+            raise WarehouseW3EnvironmentReceiptError(
+                "namespace environment probe did not return one clean fact"
+            )
+        observation = _RuntimeObservation.from_bytes(completed.stdout)
+        if (
+            observation.effective_uid != os.geteuid()
+            or observation.effective_gid != os.getegid()
+            or observation.effective_uid == 0
+            or observation.no_new_privs != 1
+            or observation.network_namespace == parent_net
+            or observation.mount_namespace == parent_mount
+        ):
+            raise WarehouseW3EnvironmentReceiptError(
+                "namespace environment execution facts differ"
+            )
+        imports = _runtime_import_table(
+            observation,
+            environment_root=visible,
+            generic_receipt=content.generic_receipt,
+        )
+        if imports != content.evidence.import_table:
+            raise WarehouseW3EnvironmentReceiptError(
+                "namespace loaded-file inventory differs from semantic content"
+            )
+        _verify_observed_elf_files(imports, environment_root=physical)
+        probe = EnvironmentProbeFact.create(
+            phase="namespace_final",
+            content_receipt_sha256=content.raw_sha256,
+            environment_root=visible,
+            sys_executable=Path(observation.sys_executable),
+            sys_prefix=Path(observation.sys_prefix),
+            sys_path=tuple(Path(path) for path in observation.sys_path),
+            import_table_sha256=content.import_table_sha256,
+            loaded_import_table=imports,
+            native_loaded_paths=tuple(
+                sorted(
+                    (
+                        (
+                            visible / item.path
+                            if item.scope == "environment"
+                            else Path(item.path)
+                        )
+                        for item in imports
+                        if item.kind == "native_extension"
+                    ),
+                    key=lambda item: str(item).encode("utf-8"),
+                )
+            ),
+            shared_library_paths=tuple(
+                sorted(
+                    (
+                        (
+                            visible / item.path
+                            if item.scope == "environment"
+                            else Path(item.path)
+                        )
+                        for item in imports
+                        if item.kind == "shared_library"
+                    ),
+                    key=lambda item: str(item).encode("utf-8"),
+                )
+            ),
+            dbus_acquired=observation.dbus_acquired,
+            dbus_unique_name=observation.dbus_unique_name,
+            dispatcher_argv=(
+                f"{visible}/bin/python",
+                "-m",
+                "scion.tools.scion_w3_tool",
+                "run",
+            ),
+        )
+        execution = NamespaceProbeExecutionFact.create(
+            physical_environment_root=physical,
+            visible_environment_root=visible,
+            environment_probe=probe,
+            producer_euid=os.geteuid(),
+            producer_egid=os.getegid(),
+            no_new_privs=True,
+            parent_network_namespace=parent_net,
+            child_network_namespace=observation.network_namespace,
+            parent_mount_namespace=parent_mount,
+            child_mount_namespace=observation.mount_namespace,
+            bwrap_sha256=bwrap_sha256,
+            bwrap_device=bwrap_identity.st_dev,
+            bwrap_inode=bwrap_identity.st_ino,
+            bwrap_size_bytes=bwrap_identity.st_size,
+            bwrap_mode=stat.S_IMODE(bwrap_identity.st_mode),
+        )
+        return probe, execution
+
+
 class EnvironmentProbeReader(Protocol):
     """Acquire one exact import/D-Bus/dispatcher probe without mutation."""
 
@@ -2500,8 +3054,7 @@ def _sys_path_shape(
 
 def _validate_relocation_probe_equivalence(
     candidate: EnvironmentProbeFact,
-    simulated: EnvironmentProbeFact,
-    final: EnvironmentProbeFact,
+    namespace_final: EnvironmentProbeFact,
     *,
     content: WarehouseEnvironmentContentReceipt,
 ) -> None:
@@ -2511,16 +3064,14 @@ def _validate_relocation_probe_equivalence(
             root=Path(fact.environment_root),
             content=content,
         )
-        for fact in (candidate, simulated, final)
+        for fact in (candidate, namespace_final)
     )
     if (
         shapes[0] != shapes[1]
-        or shapes[1] != shapes[2]
-        or candidate.dispatcher_argv[1:] != simulated.dispatcher_argv[1:]
-        or simulated.dispatcher_argv[1:] != final.dispatcher_argv[1:]
+        or candidate.dispatcher_argv[1:] != namespace_final.dispatcher_argv[1:]
     ):
         raise WarehouseW3EnvironmentReceiptError(
-            "candidate, simulated-final, and final probe shapes differ"
+            "candidate and namespace-final probe shapes differ"
         )
 
 
@@ -2728,6 +3279,7 @@ def _validate_live_rehash(
     *,
     phase: str,
     content: WarehouseEnvironmentContentReceipt,
+    expected_root: Path | None = None,
 ) -> None:
     if type(fact) is not LiveEnvironmentRehashFact:
         raise WarehouseW3EnvironmentReceiptError(
@@ -2735,13 +3287,17 @@ def _validate_live_rehash(
         )
     if LiveEnvironmentRehashFact.from_bytes(fact.raw) != fact:
         raise WarehouseW3EnvironmentReceiptError("live rehash fact object differs")
-    final_path = str(derive_final_environment_path(content))
+    expected_path = str(
+        derive_final_environment_path(content)
+        if expected_root is None
+        else expected_root
+    )
     if (
         fact.phase != phase
         or fact.content_receipt_sha256 != content.raw_sha256
         or fact.generic_receipt_sha256 != content.generic_receipt_sha256
         or fact.observed_generic_receipt != content.generic_receipt
-        or fact.environment_root != final_path
+        or fact.environment_root != expected_path
         or fact.environment_inventory_sha256 != content.environment_inventory_sha256
         or fact.external_runtime_closure_sha256
         != content.external_runtime_closure_sha256
@@ -2751,22 +3307,15 @@ def _validate_live_rehash(
         )
 
 
-def _is_simulated_final_path(
-    path: Path,
-    content: WarehouseEnvironmentContentReceipt,
-) -> bool:
-    parts = PurePosixPath(str(path)).parts
-    expected = (*_FINAL_SUFFIX_PARTS, content.generic_receipt_sha256)
-    return len(parts) > len(expected) and tuple(parts[-len(expected) :]) == expected
-
-
 @dataclass(frozen=True, slots=True, init=False)
 class EnvironmentRelocationReceipt:
     content_receipt_sha256: str
     final_environment_path: str
+    imported_candidate_environment_path: str
     candidate_probe: EnvironmentProbeFact
-    simulated_final_probe: EnvironmentProbeFact
-    final_probe: EnvironmentProbeFact
+    namespace_final_probe: EnvironmentProbeFact
+    namespace_probe_execution: NamespaceProbeExecutionFact
+    imported_candidate_rehash: LiveEnvironmentRehashFact
     relocation_pre_rehash: LiveEnvironmentRehashFact
     relocation_post_rehash: LiveEnvironmentRehashFact
     raw: bytes
@@ -2786,25 +3335,26 @@ class EnvironmentRelocationReceipt:
         content_receipt: WarehouseEnvironmentContentReceipt,
         *,
         candidate_probe: EnvironmentProbeFact,
-        simulated_final_probe: EnvironmentProbeFact,
-        final_probe: EnvironmentProbeFact,
+        namespace_final_probe: EnvironmentProbeFact,
+        namespace_probe_execution: NamespaceProbeExecutionFact,
+        imported_candidate_rehash: LiveEnvironmentRehashFact,
         relocation_pre_rehash: LiveEnvironmentRehashFact,
         relocation_post_rehash: LiveEnvironmentRehashFact,
     ) -> "EnvironmentRelocationReceipt":
         content_receipt = _validated_content(content_receipt)
         candidate_root = Path(candidate_probe.environment_root)
-        simulated_root = Path(simulated_final_probe.environment_root)
+        namespace_root = Path(namespace_final_probe.environment_root)
+        imported_root = Path(imported_candidate_rehash.environment_root)
         final_root = derive_final_environment_path(content_receipt)
         if (
             candidate_root.name != "environment"
             or candidate_root == final_root
-            or not _is_simulated_final_path(
-                simulated_root,
-                content_receipt,
-            )
+            or namespace_root != final_root
+            or imported_root.name != "environment"
+            or imported_root in {candidate_root, final_root}
         ):
             raise WarehouseW3EnvironmentReceiptError(
-                "candidate or simulated-final environment path differs"
+                "candidate, imported, or namespace-final environment path differs"
             )
         _validate_probe(
             candidate_probe,
@@ -2813,22 +3363,29 @@ class EnvironmentRelocationReceipt:
             content=content_receipt,
         )
         _validate_probe(
-            simulated_final_probe,
-            phase="simulated_final",
-            root=simulated_root,
-            content=content_receipt,
-        )
-        _validate_probe(
-            final_probe,
-            phase="final",
+            namespace_final_probe,
+            phase="namespace_final",
             root=final_root,
             content=content_receipt,
         )
+        namespace_execution = NamespaceProbeExecutionFact.from_bytes(
+            namespace_probe_execution.raw,
+            environment_probe=namespace_final_probe,
+        )
+        if namespace_execution != namespace_probe_execution:
+            raise WarehouseW3EnvironmentReceiptError(
+                "namespace probe execution object differs"
+            )
         _validate_relocation_probe_equivalence(
             candidate_probe,
-            simulated_final_probe,
-            final_probe,
+            namespace_final_probe,
             content=content_receipt,
+        )
+        _validate_live_rehash(
+            imported_candidate_rehash,
+            phase="imported_candidate",
+            content=content_receipt,
+            expected_root=imported_root,
         )
         _validate_live_rehash(
             relocation_pre_rehash,
@@ -2845,9 +3402,11 @@ class EnvironmentRelocationReceipt:
             "plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
             "content_receipt_sha256": content_receipt.raw_sha256,
             "final_environment_path": str(final_root),
+            "imported_candidate_environment_path": str(imported_root),
             "candidate_probe": json.loads(candidate_probe.raw),
-            "simulated_final_probe": json.loads(simulated_final_probe.raw),
-            "final_probe": json.loads(final_probe.raw),
+            "namespace_final_probe": json.loads(namespace_final_probe.raw),
+            "namespace_probe_execution": json.loads(namespace_probe_execution.raw),
+            "imported_candidate_rehash": json.loads(imported_candidate_rehash.raw),
             "relocation_pre_rehash": json.loads(relocation_pre_rehash.raw),
             "relocation_post_rehash": json.loads(relocation_post_rehash.raw),
             "retry": False,
@@ -2872,9 +3431,11 @@ class EnvironmentRelocationReceipt:
                     "plan_sha256",
                     "content_receipt_sha256",
                     "final_environment_path",
+                    "imported_candidate_environment_path",
                     "candidate_probe",
-                    "simulated_final_probe",
-                    "final_probe",
+                    "namespace_final_probe",
+                    "namespace_probe_execution",
+                    "imported_candidate_rehash",
                     "relocation_pre_rehash",
                     "relocation_post_rehash",
                     "retry",
@@ -2897,10 +3458,16 @@ class EnvironmentRelocationReceipt:
             return _canonical_json(value[field])
 
         candidate = EnvironmentProbeFact.from_bytes(nested_bytes("candidate_probe"))
-        simulated = EnvironmentProbeFact.from_bytes(
-            nested_bytes("simulated_final_probe")
+        namespace_final = EnvironmentProbeFact.from_bytes(
+            nested_bytes("namespace_final_probe")
         )
-        final = EnvironmentProbeFact.from_bytes(nested_bytes("final_probe"))
+        namespace_execution = NamespaceProbeExecutionFact.from_bytes(
+            nested_bytes("namespace_probe_execution"),
+            environment_probe=namespace_final,
+        )
+        imported = LiveEnvironmentRehashFact.from_bytes(
+            nested_bytes("imported_candidate_rehash")
+        )
         pre = LiveEnvironmentRehashFact.from_bytes(
             nested_bytes("relocation_pre_rehash")
         )
@@ -2908,15 +3475,18 @@ class EnvironmentRelocationReceipt:
             nested_bytes("relocation_post_rehash")
         )
         expected_final = str(derive_final_environment_path(content_receipt))
+        imported_path = _absolute_path(
+            value["imported_candidate_environment_path"],
+            field="imported candidate environment path",
+        )
         if (
             value["content_receipt_sha256"] != content_receipt.raw_sha256
             or value["final_environment_path"] != expected_final
             or Path(candidate.environment_root).name != "environment"
             or candidate.environment_root == expected_final
-            or not _is_simulated_final_path(
-                Path(simulated.environment_root),
-                content_receipt,
-            )
+            or namespace_final.environment_root != expected_final
+            or Path(imported_path).name != "environment"
+            or imported_path in {candidate.environment_root, expected_final}
         ):
             raise WarehouseW3EnvironmentReceiptError(
                 "environment relocation content or path binding differs"
@@ -2928,22 +3498,21 @@ class EnvironmentRelocationReceipt:
             content=content_receipt,
         )
         _validate_probe(
-            simulated,
-            phase="simulated_final",
-            root=Path(simulated.environment_root),
-            content=content_receipt,
-        )
-        _validate_probe(
-            final,
-            phase="final",
+            namespace_final,
+            phase="namespace_final",
             root=Path(expected_final),
             content=content_receipt,
         )
         _validate_relocation_probe_equivalence(
             candidate,
-            simulated,
-            final,
+            namespace_final,
             content=content_receipt,
+        )
+        _validate_live_rehash(
+            imported,
+            phase="imported_candidate",
+            content=content_receipt,
+            expected_root=Path(imported_path),
         )
         _validate_live_rehash(pre, phase="relocation_pre", content=content_receipt)
         _validate_live_rehash(post, phase="relocation_post", content=content_receipt)
@@ -2951,9 +3520,11 @@ class EnvironmentRelocationReceipt:
         for field, item in (
             ("content_receipt_sha256", content_receipt.raw_sha256),
             ("final_environment_path", expected_final),
+            ("imported_candidate_environment_path", imported_path),
             ("candidate_probe", candidate),
-            ("simulated_final_probe", simulated),
-            ("final_probe", final),
+            ("namespace_final_probe", namespace_final),
+            ("namespace_probe_execution", namespace_execution),
+            ("imported_candidate_rehash", imported),
             ("relocation_pre_rehash", pre),
             ("relocation_post_rehash", post),
             ("raw", raw),
@@ -2961,140 +3532,6 @@ class EnvironmentRelocationReceipt:
         ):
             object.__setattr__(instance, field, item)
         return instance
-
-
-def acquire_environment_relocation_receipt(
-    content_receipt: WarehouseEnvironmentContentReceipt,
-    *,
-    candidate_environment_root: Path,
-    simulated_final_environment_root: Path,
-    probe_reader: SubprocessEnvironmentProbeReader,
-    live_reader: FilesystemLiveEnvironmentReader,
-) -> EnvironmentRelocationReceipt:
-    """Acquire candidate/simulated/final probes and stable final-root rehashes."""
-
-    content_receipt = _validated_content(content_receipt)
-    if type(probe_reader) is not SubprocessEnvironmentProbeReader:
-        raise TypeError("probe_reader must be exact SubprocessEnvironmentProbeReader")
-    return _acquire_environment_relocation_receipt(
-        content_receipt,
-        candidate_environment_root=candidate_environment_root,
-        simulated_final_environment_root=simulated_final_environment_root,
-        probe_reader=probe_reader,
-        live_reader=live_reader,
-    )
-
-
-def acquire_environment_relocation_receipt_for_test(
-    content_receipt: WarehouseEnvironmentContentReceipt,
-    *,
-    candidate_environment_root: Path,
-    simulated_final_environment_root: Path,
-    probe_reader: EnvironmentProbeReader,
-    live_reader: FilesystemLiveEnvironmentReader,
-) -> EnvironmentRelocationReceipt:
-    """Explicit synthetic probe seam for receipt-ordering tests only."""
-
-    return _acquire_environment_relocation_receipt(
-        _validated_content(content_receipt),
-        candidate_environment_root=candidate_environment_root,
-        simulated_final_environment_root=simulated_final_environment_root,
-        probe_reader=probe_reader,
-        live_reader=live_reader,
-    )
-
-
-def _acquire_environment_relocation_receipt(
-    content_receipt: WarehouseEnvironmentContentReceipt,
-    *,
-    candidate_environment_root: Path,
-    simulated_final_environment_root: Path,
-    probe_reader: EnvironmentProbeReader,
-    live_reader: FilesystemLiveEnvironmentReader,
-) -> EnvironmentRelocationReceipt:
-    if not isinstance(candidate_environment_root, Path) or not isinstance(
-        simulated_final_environment_root,
-        Path,
-    ):
-        raise TypeError("candidate and simulated-final roots must be Paths")
-    _absolute_path(str(candidate_environment_root), field="candidate environment root")
-    _absolute_path(
-        str(simulated_final_environment_root),
-        field="simulated-final environment root",
-    )
-    final_root = derive_final_environment_path(content_receipt)
-    if (
-        candidate_environment_root.name != "environment"
-        or candidate_environment_root == final_root
-        or not _is_simulated_final_path(
-            simulated_final_environment_root,
-            content_receipt,
-        )
-    ):
-        raise WarehouseW3EnvironmentReceiptError(
-            "candidate or simulated-final input path differs"
-        )
-    probe = getattr(probe_reader, "probe", None)
-    rehash = getattr(live_reader, "rehash", None)
-    if not callable(probe) or not callable(rehash):
-        raise TypeError("probe_reader and live_reader lack their exact methods")
-    if type(live_reader) is not FilesystemLiveEnvironmentReader:
-        raise TypeError("live_reader must be exact FilesystemLiveEnvironmentReader")
-    candidate_fact = probe(
-        candidate_environment_root,
-        phase="candidate",
-        content_receipt=content_receipt,
-    )
-    _validate_probe(
-        candidate_fact,
-        phase="candidate",
-        root=candidate_environment_root,
-        content=content_receipt,
-    )
-    simulated_fact = probe(
-        simulated_final_environment_root,
-        phase="simulated_final",
-        content_receipt=content_receipt,
-    )
-    _validate_probe(
-        simulated_fact,
-        phase="simulated_final",
-        root=simulated_final_environment_root,
-        content=content_receipt,
-    )
-    pre = rehash(
-        final_root,
-        phase="relocation_pre",
-        content_receipt=content_receipt,
-        generic_receipt=content_receipt.generic_receipt,
-    )
-    _validate_live_rehash(pre, phase="relocation_pre", content=content_receipt)
-    final_fact = probe(
-        final_root,
-        phase="final",
-        content_receipt=content_receipt,
-    )
-    _validate_probe(
-        final_fact,
-        phase="final",
-        root=final_root,
-        content=content_receipt,
-    )
-    post = rehash(
-        final_root,
-        phase="relocation_post",
-        content_receipt=content_receipt,
-        generic_receipt=content_receipt.generic_receipt,
-    )
-    _validate_live_rehash(post, phase="relocation_post", content=content_receipt)
-    return EnvironmentRelocationReceipt.create(
-        content_receipt,
-        candidate_probe=candidate_fact,
-        simulated_final_probe=simulated_fact,
-        final_probe=final_fact,
-        relocation_pre_rehash=pre,
-        relocation_post_rehash=post,
-    )
 
 
 def verify_live_environment(
@@ -3136,18 +3573,19 @@ __all__ = [
     "ImportIdentity",
     "InstalledWheelMember",
     "LiveEnvironmentRehashFact",
+    "NamespaceProbeExecutionFact",
     "NativeElfIdentity",
+    "NonRootNamespaceEnvironmentProbeReader",
     "SubprocessEnvironmentProbeReader",
     "WarehouseEnvironmentContentReceipt",
     "WarehouseEnvironmentEvidence",
     "WarehouseW3EnvironmentReceiptError",
     "WheelInstallationProvenance",
-    "acquire_environment_relocation_receipt",
-    "acquire_environment_relocation_receipt_for_test",
     "acquire_warehouse_environment_content",
     "acquire_warehouse_environment_content_for_test",
     "discover_environment_external_runtime_paths",
     "derive_final_environment_path",
     "validate_environment_probe_fact",
     "verify_live_environment",
+    "verify_namespace_probe_execution_binary",
 ]

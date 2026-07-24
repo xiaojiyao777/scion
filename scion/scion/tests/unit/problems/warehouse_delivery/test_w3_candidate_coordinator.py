@@ -11,6 +11,9 @@ from scion.problems.warehouse_delivery.w3_candidate_coordinator import (
     WarehouseW3CandidateCoordinatorError,
     prepare_w3_candidate,
 )
+from scion.problems.warehouse_delivery.w3_candidate_gate import (
+    derive_namespace_probe_evidence_sha256,
+)
 
 COMMIT = "1" * 40
 
@@ -79,15 +82,15 @@ def test_launch_inventory_rejects_symlink_blob(
         coordinator._tracked_launch_paths(tmp_path, COMMIT)
 
 
-def test_simulated_evidence_digest_binds_all_three_inputs() -> None:
-    digest = coordinator._simulated_evidence_sha256(b"a", b"b", b"c")
+def test_namespace_evidence_digest_binds_all_four_inputs() -> None:
+    digest = derive_namespace_probe_evidence_sha256(b"a", b"b", b"c", b"d")
     assert (
         digest
         == hashlib.sha256(
-            b"scion.w3-candidate-simulated-relocation-evidence.v1\0abc"
+            b"scion.w3-candidate-namespace-final-probe-evidence.v1\0abcd"
         ).hexdigest()
     )
-    assert digest != coordinator._simulated_evidence_sha256(b"a", b"b", b"d")
+    assert digest != derive_namespace_probe_evidence_sha256(b"a", b"b", b"c", b"e")
 
 
 def test_prepare_candidate_rejects_root_before_any_path_read(
@@ -103,6 +106,7 @@ def test_prepare_candidate_rejects_root_before_any_path_read(
             remote_ref="refs/heads/test",
             native_record_path=Path("/absent"),
             runtime_python=Path("/usr/bin/python3.12"),
+            source_acceptance_path=Path("/absent"),
         )
 
 
@@ -118,7 +122,8 @@ def test_candidate_reopen_rehashes_and_reprobes_both_relocation_roots(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     candidate_probe = SimpleNamespace(raw=b"candidate")
-    simulated_probe = SimpleNamespace(raw=b"simulated")
+    namespace_probe = SimpleNamespace(raw=b"namespace")
+    namespace_execution = SimpleNamespace(raw=b"execution")
     semantic = SimpleNamespace(raw=b"semantic")
     candidate_root = tmp_path / "selection" / "candidate"
     simulated_root = tmp_path / "simulated-final"
@@ -132,13 +137,15 @@ def test_candidate_reopen_rehashes_and_reprobes_both_relocation_roots(
         ),
         semantic_environment=semantic,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_probe,
-        simulated_relocation=SimpleNamespace(
-            simulated_final_environment_root=str(simulated_root),
-            evidence_receipt_sha256=coordinator._simulated_evidence_sha256(
+        namespace_final_probe=namespace_probe,
+        namespace_probe_execution=namespace_execution,
+        namespace_probe_ref=SimpleNamespace(
+            physical_environment_root=str(simulated_root),
+            evidence_receipt_sha256=derive_namespace_probe_evidence_sha256(
                 semantic.raw,
                 candidate_probe.raw,
-                simulated_probe.raw,
+                namespace_probe.raw,
+                namespace_execution.raw,
             ),
         ),
     )
@@ -153,7 +160,13 @@ def test_candidate_reopen_rehashes_and_reprobes_both_relocation_roots(
         def probe(self, root, *, phase, content_receipt):
             assert content_receipt is semantic
             probed.append((root, phase))
-            return candidate_probe if phase == "candidate" else simulated_probe
+            return candidate_probe
+
+    class NamespaceProbe:
+        def probe(self, root, *, content_receipt):
+            assert content_receipt is semantic
+            probed.append((root, "namespace_final"))
+            return namespace_probe, namespace_execution
 
     monkeypatch.setattr(coordinator, "verify_environment_content", verify)
     monkeypatch.setattr(
@@ -161,13 +174,18 @@ def test_candidate_reopen_rehashes_and_reprobes_both_relocation_roots(
         "SubprocessEnvironmentProbeReader",
         Probe,
     )
+    monkeypatch.setattr(
+        coordinator,
+        "NonRootNamespaceEnvironmentProbeReader",
+        NamespaceProbe,
+    )
 
     coordinator._reverify_environment_evidence(prepared, closure)
 
     assert rehashed == [candidate_root / "environment", simulated_root]
     assert probed == [
         (candidate_root / "environment", "candidate"),
-        (simulated_root, "simulated_final"),
+        (simulated_root, "namespace_final"),
     ]
 
 
@@ -176,7 +194,8 @@ def test_candidate_reopen_rejects_changed_relocation_evidence(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     candidate_probe = SimpleNamespace(raw=b"candidate")
-    simulated_probe = SimpleNamespace(raw=b"simulated")
+    namespace_probe = SimpleNamespace(raw=b"namespace")
+    namespace_execution = SimpleNamespace(raw=b"execution")
     prepared = SimpleNamespace(
         candidate_root=tmp_path / "candidate",
         intent=SimpleNamespace(selection_directory=str(tmp_path)),
@@ -185,9 +204,10 @@ def test_candidate_reopen_rejects_changed_relocation_evidence(
         environment_content=SimpleNamespace(external_runtime=()),
         semantic_environment=SimpleNamespace(raw=b"semantic"),
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_probe,
-        simulated_relocation=SimpleNamespace(
-            simulated_final_environment_root=str(tmp_path / "simulated"),
+        namespace_final_probe=namespace_probe,
+        namespace_probe_execution=namespace_execution,
+        namespace_probe_ref=SimpleNamespace(
+            physical_environment_root=str(tmp_path / "simulated"),
             evidence_receipt_sha256="0" * 64,
         ),
     )
@@ -200,9 +220,15 @@ def test_candidate_reopen_rejects_changed_relocation_evidence(
     monkeypatch.setattr(
         coordinator,
         "SubprocessEnvironmentProbeReader",
+        lambda: SimpleNamespace(probe=lambda *args, **kwargs: candidate_probe),
+    )
+    monkeypatch.setattr(
+        coordinator,
+        "NonRootNamespaceEnvironmentProbeReader",
         lambda: SimpleNamespace(
             probe=lambda *args, **kwargs: (
-                candidate_probe if kwargs["phase"] == "candidate" else simulated_probe
+                namespace_probe,
+                namespace_execution,
             )
         ),
     )

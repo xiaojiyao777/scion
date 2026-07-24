@@ -87,13 +87,12 @@ from scion.problems.warehouse_delivery.w3_environment_receipts import (
     InstalledWheelMember,
     LiveEnvironmentRehashFact,
     NativeElfIdentity,
+    NamespaceProbeExecutionFact,
     SubprocessEnvironmentProbeReader,
     WarehouseEnvironmentContentReceipt,
     WarehouseEnvironmentEvidence,
     WarehouseW3EnvironmentReceiptError,
     WheelInstallationProvenance,
-    acquire_environment_relocation_receipt,
-    acquire_environment_relocation_receipt_for_test,
     acquire_warehouse_environment_content,
     acquire_warehouse_environment_content_for_test,
     discover_environment_external_runtime_paths,
@@ -109,7 +108,7 @@ from scion.problems.warehouse_delivery.w3_wheel import (
 )
 from scion.runtime.execution.environment_integrity import EnvironmentContentReceipt
 
-PLAN_SHA = "49196769c0c70f56714791a80e6c683d31d547c5f4e47cc7216ea1b5fda81eb6"
+PLAN_SHA = "8042f4aad34a3396e27e6cd0f1562f35b003f2603ec623d1092d16e78d660734"
 SITE = "lib/python3.12/site-packages"
 NATIVE = (
     f"{SITE}/scion/runtime/native/_spawn_into_cgroup.cpython-312-x86_64-linux-gnu.so"
@@ -143,7 +142,19 @@ def _wheel_receipt(
     native_size_bytes: int,
     wheel_sha256: str | None = None,
 ) -> OfflineDoubleWheelReceipt:
-    paths = tuple(sorted((*FIXED_REQUIRED_WHEEL_MEMBERS, NATIVE_MEMBER)))
+    paths = tuple(
+        sorted(
+            (
+                *FIXED_REQUIRED_WHEEL_MEMBERS,
+                NATIVE_MEMBER,
+                "scion-0.1.0.dist-info/METADATA",
+                "scion-0.1.0.dist-info/WHEEL",
+                "scion-0.1.0.dist-info/entry_points.txt",
+                "scion-0.1.0.dist-info/top_level.txt",
+                "scion-0.1.0.dist-info/RECORD",
+            )
+        )
+    )
     members = tuple(
         WheelMember(
             path=path,
@@ -657,7 +668,7 @@ def test_discovery_runs_only_the_fixed_local_read_only_probe(
     external_library.write_bytes(b"\x7fELFexternal library bytes")
     observation = _canonical(
         {
-            "schema": "scion.w3-environment-runtime-observation.v1",
+            "schema": "scion.w3-environment-runtime-observation.v2",
             "sys_executable": str(environment / "bin" / "python"),
             "sys_prefix": str(environment),
             "sys_path": [str(environment / SITE)],
@@ -671,6 +682,11 @@ def test_discovery_runs_only_the_fixed_local_read_only_probe(
             "mapped_shared_libraries": [str(external_library)],
             "dbus_acquired": True,
             "dbus_unique_name": ":1.91",
+            "effective_uid": os.geteuid(),
+            "effective_gid": os.getegid(),
+            "no_new_privs": 0,
+            "network_namespace": "net:[1]",
+            "mount_namespace": "mnt:[2]",
         }
     )
     calls: list[tuple[tuple[str, ...], dict[str, str]]] = []
@@ -882,7 +898,7 @@ class _ProbeReader:
         self.calls.append((environment_root, phase))
         root = (
             Path("/wrong/final/environment")
-            if self.wrong_final_root and phase == "final"
+            if self.wrong_final_root and phase == "namespace_final"
             else environment_root
         )
         sys_path = (
@@ -893,7 +909,7 @@ class _ProbeReader:
                 if self.outside_sys_path
                 else (
                     root / "lib" / "python3.12"
-                    if self.mismatched_final_sys_path and phase == "final"
+                    if self.mismatched_final_sys_path and phase == "namespace_final"
                     else root / SITE
                 )
             )
@@ -987,17 +1003,36 @@ def _relocation_receipt(
         phase="candidate",
         content_receipt=content,
     )
-    simulated_fact = reader.probe(
-        simulated,
-        phase="simulated_final",
+    namespace_fact = reader.probe(
+        final,
+        phase="namespace_final",
         content_receipt=content,
     )
-    final_fact = reader.probe(
-        final,
-        phase="final",
-        content_receipt=content,
+    namespace_execution = NamespaceProbeExecutionFact.create(
+        physical_environment_root=simulated,
+        visible_environment_root=final,
+        environment_probe=namespace_fact,
+        producer_euid=1000,
+        producer_egid=1000,
+        no_new_privs=True,
+        parent_network_namespace="net:[1]",
+        child_network_namespace="net:[2]",
+        parent_mount_namespace="mnt:[3]",
+        child_mount_namespace="mnt:[4]",
+        bwrap_sha256="a" * 64,
+        bwrap_device=1,
+        bwrap_inode=2,
+        bwrap_size_bytes=3,
+        bwrap_mode=0o755,
     )
     observed = content.generic_receipt if observed_generic is None else observed_generic
+    imported_root = candidate.parent / "imported" / "environment"
+    imported = LiveEnvironmentRehashFact._from_observed(
+        phase="imported_candidate",
+        environment_root=imported_root,
+        content_receipt=content,
+        observed_generic_receipt=observed,
+    )
     pre = LiveEnvironmentRehashFact._from_observed(
         phase="relocation_pre",
         environment_root=final,
@@ -1013,8 +1048,9 @@ def _relocation_receipt(
     return EnvironmentRelocationReceipt.create(
         content,
         candidate_probe=candidate_fact,
-        simulated_final_probe=simulated_fact,
-        final_probe=final_fact,
+        namespace_final_probe=namespace_fact,
+        namespace_probe_execution=namespace_execution,
+        imported_candidate_rehash=imported,
         relocation_pre_rehash=pre,
         relocation_post_rehash=post,
     )
@@ -1034,8 +1070,7 @@ def test_relocation_owner_derives_final_path_and_binds_all_probe_rehash_facts(
     assert receipt.final_environment_path == str(final)
     assert probe.calls == [
         (candidate, "candidate"),
-        (simulated, "simulated_final"),
-        (final, "final"),
+        (final, "namespace_final"),
     ]
     assert receipt.relocation_pre_rehash.environment_root == str(final)
     assert receipt.relocation_post_rehash.environment_root == str(final)
@@ -1055,7 +1090,7 @@ def test_relocation_rejects_wrong_final_and_simulated_paths(
     candidate, simulated = _relocation_inputs(semantic_inputs, content)
     with pytest.raises(
         WarehouseW3EnvironmentReceiptError,
-        match="final environment probe",
+        match="namespace probe execution boundary",
     ):
         _relocation_receipt(
             content,
@@ -1110,12 +1145,12 @@ def test_relocation_rejects_wrong_final_and_simulated_paths(
 
     with pytest.raises(
         WarehouseW3EnvironmentReceiptError,
-        match="simulated-final environment path",
+        match="namespace probe execution boundary",
     ):
         _relocation_receipt(
             content,
             candidate,
-            semantic_inputs["tmp_path"] / "not-final",
+            derive_final_environment_path(content),
         )
 
 
@@ -1229,15 +1264,9 @@ def test_runtime_live_rehash_interface_is_exact_for_preclaim_and_completion(
     )
     assert fact.observed_generic_receipt == content.generic_receipt
 
-    candidate, simulated = _relocation_inputs(semantic_inputs, content)
-    with pytest.raises(TypeError, match="exact FilesystemLiveEnvironmentReader"):
-        acquire_environment_relocation_receipt_for_test(
-            content,
-            candidate_environment_root=candidate,
-            simulated_final_environment_root=simulated,
-            probe_reader=_ProbeReader(),
-            live_reader=_ExpectedOnlyLiveReader(),
-        )
+    if os.geteuid() == 0:
+        with pytest.raises(PermissionError, match="rejects effective UID zero"):
+            SubprocessEnvironmentProbeReader()
 
 
 def test_module_is_problem_owned_and_has_no_mutation_capability() -> None:

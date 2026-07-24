@@ -1,9 +1,9 @@
 """Problem-owned closure of one not-yet-installed Warehouse W3 candidate.
 
 The gate consumes producer-owned exact wheel and environment receipt types.
-``CandidateSimulatedRelocationRef`` is deliberately only a gate-local adapter:
-it binds candidate and simulated-final probes to the digest of their external
-evidence without claiming that root relocation has happened.  The sole final
+``CandidateNamespaceFinalProbeRef`` is deliberately only a gate-local adapter:
+it binds candidate and non-root namespace-final probes to the digest of their
+external evidence without claiming that root relocation has happened. The sole final
 canonical output owned here is ``CandidateGateReceipt``.
 
 This module has no root, mount, D-Bus, cgroup mutation, nonce claim, or
@@ -33,7 +33,9 @@ from scion.problems.warehouse_delivery.w3_composition import (
 )
 from scion.problems.warehouse_delivery.w3_environment_receipts import (
     EnvironmentProbeFact,
+    NamespaceProbeExecutionFact,
     WarehouseEnvironmentContentReceipt,
+    derive_final_environment_path,
     validate_environment_probe_fact,
 )
 from scion.problems.warehouse_delivery.w3_installation import (
@@ -56,8 +58,8 @@ EXPECTED_CANDIDATE_COMPOSITION_STATE = (
 EXPECTED_CELL_COUNT = 43
 W3_WHEEL_LOGICAL_PATH = "artifacts/scion-w3-offline-double.whl"
 W3_WHEEL_SEALED_PATH = "sealed/artifacts/scion-w3-offline-double.whl"
-W3_WHEEL_RECEIPT_LOGICAL_PATH = "receipts/offline-double-wheel.v2.json"
-W3_WHEEL_RECEIPT_SEALED_PATH = "sealed/receipts/offline-double-wheel.v2.json"
+W3_WHEEL_RECEIPT_LOGICAL_PATH = "receipts/offline-double-wheel.v3.json"
+W3_WHEEL_RECEIPT_SEALED_PATH = "sealed/receipts/offline-double-wheel.v3.json"
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _ABSENCE_ROLES = (
@@ -105,6 +107,33 @@ _UINT64_MAX = (1 << 64) - 1
 
 class WarehouseW3CandidateGateError(RuntimeError):
     """The candidate artifact, dry-root, or absence closure differs."""
+
+
+def derive_namespace_probe_evidence_sha256(
+    semantic_raw: bytes,
+    candidate_probe_raw: bytes,
+    namespace_probe_raw: bytes,
+    namespace_execution_raw: bytes,
+) -> str:
+    """Derive the complete non-root namespace probe evidence identity."""
+
+    if any(
+        type(item) is not bytes or not item
+        for item in (
+            semantic_raw,
+            candidate_probe_raw,
+            namespace_probe_raw,
+            namespace_execution_raw,
+        )
+    ):
+        raise TypeError("namespace probe evidence inputs must be nonempty bytes")
+    return hashlib.sha256(
+        b"scion.w3-candidate-namespace-final-probe-evidence.v1\0"
+        + semantic_raw
+        + candidate_probe_raw
+        + namespace_probe_raw
+        + namespace_execution_raw
+    ).hexdigest()
 
 
 def _canonical_json(value: object) -> bytes:
@@ -336,7 +365,7 @@ def _absence_observation_sha256(
     candidate_verification_sha256: str,
     double_wheel_receipt_sha256: str,
     semantic_environment_receipt_sha256: str,
-    simulated_relocation_ref_sha256: str,
+    namespace_probe_ref_sha256: str,
 ) -> str:
     return hashlib.sha256(
         b"scion.w3-candidate-absence-observation.v2\0"
@@ -350,7 +379,7 @@ def _absence_observation_sha256(
                 "semantic_environment_receipt_sha256": (
                     semantic_environment_receipt_sha256
                 ),
-                "simulated_relocation_ref_sha256": (simulated_relocation_ref_sha256),
+                "namespace_probe_ref_sha256": (namespace_probe_ref_sha256),
             }
         )
     ).hexdigest()
@@ -695,8 +724,8 @@ def _validate_probe(
 
 
 @dataclass(frozen=True, slots=True, init=False)
-class CandidateSimulatedRelocationRef:
-    """Gate-local binding for non-root simulated-final probe evidence."""
+class CandidateNamespaceFinalProbeRef:
+    """Gate-local binding for one non-root exact-future-path probe."""
 
     evidence_receipt_sha256: str
     selection_key: str
@@ -706,22 +735,24 @@ class CandidateSimulatedRelocationRef:
     semantic_environment_receipt_sha256: str
     environment_content_receipt_sha256: str
     candidate_probe_sha256: str
-    simulated_final_probe_sha256: str
+    namespace_final_probe_sha256: str
+    namespace_probe_execution_sha256: str
     candidate_environment_root: str
-    simulated_final_environment_root: str
+    physical_environment_root: str
+    visible_environment_root: str
     filesystem_mutated: bool
     raw: bytes
     raw_sha256: str
 
-    def __new__(cls) -> "CandidateSimulatedRelocationRef":
+    def __new__(cls) -> "CandidateNamespaceFinalProbeRef":
         del cls
         raise TypeError(
-            "CandidateSimulatedRelocationRef must be parsed from exact bytes"
+            "CandidateNamespaceFinalProbeRef must be parsed from exact bytes"
         )
 
     def __init_subclass__(cls, **kwargs: object) -> None:
         del kwargs
-        raise TypeError("CandidateSimulatedRelocationRef is final")
+        raise TypeError("CandidateNamespaceFinalProbeRef is final")
 
     @classmethod
     def create(
@@ -734,8 +765,9 @@ class CandidateSimulatedRelocationRef:
         installation_sha256: str,
         semantic_environment: WarehouseEnvironmentContentReceipt,
         candidate_probe: EnvironmentProbeFact,
-        simulated_final_probe: EnvironmentProbeFact,
-    ) -> "CandidateSimulatedRelocationRef":
+        namespace_final_probe: EnvironmentProbeFact,
+        namespace_probe_execution: NamespaceProbeExecutionFact,
+    ) -> "CandidateNamespaceFinalProbeRef":
         if type(semantic_environment) is not WarehouseEnvironmentContentReceipt:
             raise TypeError(
                 "semantic_environment must be exact "
@@ -743,9 +775,10 @@ class CandidateSimulatedRelocationRef:
             )
         if (
             type(candidate_probe) is not EnvironmentProbeFact
-            or type(simulated_final_probe) is not EnvironmentProbeFact
+            or type(namespace_final_probe) is not EnvironmentProbeFact
+            or type(namespace_probe_execution) is not NamespaceProbeExecutionFact
         ):
-            raise TypeError("probes must be exact EnvironmentProbeFact")
+            raise TypeError("namespace probe dependencies have inexact types")
         _validate_probe(
             candidate_probe,
             phase="candidate",
@@ -753,15 +786,23 @@ class CandidateSimulatedRelocationRef:
             expected_root=Path(candidate_probe.environment_root),
         )
         _validate_probe(
-            simulated_final_probe,
-            phase="simulated_final",
+            namespace_final_probe,
+            phase="namespace_final",
             content=semantic_environment,
-            expected_root=Path(simulated_final_probe.environment_root),
+            expected_root=derive_final_environment_path(semantic_environment),
         )
+        execution = NamespaceProbeExecutionFact.from_bytes(
+            namespace_probe_execution.raw,
+            environment_probe=namespace_final_probe,
+        )
+        if execution != namespace_probe_execution:
+            raise WarehouseW3CandidateGateError(
+                "namespace probe execution object differs"
+            )
         return cls.from_bytes(
             _canonical_json(
                 {
-                    "schema": "scion.w3-candidate-simulated-relocation-ref.v2",
+                    "schema": "scion.w3-candidate-namespace-final-probe-ref.v1",
                     "evidence_receipt_sha256": evidence_receipt_sha256,
                     "selection_key": selection_key,
                     "launch_id": launch_id,
@@ -774,10 +815,16 @@ class CandidateSimulatedRelocationRef:
                         semantic_environment.generic_receipt_sha256
                     ),
                     "candidate_probe_sha256": candidate_probe.raw_sha256,
-                    "simulated_final_probe_sha256": (simulated_final_probe.raw_sha256),
+                    "namespace_final_probe_sha256": (namespace_final_probe.raw_sha256),
+                    "namespace_probe_execution_sha256": (
+                        namespace_probe_execution.raw_sha256
+                    ),
                     "candidate_environment_root": (candidate_probe.environment_root),
-                    "simulated_final_environment_root": (
-                        simulated_final_probe.environment_root
+                    "physical_environment_root": (
+                        namespace_probe_execution.physical_environment_root
+                    ),
+                    "visible_environment_root": (
+                        namespace_probe_execution.visible_environment_root
                     ),
                     "filesystem_mutated": False,
                 }
@@ -791,14 +838,14 @@ class CandidateSimulatedRelocationRef:
         raw: bytes,
         *,
         semantic_environment: WarehouseEnvironmentContentReceipt,
-    ) -> "CandidateSimulatedRelocationRef":
+    ) -> "CandidateNamespaceFinalProbeRef":
         if type(semantic_environment) is not WarehouseEnvironmentContentReceipt:
             raise TypeError(
                 "semantic_environment must be exact "
                 "WarehouseEnvironmentContentReceipt"
             )
         value = _exact_fields(
-            _decode_canonical(raw, label="candidate simulated-relocation reference"),
+            _decode_canonical(raw, label="candidate namespace-final reference"),
             frozenset(
                 {
                     "schema",
@@ -810,23 +857,25 @@ class CandidateSimulatedRelocationRef:
                     "semantic_environment_receipt_sha256",
                     "environment_content_receipt_sha256",
                     "candidate_probe_sha256",
-                    "simulated_final_probe_sha256",
+                    "namespace_final_probe_sha256",
+                    "namespace_probe_execution_sha256",
                     "candidate_environment_root",
-                    "simulated_final_environment_root",
+                    "physical_environment_root",
+                    "visible_environment_root",
                     "filesystem_mutated",
                 }
             ),
-            label="candidate simulated-relocation reference",
+            label="candidate namespace-final reference",
         )
         if (
-            value["schema"] != "scion.w3-candidate-simulated-relocation-ref.v2"
+            value["schema"] != "scion.w3-candidate-namespace-final-probe-ref.v1"
             or value["filesystem_mutated"] is not False
         ):
             raise WarehouseW3CandidateGateError(
-                "candidate simulated-relocation authority differs"
+                "candidate namespace-final authority differs"
             )
         fields: dict[str, object] = {
-            name: _sha256(value[name], field=f"simulated relocation.{name}")
+            name: _sha256(value[name], field=f"namespace final.{name}")
             for name in (
                 "evidence_receipt_sha256",
                 "selection_key",
@@ -836,7 +885,8 @@ class CandidateSimulatedRelocationRef:
                 "semantic_environment_receipt_sha256",
                 "environment_content_receipt_sha256",
                 "candidate_probe_sha256",
-                "simulated_final_probe_sha256",
+                "namespace_final_probe_sha256",
+                "namespace_probe_execution_sha256",
             )
         }
         if (
@@ -846,35 +896,34 @@ class CandidateSimulatedRelocationRef:
             != semantic_environment.generic_receipt_sha256
         ):
             raise WarehouseW3CandidateGateError(
-                "candidate simulated-relocation environment binding differs"
+                "candidate namespace-final environment binding differs"
             )
         candidate_root = _absolute_path(
             value["candidate_environment_root"],
             field="candidate environment root",
         )
-        simulated_root = _absolute_path(
-            value["simulated_final_environment_root"],
-            field="simulated-final environment root",
+        physical_root = _absolute_path(
+            value["physical_environment_root"],
+            field="namespace physical environment root",
         )
-        expected_suffix = (
-            *_SIMULATED_FINAL_SUFFIX,
-            fields["environment_content_receipt_sha256"],
+        visible_root = _absolute_path(
+            value["visible_environment_root"],
+            field="namespace visible environment root",
         )
-        simulated_parts = PurePosixPath(simulated_root).parts
-        root_final = f"/{'/'.join(expected_suffix)}"
+        expected_visible = str(derive_final_environment_path(semantic_environment))
         if (
-            candidate_root == simulated_root
-            or simulated_root == root_final
-            or len(simulated_parts) <= len(expected_suffix)
-            or tuple(simulated_parts[-len(expected_suffix) :]) != expected_suffix
+            candidate_root == physical_root
+            or physical_root == visible_root
+            or visible_root != expected_visible
         ):
             raise WarehouseW3CandidateGateError(
-                "simulated-final path is not one non-root relocation projection"
+                "namespace-final physical or visible path differs"
             )
         fields.update(
             {
                 "candidate_environment_root": candidate_root,
-                "simulated_final_environment_root": simulated_root,
+                "physical_environment_root": physical_root,
+                "visible_environment_root": visible_root,
                 "filesystem_mutated": False,
                 "raw": raw,
                 "raw_sha256": hashlib.sha256(raw).hexdigest(),
@@ -947,9 +996,9 @@ class CandidateAbsenceFacts:
     double_wheel_receipt_sha256: str
     semantic_environment_receipt_sha256: str
     candidate_probe_sha256: str
-    simulated_final_probe_sha256: str
-    simulated_relocation_ref_sha256: str
-    simulated_relocation_evidence_sha256: str
+    namespace_final_probe_sha256: str
+    namespace_probe_ref_sha256: str
+    namespace_probe_evidence_sha256: str
     observations: tuple[CandidateAbsenceObservation, ...]
     raw: bytes
     raw_sha256: str
@@ -977,9 +1026,9 @@ class CandidateAbsenceFacts:
         double_wheel_receipt_sha256: str,
         semantic_environment_receipt_sha256: str,
         candidate_probe_sha256: str,
-        simulated_final_probe_sha256: str,
-        simulated_relocation_ref_sha256: str,
-        simulated_relocation_evidence_sha256: str,
+        namespace_final_probe_sha256: str,
+        namespace_probe_ref_sha256: str,
+        namespace_probe_evidence_sha256: str,
         observations: tuple[CandidateAbsenceObservation, ...],
     ) -> "CandidateAbsenceFacts":
         if type(observations) is not tuple or any(
@@ -1005,12 +1054,10 @@ class CandidateAbsenceFacts:
                         semantic_environment_receipt_sha256
                     ),
                     "candidate_probe_sha256": candidate_probe_sha256,
-                    "simulated_final_probe_sha256": (simulated_final_probe_sha256),
-                    "simulated_relocation_ref_sha256": (
-                        simulated_relocation_ref_sha256
-                    ),
-                    "simulated_relocation_evidence_sha256": (
-                        simulated_relocation_evidence_sha256
+                    "namespace_final_probe_sha256": (namespace_final_probe_sha256),
+                    "namespace_probe_ref_sha256": (namespace_probe_ref_sha256),
+                    "namespace_probe_evidence_sha256": (
+                        namespace_probe_evidence_sha256
                     ),
                     "observations": [item.to_mapping() for item in observations],
                 }
@@ -1035,9 +1082,9 @@ class CandidateAbsenceFacts:
                     "double_wheel_receipt_sha256",
                     "semantic_environment_receipt_sha256",
                     "candidate_probe_sha256",
-                    "simulated_final_probe_sha256",
-                    "simulated_relocation_ref_sha256",
-                    "simulated_relocation_evidence_sha256",
+                    "namespace_final_probe_sha256",
+                    "namespace_probe_ref_sha256",
+                    "namespace_probe_evidence_sha256",
                     "observations",
                 }
             ),
@@ -1084,9 +1131,9 @@ class CandidateAbsenceFacts:
                 "double_wheel_receipt_sha256",
                 "semantic_environment_receipt_sha256",
                 "candidate_probe_sha256",
-                "simulated_final_probe_sha256",
-                "simulated_relocation_ref_sha256",
-                "simulated_relocation_evidence_sha256",
+                "namespace_final_probe_sha256",
+                "namespace_probe_ref_sha256",
+                "namespace_probe_evidence_sha256",
             )
         }
         subjects = _derived_absence_subjects(
@@ -1108,9 +1155,7 @@ class CandidateAbsenceFacts:
                 semantic_environment_receipt_sha256=bindings[
                     "semantic_environment_receipt_sha256"
                 ],
-                simulated_relocation_ref_sha256=bindings[
-                    "simulated_relocation_ref_sha256"
-                ],
+                namespace_probe_ref_sha256=bindings["namespace_probe_ref_sha256"],
             ):
                 raise WarehouseW3CandidateGateError(
                     "candidate absence observation is not mechanically derived"
@@ -1154,9 +1199,9 @@ class CandidateCompositionInspection:
     double_wheel_receipt_sha256: str
     semantic_environment_receipt_sha256: str
     candidate_probe_sha256: str
-    simulated_final_probe_sha256: str
-    simulated_relocation_ref_sha256: str
-    simulated_relocation_evidence_sha256: str
+    namespace_final_probe_sha256: str
+    namespace_probe_ref_sha256: str
+    namespace_probe_evidence_sha256: str
     manifest_sha256: str
     source_tree_identity_sha256: str
     state: str
@@ -1197,9 +1242,9 @@ class CandidateCompositionInspection:
         double_wheel_receipt_sha256: str,
         semantic_environment_receipt_sha256: str,
         candidate_probe_sha256: str,
-        simulated_final_probe_sha256: str,
-        simulated_relocation_ref_sha256: str,
-        simulated_relocation_evidence_sha256: str,
+        namespace_final_probe_sha256: str,
+        namespace_probe_ref_sha256: str,
+        namespace_probe_evidence_sha256: str,
         manifest_sha256: str,
         source_tree_identity_sha256: str,
         state: str,
@@ -1239,12 +1284,10 @@ class CandidateCompositionInspection:
                         semantic_environment_receipt_sha256
                     ),
                     "candidate_probe_sha256": candidate_probe_sha256,
-                    "simulated_final_probe_sha256": (simulated_final_probe_sha256),
-                    "simulated_relocation_ref_sha256": (
-                        simulated_relocation_ref_sha256
-                    ),
-                    "simulated_relocation_evidence_sha256": (
-                        simulated_relocation_evidence_sha256
+                    "namespace_final_probe_sha256": (namespace_final_probe_sha256),
+                    "namespace_probe_ref_sha256": (namespace_probe_ref_sha256),
+                    "namespace_probe_evidence_sha256": (
+                        namespace_probe_evidence_sha256
                     ),
                     "manifest_sha256": manifest_sha256,
                     "source_tree_identity_sha256": source_tree_identity_sha256,
@@ -1281,9 +1324,9 @@ class CandidateCompositionInspection:
                     "double_wheel_receipt_sha256",
                     "semantic_environment_receipt_sha256",
                     "candidate_probe_sha256",
-                    "simulated_final_probe_sha256",
-                    "simulated_relocation_ref_sha256",
-                    "simulated_relocation_evidence_sha256",
+                    "namespace_final_probe_sha256",
+                    "namespace_probe_ref_sha256",
+                    "namespace_probe_evidence_sha256",
                     "manifest_sha256",
                     "source_tree_identity_sha256",
                     "state",
@@ -1364,9 +1407,9 @@ class CandidateCompositionInspection:
                         "double_wheel_receipt_sha256",
                         "semantic_environment_receipt_sha256",
                         "candidate_probe_sha256",
-                        "simulated_final_probe_sha256",
-                        "simulated_relocation_ref_sha256",
-                        "simulated_relocation_evidence_sha256",
+                        "namespace_final_probe_sha256",
+                        "namespace_probe_ref_sha256",
+                        "namespace_probe_evidence_sha256",
                     )
                 },
                 "manifest_sha256": EXPECTED_MANIFEST_SHA256,
@@ -1403,8 +1446,9 @@ class CandidateCompositionInspector(Protocol):
         double_wheel: OfflineDoubleWheelReceipt,
         semantic_environment: WarehouseEnvironmentContentReceipt,
         candidate_probe: EnvironmentProbeFact,
-        simulated_final_probe: EnvironmentProbeFact,
-        simulated_relocation: CandidateSimulatedRelocationRef,
+        namespace_final_probe: EnvironmentProbeFact,
+        namespace_probe_execution: NamespaceProbeExecutionFact,
+        namespace_probe_ref: CandidateNamespaceFinalProbeRef,
     ) -> tuple[CandidateCompositionInspection, CandidateAbsenceFacts]:
         """Reacquire the exact candidate-state facts without mutation."""
 
@@ -1430,8 +1474,8 @@ class FilesystemCandidateCompositionInspector:
         double_wheel: OfflineDoubleWheelReceipt,
         semantic_environment: WarehouseEnvironmentContentReceipt,
         candidate_probe: EnvironmentProbeFact,
-        simulated_final_probe: EnvironmentProbeFact,
-        simulated_relocation: CandidateSimulatedRelocationRef,
+        namespace_final_probe: EnvironmentProbeFact,
+        namespace_probe_ref: CandidateNamespaceFinalProbeRef,
     ) -> tuple[CandidateCompositionInspection, CandidateAbsenceFacts]:
         if (
             type(prepared_candidate) is not PreparedCandidate
@@ -1551,7 +1595,7 @@ class FilesystemCandidateCompositionInspector:
             )
         subjects = _derived_absence_subjects(
             accepted_root=str(accepted_root),
-            launch_id=simulated_relocation.launch_id,
+            launch_id=namespace_probe_ref.launch_id,
             nonce=nonce,
             authority_sha256=candidate_verification.authority_sha256,
             installation_sha256=candidate_verification.installation_sha256,
@@ -1579,7 +1623,7 @@ class FilesystemCandidateCompositionInspector:
                 raise WarehouseW3CandidateGateError(
                     f"candidate filesystem subject is present: {role}"
                 )
-        process_token = (f"scion-w3@{simulated_relocation.launch_id}.service").encode(
+        process_token = (f"scion-w3@{namespace_probe_ref.launch_id}.service").encode(
             "ascii"
         )
         try:
@@ -1613,10 +1657,10 @@ class FilesystemCandidateCompositionInspector:
             "double_wheel_receipt_sha256": double_wheel.raw_sha256,
             "semantic_environment_receipt_sha256": (semantic_environment.raw_sha256),
             "candidate_probe_sha256": candidate_probe.raw_sha256,
-            "simulated_final_probe_sha256": (simulated_final_probe.raw_sha256),
-            "simulated_relocation_ref_sha256": simulated_relocation.raw_sha256,
-            "simulated_relocation_evidence_sha256": (
-                simulated_relocation.evidence_receipt_sha256
+            "namespace_final_probe_sha256": (namespace_final_probe.raw_sha256),
+            "namespace_probe_ref_sha256": namespace_probe_ref.raw_sha256,
+            "namespace_probe_evidence_sha256": (
+                namespace_probe_ref.evidence_receipt_sha256
             ),
         }
         observations = tuple(
@@ -1635,8 +1679,8 @@ class FilesystemCandidateCompositionInspector:
                     semantic_environment_receipt_sha256=binding_values[
                         "semantic_environment_receipt_sha256"
                     ],
-                    simulated_relocation_ref_sha256=binding_values[
-                        "simulated_relocation_ref_sha256"
+                    namespace_probe_ref_sha256=binding_values[
+                        "namespace_probe_ref_sha256"
                     ],
                 ),
                 state="ABSENT",
@@ -1645,7 +1689,7 @@ class FilesystemCandidateCompositionInspector:
         )
         absence = CandidateAbsenceFacts.create(
             selection_key=candidate_verification.selection_key,
-            launch_id=simulated_relocation.launch_id,
+            launch_id=namespace_probe_ref.launch_id,
             nonce=nonce,
             authority_sha256=candidate_verification.authority_sha256,
             installation_sha256=candidate_verification.installation_sha256,
@@ -1658,7 +1702,7 @@ class FilesystemCandidateCompositionInspector:
         )
         inspection = CandidateCompositionInspection.create(
             selection_key=candidate_verification.selection_key,
-            launch_id=simulated_relocation.launch_id,
+            launch_id=namespace_probe_ref.launch_id,
             nonce=nonce,
             authority_sha256=candidate_verification.authority_sha256,
             installation_sha256=candidate_verification.installation_sha256,
@@ -1690,15 +1734,17 @@ class CandidateGateReceipt:
     nonce: str
     authority_sha256: str
     installation_sha256: str
+    source_acceptance_sha256: str
     source_receipt_sha256: str
     candidate_verification_sha256: str
     double_wheel_receipt_sha256: str
     semantic_environment_receipt_sha256: str
     environment_content_receipt_sha256: str
     candidate_probe_sha256: str
-    simulated_final_probe_sha256: str
-    simulated_relocation_ref_sha256: str
-    simulated_relocation_evidence_sha256: str
+    namespace_final_probe_sha256: str
+    namespace_probe_execution_sha256: str
+    namespace_probe_ref_sha256: str
+    namespace_probe_evidence_sha256: str
     candidate_root: str
     candidate_root_identity: CandidateRootIdentity
     accepted_root: str
@@ -1739,19 +1785,22 @@ class CandidateGateReceipt:
         semantic_environment: WarehouseEnvironmentContentReceipt,
         environment_content: EnvironmentContentReceipt,
         candidate_probe: EnvironmentProbeFact,
-        simulated_final_probe: EnvironmentProbeFact,
-        simulated_relocation: CandidateSimulatedRelocationRef,
+        namespace_final_probe: EnvironmentProbeFact,
+        namespace_probe_execution: NamespaceProbeExecutionFact,
+        namespace_probe_ref: CandidateNamespaceFinalProbeRef,
         inspection: CandidateCompositionInspection,
         absence_facts: CandidateAbsenceFacts,
     ) -> "CandidateGateReceipt":
         if (
             semantic_environment.generic_receipt != environment_content
-            or simulated_relocation.semantic_environment_receipt_sha256
+            or namespace_probe_ref.semantic_environment_receipt_sha256
             != semantic_environment.raw_sha256
-            or simulated_relocation.environment_content_receipt_sha256
+            or namespace_probe_ref.environment_content_receipt_sha256
             != semantic_environment.generic_receipt_sha256
-            or simulated_relocation.environment_content_receipt_sha256
+            or namespace_probe_ref.environment_content_receipt_sha256
             != environment_content.raw_sha256
+            or namespace_probe_ref.namespace_probe_execution_sha256
+            != namespace_probe_execution.raw_sha256
         ):
             raise WarehouseW3CandidateGateError(
                 "candidate gate environment relocation binding differs"
@@ -1759,13 +1808,14 @@ class CandidateGateReceipt:
         return cls.from_bytes(
             _canonical_json(
                 {
-                    "schema": "scion.w3-candidate-gate.v2",
+                    "schema": "scion.w3-candidate-gate.v4",
                     "state": "CANDIDATE_ACCEPTED_INSTALLATION_ABSENT",
                     "selection_key": candidate.selection_key,
                     "launch_id": inspection.launch_id,
                     "nonce": nonce,
                     "authority_sha256": candidate.authority_sha256,
                     "installation_sha256": candidate.installation_sha256,
+                    "source_acceptance_sha256": (candidate.source_acceptance_sha256),
                     "source_receipt_sha256": (candidate.source_receipt_sha256),
                     "candidate_verification_sha256": candidate.raw_sha256,
                     "double_wheel_receipt_sha256": double_wheel.raw_sha256,
@@ -1776,12 +1826,13 @@ class CandidateGateReceipt:
                         environment_content.raw_sha256
                     ),
                     "candidate_probe_sha256": candidate_probe.raw_sha256,
-                    "simulated_final_probe_sha256": (simulated_final_probe.raw_sha256),
-                    "simulated_relocation_ref_sha256": (
-                        simulated_relocation.raw_sha256
+                    "namespace_final_probe_sha256": (namespace_final_probe.raw_sha256),
+                    "namespace_probe_execution_sha256": (
+                        namespace_probe_execution.raw_sha256
                     ),
-                    "simulated_relocation_evidence_sha256": (
-                        simulated_relocation.evidence_receipt_sha256
+                    "namespace_probe_ref_sha256": (namespace_probe_ref.raw_sha256),
+                    "namespace_probe_evidence_sha256": (
+                        namespace_probe_ref.evidence_receipt_sha256
                     ),
                     "candidate_root": str(candidate_root),
                     "candidate_root_identity": (candidate_root_identity.to_mapping()),
@@ -1829,15 +1880,17 @@ class CandidateGateReceipt:
                     "nonce",
                     "authority_sha256",
                     "installation_sha256",
+                    "source_acceptance_sha256",
                     "source_receipt_sha256",
                     "candidate_verification_sha256",
                     "double_wheel_receipt_sha256",
                     "semantic_environment_receipt_sha256",
                     "environment_content_receipt_sha256",
                     "candidate_probe_sha256",
-                    "simulated_final_probe_sha256",
-                    "simulated_relocation_ref_sha256",
-                    "simulated_relocation_evidence_sha256",
+                    "namespace_final_probe_sha256",
+                    "namespace_probe_execution_sha256",
+                    "namespace_probe_ref_sha256",
+                    "namespace_probe_evidence_sha256",
                     "candidate_root",
                     "candidate_root_identity",
                     "accepted_root",
@@ -1863,7 +1916,7 @@ class CandidateGateReceipt:
         )
         _false_controls(value, label="candidate gate receipt")
         if (
-            value["schema"] != "scion.w3-candidate-gate.v2"
+            value["schema"] != "scion.w3-candidate-gate.v4"
             or value["state"] != "CANDIDATE_ACCEPTED_INSTALLATION_ABSENT"
             or value["manifest_sha256"] != EXPECTED_MANIFEST_SHA256
             or value["source_tree_identity_sha256"]
@@ -1888,15 +1941,17 @@ class CandidateGateReceipt:
                 "nonce",
                 "authority_sha256",
                 "installation_sha256",
+                "source_acceptance_sha256",
                 "source_receipt_sha256",
                 "candidate_verification_sha256",
                 "double_wheel_receipt_sha256",
                 "semantic_environment_receipt_sha256",
                 "environment_content_receipt_sha256",
                 "candidate_probe_sha256",
-                "simulated_final_probe_sha256",
-                "simulated_relocation_ref_sha256",
-                "simulated_relocation_evidence_sha256",
+                "namespace_final_probe_sha256",
+                "namespace_probe_execution_sha256",
+                "namespace_probe_ref_sha256",
+                "namespace_probe_evidence_sha256",
                 "accepted_root_inventory_sha256",
                 "manifest_sha256",
                 "source_tree_identity_sha256",
@@ -1945,8 +2000,9 @@ class CandidateGateClosureBundle:
     semantic_environment: WarehouseEnvironmentContentReceipt
     environment_content: EnvironmentContentReceipt
     candidate_probe: EnvironmentProbeFact
-    simulated_final_probe: EnvironmentProbeFact
-    simulated_relocation: CandidateSimulatedRelocationRef
+    namespace_final_probe: EnvironmentProbeFact
+    namespace_probe_execution: NamespaceProbeExecutionFact
+    namespace_probe_ref: CandidateNamespaceFinalProbeRef
     inspection: CandidateCompositionInspection
     absence_facts: CandidateAbsenceFacts
     raw: bytes
@@ -1970,8 +2026,9 @@ class CandidateGateClosureBundle:
         semantic_environment: WarehouseEnvironmentContentReceipt,
         environment_content: EnvironmentContentReceipt,
         candidate_probe: EnvironmentProbeFact,
-        simulated_final_probe: EnvironmentProbeFact,
-        simulated_relocation: CandidateSimulatedRelocationRef,
+        namespace_final_probe: EnvironmentProbeFact,
+        namespace_probe_execution: NamespaceProbeExecutionFact,
+        namespace_probe_ref: CandidateNamespaceFinalProbeRef,
         inspection: CandidateCompositionInspection,
         absence_facts: CandidateAbsenceFacts,
     ) -> "CandidateGateClosureBundle":
@@ -1982,8 +2039,9 @@ class CandidateGateClosureBundle:
             semantic_environment,
             environment_content,
             candidate_probe,
-            simulated_final_probe,
-            simulated_relocation,
+            namespace_final_probe,
+            namespace_probe_execution,
+            namespace_probe_ref,
             inspection,
             absence_facts,
         )
@@ -1992,7 +2050,7 @@ class CandidateGateClosureBundle:
         return cls.from_bytes(
             _canonical_json(
                 {
-                    "schema": "scion.w3-candidate-gate-closure.v1",
+                    "schema": "scion.w3-candidate-gate-closure.v2",
                     "gate": gate.raw.decode("utf-8", "strict"),
                     "candidate_verification": (
                         candidate_verification.raw.decode("utf-8", "strict")
@@ -2005,11 +2063,14 @@ class CandidateGateClosureBundle:
                         environment_content.raw.decode("utf-8", "strict")
                     ),
                     "candidate_probe": candidate_probe.raw.decode("utf-8", "strict"),
-                    "simulated_final_probe": (
-                        simulated_final_probe.raw.decode("utf-8", "strict")
+                    "namespace_final_probe": (
+                        namespace_final_probe.raw.decode("utf-8", "strict")
                     ),
-                    "simulated_relocation": (
-                        simulated_relocation.raw.decode("utf-8", "strict")
+                    "namespace_probe_execution": (
+                        namespace_probe_execution.raw.decode("utf-8", "strict")
+                    ),
+                    "namespace_probe_ref": (
+                        namespace_probe_ref.raw.decode("utf-8", "strict")
                     ),
                     "inspection": inspection.raw.decode("utf-8", "strict"),
                     "absence_facts": absence_facts.raw.decode("utf-8", "strict"),
@@ -2030,15 +2091,16 @@ class CandidateGateClosureBundle:
                     "semantic_environment",
                     "environment_content",
                     "candidate_probe",
-                    "simulated_final_probe",
-                    "simulated_relocation",
+                    "namespace_final_probe",
+                    "namespace_probe_execution",
+                    "namespace_probe_ref",
                     "inspection",
                     "absence_facts",
                 }
             ),
             label="candidate gate closure bundle",
         )
-        if value["schema"] != "scion.w3-candidate-gate-closure.v1":
+        if value["schema"] != "scion.w3-candidate-gate-closure.v2":
             raise WarehouseW3CandidateGateError("candidate gate closure schema differs")
 
         def nested(name: str) -> bytes:
@@ -2068,11 +2130,15 @@ class CandidateGateClosureBundle:
             wheel_receipt=wheel,
         )
         candidate_probe = EnvironmentProbeFact.from_bytes(nested("candidate_probe"))
-        simulated_probe = EnvironmentProbeFact.from_bytes(
-            nested("simulated_final_probe")
+        namespace_probe = EnvironmentProbeFact.from_bytes(
+            nested("namespace_final_probe")
         )
-        relocation = CandidateSimulatedRelocationRef.from_bytes(
-            nested("simulated_relocation"),
+        namespace_execution = NamespaceProbeExecutionFact.from_bytes(
+            nested("namespace_probe_execution"),
+            environment_probe=namespace_probe,
+        )
+        relocation = CandidateNamespaceFinalProbeRef.from_bytes(
+            nested("namespace_probe_ref"),
             semantic_environment=semantic,
         )
         _validate_probe(
@@ -2082,10 +2148,10 @@ class CandidateGateClosureBundle:
             expected_root=Path(relocation.candidate_environment_root),
         )
         _validate_probe(
-            simulated_probe,
-            phase="simulated_final",
+            namespace_probe,
+            phase="namespace_final",
             content=semantic,
-            expected_root=Path(relocation.simulated_final_environment_root),
+            expected_root=Path(relocation.visible_environment_root),
         )
         inspection = CandidateCompositionInspection.from_bytes(nested("inspection"))
         absence = CandidateAbsenceFacts.from_bytes(nested("absence_facts"))
@@ -2100,11 +2166,9 @@ class CandidateGateClosureBundle:
             "double_wheel_receipt_sha256": wheel.raw_sha256,
             "semantic_environment_receipt_sha256": semantic.raw_sha256,
             "candidate_probe_sha256": candidate_probe.raw_sha256,
-            "simulated_final_probe_sha256": simulated_probe.raw_sha256,
-            "simulated_relocation_ref_sha256": relocation.raw_sha256,
-            "simulated_relocation_evidence_sha256": (
-                relocation.evidence_receipt_sha256
-            ),
+            "namespace_final_probe_sha256": namespace_probe.raw_sha256,
+            "namespace_probe_ref_sha256": relocation.raw_sha256,
+            "namespace_probe_evidence_sha256": (relocation.evidence_receipt_sha256),
         }
         if (
             (
@@ -2140,15 +2204,17 @@ class CandidateGateClosureBundle:
             or derive_launch_id(candidate.authority_sha256, gate.nonce)
             != gate.launch_id
             or gate.source_receipt_sha256 != candidate.source_receipt_sha256
+            or gate.source_acceptance_sha256 != candidate.source_acceptance_sha256
             or gate.candidate_root_identity != candidate.candidate_root_identity
             or gate.candidate_verification_sha256 != candidate.raw_sha256
             or gate.double_wheel_receipt_sha256 != wheel.raw_sha256
             or gate.semantic_environment_receipt_sha256 != semantic.raw_sha256
             or gate.environment_content_receipt_sha256 != environment.raw_sha256
             or gate.candidate_probe_sha256 != candidate_probe.raw_sha256
-            or gate.simulated_final_probe_sha256 != simulated_probe.raw_sha256
-            or gate.simulated_relocation_ref_sha256 != relocation.raw_sha256
-            or gate.simulated_relocation_evidence_sha256
+            or gate.namespace_final_probe_sha256 != namespace_probe.raw_sha256
+            or gate.namespace_probe_execution_sha256 != namespace_execution.raw_sha256
+            or gate.namespace_probe_ref_sha256 != relocation.raw_sha256
+            or gate.namespace_probe_evidence_sha256
             != relocation.evidence_receipt_sha256
             or gate.composition_inspection_sha256 != inspection.raw_sha256
             or gate.absence_facts_sha256 != absence.raw_sha256
@@ -2163,11 +2229,24 @@ class CandidateGateClosureBundle:
             or relocation.semantic_environment_receipt_sha256 != semantic.raw_sha256
             or relocation.environment_content_receipt_sha256 != environment.raw_sha256
             or relocation.candidate_probe_sha256 != candidate_probe.raw_sha256
-            or relocation.simulated_final_probe_sha256 != simulated_probe.raw_sha256
+            or relocation.namespace_final_probe_sha256 != namespace_probe.raw_sha256
+            or relocation.namespace_probe_execution_sha256
+            != namespace_execution.raw_sha256
+            or relocation.evidence_receipt_sha256
+            != derive_namespace_probe_evidence_sha256(
+                semantic.raw,
+                candidate_probe.raw,
+                namespace_probe.raw,
+                namespace_execution.raw,
+            )
+            or relocation.physical_environment_root
+            != namespace_execution.physical_environment_root
+            or relocation.visible_environment_root
+            != namespace_execution.visible_environment_root
             or candidate_probe.phase != "candidate"
-            or simulated_probe.phase != "simulated_final"
+            or namespace_probe.phase != "namespace_final"
             or candidate_probe.content_receipt_sha256 != semantic.raw_sha256
-            or simulated_probe.content_receipt_sha256 != semantic.raw_sha256
+            or namespace_probe.content_receipt_sha256 != semantic.raw_sha256
             or any(
                 getattr(inspection, name) != expected
                 or getattr(absence, name) != expected
@@ -2190,8 +2269,9 @@ class CandidateGateClosureBundle:
             ("semantic_environment", semantic),
             ("environment_content", environment),
             ("candidate_probe", candidate_probe),
-            ("simulated_final_probe", simulated_probe),
-            ("simulated_relocation", relocation),
+            ("namespace_final_probe", namespace_probe),
+            ("namespace_probe_execution", namespace_execution),
+            ("namespace_probe_ref", relocation),
             ("inspection", inspection),
             ("absence_facts", absence),
             ("raw", raw),
@@ -2208,8 +2288,9 @@ def _close_candidate_gate_closure(
     semantic_environment: WarehouseEnvironmentContentReceipt,
     environment_content: EnvironmentContentReceipt,
     candidate_probe: EnvironmentProbeFact,
-    simulated_final_probe: EnvironmentProbeFact,
-    simulated_relocation: CandidateSimulatedRelocationRef,
+    namespace_final_probe: EnvironmentProbeFact,
+    namespace_probe_execution: NamespaceProbeExecutionFact,
+    namespace_probe_ref: CandidateNamespaceFinalProbeRef,
     candidate_root: Path,
     accepted_root: Path,
     nonce: str,
@@ -2233,14 +2314,19 @@ def _close_candidate_gate_closure(
         (environment_content, EnvironmentContentReceipt, "environment_content"),
         (candidate_probe, EnvironmentProbeFact, "candidate_probe"),
         (
-            simulated_final_probe,
+            namespace_final_probe,
             EnvironmentProbeFact,
-            "simulated_final_probe",
+            "namespace_final_probe",
         ),
         (
-            simulated_relocation,
-            CandidateSimulatedRelocationRef,
-            "simulated_relocation",
+            namespace_probe_execution,
+            NamespaceProbeExecutionFact,
+            "namespace_probe_execution",
+        ),
+        (
+            namespace_probe_ref,
+            CandidateNamespaceFinalProbeRef,
+            "namespace_probe_ref",
         ),
     )
     for value, expected, label in exact_types:
@@ -2272,9 +2358,13 @@ def _close_candidate_gate_closure(
             generic_receipt=environment_content,
             wheel_receipt=double_wheel,
         )
-        parsed_relocation = CandidateSimulatedRelocationRef.from_bytes(
-            simulated_relocation.raw,
+        parsed_relocation = CandidateNamespaceFinalProbeRef.from_bytes(
+            namespace_probe_ref.raw,
             semantic_environment=parsed_semantic,
+        )
+        parsed_execution = NamespaceProbeExecutionFact.from_bytes(
+            namespace_probe_execution.raw,
+            environment_probe=namespace_final_probe,
         )
     except Exception as exc:
         raise WarehouseW3CandidateGateError(
@@ -2284,7 +2374,8 @@ def _close_candidate_gate_closure(
         parsed_candidate != candidate_verification
         or parsed_environment != environment_content
         or parsed_semantic != semantic_environment
-        or parsed_relocation != simulated_relocation
+        or parsed_execution != namespace_probe_execution
+        or parsed_relocation != namespace_probe_ref
     ):
         raise WarehouseW3CandidateGateError("candidate artifact receipt object differs")
 
@@ -2348,10 +2439,10 @@ def _close_candidate_gate_closure(
         expected_root=candidate_root / "environment",
     )
     _validate_probe(
-        simulated_final_probe,
-        phase="simulated_final",
+        namespace_final_probe,
+        phase="namespace_final",
         content=semantic_environment,
-        expected_root=Path(simulated_relocation.simulated_final_environment_root),
+        expected_root=Path(namespace_probe_ref.visible_environment_root),
     )
     expected_launch_id = derive_launch_id(
         candidate.authority_sha256,
@@ -2359,36 +2450,38 @@ def _close_candidate_gate_closure(
     )
     shared = (
         candidate.selection_key,
-        simulated_relocation.launch_id,
+        namespace_probe_ref.launch_id,
         candidate.authority_sha256,
         candidate.installation_sha256,
     )
     if (
         (
-            simulated_relocation.selection_key,
-            simulated_relocation.launch_id,
-            simulated_relocation.authority_sha256,
-            simulated_relocation.installation_sha256,
+            namespace_probe_ref.selection_key,
+            namespace_probe_ref.launch_id,
+            namespace_probe_ref.authority_sha256,
+            namespace_probe_ref.installation_sha256,
         )
         != shared
-        or simulated_relocation.launch_id != expected_launch_id
-        or simulated_relocation.semantic_environment_receipt_sha256
+        or namespace_probe_ref.launch_id != expected_launch_id
+        or namespace_probe_ref.semantic_environment_receipt_sha256
         != semantic_environment.raw_sha256
-        or simulated_relocation.environment_content_receipt_sha256
+        or namespace_probe_ref.environment_content_receipt_sha256
         != semantic_environment.generic_receipt_sha256
-        or simulated_relocation.environment_content_receipt_sha256
+        or namespace_probe_ref.environment_content_receipt_sha256
         != environment_content.raw_sha256
-        or simulated_relocation.candidate_probe_sha256 != candidate_probe.raw_sha256
-        or simulated_relocation.simulated_final_probe_sha256
-        != simulated_final_probe.raw_sha256
-        or simulated_relocation.candidate_environment_root
+        or namespace_probe_ref.candidate_probe_sha256 != candidate_probe.raw_sha256
+        or namespace_probe_ref.namespace_final_probe_sha256
+        != namespace_final_probe.raw_sha256
+        or namespace_probe_ref.namespace_probe_execution_sha256
+        != namespace_probe_execution.raw_sha256
+        or namespace_probe_ref.candidate_environment_root
         != candidate_probe.environment_root
-        or simulated_relocation.simulated_final_environment_root
-        != simulated_final_probe.environment_root
+        or namespace_probe_ref.physical_environment_root
+        != namespace_probe_execution.physical_environment_root
+        or namespace_probe_ref.visible_environment_root
+        != namespace_probe_execution.visible_environment_root
     ):
-        raise WarehouseW3CandidateGateError(
-            "candidate simulated-relocation binding differs"
-        )
+        raise WarehouseW3CandidateGateError("candidate namespace-final binding differs")
 
     try:
         inspected = method(
@@ -2401,8 +2494,8 @@ def _close_candidate_gate_closure(
             double_wheel=double_wheel,
             semantic_environment=semantic_environment,
             candidate_probe=candidate_probe,
-            simulated_final_probe=simulated_final_probe,
-            simulated_relocation=simulated_relocation,
+            namespace_final_probe=namespace_final_probe,
+            namespace_probe_ref=namespace_probe_ref,
         )
     except Exception as exc:
         raise WarehouseW3CandidateGateError(
@@ -2466,10 +2559,10 @@ def _close_candidate_gate_closure(
         "double_wheel_receipt_sha256": double_wheel.raw_sha256,
         "semantic_environment_receipt_sha256": semantic_environment.raw_sha256,
         "candidate_probe_sha256": candidate_probe.raw_sha256,
-        "simulated_final_probe_sha256": simulated_final_probe.raw_sha256,
-        "simulated_relocation_ref_sha256": simulated_relocation.raw_sha256,
-        "simulated_relocation_evidence_sha256": (
-            simulated_relocation.evidence_receipt_sha256
+        "namespace_final_probe_sha256": namespace_final_probe.raw_sha256,
+        "namespace_probe_ref_sha256": namespace_probe_ref.raw_sha256,
+        "namespace_probe_evidence_sha256": (
+            namespace_probe_ref.evidence_receipt_sha256
         ),
     }
     if any(
@@ -2509,8 +2602,9 @@ def _close_candidate_gate_closure(
         semantic_environment=semantic_environment,
         environment_content=environment_content,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_final_probe,
-        simulated_relocation=simulated_relocation,
+        namespace_final_probe=namespace_final_probe,
+        namespace_probe_execution=namespace_probe_execution,
+        namespace_probe_ref=namespace_probe_ref,
         inspection=inspection,
         absence_facts=absence,
     )
@@ -2521,8 +2615,9 @@ def _close_candidate_gate_closure(
         semantic_environment=semantic_environment,
         environment_content=environment_content,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_final_probe,
-        simulated_relocation=simulated_relocation,
+        namespace_final_probe=namespace_final_probe,
+        namespace_probe_execution=namespace_probe_execution,
+        namespace_probe_ref=namespace_probe_ref,
         inspection=inspection,
         absence_facts=absence,
     )
@@ -2535,8 +2630,9 @@ def close_candidate_gate_closure(
     semantic_environment: WarehouseEnvironmentContentReceipt,
     environment_content: EnvironmentContentReceipt,
     candidate_probe: EnvironmentProbeFact,
-    simulated_final_probe: EnvironmentProbeFact,
-    simulated_relocation: CandidateSimulatedRelocationRef,
+    namespace_final_probe: EnvironmentProbeFact,
+    namespace_probe_execution: NamespaceProbeExecutionFact,
+    namespace_probe_ref: CandidateNamespaceFinalProbeRef,
     candidate_root: Path,
     accepted_root: Path,
     nonce: str,
@@ -2551,8 +2647,9 @@ def close_candidate_gate_closure(
         semantic_environment=semantic_environment,
         environment_content=environment_content,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_final_probe,
-        simulated_relocation=simulated_relocation,
+        namespace_final_probe=namespace_final_probe,
+        namespace_probe_execution=namespace_probe_execution,
+        namespace_probe_ref=namespace_probe_ref,
         candidate_root=candidate_root,
         accepted_root=accepted_root,
         nonce=nonce,
@@ -2568,8 +2665,9 @@ def close_candidate_gate(
     semantic_environment: WarehouseEnvironmentContentReceipt,
     environment_content: EnvironmentContentReceipt,
     candidate_probe: EnvironmentProbeFact,
-    simulated_final_probe: EnvironmentProbeFact,
-    simulated_relocation: CandidateSimulatedRelocationRef,
+    namespace_final_probe: EnvironmentProbeFact,
+    namespace_probe_execution: NamespaceProbeExecutionFact,
+    namespace_probe_ref: CandidateNamespaceFinalProbeRef,
     candidate_root: Path,
     accepted_root: Path,
     nonce: str,
@@ -2584,8 +2682,9 @@ def close_candidate_gate(
         semantic_environment=semantic_environment,
         environment_content=environment_content,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_final_probe,
-        simulated_relocation=simulated_relocation,
+        namespace_final_probe=namespace_final_probe,
+        namespace_probe_execution=namespace_probe_execution,
+        namespace_probe_ref=namespace_probe_ref,
         candidate_root=candidate_root,
         accepted_root=accepted_root,
         nonce=nonce,
@@ -2602,7 +2701,7 @@ __all__ = [
     "FilesystemCandidateCompositionInspector",
     "CandidateGateClosureBundle",
     "CandidateGateReceipt",
-    "CandidateSimulatedRelocationRef",
+    "CandidateNamespaceFinalProbeRef",
     "EXPECTED_CANDIDATE_COMPOSITION_STATE",
     "EXPECTED_CELL_COUNT",
     "WarehouseW3CandidateGateError",

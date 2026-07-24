@@ -78,11 +78,12 @@ from scion.problems.warehouse_delivery.w3_candidate_gate import (
     CandidateCompositionInspection,
     CandidateGateClosureBundle,
     CandidateGateReceipt,
-    CandidateSimulatedRelocationRef,
+    CandidateNamespaceFinalProbeRef,
     FilesystemCandidateCompositionInspector,
     WarehouseW3CandidateGateError,
     close_candidate_gate,
     close_candidate_gate_closure,
+    derive_namespace_probe_evidence_sha256,
 )
 from scion.problems.warehouse_delivery.w3_composition import (
     EXPECTED_MANIFEST_SHA256,
@@ -94,10 +95,12 @@ from scion.problems.warehouse_delivery.w3_environment_receipts import (
     EnvironmentProbeFact,
     ImportIdentity,
     InstalledWheelMember,
+    NamespaceProbeExecutionFact,
     NativeElfIdentity,
     WarehouseEnvironmentContentReceipt,
     WarehouseEnvironmentEvidence,
     WheelInstallationProvenance,
+    derive_final_environment_path,
 )
 from scion.problems.warehouse_delivery.w3_installation import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
@@ -154,8 +157,8 @@ def _fixed_gate_dependencies(monkeypatch: pytest.MonkeyPatch):
         wheel = values["double_wheel"]
         semantic = values["semantic_environment"]
         candidate_probe = values["candidate_probe"]
-        final_probe = values["simulated_final_probe"]
-        relocation = values["simulated_relocation"]
+        final_probe = values["namespace_final_probe"]
+        relocation = values["namespace_probe_ref"]
         accepted_root = values["accepted_root"]
         nonce = values["nonce"]
         assert type(candidate) is CandidateVerificationReceipt
@@ -163,7 +166,7 @@ def _fixed_gate_dependencies(monkeypatch: pytest.MonkeyPatch):
         assert type(semantic) is WarehouseEnvironmentContentReceipt
         assert type(candidate_probe) is EnvironmentProbeFact
         assert type(final_probe) is EnvironmentProbeFact
-        assert type(relocation) is CandidateSimulatedRelocationRef
+        assert type(relocation) is CandidateNamespaceFinalProbeRef
         assert isinstance(accepted_root, Path)
         assert type(nonce) is str
         root_identity, inventory_sha, inventory_count = (
@@ -174,11 +177,9 @@ def _fixed_gate_dependencies(monkeypatch: pytest.MonkeyPatch):
             "double_wheel_receipt_sha256": wheel.raw_sha256,
             "semantic_environment_receipt_sha256": semantic.raw_sha256,
             "candidate_probe_sha256": candidate_probe.raw_sha256,
-            "simulated_final_probe_sha256": final_probe.raw_sha256,
-            "simulated_relocation_ref_sha256": relocation.raw_sha256,
-            "simulated_relocation_evidence_sha256": (
-                relocation.evidence_receipt_sha256
-            ),
+            "namespace_final_probe_sha256": final_probe.raw_sha256,
+            "namespace_probe_ref_sha256": relocation.raw_sha256,
+            "namespace_probe_evidence_sha256": (relocation.evidence_receipt_sha256),
         }
         subjects = gate_module._derived_absence_subjects(
             accepted_root=str(accepted_root),
@@ -198,7 +199,7 @@ def _fixed_gate_dependencies(monkeypatch: pytest.MonkeyPatch):
                     candidate_verification_sha256=candidate.raw_sha256,
                     double_wheel_receipt_sha256=wheel.raw_sha256,
                     semantic_environment_receipt_sha256=semantic.raw_sha256,
-                    simulated_relocation_ref_sha256=relocation.raw_sha256,
+                    namespace_probe_ref_sha256=relocation.raw_sha256,
                 ),
                 state="ABSENT",
             )
@@ -285,11 +286,15 @@ def _candidate(
     candidate_root_identity: CandidateRootIdentity,
     candidate_receipt_sha256: str | None = None,
     source_receipt_sha256: str | None = None,
+    source_acceptance_sha256: str | None = None,
 ) -> CandidateVerificationReceipt:
     value = {
-        "schema": "scion.w3-candidate-verification.v1",
+        "schema": "scion.w3-candidate-verification.v2",
         "fixed_plan_sha256": ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
         "selection_key": selection_key or _sha("selection"),
+        "source_acceptance_sha256": (
+            source_acceptance_sha256 or _sha("source-acceptance")
+        ),
         "candidate_root_identity": candidate_root_identity.to_mapping(),
         "candidate_receipt_sha256": (candidate_receipt_sha256 or _sha("candidate")),
         "content_aggregate_sha256": _sha("content"),
@@ -396,7 +401,19 @@ def _double_wheel() -> OfflineDoubleWheelReceipt:
     native_path = (
         "scion/runtime/native/" "_spawn_into_cgroup.cpython-312-x86_64-linux-gnu.so"
     )
-    paths = tuple(sorted({*FIXED_REQUIRED_WHEEL_MEMBERS, native_path}))
+    paths = tuple(
+        sorted(
+            {
+                *FIXED_REQUIRED_WHEEL_MEMBERS,
+                native_path,
+                "scion-0.1.0.dist-info/METADATA",
+                "scion-0.1.0.dist-info/WHEEL",
+                "scion-0.1.0.dist-info/entry_points.txt",
+                "scion-0.1.0.dist-info/top_level.txt",
+                "scion-0.1.0.dist-info/RECORD",
+            }
+        )
+    )
     members = tuple(
         WheelMember(
             path=path,
@@ -629,20 +646,43 @@ def _bundle(tmp_path: Path) -> dict[str, object]:
     )
     simulated_probe = _probe(
         semantic,
-        phase="simulated_final",
-        root=simulated_root,
+        phase="namespace_final",
+        root=derive_final_environment_path(semantic),
+    )
+    namespace_execution = NamespaceProbeExecutionFact.create(
+        physical_environment_root=simulated_root,
+        visible_environment_root=derive_final_environment_path(semantic),
+        environment_probe=simulated_probe,
+        producer_euid=1000,
+        producer_egid=1000,
+        no_new_privs=True,
+        parent_network_namespace="net:[1]",
+        child_network_namespace="net:[2]",
+        parent_mount_namespace="mnt:[3]",
+        child_mount_namespace="mnt:[4]",
+        bwrap_sha256=_sha("bwrap"),
+        bwrap_device=1,
+        bwrap_inode=2,
+        bwrap_size_bytes=3,
+        bwrap_mode=0o755,
     )
     nonce = _sha("nonce")
     launch_id = derive_launch_id(candidate.authority_sha256, nonce)
-    relocation = CandidateSimulatedRelocationRef.create(
-        evidence_receipt_sha256=_sha("simulated-relocation-evidence"),
+    relocation = CandidateNamespaceFinalProbeRef.create(
+        evidence_receipt_sha256=derive_namespace_probe_evidence_sha256(
+            semantic.raw,
+            candidate_probe.raw,
+            simulated_probe.raw,
+            namespace_execution.raw,
+        ),
         selection_key=candidate.selection_key,
         launch_id=launch_id,
         authority_sha256=candidate.authority_sha256,
         installation_sha256=candidate.installation_sha256,
         semantic_environment=semantic,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_probe,
+        namespace_final_probe=simulated_probe,
+        namespace_probe_execution=namespace_execution,
     )
     _PREPARED_BY_ROOT[str(candidate_root)] = PreparedCandidate(
         candidate_root=candidate_root,
@@ -673,8 +713,9 @@ def _bundle(tmp_path: Path) -> dict[str, object]:
         "semantic_environment": semantic,
         "environment_content": generic,
         "candidate_probe": candidate_probe,
-        "simulated_final_probe": simulated_probe,
-        "simulated_relocation": relocation,
+        "namespace_final_probe": simulated_probe,
+        "namespace_probe_execution": namespace_execution,
+        "namespace_probe_ref": relocation,
         "candidate_root": candidate_root,
         "accepted_root": accepted_root,
         "nonce": nonce,
@@ -701,8 +742,8 @@ def _inspect_bundle(
         double_wheel=artifact.receipt,
         semantic_environment=bundle["semantic_environment"],
         candidate_probe=bundle["candidate_probe"],
-        simulated_final_probe=bundle["simulated_final_probe"],
-        simulated_relocation=bundle["simulated_relocation"],
+        namespace_final_probe=bundle["namespace_final_probe"],
+        namespace_probe_ref=bundle["namespace_probe_ref"],
     )
 
 
@@ -821,10 +862,10 @@ def _production_inspector_inputs(
         "double_wheel": wheel,
         "semantic_environment": types.SimpleNamespace(raw_sha256=_sha("semantic")),
         "candidate_probe": types.SimpleNamespace(raw_sha256=_sha("candidate-probe")),
-        "simulated_final_probe": types.SimpleNamespace(
+        "namespace_final_probe": types.SimpleNamespace(
             raw_sha256=_sha("simulated-probe")
         ),
-        "simulated_relocation": types.SimpleNamespace(
+        "namespace_probe_ref": types.SimpleNamespace(
             launch_id=launch_id,
             raw_sha256=_sha("relocation"),
             evidence_receipt_sha256=_sha("relocation-evidence"),
@@ -956,14 +997,14 @@ def test_candidate_gate_closes_exact_artifacts_dry_root_and_absence(
     assert receipt.accepted_root_read_only is True
     semantic = bundle["semantic_environment"]
     generic = bundle["environment_content"]
-    relocation = bundle["simulated_relocation"]
+    relocation = bundle["namespace_probe_ref"]
     assert type(semantic) is WarehouseEnvironmentContentReceipt
     assert type(generic) is EnvironmentContentReceipt
-    assert type(relocation) is CandidateSimulatedRelocationRef
+    assert type(relocation) is CandidateNamespaceFinalProbeRef
     assert semantic.raw_sha256 != generic.raw_sha256
     assert semantic.generic_receipt_sha256 == generic.raw_sha256
     assert relocation.environment_content_receipt_sha256 == generic.raw_sha256
-    assert Path(relocation.simulated_final_environment_root).name == generic.raw_sha256
+    assert Path(relocation.physical_environment_root).name == generic.raw_sha256
 
 
 def test_candidate_gate_reverifies_complete_candidate_after_inspection(
@@ -1031,8 +1072,8 @@ def test_minimal_old_candidate_and_launch_ready_claim_are_rejected(
         double_wheel=artifact.receipt,
         semantic_environment=bundle["semantic_environment"],
         candidate_probe=bundle["candidate_probe"],
-        simulated_final_probe=bundle["simulated_final_probe"],
-        simulated_relocation=bundle["simulated_relocation"],
+        namespace_final_probe=bundle["namespace_final_probe"],
+        namespace_probe_ref=bundle["namespace_probe_ref"],
     )
     assert type(inspection) is CandidateCompositionInspection
     value = json.loads(inspection.raw)
@@ -1049,12 +1090,12 @@ def test_gate_rejects_mixed_selection_authority_and_receipt_replay(
     tmp_path: Path,
 ) -> None:
     bundle = _bundle(tmp_path / "selection")
-    relocation = bundle["simulated_relocation"]
-    assert type(relocation) is CandidateSimulatedRelocationRef
+    relocation = bundle["namespace_probe_ref"]
+    assert type(relocation) is CandidateNamespaceFinalProbeRef
     value = json.loads(relocation.raw)
 
     value["selection_key"] = _sha("replayed-selection")
-    bundle["simulated_relocation"] = CandidateSimulatedRelocationRef.from_bytes(
+    bundle["namespace_probe_ref"] = CandidateNamespaceFinalProbeRef.from_bytes(
         _canonical(value),
         semantic_environment=bundle["semantic_environment"],
     )
@@ -1062,11 +1103,11 @@ def test_gate_rejects_mixed_selection_authority_and_receipt_replay(
         close_candidate_gate(**bundle)
 
     bundle = _bundle(tmp_path / "authority")
-    relocation = bundle["simulated_relocation"]
-    assert type(relocation) is CandidateSimulatedRelocationRef
+    relocation = bundle["namespace_probe_ref"]
+    assert type(relocation) is CandidateNamespaceFinalProbeRef
     value = json.loads(relocation.raw)
     value["authority_sha256"] = _sha("replayed-authority")
-    bundle["simulated_relocation"] = CandidateSimulatedRelocationRef.from_bytes(
+    bundle["namespace_probe_ref"] = CandidateNamespaceFinalProbeRef.from_bytes(
         _canonical(value),
         semantic_environment=bundle["semantic_environment"],
     )
@@ -1074,11 +1115,11 @@ def test_gate_rejects_mixed_selection_authority_and_receipt_replay(
         close_candidate_gate(**bundle)
 
     bundle = _bundle(tmp_path / "probe")
-    relocation = bundle["simulated_relocation"]
-    assert type(relocation) is CandidateSimulatedRelocationRef
+    relocation = bundle["namespace_probe_ref"]
+    assert type(relocation) is CandidateNamespaceFinalProbeRef
     value = json.loads(relocation.raw)
     value["candidate_probe_sha256"] = _sha("replayed-probe")
-    bundle["simulated_relocation"] = CandidateSimulatedRelocationRef.from_bytes(
+    bundle["namespace_probe_ref"] = CandidateNamespaceFinalProbeRef.from_bytes(
         _canonical(value),
         semantic_environment=bundle["semantic_environment"],
     )
@@ -1095,54 +1136,53 @@ def test_gate_rejects_mixed_absence_and_root_final_relocation_semantics(
         close_candidate_gate(**bundle)
 
     bundle = _bundle(tmp_path / "root-final")
-    relocation = bundle["simulated_relocation"]
-    assert type(relocation) is CandidateSimulatedRelocationRef
+    relocation = bundle["namespace_probe_ref"]
+    assert type(relocation) is CandidateNamespaceFinalProbeRef
     value = json.loads(relocation.raw)
-    value["simulated_final_environment_root"] = (
+    value["physical_environment_root"] = (
         f"/var/lib/scion/environments/w3/"
         f"{relocation.environment_content_receipt_sha256}"
     )
     with pytest.raises(
         WarehouseW3CandidateGateError,
-        match="non-root relocation projection",
+        match="physical or visible path",
     ):
-        CandidateSimulatedRelocationRef.from_bytes(
+        CandidateNamespaceFinalProbeRef.from_bytes(
             _canonical(value),
             semantic_environment=bundle["semantic_environment"],
         )
 
 
-def test_simulated_relocation_v2_rejects_old_schema_semantic_suffix_and_generic_drift(
+def test_namespace_probe_ref_rejects_old_schema_visible_suffix_and_generic_drift(
     tmp_path: Path,
 ) -> None:
     bundle = _bundle(tmp_path)
-    relocation = bundle["simulated_relocation"]
+    relocation = bundle["namespace_probe_ref"]
     semantic = bundle["semantic_environment"]
-    assert type(relocation) is CandidateSimulatedRelocationRef
+    assert type(relocation) is CandidateNamespaceFinalProbeRef
     assert type(semantic) is WarehouseEnvironmentContentReceipt
     assert semantic.raw_sha256 != semantic.generic_receipt_sha256
     value = json.loads(relocation.raw)
-    assert value["schema"] == "scion.w3-candidate-simulated-relocation-ref.v2"
+    assert value["schema"] == "scion.w3-candidate-namespace-final-probe-ref.v1"
 
     old_v1 = dict(value)
-    old_v1["schema"] = "scion.w3-candidate-simulated-relocation-ref.v1"
-    old_v1.pop("environment_content_receipt_sha256")
-    with pytest.raises(WarehouseW3CandidateGateError, match="fields differ"):
-        CandidateSimulatedRelocationRef.from_bytes(
+    old_v1["schema"] = "scion.w3-candidate-simulated-relocation-ref.v2"
+    with pytest.raises(WarehouseW3CandidateGateError, match="authority differs"):
+        CandidateNamespaceFinalProbeRef.from_bytes(
             _canonical(old_v1),
             semantic_environment=semantic,
         )
 
     semantic_suffix = dict(value)
-    semantic_suffix["simulated_final_environment_root"] = (
+    semantic_suffix["visible_environment_root"] = (
         f"{tmp_path}/semantic-suffix/var/lib/scion/environments/w3/"
         f"{semantic.raw_sha256}"
     )
     with pytest.raises(
         WarehouseW3CandidateGateError,
-        match="non-root relocation projection",
+        match="physical or visible path",
     ):
-        CandidateSimulatedRelocationRef.from_bytes(
+        CandidateNamespaceFinalProbeRef.from_bytes(
             _canonical(semantic_suffix),
             semantic_environment=semantic,
         )
@@ -1153,7 +1193,7 @@ def test_simulated_relocation_v2_rejects_old_schema_semantic_suffix_and_generic_
         WarehouseW3CandidateGateError,
         match="environment binding differs",
     ):
-        CandidateSimulatedRelocationRef.from_bytes(
+        CandidateNamespaceFinalProbeRef.from_bytes(
             _canonical(generic_drift),
             semantic_environment=semantic,
         )
@@ -1196,10 +1236,10 @@ def test_gate_requires_exact_candidate_environment_root_and_identity(
         phase="candidate",
         root=final_root,
     )
-    relocation = bundle["simulated_relocation"]
-    assert type(relocation) is CandidateSimulatedRelocationRef
+    relocation = bundle["namespace_probe_ref"]
+    assert type(relocation) is CandidateNamespaceFinalProbeRef
     bundle["candidate_probe"] = bad_probe
-    bundle["simulated_relocation"] = CandidateSimulatedRelocationRef.create(
+    bundle["namespace_probe_ref"] = CandidateNamespaceFinalProbeRef.create(
         evidence_receipt_sha256=relocation.evidence_receipt_sha256,
         selection_key=relocation.selection_key,
         launch_id=relocation.launch_id,
@@ -1207,7 +1247,8 @@ def test_gate_requires_exact_candidate_environment_root_and_identity(
         installation_sha256=relocation.installation_sha256,
         semantic_environment=semantic,
         candidate_probe=bad_probe,
-        simulated_final_probe=bundle["simulated_final_probe"],
+        namespace_final_probe=bundle["namespace_final_probe"],
+        namespace_probe_execution=bundle["namespace_probe_execution"],
     )
     with pytest.raises(
         WarehouseW3CandidateGateError,
@@ -1305,7 +1346,7 @@ def test_absence_subjects_and_integer_domain_are_not_caller_declared(
         semantic_environment_receipt_sha256=value[
             "semantic_environment_receipt_sha256"
         ],
-        simulated_relocation_ref_sha256=value["simulated_relocation_ref_sha256"],
+        namespace_probe_ref_sha256=value["namespace_probe_ref_sha256"],
     )
     with pytest.raises(
         WarehouseW3CandidateGateError,

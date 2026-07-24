@@ -34,6 +34,10 @@ from scion.problems.warehouse_delivery.w3_root_installation import (
 from scion.problems.warehouse_delivery.w3_root_staging import (
     WarehouseW3RootStagingVerification,
 )
+from scion.problems.warehouse_delivery.w3_root_preflight import (
+    WarehouseW3RootFinalAbsenceReceipt,
+    WarehouseW3RootTransactionTraceReceipt,
+)
 from scion.runtime.execution.environment_integrity import EnvironmentContentReceipt
 from scion.runtime.execution.external_installation import (
     RootPhase,
@@ -53,7 +57,7 @@ from scion.runtime.execution.launch_authority import (
 )
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
-_SCHEMA = "scion.w3-root-selection.v1"
+_SCHEMA = "scion.w3-root-selection.v3"
 _MAX_REPLAY_OBJECT_BYTES = 64 * 1024 * 1024
 
 
@@ -141,6 +145,8 @@ def derive_root_staging_effect_authority_sha256(
     closure: CandidateGateClosureBundle,
     ingress: CandidateGateIngressFact,
     tree_import: ImmutableTreeImportReceipt,
+    trace: WarehouseW3RootTransactionTraceReceipt,
+    root_final_absence: WarehouseW3RootFinalAbsenceReceipt,
 ) -> str:
     """Re-derive K0 authority from the completed import's pre-effect fields."""
 
@@ -156,6 +162,8 @@ def derive_root_staging_effect_authority_sha256(
         staging_leaf=tree_import.staging_leaf,
         target_uid=tree_import.target_uid,
         target_gid=tree_import.target_gid,
+        trace=trace,
+        root_final_absence=root_final_absence,
     )
 
 
@@ -166,6 +174,8 @@ def derive_root_staging_import_authority_sha256(
     staging_leaf: str,
     target_uid: int,
     target_gid: int,
+    trace: WarehouseW3RootTransactionTraceReceipt,
+    root_final_absence: WarehouseW3RootFinalAbsenceReceipt,
 ) -> str:
     """Derive K0 authority entirely from facts fixed before import."""
 
@@ -173,6 +183,12 @@ def derive_root_staging_import_authority_sha256(
         raise TypeError("closure must be exact CandidateGateClosureBundle")
     if type(ingress) is not CandidateGateIngressFact:
         raise TypeError("ingress must be exact CandidateGateIngressFact")
+    if type(trace) is not WarehouseW3RootTransactionTraceReceipt:
+        raise TypeError("trace must be exact WarehouseW3RootTransactionTraceReceipt")
+    if type(root_final_absence) is not WarehouseW3RootFinalAbsenceReceipt:
+        raise TypeError(
+            "root_final_absence must be exact WarehouseW3RootFinalAbsenceReceipt"
+        )
     if (
         type(staging_leaf) is not str
         or not staging_leaf
@@ -188,12 +204,23 @@ def derive_root_staging_import_authority_sha256(
         or target_gid != 0
         or ingress.closure_sha256 != closure.raw_sha256
         or ingress.gate_sha256 != closure.gate.raw_sha256
+        or trace.selection_key != closure.gate.selection_key
+        or trace.launch_id != closure.gate.launch_id
+        or trace.candidate_gate_sha256 != closure.gate.raw_sha256
+        or trace.candidate_gate_closure_sha256 != closure.raw_sha256
+        or trace.candidate_gate_ingress_sha256 != ingress.raw_sha256
+        or trace.source_acceptance_sha256 != closure.gate.source_acceptance_sha256
+        or trace.expected_root_final_absence_sha256 != root_final_absence.raw_sha256
+        or root_final_absence.selection_key != closure.gate.selection_key
+        or root_final_absence.launch_id != closure.gate.launch_id
+        or root_final_absence.source_acceptance_sha256
+        != closure.gate.source_acceptance_sha256
     ):
         raise WarehouseW3RootSelectionError(
             "K0 root-staging authority producer differs"
         )
     value = {
-        "schema": "scion.w3-root-staging-effect-authority.v1",
+        "schema": "scion.w3-root-staging-effect-authority.v2",
         "selection_key": closure.gate.selection_key,
         "launch_id": closure.gate.launch_id,
         "candidate_gate_ingress_fact_sha256": ingress.raw_sha256,
@@ -202,6 +229,11 @@ def derive_root_staging_import_authority_sha256(
         "staging_leaf": staging_leaf,
         "target_uid": target_uid,
         "target_gid": target_gid,
+        "root_transaction_trace_sha256": trace.raw_sha256,
+        "expected_root_final_absence_sha256": (
+            trace.expected_root_final_absence_sha256
+        ),
+        "root_final_absence_sha256": root_final_absence.raw_sha256,
     }
     return hashlib.sha256(_canonical_json(value)).hexdigest()
 
@@ -232,6 +264,9 @@ class WarehouseW3RootSelectionReceipt:
     nonce: str
     authority_sha256: str
     installation_sha256: str
+    source_acceptance_sha256: str
+    root_transaction_trace_sha256: str
+    root_final_absence_sha256: str
     generic_selection_sha256: str
     staged_candidate_sha256: str
     root_staging_verification_sha256: str
@@ -246,6 +281,8 @@ class WarehouseW3RootSelectionReceipt:
     preparation_commit_sha256: str
     selection: SelectionReceipt
     staged_candidate: WarehouseW3StagedCandidateReceipt
+    root_transaction_trace: WarehouseW3RootTransactionTraceReceipt
+    root_final_absence: WarehouseW3RootFinalAbsenceReceipt
     raw: bytes
     raw_sha256: str
 
@@ -265,6 +302,8 @@ class WarehouseW3RootSelectionReceipt:
         *,
         selection: SelectionReceipt,
         staged_candidate: WarehouseW3StagedCandidateReceipt,
+        trace: WarehouseW3RootTransactionTraceReceipt,
+        root_final_absence: WarehouseW3RootFinalAbsenceReceipt,
     ) -> "WarehouseW3RootSelectionReceipt":
         if os.geteuid() != 0:
             raise PermissionError(
@@ -273,6 +312,8 @@ class WarehouseW3RootSelectionReceipt:
         return cls._create_for_test(
             selection=selection,
             staged_candidate=staged_candidate,
+            trace=trace,
+            root_final_absence=root_final_absence,
         )
 
     @classmethod
@@ -281,21 +322,29 @@ class WarehouseW3RootSelectionReceipt:
         *,
         selection: SelectionReceipt,
         staged_candidate: WarehouseW3StagedCandidateReceipt,
+        trace: WarehouseW3RootTransactionTraceReceipt,
+        root_final_absence: WarehouseW3RootFinalAbsenceReceipt,
     ) -> "WarehouseW3RootSelectionReceipt":
         expected, selected, staged = cls._expected(
             selection,
             staged_candidate,
+            trace,
+            root_final_absence,
         )
         return cls.from_bytes(
             _canonical_json(expected),
             selection=selected,
             staged_candidate=staged,
+            trace=trace,
+            root_final_absence=root_final_absence,
         )
 
     @staticmethod
     def _expected(
         selection: SelectionReceipt,
         staged_candidate: WarehouseW3StagedCandidateReceipt,
+        trace: WarehouseW3RootTransactionTraceReceipt,
+        root_final_absence: WarehouseW3RootFinalAbsenceReceipt,
     ) -> tuple[
         dict[str, object],
         SelectionReceipt,
@@ -306,6 +355,14 @@ class WarehouseW3RootSelectionReceipt:
         if type(staged_candidate) is not WarehouseW3StagedCandidateReceipt:
             raise TypeError(
                 "staged_candidate must be exact " "WarehouseW3StagedCandidateReceipt"
+            )
+        if type(trace) is not WarehouseW3RootTransactionTraceReceipt:
+            raise TypeError(
+                "trace must be exact WarehouseW3RootTransactionTraceReceipt"
+            )
+        if type(root_final_absence) is not WarehouseW3RootFinalAbsenceReceipt:
+            raise TypeError(
+                "root_final_absence must be exact " "WarehouseW3RootFinalAbsenceReceipt"
             )
         selected = SelectionReceipt.from_bytes(selection.raw)
         verification = staged_candidate.root_staging_verification
@@ -336,6 +393,19 @@ class WarehouseW3RootSelectionReceipt:
             != staged.imported_tree_aggregate_sha256
             or _source_identity_tuple(selected.source_candidate_identity)
             != _source_identity_tuple(staged.source_identity)
+            or trace.selection_key != staged.selection_key
+            or trace.launch_id != staged.launch_id
+            or trace.candidate_gate_sha256 != gate.raw_sha256
+            or trace.candidate_gate_closure_sha256
+            != staged.candidate_gate_closure_sha256
+            or trace.candidate_gate_ingress_sha256
+            != staged.candidate_gate_ingress_fact_sha256
+            or trace.source_acceptance_sha256 != intent.source_acceptance_sha256
+            or trace.expected_root_final_absence_sha256 != root_final_absence.raw_sha256
+            or root_final_absence.selection_key != staged.selection_key
+            or root_final_absence.launch_id != staged.launch_id
+            or root_final_absence.source_acceptance_sha256
+            != intent.source_acceptance_sha256
         ):
             raise WarehouseW3RootSelectionError(
                 "generic selection differs from W3 staged candidate"
@@ -350,6 +420,9 @@ class WarehouseW3RootSelectionReceipt:
                 "nonce": gate.nonce,
                 "authority_sha256": staged.authority_sha256,
                 "installation_sha256": staged.installation_sha256,
+                "source_acceptance_sha256": intent.source_acceptance_sha256,
+                "root_transaction_trace_sha256": trace.raw_sha256,
+                "root_final_absence_sha256": root_final_absence.raw_sha256,
                 "generic_selection_sha256": selected.raw_sha256,
                 "staged_candidate_sha256": staged.raw_sha256,
                 "root_staging_verification_sha256": (
@@ -385,10 +458,14 @@ class WarehouseW3RootSelectionReceipt:
         *,
         selection: SelectionReceipt,
         staged_candidate: WarehouseW3StagedCandidateReceipt,
+        trace: WarehouseW3RootTransactionTraceReceipt,
+        root_final_absence: WarehouseW3RootFinalAbsenceReceipt,
     ) -> "WarehouseW3RootSelectionReceipt":
         expected, selected, staged = cls._expected(
             selection,
             staged_candidate,
+            trace,
+            root_final_absence,
         )
         value = _decode(raw, label="W3 root selection")
         if (
@@ -409,6 +486,9 @@ class WarehouseW3RootSelectionReceipt:
                     "nonce",
                     "authority_sha256",
                     "installation_sha256",
+                    "source_acceptance_sha256",
+                    "root_transaction_trace_sha256",
+                    "root_final_absence_sha256",
                     "generic_selection_sha256",
                     "staged_candidate_sha256",
                     "root_staging_verification_sha256",
@@ -425,6 +505,8 @@ class WarehouseW3RootSelectionReceipt:
             ),
             ("selection", selected),
             ("staged_candidate", staged),
+            ("root_transaction_trace", trace),
+            ("root_final_absence", root_final_absence),
             ("raw", raw),
             ("raw_sha256", hashlib.sha256(raw).hexdigest()),
         ):
@@ -436,6 +518,8 @@ class WarehouseW3RootSelectionReceipt:
 class WarehouseW3SelectionReplayInputs:
     candidate_gate_closure_raw: bytes
     candidate_gate_ingress_fact_raw: bytes
+    root_transaction_trace_raw: bytes
+    root_final_absence_raw: bytes
     tree_import_raw: bytes
     candidate_receipt_raw: bytes
     source_receipt_raw: bytes
@@ -465,6 +549,8 @@ class WarehouseW3SelectionReplayInputs:
 class WarehouseW3SelectedCandidateChain:
     closure: CandidateGateClosureBundle
     ingress: CandidateGateIngressFact
+    root_transaction_trace: WarehouseW3RootTransactionTraceReceipt
+    root_final_absence: WarehouseW3RootFinalAbsenceReceipt
     tree_import: ImmutableTreeImportReceipt
     root_staging_verification: WarehouseW3RootStagingVerification
     staged_candidate: WarehouseW3StagedCandidateReceipt
@@ -491,6 +577,8 @@ def selection_replay_inputs_from_chain(
     inputs = WarehouseW3SelectionReplayInputs(
         candidate_gate_closure_raw=chain.closure.raw,
         candidate_gate_ingress_fact_raw=chain.ingress.raw,
+        root_transaction_trace_raw=chain.root_transaction_trace.raw,
+        root_final_absence_raw=chain.root_final_absence.raw,
         tree_import_raw=chain.tree_import.raw,
         candidate_receipt_raw=verification.candidate_receipt.raw,
         source_receipt_raw=verification.source_receipt.raw,
@@ -723,6 +811,13 @@ def verify_w3_selected_candidate_chain(
         ingress = CandidateGateIngressFact.from_bytes(
             inputs.candidate_gate_ingress_fact_raw
         )
+        trace = WarehouseW3RootTransactionTraceReceipt.from_bytes(
+            inputs.root_transaction_trace_raw
+        )
+        root_final_absence = WarehouseW3RootFinalAbsenceReceipt.from_bytes(
+            inputs.root_final_absence_raw,
+            candidate_absence=closure.absence_facts,
+        )
         imported = ImmutableTreeImportReceipt.from_bytes(inputs.tree_import_raw)
         candidate = CandidateReceipt.from_bytes(inputs.candidate_receipt_raw)
         source = GitSourceReceipt.from_bytes(inputs.source_receipt_raw)
@@ -768,6 +863,8 @@ def verify_w3_selected_candidate_chain(
             inputs.root_selection_raw,
             selection=generic,
             staged_candidate=staged,
+            trace=trace,
+            root_final_absence=root_final_absence,
         )
         k0_intent = RootPhaseIntentReceipt.from_bytes(inputs.root_staging_intent_raw)
         k0 = RootPhaseReceipt.from_bytes(inputs.root_staging_receipt_raw)
@@ -806,9 +903,13 @@ def verify_w3_selected_candidate_chain(
             closure,
             ingress,
             imported,
+            trace,
+            root_final_absence,
         )
         or not receipt_matches(k0_intent, k0)
         or k0.effect_sha256 != staged.raw_sha256
+        or root_selection.root_transaction_trace_sha256 != trace.raw_sha256
+        or root_selection.root_final_absence_sha256 != root_final_absence.raw_sha256
         or k1_intent.phase is not RootPhase.CANDIDATE_SELECTED
         or k1_intent.launch_id != root_selection.launch_id
         or k1_intent.predecessor_sha256 != (k0.raw_sha256,)
@@ -823,6 +924,8 @@ def verify_w3_selected_candidate_chain(
     return WarehouseW3SelectedCandidateChain(
         closure=closure,
         ingress=ingress,
+        root_transaction_trace=trace,
+        root_final_absence=root_final_absence,
         tree_import=imported,
         root_staging_verification=verification,
         staged_candidate=staged,

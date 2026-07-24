@@ -2010,6 +2010,8 @@ class WarehouseW3PreStartEvidence:
             selection.raw,
             selection=selection.selection,
             staged_candidate=reopened_staged,
+            trace=selection.root_transaction_trace,
+            root_final_absence=selection.root_final_absence,
         )
         if root_selection != selection:
             raise WarehouseW3RootInstallationError("W3 root selection object differs")
@@ -2143,9 +2145,10 @@ class WarehouseW3PreStartEvidence:
                     "close_template_size_bytes",
                     "run_publication_sha256",
                     "close_publication_sha256",
+                    "dropin_absence_paths",
                 }
             ),
-            schema="scion.unit-publication-acceptance.v3",
+            schema="scion.unit-publication-acceptance.v4",
         )
         reload_raw = _require_exact_receipt_object(
             manager_reload,
@@ -2507,6 +2510,10 @@ class WarehouseW3PreStartEvidence:
             or selection_value.nonce != authority_value.nonce
             or selection_value.authority_sha256 != authority_sha
             or selection_value.candidate_sha256 != candidate.raw_sha256
+            or root_selection.source_acceptance_sha256
+            != candidate.source_acceptance_sha256
+            or root_selection.source_acceptance_sha256
+            != staged_candidate.root_staging_verification.selection_intent.source_acceptance_sha256
             or selection_value.import_receipt_sha256
             != staged_candidate.tree_import_sha256
             or selection_value.imported_staging_aggregate_sha256
@@ -2680,6 +2687,7 @@ class WarehouseW3PreStartEvidence:
             "loaded_manager": loaded_manager.raw_sha256,
             "prestart_absence": prestart_absence.raw_sha256,
             "runtime_account": runtime_account.raw_sha256,
+            "source_acceptance": root_selection.source_acceptance_sha256,
         }
         return {
             "schema": WAREHOUSE_W3_PRESTART_EVIDENCE_SCHEMA,

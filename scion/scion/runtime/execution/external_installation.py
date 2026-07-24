@@ -2206,6 +2206,7 @@ class UnitPublicationReceipt:
     close_template_size_bytes: int
     run_publication_sha256: str
     close_publication_sha256: str
+    dropin_absence_paths: tuple[str, ...]
     raw: bytes
     raw_sha256: str
 
@@ -2282,7 +2283,7 @@ class UnitPublicationReceipt:
             reopened_close_publication,
         )
         value = {
-            "schema": "scion.unit-publication-acceptance.v3",
+            "schema": "scion.unit-publication-acceptance.v4",
             "state": "PUBLISHED_REOPENED",
             "launch_id": installation.launch_id,
             "authority_sha256": authority.authority_sha256,
@@ -2299,6 +2300,14 @@ class UnitPublicationReceipt:
             "close_template_size_bytes": len(close_raw),
             "run_publication_sha256": reopened_run_publication.raw_sha256,
             "close_publication_sha256": reopened_close_publication.raw_sha256,
+            "dropin_absence_paths": sorted(
+                (
+                    f"{run_fragment}.d",
+                    f"{close_fragment}.d",
+                    f"/etc/systemd/system/{installation.run_unit}.d",
+                    f"/etc/systemd/system/{installation.close_unit}.d",
+                )
+            ),
         }
         return cls.from_bytes(
             _canonical_json(value),
@@ -2355,6 +2364,7 @@ class UnitPublicationReceipt:
                     "close_template_size_bytes",
                     "run_publication_sha256",
                     "close_publication_sha256",
+                    "dropin_absence_paths",
                 }
             ),
             label="unit publication receipt",
@@ -2391,7 +2401,7 @@ class UnitPublicationReceipt:
             reopened_close_publication,
         )
         expected = {
-            "schema": "scion.unit-publication-acceptance.v3",
+            "schema": "scion.unit-publication-acceptance.v4",
             "state": "PUBLISHED_REOPENED",
             "launch_id": installation.launch_id,
             "authority_sha256": authority.authority_sha256,
@@ -2408,6 +2418,14 @@ class UnitPublicationReceipt:
             "close_template_size_bytes": len(close_raw),
             "run_publication_sha256": reopened_run_publication.raw_sha256,
             "close_publication_sha256": reopened_close_publication.raw_sha256,
+            "dropin_absence_paths": sorted(
+                (
+                    f"{run_fragment}.d",
+                    f"{close_fragment}.d",
+                    f"/etc/systemd/system/{installation.run_unit}.d",
+                    f"/etc/systemd/system/{installation.close_unit}.d",
+                )
+            ),
         }
         if (
             _canonical_json(value) != _canonical_json(expected)
@@ -2435,6 +2453,7 @@ class UnitPublicationReceipt:
             ("close_template_size_bytes", len(close_raw)),
             ("run_publication_sha256", reopened_run_publication.raw_sha256),
             ("close_publication_sha256", reopened_close_publication.raw_sha256),
+            ("dropin_absence_paths", tuple(expected["dropin_absence_paths"])),
             ("raw", raw),
             ("raw_sha256", hashlib.sha256(raw).hexdigest()),
         ):
@@ -2663,6 +2682,16 @@ class RootPhaseReceiptWriter(NoReplaceReceiptWriter, Protocol):
 
 class PreStartReacquirer(Protocol):
     """Reacquire every live pre-start gate and return its canonical receipt."""
+
+    def __call__(
+        self,
+        authorization: "StartAuthorizationReceipt",
+        installed_acceptance: InstalledAcceptance,
+    ) -> bytes: ...
+
+
+class AdjacentLoadedManagerReacquirer(Protocol):
+    """Reacquire the full loaded pair immediately before StartUnit."""
 
     def __call__(
         self,
@@ -3844,6 +3873,7 @@ class StartAuthorizationReceipt:
     selection_key: str
     preparation_commit_sha256: str
     root_selection_sha256: str
+    external_source_acceptance_sha256: str
     user_statement: str
     task_event_identity: str
     recorded_at_utc: str
@@ -3872,13 +3902,14 @@ class StartAuthorizationReceipt:
         selection_key: str,
         preparation_commit_sha256: str,
         root_selection_sha256: str,
+        external_source_acceptance_sha256: str,
         user_statement: str,
         task_event_identity: str,
         recorded_at_utc: str,
         unit: str,
     ) -> "StartAuthorizationReceipt":
         value = {
-            "schema": "scion.start-authorization.v1",
+            "schema": "scion.start-authorization.v2",
             "launch_id": _launch_id(launch_id),
             "authority_sha256": _sha256(
                 authority_sha256,
@@ -3905,6 +3936,10 @@ class StartAuthorizationReceipt:
             "root_selection_sha256": _sha256(
                 root_selection_sha256,
                 field="root_selection_sha256",
+            ),
+            "external_source_acceptance_sha256": _sha256(
+                external_source_acceptance_sha256,
+                field="external_source_acceptance_sha256",
             ),
             "user_statement": _bounded_text(
                 user_statement,
@@ -3945,6 +3980,7 @@ class StartAuthorizationReceipt:
                     "selection_key",
                     "preparation_commit_sha256",
                     "root_selection_sha256",
+                    "external_source_acceptance_sha256",
                     "user_statement",
                     "task_event_identity",
                     "recorded_at_utc",
@@ -3959,7 +3995,7 @@ class StartAuthorizationReceipt:
             label="start authorization",
         )
         if (
-            value["schema"] != "scion.start-authorization.v1"
+            value["schema"] != "scion.start-authorization.v2"
             or value["method"] != "StartUnit"
             or value["mode"] != "fail"
             or value["retry"] is not False
@@ -3998,6 +4034,10 @@ class StartAuthorizationReceipt:
                 value["root_selection_sha256"],
                 field="root_selection_sha256",
             ),
+            "external_source_acceptance_sha256": _sha256(
+                value["external_source_acceptance_sha256"],
+                field="external_source_acceptance_sha256",
+            ),
             "user_statement": _bounded_text(
                 value["user_statement"],
                 field="user_statement",
@@ -4029,6 +4069,7 @@ class StartIssueReceipt:
     installation_sha256: str
     installed_acceptance_sha256: str
     prestart_receipt_sha256: str
+    loaded_manager_sha256: str
     manager_unique_owner: str
     boot_id: str
     manager_version: str
@@ -4053,13 +4094,14 @@ class StartIssueReceipt:
         installation_sha256: str,
         installed_acceptance_sha256: str,
         prestart_receipt_sha256: str,
+        loaded_manager_sha256: str,
         manager_unique_owner: str,
         boot_id: str,
         manager_version: str,
         unit: str,
     ) -> "StartIssueReceipt":
         value = {
-            "schema": "scion.start-issued.v1",
+            "schema": "scion.start-issued.v2",
             "launch_id": _launch_id(launch_id),
             "authorization_sha256": _sha256(
                 authorization_sha256,
@@ -4076,6 +4118,10 @@ class StartIssueReceipt:
             "prestart_receipt_sha256": _sha256(
                 prestart_receipt_sha256,
                 field="prestart_receipt_sha256",
+            ),
+            "loaded_manager_sha256": _sha256(
+                loaded_manager_sha256,
+                field="loaded_manager_sha256",
             ),
             "manager_unique_owner": _unique_owner(manager_unique_owner),
             "boot_id": _boot_id(boot_id),
@@ -4095,6 +4141,7 @@ class StartIssueReceipt:
         authorization: StartAuthorizationReceipt,
         *,
         prestart_receipt_sha256: str,
+        loaded_manager_sha256: str,
         manager_identity: ManagerIdentity,
     ) -> "StartIssueReceipt":
         if type(authorization) is not StartAuthorizationReceipt:
@@ -4107,6 +4154,7 @@ class StartIssueReceipt:
             installation_sha256=authorization.installation_sha256,
             installed_acceptance_sha256=(authorization.installed_acceptance_sha256),
             prestart_receipt_sha256=prestart_receipt_sha256,
+            loaded_manager_sha256=loaded_manager_sha256,
             manager_unique_owner=manager_identity.unique_owner,
             boot_id=manager_identity.boot_id,
             manager_version=manager_identity.version,
@@ -4125,6 +4173,7 @@ class StartIssueReceipt:
                     "installation_sha256",
                     "installed_acceptance_sha256",
                     "prestart_receipt_sha256",
+                    "loaded_manager_sha256",
                     "manager_unique_owner",
                     "boot_id",
                     "manager_version",
@@ -4139,7 +4188,7 @@ class StartIssueReceipt:
             label="start issue receipt",
         )
         if (
-            value["schema"] != "scion.start-issued.v1"
+            value["schema"] != "scion.start-issued.v2"
             or value["method"] != "StartUnit"
             or value["mode"] != "fail"
             or value["retry"] is not False
@@ -4173,6 +4222,13 @@ class StartIssueReceipt:
                 _sha256(
                     value["prestart_receipt_sha256"],
                     field="prestart_receipt_sha256",
+                ),
+            ),
+            (
+                "loaded_manager_sha256",
+                _sha256(
+                    value["loaded_manager_sha256"],
+                    field="loaded_manager_sha256",
                 ),
             ),
             (
@@ -4310,6 +4366,7 @@ class StartPermitOwner:
         "_installed_acceptance",
         "_issue",
         "_manager",
+        "_reacquire_loaded_manager",
         "_reacquire_prestart",
         "_writer",
         "_spent",
@@ -4325,6 +4382,7 @@ class StartPermitOwner:
         issue: StartIssueReceipt,
         manager: NarrowStartManager,
         reacquire_prestart: PreStartReacquirer,
+        reacquire_loaded_manager: AdjacentLoadedManagerReacquirer,
         writer: NoReplaceReceiptWriter,
     ) -> None:
         if type(authorization) is not StartAuthorizationReceipt:
@@ -4339,6 +4397,8 @@ class StartPermitOwner:
             raise TypeError("issue must be exact StartIssueReceipt")
         if not callable(reacquire_prestart):
             raise TypeError("reacquire_prestart must be callable")
+        if not callable(reacquire_loaded_manager):
+            raise TypeError("reacquire_loaded_manager must be callable")
         if not callable(getattr(writer, "write_no_replace", None)):
             raise TypeError("writer lacks write_no_replace")
         if (
@@ -4362,6 +4422,7 @@ class StartPermitOwner:
         self._installed_acceptance = installed_acceptance
         self._issue = issue
         self._manager = manager
+        self._reacquire_loaded_manager = reacquire_loaded_manager
         self._reacquire_prestart = reacquire_prestart
         self._writer = writer
         self._spent = False
@@ -4412,6 +4473,23 @@ class StartPermitOwner:
         if current_identity != expected_identity:
             raise StartPermitError("manager identity differs before issue")
         self._writer.write_no_replace("START_ISSUED", self._issue.raw)
+        try:
+            loaded_manager_raw = self._reacquire_loaded_manager(
+                self._authorization,
+                self._installed_acceptance,
+            )
+        except Exception as exc:
+            raise StartPermitError(
+                "adjacent loaded-manager pair could not be reacquired"
+            ) from exc
+        if (
+            type(loaded_manager_raw) is not bytes
+            or not loaded_manager_raw
+            or len(loaded_manager_raw) > 4 * 1024 * 1024
+            or hashlib.sha256(loaded_manager_raw).hexdigest()
+            != self._issue.loaded_manager_sha256
+        ):
+            raise StartPermitError("adjacent loaded-manager receipt differs")
         referenced = False
         try:
             try:
@@ -4506,6 +4584,7 @@ def classify_start_dispatch(
 
 
 __all__ = [
+    "AdjacentLoadedManagerReacquirer",
     "CanonicalReceiptError",
     "DefiniteStartError",
     "DirectoryIdentity",

@@ -72,6 +72,7 @@ def _chain(semantic_inputs: dict[str, object]) -> dict[str, object]:
     issue = StartIssueReceipt.create_authorized(
         authorization,
         prestart_receipt_sha256=evidence.raw_sha256,
+        loaded_manager_sha256=values["loaded_manager"].raw_sha256,
         manager_identity=ManagerIdentity(
             unique_owner=":1.42",
             boot_id="12345678-1234-1234-1234-123456789abc",

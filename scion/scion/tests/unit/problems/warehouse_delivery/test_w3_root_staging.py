@@ -51,6 +51,22 @@ def _canonical(value: object) -> bytes:
     ).encode()
 
 
+@pytest.fixture(autouse=True)
+def _verified_external_root_facts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        root_staging_module,
+        "verify_namespace_probe_execution_binary",
+        lambda fact: fact,
+    )
+    monkeypatch.setattr(
+        root_staging_module,
+        "verify_wheel_bytes_against_receipt",
+        lambda raw, receipt, *, trusted_source_snapshot: receipt,
+    )
+
+
 def _closure(
     prepared,
     *,

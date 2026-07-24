@@ -12,6 +12,10 @@ from scion.problems.warehouse_delivery.w3_composition import (
     EXPECTED_MANIFEST_SHA256,
     EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256,
 )
+from scion.problems.warehouse_delivery.w3_candidate_gate import (
+    W3_WHEEL_LOGICAL_PATH,
+    W3_WHEEL_SEALED_PATH,
+)
 from scion.problems.warehouse_delivery.w3_installation import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
     AuthorityInputAdapter,
@@ -37,6 +41,14 @@ from scion.problems.warehouse_delivery.w3_installation import (
     derive_selection_key,
     prepare_candidate,
     verify_candidate,
+)
+from scion.problems.warehouse_delivery.w3_source_acceptance import (
+    FixedSourceReviewClosure,
+    RootFixedSourceAcceptanceReceipt,
+    RootGitVerificationReceipt,
+    W3_SOURCE_ACCEPTANCE_LOGICAL_PATH,
+    W3_SOURCE_ACCEPTANCE_SEALED_PATH,
+    source_inventory_sha256,
 )
 
 COMMIT = hashlib.sha1(b"w3 launch commit").hexdigest()
@@ -217,11 +229,13 @@ def test_selection_receipts_are_canonical_plan_bound_and_cross_bound(
         task_event_identity="task-event:20260723",
         launch_commit=COMMIT,
         launch_tree=TREE,
+        source_acceptance_sha256="d" * 64,
     )
     expected_key = derive_selection_key(
         task_event_identity="task-event:20260723",
         launch_commit=COMMIT,
         launch_tree=TREE,
+        source_acceptance_sha256="d" * 64,
         dry_root_manifest_sha256=EXPECTED_MANIFEST_SHA256,
         native_record_sha256=EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256,
     )
@@ -265,6 +279,7 @@ def test_selection_intent_rejects_unknown_duplicate_and_plan_drift(
         task_event_identity="task-event:one",
         launch_commit=COMMIT,
         launch_tree=TREE,
+        source_acceptance_sha256="d" * 64,
     )
     value = json.loads(intent.raw)
     value["unknown"] = False
@@ -289,6 +304,7 @@ def test_selection_owner_publishes_one_fsynced_pair_and_refuses_reuse(
         task_event_identity="task-event:selection-owner",
         launch_commit=COMMIT,
         launch_tree=TREE,
+        source_acceptance_sha256="d" * 64,
     )
     paths = derive_candidate_paths(tmp_path, intent.selection_key)
     owner = CandidateSelectionOwner(intent)
@@ -330,6 +346,7 @@ def test_selection_owner_rejects_root_and_existing_candidate_before_mutation(
         task_event_identity="task-event:selection-root-refusal",
         launch_commit=COMMIT,
         launch_tree=TREE,
+        source_acceptance_sha256="d" * 64,
     )
     paths = derive_candidate_paths(tmp_path, intent.selection_key)
 
@@ -623,11 +640,46 @@ def _prepared_inputs(
         native_sha,
     )
     source, _runner = _source(tmp_path)
+    source_inventory = source_inventory_sha256(source.receipt)
+    root_git = RootGitVerificationReceipt.create(
+        trusted_git_root=Path("/srv/scion/trusted-w3.git"),
+        trusted_git_device=1,
+        trusted_git_inode=2,
+        git_binary_sha256="a" * 64,
+        remote_name=REMOTE,
+        remote_ref=REMOTE_REF,
+        source=source,
+    )
+    reviews = tuple(
+        FixedSourceReviewClosure.create(
+            review_scope=scope,
+            reviewer_identity=f"reviewer-{index}",
+            task_identity=f"task-{index}",
+            source_commit=source.receipt.source_commit,
+            source_tree=source.receipt.source_tree,
+            source_inventory_sha256=source_inventory,
+            report_sha256=str(index) * 64,
+            p0_open=0,
+            p1_open=0,
+            completed_at_utc=f"2026-07-2{index}T00:00:00Z",
+        )
+        for index, scope in enumerate(
+            ("root_installation", "launch_readiness"),
+            start=1,
+        )
+    )
+    source_acceptance = RootFixedSourceAcceptanceReceipt.create(
+        source=source,
+        root_git_verification=root_git,
+        reviews=reviews,
+        accepted_at_utc="2026-07-23T00:00:00Z",
+    )
     intent = CandidateSelectionIntent.create(
         experiment_parent=tmp_path,
         task_event_identity="task-event:candidate-facade",
         launch_commit=COMMIT,
         launch_tree=TREE,
+        source_acceptance_sha256=source_acceptance.raw_sha256,
         dry_root_manifest_sha256=manifest_sha,
         native_record_sha256=native_sha,
     )
@@ -652,6 +704,22 @@ def _prepared_inputs(
                 logical_path=W3_NATIVE_RECORD_LOGICAL_PATH,
                 sealed_path=f"sealed/{W3_NATIVE_RECORD_LOGICAL_PATH}",
                 source_path=native_path,
+            ),
+            SealedStoreObject.generated(
+                logical_path=W3_SOURCE_ACCEPTANCE_LOGICAL_PATH,
+                sealed_path=W3_SOURCE_ACCEPTANCE_SEALED_PATH,
+                raw=source_acceptance.raw,
+                generator_sha256=root_git.raw_sha256,
+                input_sha256=(source.receipt.raw_sha256,),
+                rule_sha256=ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
+            ),
+            SealedStoreObject.generated(
+                logical_path=W3_WHEEL_LOGICAL_PATH,
+                sealed_path=W3_WHEEL_SEALED_PATH,
+                raw=b"exact wheel bytes",
+                generator_sha256="b" * 64,
+                input_sha256=(source.receipt.raw_sha256,),
+                rule_sha256=ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
             ),
         ]
     )

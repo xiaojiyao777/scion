@@ -21,9 +21,10 @@ from .w3_candidate_gate import (
     W3_WHEEL_RECEIPT_SEALED_PATH,
     W3_WHEEL_SEALED_PATH,
     CandidateGateClosureBundle,
-    CandidateSimulatedRelocationRef,
+    CandidateNamespaceFinalProbeRef,
     FilesystemCandidateCompositionInspector,
     close_candidate_gate_closure,
+    derive_namespace_probe_evidence_sha256,
 )
 from .w3_candidate_ingress import (
     PinnedCandidateGateIngress,
@@ -38,11 +39,12 @@ from .w3_composition import (
 )
 from .w3_environment import (
     WarehouseRuntimeSources,
-    materialize_simulated_warehouse_environment,
+    materialize_simulated_warehouse_environment as materialize_namespace_environment,
     prepare_production_warehouse_environment,
 )
 from .w3_environment_receipts import (
     FilesystemEnvironmentSemanticReader,
+    NonRootNamespaceEnvironmentProbeReader,
     SubprocessEnvironmentProbeReader,
     acquire_warehouse_environment_content,
 )
@@ -58,6 +60,12 @@ from .w3_installation import (
     derive_candidate_paths,
     prepare_candidate,
     verify_candidate,
+)
+from .w3_source_acceptance import (
+    RootFixedSourceAcceptanceAuthority,
+    W3_SOURCE_ACCEPTANCE_LOGICAL_PATH,
+    W3_SOURCE_ACCEPTANCE_SEALED_PATH,
+    source_acceptance_path as canonical_source_acceptance_path,
 )
 from .w3_wheel import (
     ImmutableGitArchive,
@@ -512,19 +520,6 @@ def _generated_store_objects(
     return wheel, receipt
 
 
-def _simulated_evidence_sha256(
-    semantic_raw: bytes,
-    candidate_probe_raw: bytes,
-    simulated_probe_raw: bytes,
-) -> str:
-    return hashlib.sha256(
-        b"scion.w3-candidate-simulated-relocation-evidence.v1\0"
-        + semantic_raw
-        + candidate_probe_raw
-        + simulated_probe_raw
-    ).hexdigest()
-
-
 def _reverify_environment_evidence(
     prepared: PreparedCandidate,
     closure: CandidateGateClosureBundle,
@@ -532,14 +527,14 @@ def _reverify_environment_evidence(
     """Rehash and rerun both non-root relocation probes during reopen."""
 
     candidate_root = prepared.candidate_root / "environment"
-    simulated_root = Path(closure.simulated_relocation.simulated_final_environment_root)
+    physical_root = Path(closure.namespace_probe_ref.physical_environment_root)
     external_runtime_paths = tuple(
         Path(item.path) for item in closure.environment_content.external_runtime
     )
     selection_root = Path(prepared.intent.selection_directory)
     for label, environment_root in (
         ("candidate", candidate_root),
-        ("simulated-final", simulated_root),
+        ("namespace-physical", physical_root),
     ):
         try:
             verify_environment_content(
@@ -554,15 +549,15 @@ def _reverify_environment_evidence(
                 f"live {label} environment differs from candidate closure"
             ) from exc
     reader = SubprocessEnvironmentProbeReader()
+    namespace_reader = NonRootNamespaceEnvironmentProbeReader()
     try:
         candidate_probe = reader.probe(
             candidate_root,
             phase="candidate",
             content_receipt=closure.semantic_environment,
         )
-        simulated_probe = reader.probe(
-            simulated_root,
-            phase="simulated_final",
+        namespace_probe, namespace_execution = namespace_reader.probe(
+            physical_root,
             content_receipt=closure.semantic_environment,
         )
     except Exception as exc:
@@ -571,13 +566,15 @@ def _reverify_environment_evidence(
         ) from exc
     if (
         candidate_probe != closure.candidate_probe
-        or simulated_probe != closure.simulated_final_probe
-        or _simulated_evidence_sha256(
+        or namespace_probe != closure.namespace_final_probe
+        or namespace_execution != closure.namespace_probe_execution
+        or derive_namespace_probe_evidence_sha256(
             closure.semantic_environment.raw,
             candidate_probe.raw,
-            simulated_probe.raw,
+            namespace_probe.raw,
+            namespace_execution.raw,
         )
-        != closure.simulated_relocation.evidence_receipt_sha256
+        != closure.namespace_probe_ref.evidence_receipt_sha256
     ):
         raise WarehouseW3CandidateCoordinatorError(
             "live candidate relocation evidence differs"
@@ -593,6 +590,7 @@ def prepare_w3_candidate(
     remote_ref: str,
     native_record_path: Path,
     runtime_python: Path,
+    source_acceptance_path: Path,
 ) -> WarehouseW3PreparedCandidateClosure:
     """Prepare, close, publish, and independently reopen one exact candidate."""
 
@@ -620,13 +618,30 @@ def prepare_w3_candidate(
         raise WarehouseW3CandidateCoordinatorError(
             "accepted manifest or native record identity differs"
         )
-    logical_paths = _tracked_launch_paths(repo, launch_commit)
-    source = GitSourceAcquirer(repo).acquire(
-        launch_commit=launch_commit,
-        remote_name=remote_name,
-        remote_ref=remote_ref,
-        logical_paths=logical_paths,
-    )
+    with RootFixedSourceAcceptanceAuthority.open(
+        source_acceptance_path
+    ) as source_authority:
+        source_acceptance = source_authority.receipt
+        if (
+            source_acceptance_path
+            != canonical_source_acceptance_path(source_acceptance.source_commit)
+            or launch_commit != source_acceptance.source_commit
+        ):
+            raise WarehouseW3CandidateCoordinatorError(
+                "root fixed-source acceptance path or commit differs"
+            )
+        logical_paths = _tracked_launch_paths(repo, launch_commit)
+        source = GitSourceAcquirer(repo).acquire(
+            launch_commit=launch_commit,
+            remote_name=remote_name,
+            remote_ref=remote_ref,
+            logical_paths=logical_paths,
+        )
+        if source.receipt != source_acceptance.source_receipt:
+            raise WarehouseW3CandidateCoordinatorError(
+                "live Git source differs from root fixed-source acceptance"
+            )
+        source_authority.revalidate()
     intent = CandidateSelectionIntent.create(
         experiment_parent=root.parent,
         task_event_identity=W3_TASK_EVENT_IDENTITY,
@@ -634,6 +649,7 @@ def prepare_w3_candidate(
         launch_tree=source.receipt.source_tree,
         dry_root_manifest_sha256=EXPECTED_MANIFEST_SHA256,
         native_record_sha256=EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256,
+        source_acceptance_sha256=source_acceptance.raw_sha256,
     )
     paths = derive_candidate_paths(root.parent, intent.selection_key)
     work_root = _prepare_work_root(root.parent, intent.selection_key)
@@ -683,6 +699,11 @@ def prepare_w3_candidate(
             sealed_path=f"sealed/{W3_NATIVE_RECORD_LOGICAL_PATH}",
             source_path=native_record_path,
         ),
+        SealedStoreObject.external_evidence(
+            logical_path=W3_SOURCE_ACCEPTANCE_LOGICAL_PATH,
+            sealed_path=W3_SOURCE_ACCEPTANCE_SEALED_PATH,
+            source_path=source_acceptance_path,
+        ),
         *generated,
     )
     prepared = prepare_candidate(
@@ -700,9 +721,9 @@ def prepare_w3_candidate(
         phase="candidate",
         content_receipt=semantic,
     )
-    simulated_environment = (
+    namespace_environment = (
         work_root
-        / "simulated-final"
+        / "namespace-physical"
         / "var"
         / "lib"
         / "scion"
@@ -710,26 +731,29 @@ def prepare_w3_candidate(
         / "w3"
         / production_environment.build.receipt.raw_sha256
     )
-    simulated_environment.parent.mkdir(mode=0o700, parents=True)
-    materialize_simulated_warehouse_environment(
+    namespace_environment.parent.mkdir(mode=0o700, parents=True)
+    materialize_namespace_environment(
         candidate_environment,
-        simulated_environment,
+        namespace_environment,
         production_environment.build.receipt,
         external_runtime_paths=production_environment.external_runtime_paths,
         candidate_root=prepared.candidate_root,
         selection_root=paths.selection_directory,
     )
-    simulated_probe = probe_reader.probe(
-        simulated_environment,
-        phase="simulated_final",
+    (
+        namespace_probe,
+        namespace_execution,
+    ) = NonRootNamespaceEnvironmentProbeReader().probe(
+        namespace_environment,
         content_receipt=semantic,
     )
     launch_id = prepared.installation.launch_id
-    relocation = CandidateSimulatedRelocationRef.create(
-        evidence_receipt_sha256=_simulated_evidence_sha256(
+    relocation = CandidateNamespaceFinalProbeRef.create(
+        evidence_receipt_sha256=derive_namespace_probe_evidence_sha256(
             semantic.raw,
             candidate_probe.raw,
-            simulated_probe.raw,
+            namespace_probe.raw,
+            namespace_execution.raw,
         ),
         selection_key=intent.selection_key,
         launch_id=launch_id,
@@ -737,7 +761,8 @@ def prepare_w3_candidate(
         installation_sha256=prepared.installation.installation_sha256,
         semantic_environment=semantic,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_probe,
+        namespace_final_probe=namespace_probe,
+        namespace_probe_execution=namespace_execution,
     )
     closure = close_candidate_gate_closure(
         candidate_verification=prepared.verification_receipt,
@@ -745,8 +770,9 @@ def prepare_w3_candidate(
         semantic_environment=semantic,
         environment_content=production_environment.build.receipt,
         candidate_probe=candidate_probe,
-        simulated_final_probe=simulated_probe,
-        simulated_relocation=relocation,
+        namespace_final_probe=namespace_probe,
+        namespace_probe_execution=namespace_execution,
+        namespace_probe_ref=relocation,
         candidate_root=prepared.candidate_root,
         accepted_root=root,
         nonce=prepared.authority.nonce,
@@ -762,6 +788,7 @@ def prepare_w3_candidate(
     reopened = verify_w3_candidate(
         prepared.candidate_root,
         repo_root=repo,
+        source_acceptance_path=source_acceptance_path,
     )
     if reopened.closure != closure or reopened.candidate != prepared:
         raise WarehouseW3CandidateCoordinatorError(
@@ -808,6 +835,7 @@ def verify_w3_candidate(
     candidate_root: Path,
     *,
     repo_root: Path,
+    source_acceptance_path: Path,
 ) -> WarehouseW3PreparedCandidateClosure:
     """Independently reopen static candidate, build, dry-root, and ingress facts."""
 
@@ -826,18 +854,32 @@ def verify_w3_candidate(
             raise WarehouseW3CandidateCoordinatorError(
                 "candidate verification differs from ingress"
             )
-        source = GitSourceAcquirer(root).acquire(
-            launch_commit=prepared.source_receipt.source_commit,
-            remote_name=prepared.source_receipt.remote_name,
-            remote_ref=prepared.source_receipt.remote_ref,
-            logical_paths=tuple(
-                item.logical_path for item in prepared.source_receipt.blobs
-            ),
-        )
-        if source.receipt != prepared.source_receipt:
-            raise WarehouseW3CandidateCoordinatorError(
-                "live Git source differs from candidate"
+        with RootFixedSourceAcceptanceAuthority.open(
+            source_acceptance_path
+        ) as source_authority:
+            source_acceptance = source_authority.receipt
+            source = GitSourceAcquirer(root).acquire(
+                launch_commit=prepared.source_receipt.source_commit,
+                remote_name=prepared.source_receipt.remote_name,
+                remote_ref=prepared.source_receipt.remote_ref,
+                logical_paths=tuple(
+                    item.logical_path for item in prepared.source_receipt.blobs
+                ),
             )
+            if (
+                source_acceptance_path
+                != canonical_source_acceptance_path(source_acceptance.source_commit)
+                or source.receipt != prepared.source_receipt
+                or source.receipt != source_acceptance.source_receipt
+                or prepared.intent.source_acceptance_sha256
+                != source_acceptance.raw_sha256
+                or closure.candidate_verification.source_acceptance_sha256
+                != source_acceptance.raw_sha256
+            ):
+                raise WarehouseW3CandidateCoordinatorError(
+                    "live Git/source acceptance differs from candidate"
+                )
+            source_authority.revalidate()
         _reverify_environment_evidence(prepared, closure)
         artifact = _reopen_build_artifact(
             pinned,
@@ -858,8 +900,8 @@ def verify_w3_candidate(
             double_wheel=closure.double_wheel,
             semantic_environment=closure.semantic_environment,
             candidate_probe=closure.candidate_probe,
-            simulated_final_probe=closure.simulated_final_probe,
-            simulated_relocation=closure.simulated_relocation,
+            namespace_final_probe=closure.namespace_final_probe,
+            namespace_probe_ref=closure.namespace_probe_ref,
         )
         if inspected != (closure.inspection, closure.absence_facts):
             raise WarehouseW3CandidateCoordinatorError(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import stat
@@ -252,7 +253,13 @@ class FakeWheelRunner:
             b"Root-Is-Purelib: false\n"
             b"Tag: cp312-cp312-linux_x86_64\n"
         )
-        members["scion-0.1.0.dist-info/RECORD"] = b""
+        members["scion-0.1.0.dist-info/METADATA"] = (
+            b"Metadata-Version: 2.1\nName: scion\nVersion: 0.1.0\n"
+        )
+        members["scion-0.1.0.dist-info/entry_points.txt"] = (
+            b"[console_scripts]\nscion-w3-install=scion.tools.scion_w3_install:main\n"
+        )
+        members["scion-0.1.0.dist-info/top_level.txt"] = b"scion\n"
         if self.missing_member is not None:
             members.pop(self.missing_member, None)
         if self.leak_work_root:
@@ -261,6 +268,15 @@ class FakeWheelRunner:
             members[self.changed_source_member] = b"# wheel-only changed bytes\n"
         if self.wheel_only_python:
             members["scion/wheel_only.py"] = b"EXECUTABLE = True\n"
+        record_path = "scion-0.1.0.dist-info/RECORD"
+        record_rows = []
+        for name, raw in sorted(members.items()):
+            encoded = base64.urlsafe_b64encode(hashlib.sha256(raw).digest()).rstrip(
+                b"="
+            )
+            record_rows.append(f"{name},sha256={encoded.decode('ascii')},{len(raw)}\n")
+        record_rows.append(f"{record_path},,\n")
+        members[record_path] = "".join(record_rows).encode("ascii")
         wheel_path = Path(argv[8]) / WHEEL_NAME
         with zipfile.ZipFile(
             wheel_path,
@@ -496,7 +512,7 @@ def test_wheel_rejects_missing_required_member(
     _accept_fixture_native(monkeypatch)
     runner = FakeWheelRunner(missing_member=W3_TOOL_MEMBER)
 
-    with pytest.raises(WarehouseW3WheelError, match="fixed W3/runtime member"):
+    with pytest.raises(WarehouseW3WheelError, match="member allowlist"):
         _build(
             archives,
             work_root=tmp_path / "work",
@@ -627,7 +643,7 @@ def test_wheel_payload_is_exactly_the_git_python_and_template_bytes(
     _accept_fixture_native(monkeypatch)
     with pytest.raises(
         WarehouseW3WheelError,
-        match="Python/template",
+        match="Python/template|member allowlist",
     ):
         _build(
             archives,
