@@ -95,6 +95,16 @@ NATIVE_BYTES = b"\x7fELFfixture accepted native bytes\n"
 WHEEL_NAME = "scion-0.1.0-cp312-cp312-linux_x86_64.whl"
 
 
+def test_fixed_required_members_match_namespace_project_tree() -> None:
+    project_root = Path(__file__).resolve().parents[5]
+
+    assert not (project_root / "scion/__init__.py").exists()
+    assert "scion/__init__.py" not in FIXED_REQUIRED_WHEEL_MEMBERS
+    assert all(
+        (project_root / member).is_file() for member in FIXED_REQUIRED_WHEEL_MEMBERS
+    )
+
+
 def _source_members(
     *,
     extra: tuple[tuple[str, bytes], ...] = (),

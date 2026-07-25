@@ -61,7 +61,6 @@ W3_CLOSE_TEMPLATE_MEMBER = (
 # This is the reviewed minimum import surface.  The builder additionally
 # requires every non-test scion/*.py member present in the Git archive.
 FIXED_REQUIRED_WHEEL_MEMBERS = (
-    "scion/__init__.py",
     "scion/core/__init__.py",
     "scion/core/models.py",
     "scion/core/path_match.py",
