@@ -30,6 +30,9 @@ exclude = ["scion.tests*"]
 [tool.setuptools.package-data]
 "scion.problems.warehouse_delivery" = ["systemd/*.service"]
 
+[tool.setuptools.exclude-package-data]
+"scion.runtime.native" = ["spawn_into_cgroup.c"]
+
 [[tool.setuptools.ext-modules]]
 name = "scion.runtime.native._spawn_into_cgroup"
 sources = ["scion/runtime/native/spawn_into_cgroup.c"]

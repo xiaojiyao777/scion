@@ -417,7 +417,7 @@ def _double_wheel() -> OfflineDoubleWheelReceipt:
     members = tuple(
         WheelMember(
             path=path,
-            mode=0o644,
+            mode=(0o664 if path == "scion-0.1.0.dist-info/RECORD" else 0o644),
             size_bytes=1,
             compressed_size_bytes=1,
             crc32=1,

@@ -51,6 +51,7 @@ BUILDER_ARGV_TEMPLATE = (
     "<wheel-dir>",
     ".",
 )
+BUILDER_UMASK = 0o022
 
 W3_TOOL_MEMBER = "scion/tools/scion_w3_tool.py"
 W3_RUN_TEMPLATE_MEMBER = "scion/problems/warehouse_delivery/systemd/scion-w3@.service"
@@ -115,7 +116,7 @@ FIXED_REQUIRED_WHEEL_MEMBERS = (
     W3_TOOL_MEMBER,
 )
 
-_SCHEMA = "scion.w3-offline-double-wheel.v3"
+_SCHEMA = "scion.w3-offline-double-wheel.v4"
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _GIT_OID_RE = re.compile(r"[0-9a-f]{40}\Z")
 _WHEEL_NAME_RE = re.compile(
@@ -135,6 +136,8 @@ _DIST_INFO_MEMBERS = frozenset(
         f"{_DIST_INFO_ROOT}/RECORD",
     }
 )
+_WHEEL_RECORD_MEMBER = f"{_DIST_INFO_ROOT}/RECORD"
+_WHEEL_RECORD_MODE = 0o664
 _ARCHIVE_MEMBER_LIMIT = 16_384
 _ARCHIVE_TOTAL_LIMIT = 1024 * 1024 * 1024
 _WHEEL_MEMBER_LIMIT = 16_384
@@ -824,7 +827,9 @@ def _extract_archive(
                     if hasattr(os, "O_NOFOLLOW"):
                         flags |= os.O_NOFOLLOW
                     descriptor = os.open(
-                        target, flags, 0o700 if item.mode == 0o755 else 0o600
+                        target,
+                        flags,
+                        item.mode,
                     )
                     try:
                         actual = _write_all(descriptor, extracted, item.size_bytes)
@@ -832,6 +837,7 @@ def _extract_archive(
                             raise WarehouseW3WheelError(
                                 "extracted archive member SHA-256 differs"
                             )
+                        os.fchmod(descriptor, item.mode)
                         os.fsync(descriptor)
                     finally:
                         os.close(descriptor)
@@ -871,7 +877,7 @@ def _validate_runner_inputs(
         or argv[-1] != "."
         or not isinstance(cwd, Path)
         or type(umask) is not int
-        or umask != 0o077
+        or umask != BUILDER_UMASK
     ):
         raise TypeError("wheel runner command differs")
     _absolute_path(cwd, field="runner.cwd")
@@ -1001,7 +1007,7 @@ class WheelMember:
         )
         path = _relative_path(value["path"], field="wheel member path")
         mode = _uint(value["mode"], field="wheel member mode")
-        if mode not in {0o644, 0o755}:
+        if not _wheel_member_mode_is_allowed(path, mode):
             raise WarehouseW3WheelError("wheel member mode differs")
         compression = _uint(
             value["compression"],
@@ -1042,6 +1048,12 @@ class WheelMember:
             "compression": self.compression,
             "sha256": self.sha256,
         }
+
+
+def _wheel_member_mode_is_allowed(path: str, mode: int) -> bool:
+    if path == _WHEEL_RECORD_MEMBER:
+        return mode == _WHEEL_RECORD_MODE
+    return mode in {0o644, 0o755}
 
 
 def _member_inventory_sha256(members: tuple[WheelMember, ...]) -> str:
@@ -1158,7 +1170,7 @@ def _wheel_inventory(
                         "wheel contains a directory, link, or encrypted member"
                     )
                 mode = stat.S_IMODE(raw_mode)
-                if mode not in {0o644, 0o755}:
+                if not _wheel_member_mode_is_allowed(path, mode):
                     raise WarehouseW3WheelError("wheel member mode differs")
                 if info.compress_type not in {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
                     raise WarehouseW3WheelError("wheel member compression differs")
@@ -1688,7 +1700,7 @@ class OfflineDoubleWheelReceipt:
             ),
             "builder_argv_template": list(BUILDER_ARGV_TEMPLATE),
             "build_environment_template": dict(_ENVIRONMENT_TEMPLATE),
-            "umask": 0o077,
+            "umask": BUILDER_UMASK,
             "required_module_members": list(required_module_members),
             "wheel_filename": wheel_filename,
             "wheel_size_bytes": _uint(
@@ -1762,7 +1774,7 @@ class OfflineDoubleWheelReceipt:
             or value["fixed_plan_sha256"] != ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
             or value["builder_argv_template"] != list(BUILDER_ARGV_TEMPLATE)
             or value["build_environment_template"] != dict(_ENVIRONMENT_TEMPLATE)
-            or value["umask"] != 0o077
+            or value["umask"] != BUILDER_UMASK
             or value["native_elf_sha256"] != ACCEPTED_NATIVE_ELF_SHA256
             or value["retry"] is not False
             or value["resume"] is not False
@@ -2331,14 +2343,14 @@ def _run(
         argv,
         cwd=cwd,
         environment=environment,
-        umask=0o077,
+        umask=BUILDER_UMASK,
     )
     try:
         result = method(
             argv,
             cwd=cwd,
             environment=environment,
-            umask=0o077,
+            umask=BUILDER_UMASK,
         )
     except WarehouseW3WheelError:
         raise
@@ -2662,6 +2674,7 @@ __all__ = [
     "ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256",
     "BUILDER_ARGV_TEMPLATE",
     "BUILDER_PYTHON",
+    "BUILDER_UMASK",
     "FIXED_REQUIRED_WHEEL_MEMBERS",
     "ImmutableGitArchive",
     "OfflineDoubleWheelArtifact",

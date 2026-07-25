@@ -6,6 +6,7 @@ import json
 import stat
 import sys
 import tarfile
+import tomllib
 import types
 import zipfile
 from pathlib import Path
@@ -73,6 +74,7 @@ from scion.problems.warehouse_delivery.w3_wheel import (
     BWRAP,
     BUILDER_ARGV_TEMPLATE,
     BUILDER_PYTHON,
+    BUILDER_UMASK,
     FIXED_REQUIRED_WHEEL_MEMBERS,
     ImmutableGitArchive,
     OfflineDoubleWheelArtifact,
@@ -103,6 +105,10 @@ def test_fixed_required_members_match_namespace_project_tree() -> None:
     assert all(
         (project_root / member).is_file() for member in FIXED_REQUIRED_WHEEL_MEMBERS
     )
+    configuration = tomllib.loads((project_root / "pyproject.toml").read_text())
+    assert configuration["tool"]["setuptools"]["exclude-package-data"] == {
+        "scion.runtime.native": ["spawn_into_cgroup.c"],
+    }
 
 
 def _source_members(
@@ -207,10 +213,12 @@ class _BytesReader:
         return result
 
 
-def _zip_info(path: str) -> zipfile.ZipInfo:
+def _zip_info(path: str, *, mode: int | None = None) -> zipfile.ZipInfo:
     info = zipfile.ZipInfo(path, date_time=(2024, 1, 1, 0, 0, 0))
     info.create_system = 3
-    info.external_attr = (stat.S_IFREG | 0o644) << 16
+    if mode is None:
+        mode = 0o664 if path == "scion-0.1.0.dist-info/RECORD" else 0o644
+    info.external_attr = (stat.S_IFREG | mode) << 16
     info.compress_type = zipfile.ZIP_DEFLATED
     return info
 
@@ -225,14 +233,17 @@ class FakeWheelRunner:
         leak_work_root: bool = False,
         changed_source_member: str | None = None,
         wheel_only_python: bool = False,
+        member_mode_overrides: dict[str, int] | None = None,
     ) -> None:
         self.calls: list[tuple[tuple[str, ...], Path, dict[str, str], int]] = []
+        self.source_modes: list[dict[str, int]] = []
         self.missing_member = missing_member
         self.native_bytes = native_bytes
         self.second_comment = second_comment
         self.leak_work_root = leak_work_root
         self.changed_source_member = changed_source_member
         self.wheel_only_python = wheel_only_python
+        self.member_mode_overrides = member_mode_overrides or {}
 
     def run(
         self,
@@ -243,6 +254,13 @@ class FakeWheelRunner:
         umask: int,
     ) -> None:
         self.calls.append((argv, cwd, dict(environment), umask))
+        self.source_modes.append(
+            {
+                item.relative_to(cwd).as_posix(): stat.S_IMODE(item.stat().st_mode)
+                for item in cwd.rglob("*")
+                if item.is_file()
+            }
+        )
         members = {
             item.relative_to(cwd).as_posix(): item.read_bytes()
             for item in cwd.rglob("*")
@@ -294,7 +312,10 @@ class FakeWheelRunner:
             compression=zipfile.ZIP_DEFLATED,
         ) as archive:
             for name, raw in sorted(members.items()):
-                archive.writestr(_zip_info(name), raw)
+                archive.writestr(
+                    _zip_info(name, mode=self.member_mode_overrides.get(name)),
+                    raw,
+                )
             if self.second_comment and len(self.calls) == 2:
                 archive.comment = b"second build differs only in ZIP bytes"
 
@@ -414,7 +435,12 @@ def test_double_build_uses_exact_offline_contract_and_canonical_receipt(
         assert environment["PIP_CONFIG_FILE"] == "/dev/null"
         assert environment["SOURCE_DATE_EPOCH"] == str(EPOCH)
         assert "http_proxy" not in environment
-        assert umask == 0o077
+        assert umask == BUILDER_UMASK
+    assert all(
+        mode == 0o644
+        for source_modes in runner.source_modes
+        for mode in source_modes.values()
+    )
     assert artifact.wheel_path.name == WHEEL_NAME
     assert artifact.wheel_path.stat().st_mode & 0o777 == 0o444
     assert artifact.wheel_identity == artifact.receipt.wheel_identity
@@ -544,6 +570,33 @@ def test_wheel_rejects_native_elf_hash_drift(
     runner = FakeWheelRunner()
 
     with pytest.raises(WarehouseW3WheelError, match="native ELF SHA-256"):
+        _build(
+            archives,
+            work_root=tmp_path / "work",
+            runner=runner,
+        )
+
+    assert len(runner.calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("path", "mode"),
+    (
+        ("scion-0.1.0.dist-info/RECORD", 0o644),
+        ("scion-0.1.0.dist-info/METADATA", 0o664),
+    ),
+)
+def test_wheel_member_modes_are_exact(
+    archives: tuple[ImmutableGitArchive, ImmutableGitArchive],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    path: str,
+    mode: int,
+) -> None:
+    _accept_fixture_native(monkeypatch)
+    runner = FakeWheelRunner(member_mode_overrides={path: mode})
+
+    with pytest.raises(WarehouseW3WheelError, match="wheel member mode differs"):
         _build(
             archives,
             work_root=tmp_path / "work",
@@ -741,7 +794,7 @@ def test_actual_runner_is_narrow_no_shell_and_closed_environment(
         argv,
         cwd=cwd,
         environment=environment,
-        umask=0o077,
+        umask=BUILDER_UMASK,
     )
 
     assert captured["argv"] == (
@@ -758,7 +811,7 @@ def test_actual_runner_is_narrow_no_shell_and_closed_environment(
     )
     assert captured["shell"] is False
     assert captured["env"] == environment
-    assert captured["umask"] == 0o077
+    assert captured["umask"] == BUILDER_UMASK
     assert captured["stdin"] is w3_wheel.subprocess.DEVNULL
 
 

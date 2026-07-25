@@ -158,7 +158,7 @@ def _wheel_receipt(
     members = tuple(
         WheelMember(
             path=path,
-            mode=0o644,
+            mode=(0o664 if path == "scion-0.1.0.dist-info/RECORD" else 0o644),
             size_bytes=native_size_bytes if path == NATIVE_MEMBER else len(path),
             compressed_size_bytes=(
                 native_size_bytes if path == NATIVE_MEMBER else len(path)
