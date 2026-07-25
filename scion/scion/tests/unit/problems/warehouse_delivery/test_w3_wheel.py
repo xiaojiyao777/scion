@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import stat
 import sys
 import tarfile
@@ -109,6 +110,22 @@ def test_fixed_required_members_match_namespace_project_tree() -> None:
     assert configuration["tool"]["setuptools"]["exclude-package-data"] == {
         "scion.runtime.native": ["spawn_into_cgroup.c"],
     }
+    plan_raw = (
+        project_root / "docs/planning/v0.4/"
+        "v0.4-w3-root-installation-loaded-manager-launch-plan-20260723.md"
+    ).read_bytes()
+    assert hashlib.sha256(plan_raw).hexdigest() == (
+        w3_wheel.ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256
+    )
+    plan_text = plan_raw.decode("utf-8")
+    for required_contract in (
+        "scion.w3-offline-double-wheel.v4",
+        "receipts/offline-double-wheel.v4.json",
+        "builder runs with umask `0022`",
+        "which must be `0664`",
+        "native C build input is excluded from the wheel",
+    ):
+        assert required_contract in plan_text
 
 
 def _source_members(
@@ -142,6 +159,7 @@ def _write_archive(
     extra: tuple[tuple[str, bytes], ...] = (),
     omit: str | None = None,
     extra_directory: str | None = None,
+    executable: str | None = None,
 ) -> ImmutableGitArchive:
     members = _source_members(extra=extra, omit=omit)
     with tarfile.open(path, mode="w", format=tarfile.USTAR_FORMAT) as archive:
@@ -165,7 +183,7 @@ def _write_archive(
             archive.addfile(info)
         for name, raw in sorted(members.items()):
             info = tarfile.TarInfo(name)
-            info.mode = 0o644
+            info.mode = 0o755 if name == executable else 0o644
             info.mtime = EPOCH
             info.uid = 0
             info.gid = 0
@@ -177,7 +195,7 @@ def _write_archive(
     blobs = tuple(
         GitBlobIdentity(
             logical_path=name,
-            mode="100644",
+            mode="100755" if name == executable else "100644",
             blob_oid=hashlib.sha1(f"blob {len(raw)}\0".encode() + raw).hexdigest(),
             sha256=hashlib.sha256(raw).hexdigest(),
             size_bytes=len(raw),
@@ -540,6 +558,48 @@ def test_archive_must_contain_fixed_tool_templates_and_runtime_source(
         )
 
     assert runner.calls == []
+
+
+def test_archive_extraction_restores_exact_modes_beneath_private_roots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _accept_fixture_native(monkeypatch)
+    executable = "scion/core/executable_launch_module.py"
+    extra = ((executable, b"#!/usr/bin/env python3\nVALUE = True\n"),)
+    archives = (
+        _write_archive(
+            tmp_path / "source-one.tar",
+            extra=extra,
+            executable=executable,
+        ),
+        _write_archive(
+            tmp_path / "source-two.tar",
+            extra=extra,
+            executable=executable,
+        ),
+    )
+    runner = FakeWheelRunner()
+    work_root = tmp_path / "work"
+    previous_umask = os.umask(0o077)
+    try:
+        _build(
+            archives,
+            work_root=work_root,
+            runner=runner,
+        )
+    finally:
+        os.umask(previous_umask)
+
+    for source_modes in runner.source_modes:
+        assert source_modes[executable] == 0o755
+        assert all(
+            mode == 0o644 for path, mode in source_modes.items() if path != executable
+        )
+    for index in (1, 2):
+        source_root = work_root / f"build-{index}/source"
+        assert stat.S_IMODE(source_root.stat().st_mode) == 0o700
+        assert stat.S_IMODE((source_root / "scion/core").stat().st_mode) == 0o700
 
 
 def test_wheel_rejects_missing_required_member(

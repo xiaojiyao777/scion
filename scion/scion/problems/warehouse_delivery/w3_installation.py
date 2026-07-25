@@ -43,7 +43,7 @@ from scion.runtime.execution.environment_integrity import (
 from scion.runtime.execution.systemd_acquisition import parse_unit_template
 
 ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256 = (
-    "dad4372b6c72f86c740b4fab5feb2e84f78f9c498f48abfb4e3c36bd9a86ed55"
+    "87c873a22da7e1581ae370bf0a13d86414e1d05ac441754339fcb2efcf027643"
 )
 
 W3_COMPOSITION_LOGICAL_PATH = "scion/problems/warehouse_delivery/w3_composition.py"

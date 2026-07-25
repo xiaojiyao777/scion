@@ -32,7 +32,7 @@ from scion.problems.warehouse_delivery.w3_installation import (
 )
 
 ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256 = (
-    "dad4372b6c72f86c740b4fab5feb2e84f78f9c498f48abfb4e3c36bd9a86ed55"
+    "87c873a22da7e1581ae370bf0a13d86414e1d05ac441754339fcb2efcf027643"
 )
 ACCEPTED_NATIVE_ELF_SHA256 = (
     "3d747973bc2eb3b0f6fda68f288987c7b988820eb24df2ff617aa567071803fc"

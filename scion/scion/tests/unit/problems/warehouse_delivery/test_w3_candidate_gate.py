@@ -127,6 +127,20 @@ DBUS_GLIB = f"{SITE}/_dbus_glib_bindings.cpython-312-x86_64-linux-gnu.so"
 DBUS_METADATA = f"{SITE}/dbus_python-1.3.2.dist-info/METADATA"
 DBUS_METADATA_CONTENTS = "Metadata-Version: 2.1\nName: dbus-python\nVersion: 1.3.2\n\n"
 WHEEL_INSTALLATION_MANIFEST = ".scion/w3-wheel-installation.json"
+
+
+def test_offline_double_wheel_v4_schema_matches_persisted_paths() -> None:
+    receipt = _double_wheel()
+
+    assert json.loads(receipt.raw)["schema"] == "scion.w3-offline-double-wheel.v4"
+    assert gate_module.W3_WHEEL_RECEIPT_LOGICAL_PATH == (
+        "receipts/offline-double-wheel.v4.json"
+    )
+    assert gate_module.W3_WHEEL_RECEIPT_SEALED_PATH == (
+        "sealed/receipts/offline-double-wheel.v4.json"
+    )
+
+
 _PREPARED_BY_ROOT: dict[str, PreparedCandidate] = {}
 _ORIGINAL_INSPECT = FilesystemCandidateCompositionInspector.inspect
 

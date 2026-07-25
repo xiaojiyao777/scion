@@ -58,8 +58,8 @@ EXPECTED_CANDIDATE_COMPOSITION_STATE = (
 EXPECTED_CELL_COUNT = 43
 W3_WHEEL_LOGICAL_PATH = "artifacts/scion-w3-offline-double.whl"
 W3_WHEEL_SEALED_PATH = "sealed/artifacts/scion-w3-offline-double.whl"
-W3_WHEEL_RECEIPT_LOGICAL_PATH = "receipts/offline-double-wheel.v3.json"
-W3_WHEEL_RECEIPT_SEALED_PATH = "sealed/receipts/offline-double-wheel.v3.json"
+W3_WHEEL_RECEIPT_LOGICAL_PATH = "receipts/offline-double-wheel.v4.json"
+W3_WHEEL_RECEIPT_SEALED_PATH = "sealed/receipts/offline-double-wheel.v4.json"
 
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _ABSENCE_ROLES = (
