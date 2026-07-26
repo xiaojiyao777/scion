@@ -17,6 +17,9 @@ from scion.problems.warehouse_delivery.w3_candidate_coordinator import (
 from scion.problems.warehouse_delivery.w3_candidate_gate import (
     derive_namespace_probe_evidence_sha256,
 )
+from scion.problems.warehouse_delivery.w3_environment import (
+    WarehouseW3EnvironmentError,
+)
 from scion.problems.warehouse_delivery.w3_installation import GitSourceAcquirer
 
 COMMIT = "1" * 40
@@ -273,6 +276,31 @@ def test_prepare_candidate_rejects_root_before_any_path_read(
             remote_ref="refs/heads/test",
             native_record_path=Path("/absent"),
             runtime_python=Path("/usr/bin/python3.12"),
+            source_acceptance_path=Path("/absent"),
+        )
+
+
+def test_prepare_candidate_rejects_runtime_drift_before_any_path_read(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(coordinator.os, "geteuid", lambda: 1001)
+    monkeypatch.setattr(
+        coordinator,
+        "_runtime_sources",
+        lambda: (_ for _ in ()).throw(AssertionError("runtime sources were read")),
+    )
+    with pytest.raises(
+        WarehouseW3EnvironmentError,
+        match="runtime_python differs from fixed runtime",
+    ):
+        prepare_w3_candidate(
+            Path("/absent"),
+            repo_root=Path("/absent"),
+            launch_commit=COMMIT,
+            remote_name="origin",
+            remote_ref="refs/heads/test",
+            native_record_path=Path("/absent"),
+            runtime_python=Path("/wrong/python3.12"),
             source_acceptance_path=Path("/absent"),
         )
 

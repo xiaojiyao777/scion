@@ -41,6 +41,7 @@ from .w3_environment import (
     WarehouseRuntimeSources,
     materialize_simulated_warehouse_environment as materialize_namespace_environment,
     prepare_production_warehouse_environment,
+    validate_runtime_python,
 )
 from .w3_environment_receipts import (
     FilesystemEnvironmentSemanticReader,
@@ -604,6 +605,8 @@ def prepare_w3_candidate(
     """Prepare, close, publish, and independently reopen one exact candidate."""
 
     _require_nonroot()
+    validate_runtime_python(runtime_python)
+    runtime_sources = _runtime_sources()
     root = _absolute_directory(accepted_root, label="accepted_root")
     repo = _absolute_directory(repo_root, label="repo_root")
     if not isinstance(native_record_path, Path):
@@ -683,7 +686,7 @@ def prepare_w3_candidate(
         work_root / "environment",
         wheel_path=artifact.wheel_path,
         wheel_sha256=artifact.receipt.wheel_sha256,
-        runtime_sources=_runtime_sources(),
+        runtime_sources=runtime_sources,
         candidate_root=paths.candidate_root,
         selection_root=paths.selection_directory,
         runtime_python=runtime_python,

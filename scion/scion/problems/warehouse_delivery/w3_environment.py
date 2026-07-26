@@ -182,6 +182,16 @@ def _absolute_path(path: Path, *, field: str) -> str:
     return text
 
 
+def validate_runtime_python(runtime_python: Path) -> Path:
+    """Validate the fixed runtime interpreter before any preparation effect."""
+
+    if not isinstance(runtime_python, Path):
+        raise TypeError("runtime_python must be Path")
+    if _absolute_path(runtime_python, field="runtime_python") != RUNTIME_PYTHON:
+        raise WarehouseW3EnvironmentError("runtime_python differs from fixed runtime")
+    return runtime_python
+
+
 def _sha256_text(value: object, *, field: str) -> str:
     if type(value) is not str or _SHA256_RE.fullmatch(value) is None:
         raise WarehouseW3EnvironmentError(f"{field} is not one SHA-256 value")
@@ -950,10 +960,7 @@ def prepare_production_warehouse_environment(
 ) -> ProductionWarehouseEnvironmentBuild:
     """Build through fixed runners and discover the exact live external closure."""
 
-    if not isinstance(runtime_python, Path):
-        raise TypeError("runtime_python must be Path")
-    if _absolute_path(runtime_python, field="runtime_python") != RUNTIME_PYTHON:
-        raise WarehouseW3EnvironmentError("runtime_python differs from fixed runtime")
+    validate_runtime_python(runtime_python)
     expected_wheel_sha256, venv_argv, install_argv = _materialize_warehouse_environment(
         environment_root,
         wheel_path=wheel_path,
@@ -1110,5 +1117,6 @@ __all__ = [
     "materialize_simulated_warehouse_environment",
     "prepare_production_warehouse_environment",
     "prepare_warehouse_environment",
+    "validate_runtime_python",
     "verify_warehouse_environment",
 ]
