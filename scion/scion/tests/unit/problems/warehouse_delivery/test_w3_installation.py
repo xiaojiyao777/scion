@@ -578,6 +578,7 @@ def test_sealed_store_receipt_is_complete_canonical_and_provenance_bound(
         logical_path="external/record.json",
         sealed_path="sealed/external/record.json",
         source_path=external_path,
+        source_mode=0o444,
     )
     generated = SealedStoreObject.generated(
         logical_path="bin/scion-w3-tool",
@@ -620,6 +621,130 @@ def test_sealed_store_receipt_is_complete_canonical_and_provenance_bound(
         match="directory facts differ",
     ):
         SealedStoreReceipt.from_bytes(_canonical(changed))
+
+
+def test_external_evidence_snapshots_accepted_private_source_mode(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "accepted-private-evidence.json"
+    raw = b'{"accepted":true}\n'
+    source.write_bytes(raw)
+    source.chmod(0o600)
+    identity = source.stat()
+
+    sealed = SealedStoreObject.external_evidence(
+        logical_path="external/accepted-private-evidence.json",
+        sealed_path="sealed/external/accepted-private-evidence.json",
+        source_path=source,
+        source_mode=0o600,
+    )
+
+    assert source.stat().st_mode & 0o777 == 0o600
+    assert sealed.raw == raw
+    assert sealed.mode == 0o444
+    assert dict(sealed.adapter.provenance) == {
+        "device": identity.st_dev,
+        "inode": identity.st_ino,
+        "kind": "external_evidence",
+        "source_path": str(source),
+    }
+    with pytest.raises(
+        WarehouseW3InstallationError,
+        match="sealed-store object mode differs",
+    ):
+        SealedStoreObject(adapter=sealed.adapter, raw=sealed.raw, mode=0o600)
+
+
+def test_external_evidence_rejects_unaccepted_source_mode(tmp_path: Path) -> None:
+    source = tmp_path / "unaccepted-evidence.json"
+    source.write_bytes(b'{"accepted":false}\n')
+    source.chmod(0o644)
+
+    with pytest.raises(
+        WarehouseW3InstallationError,
+        match="not one accepted single-link regular file",
+    ):
+        SealedStoreObject.external_evidence(
+            logical_path="external/unaccepted-evidence.json",
+            sealed_path="sealed/external/unaccepted-evidence.json",
+            source_path=source,
+            source_mode=0o600,
+        )
+
+
+@pytest.mark.parametrize("source_mode", (0o644, True, "0600"))
+def test_external_evidence_rejects_invalid_declared_source_mode(
+    tmp_path: Path,
+    source_mode: object,
+) -> None:
+    source = tmp_path / "accepted-private-evidence.json"
+    source.write_bytes(b'{"accepted":true}\n')
+    source.chmod(0o600)
+
+    with pytest.raises(
+        WarehouseW3InstallationError,
+        match="source mode is not accepted",
+    ):
+        SealedStoreObject.external_evidence(
+            logical_path="external/accepted-private-evidence.json",
+            sealed_path="sealed/external/accepted-private-evidence.json",
+            source_path=source,
+            source_mode=source_mode,  # type: ignore[arg-type]
+        )
+
+
+@pytest.mark.parametrize(
+    ("actual_mode", "declared_mode"),
+    (
+        (0o444, 0o600),
+        (0o555, 0o600),
+        (0o600, 0o444),
+        (0o555, 0o444),
+    ),
+)
+def test_external_evidence_rejects_role_mode_substitution(
+    tmp_path: Path,
+    actual_mode: int,
+    declared_mode: int,
+) -> None:
+    source = tmp_path / "role-bound-evidence.json"
+    source.write_bytes(b'{"role":"bound"}\n')
+    source.chmod(actual_mode)
+
+    with pytest.raises(
+        WarehouseW3InstallationError,
+        match="not one accepted single-link regular file",
+    ):
+        SealedStoreObject.external_evidence(
+            logical_path="external/role-bound-evidence.json",
+            sealed_path="sealed/external/role-bound-evidence.json",
+            source_path=source,
+            source_mode=declared_mode,
+        )
+
+
+@pytest.mark.parametrize("kind", ("hardlink", "symlink"))
+def test_external_evidence_rejects_linked_source(
+    tmp_path: Path,
+    kind: str,
+) -> None:
+    source = tmp_path / "accepted-private-evidence.json"
+    source.write_bytes(b'{"accepted":true}\n')
+    source.chmod(0o600)
+    selected = source
+    if kind == "hardlink":
+        (tmp_path / "second-link.json").hardlink_to(source)
+    else:
+        selected = tmp_path / "evidence-link.json"
+        selected.symlink_to(source)
+
+    with pytest.raises(WarehouseW3InstallationError):
+        SealedStoreObject.external_evidence(
+            logical_path="external/accepted-private-evidence.json",
+            sealed_path="sealed/external/accepted-private-evidence.json",
+            source_path=selected,
+            source_mode=0o600,
+        )
 
 
 def test_generated_authority_input_rejects_duplicate_content_identity() -> None:
@@ -708,8 +833,8 @@ def _prepared_inputs(
     native_path = evidence / "native-record.v1.json"
     manifest_path.write_bytes(manifest_raw)
     native_path.write_bytes(native_raw)
-    manifest_path.chmod(0o444)
-    native_path.chmod(0o444)
+    manifest_path.chmod(0o600)
+    native_path.chmod(0o600)
     objects = tuple(
         [
             *(SealedStoreObject.from_git_blob(item) for item in source.blobs),
@@ -717,11 +842,13 @@ def _prepared_inputs(
                 logical_path=EXPECTED_MANIFEST_NAME,
                 sealed_path=f"sealed/{EXPECTED_MANIFEST_NAME}",
                 source_path=manifest_path,
+                source_mode=0o600,
             ),
             SealedStoreObject.external_evidence(
                 logical_path=W3_NATIVE_RECORD_LOGICAL_PATH,
                 sealed_path=f"sealed/{W3_NATIVE_RECORD_LOGICAL_PATH}",
                 source_path=native_path,
+                source_mode=0o600,
             ),
             SealedStoreObject.generated(
                 logical_path=W3_SOURCE_ACCEPTANCE_LOGICAL_PATH,

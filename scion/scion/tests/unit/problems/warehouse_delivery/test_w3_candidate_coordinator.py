@@ -22,7 +22,10 @@ from scion.problems.warehouse_delivery.w3_environment import (
     dbus_metadata_installation_path,
     is_dbus_metadata_installation_path,
 )
-from scion.problems.warehouse_delivery.w3_installation import GitSourceAcquirer
+from scion.problems.warehouse_delivery.w3_installation import (
+    GitSourceAcquirer,
+    WarehouseW3InstallationError,
+)
 
 COMMIT = "1" * 40
 
@@ -351,6 +354,181 @@ def test_prepare_candidate_rejects_runtime_drift_before_any_path_read(
             native_record_path=Path("/absent"),
             runtime_python=Path("/wrong/python3.12"),
             source_acceptance_path=Path("/absent"),
+        )
+
+
+@pytest.mark.parametrize("native_mode", (0o444, 0o555, 0o644))
+def test_prepare_candidate_rejects_native_mode_before_work_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_mode: int,
+) -> None:
+    accepted_root = tmp_path / "accepted-root"
+    repo_root = tmp_path / "repo"
+    accepted_root.mkdir()
+    repo_root.mkdir()
+    manifest_raw = b'{"accepted":"manifest"}\n'
+    manifest_path = accepted_root / coordinator.EXPECTED_MANIFEST_NAME
+    manifest_path.write_bytes(manifest_raw)
+    manifest_path.chmod(0o600)
+    native_path = tmp_path / "native-record.json"
+    native_path.write_bytes(b'{"accepted":"native"}\n')
+    native_path.chmod(native_mode)
+
+    monkeypatch.setattr(coordinator.os, "geteuid", lambda: 1001)
+    monkeypatch.setattr(coordinator, "validate_runtime_python", lambda _path: None)
+    monkeypatch.setattr(coordinator, "_runtime_sources", lambda: object())
+    monkeypatch.setattr(
+        coordinator,
+        "EXPECTED_MANIFEST_SHA256",
+        hashlib.sha256(manifest_raw).hexdigest(),
+    )
+    monkeypatch.setattr(
+        coordinator,
+        "_prepare_work_root",
+        lambda *_args: (_ for _ in ()).throw(
+            AssertionError("work root was created before external acquisition")
+        ),
+    )
+
+    with pytest.raises(
+        WarehouseW3InstallationError,
+        match="not one accepted single-link regular file",
+    ):
+        prepare_w3_candidate(
+            accepted_root,
+            repo_root=repo_root,
+            launch_commit=COMMIT,
+            remote_name="origin",
+            remote_ref="refs/heads/test",
+            native_record_path=native_path,
+            runtime_python=Path("/usr/bin/python3.12"),
+            source_acceptance_path=tmp_path / "absent-source-acceptance.json",
+        )
+
+
+def test_prepare_candidate_acquires_all_external_roles_before_work_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    accepted_root = tmp_path / "accepted-root"
+    repo_root = tmp_path / "repo"
+    accepted_root.mkdir()
+    repo_root.mkdir()
+    manifest_raw = b'{"accepted":"manifest"}\n'
+    native_raw = b'{"accepted":"native"}\n'
+    source_acceptance_raw = b'{"accepted":"root-source"}\n'
+    launch_commit = "12" * 20
+    launch_tree = "23" * 20
+    manifest_path = accepted_root / coordinator.EXPECTED_MANIFEST_NAME
+    native_path = tmp_path / "native-record.json"
+    source_acceptance_path = tmp_path / "source-acceptance.json"
+    for path, raw, mode in (
+        (manifest_path, manifest_raw, 0o600),
+        (native_path, native_raw, 0o600),
+        (source_acceptance_path, source_acceptance_raw, 0o444),
+    ):
+        path.write_bytes(raw)
+        path.chmod(mode)
+
+    source_receipt = SimpleNamespace(
+        source_commit=launch_commit,
+        source_tree=launch_tree,
+    )
+    source = SimpleNamespace(receipt=source_receipt, blobs=())
+    source_acceptance = SimpleNamespace(
+        source_commit=launch_commit,
+        source_receipt=source_receipt,
+        raw=source_acceptance_raw,
+        raw_sha256=hashlib.sha256(source_acceptance_raw).hexdigest(),
+    )
+
+    class SourceAuthority:
+        receipt = source_acceptance
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def revalidate(self):
+            return None
+
+    class SourceAcquirer:
+        def __init__(self, _repo_root):
+            pass
+
+        def acquire(self, **_kwargs):
+            return source
+
+    original_external = coordinator.SealedStoreObject.external_evidence
+    acquired: list[tuple[str, int]] = []
+
+    def capture_external(_cls, **kwargs):
+        acquired.append((str(kwargs["logical_path"]), int(kwargs["source_mode"])))
+        return original_external(**kwargs)
+
+    class WorkRootReached(RuntimeError):
+        pass
+
+    def stop_at_work_root(*_args):
+        assert acquired == [
+            (coordinator.EXPECTED_MANIFEST_NAME, 0o600),
+            (coordinator.W3_NATIVE_RECORD_LOGICAL_PATH, 0o600),
+            (coordinator.W3_SOURCE_ACCEPTANCE_LOGICAL_PATH, 0o444),
+        ]
+        raise WorkRootReached
+
+    monkeypatch.setattr(coordinator.os, "geteuid", lambda: 1001)
+    monkeypatch.setattr(coordinator, "validate_runtime_python", lambda _path: None)
+    monkeypatch.setattr(coordinator, "_runtime_sources", lambda: object())
+    monkeypatch.setattr(
+        coordinator,
+        "EXPECTED_MANIFEST_SHA256",
+        hashlib.sha256(manifest_raw).hexdigest(),
+    )
+    monkeypatch.setattr(
+        coordinator,
+        "EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256",
+        hashlib.sha256(native_raw).hexdigest(),
+    )
+    monkeypatch.setattr(
+        coordinator.RootFixedSourceAcceptanceAuthority,
+        "open",
+        lambda _path: SourceAuthority(),
+    )
+    monkeypatch.setattr(
+        coordinator,
+        "canonical_source_acceptance_path",
+        lambda _commit: source_acceptance_path,
+    )
+    monkeypatch.setattr(coordinator, "_tracked_launch_paths", lambda *_args: ("x",))
+    monkeypatch.setattr(coordinator, "GitSourceAcquirer", SourceAcquirer)
+    monkeypatch.setattr(
+        coordinator,
+        "CandidateSelectionIntent",
+        SimpleNamespace(
+            create=lambda **_kwargs: SimpleNamespace(selection_key="34" * 32)
+        ),
+    )
+    monkeypatch.setattr(
+        coordinator.SealedStoreObject,
+        "external_evidence",
+        classmethod(capture_external),
+    )
+    monkeypatch.setattr(coordinator, "_prepare_work_root", stop_at_work_root)
+
+    with pytest.raises(WorkRootReached):
+        prepare_w3_candidate(
+            accepted_root,
+            repo_root=repo_root,
+            launch_commit=launch_commit,
+            remote_name="origin",
+            remote_ref="refs/heads/test",
+            native_record_path=native_path,
+            runtime_python=Path("/usr/bin/python3.12"),
+            source_acceptance_path=source_acceptance_path,
         )
 
 

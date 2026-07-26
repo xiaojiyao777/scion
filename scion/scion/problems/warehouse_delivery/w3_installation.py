@@ -73,6 +73,7 @@ _CANDIDATE_SCHEMA = "scion.w3-candidate.v1"
 _CANDIDATE_VERIFICATION_SCHEMA = "scion.w3-candidate-verification.v2"
 _DIRECTORY_MODE = 0o555
 _REGULAR_MODES = frozenset({0o444, 0o555})
+_EXTERNAL_EVIDENCE_SOURCE_MODES = frozenset({0o444, 0o555, 0o600})
 _READ_SIZE = 1024 * 1024
 _CANDIDATE_INVENTORY = (
     "candidate.v1.json",
@@ -2007,6 +2008,7 @@ def _read_open_regular(
     named: os.stat_result | None,
     maximum: int,
     label: str,
+    accepted_modes: frozenset[int],
 ) -> tuple[bytes, os.stat_result]:
     chunks: list[bytes] = []
     total = 0
@@ -2015,10 +2017,10 @@ def _read_open_regular(
         if (
             not stat.S_ISREG(before.st_mode)
             or before.st_nlink != 1
-            or stat.S_IMODE(before.st_mode) not in _REGULAR_MODES
+            or stat.S_IMODE(before.st_mode) not in accepted_modes
         ):
             raise WarehouseW3InstallationError(
-                f"{label} is not one immutable single-link regular file"
+                f"{label} is not one accepted single-link regular file"
             )
         if named is not None and _stat_signature(before) != _stat_signature(named):
             raise WarehouseW3InstallationError(f"{label} opened identity differs")
@@ -2038,7 +2040,12 @@ def _read_open_regular(
     return b"".join(chunks), after
 
 
-def _read_external_regular(path: Path, *, label: str) -> tuple[bytes, os.stat_result]:
+def _read_external_regular(
+    path: Path,
+    *,
+    label: str,
+    accepted_modes: frozenset[int],
+) -> tuple[bytes, os.stat_result]:
     if not isinstance(path, Path):
         raise TypeError(f"{label} path must be Path")
     _absolute_path(str(path), field=f"{label}.path")
@@ -2056,6 +2063,7 @@ def _read_external_regular(path: Path, *, label: str) -> tuple[bytes, os.stat_re
             named=named_before,
             maximum=_MAX_GIT_BLOB_BYTES,
             label=label,
+            accepted_modes=accepted_modes,
         )
     finally:
         os.close(descriptor)
@@ -2109,13 +2117,22 @@ class SealedStoreObject:
         logical_path: str,
         sealed_path: str,
         source_path: Path,
+        source_mode: int,
         executable: bool = False,
     ) -> "SealedStoreObject":
         if type(executable) is not bool:
             raise TypeError("executable must be exact bool")
+        if (
+            type(source_mode) is not int
+            or source_mode not in _EXTERNAL_EVIDENCE_SOURCE_MODES
+        ):
+            raise WarehouseW3InstallationError(
+                "external evidence source mode is not accepted"
+            )
         raw, identity = _read_external_regular(
             source_path,
             label="external evidence",
+            accepted_modes=frozenset({source_mode}),
         )
         adapter = AuthorityInputAdapter.external_evidence(
             logical_path=logical_path,
@@ -2841,6 +2858,7 @@ def _read_regular_at(
             named=named,
             maximum=maximum,
             label=label,
+            accepted_modes=_REGULAR_MODES,
         )
     finally:
         os.close(descriptor)
@@ -3139,6 +3157,7 @@ def _materialize_environment(
         raw, _identity = _read_external_regular(
             source_root / entry.path,
             label=f"built environment {entry.path}",
+            accepted_modes=_REGULAR_MODES,
         )
         if (
             len(raw) != entry.size_bytes

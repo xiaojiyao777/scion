@@ -85,7 +85,6 @@ _WORK_PARENT = ".scion-w3-candidate-work"
 _ARCHIVE_NAMES = ("source-1.tar", "source-2.tar")
 _RUNTIME_PACKAGE_ROOT = Path("/usr/lib/python3/dist-packages")
 _MAX_GIT_INVENTORY_BYTES = 8 * 1024 * 1024
-_MAX_EXTERNAL_EVIDENCE_BYTES = 64 * 1024 * 1024
 
 
 class WarehouseW3CandidateCoordinatorError(RuntimeError):
@@ -618,20 +617,21 @@ def prepare_w3_candidate(
     if not isinstance(native_record_path, Path):
         raise TypeError("native_record_path must be Path")
     manifest_path = root / EXPECTED_MANIFEST_NAME
-    manifest_raw = _bound_regular_bytes(
-        manifest_path,
-        label="accepted W3 manifest",
-        maximum=_MAX_EXTERNAL_EVIDENCE_BYTES,
+    manifest_object = SealedStoreObject.external_evidence(
+        logical_path=EXPECTED_MANIFEST_NAME,
+        sealed_path=f"sealed/{EXPECTED_MANIFEST_NAME}",
+        source_path=manifest_path,
+        source_mode=0o600,
     )
-    native_raw = _bound_regular_bytes(
-        native_record_path,
-        label="accepted native record",
-        maximum=_MAX_EXTERNAL_EVIDENCE_BYTES,
+    native_object = SealedStoreObject.external_evidence(
+        logical_path=W3_NATIVE_RECORD_LOGICAL_PATH,
+        sealed_path=f"sealed/{W3_NATIVE_RECORD_LOGICAL_PATH}",
+        source_path=native_record_path,
+        source_mode=0o600,
     )
     if (
-        hashlib.sha256(manifest_raw).hexdigest() != EXPECTED_MANIFEST_SHA256
-        or hashlib.sha256(native_raw).hexdigest()
-        != EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256
+        manifest_object.adapter.sha256 != EXPECTED_MANIFEST_SHA256
+        or native_object.adapter.sha256 != EXPECTED_NATIVE_ACCEPTANCE_RECORD_SHA256
     ):
         raise WarehouseW3CandidateCoordinatorError(
             "accepted manifest or native record identity differs"
@@ -647,6 +647,16 @@ def prepare_w3_candidate(
         ):
             raise WarehouseW3CandidateCoordinatorError(
                 "root fixed-source acceptance path or commit differs"
+            )
+        source_acceptance_object = SealedStoreObject.external_evidence(
+            logical_path=W3_SOURCE_ACCEPTANCE_LOGICAL_PATH,
+            sealed_path=W3_SOURCE_ACCEPTANCE_SEALED_PATH,
+            source_path=source_acceptance_path,
+            source_mode=0o444,
+        )
+        if source_acceptance_object.raw != source_acceptance.raw:
+            raise WarehouseW3CandidateCoordinatorError(
+                "root fixed-source acceptance bytes differ"
             )
         logical_paths = _tracked_launch_paths(repo, launch_commit)
         source = GitSourceAcquirer(repo).acquire(
@@ -714,21 +724,9 @@ def prepare_w3_candidate(
     generated = _generated_store_objects(source, artifact)
     sealed_objects = (
         *(SealedStoreObject.from_git_blob(item) for item in source.blobs),
-        SealedStoreObject.external_evidence(
-            logical_path=EXPECTED_MANIFEST_NAME,
-            sealed_path=f"sealed/{EXPECTED_MANIFEST_NAME}",
-            source_path=manifest_path,
-        ),
-        SealedStoreObject.external_evidence(
-            logical_path=W3_NATIVE_RECORD_LOGICAL_PATH,
-            sealed_path=f"sealed/{W3_NATIVE_RECORD_LOGICAL_PATH}",
-            source_path=native_record_path,
-        ),
-        SealedStoreObject.external_evidence(
-            logical_path=W3_SOURCE_ACCEPTANCE_LOGICAL_PATH,
-            sealed_path=W3_SOURCE_ACCEPTANCE_SEALED_PATH,
-            source_path=source_acceptance_path,
-        ),
+        manifest_object,
+        native_object,
+        source_acceptance_object,
         *generated,
     )
     prepared = prepare_candidate(
