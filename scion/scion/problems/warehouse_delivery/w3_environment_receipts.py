@@ -17,6 +17,7 @@ import re
 import stat
 import subprocess
 from dataclasses import dataclass
+from email.message import Message
 from email.parser import Parser
 from email.policy import strict as strict_email_policy
 from pathlib import Path, PurePosixPath
@@ -268,6 +269,29 @@ def _text(value: object, *, field: str, maximum: int = 4096) -> str:
     if len(encoded) > maximum or any(byte < 0x20 or byte == 0x7F for byte in encoded):
         raise WarehouseW3EnvironmentReceiptError(f"{field} is not bounded text")
     return value
+
+
+def _metadata_header_texts(
+    metadata: Message,
+    name: str,
+    *,
+    field: str,
+    maximum: int,
+) -> tuple[str, ...]:
+    """Project strict email header objects into exact validated text."""
+
+    if not isinstance(metadata, Message):
+        raise TypeError("metadata must be an email Message")
+    values = metadata.get_all(name, failobj=[])
+    projected: list[str] = []
+    for value in values:
+        defects = getattr(value, "defects", None)
+        if type(defects) is not tuple or defects:
+            raise WarehouseW3EnvironmentReceiptError(
+                f"{field} contains a defective metadata header"
+            )
+        projected.append(_text(str(value), field=field, maximum=maximum))
+    return tuple(projected)
 
 
 def _subject(value: object, *, field: str) -> str:
@@ -928,9 +952,19 @@ class DbusProvenance:
             raise WarehouseW3EnvironmentReceiptError(
                 "D-Bus package metadata cannot be parsed"
             ) from exc
-        if metadata.get_all("Name", failobj=[]) != [
-            _DBUS_DISTRIBUTION_NAME
-        ] or metadata.get_all("Version", failobj=[]) != [self.package_version]:
+        if _metadata_header_texts(
+            metadata,
+            "Name",
+            field="D-Bus package metadata Name",
+            maximum=128,
+        ) != (_DBUS_DISTRIBUTION_NAME,) or _metadata_header_texts(
+            metadata,
+            "Version",
+            field="D-Bus package metadata Version",
+            maximum=128,
+        ) != (
+            self.package_version,
+        ):
             raise WarehouseW3EnvironmentReceiptError(
                 "D-Bus package metadata name or version differs"
             )
@@ -1824,9 +1858,19 @@ class FilesystemEnvironmentSemanticReader:
             raise WarehouseW3EnvironmentReceiptError(
                 "installed D-Bus PKG-INFO cannot be read"
             ) from exc
-        names = metadata.get_all("Name", failobj=[])
-        versions = metadata.get_all("Version", failobj=[])
-        if names != [_DBUS_DISTRIBUTION_NAME] or len(versions) != 1:
+        names = _metadata_header_texts(
+            metadata,
+            "Name",
+            field="installed D-Bus PKG-INFO Name",
+            maximum=128,
+        )
+        versions = _metadata_header_texts(
+            metadata,
+            "Version",
+            field="installed D-Bus PKG-INFO Version",
+            maximum=128,
+        )
+        if names != (_DBUS_DISTRIBUTION_NAME,) or len(versions) != 1:
             raise WarehouseW3EnvironmentReceiptError(
                 "installed D-Bus PKG-INFO identity differs"
             )

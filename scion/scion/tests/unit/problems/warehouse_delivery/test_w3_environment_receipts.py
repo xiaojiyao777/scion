@@ -9,9 +9,12 @@ import shutil
 import subprocess
 import sys
 import types
+from email.parser import Parser
+from email.policy import strict as strict_email_policy
 
 import pytest
 
+import scion.problems.warehouse_delivery.w3_environment_receipts as receipts_module
 import scion.problems.warehouse_delivery.w3_wheel as w3_wheel_module
 
 # The semantic receipt module has no native dependency, but importing the
@@ -664,6 +667,22 @@ def test_dbus_provenance_rejects_synthetic_wheel_metadata_layout() -> None:
             glib_bindings_subject="_dbus_glib_bindings",
             shared_library_paths=("/usr/lib/libdbus-1.so.3",),
         )
+
+
+def test_strict_dbus_metadata_headers_project_to_exact_text() -> None:
+    metadata = Parser(policy=strict_email_policy).parsestr(
+        DBUS_METADATA_CONTENTS,
+        headersonly=True,
+    )
+    raw_version = metadata.get_all("Version", failobj=[])[0]
+
+    assert type(raw_version) is not str
+    assert receipts_module._metadata_header_texts(
+        metadata,
+        "Version",
+        field="test D-Bus version",
+        maximum=128,
+    ) == ("1.3.2",)
 
 
 def test_production_readers_and_discovery_surface_are_fixed() -> None:
