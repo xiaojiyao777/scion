@@ -24,13 +24,17 @@ from pathlib import Path, PurePosixPath
 from typing import Mapping, Protocol
 
 from scion.problems.warehouse_delivery.w3_environment import (
+    WHEEL_GENERATED_INSTALLATION_FILES,
+    WHEEL_INSTALLATION_MANIFEST_PATH,
+    WHEEL_INSTALLATION_MANIFEST_SCHEMA,
+    WHEEL_RECORD_MEMBER_PATH,
     WarehouseW3EnvironmentError,
+    canonical_installed_record_bytes,
     dbus_metadata_installation_path,
     is_dbus_metadata_installation_path,
 )
 from scion.problems.warehouse_delivery.w3_wheel import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
-    FIXED_REQUIRED_WHEEL_MEMBERS,
     OfflineDoubleWheelReceipt,
 )
 from scion.runtime.execution.environment_integrity import (
@@ -71,8 +75,64 @@ _DBUS_PACKAGE_SUBJECT = "dbus"
 _DBUS_BINDINGS_SUBJECT = "_dbus_bindings"
 _DBUS_GLIB_BINDINGS_SUBJECT = "_dbus_glib_bindings"
 _DBUS_DISTRIBUTION_NAME = "dbus-python"
-_WHEEL_INSTALLATION_MANIFEST_SCHEMA = "scion.w3-wheel-installation-map.v1"
-_WHEEL_INSTALLATION_MANIFEST_PATH = ".scion/w3-wheel-installation.json"
+FIXED_RUNTIME_PROBE_WHEEL_MEMBERS = (
+    "scion/core/__init__.py",
+    "scion/core/execution_outcome.py",
+    "scion/core/models.py",
+    "scion/core/path_match.py",
+    "scion/core/paths.py",
+    "scion/core/research_surface_index.py",
+    "scion/problems/__init__.py",
+    "scion/problems/warehouse_delivery/__init__.py",
+    "scion/problems/warehouse_delivery/w2_preservation.py",
+    "scion/problems/warehouse_delivery/w3_analysis.py",
+    "scion/problems/warehouse_delivery/w3_candidate_gate.py",
+    "scion/problems/warehouse_delivery/w3_candidate_ingress.py",
+    "scion/problems/warehouse_delivery/w3_composition.py",
+    "scion/problems/warehouse_delivery/w3_counter_fixtures.py",
+    "scion/problems/warehouse_delivery/w3_environment.py",
+    "scion/problems/warehouse_delivery/w3_environment_receipts.py",
+    "scion/problems/warehouse_delivery/w3_fixed_arm.py",
+    "scion/problems/warehouse_delivery/w3_installation.py",
+    "scion/problems/warehouse_delivery/w3_installed_replay.py",
+    "scion/problems/warehouse_delivery/w3_prestart_facts.py",
+    "scion/problems/warehouse_delivery/w3_root_coordinator.py",
+    "scion/problems/warehouse_delivery/w3_root_installation.py",
+    "scion/problems/warehouse_delivery/w3_root_preflight.py",
+    "scion/problems/warehouse_delivery/w3_root_selection.py",
+    "scion/problems/warehouse_delivery/w3_root_staging.py",
+    "scion/problems/warehouse_delivery/w3_source_acceptance.py",
+    "scion/problems/warehouse_delivery/w3_start_authorization.py",
+    "scion/problems/warehouse_delivery/w3_start_gate.py",
+    "scion/problems/warehouse_delivery/w3_start_store.py",
+    "scion/problems/warehouse_delivery/w3_validation.py",
+    "scion/problems/warehouse_delivery/w3_wheel.py",
+    "scion/runtime/__init__.py",
+    "scion/runtime/execution/__init__.py",
+    "scion/runtime/execution/cgroup_v2.py",
+    "scion/runtime/execution/environment_integrity.py",
+    "scion/runtime/execution/external_installation.py",
+    "scion/runtime/execution/external_linux.py",
+    "scion/runtime/execution/invocation_terminal.py",
+    "scion/runtime/execution/launch_authority.py",
+    "scion/runtime/execution/model.py",
+    "scion/runtime/execution/spawn_backend.py",
+    "scion/runtime/execution/systemd255.py",
+    "scion/runtime/execution/systemd_acquisition.py",
+    "scion/runtime/native/__init__.py",
+    "scion/runtime/runner.py",
+    "scion/runtime/subprocess_runner.py",
+    "scion/runtime/workspace.py",
+    "scion/tools/__init__.py",
+    "scion/tools/scion_w3_tool.py",
+)
+if FIXED_RUNTIME_PROBE_WHEEL_MEMBERS != tuple(
+    sorted(
+        set(FIXED_RUNTIME_PROBE_WHEEL_MEMBERS),
+        key=lambda item: item.encode("utf-8"),
+    )
+):
+    raise RuntimeError("fixed runtime probe members are not unique and byte-sorted")
 _RUNTIME_OBSERVATION_SCHEMA = "scion.w3-environment-runtime-observation.v2"
 _ELF_MAGIC = b"\x7fELF"
 _PROBE_TIMEOUT_SECONDS = 60
@@ -745,7 +805,7 @@ class WheelInstallationProvenance:
             ),
             label="wheel installation provenance",
         )
-        if fields["schema"] != _WHEEL_INSTALLATION_MANIFEST_SCHEMA:
+        if fields["schema"] != WHEEL_INSTALLATION_MANIFEST_SCHEMA:
             raise WarehouseW3EnvironmentReceiptError(
                 "wheel installation manifest schema differs"
             )
@@ -765,7 +825,7 @@ class WheelInstallationProvenance:
 
     def to_mapping(self) -> dict[str, object]:
         return {
-            "schema": _WHEEL_INSTALLATION_MANIFEST_SCHEMA,
+            "schema": WHEEL_INSTALLATION_MANIFEST_SCHEMA,
             "manifest_path": self.manifest_path,
             "wheel_receipt_sha256": self.wheel_receipt_sha256,
             "wheel_sha256": self.wheel_sha256,
@@ -1168,29 +1228,68 @@ def _validate_wheel_installation(
         for item in generic.environment_inventory
         if item.kind == "regular"
     }
-    expected_members = []
+    installed_by_member = {
+        item.wheel_member_path: item for item in provenance.installed_members
+    }
+    if frozenset(installed_by_member) != frozenset(
+        item.path for item in wheel.member_inventory
+    ):
+        raise WarehouseW3EnvironmentReceiptError(
+            "installed wheel map does not close the exact member inventory"
+        )
     for member in wheel.member_inventory:
         environment_path = (installation_prefix / member.path).as_posix()
-        installed = environment.get(environment_path)
+        provenance_member = installed_by_member[member.path]
+        installed = environment.get(provenance_member.environment_path)
         if (
             installed is None
-            or installed.sha256 != member.sha256
+            or provenance_member.environment_path != environment_path
+            or installed.sha256 != provenance_member.sha256
+            or installed.size_bytes != provenance_member.size_bytes
+        ):
+            raise WarehouseW3EnvironmentReceiptError(
+                f"installed wheel member is not bound by environment: {member.path}"
+            )
+        if member.path != WHEEL_RECORD_MEMBER_PATH and (
+            installed.sha256 != member.sha256
             or installed.size_bytes != member.size_bytes
         ):
             raise WarehouseW3EnvironmentReceiptError(
-                f"wheel member is not installed byte-for-byte: {member.path}"
+                f"immutable wheel member is not installed byte-for-byte: {member.path}"
             )
-        expected_members.append(
-            InstalledWheelMember(
-                wheel_member_path=member.path,
-                environment_path=environment_path,
-                sha256=member.sha256,
-                size_bytes=member.size_bytes,
+    record_member = installed_by_member[WHEEL_RECORD_MEMBER_PATH]
+    installed_record_files = {
+        item.wheel_member_path: (item.sha256, item.size_bytes)
+        for item in provenance.installed_members
+    }
+    for generated_path, expected_raw in WHEEL_GENERATED_INSTALLATION_FILES.items():
+        generated = environment.get((installation_prefix / generated_path).as_posix())
+        if (
+            generated is None
+            or generated.sha256 != hashlib.sha256(expected_raw).hexdigest()
+            or generated.size_bytes != len(expected_raw)
+        ):
+            raise WarehouseW3EnvironmentReceiptError(
+                f"generated installation file differs: {generated_path}"
             )
+        installed_record_files[generated_path] = (
+            generated.sha256 or "",
+            generated.size_bytes,
         )
-    if provenance.installed_members != tuple(expected_members):
+    try:
+        expected_record = canonical_installed_record_bytes(
+            tuple(item.path for item in wheel.member_inventory),
+            installed_record_files,
+        )
+    except WarehouseW3EnvironmentError as exc:
         raise WarehouseW3EnvironmentReceiptError(
-            "installed wheel map does not close the exact member inventory"
+            "installed RECORD inputs differ"
+        ) from exc
+    if record_member.sha256 != hashlib.sha256(
+        expected_record
+    ).hexdigest() or record_member.size_bytes != len(expected_record):
+        raise WarehouseW3EnvironmentReceiptError(
+            "installed RECORD is not the canonical wheel transformation"
         )
     manifest = environment.get(provenance.manifest_path)
     manifest_raw = provenance.manifest_bytes()
@@ -1202,6 +1301,50 @@ def _validate_wheel_installation(
         raise WarehouseW3EnvironmentReceiptError(
             "wheel installation manifest is not bound by environment content"
         )
+
+
+def _read_wheel_installation_provenance(
+    environment_root: Path,
+    generic: EnvironmentContentReceipt,
+) -> WheelInstallationProvenance:
+    entries = tuple(
+        item
+        for item in generic.environment_inventory
+        if item.kind == "regular" and item.path == WHEEL_INSTALLATION_MANIFEST_PATH
+    )
+    if len(entries) != 1:
+        raise WarehouseW3EnvironmentReceiptError(
+            "environment lacks one wheel installation manifest"
+        )
+    entry = entries[0]
+    raw = _read_bound_regular(
+        environment_root / entry.path,
+        expected_sha256=entry.sha256 or "",
+        expected_size_bytes=entry.size_bytes,
+        maximum=4 * 1024 * 1024,
+    )
+    fields = _exact_fields(
+        _decode_canonical(raw, label="wheel installation manifest"),
+        frozenset(
+            {
+                "schema",
+                "wheel_receipt_sha256",
+                "wheel_sha256",
+                "installed_members",
+            }
+        ),
+        label="wheel installation manifest",
+    )
+    value = {
+        "manifest_path": WHEEL_INSTALLATION_MANIFEST_PATH,
+        **fields,
+    }
+    provenance = WheelInstallationProvenance.from_mapping(value)
+    if provenance.manifest_bytes() != raw:
+        raise WarehouseW3EnvironmentReceiptError(
+            "wheel installation manifest bytes differ"
+        )
+    return provenance
 
 
 def _validate_semantic_evidence(
@@ -1244,10 +1387,7 @@ def _validate_semantic_evidence(
         item.wheel_member_path: item
         for item in evidence.wheel_installation.installed_members
     }
-    required_runtime_modules = tuple(
-        member for member in FIXED_REQUIRED_WHEEL_MEMBERS if member.endswith(".py")
-    )
-    for member_path in required_runtime_modules:
+    for member_path in FIXED_RUNTIME_PROBE_WHEEL_MEMBERS:
         installed = installed_by_member.get(member_path)
         if installed is None:
             raise WarehouseW3EnvironmentReceiptError(
@@ -1812,25 +1952,9 @@ class FilesystemEnvironmentSemanticReader:
                 "runtime observation does not identify one installed native wheel member"
             )
         native_entry = native_matches[0]
-        native_path = PurePosixPath(native_entry.path)
-        member_path = PurePosixPath(wheel.native_member_path)
-        installation_prefix = PurePosixPath(
-            *native_path.parts[: -len(member_path.parts)]
-        )
-        installed_members = tuple(
-            InstalledWheelMember(
-                wheel_member_path=member.path,
-                environment_path=(installation_prefix / member.path).as_posix(),
-                sha256=member.sha256,
-                size_bytes=member.size_bytes,
-            )
-            for member in wheel.member_inventory
-        )
-        wheel_installation = WheelInstallationProvenance(
-            manifest_path=_WHEEL_INSTALLATION_MANIFEST_PATH,
-            wheel_receipt_sha256=wheel.raw_sha256,
-            wheel_sha256=wheel.wheel_sha256,
-            installed_members=installed_members,
+        wheel_installation = _read_wheel_installation_provenance(
+            environment_root,
+            generic,
         )
         metadata_matches = tuple(
             item
@@ -3618,6 +3742,7 @@ __all__ = [
     "EnvironmentRelocationReceipt",
     "EnvironmentSemanticReader",
     "FINAL_ENVIRONMENT_PARENT",
+    "FIXED_RUNTIME_PROBE_WHEEL_MEMBERS",
     "FilesystemEnvironmentSemanticReader",
     "FilesystemLiveEnvironmentReader",
     "ImportIdentity",

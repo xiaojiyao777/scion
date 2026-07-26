@@ -93,6 +93,7 @@ from scion.problems.warehouse_delivery.w3_composition import (
 from scion.problems.warehouse_delivery.w3_environment_receipts import (
     DbusProvenance,
     EnvironmentProbeFact,
+    FIXED_RUNTIME_PROBE_WHEEL_MEMBERS,
     ImportIdentity,
     InstalledWheelMember,
     NamespaceProbeExecutionFact,
@@ -101,6 +102,11 @@ from scion.problems.warehouse_delivery.w3_environment_receipts import (
     WarehouseEnvironmentEvidence,
     WheelInstallationProvenance,
     derive_final_environment_path,
+)
+from scion.problems.warehouse_delivery.w3_environment import (
+    WHEEL_GENERATED_INSTALLATION_FILES,
+    WHEEL_RECORD_MEMBER_PATH,
+    canonical_installed_record_bytes,
 )
 from scion.problems.warehouse_delivery.w3_installation import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
@@ -326,10 +332,23 @@ def _candidate(
     return CandidateVerificationReceipt.from_bytes(_canonical(value))
 
 
-def _environment_content(
+def _wheel_installation(
     wheel: OfflineDoubleWheelReceipt,
-) -> EnvironmentContentReceipt:
-    wheel_installation = WheelInstallationProvenance(
+) -> WheelInstallationProvenance:
+    installed_files = {
+        item.path: (item.sha256, item.size_bytes) for item in wheel.member_inventory
+    }
+    installed_files.update(
+        {
+            path: (hashlib.sha256(raw).hexdigest(), len(raw))
+            for path, raw in WHEEL_GENERATED_INSTALLATION_FILES.items()
+        }
+    )
+    installed_record = canonical_installed_record_bytes(
+        tuple(item.path for item in wheel.member_inventory),
+        installed_files,
+    )
+    return WheelInstallationProvenance(
         manifest_path=WHEEL_INSTALLATION_MANIFEST,
         wheel_receipt_sha256=wheel.raw_sha256,
         wheel_sha256=wheel.wheel_sha256,
@@ -337,12 +356,26 @@ def _environment_content(
             InstalledWheelMember(
                 wheel_member_path=member.path,
                 environment_path=f"{SITE}/{member.path}",
-                sha256=member.sha256,
-                size_bytes=member.size_bytes,
+                sha256=(
+                    hashlib.sha256(installed_record).hexdigest()
+                    if member.path == WHEEL_RECORD_MEMBER_PATH
+                    else member.sha256
+                ),
+                size_bytes=(
+                    len(installed_record)
+                    if member.path == WHEEL_RECORD_MEMBER_PATH
+                    else member.size_bytes
+                ),
             )
             for member in wheel.member_inventory
         ),
     )
+
+
+def _environment_content(
+    wheel: OfflineDoubleWheelReceipt,
+) -> EnvironmentContentReceipt:
+    wheel_installation = _wheel_installation(wheel)
     files = {
         "bin/python": _sha("python"),
         DBUS_BINDINGS: _sha("bindings"),
@@ -356,6 +389,10 @@ def _environment_content(
             item.environment_path: item.sha256
             for item in wheel_installation.installed_members
         },
+        **{
+            f"{SITE}/{path}": hashlib.sha256(raw).hexdigest()
+            for path, raw in WHEEL_GENERATED_INSTALLATION_FILES.items()
+        },
     }
     sizes = {
         **{path: 1 for path in files},
@@ -364,6 +401,10 @@ def _environment_content(
         **{
             item.environment_path: item.size_bytes
             for item in wheel_installation.installed_members
+        },
+        **{
+            f"{SITE}/{path}": len(raw)
+            for path, raw in WHEEL_GENERATED_INSTALLATION_FILES.items()
         },
     }
     directories = {"."}
@@ -419,6 +460,7 @@ def _double_wheel() -> OfflineDoubleWheelReceipt:
         sorted(
             {
                 *FIXED_REQUIRED_WHEEL_MEMBERS,
+                *FIXED_RUNTIME_PROBE_WHEEL_MEMBERS,
                 native_path,
                 "scion-0.1.0.dist-info/METADATA",
                 "scion-0.1.0.dist-info/WHEEL",
@@ -445,7 +487,16 @@ def _double_wheel() -> OfflineDoubleWheelReceipt:
         for path in paths
     )
     required = tuple(
-        sorted(path for path in FIXED_REQUIRED_WHEEL_MEMBERS if path.endswith(".py"))
+        sorted(
+            {
+                *(
+                    path
+                    for path in FIXED_REQUIRED_WHEEL_MEMBERS
+                    if path.endswith(".py")
+                ),
+                *FIXED_RUNTIME_PROBE_WHEEL_MEMBERS,
+            }
+        )
     )
     return OfflineDoubleWheelReceipt._for_test(
         source_commit="0123456789abcdef0123456789abcdef01234567",
@@ -472,20 +523,7 @@ def _semantic(
         for item in double_wheel.member_inventory
         if item.path == double_wheel.native_member_path
     )
-    wheel_installation = WheelInstallationProvenance(
-        manifest_path=WHEEL_INSTALLATION_MANIFEST,
-        wheel_receipt_sha256=double_wheel.raw_sha256,
-        wheel_sha256=double_wheel.wheel_sha256,
-        installed_members=tuple(
-            InstalledWheelMember(
-                wheel_member_path=member.path,
-                environment_path=f"{SITE}/{member.path}",
-                sha256=member.sha256,
-                size_bytes=member.size_bytes,
-            )
-            for member in double_wheel.member_inventory
-        ),
-    )
+    wheel_installation = _wheel_installation(double_wheel)
     imports = (
         ImportIdentity(
             "sys.executable",

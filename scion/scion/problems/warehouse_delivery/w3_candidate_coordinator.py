@@ -39,6 +39,7 @@ from .w3_composition import (
 )
 from .w3_environment import (
     WarehouseRuntimeSources,
+    WarehouseWheelInstallationInput,
     materialize_simulated_warehouse_environment as materialize_namespace_environment,
     prepare_production_warehouse_environment,
     validate_runtime_python,
@@ -686,6 +687,13 @@ def prepare_w3_candidate(
         work_root / "environment",
         wheel_path=artifact.wheel_path,
         wheel_sha256=artifact.receipt.wheel_sha256,
+        wheel_installation=WarehouseWheelInstallationInput(
+            wheel_receipt_sha256=artifact.receipt.raw_sha256,
+            wheel_sha256=artifact.receipt.wheel_sha256,
+            wheel_member_paths=tuple(
+                item.path for item in artifact.receipt.member_inventory
+            ),
+        ),
         runtime_sources=runtime_sources,
         candidate_root=paths.candidate_root,
         selection_root=paths.selection_directory,

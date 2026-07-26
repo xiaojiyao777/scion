@@ -84,6 +84,7 @@ from scion.problems.warehouse_delivery.w3_environment_receipts import (
     DbusProvenance,
     EnvironmentProbeFact,
     EnvironmentRelocationReceipt,
+    FIXED_RUNTIME_PROBE_WHEEL_MEMBERS,
     FilesystemEnvironmentSemanticReader,
     FilesystemLiveEnvironmentReader,
     ImportIdentity,
@@ -101,6 +102,11 @@ from scion.problems.warehouse_delivery.w3_environment_receipts import (
     discover_environment_external_runtime_paths,
     derive_final_environment_path,
     verify_live_environment,
+)
+from scion.problems.warehouse_delivery.w3_environment import (
+    WHEEL_GENERATED_INSTALLATION_FILES,
+    WHEEL_RECORD_MEMBER_PATH,
+    canonical_installed_record_bytes,
 )
 from scion.problems.warehouse_delivery.w3_wheel import (
     ACCEPTED_NATIVE_ELF_SHA256,
@@ -147,15 +153,16 @@ def _wheel_receipt(
 ) -> OfflineDoubleWheelReceipt:
     paths = tuple(
         sorted(
-            (
+            {
                 *FIXED_REQUIRED_WHEEL_MEMBERS,
+                *FIXED_RUNTIME_PROBE_WHEEL_MEMBERS,
                 NATIVE_MEMBER,
                 "scion-0.1.0.dist-info/METADATA",
                 "scion-0.1.0.dist-info/WHEEL",
                 "scion-0.1.0.dist-info/entry_points.txt",
                 "scion-0.1.0.dist-info/top_level.txt",
                 "scion-0.1.0.dist-info/RECORD",
-            )
+            }
         )
     )
     members = tuple(
@@ -183,7 +190,16 @@ def _wheel_receipt(
         archive_sha256=("1" * 64, "2" * 64),
         archive_inventory_sha256="3" * 64,
         required_module_members=tuple(
-            path for path in FIXED_REQUIRED_WHEEL_MEMBERS if path.endswith(".py")
+            sorted(
+                {
+                    *(
+                        path
+                        for path in FIXED_REQUIRED_WHEEL_MEMBERS
+                        if path.endswith(".py")
+                    ),
+                    *FIXED_RUNTIME_PROBE_WHEEL_MEMBERS,
+                }
+            )
         ),
         wheel_filename="scion-0.1.0-cp312-cp312-linux_x86_64.whl",
         wheel_size_bytes=100_000,
@@ -195,6 +211,7 @@ def _wheel_receipt(
 
 def _wheel_installation(
     wheel: OfflineDoubleWheelReceipt,
+    installed_contents: dict[str, bytes],
 ) -> WheelInstallationProvenance:
     return WheelInstallationProvenance(
         manifest_path=WHEEL_INSTALLATION_MANIFEST,
@@ -204,8 +221,8 @@ def _wheel_installation(
             InstalledWheelMember(
                 wheel_member_path=member.path,
                 environment_path=f"{SITE}/{member.path}",
-                sha256=member.sha256,
-                size_bytes=member.size_bytes,
+                sha256=_hash(installed_contents[member.path]),
+                size_bytes=len(installed_contents[member.path]),
             )
             for member in wheel.member_inventory
         ),
@@ -249,18 +266,36 @@ def semantic_inputs(
         _hash(native_raw),
     )
     wheel = _wheel_receipt(native_size_bytes=len(native_raw))
-    wheel_installation = _wheel_installation(wheel)
+    installed_contents = {
+        member.path: (
+            native_raw if member.path == NATIVE_MEMBER else member.path.encode()
+        )
+        for member in wheel.member_inventory
+    }
+    installed_record_inputs = {
+        path: (_hash(raw), len(raw)) for path, raw in installed_contents.items()
+    }
+    installed_record_inputs.update(
+        {
+            path: (_hash(raw), len(raw))
+            for path, raw in WHEEL_GENERATED_INSTALLATION_FILES.items()
+        }
+    )
+    installed_contents[WHEEL_RECORD_MEMBER_PATH] = canonical_installed_record_bytes(
+        tuple(item.path for item in wheel.member_inventory),
+        installed_record_inputs,
+    )
+    wheel_installation = _wheel_installation(wheel, installed_contents)
     content = {
         DBUS_PACKAGE: b"DBUS = 'copied'\n",
         DBUS_BINDINGS: native_raw,
         DBUS_GLIB: native_raw,
         DBUS_METADATA: DBUS_METADATA_CONTENTS.encode(),
         NATIVE: native_raw,
+        **{f"{SITE}/{path}": raw for path, raw in installed_contents.items()},
         **{
-            f"{SITE}/{member.path}": (
-                native_raw if member.path == NATIVE_MEMBER else member.path.encode()
-            )
-            for member in wheel.member_inventory
+            f"{SITE}/{path}": raw
+            for path, raw in WHEEL_GENERATED_INSTALLATION_FILES.items()
         },
         WHEEL_INSTALLATION_MANIFEST: wheel_installation.manifest_bytes(),
     }
@@ -447,6 +482,60 @@ def _semantic(
     )
 
 
+def _rewrite_installed_wheel_member(
+    values: dict[str, object],
+    *,
+    wheel_member_path: str,
+    raw: bytes,
+) -> tuple[
+    EnvironmentContentReceipt,
+    WarehouseEnvironmentEvidence,
+    WheelInstallationProvenance,
+]:
+    environment = values["environment"]
+    evidence = values["evidence"]
+    target = environment / SITE / wheel_member_path
+    target.chmod(0o644)
+    target.write_bytes(raw)
+    target.chmod(0o444)
+    installed_members = tuple(
+        (
+            InstalledWheelMember(
+                wheel_member_path=item.wheel_member_path,
+                environment_path=item.environment_path,
+                sha256=_hash(raw),
+                size_bytes=len(raw),
+            )
+            if item.wheel_member_path == wheel_member_path
+            else item
+        )
+        for item in evidence.wheel_installation.installed_members
+    )
+    provenance = WheelInstallationProvenance(
+        manifest_path=WHEEL_INSTALLATION_MANIFEST,
+        wheel_receipt_sha256=evidence.wheel_installation.wheel_receipt_sha256,
+        wheel_sha256=evidence.wheel_installation.wheel_sha256,
+        installed_members=installed_members,
+    )
+    manifest = environment / WHEEL_INSTALLATION_MANIFEST
+    manifest.chmod(0o644)
+    manifest.write_bytes(provenance.manifest_bytes())
+    manifest.chmod(0o444)
+    generic = EnvironmentContentReceipt.create(
+        environment,
+        external_runtime_paths=(values["external"],),
+        candidate_root=values["candidate"],
+        selection_root=values["selection"],
+    )
+    rewritten_evidence = WarehouseEnvironmentEvidence(
+        native_elf=evidence.native_elf,
+        wheel_installation=provenance,
+        import_table=evidence.import_table,
+        dbus_provenance=evidence.dbus_provenance,
+    )
+    return generic, rewritten_evidence, provenance
+
+
 def test_semantic_receipt_canonically_binds_all_problem_owned_evidence(
     semantic_inputs: dict[str, object],
 ) -> None:
@@ -479,6 +568,76 @@ def test_semantic_receipt_canonically_binds_all_problem_owned_evidence(
         semantic_inputs["wheel"]
     )
     assert ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256 == PLAN_SHA
+
+
+def test_semantic_receipt_binds_canonical_installed_record_rewrite(
+    semantic_inputs: dict[str, object],
+) -> None:
+    record_member = "scion-0.1.0.dist-info/RECORD"
+    receipt = WarehouseEnvironmentContentReceipt.create(
+        semantic_inputs["generic"],
+        semantic_inputs["wheel"],
+        semantic_inputs["evidence"],
+    )
+
+    assert (
+        receipts_module._read_wheel_installation_provenance(
+            semantic_inputs["environment"],
+            semantic_inputs["generic"],
+        )
+        == semantic_inputs["evidence"].wheel_installation
+    )
+    installed_record = next(
+        item
+        for item in receipt.evidence.wheel_installation.installed_members
+        if item.wheel_member_path == record_member
+    )
+    wheel_record = next(
+        item
+        for item in semantic_inputs["wheel"].member_inventory
+        if item.path == record_member
+    )
+    assert installed_record.sha256 != wheel_record.sha256
+
+
+def test_semantic_receipt_rejects_arbitrary_installed_record_rewrite(
+    semantic_inputs: dict[str, object],
+) -> None:
+    generic, evidence, _provenance = _rewrite_installed_wheel_member(
+        semantic_inputs,
+        wheel_member_path=WHEEL_RECORD_MEMBER_PATH,
+        raw=b"arbitrary installed RECORD\n",
+    )
+
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="installed RECORD is not the canonical wheel transformation",
+    ):
+        WarehouseEnvironmentContentReceipt.create(
+            generic,
+            semantic_inputs["wheel"],
+            evidence,
+        )
+
+
+def test_semantic_receipt_rejects_other_installed_wheel_rewrite(
+    semantic_inputs: dict[str, object],
+) -> None:
+    generic, evidence, _provenance = _rewrite_installed_wheel_member(
+        semantic_inputs,
+        wheel_member_path="scion-0.1.0.dist-info/METADATA",
+        raw=b"rewritten immutable metadata\n",
+    )
+
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="immutable wheel member is not installed byte-for-byte",
+    ):
+        WarehouseEnvironmentContentReceipt.create(
+            generic,
+            semantic_inputs["wheel"],
+            evidence,
+        )
 
 
 def test_semantic_receipt_rejects_mixed_wheel_import_and_external_evidence(
@@ -557,13 +716,20 @@ def test_semantic_receipt_rejects_mixed_wheel_import_and_external_evidence(
         )
 
 
-def test_semantic_receipt_requires_every_wheel_module_in_target_interpreter(
+@pytest.mark.parametrize(
+    "omitted",
+    (
+        "scion/problems/warehouse_delivery/w3_analysis.py",
+        "scion/problems/warehouse_delivery/w3_composition.py",
+        "scion/problems/warehouse_delivery/w3_start_gate.py",
+        "scion/tools/scion_w3_tool.py",
+    ),
+)
+def test_semantic_receipt_requires_runtime_probe_closure_in_target_interpreter(
     semantic_inputs: dict[str, object],
+    omitted: str,
 ) -> None:
     evidence = semantic_inputs["evidence"]
-    omitted = next(
-        member for member in FIXED_REQUIRED_WHEEL_MEMBERS if member.endswith(".py")
-    )
     omitted_path = f"{SITE}/{omitted}"
     incomplete = WarehouseEnvironmentEvidence(
         native_elf=evidence.native_elf,
@@ -582,6 +748,39 @@ def test_semantic_receipt_requires_every_wheel_module_in_target_interpreter(
             semantic_inputs["wheel"],
             incomplete,
         )
+
+
+def test_semantic_receipt_does_not_force_preparation_module_import(
+    semantic_inputs: dict[str, object],
+) -> None:
+    evidence = semantic_inputs["evidence"]
+    preparation_member = "scion/problems/warehouse_delivery/w3_candidate_coordinator.py"
+    preparation_path = f"{SITE}/{preparation_member}"
+    reduced = WarehouseEnvironmentEvidence(
+        native_elf=evidence.native_elf,
+        wheel_installation=evidence.wheel_installation,
+        import_table=tuple(
+            item for item in evidence.import_table if item.path != preparation_path
+        ),
+        dbus_provenance=evidence.dbus_provenance,
+    )
+
+    receipt = WarehouseEnvironmentContentReceipt.create(
+        semantic_inputs["generic"],
+        semantic_inputs["wheel"],
+        reduced,
+    )
+
+    assert preparation_path not in {item.path for item in receipt.evidence.import_table}
+    assert preparation_member not in FIXED_RUNTIME_PROBE_WHEEL_MEMBERS
+    assert {
+        "scion/problems/warehouse_delivery/w3_analysis.py",
+        "scion/problems/warehouse_delivery/w3_composition.py",
+        "scion/problems/warehouse_delivery/w3_start_gate.py",
+        "scion/problems/warehouse_delivery/w3_start_store.py",
+        "scion/runtime/execution/invocation_terminal.py",
+        "scion/tools/scion_w3_tool.py",
+    }.issubset(FIXED_RUNTIME_PROBE_WHEEL_MEMBERS)
 
 
 def test_semantic_reader_drift_is_fail_closed(
@@ -1368,4 +1567,5 @@ def test_module_is_problem_owned_and_has_no_mutation_capability() -> None:
     assert "run" in calls
     assert "FilesystemEnvironmentSemanticReader" in source
     assert "SubprocessEnvironmentProbeReader" in source
-    assert "w3_installation" not in source
+    assert "from scion.problems.warehouse_delivery.w3_installation import" not in source
+    assert "import scion.problems.warehouse_delivery.w3_installation" not in source

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
 import os
@@ -10,7 +11,9 @@ import pytest
 
 from scion.problems.warehouse_delivery.w3_environment import (
     RUNTIME_PYTHON,
+    WHEEL_INSTALLATION_MANIFEST_PATH,
     WarehouseRuntimeSources,
+    WarehouseWheelInstallationInput,
     WarehouseW3EnvironmentError,
     prepare_warehouse_environment,
     verify_warehouse_environment,
@@ -23,11 +26,13 @@ class FakeRunner:
         *,
         hardlink_candidate: bool = False,
         leak_bytes: bytes | None = None,
+        manifest_collision: bool = False,
         special_candidate: bool = False,
     ) -> None:
         self.calls: list[tuple[str, ...]] = []
         self.hardlink_candidate = hardlink_candidate
         self.leak_bytes = leak_bytes
+        self.manifest_collision = manifest_collision
         self.special_candidate = special_candidate
 
     def run(self, argv: tuple[str, ...]) -> None:
@@ -78,12 +83,38 @@ class FakeRunner:
         (dist_info / "direct_url.json").write_text(
             json.dumps(direct_url, sort_keys=True)
         )
+        (dist_info / "INSTALLER").write_bytes(b"pip\n")
+        (dist_info / "REQUESTED").write_bytes(b"")
+
+        def record_row(relative: str, physical: Path) -> str:
+            raw = physical.read_bytes()
+            digest = (
+                base64.urlsafe_b64encode(hashlib.sha256(raw).digest())
+                .rstrip(b"=")
+                .decode("ascii")
+            )
+            return f"{relative},sha256={digest},{len(raw)}\n"
+
         (dist_info / "RECORD").write_text(
-            "../../../bin/scion,sha256=script,1\n"
-            "scion/__init__.py,sha256=package,1\n"
-            f"{dist_info.name}/RECORD,,\n"
-            f"{dist_info.name}/direct_url.json,sha256=url,1\n"
+            record_row("../../../bin/scion", root / "bin" / "scion")
+            + record_row("scion/__init__.py", package / "__init__.py")
+            + record_row(
+                f"{dist_info.name}/INSTALLER",
+                dist_info / "INSTALLER",
+            )
+            + record_row(
+                f"{dist_info.name}/REQUESTED",
+                dist_info / "REQUESTED",
+            )
+            + f"{dist_info.name}/RECORD,,\n"
+            + record_row(
+                f"{dist_info.name}/direct_url.json",
+                dist_info / "direct_url.json",
+            )
         )
+        if self.manifest_collision:
+            (root / ".scion").mkdir()
+            (root / ".scion" / "w3-wheel-installation.json").write_bytes(b"collision\n")
 
 
 class FakeSmoke:
@@ -143,6 +174,7 @@ def preparation_inputs(
     (yaml_metadata / "INSTALLER").write_bytes(b"apt\n")
     wheel = tmp_path / "scion.whl"
     wheel.write_bytes(b"exact wheel bytes")
+    wheel_sha256 = hashlib.sha256(wheel.read_bytes()).hexdigest()
     external = tmp_path / "external-runtime"
     external.write_bytes(b"external runtime bytes")
     external.chmod(0o444)
@@ -163,7 +195,15 @@ def preparation_inputs(
         "environment": tmp_path / "built-environment",
         "selection": selection,
         "wheel": wheel,
-        "wheel_sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+        "wheel_sha256": wheel_sha256,
+        "wheel_installation": WarehouseWheelInstallationInput(
+            wheel_receipt_sha256="e" * 64,
+            wheel_sha256=wheel_sha256,
+            wheel_member_paths=(
+                "scion-0.1.0.dist-info/RECORD",
+                "scion/__init__.py",
+            ),
+        ),
         "external": external,
         "runtime_sources": WarehouseRuntimeSources(
             dbus_package=dbus,
@@ -188,6 +228,7 @@ def _prepare(
         inputs["environment"],
         wheel_path=inputs["wheel"],
         wheel_sha256=inputs["wheel_sha256"],
+        wheel_installation=inputs["wheel_installation"],
         runtime_sources=inputs["runtime_sources"],
         external_runtime_paths=(inputs["external"],),
         candidate_root=inputs["candidate"],
@@ -271,6 +312,17 @@ def test_prepare_uses_exact_offline_commands_and_freezes_environment(
         / "PyYAML-6.0.1.dist-info"
         / "INSTALLER"
     ).read_bytes() == b"apt\n"
+    installation = json.loads(
+        (environment / WHEEL_INSTALLATION_MANIFEST_PATH).read_bytes()
+    )
+    assert installation["schema"] == "scion.w3-wheel-installation-map.v1"
+    assert installation["wheel_receipt_sha256"] == "e" * 64
+    assert tuple(
+        item["wheel_member_path"] for item in installation["installed_members"]
+    ) == (
+        "scion-0.1.0.dist-info/RECORD",
+        "scion/__init__.py",
+    )
     assert b"command = " not in (environment / "pyvenv.cfg").read_bytes()
     dist_info = (
         environment / "lib" / "python3.12" / "site-packages" / "scion-0.1.0.dist-info"
@@ -415,6 +467,19 @@ def test_builder_rejects_candidate_special_file(
         )
 
 
+def test_builder_rejects_preexisting_installation_manifest(
+    preparation_inputs: dict[str, object],
+) -> None:
+    with pytest.raises(
+        WarehouseW3EnvironmentError,
+        match="manifest cannot be published",
+    ):
+        _prepare(
+            preparation_inputs,
+            runner=FakeRunner(manifest_collision=True),
+        )
+
+
 def test_builder_rejects_runtime_source_symlink(
     preparation_inputs: dict[str, object],
 ) -> None:
@@ -438,6 +503,7 @@ def test_builder_rejects_wrong_wheel_before_runner(
             preparation_inputs["environment"],
             wheel_path=preparation_inputs["wheel"],
             wheel_sha256="0" * 64,
+            wheel_installation=preparation_inputs["wheel_installation"],
             runtime_sources=preparation_inputs["runtime_sources"],
             external_runtime_paths=(preparation_inputs["external"],),
             candidate_root=preparation_inputs["candidate"],
@@ -459,6 +525,7 @@ def test_builder_rejects_effective_uid_zero_before_runner(
             preparation_inputs["environment"],
             wheel_path=preparation_inputs["wheel"],
             wheel_sha256=preparation_inputs["wheel_sha256"],
+            wheel_installation=preparation_inputs["wheel_installation"],
             runtime_sources=preparation_inputs["runtime_sources"],
             external_runtime_paths=(preparation_inputs["external"],),
             candidate_root=preparation_inputs["candidate"],
@@ -482,6 +549,7 @@ def test_builder_staging_root_cannot_overlap_candidate_or_selection(
                 environment_root,
                 wheel_path=preparation_inputs["wheel"],
                 wheel_sha256=preparation_inputs["wheel_sha256"],
+                wheel_installation=preparation_inputs["wheel_installation"],
                 runtime_sources=preparation_inputs["runtime_sources"],
                 external_runtime_paths=(preparation_inputs["external"],),
                 candidate_root=preparation_inputs["candidate"],

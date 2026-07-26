@@ -7,16 +7,18 @@ the lower-level builder retains narrow caller-supplied seams for tests.
 
 from __future__ import annotations
 
+import base64
 import csv
 import hashlib
 import io
+import json
 import os
 import re
 import stat
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Protocol
+from typing import Mapping, Protocol
 
 from scion.runtime.execution.environment_integrity import (
     EnvironmentContentReceipt,
@@ -25,6 +27,13 @@ from scion.runtime.execution.environment_integrity import (
 )
 
 RUNTIME_PYTHON = "/usr/bin/python3.12"
+WHEEL_INSTALLATION_MANIFEST_PATH = ".scion/w3-wheel-installation.json"
+WHEEL_INSTALLATION_MANIFEST_SCHEMA = "scion.w3-wheel-installation-map.v1"
+WHEEL_RECORD_MEMBER_PATH = "scion-0.1.0.dist-info/RECORD"
+WHEEL_GENERATED_INSTALLATION_FILES = {
+    "scion-0.1.0.dist-info/INSTALLER": b"pip\n",
+    "scion-0.1.0.dist-info/REQUESTED": b"",
+}
 _SITE_PACKAGES = PurePosixPath("lib/python3.12/site-packages")
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _DBUS_BINDINGS_RE = re.compile(r"_dbus_bindings\.cpython-312-[A-Za-z0-9_.-]+\.so\Z")
@@ -220,6 +229,87 @@ def _sha256_text(value: object, *, field: str) -> str:
     if type(value) is not str or _SHA256_RE.fullmatch(value) is None:
         raise WarehouseW3EnvironmentError(f"{field} is not one SHA-256 value")
     return value
+
+
+def _canonical_json(value: object) -> bytes:
+    try:
+        return (
+            json.dumps(
+                value,
+                ensure_ascii=False,
+                allow_nan=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise WarehouseW3EnvironmentError(
+            "wheel installation manifest is not canonical JSON"
+        ) from exc
+
+
+def _wheel_member_path(value: object) -> str:
+    if type(value) is not str or not value:
+        raise WarehouseW3EnvironmentError("wheel member path is not exact text")
+    pure = PurePosixPath(value)
+    if (
+        pure.is_absolute()
+        or str(pure) != value
+        or any(part in {"", ".", ".."} for part in pure.parts)
+    ):
+        raise WarehouseW3EnvironmentError(
+            "wheel member path is not one canonical relative path"
+        )
+    return value
+
+
+def canonical_installed_record_bytes(
+    wheel_member_paths: tuple[str, ...],
+    installed_files: Mapping[str, tuple[str, int]],
+) -> bytes:
+    """Create the one canonical post-cleanup installed RECORD."""
+
+    if type(wheel_member_paths) is not tuple or not wheel_member_paths:
+        raise TypeError("wheel_member_paths must be one nonempty exact tuple")
+    paths = tuple(_wheel_member_path(item) for item in wheel_member_paths)
+    if (
+        paths != tuple(sorted(set(paths), key=lambda item: item.encode("utf-8")))
+        or WHEEL_RECORD_MEMBER_PATH not in paths
+    ):
+        raise WarehouseW3EnvironmentError(
+            "wheel member paths are not complete, unique, and byte-sorted"
+        )
+    expected_paths = frozenset((*paths, *WHEEL_GENERATED_INSTALLATION_FILES))
+    if (
+        type(installed_files) is not dict
+        or frozenset(installed_files) != expected_paths
+    ):
+        raise WarehouseW3EnvironmentError(
+            "installed RECORD input does not close the expected files"
+        )
+    rows: list[list[str]] = []
+    for path in sorted(expected_paths, key=lambda item: item.encode("utf-8")):
+        identity = installed_files[path]
+        if (
+            type(identity) is not tuple
+            or len(identity) != 2
+            or type(identity[1]) is not int
+            or identity[1] < 0
+        ):
+            raise WarehouseW3EnvironmentError("installed RECORD identity differs")
+        digest = _sha256_text(identity[0], field="installed RECORD sha256")
+        if path == WHEEL_RECORD_MEMBER_PATH:
+            rows.append([path, "", ""])
+            continue
+        encoded_digest = (
+            base64.urlsafe_b64encode(bytes.fromhex(digest)).rstrip(b"=").decode("ascii")
+        )
+        rows.append([path, f"sha256={encoded_digest}", str(identity[1])])
+    output = io.StringIO(newline="")
+    writer = csv.writer(output, lineterminator="\n")
+    writer.writerows(rows)
+    return output.getvalue().encode("utf-8", "strict")
 
 
 def _paths_overlap(first: Path, second: Path) -> bool:
@@ -522,6 +612,45 @@ class WarehouseRuntimeSources:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class WarehouseWheelInstallationInput:
+    """Exact wheel identity and member paths needed for installed-byte mapping."""
+
+    wheel_receipt_sha256: str
+    wheel_sha256: str
+    wheel_member_paths: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "wheel_receipt_sha256",
+            _sha256_text(
+                self.wheel_receipt_sha256,
+                field="wheel_receipt_sha256",
+            ),
+        )
+        object.__setattr__(
+            self,
+            "wheel_sha256",
+            _sha256_text(self.wheel_sha256, field="wheel_sha256"),
+        )
+        if type(self.wheel_member_paths) is not tuple or not self.wheel_member_paths:
+            raise TypeError("wheel_member_paths must be one nonempty exact tuple")
+        paths = tuple(_wheel_member_path(item) for item in self.wheel_member_paths)
+        if (
+            paths != tuple(sorted(set(paths), key=lambda item: item.encode("utf-8")))
+            or WHEEL_RECORD_MEMBER_PATH not in paths
+        ):
+            raise WarehouseW3EnvironmentError(
+                "wheel member paths are not complete, unique, and byte-sorted"
+            )
+        object.__setattr__(self, "wheel_member_paths", paths)
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("WarehouseWheelInstallationInput is final")
+
+
 def _copy_runtime_sources(
     environment_root: Path,
     sources: WarehouseRuntimeSources,
@@ -656,7 +785,10 @@ def _remove_candidate_command(environment_root: Path) -> None:
         os.close(descriptor)
 
 
-def _clean_install_metadata(environment_root: Path) -> None:
+def _clean_install_metadata(
+    environment_root: Path,
+    installation: WarehouseWheelInstallationInput,
+) -> None:
     site_packages = environment_root / _SITE_PACKAGES
     dist_infos: list[Path] = []
     for name, metadata in _children(site_packages):
@@ -674,7 +806,6 @@ def _clean_install_metadata(environment_root: Path) -> None:
     dist_info = dist_infos[0]
     direct_url = dist_info / "direct_url.json"
     record = dist_info / "RECORD"
-    _unlink_exact_regular(direct_url, label="Scion direct_url.json")
     try:
         metadata = os.lstat(record)
         raw = record.read_bytes()
@@ -691,24 +822,89 @@ def _clean_install_metadata(environment_root: Path) -> None:
     except (UnicodeError, csv.Error) as exc:
         raise WarehouseW3EnvironmentError("Scion RECORD is malformed") from exc
     direct_name = f"{dist_info.name}/direct_url.json"
-    kept: list[list[str]] = []
-    removed_script = 0
-    removed_direct = 0
+    script_name = "../../../bin/scion"
+    expected_paths = frozenset(
+        (
+            *installation.wheel_member_paths,
+            *WHEEL_GENERATED_INSTALLATION_FILES,
+            direct_name,
+            script_name,
+        )
+    )
+    by_path: dict[str, list[str]] = {}
     for row in rows:
-        if len(row) != 3:
+        if (
+            len(row) != 3
+            or row[0] in by_path
+            or (row[0] != script_name and _wheel_member_path(row[0]) != row[0])
+        ):
             raise WarehouseW3EnvironmentError("Scion RECORD row shape differs")
-        if row[0] == "../../../bin/scion":
-            removed_script += 1
-        elif row[0] == direct_name:
-            removed_direct += 1
-        else:
-            kept.append(row)
-    if removed_script != 1 or removed_direct != 1:
-        raise WarehouseW3EnvironmentError("Scion RECORD cleanup inventory differs")
-    output = io.StringIO(newline="")
-    writer = csv.writer(output, lineterminator="\n")
-    writer.writerows(kept)
-    rewritten = output.getvalue().encode("utf-8", "strict")
+        by_path[row[0]] = row
+    if frozenset(by_path) != expected_paths:
+        raise WarehouseW3EnvironmentError("Scion RECORD install inventory differs")
+    for relative_path, row in by_path.items():
+        if relative_path == WHEEL_RECORD_MEMBER_PATH:
+            if row[1:] != ["", ""]:
+                raise WarehouseW3EnvironmentError("Scion RECORD self identity differs")
+            continue
+        physical_path = (
+            environment_root / "bin" / "scion"
+            if relative_path == script_name
+            else site_packages / relative_path
+        )
+        try:
+            file_metadata = os.lstat(physical_path)
+        except OSError as exc:
+            raise WarehouseW3EnvironmentError(
+                f"Scion RECORD member is absent: {relative_path}"
+            ) from exc
+        if file_metadata.st_nlink != 1:
+            raise WarehouseW3EnvironmentError(
+                f"Scion RECORD member is multiply linked: {relative_path}"
+            )
+        if stat.S_ISLNK(file_metadata.st_mode) or not stat.S_ISREG(
+            file_metadata.st_mode
+        ):
+            raise WarehouseW3EnvironmentError(
+                f"Scion RECORD member identity differs: {relative_path}"
+            )
+        encoded_digest = (
+            base64.urlsafe_b64encode(bytes.fromhex(_hash_regular(physical_path)))
+            .rstrip(b"=")
+            .decode("ascii")
+        )
+        if row[1:] != [
+            f"sha256={encoded_digest}",
+            str(file_metadata.st_size),
+        ]:
+            raise WarehouseW3EnvironmentError(
+                f"Scion RECORD member hash differs: {relative_path}"
+            )
+    for relative_path, expected_raw in WHEEL_GENERATED_INSTALLATION_FILES.items():
+        physical_path = site_packages / relative_path
+        if _hash_regular(physical_path) != hashlib.sha256(
+            expected_raw
+        ).hexdigest() or os.lstat(physical_path).st_size != len(expected_raw):
+            raise WarehouseW3EnvironmentError(
+                f"generated installation file differs: {relative_path}"
+            )
+    _unlink_exact_regular(direct_url, label="Scion direct_url.json")
+    _unlink_exact_regular(
+        environment_root / "bin" / "scion",
+        label="unused Scion console script",
+    )
+    installed_files: dict[str, tuple[str, int]] = {}
+    for relative_path in expected_paths - {direct_name, script_name}:
+        physical_path = site_packages / relative_path
+        file_metadata = os.lstat(physical_path)
+        installed_files[relative_path] = (
+            _hash_regular(physical_path),
+            file_metadata.st_size,
+        )
+    rewritten = canonical_installed_record_bytes(
+        installation.wheel_member_paths,
+        installed_files,
+    )
     flags = os.O_WRONLY | os.O_CLOEXEC
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -724,11 +920,13 @@ def _clean_install_metadata(environment_root: Path) -> None:
         os.close(descriptor)
 
 
-def _purge_generated_paths(environment_root: Path) -> None:
+def _purge_generated_paths(
+    environment_root: Path,
+    installation: WarehouseWheelInstallationInput,
+) -> None:
     bin_root = environment_root / "bin"
     for name in _ACTIVATION_NAMES:
         _unlink_exact_regular(bin_root / name, label=f"activation script {name}")
-    _unlink_exact_regular(bin_root / "scion", label="unused Scion console script")
     lib64 = environment_root / "lib64"
     try:
         lib64_stat = os.lstat(lib64)
@@ -737,9 +935,86 @@ def _purge_generated_paths(environment_root: Path) -> None:
     if not stat.S_ISLNK(lib64_stat.st_mode) or os.readlink(lib64) != "lib":
         raise WarehouseW3EnvironmentError("venv lib64 alias differs")
     lib64.unlink()
-    _clean_install_metadata(environment_root)
+    _clean_install_metadata(environment_root, installation)
     _purge_caches(environment_root)
     _remove_candidate_command(environment_root)
+
+
+def _write_wheel_installation_manifest(
+    environment_root: Path,
+    installation: WarehouseWheelInstallationInput,
+) -> None:
+    if type(installation) is not WarehouseWheelInstallationInput:
+        raise TypeError(
+            "wheel_installation must be exact WarehouseWheelInstallationInput"
+        )
+    installed_members: list[dict[str, object]] = []
+    for wheel_member_path in installation.wheel_member_paths:
+        environment_path = (_SITE_PACKAGES / wheel_member_path).as_posix()
+        physical_path = environment_root / environment_path
+        try:
+            metadata = os.lstat(physical_path)
+        except OSError as exc:
+            raise WarehouseW3EnvironmentError(
+                f"installed wheel member is absent: {wheel_member_path}"
+            ) from exc
+        if metadata.st_nlink != 1:
+            raise WarehouseW3EnvironmentError(
+                f"installed wheel member is multiply linked: {wheel_member_path}"
+            )
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise WarehouseW3EnvironmentError(
+                f"installed wheel member identity differs: {wheel_member_path}"
+            )
+        installed_members.append(
+            {
+                "wheel_member_path": wheel_member_path,
+                "environment_path": environment_path,
+                "sha256": _hash_regular(physical_path),
+                "size_bytes": metadata.st_size,
+            }
+        )
+    raw = _canonical_json(
+        {
+            "schema": WHEEL_INSTALLATION_MANIFEST_SCHEMA,
+            "wheel_receipt_sha256": installation.wheel_receipt_sha256,
+            "wheel_sha256": installation.wheel_sha256,
+            "installed_members": installed_members,
+        }
+    )
+    manifest_path = environment_root / WHEEL_INSTALLATION_MANIFEST_PATH
+    manifest_parent = manifest_path.parent
+    try:
+        os.mkdir(manifest_parent, 0o700)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(manifest_path, flags, 0o600)
+        try:
+            _write_all(descriptor, raw)
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        parent_descriptor = os.open(
+            manifest_parent,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY,
+        )
+        try:
+            os.fsync(parent_descriptor)
+        finally:
+            os.close(parent_descriptor)
+        environment_descriptor = os.open(
+            environment_root,
+            os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY,
+        )
+        try:
+            os.fsync(environment_descriptor)
+        finally:
+            os.close(environment_descriptor)
+    except OSError as exc:
+        raise WarehouseW3EnvironmentError(
+            "wheel installation manifest cannot be published"
+        ) from exc
 
 
 def _normalize_modes(environment_root: Path) -> None:
@@ -863,6 +1138,7 @@ def _materialize_warehouse_environment(
     *,
     wheel_path: Path,
     wheel_sha256: str,
+    wheel_installation: WarehouseWheelInstallationInput,
     runtime_sources: WarehouseRuntimeSources,
     candidate_root: Path,
     selection_root: Path,
@@ -890,6 +1166,11 @@ def _materialize_warehouse_environment(
     )
     if _hash_regular(wheel_path) != expected_wheel_sha256:
         raise WarehouseW3EnvironmentError("wheel SHA-256 differs")
+    if (
+        type(wheel_installation) is not WarehouseWheelInstallationInput
+        or wheel_installation.wheel_sha256 != expected_wheel_sha256
+    ):
+        raise WarehouseW3EnvironmentError("wheel installation input differs from wheel")
     runtime_sources.validate()
     venv_argv = (
         RUNTIME_PYTHON,
@@ -914,7 +1195,8 @@ def _materialize_warehouse_environment(
     _run_exact(runner, venv_argv)
     _run_exact(runner, install_argv)
     _copy_runtime_sources(environment_root, runtime_sources)
-    _purge_generated_paths(environment_root)
+    _purge_generated_paths(environment_root, wheel_installation)
+    _write_wheel_installation_manifest(environment_root, wheel_installation)
     _normalize_modes(environment_root)
     return expected_wheel_sha256, venv_argv, install_argv
 
@@ -924,6 +1206,7 @@ def prepare_warehouse_environment(
     *,
     wheel_path: Path,
     wheel_sha256: str,
+    wheel_installation: WarehouseWheelInstallationInput,
     runtime_sources: WarehouseRuntimeSources,
     external_runtime_paths: tuple[Path, ...],
     candidate_root: Path,
@@ -939,6 +1222,7 @@ def prepare_warehouse_environment(
         environment_root,
         wheel_path=wheel_path,
         wheel_sha256=wheel_sha256,
+        wheel_installation=wheel_installation,
         runtime_sources=runtime_sources,
         candidate_root=candidate_root,
         selection_root=selection_root,
@@ -981,6 +1265,7 @@ def prepare_production_warehouse_environment(
     *,
     wheel_path: Path,
     wheel_sha256: str,
+    wheel_installation: WarehouseWheelInstallationInput,
     runtime_sources: WarehouseRuntimeSources,
     candidate_root: Path,
     selection_root: Path,
@@ -993,6 +1278,7 @@ def prepare_production_warehouse_environment(
         environment_root,
         wheel_path=wheel_path,
         wheel_sha256=wheel_sha256,
+        wheel_installation=wheel_installation,
         runtime_sources=runtime_sources,
         candidate_root=candidate_root,
         selection_root=selection_root,
@@ -1141,7 +1427,13 @@ __all__ = [
     "SubprocessEnvironmentCommandRunner",
     "WarehouseEnvironmentBuild",
     "WarehouseRuntimeSources",
+    "WarehouseWheelInstallationInput",
     "WarehouseW3EnvironmentError",
+    "WHEEL_GENERATED_INSTALLATION_FILES",
+    "WHEEL_INSTALLATION_MANIFEST_PATH",
+    "WHEEL_INSTALLATION_MANIFEST_SCHEMA",
+    "WHEEL_RECORD_MEMBER_PATH",
+    "canonical_installed_record_bytes",
     "dbus_metadata_installation_path",
     "is_dbus_metadata_installation_path",
     "materialize_simulated_warehouse_environment",
