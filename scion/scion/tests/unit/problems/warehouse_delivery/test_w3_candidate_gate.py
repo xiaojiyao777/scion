@@ -98,6 +98,7 @@ from scion.problems.warehouse_delivery.w3_environment_receipts import (
     InstalledWheelMember,
     NamespaceProbeExecutionFact,
     NativeElfIdentity,
+    PythonSearchPathEntry,
     WarehouseEnvironmentContentReceipt,
     WarehouseEnvironmentEvidence,
     WheelInstallationProvenance,
@@ -133,6 +134,15 @@ DBUS_GLIB = f"{SITE}/_dbus_glib_bindings.cpython-312-x86_64-linux-gnu.so"
 DBUS_METADATA = f"{SITE}/dbus_python-1.3.2.egg-info/PKG-INFO"
 DBUS_METADATA_CONTENTS = "Metadata-Version: 2.1\nName: dbus-python\nVersion: 1.3.2\n\n"
 WHEEL_INSTALLATION_MANIFEST = ".scion/w3-wheel-installation.json"
+EXTERNAL_RUNTIME_PATHS = tuple(
+    Path(path)
+    for path in (
+        "/etc/python3.12/sitecustomize.py",
+        "/usr/lib/libdbus-1.so.3",
+        ("/usr/lib/python3.12/lib-dynload/" "_hashlib.cpython-312-x86_64-linux-gnu.so"),
+        "/usr/lib/python3.12/os.py",
+    )
+)
 
 
 def test_offline_double_wheel_v4_schema_matches_persisted_paths() -> None:
@@ -166,7 +176,7 @@ def _fixed_gate_dependencies(monkeypatch: pytest.MonkeyPatch):
         *,
         external_runtime_paths: tuple[Path, ...],
     ) -> PreparedCandidate:
-        assert external_runtime_paths == (Path("/usr/lib/libdbus-1.so.3"),)
+        assert external_runtime_paths == EXTERNAL_RUNTIME_PATHS
         return _PREPARED_BY_ROOT[str(candidate_root)]
 
     def inspect(
@@ -438,15 +448,42 @@ def _environment_content(
             {
                 "schema": "scion.environment-content.v1",
                 "environment_inventory": inventory,
-                "external_runtime": [
-                    {
-                        "path": "/usr/lib/libdbus-1.so.3",
-                        "device": 3,
-                        "inode": 4,
-                        "size_bytes": 1,
-                        "sha256": _sha("libdbus"),
-                    }
-                ],
+                "external_runtime": sorted(
+                    (
+                        {
+                            "path": "/etc/python3.12/sitecustomize.py",
+                            "device": 3,
+                            "inode": 4,
+                            "size_bytes": 1,
+                            "sha256": _sha("sitecustomize"),
+                        },
+                        {
+                            "path": "/usr/lib/libdbus-1.so.3",
+                            "device": 3,
+                            "inode": 5,
+                            "size_bytes": 1,
+                            "sha256": _sha("libdbus"),
+                        },
+                        {
+                            "path": (
+                                "/usr/lib/python3.12/lib-dynload/"
+                                "_hashlib.cpython-312-x86_64-linux-gnu.so"
+                            ),
+                            "device": 3,
+                            "inode": 6,
+                            "size_bytes": 1,
+                            "sha256": _sha("hashlib"),
+                        },
+                        {
+                            "path": "/usr/lib/python3.12/os.py",
+                            "device": 3,
+                            "inode": 7,
+                            "size_bytes": 1,
+                            "sha256": _sha("os"),
+                        },
+                    ),
+                    key=lambda item: item["path"].encode(),
+                ),
             }
         )
     )
@@ -573,6 +610,33 @@ def _semantic(
             _sha("libdbus"),
             1,
         ),
+        ImportIdentity(
+            "_hashlib",
+            "native_extension",
+            "external_runtime",
+            (
+                "/usr/lib/python3.12/lib-dynload/"
+                "_hashlib.cpython-312-x86_64-linux-gnu.so"
+            ),
+            _sha("hashlib"),
+            1,
+        ),
+        ImportIdentity(
+            "os",
+            "stdlib",
+            "external_runtime",
+            "/usr/lib/python3.12/os.py",
+            _sha("os"),
+            1,
+        ),
+        ImportIdentity(
+            "sitecustomize",
+            "stdlib",
+            "external_runtime",
+            "/etc/python3.12/sitecustomize.py",
+            _sha("sitecustomize"),
+            1,
+        ),
         *(
             ImportIdentity(
                 (
@@ -605,6 +669,21 @@ def _semantic(
                     item.path.encode("utf-8"),
                 ),
             )
+        ),
+        python_search_path=(
+            PythonSearchPathEntry(
+                scope="external_runtime",
+                path="/usr/lib/python312.zip",
+            ),
+            PythonSearchPathEntry(
+                scope="external_runtime",
+                path="/usr/lib/python3.12",
+            ),
+            PythonSearchPathEntry(
+                scope="external_runtime",
+                path="/usr/lib/python3.12/lib-dynload",
+            ),
+            PythonSearchPathEntry(scope="environment", path=SITE),
         ),
         dbus_provenance=DbusProvenance(
             package_version="1.3.2",
@@ -642,7 +721,10 @@ def _probe(
         environment_root=root,
         sys_executable=root / "bin/python",
         sys_prefix=root,
-        sys_path=(root / "lib/python3.12/site-packages",),
+        sys_path=tuple(
+            (root / item.path if item.scope == "environment" else Path(item.path))
+            for item in semantic.evidence.python_search_path
+        ),
         import_table_sha256=semantic.import_table_sha256,
         loaded_import_table=semantic.evidence.import_table,
         native_loaded_paths=tuple(Path(path) for path in native_paths),
@@ -1074,7 +1156,7 @@ def test_candidate_gate_reverifies_complete_candidate_after_inspection(
         *,
         external_runtime_paths: tuple[Path, ...],
     ) -> PreparedCandidate:
-        assert external_runtime_paths == (Path("/usr/lib/libdbus-1.so.3"),)
+        assert external_runtime_paths == EXTERNAL_RUNTIME_PATHS
         calls.append(current_root)
         if len(calls) == 1:
             return prepared

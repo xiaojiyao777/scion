@@ -114,7 +114,7 @@ def _prepared_with_gate(
         sealed_objects=objects,
         environment_root=semantic_inputs["environment"],
         environment_receipt=semantic.generic_receipt,
-        external_runtime_paths=(semantic_inputs["external"],),
+        external_runtime_paths=semantic_inputs["external_paths"],
         run_root=accepted_root,
         nonce=NONCE,
     )
@@ -268,7 +268,7 @@ def test_root_staging_rejects_candidate_fixed_inventory_extension(
         sealed_objects=objects,
         environment_root=semantic_inputs["environment"],
         environment_receipt=semantic.generic_receipt,
-        external_runtime_paths=(semantic_inputs["external"],),
+        external_runtime_paths=semantic_inputs["external_paths"],
         run_root=accepted_root,
         nonce=NONCE,
     )

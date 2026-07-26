@@ -92,6 +92,7 @@ from scion.problems.warehouse_delivery.w3_environment_receipts import (
     LiveEnvironmentRehashFact,
     NativeElfIdentity,
     NamespaceProbeExecutionFact,
+    PythonSearchPathEntry,
     SubprocessEnvironmentProbeReader,
     WarehouseEnvironmentContentReceipt,
     WarehouseEnvironmentEvidence,
@@ -307,16 +308,33 @@ def semantic_inputs(
         _write(environment, path, raw)
     _freeze_directories(environment)
 
-    external = tmp_path / "external" / "libdbus-1.so.3"
-    external.parent.mkdir()
+    external_root = tmp_path / "external-runtime"
+    external = external_root / "usr/lib/x86_64-linux-gnu/libdbus-1.so.3"
+    external.parent.mkdir(parents=True)
     external.write_bytes(native_raw)
     external.chmod(0o444)
+    stdlib = external_root / "usr/lib/python3.12/os.py"
+    _write(external_root, "usr/lib/python3.12/os.py", b"# stdlib witness\n")
+    dynload = (
+        external_root
+        / "usr/lib/python3.12/lib-dynload/_hashlib.cpython-312-x86_64-linux-gnu.so"
+    )
+    _write(
+        external_root,
+        "usr/lib/python3.12/lib-dynload/_hashlib.cpython-312-x86_64-linux-gnu.so",
+        native_raw,
+    )
+    sitecustomize = external_root / "etc/python3.12/sitecustomize.py"
+    _write(external_root, "etc/python3.12/sitecustomize.py", b"# startup hook\n")
+    sitecustomize_link = external_root / "usr/lib/python3.12/sitecustomize.py"
+    sitecustomize_link.symlink_to(sitecustomize)
+    external_paths = (external, stdlib, dynload, sitecustomize)
     candidate = tmp_path / "candidate"
     selection = tmp_path / ".scion-w3-selections" / ("a" * 64)
     selection.mkdir(parents=True)
     generic = EnvironmentContentReceipt.create(
         environment,
-        external_runtime_paths=(external,),
+        external_runtime_paths=external_paths,
         candidate_root=candidate,
         selection_root=selection,
     )
@@ -325,7 +343,8 @@ def semantic_inputs(
         for item in generic.environment_inventory
         if item.kind == "regular"
     }
-    external_entry = generic.external_runtime[0]
+    external_by_path = {item.path: item for item in generic.external_runtime}
+    external_entry = external_by_path[str(external)]
     native = NativeElfIdentity(
         environment_path=NATIVE,
         sha256=by_path[NATIVE].sha256 or "",
@@ -383,6 +402,30 @@ def semantic_inputs(
                     size_bytes=external_entry.size_bytes,
                 ),
                 ImportIdentity(
+                    subject="_hashlib",
+                    kind="native_extension",
+                    scope="external_runtime",
+                    path=str(dynload),
+                    sha256=external_by_path[str(dynload)].sha256,
+                    size_bytes=external_by_path[str(dynload)].size_bytes,
+                ),
+                ImportIdentity(
+                    subject="os",
+                    kind="stdlib",
+                    scope="external_runtime",
+                    path=str(stdlib),
+                    sha256=external_by_path[str(stdlib)].sha256,
+                    size_bytes=external_by_path[str(stdlib)].size_bytes,
+                ),
+                ImportIdentity(
+                    subject="sitecustomize",
+                    kind="stdlib",
+                    scope="external_runtime",
+                    path=str(sitecustomize_link.resolve()),
+                    sha256=external_by_path[str(sitecustomize)].sha256,
+                    size_bytes=external_by_path[str(sitecustomize)].size_bytes,
+                ),
+                ImportIdentity(
                     subject="scion.runtime.native._spawn_into_cgroup",
                     kind="native_extension",
                     scope="environment",
@@ -406,6 +449,21 @@ def semantic_inputs(
         native_elf=native,
         wheel_installation=wheel_installation,
         import_table=imports,
+        python_search_path=(
+            PythonSearchPathEntry(
+                scope="external_runtime",
+                path=str(stdlib.parent.parent / "python312.zip"),
+            ),
+            PythonSearchPathEntry(
+                scope="external_runtime",
+                path=str(stdlib.parent),
+            ),
+            PythonSearchPathEntry(
+                scope="external_runtime",
+                path=str(dynload.parent),
+            ),
+            PythonSearchPathEntry(scope="environment", path=SITE),
+        ),
         dbus_provenance=DbusProvenance(
             package_version="1.3.2",
             package_metadata_path=DBUS_METADATA,
@@ -432,6 +490,8 @@ def semantic_inputs(
         "tmp_path": tmp_path,
         "environment": environment,
         "external": external,
+        "external_paths": external_paths,
+        "sitecustomize_link": sitecustomize_link,
         "candidate": candidate,
         "selection": selection,
         "generic": generic,
@@ -523,7 +583,7 @@ def _rewrite_installed_wheel_member(
     manifest.chmod(0o444)
     generic = EnvironmentContentReceipt.create(
         environment,
-        external_runtime_paths=(values["external"],),
+        external_runtime_paths=values["external_paths"],
         candidate_root=values["candidate"],
         selection_root=values["selection"],
     )
@@ -531,6 +591,7 @@ def _rewrite_installed_wheel_member(
         native_elf=evidence.native_elf,
         wheel_installation=provenance,
         import_table=evidence.import_table,
+        python_search_path=evidence.python_search_path,
         dbus_provenance=evidence.dbus_provenance,
     )
     return generic, rewritten_evidence, provenance
@@ -554,7 +615,14 @@ def test_semantic_receipt_canonically_binds_all_problem_owned_evidence(
     assert receipt.generic_receipt_sha256 == semantic_inputs["generic"].raw_sha256
     assert receipt.wheel_receipt_sha256 == semantic_inputs["wheel"].raw_sha256
     assert receipt.wheel_sha256 == semantic_inputs["wheel"].wheel_sha256
-    assert receipt.external_runtime_count == 1
+    assert receipt.external_runtime_count == 4
+    assert receipt.evidence.python_search_path[-1] == PythonSearchPathEntry(
+        scope="environment",
+        path=SITE,
+    )
+    assert json.loads(receipt.raw)["python_search_path"] == [
+        item.to_mapping() for item in receipt.evidence.python_search_path
+    ]
     assert str("/var/lib/scion/environments/w3/").encode() not in receipt.raw
     assert (
         WarehouseEnvironmentContentReceipt.from_bytes(
@@ -684,6 +752,7 @@ def test_semantic_receipt_rejects_mixed_wheel_import_and_external_evidence(
         native_elf=semantic_inputs["evidence"].native_elf,
         wheel_installation=semantic_inputs["evidence"].wheel_installation,
         import_table=tuple(imports),
+        python_search_path=semantic_inputs["evidence"].python_search_path,
         dbus_provenance=semantic_inputs["evidence"].dbus_provenance,
     )
     with pytest.raises(
@@ -737,6 +806,7 @@ def test_semantic_receipt_requires_runtime_probe_closure_in_target_interpreter(
         import_table=tuple(
             item for item in evidence.import_table if item.path != omitted_path
         ),
+        python_search_path=evidence.python_search_path,
         dbus_provenance=evidence.dbus_provenance,
     )
     with pytest.raises(
@@ -762,6 +832,7 @@ def test_semantic_receipt_does_not_force_preparation_module_import(
         import_table=tuple(
             item for item in evidence.import_table if item.path != preparation_path
         ),
+        python_search_path=evidence.python_search_path,
         dbus_provenance=evidence.dbus_provenance,
     )
 
@@ -797,6 +868,7 @@ def test_semantic_reader_drift_is_fail_closed(
             native_elf=evidence.native_elf,
             wheel_installation=evidence.wheel_installation,
             import_table=tuple(imports),
+            python_search_path=evidence.python_search_path,
             dbus_provenance=evidence.dbus_provenance,
         )
 
@@ -804,6 +876,7 @@ def test_semantic_reader_drift_is_fail_closed(
         native_elf=evidence.native_elf,
         wheel_installation=evidence.wheel_installation,
         import_table=evidence.import_table,
+        python_search_path=evidence.python_search_path,
         dbus_provenance=DbusProvenance(
             package_version="1.3.3",
             package_metadata_path=DBUS_METADATA.replace("1.3.2", "1.3.3"),
@@ -837,7 +910,7 @@ def test_semantic_reader_drift_is_fail_closed(
         )
 
 
-def test_semantic_receipt_v3_binds_copied_debian_dbus_metadata(
+def test_semantic_receipt_v4_binds_copied_debian_dbus_metadata(
     semantic_inputs: dict[str, object],
 ) -> None:
     receipt = WarehouseEnvironmentContentReceipt.create(
@@ -847,9 +920,32 @@ def test_semantic_receipt_v3_binds_copied_debian_dbus_metadata(
     )
 
     assert json.loads(receipt.raw)["schema"] == (
-        "scion.w3-environment-semantic-content.v3"
+        "scion.w3-environment-semantic-content.v4"
     )
     assert receipt.evidence.dbus_provenance.package_metadata_path == DBUS_METADATA
+
+
+def test_semantic_receipt_v3_downgrade_and_missing_path_authority_fail_closed(
+    semantic_inputs: dict[str, object],
+) -> None:
+    receipt = _semantic(semantic_inputs)
+    downgraded = json.loads(receipt.raw)
+    downgraded["schema"] = "scion.w3-environment-semantic-content.v3"
+    with pytest.raises(WarehouseW3EnvironmentReceiptError, match="schema differs"):
+        WarehouseEnvironmentContentReceipt.from_bytes(
+            _canonical(downgraded),
+            generic_receipt=semantic_inputs["generic"],
+            wheel_receipt=semantic_inputs["wheel"],
+        )
+
+    missing = json.loads(receipt.raw)
+    del missing["python_search_path"]
+    with pytest.raises(WarehouseW3EnvironmentReceiptError, match="fields differ"):
+        WarehouseEnvironmentContentReceipt.from_bytes(
+            _canonical(missing),
+            generic_receipt=semantic_inputs["generic"],
+            wheel_receipt=semantic_inputs["wheel"],
+        )
 
 
 def test_dbus_provenance_rejects_synthetic_wheel_metadata_layout() -> None:
@@ -978,6 +1074,251 @@ def test_discovery_runs_only_the_fixed_local_read_only_probe(
     }
 
 
+def test_production_python_search_path_binds_ordered_witnessed_roots(
+    semantic_inputs: dict[str, object],
+) -> None:
+    environment = semantic_inputs["environment"]
+    evidence = semantic_inputs["evidence"]
+    observed = tuple(
+        (str(environment / item.path) if item.scope == "environment" else item.path)
+        for item in evidence.python_search_path
+    )
+
+    shape = receipts_module._production_python_search_path(
+        observed,
+        evidence.import_table,
+        environment_root=environment,
+        site_packages_root=SITE,
+    )
+
+    assert shape == evidence.python_search_path
+    startup_hook = next(
+        item for item in evidence.import_table if item.subject == "sitecustomize"
+    )
+    assert semantic_inputs["sitecustomize_link"].is_symlink()
+    assert startup_hook.path == str(semantic_inputs["sitecustomize_link"].resolve())
+    assert all(
+        not (
+            item.scope == "external_runtime"
+            and item.path.startswith(str(Path(startup_hook.path).parent))
+        )
+        for item in shape
+    )
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "broad",
+        "foreign",
+        "startup_realpath",
+        "unpaired_zip",
+        "missing_stdlib",
+        "missing_dynload",
+    ),
+)
+def test_production_python_search_path_rejects_unwitnessed_roots_and_loss(
+    semantic_inputs: dict[str, object],
+    mutation: str,
+) -> None:
+    environment = semantic_inputs["environment"]
+    evidence = semantic_inputs["evidence"]
+    observed = [
+        (str(environment / item.path) if item.scope == "environment" else item.path)
+        for item in evidence.python_search_path
+    ]
+    if mutation == "broad":
+        observed.insert(-1, str(Path(observed[1]).parents[2]))
+    elif mutation == "foreign":
+        observed.insert(-1, str(environment.parent / "foreign/python3.12"))
+    elif mutation == "startup_realpath":
+        startup_path = next(
+            item.path
+            for item in evidence.import_table
+            if item.subject == "sitecustomize"
+        )
+        observed.insert(-1, str(Path(startup_path).parent))
+    elif mutation == "unpaired_zip":
+        observed.insert(-1, str(environment.parent / "foreign/python312.zip"))
+    elif mutation == "missing_stdlib":
+        observed.pop(1)
+    elif mutation == "missing_dynload":
+        observed.pop(2)
+    else:
+        raise AssertionError(f"unknown mutation: {mutation}")
+
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="fixed runtime closure",
+    ):
+        receipts_module._production_python_search_path(
+            tuple(observed),
+            evidence.import_table,
+            environment_root=environment,
+            site_packages_root=SITE,
+        )
+
+
+@pytest.mark.parametrize(
+    ("subject", "path", "message"),
+    (
+        (
+            "os",
+            "/foreign/python3.12/site-packages/os.py",
+            "external Python import enters site-packages",
+        ),
+        (
+            "os",
+            "/foreign/python3.12/dist-packages/os.py",
+            "external Python import enters dist-packages",
+        ),
+        (
+            "_hashlib",
+            "/foreign/lib-dynload/_hashlib.cpython-312-x86_64-linux-gnu.so",
+            "external native import has no versioned root",
+        ),
+    ),
+)
+def test_python_search_path_rejects_external_packages_and_unversioned_dynload(
+    semantic_inputs: dict[str, object],
+    subject: str,
+    path: str,
+    message: str,
+) -> None:
+    evidence = semantic_inputs["evidence"]
+    original = next(item for item in evidence.import_table if item.subject == subject)
+    replacement = ImportIdentity(
+        subject=original.subject,
+        kind=original.kind,
+        scope=original.scope,
+        path=path,
+        sha256=original.sha256,
+        size_bytes=original.size_bytes,
+    )
+    imports = tuple(
+        replacement if item is original else item for item in evidence.import_table
+    )
+
+    with pytest.raises(WarehouseW3EnvironmentReceiptError, match=message):
+        receipts_module._validate_python_search_path_authority(
+            evidence.python_search_path,
+            imports,
+            site_packages_root=SITE,
+        )
+
+
+def test_python_search_path_requires_paired_zip_and_one_adjacent_runtime_root(
+    semantic_inputs: dict[str, object],
+) -> None:
+    evidence = semantic_inputs["evidence"]
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="fixed runtime closure",
+    ):
+        receipts_module._validate_python_search_path_authority(
+            evidence.python_search_path[1:],
+            evidence.import_table,
+            site_packages_root=SITE,
+        )
+
+    stdlib = next(item for item in evidence.import_table if item.subject == "os")
+    second_root = ImportIdentity(
+        subject="email",
+        kind="stdlib",
+        scope="external_runtime",
+        path="/foreign/lib/python3.12/email/__init__.py",
+        sha256=stdlib.sha256,
+        size_bytes=stdlib.size_bytes,
+    )
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="one fixed runtime root closure",
+    ):
+        receipts_module._validate_python_search_path_authority(
+            evidence.python_search_path,
+            (*evidence.import_table, second_root),
+            site_packages_root=SITE,
+        )
+
+    dynload = next(item for item in evidence.import_table if item.subject == "_hashlib")
+    nonadjacent = ImportIdentity(
+        subject=dynload.subject,
+        kind=dynload.kind,
+        scope=dynload.scope,
+        path=(
+            "/opt/lib/python3.12/lib-dynload/"
+            "_hashlib.cpython-312-x86_64-linux-gnu.so"
+        ),
+        sha256=dynload.sha256,
+        size_bytes=dynload.size_bytes,
+    )
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="fixed runtime closure",
+    ):
+        receipts_module._validate_python_search_path_authority(
+            evidence.python_search_path,
+            tuple(
+                nonadjacent if item is dynload else item
+                for item in evidence.import_table
+            ),
+            site_packages_root=SITE,
+        )
+
+
+def test_python_search_path_rejects_cross_version_runtime_witnesses(
+    semantic_inputs: dict[str, object],
+) -> None:
+    evidence = semantic_inputs["evidence"]
+    replacements = {
+        "os": "/opt/lib/python3.13/os.py",
+        "_hashlib": (
+            "/opt/lib/python3.13/lib-dynload/"
+            "_hashlib.cpython-313-x86_64-linux-gnu.so"
+        ),
+    }
+    imports = tuple(
+        (
+            ImportIdentity(
+                subject=item.subject,
+                kind=item.kind,
+                scope=item.scope,
+                path=replacements[item.subject],
+                sha256=item.sha256,
+                size_bytes=item.size_bytes,
+            )
+            if item.subject in replacements
+            else item
+        )
+        for item in evidence.import_table
+    )
+    authority = (
+        PythonSearchPathEntry(
+            scope="external_runtime",
+            path="/opt/lib/python313.zip",
+        ),
+        PythonSearchPathEntry(
+            scope="external_runtime",
+            path="/opt/lib/python3.13",
+        ),
+        PythonSearchPathEntry(
+            scope="external_runtime",
+            path="/opt/lib/python3.13/lib-dynload",
+        ),
+        PythonSearchPathEntry(scope="environment", path=SITE),
+    )
+
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="version differs",
+    ):
+        receipts_module._validate_python_search_path_authority(
+            authority,
+            imports,
+            site_packages_root=SITE,
+        )
+
+
 def test_stable_fake_dbus_version_is_rejected_by_installed_metadata(
     semantic_inputs: dict[str, object],
 ) -> None:
@@ -990,6 +1331,7 @@ def test_stable_fake_dbus_version_is_rejected_by_installed_metadata(
         native_elf=evidence.native_elf,
         wheel_installation=evidence.wheel_installation,
         import_table=evidence.import_table,
+        python_search_path=evidence.python_search_path,
         dbus_provenance=DbusProvenance(
             package_version="9.9.9",
             package_metadata_path=DBUS_METADATA.replace("1.3.2", "9.9.9"),
@@ -1049,6 +1391,7 @@ def test_dbus_shared_library_provenance_must_equal_complete_shared_imports(
         native_elf=evidence.native_elf,
         wheel_installation=evidence.wheel_installation,
         import_table=imports,
+        python_search_path=evidence.python_search_path,
         dbus_provenance=evidence.dbus_provenance,
     )
     with pytest.raises(
@@ -1102,6 +1445,18 @@ def test_canonical_parsers_reject_unknown_duplicate_and_retry_fields(
             wheel_receipt=wheel,
         )
 
+    duplicate_path = json.loads(semantic.raw)
+    duplicate_path["python_search_path"].append(duplicate_path["python_search_path"][0])
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="ordered unique",
+    ):
+        WarehouseEnvironmentContentReceipt.from_bytes(
+            _canonical(duplicate_path),
+            generic_receipt=semantic_inputs["generic"],
+            wheel_receipt=wheel,
+        )
+
 
 def _loaded_paths(
     root: Path,
@@ -1151,15 +1506,22 @@ class _ProbeReader:
             else environment_root
         )
         sys_path = (
-            Path("/usr")
+            (Path("/usr"),)
             if self.broad_usr_sys_path
             else (
-                Path("/unbound/python-path")
+                (Path("/unbound/python-path"),)
                 if self.outside_sys_path
                 else (
-                    root / "lib" / "python3.12"
+                    (root / "lib" / "python3.12",)
                     if self.mismatched_final_sys_path and phase == "namespace_final"
-                    else root / SITE
+                    else tuple(
+                        (
+                            root / item.path
+                            if item.scope == "environment"
+                            else Path(item.path)
+                        )
+                        for item in content_receipt.evidence.python_search_path
+                    )
                 )
             )
         )
@@ -1169,7 +1531,7 @@ class _ProbeReader:
             environment_root=root,
             sys_executable=root / "bin" / "python",
             sys_prefix=root,
-            sys_path=(sys_path,),
+            sys_path=sys_path,
             import_table_sha256=content_receipt.import_table_sha256,
             loaded_import_table=content_receipt.evidence.import_table,
             native_loaded_paths=_loaded_paths(
@@ -1195,6 +1557,64 @@ class _ProbeReader:
                 "run",
             ),
         )
+
+
+def test_probe_sys_path_replays_ordered_semantic_authority(
+    semantic_inputs: dict[str, object],
+) -> None:
+    content = _semantic(semantic_inputs)
+    root = semantic_inputs["tmp_path"] / "candidate" / "environment"
+    fact = _ProbeReader().probe(
+        root,
+        phase="candidate",
+        content_receipt=content,
+    )
+    receipts_module.validate_environment_probe_fact(
+        fact,
+        phase="candidate",
+        root=root,
+        content=content,
+    )
+    expected = list(fact.sys_path)
+    mutations = (
+        (expected[1], expected[0], *expected[2:]),
+        (*expected[:-1], "/etc/python3.12", "/etc/python312.zip", expected[-1]),
+        tuple(expected[1:]),
+    )
+    for sys_path in mutations:
+        value = json.loads(fact.raw)
+        value["sys_path"] = list(sys_path)
+        changed = EnvironmentProbeFact.from_bytes(_canonical(value))
+        with pytest.raises(
+            WarehouseW3EnvironmentReceiptError,
+            match="exact import-root closure",
+        ):
+            receipts_module.validate_environment_probe_fact(
+                changed,
+                phase="candidate",
+                root=root,
+                content=content,
+            )
+
+
+def test_probe_sys_path_rejects_duplicate_authority_entry(
+    semantic_inputs: dict[str, object],
+) -> None:
+    content = _semantic(semantic_inputs)
+    root = semantic_inputs["tmp_path"] / "candidate" / "environment"
+    fact = _ProbeReader().probe(
+        root,
+        phase="candidate",
+        content_receipt=content,
+    )
+    value = json.loads(fact.raw)
+    value["sys_path"].append(value["sys_path"][0])
+
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="duplicate",
+    ):
+        EnvironmentProbeFact.from_bytes(_canonical(value))
 
 
 class _ExpectedOnlyLiveReader:
@@ -1415,20 +1835,20 @@ def test_relocation_rejects_replay_against_another_semantic_content(
     )
     second_imports = tuple(
         sorted(
-            (
-                *(
-                    item
-                    for item in evidence.import_table
-                    if item.scope != "external_runtime"
-                ),
-                ImportIdentity(
-                    subject="libdbus-replay",
-                    kind=external.kind,
-                    scope=external.scope,
-                    path=external.path,
-                    sha256=external.sha256,
-                    size_bytes=external.size_bytes,
-                ),
+            tuple(
+                (
+                    ImportIdentity(
+                        subject="libdbus-replay",
+                        kind=external.kind,
+                        scope=external.scope,
+                        path=external.path,
+                        sha256=external.sha256,
+                        size_bytes=external.size_bytes,
+                    )
+                    if item is external
+                    else item
+                )
+                for item in evidence.import_table
             ),
             key=lambda item: (item.subject.encode(), item.path.encode()),
         )
@@ -1440,6 +1860,7 @@ def test_relocation_rejects_replay_against_another_semantic_content(
             native_elf=evidence.native_elf,
             wheel_installation=evidence.wheel_installation,
             import_table=second_imports,
+            python_search_path=evidence.python_search_path,
             dbus_provenance=evidence.dbus_provenance,
         ),
     )
@@ -1501,7 +1922,7 @@ def test_runtime_live_rehash_interface_is_exact_for_preclaim_and_completion(
         )
 
     real = FilesystemLiveEnvironmentReader(
-        external_runtime_paths=(semantic_inputs["external"],),
+        external_runtime_paths=semantic_inputs["external_paths"],
         candidate_root=semantic_inputs["candidate"],
         selection_root=semantic_inputs["selection"],
     )

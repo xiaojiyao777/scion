@@ -61,7 +61,10 @@ def _probe(
         environment_root=root,
         sys_executable=root / "bin/python",
         sys_prefix=root,
-        sys_path=(root / "lib/python3.12/site-packages",),
+        sys_path=tuple(
+            (root / item.path if item.scope == "environment" else Path(item.path))
+            for item in semantic.evidence.python_search_path
+        ),
         import_table_sha256=semantic.import_table_sha256,
         loaded_import_table=semantic.evidence.import_table,
         native_loaded_paths=native_paths,

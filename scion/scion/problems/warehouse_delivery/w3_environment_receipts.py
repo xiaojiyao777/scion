@@ -44,13 +44,14 @@ from scion.runtime.execution.environment_integrity import (
 
 FINAL_ENVIRONMENT_PARENT = PurePosixPath("/var/lib/scion/environments/w3")
 
-_SEMANTIC_SCHEMA = "scion.w3-environment-semantic-content.v3"
+_SEMANTIC_SCHEMA = "scion.w3-environment-semantic-content.v4"
 _PROBE_SCHEMA = "scion.w3-environment-probe.v3"
 _NAMESPACE_PROBE_SCHEMA = "scion.w3-namespace-probe-execution.v1"
 _LIVE_REHASH_SCHEMA = "scion.w3-environment-live-rehash.v2"
 _RELOCATION_SCHEMA = "scion.w3-environment-relocation.v3"
 _SHA256_RE = re.compile(r"[0-9a-f]{64}\Z")
 _SUBJECT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_.:+-]{0,255}\Z")
+_PYTHON_VERSION_PART_RE = re.compile(r"python([0-9]+)\.([0-9]+)\Z")
 _IMPORT_KINDS = frozenset(
     {
         "python",
@@ -61,6 +62,8 @@ _IMPORT_KINDS = frozenset(
     }
 )
 _IMPORT_SCOPES = frozenset({"environment", "external_runtime"})
+_PYTHON_IMPORT_KINDS = frozenset({"python", "native_extension", "stdlib"})
+_PYTHON_STARTUP_HOOKS = frozenset({"sitecustomize", "usercustomize"})
 _PROBE_PHASES = frozenset({"candidate", "namespace_final"})
 _LIVE_PHASES = frozenset(
     {
@@ -959,6 +962,46 @@ class ImportIdentity:
 
 
 @dataclass(frozen=True, slots=True)
+class PythonSearchPathEntry:
+    """One ordered, relocation-neutral target-interpreter search root."""
+
+    scope: str
+    path: str
+
+    def __post_init__(self) -> None:
+        if self.scope not in _IMPORT_SCOPES:
+            raise WarehouseW3EnvironmentReceiptError("Python search-path scope differs")
+        path = (
+            _relative_path(self.path, field="environment Python search path")
+            if self.scope == "environment"
+            else _absolute_path(
+                self.path,
+                field="external runtime Python search path",
+            )
+        )
+        object.__setattr__(self, "path", path)
+
+    def __init_subclass__(cls, **kwargs: object) -> None:
+        del kwargs
+        raise TypeError("PythonSearchPathEntry is final")
+
+    @classmethod
+    def from_mapping(cls, value: object) -> "PythonSearchPathEntry":
+        fields = _exact_fields(
+            value,
+            frozenset({"scope", "path"}),
+            label="Python search-path entry",
+        )
+        return cls(
+            scope=fields["scope"],  # type: ignore[arg-type]
+            path=fields["path"],  # type: ignore[arg-type]
+        )
+
+    def to_mapping(self) -> dict[str, str]:
+        return {"scope": self.scope, "path": self.path}
+
+
+@dataclass(frozen=True, slots=True)
 class DbusProvenance:
     package_version: str
     package_metadata_path: str
@@ -1115,6 +1158,7 @@ class WarehouseEnvironmentEvidence:
     native_elf: NativeElfIdentity
     wheel_installation: WheelInstallationProvenance
     import_table: tuple[ImportIdentity, ...]
+    python_search_path: tuple[PythonSearchPathEntry, ...]
     dbus_provenance: DbusProvenance
 
     def __post_init__(self) -> None:
@@ -1147,6 +1191,18 @@ class WarehouseEnvironmentEvidence:
             raise WarehouseW3EnvironmentReceiptError(
                 "import table is not complete, unique, and byte-sorted"
             )
+        if (
+            type(self.python_search_path) is not tuple
+            or not self.python_search_path
+            or any(
+                type(item) is not PythonSearchPathEntry
+                for item in self.python_search_path
+            )
+            or len(set(self.python_search_path)) != len(self.python_search_path)
+        ):
+            raise WarehouseW3EnvironmentReceiptError(
+                "Python search-path authority is not one ordered unique tuple"
+            )
         if type(self.dbus_provenance) is not DbusProvenance:
             raise TypeError("dbus_provenance must be exact DbusProvenance")
 
@@ -1163,6 +1219,7 @@ class WarehouseEnvironmentEvidence:
                     "native_elf",
                     "wheel_installation",
                     "import_table",
+                    "python_search_path",
                     "dbus_provenance",
                 }
             ),
@@ -1171,6 +1228,11 @@ class WarehouseEnvironmentEvidence:
         raw_imports = fields["import_table"]
         if type(raw_imports) is not list or not raw_imports:
             raise WarehouseW3EnvironmentReceiptError("import table is empty")
+        raw_python_path = fields["python_search_path"]
+        if type(raw_python_path) is not list or not raw_python_path:
+            raise WarehouseW3EnvironmentReceiptError(
+                "Python search-path authority is empty"
+            )
         return cls(
             native_elf=NativeElfIdentity.from_mapping(fields["native_elf"]),
             wheel_installation=WheelInstallationProvenance.from_mapping(
@@ -1178,6 +1240,9 @@ class WarehouseEnvironmentEvidence:
             ),
             import_table=tuple(
                 ImportIdentity.from_mapping(item) for item in raw_imports
+            ),
+            python_search_path=tuple(
+                PythonSearchPathEntry.from_mapping(item) for item in raw_python_path
             ),
             dbus_provenance=DbusProvenance.from_mapping(fields["dbus_provenance"]),
         )
@@ -1187,8 +1252,224 @@ class WarehouseEnvironmentEvidence:
             "native_elf": self.native_elf.to_mapping(),
             "wheel_installation": self.wheel_installation.to_mapping(),
             "import_table": [item.to_mapping() for item in self.import_table],
+            "python_search_path": [
+                item.to_mapping() for item in self.python_search_path
+            ],
             "dbus_provenance": self.dbus_provenance.to_mapping(),
         }
+
+
+def _python_search_path_shape(
+    values: tuple[str, ...],
+    *,
+    environment_root: Path,
+) -> tuple[PythonSearchPathEntry, ...]:
+    if (
+        type(values) is not tuple
+        or not values
+        or any(type(item) is not str for item in values)
+        or len(set(values)) != len(values)
+    ):
+        raise WarehouseW3EnvironmentReceiptError(
+            "observed Python search path is not one ordered unique tuple"
+        )
+    root = PurePosixPath(
+        _absolute_path(str(environment_root), field="Python search-path root")
+    )
+    shaped: list[PythonSearchPathEntry] = []
+    for value in values:
+        path = PurePosixPath(_absolute_path(value, field="observed Python search path"))
+        try:
+            relative = path.relative_to(root)
+        except ValueError:
+            shaped.append(
+                PythonSearchPathEntry(
+                    scope="external_runtime",
+                    path=path.as_posix(),
+                )
+            )
+        else:
+            shaped.append(
+                PythonSearchPathEntry(
+                    scope="environment",
+                    path=relative.as_posix(),
+                )
+            )
+    return tuple(shaped)
+
+
+def _wheel_site_packages_root(
+    installation: WheelInstallationProvenance,
+) -> str:
+    roots: set[str] = set()
+    for item in installation.installed_members:
+        path = PurePosixPath(item.environment_path)
+        if "site-packages" not in path.parts:
+            raise WarehouseW3EnvironmentReceiptError(
+                "installed wheel member has no site-packages root"
+            )
+        index = path.parts.index("site-packages")
+        roots.add(PurePosixPath(*path.parts[: index + 1]).as_posix())
+    if len(roots) != 1:
+        raise WarehouseW3EnvironmentReceiptError(
+            "installed wheel has no unique site-packages root"
+        )
+    return next(iter(roots))
+
+
+def _python_import_search_root(
+    item: ImportIdentity,
+) -> tuple[PythonSearchPathEntry, str, tuple[str, str]] | None:
+    if item.kind not in _PYTHON_IMPORT_KINDS:
+        return None
+    if item.subject in _PYTHON_STARTUP_HOOKS:
+        return None
+    path = PurePosixPath(item.path)
+    parts = path.parts
+    if "site-packages" in parts:
+        if item.scope != "environment":
+            raise WarehouseW3EnvironmentReceiptError(
+                "external Python import enters site-packages"
+            )
+        index = parts.index("site-packages")
+        return (
+            PythonSearchPathEntry(
+                scope="environment",
+                path=PurePosixPath(*parts[: index + 1]).as_posix(),
+            ),
+            "site_packages",
+            _python_version(parts[index - 1], field="environment site-packages"),
+        )
+    if item.scope != "external_runtime":
+        raise WarehouseW3EnvironmentReceiptError(
+            f"environment import has no site-packages root: {item.subject}"
+        )
+    if "dist-packages" in parts:
+        raise WarehouseW3EnvironmentReceiptError(
+            "external Python import enters dist-packages"
+        )
+    if "lib-dynload" in parts:
+        index = parts.index("lib-dynload")
+        if index == 0 or _PYTHON_VERSION_PART_RE.fullmatch(parts[index - 1]) is None:
+            raise WarehouseW3EnvironmentReceiptError(
+                f"external native import has no versioned root: {item.subject}"
+            )
+        return (
+            PythonSearchPathEntry(
+                scope="external_runtime",
+                path=PurePosixPath(*parts[: index + 1]).as_posix(),
+            ),
+            "lib_dynload",
+            _python_version(parts[index - 1], field="external lib-dynload"),
+        )
+    for index, part in enumerate(parts):
+        matched = _PYTHON_VERSION_PART_RE.fullmatch(part)
+        if matched is None:
+            continue
+        return (
+            PythonSearchPathEntry(
+                scope="external_runtime",
+                path=PurePosixPath(*parts[: index + 1]).as_posix(),
+            ),
+            "stdlib",
+            (matched.group(1), matched.group(2)),
+        )
+    raise WarehouseW3EnvironmentReceiptError(
+        f"external import has no versioned Python root: {item.subject}"
+    )
+
+
+def _python_version(value: str, *, field: str) -> tuple[str, str]:
+    matched = _PYTHON_VERSION_PART_RE.fullmatch(value)
+    if matched is None:
+        raise WarehouseW3EnvironmentReceiptError(
+            f"{field} has no versioned Python root"
+        )
+    return matched.group(1), matched.group(2)
+
+
+def _validate_python_search_path_authority(
+    authority: tuple[PythonSearchPathEntry, ...],
+    imports: tuple[ImportIdentity, ...],
+    *,
+    site_packages_root: str,
+) -> None:
+    site_path = PurePosixPath(site_packages_root)
+    if site_path.name != "site-packages":
+        raise WarehouseW3EnvironmentReceiptError(
+            "wheel installation has no exact site-packages root"
+        )
+    version = _python_version(
+        site_path.parent.name,
+        field="wheel site-packages",
+    )
+    site_packages = PythonSearchPathEntry(
+        scope="environment",
+        path=site_packages_root,
+    )
+    roots: dict[str, set[PythonSearchPathEntry]] = {
+        "site_packages": set(),
+        "stdlib": set(),
+        "lib_dynload": set(),
+    }
+    for item in imports:
+        witnessed = _python_import_search_root(item)
+        if witnessed is None:
+            continue
+        root, role, witnessed_version = witnessed
+        if witnessed_version != version:
+            raise WarehouseW3EnvironmentReceiptError(
+                "Python import root version differs from wheel site-packages"
+            )
+        roots[role].add(root)
+    if (
+        roots["site_packages"] != {site_packages}
+        or len(roots["stdlib"]) != 1
+        or len(roots["lib_dynload"]) != 1
+    ):
+        raise WarehouseW3EnvironmentReceiptError(
+            "Python imports do not prove one fixed runtime root closure"
+        )
+    stdlib = next(iter(roots["stdlib"]))
+    lib_dynload = next(iter(roots["lib_dynload"]))
+    expected_dynload = PythonSearchPathEntry(
+        scope="external_runtime",
+        path=(PurePosixPath(stdlib.path) / "lib-dynload").as_posix(),
+    )
+    paired_zip = PythonSearchPathEntry(
+        scope="external_runtime",
+        path=(
+            PurePosixPath(stdlib.path).parent / f"python{version[0]}{version[1]}.zip"
+        ).as_posix(),
+    )
+    if lib_dynload != expected_dynload or authority != (
+        paired_zip,
+        stdlib,
+        lib_dynload,
+        site_packages,
+    ):
+        raise WarehouseW3EnvironmentReceiptError(
+            "Python search-path authority differs from fixed runtime closure"
+        )
+
+
+def _production_python_search_path(
+    observed: tuple[str, ...],
+    imports: tuple[ImportIdentity, ...],
+    *,
+    environment_root: Path,
+    site_packages_root: str,
+) -> tuple[PythonSearchPathEntry, ...]:
+    authority = _python_search_path_shape(
+        observed,
+        environment_root=environment_root,
+    )
+    _validate_python_search_path_authority(
+        authority,
+        imports,
+        site_packages_root=site_packages_root,
+    )
+    return authority
 
 
 def _import_table_sha256(imports: tuple[ImportIdentity, ...]) -> str:
@@ -1353,6 +1634,11 @@ def _validate_semantic_evidence(
     evidence: WarehouseEnvironmentEvidence,
 ) -> None:
     _validate_wheel_installation(generic, wheel, evidence)
+    _validate_python_search_path_authority(
+        evidence.python_search_path,
+        evidence.import_table,
+        site_packages_root=_wheel_site_packages_root(evidence.wheel_installation),
+    )
     environment = {
         item.path: item
         for item in generic.environment_inventory
@@ -2017,6 +2303,12 @@ class FilesystemEnvironmentSemanticReader:
             ),
             wheel_installation=wheel_installation,
             import_table=imports,
+            python_search_path=_production_python_search_path(
+                observation.sys_path,
+                imports,
+                environment_root=environment_root,
+                site_packages_root=_wheel_site_packages_root(wheel_installation),
+            ),
             dbus_provenance=DbusProvenance(
                 package_version=versions[0],
                 package_metadata_path=metadata_entry.path,
@@ -2090,6 +2382,9 @@ class WarehouseEnvironmentContentReceipt:
             "wheel_installation": evidence.wheel_installation.to_mapping(),
             "import_table": [item.to_mapping() for item in evidence.import_table],
             "import_table_sha256": _import_table_sha256(evidence.import_table),
+            "python_search_path": [
+                item.to_mapping() for item in evidence.python_search_path
+            ],
             "dbus_provenance": evidence.dbus_provenance.to_mapping(),
             "environment_inventory_sha256": _inventory_sha256(generic),
             "external_runtime_closure_sha256": _external_runtime_sha256(generic),
@@ -2132,6 +2427,7 @@ class WarehouseEnvironmentContentReceipt:
                     "wheel_installation",
                     "import_table",
                     "import_table_sha256",
+                    "python_search_path",
                     "dbus_provenance",
                     "environment_inventory_sha256",
                     "external_runtime_closure_sha256",
@@ -2154,6 +2450,11 @@ class WarehouseEnvironmentContentReceipt:
         raw_imports = value["import_table"]
         if type(raw_imports) is not list or not raw_imports:
             raise WarehouseW3EnvironmentReceiptError("semantic import table is empty")
+        raw_python_path = value["python_search_path"]
+        if type(raw_python_path) is not list or not raw_python_path:
+            raise WarehouseW3EnvironmentReceiptError(
+                "semantic Python search-path authority is empty"
+            )
         evidence = WarehouseEnvironmentEvidence(
             native_elf=NativeElfIdentity.from_mapping(value["native_elf"]),
             wheel_installation=WheelInstallationProvenance.from_mapping(
@@ -2161,6 +2462,9 @@ class WarehouseEnvironmentContentReceipt:
             ),
             import_table=tuple(
                 ImportIdentity.from_mapping(item) for item in raw_imports
+            ),
+            python_search_path=tuple(
+                PythonSearchPathEntry.from_mapping(item) for item in raw_python_path
             ),
             dbus_provenance=DbusProvenance.from_mapping(value["dbus_provenance"]),
         )
@@ -3086,62 +3390,6 @@ def _expected_loaded_paths(
     return tuple(sorted(values, key=lambda item: item.encode()))
 
 
-def _expected_sys_path(
-    root: Path,
-    content: WarehouseEnvironmentContentReceipt,
-) -> tuple[str, ...]:
-    relative_roots: set[str] = set()
-    external_roots: set[str] = set()
-    for item in content.evidence.import_table:
-        if item.kind not in {"python", "native_extension", "stdlib"}:
-            continue
-        path = PurePosixPath(item.path)
-        if item.scope == "environment":
-            parts = path.parts
-            if "site-packages" in parts:
-                index = parts.index("site-packages")
-                relative_roots.add(PurePosixPath(*parts[: index + 1]).as_posix())
-            elif "lib-dynload" in parts:
-                index = parts.index("lib-dynload")
-                relative_roots.add(PurePosixPath(*parts[: index + 1]).as_posix())
-            elif len(parts) >= 2 and parts[0] == "lib" and parts[1] == "python3.12":
-                relative_roots.add("lib/python3.12")
-            else:
-                raise WarehouseW3EnvironmentReceiptError(
-                    f"import path has no accepted Python root: {item.subject}"
-                )
-        else:
-            parts = path.parts
-            if "site-packages" in parts:
-                index = parts.index("site-packages")
-                external_roots.add(PurePosixPath(*parts[: index + 1]).as_posix())
-            elif "lib-dynload" in parts:
-                index = parts.index("lib-dynload")
-                external_roots.add(PurePosixPath(*parts[: index + 1]).as_posix())
-            elif "python3.12" in parts:
-                index = parts.index("python3.12")
-                external_roots.add(PurePosixPath(*parts[: index + 1]).as_posix())
-            else:
-                raise WarehouseW3EnvironmentReceiptError(
-                    f"external import has no accepted Python root: {item.subject}"
-                )
-    for value in tuple(external_roots):
-        path = PurePosixPath(value)
-        if "python3.12" in path.parts:
-            index = path.parts.index("python3.12")
-            parent = PurePosixPath(*path.parts[:index])
-            external_roots.add((parent / "python312.zip").as_posix())
-    return tuple(
-        sorted(
-            (
-                *(str(root / value) for value in relative_roots),
-                *external_roots,
-            ),
-            key=lambda item: item.encode(),
-        )
-    )
-
-
 def _validate_probe(
     fact: EnvironmentProbeFact,
     *,
@@ -3208,22 +3456,12 @@ def _sys_path_shape(
     root: Path,
     content: WarehouseEnvironmentContentReceipt,
 ) -> tuple[tuple[str, str], ...]:
-    expected = _expected_sys_path(root, content)
-    if len(values) != len(expected) or set(values) != set(expected):
+    shaped = _python_search_path_shape(values, environment_root=root)
+    if shaped != content.evidence.python_search_path:
         raise WarehouseW3EnvironmentReceiptError(
             "probe sys.path differs from the exact import-root closure"
         )
-    root_path = PurePosixPath(str(root))
-    shaped = []
-    for value in values:
-        path = PurePosixPath(value)
-        try:
-            relative = path.relative_to(root_path)
-        except ValueError:
-            shaped.append(("external_runtime", path.as_posix()))
-        else:
-            shaped.append(("environment", relative.as_posix()))
-    return tuple(shaped)
+    return tuple((item.scope, item.path) for item in shaped)
 
 
 def _validate_relocation_probe_equivalence(
@@ -3751,6 +3989,7 @@ __all__ = [
     "NamespaceProbeExecutionFact",
     "NativeElfIdentity",
     "NonRootNamespaceEnvironmentProbeReader",
+    "PythonSearchPathEntry",
     "SubprocessEnvironmentProbeReader",
     "WarehouseEnvironmentContentReceipt",
     "WarehouseEnvironmentEvidence",
