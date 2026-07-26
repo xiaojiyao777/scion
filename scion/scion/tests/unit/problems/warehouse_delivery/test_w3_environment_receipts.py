@@ -119,7 +119,7 @@ NATIVE_MEMBER = (
 DBUS_PACKAGE = f"{SITE}/dbus/__init__.py"
 DBUS_BINDINGS = f"{SITE}/_dbus_bindings.cpython-312-x86_64-linux-gnu.so"
 DBUS_GLIB = f"{SITE}/_dbus_glib_bindings.cpython-312-x86_64-linux-gnu.so"
-DBUS_METADATA = f"{SITE}/dbus_python-1.3.2.dist-info/METADATA"
+DBUS_METADATA = f"{SITE}/dbus_python-1.3.2.egg-info/PKG-INFO"
 DBUS_METADATA_CONTENTS = (
     "Metadata-Version: 2.1\n" "Name: dbus-python\n" "Version: 1.3.2\n" "\n"
 )
@@ -632,6 +632,37 @@ def test_semantic_reader_drift_is_fail_closed(
             generic_receipt=semantic_inputs["generic"],
             wheel_receipt=semantic_inputs["wheel"],
             reader=_SemanticReader(evidence),
+        )
+
+
+def test_semantic_receipt_v3_binds_copied_debian_dbus_metadata(
+    semantic_inputs: dict[str, object],
+) -> None:
+    receipt = WarehouseEnvironmentContentReceipt.create(
+        semantic_inputs["generic"],
+        semantic_inputs["wheel"],
+        semantic_inputs["evidence"],
+    )
+
+    assert json.loads(receipt.raw)["schema"] == (
+        "scion.w3-environment-semantic-content.v3"
+    )
+    assert receipt.evidence.dbus_provenance.package_metadata_path == DBUS_METADATA
+
+
+def test_dbus_provenance_rejects_synthetic_wheel_metadata_layout() -> None:
+    with pytest.raises(
+        WarehouseW3EnvironmentReceiptError,
+        match="metadata path differs",
+    ):
+        DbusProvenance(
+            package_version="1.3.2",
+            package_metadata_path=(f"{SITE}/dbus_python-1.3.2.dist-info/METADATA"),
+            package_metadata_contents=DBUS_METADATA_CONTENTS,
+            package_subject="dbus",
+            bindings_subject="_dbus_bindings",
+            glib_bindings_subject="_dbus_glib_bindings",
+            shared_library_paths=("/usr/lib/libdbus-1.so.3",),
         )
 
 

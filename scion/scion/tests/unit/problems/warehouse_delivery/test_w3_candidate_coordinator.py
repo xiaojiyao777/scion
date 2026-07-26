@@ -19,6 +19,8 @@ from scion.problems.warehouse_delivery.w3_candidate_gate import (
 )
 from scion.problems.warehouse_delivery.w3_environment import (
     WarehouseW3EnvironmentError,
+    dbus_metadata_installation_path,
+    is_dbus_metadata_installation_path,
 )
 from scion.problems.warehouse_delivery.w3_installation import GitSourceAcquirer
 
@@ -310,6 +312,11 @@ def test_runtime_package_sources_close_on_the_fixed_host_paths() -> None:
     sources.validate()
     assert sources.dbus_package == Path("/usr/lib/python3/dist-packages/dbus")
     assert sources.yaml_package == Path("/usr/lib/python3/dist-packages/yaml")
+    metadata_path = dbus_metadata_installation_path(sources.dbus_metadata)
+    assert metadata_path == (
+        "lib/python3.12/site-packages/" f"{sources.dbus_metadata.name}/PKG-INFO"
+    )
+    assert is_dbus_metadata_installation_path(metadata_path)
 
 
 def test_candidate_reopen_rehashes_and_reprobes_both_relocation_roots(

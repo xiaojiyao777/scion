@@ -124,7 +124,7 @@ SITE = "lib/python3.12/site-packages"
 DBUS_PACKAGE = f"{SITE}/dbus/__init__.py"
 DBUS_BINDINGS = f"{SITE}/_dbus_bindings.cpython-312-x86_64-linux-gnu.so"
 DBUS_GLIB = f"{SITE}/_dbus_glib_bindings.cpython-312-x86_64-linux-gnu.so"
-DBUS_METADATA = f"{SITE}/dbus_python-1.3.2.dist-info/METADATA"
+DBUS_METADATA = f"{SITE}/dbus_python-1.3.2.egg-info/PKG-INFO"
 DBUS_METADATA_CONTENTS = "Metadata-Version: 2.1\nName: dbus-python\nVersion: 1.3.2\n\n"
 WHEEL_INSTALLATION_MANIFEST = ".scion/w3-wheel-installation.json"
 

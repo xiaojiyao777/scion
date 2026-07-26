@@ -192,6 +192,30 @@ def validate_runtime_python(runtime_python: Path) -> Path:
     return runtime_python
 
 
+def dbus_metadata_installation_path(dbus_metadata: Path) -> str:
+    """Derive the exact copied Debian D-Bus metadata file path."""
+
+    if not isinstance(dbus_metadata, Path):
+        raise TypeError("dbus_metadata must be Path")
+    if _DBUS_METADATA_RE.fullmatch(dbus_metadata.name) is None:
+        raise WarehouseW3EnvironmentError("dbus metadata basename differs")
+    return (_SITE_PACKAGES / dbus_metadata.name / "PKG-INFO").as_posix()
+
+
+def is_dbus_metadata_installation_path(path: str) -> bool:
+    """Return whether one inventory path is the fixed copied metadata file."""
+
+    if type(path) is not str:
+        return False
+    pure = PurePosixPath(path)
+    return (
+        str(pure) == path
+        and pure.name == "PKG-INFO"
+        and pure.parent.parent == _SITE_PACKAGES
+        and _DBUS_METADATA_RE.fullmatch(pure.parent.name) is not None
+    )
+
+
 def _sha256_text(value: object, *, field: str) -> str:
     if type(value) is not str or _SHA256_RE.fullmatch(value) is None:
         raise WarehouseW3EnvironmentError(f"{field} is not one SHA-256 value")
@@ -455,6 +479,10 @@ class WarehouseRuntimeSources:
             raise WarehouseW3EnvironmentError("dbus GLib bindings basename differs")
         if _DBUS_METADATA_RE.fullmatch(self.dbus_metadata.name) is None:
             raise WarehouseW3EnvironmentError("dbus metadata basename differs")
+        if not is_dbus_metadata_installation_path(
+            dbus_metadata_installation_path(self.dbus_metadata)
+        ):
+            raise WarehouseW3EnvironmentError("dbus metadata installation path differs")
         if _YAML_METADATA_RE.fullmatch(self.yaml_metadata.name) is None:
             raise WarehouseW3EnvironmentError("YAML metadata basename differs")
         for label, path in (
@@ -1114,6 +1142,8 @@ __all__ = [
     "WarehouseEnvironmentBuild",
     "WarehouseRuntimeSources",
     "WarehouseW3EnvironmentError",
+    "dbus_metadata_installation_path",
+    "is_dbus_metadata_installation_path",
     "materialize_simulated_warehouse_environment",
     "prepare_production_warehouse_environment",
     "prepare_warehouse_environment",

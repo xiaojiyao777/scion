@@ -22,6 +22,11 @@ from email.policy import strict as strict_email_policy
 from pathlib import Path, PurePosixPath
 from typing import Mapping, Protocol
 
+from scion.problems.warehouse_delivery.w3_environment import (
+    WarehouseW3EnvironmentError,
+    dbus_metadata_installation_path,
+    is_dbus_metadata_installation_path,
+)
 from scion.problems.warehouse_delivery.w3_wheel import (
     ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
     FIXED_REQUIRED_WHEEL_MEMBERS,
@@ -34,7 +39,7 @@ from scion.runtime.execution.environment_integrity import (
 
 FINAL_ENVIRONMENT_PARENT = PurePosixPath("/var/lib/scion/environments/w3")
 
-_SEMANTIC_SCHEMA = "scion.w3-environment-semantic-content.v2"
+_SEMANTIC_SCHEMA = "scion.w3-environment-semantic-content.v3"
 _PROBE_SCHEMA = "scion.w3-environment-probe.v3"
 _NAMESPACE_PROBE_SCHEMA = "scion.w3-namespace-probe-execution.v1"
 _LIVE_REHASH_SCHEMA = "scion.w3-environment-live-rehash.v2"
@@ -893,10 +898,15 @@ class DbusProvenance:
                 field="D-Bus package metadata path",
             ),
         )
-        expected_metadata_suffix = (
-            f"/site-packages/dbus_python-{self.package_version}.dist-info/METADATA"
-        )
-        if not self.package_metadata_path.endswith(expected_metadata_suffix):
+        try:
+            expected_metadata_path = dbus_metadata_installation_path(
+                Path(f"dbus_python-{self.package_version}.egg-info")
+            )
+        except (TypeError, WarehouseW3EnvironmentError) as exc:
+            raise WarehouseW3EnvironmentReceiptError(
+                "D-Bus package version cannot name its metadata path"
+            ) from exc
+        if self.package_metadata_path != expected_metadata_path:
             raise WarehouseW3EnvironmentReceiptError(
                 "D-Bus package metadata path differs"
             )
@@ -1791,15 +1801,11 @@ class FilesystemEnvironmentSemanticReader:
         metadata_matches = tuple(
             item
             for item in environment.values()
-            if re.fullmatch(
-                r"lib/python3\.12/site-packages/"
-                r"dbus_python-[^/]+\.dist-info/METADATA",
-                item.path,
-            )
+            if is_dbus_metadata_installation_path(item.path)
         )
         if len(metadata_matches) != 1:
             raise WarehouseW3EnvironmentReceiptError(
-                "environment does not contain one exact D-Bus METADATA file"
+                "environment does not contain one exact D-Bus PKG-INFO file"
             )
         metadata_entry = metadata_matches[0]
         metadata_raw = _read_bound_regular(
@@ -1816,13 +1822,13 @@ class FilesystemEnvironmentSemanticReader:
             )
         except (UnicodeError, Exception) as exc:
             raise WarehouseW3EnvironmentReceiptError(
-                "installed D-Bus METADATA cannot be read"
+                "installed D-Bus PKG-INFO cannot be read"
             ) from exc
         names = metadata.get_all("Name", failobj=[])
         versions = metadata.get_all("Version", failobj=[])
         if names != [_DBUS_DISTRIBUTION_NAME] or len(versions) != 1:
             raise WarehouseW3EnvironmentReceiptError(
-                "installed D-Bus METADATA identity differs"
+                "installed D-Bus PKG-INFO identity differs"
             )
         shared_paths = tuple(
             sorted(
