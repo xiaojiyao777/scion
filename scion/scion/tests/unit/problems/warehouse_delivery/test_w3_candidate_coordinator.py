@@ -31,13 +31,16 @@ COMMIT = "1" * 40
 
 
 class _GitInventory:
-    def __init__(self, raw: bytes) -> None:
+    def __init__(self, raw: bytes, *, prefix: bytes = b"\n") -> None:
         self.raw = raw
+        self.prefix = prefix
         self.calls: list[tuple[str, ...]] = []
 
     def run(self, argv, *, cwd):
         del cwd
         self.calls.append(argv)
+        if argv == ("git", "rev-parse", "--show-prefix"):
+            return self.prefix
         return self.raw
 
 
@@ -74,6 +77,7 @@ def test_launch_inventory_is_sorted_regular_and_excludes_tests(
     assert "scion/tests/test_hidden.py" not in paths
     assert "scion/tools/scion_w3_install.py" in paths
     assert inventory.calls == [
+        ("git", "rev-parse", "--show-prefix"),
         (
             "git",
             "ls-tree",
@@ -83,8 +87,28 @@ def test_launch_inventory_is_sorted_regular_and_excludes_tests(
             "--",
             ":(top,literal)scion/pyproject.toml",
             ":(top,literal)scion/scion",
-        )
+        ),
     ]
+
+
+def test_launch_inventory_rejects_project_subdirectory_before_inventory(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inventory = _GitInventory(b"not read", prefix=b"scion/\n")
+    monkeypatch.setattr(
+        coordinator,
+        "SubprocessGitRunner",
+        lambda: inventory,
+    )
+
+    with pytest.raises(
+        WarehouseW3CandidateCoordinatorError,
+        match="not the Git repository top level",
+    ):
+        coordinator._tracked_launch_paths(tmp_path, COMMIT)
+
+    assert inventory.calls == [("git", "rev-parse", "--show-prefix")]
 
 
 def test_launch_inventory_rejects_symlink_blob(
@@ -129,8 +153,36 @@ def test_launch_inventory_rejects_path_outside_fixed_project_subtree(
         coordinator._tracked_launch_paths(tmp_path, COMMIT)
 
 
-def test_launch_inventory_maps_one_real_nested_git_project(
+@pytest.mark.parametrize(
+    "raw",
+    (
+        b"",
+        b"0\n",
+        b"-1\n",
+        b"1",
+        b"1\n2\n",
+        b"not-an-epoch\n",
+        f"{1 << 63}\n".encode(),
+    ),
+)
+def test_launch_source_date_epoch_rejects_noncanonical_value(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    raw: bytes,
+) -> None:
+    monkeypatch.setattr(
+        coordinator,
+        "SubprocessGitRunner",
+        lambda: _GitInventory(raw),
+    )
+
+    with pytest.raises(WarehouseW3CandidateCoordinatorError):
+        coordinator._launch_source_date_epoch(tmp_path, COMMIT)
+
+
+def test_launch_inventory_and_archives_map_one_real_nested_git_project(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     repository = tmp_path / "repository"
     project = repository / "scion"
@@ -139,9 +191,11 @@ def test_launch_inventory_maps_one_real_nested_git_project(
     package.mkdir(parents=True)
     tests.mkdir()
     (project / "pyproject.toml").write_text("[project]\nname='fixture'\n")
+    (package / "literal[1].py").write_text('"""literal pathspec"""\n')
     (package / "scion_w3_tool.py").write_text('"""tool"""\n')
     (package / "scion_w3_install.py").write_text('"""installer"""\n')
     (tests / "test_hidden.py").write_text('"""excluded"""\n')
+    (repository / "top-level-trap.txt").write_text("must not be archived\n")
     subprocess.run(
         ("git", "init", "-q"),
         cwd=repository,
@@ -149,7 +203,7 @@ def test_launch_inventory_maps_one_real_nested_git_project(
         stdin=subprocess.DEVNULL,
     )
     subprocess.run(
-        ("git", "add", "--", "scion"),
+        ("git", "add", "--", "scion", "top-level-trap.txt"),
         cwd=repository,
         check=True,
         stdin=subprocess.DEVNULL,
@@ -178,10 +232,11 @@ def test_launch_inventory_maps_one_real_nested_git_project(
         .strip()
     )
 
-    paths = coordinator._tracked_launch_paths(project, launch_commit)
+    paths = coordinator._tracked_launch_paths(repository, launch_commit)
 
     assert paths == (
         "pyproject.toml",
+        "scion/tools/literal[1].py",
         "scion/tools/scion_w3_install.py",
         "scion/tools/scion_w3_tool.py",
     )
@@ -211,47 +266,120 @@ def test_launch_inventory_maps_one_real_nested_git_project(
         check=True,
         stdin=subprocess.DEVNULL,
     )
-    source = GitSourceAcquirer(project).acquire(
+    source = GitSourceAcquirer(repository).acquire(
         launch_commit=launch_commit,
         remote_name="origin",
         remote_ref=f"refs/heads/{branch}",
         logical_paths=paths,
     )
-    archive = coordinator._create_git_archive(
-        project,
+    source_date_epoch = coordinator._launch_source_date_epoch(
+        repository,
+        launch_commit,
+    )
+    original_run = subprocess.run
+    archive_calls: list[tuple[str, ...]] = []
+
+    def capture_archive_run(argv, **kwargs):
+        if argv[:5] == (
+            "git",
+            "-c",
+            "tar.umask=0022",
+            "archive",
+            "--format=tar",
+        ):
+            archive_calls.append(argv)
+        return original_run(argv, **kwargs)
+
+    monkeypatch.setattr(coordinator.subprocess, "run", capture_archive_run)
+    rejected = tmp_path / "source-rejected.tar"
+    with pytest.raises(
+        WarehouseW3CandidateCoordinatorError,
+        match="source identity differs",
+    ):
+        coordinator._create_git_archive(
+            repository,
+            launch_commit=launch_commit,
+            source_date_epoch=source_date_epoch,
+            logical_paths=paths[:-1],
+            destination=rejected,
+            source=source,
+        )
+    assert not rejected.exists()
+    first = coordinator._create_git_archive(
+        repository,
         launch_commit=launch_commit,
+        source_date_epoch=source_date_epoch,
         logical_paths=paths,
-        destination=tmp_path / "source.tar",
+        destination=tmp_path / "source-1.tar",
+        source=source,
+    )
+    second = coordinator._create_git_archive(
+        repository,
+        launch_commit=launch_commit,
+        source_date_epoch=source_date_epoch,
+        logical_paths=paths,
+        destination=tmp_path / "source-2.tar",
         source=source,
     )
 
-    with tarfile.open(archive.path, mode="r:") as stream:
+    assert first.sha256 == second.sha256
+    assert first.path.read_bytes() == second.path.read_bytes()
+    assert first.path.stat().st_ino != second.path.stat().st_ino
+    expected_archive_argv = (
+        "git",
+        "-c",
+        "tar.umask=0022",
+        "archive",
+        "--format=tar",
+        f"--mtime=@{source_date_epoch}",
+        f"{launch_commit}:scion",
+        "--",
+        *(f":(top,literal){path}" for path in paths),
+    )
+    assert archive_calls == [expected_archive_argv, expected_archive_argv]
+
+    with tarfile.open(first.path, mode="r:") as stream:
         members = {item.name: item for item in stream.getmembers()}
     assert tuple(members) == (
         "pyproject.toml",
         "scion",
         "scion/tools",
+        "scion/tools/literal[1].py",
         "scion/tools/scion_w3_install.py",
         "scion/tools/scion_w3_tool.py",
     )
     assert all(
         item.mode == (0o755 if item.isdir() else 0o644) for item in members.values()
     )
-    source_date_epoch = int(
-        subprocess.check_output(
-            ("git", "show", "-s", "--format=%ct", launch_commit),
-            cwd=repository,
-        ).decode("ascii")
-    )
-    inventory, _aggregate, _identity = w3_wheel._archive_inventory(
-        archive,
+    assert all(item.mtime == source_date_epoch for item in members.values())
+    regular = {item.name: item for item in members.values() if item.isfile()}
+    blobs = {item.logical_path: item for item in source.receipt.blobs}
+    assert frozenset(regular) == frozenset(blobs)
+    with tarfile.open(first.path, mode="r:") as stream:
+        for path, blob in blobs.items():
+            member = stream.getmember(path)
+            opened = stream.extractfile(member)
+            assert opened is not None
+            raw = opened.read()
+            assert len(raw) == blob.size_bytes
+            assert hashlib.sha256(raw).hexdigest() == blob.sha256
+            assert member.mode == int(blob.mode[-3:], 8)
+    first_inventory, first_aggregate, _first_identity = w3_wheel._archive_inventory(
+        first,
         source_date_epoch=source_date_epoch,
     )
-    assert tuple(item.path for item in inventory) == (
+    second_inventory, second_aggregate, _second_identity = w3_wheel._archive_inventory(
+        second,
+        source_date_epoch=source_date_epoch,
+    )
+    assert first_inventory == second_inventory
+    assert first_aggregate == second_aggregate
+    assert tuple(item.path for item in first_inventory) == (
         ".",
         "pyproject.toml",
         "scion",
         "scion/tools",
+        "scion/tools/literal[1].py",
         "scion/tools/scion_w3_install.py",
         "scion/tools/scion_w3_tool.py",
     )
@@ -505,6 +633,7 @@ def test_prepare_candidate_acquires_all_external_roles_before_work_root(
     )
     monkeypatch.setattr(coordinator, "_tracked_launch_paths", lambda *_args: ("x",))
     monkeypatch.setattr(coordinator, "GitSourceAcquirer", SourceAcquirer)
+    monkeypatch.setattr(coordinator, "_launch_source_date_epoch", lambda *_args: 1)
     monkeypatch.setattr(
         coordinator,
         "CandidateSelectionIntent",

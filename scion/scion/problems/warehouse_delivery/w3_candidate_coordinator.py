@@ -85,6 +85,7 @@ _WORK_PARENT = ".scion-w3-candidate-work"
 _ARCHIVE_NAMES = ("source-1.tar", "source-2.tar")
 _RUNTIME_PACKAGE_ROOT = Path("/usr/lib/python3/dist-packages")
 _MAX_GIT_INVENTORY_BYTES = 8 * 1024 * 1024
+_MAX_SOURCE_DATE_EPOCH = (1 << 63) - 1
 
 
 class WarehouseW3CandidateCoordinatorError(RuntimeError):
@@ -251,7 +252,16 @@ def _bound_regular_bytes(path: Path, *, label: str, maximum: int) -> bytes:
 
 
 def _tracked_launch_paths(repo_root: Path, launch_commit: str) -> tuple[str, ...]:
-    raw = SubprocessGitRunner().run(
+    runner = SubprocessGitRunner()
+    prefix = runner.run(
+        ("git", "rev-parse", "--show-prefix"),
+        cwd=repo_root,
+    )
+    if prefix != b"\n":
+        raise WarehouseW3CandidateCoordinatorError(
+            "repo_root is not the Git repository top level"
+        )
+    raw = runner.run(
         (
             "git",
             "ls-tree",
@@ -311,6 +321,28 @@ def _tracked_launch_paths(repo_root: Path, launch_commit: str) -> tuple[str, ...
     return selected
 
 
+def _launch_source_date_epoch(repo_root: Path, launch_commit: str) -> int:
+    raw = SubprocessGitRunner().run(
+        ("git", "show", "-s", "--format=%ct", launch_commit),
+        cwd=repo_root,
+    )
+    if (
+        not raw.endswith(b"\n")
+        or raw.count(b"\n") != 1
+        or not raw[:-1].isascii()
+        or not raw[:-1].isdigit()
+    ):
+        raise WarehouseW3CandidateCoordinatorError(
+            "launch commit timestamp is not canonical"
+        )
+    epoch = int(raw[:-1], 10)
+    if not 0 < epoch <= _MAX_SOURCE_DATE_EPOCH:
+        raise WarehouseW3CandidateCoordinatorError(
+            "launch commit timestamp is outside the fixed bound"
+        )
+    return epoch
+
+
 def _prepare_work_root(experiment_parent: Path, selection_key: str) -> Path:
     parent = experiment_parent / _WORK_PARENT
     try:
@@ -361,10 +393,24 @@ def _create_git_archive(
     repo_root: Path,
     *,
     launch_commit: str,
+    source_date_epoch: int,
     logical_paths: tuple[str, ...],
     destination: Path,
     source: GitSourceSnapshot,
 ) -> ImmutableGitArchive:
+    if (
+        type(source_date_epoch) is not int
+        or not 0 < source_date_epoch <= _MAX_SOURCE_DATE_EPOCH
+    ):
+        raise TypeError("source_date_epoch is outside the fixed bound")
+    if (
+        not isinstance(source, GitSourceSnapshot)
+        or launch_commit != source.receipt.source_commit
+        or logical_paths != tuple(item.logical_path for item in source.blobs)
+    ):
+        raise WarehouseW3CandidateCoordinatorError(
+            "immutable Git archive source identity differs"
+        )
     flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC
     if hasattr(os, "O_NOFOLLOW"):
         flags |= os.O_NOFOLLOW
@@ -391,9 +437,10 @@ def _create_git_archive(
                 "tar.umask=0022",
                 "archive",
                 "--format=tar",
-                launch_commit,
+                f"--mtime=@{source_date_epoch}",
+                f"{launch_commit}:{W3_PROJECT_GIT_TREE_PREFIX.removesuffix('/')}",
                 "--",
-                *logical_paths,
+                *(f":(top,literal){path}" for path in logical_paths),
             ),
             cwd=repo_root,
             env=environment,
@@ -670,6 +717,10 @@ def prepare_w3_candidate(
                 "live Git source differs from root fixed-source acceptance"
             )
         source_authority.revalidate()
+    source_date_epoch = _launch_source_date_epoch(
+        repo,
+        source.receipt.source_commit,
+    )
     intent = CandidateSelectionIntent.create(
         experiment_parent=root.parent,
         task_event_identity=W3_TASK_EVENT_IDENTITY,
@@ -685,6 +736,7 @@ def prepare_w3_candidate(
         _create_git_archive(
             repo,
             launch_commit=source.receipt.source_commit,
+            source_date_epoch=source_date_epoch,
             logical_paths=logical_paths,
             destination=work_root / name,
             source=source,
