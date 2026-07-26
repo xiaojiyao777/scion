@@ -271,6 +271,15 @@ class AuthorityInput:
                 )
             for item in inputs:
                 _sha256(item, field="provenance.input_sha256")
+            if inputs != sorted(
+                inputs,
+                key=lambda item: item.encode("ascii"),
+            ) or len(
+                set(inputs)
+            ) != len(inputs):
+                raise LaunchAuthorityError(
+                    "generated provenance input_sha256 is not unique and sorted"
+                )
             _sha256(
                 raw_provenance["rule_sha256"],
                 field="provenance.rule_sha256",

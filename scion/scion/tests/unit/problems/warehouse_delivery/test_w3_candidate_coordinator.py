@@ -265,6 +265,53 @@ def test_namespace_evidence_digest_binds_all_four_inputs() -> None:
     assert digest != derive_namespace_probe_evidence_sha256(b"a", b"b", b"c", b"e")
 
 
+def test_generated_wheel_provenance_deduplicates_equal_archive_content(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wheel_raw = b"deterministic wheel bytes"
+    wheel_path = tmp_path / "scion.whl"
+    wheel_path.write_bytes(wheel_raw)
+    source_sha256 = hashlib.sha256(b"source receipt").hexdigest()
+    archive_sha256 = hashlib.sha256(b"equal archive bytes").hexdigest()
+    wheel_sha256 = hashlib.sha256(wheel_raw).hexdigest()
+    captured: list[dict[str, object]] = []
+
+    def generated(**kwargs: object) -> object:
+        captured.append(kwargs)
+        return kwargs["logical_path"]
+
+    monkeypatch.setattr(
+        coordinator,
+        "SealedStoreObject",
+        SimpleNamespace(generated=generated),
+    )
+    source = SimpleNamespace(
+        blobs=(
+            SimpleNamespace(
+                logical_path="scion/problems/warehouse_delivery/w3_wheel.py",
+                sha256=hashlib.sha256(b"generator").hexdigest(),
+            ),
+        ),
+        receipt=SimpleNamespace(raw_sha256=source_sha256),
+    )
+    artifact = SimpleNamespace(
+        wheel_path=wheel_path,
+        receipt=SimpleNamespace(
+            wheel_size_bytes=len(wheel_raw),
+            wheel_sha256=wheel_sha256,
+            archive_sha256=(archive_sha256, archive_sha256),
+            raw=b'{"wheel":"receipt"}\n',
+            raw_sha256=hashlib.sha256(b'{"wheel":"receipt"}\n').hexdigest(),
+        ),
+    )
+
+    coordinator._generated_store_objects(source, artifact)
+
+    assert captured[0]["input_sha256"] == tuple(sorted((source_sha256, archive_sha256)))
+    assert captured[1]["input_sha256"] == (source_sha256, wheel_sha256)
+
+
 def test_prepare_candidate_rejects_root_before_any_path_read(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

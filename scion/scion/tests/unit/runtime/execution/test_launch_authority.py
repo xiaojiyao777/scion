@@ -285,6 +285,31 @@ def test_generated_provenance_is_deeply_immutable(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize(
+    "inputs",
+    (
+        ["d" * 64, "d" * 64],
+        ["e" * 64, "d" * 64],
+    ),
+)
+def test_generated_provenance_rejects_duplicate_or_unsorted_inputs(
+    tmp_path: Path,
+    inputs: list[str],
+) -> None:
+    value = _authority_value(
+        tmp_path,
+        provenance={
+            "kind": "generated",
+            "generator_sha256": "a" * 64,
+            "input_sha256": inputs,
+            "rule_sha256": "b" * 64,
+        },
+    )
+
+    with pytest.raises(LaunchAuthorityError, match="not unique and sorted"):
+        AcceptedLaunchAuthority.from_bytes(_canonical(value))
+
+
+@pytest.mark.parametrize(
     ("field", "replacement", "message"),
     (
         ("manifest_sha256", "0" * 64, "manifest_sha256 differs"),

@@ -511,9 +511,14 @@ def _generated_store_objects(
         sealed_path=W3_WHEEL_SEALED_PATH,
         raw=wheel_raw,
         generator_sha256=generator.sha256,
-        input_sha256=(
-            source.receipt.raw_sha256,
-            *artifact.receipt.archive_sha256,
+        input_sha256=tuple(
+            sorted(
+                {
+                    source.receipt.raw_sha256,
+                    *artifact.receipt.archive_sha256,
+                },
+                key=lambda item: item.encode("ascii"),
+            )
         ),
         rule_sha256=ACCEPTED_ROOT_INSTALLATION_PLAN_SHA256,
     )
