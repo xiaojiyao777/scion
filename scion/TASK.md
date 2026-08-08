@@ -157,6 +157,7 @@ They do not block this task and cannot satisfy it.
 | R9 | proven | CVRP campaigns repeat known failures because accepted cross-campaign conclusions are absent from H context. | Add a short problem-owned research prior, with no target prescription. |
 | R10 | proven | Repeated pair trees make later prompts grow sharply while adding little new information. | Use fresh one-candidate lines now; later allow only reversible lossless factoring. |
 | R11 | proven and corrected at `88c1bc2b` | Warehouse continuity R3 promoted one candidate to v2, then stopped at 6/36 when a patchless stale branch was misclassified as a markerless research rejection. | Retire that stale branch as non-research lifecycle work and let typed Contract/Verification rejection schedule forward without a second disposition authority. Preserve all infra and missing-outcome stops. |
+| R12 | resolved launch invalidity | R4 passed the literal `<stdin>` as the proxy key because of an operator-side `jq input_filename` mistake. It stopped on the first H with 401, 0 evaluated stages and 0 experiments. | Seal R4 with no scientific conclusion. R5 uses one exact key extraction plus a silent authenticated `/v1/models` check in a fresh root. |
 
 ## Modular execution plan
 
@@ -259,6 +260,9 @@ They do not block this task and cannot satisfy it.
   `88c1bc2b` retires a patchless stale branch as non-research housekeeping and
   removes `attempt_disposition` as a scheduling authority. The post-fix suite
   passed `1964 passed, 1 skipped` in 620.83 seconds.
+- [x] Exclude R4 as operator-side launch infrastructure only: one unauthenticated
+  H request, zero evaluated stages and zero experiments. Do not reuse its root;
+  R5 preserves every scientific input and changes only credential extraction.
 - [ ] Run a fresh uninterrupted Terra synthetic Warehouse campaign with a
   pre-registered 36 formal-stage horizon. Do not split it into fresh roots when
   a candidate is queued for expansion/validation/frozen. This horizon covers

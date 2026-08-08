@@ -203,6 +203,14 @@ change Protocol, Decision, Scheduler priority, cases, seeds, thresholds or
 time limits. Therefore R3 proves one promotion, not same-campaign continuity,
 v3, production transfer or independent replay.
 
+The first post-fix launch, R4, has no scientific result. An operator-side shell
+expression assigned jq's `<stdin>` input filename instead of the local proxy
+client key, so the first H request received 401 and the run stopped
+`invalid_infra_only` with zero evaluated stages and zero experiments. The proxy
+itself remained authenticated with one active account. R4 is sealed; R5 uses a
+fresh root, the same scientific inputs and executable code, and one exact key
+extraction followed by a silent authenticated `/v1/models` check.
+
 ### CVRP
 
 Campaign:
