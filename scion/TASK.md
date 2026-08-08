@@ -146,7 +146,7 @@ They do not block this task and cannot satisfy it.
 
 | ID | Status | Finding | Consequence |
 |---|---|---|---|
-| R1 | proven | Warehouse 3R ended with an exact candidate queued for screening expansion. | Finish queued stages before diagnosing search failure. |
+| R1 | resolved scientific negative | Warehouse 3R ended with an exact candidate queued for screening expansion. Exact eval-only replay passed expanded screening but timed out on 11/15 validation pairs. | Do not promote or tune around this candidate; proceed to a fresh long-horizon synthetic campaign. |
 | R2 | proven | v0.3 synthetic campaigns ran 25-66 rounds; first promotion appeared at rounds 4-19. | A 3R campaign cannot test continuous promotion. |
 | R3 | proven | Current production Warehouse has near-saturated split objective and noisy cost effects; v0.3 multi-promotion used high-headroom synthetic cases. | Use synthetic recovery and production transfer as different controls. |
 | R4 | proven baseline deviation; corrected on current branch; causal effect unproven | The accepted baseline mapped screening `fail` to clean-parent rejection, contrary to V3 §11.2. | Keep the lightweight provisional branch head and test it without changing promotion gates. |
@@ -173,13 +173,15 @@ They do not block this task and cannot satisfy it.
 
 ### S1 - Finish the truncated Warehouse candidate
 
-- [ ] Materialize the exact Warehouse 3R round-3 MergeVehicles candidate and
+- [x] Materialize the exact Warehouse 3R round-3 MergeVehicles candidate and
   its exact v1 champion without another provider call.
-- [ ] Run the queued expanded screening population. If Protocol passes, drain
+- [x] Run the queued expanded screening population. If Protocol passes, drain
   validation and frozen with the same source; otherwise stop that candidate.
-- [ ] Classify the result as `TRUNCATED_QUEUE_CONFIRMED` or
+- [x] Classify the result as `TRUNCATED_QUEUE_CONFIRMED` or
   `SCIENTIFIC_NEGATIVE`. This diagnostic does not by itself prove continuous
-  agent research.
+  agent research. Result: `SCIENTIFIC_NEGATIVE`; screening passed 8W/0L/6T,
+  but validation had 11/15 candidate timeouts, 0 champion failures and stopped
+  before frozen.
 
 ### S2 - Restore the small V3 research semantics
 
@@ -338,9 +340,10 @@ CVRP acceptance:
 
 ## Status
 
-**Active: S1 evaluation readiness, then S4/S5 experiments.** S2/S3 are complete
-at focused-test scope; S6 full-suite closure remains pending. The prior
-lightweight runtime is closed and merged locally. Solver-improvement acceptance
-is not yet satisfied: Warehouse is v1 in the current fresh controls, the
-promising Warehouse stage is truncated, and CVRP has no Protocol-complete
-promotion.
+**Active: S4 Warehouse continuous-optimization experiment, then S5 CVRP.** S1
+is closed as a scientific negative; S2/S3 are complete and the stable pre-S1
+suite passed 1949 tests with one skip. S6 final closure remains pending. The
+prior lightweight runtime is closed and merged locally. Solver-improvement
+acceptance is not yet satisfied: Warehouse is v1 in the current fresh controls,
+the prior MergeVehicles candidate failed validation runtime, and CVRP has no
+Protocol-complete promotion.

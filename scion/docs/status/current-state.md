@@ -170,6 +170,14 @@ its negative evidence; R3 pivoted to vehicle elimination.  Operator files were
 registered and eligible, but there are no direct per-operator invocation
 counters, so attribution remains candidate/pool-level.
 
+The pre-registered exact R3 eval-only completion is now final. Expanded
+screening passed on 14 cases (8W/0L/6T, median `+950`, CI `[400,4900]`), but
+validation failed: the exact candidate timed out on 11/15 pairs while champion
+failed on 0/15, with candidate median runtime ratio `1.4750`. Frozen was skipped
+by the declared conditional policy. This is a `SCIENTIFIC_NEGATIVE` at
+validation, not a framework/queue failure, and closes the old truncated-candidate
+question without a promotion.
+
 ### CVRP
 
 Campaign:
