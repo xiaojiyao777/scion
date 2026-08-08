@@ -14,10 +14,6 @@ from scion.core.models import CheckResult, PatchProposal
 from scion.core.operator_interface import parse_execute_signature
 from scion.core.path_match import normalize_relative_glob_pattern, segment_glob_match
 from scion.core.paths import normalize_relative_patch_path
-from scion.problem.providers import (
-    active_subject_policy_matches_path,
-    active_subject_policy_payload,
-)
 from scion.problem.spec import SUPPORTED_RESEARCH_SURFACE_KINDS
 
 _STATIC_UNKNOWN = object()
@@ -29,7 +25,7 @@ def check_surface_interface(
     problem_spec: Any | None = None,
     selected_surface: str | None = None,
     operator_execute_signature: str | None = None,
-    active_subject_policy: Mapping[str, Any] | None = None,
+    enforce_public_interface: bool = True,
     check_name: str,
     severity: str = "light",
     detail_suffix: str = "",
@@ -83,12 +79,22 @@ def check_surface_interface(
     if kind_error is not None:
         return _cr(check_name, False, severity, kind_error, t0)
 
+    if not enforce_public_interface:
+        return _cr(
+            check_name,
+            True,
+            severity,
+            _detail(
+                "additional helper module has no public-entrypoint requirement",
+                detail_suffix,
+            ),
+            t0,
+        )
+
     kind = str(_field(surface, "kind", "operator") or "operator")
-    if kind == "solver_design" and _is_active_subject_support_module(
-        problem_spec,
+    if kind == "solver_design" and _is_declared_support_module(
+        surface,
         file_rel,
-        selected_surface=selected_surface,
-        active_subject_policy=active_subject_policy,
     ):
         return _cr(
             check_name,
@@ -263,25 +269,19 @@ def surface_return_values(surface: Any | None) -> dict[str, Any]:
     return dict(values) if isinstance(values, Mapping) else {}
 
 
-def _is_active_subject_support_module(
-    problem_spec: Any | None,
+def _is_declared_support_module(
+    surface: Any | None,
     file_rel: str,
-    *,
-    selected_surface: str | None,
-    active_subject_policy: Mapping[str, Any] | None,
 ) -> bool:
-    policy = active_subject_policy
-    if policy is None:
-        policy = active_subject_policy_payload(
-            problem_spec=problem_spec,
-            surface=selected_surface,
-        )
-    return active_subject_policy_matches_path(
-        policy,
-        file_rel,
-        include_entrypoints=False,
-        include_support=True,
-        include_compatibility=False,
+    interface = _field(surface, "interface")
+    support_files = list(_field(interface, "support_files", []) or [])
+    entrypoint_files = list(_field(interface, "entrypoint_files", []) or [])
+    return any(
+        _matches_config_pattern(file_rel, str(pattern).lstrip("/"))
+        for pattern in support_files
+    ) and not any(
+        _matches_config_pattern(file_rel, str(pattern).lstrip("/"))
+        for pattern in entrypoint_files
     )
 
 
@@ -356,18 +356,6 @@ def _check_policy_interface(
     detail_suffix: str,
     start_ns: int,
 ) -> CheckResult:
-    classes = [n.name for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
-    if classes:
-        return _cr(
-            check_name,
-            False,
-            severity,
-            _detail(
-                f"policy surface must use module-level functions, found classes {classes}",
-                detail_suffix,
-            ),
-            start_ns,
-        )
     return _check_module_function_interface(
         tree,
         surface,
@@ -436,25 +424,11 @@ def _check_module_function_interface(
             start_ns,
         )
 
-    return_error = _declared_return_value_error(functions, surface)
-    if return_error is not None:
-        return _cr(
-            check_name,
-            False,
-            severity,
-            _detail(return_error, detail_suffix),
-            start_ns,
-        )
-
-    return_detail = _declared_return_value_detail(functions, surface)
-    detail = success_prefix
-    if return_detail:
-        detail = f"{detail}; {return_detail}"
     return _cr(
         check_name,
         True,
         severity,
-        _detail(detail, detail_suffix),
+        _detail(success_prefix, detail_suffix),
         start_ns,
     )
 

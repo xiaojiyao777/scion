@@ -396,19 +396,6 @@ class SafeProposalInputExtractor:
             family, section = owner.split(".", 1)
             target = static if family == "static" else evidence
             target.setdefault(section, {})[key] = value
-        provider_task_constraint_keys = tuple(
-            key
-            for key in ("forced_surface", "forced_action", "forced_target_file")
-            if key in context and owners.get(key) != "governance"
-        )
-        if provider_task_constraint_keys:
-            governance["provider_task_constraint_authority"] = {
-                "provider_keys": list(provider_task_constraint_keys),
-                "provider_values_digest": _stable_hash(
-                    {key: context[key] for key in provider_task_constraint_keys}
-                ),
-                "authority_ref": "provider_visible_task_constraints",
-            }
         if phase == "code":
             hard_binding_keys = tuple(
                 key

@@ -74,7 +74,13 @@ def test_context_manager_projects_complete_current_cvrp_guidance() -> None:
     assert problem_owned["schema_version"] == "scion.cvrp_measurement_guidance.v3"
     assert problem_owned["measurement_context"]["metric"] == "total_distance"
     assert problem_owned["feasibility"]["required"] is True
-    assert "typed_attribution" not in problem_owned
+    assert problem_owned["typed_attribution"]["observations"] == [
+        "attempted change",
+        "accepted route-state transition",
+        "direct objective change when observable",
+        "downstream search effect",
+        "final total_distance",
+    ]
 
 
 def test_adapter_projection_redacts_raw_or_hidden_measurement_rows() -> None:
@@ -84,7 +90,24 @@ def test_adapter_projection_redacts_raw_or_hidden_measurement_rows() -> None:
     class _Adapter:
         def render_problem_measurement_diagnostics(self) -> dict[str, object]:
             return {
+                "schema_version": "test.measurement.v1",
+                "proposal_visibility_only": True,
+                "decision_features_excluded": True,
+                "proposal_visible_fields": [
+                    "safe_note",
+                    "operator_telemetry",
+                    "raw_pair_rows",
+                    "validation_case_details",
+                    "frozen_case_details",
+                    "holdout_rows",
+                    "bks_gap_details",
+                    "llm_text",
+                ],
                 "safe_note": "keep",
+                "operator_telemetry": {
+                    "mechanism_activation": "keep structured diagnostic"
+                },
+                "unlisted_note": "must stay hidden",
                 "raw_pair_rows": [{"case": "hidden"}],
                 "pair_evidence": [{"case": "hidden"}],
                 "validation_case_details": "hidden",
@@ -100,6 +123,11 @@ def test_adapter_projection_redacts_raw_or_hidden_measurement_rows() -> None:
     rendered = json.dumps(payload, sort_keys=True)
 
     assert "keep" in rendered
+    assert "operator_telemetry" in rendered
+    assert "mechanism_activation" in rendered
+    assert "keep structured diagnostic" in rendered
+    assert "unlisted_note" not in rendered
+    assert "must stay hidden" not in rendered
     for forbidden in (
         "raw_pair_rows",
         "pair_evidence",

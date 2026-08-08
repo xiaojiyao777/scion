@@ -20,7 +20,6 @@ from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_fr
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
-from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
@@ -39,7 +38,6 @@ def _baseline_algorithm_solve_patch(new_solve: str) -> dict:
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": source_digest_for_content(source),
         "old_string": old_solve,
         "new_string": new_solve if new_solve.endswith("\n") else new_solve + "\n",
         "replace_all": False,
@@ -189,7 +187,10 @@ def test_cvrp_screening_keeps_static_case_coverage_when_all_solver_pairs_fail(
         "observed_cases": 0,
         "unavailable_cases": 2,
         "reference_route_cases": 0,
-        "reference_route_source_counts": {"allowed_routes": 0, "bks_routes": 0},
+        "reference_route_source_counts": {
+            "allowed_routes": 0,
+            "benchmark_reference_routes": 0,
+        },
     }
     assert str(candidate_ws) not in json.dumps(evidence, sort_keys=True)
 
@@ -250,7 +251,10 @@ def test_cvrp_protocol_solver_design_metrics_preserve_required_runtime_fields(
         "observed_cases": 0,
         "unavailable_cases": 2,
         "reference_route_cases": 0,
-        "reference_route_source_counts": {"allowed_routes": 0, "bks_routes": 0},
+        "reference_route_source_counts": {
+            "allowed_routes": 0,
+            "benchmark_reference_routes": 0,
+        },
     }
     rendered_evidence = json.dumps(evidence, sort_keys=True)
     assert str(candidate_ws) not in rendered_evidence
@@ -380,14 +384,21 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
         experiment_protocol=proto,
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
-        force_surface="solver_design",
     )
 
     result = campaign.run_one_step()
-    if result.action == "create_branch":
+    if result.action == "create_branch" and not result.formal_protocol_evaluated:
         result = campaign.run_one_step()
 
-    assert result.action in {"validate", "promote", "abandon", "noop"}
+    assert result.action in {
+        "create_branch",
+        "explore",
+        "validate",
+        "promote",
+        "abandon",
+        "noop",
+    }
+    assert result.formal_protocol_evaluated is True
     assert campaign._n_experiments >= 1
     assert campaign._step_history
     step = next(

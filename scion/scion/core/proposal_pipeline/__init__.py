@@ -6,10 +6,6 @@ compatible while implementation details live in focused modules.
 from __future__ import annotations
 
 from .facade import ProposalPipeline
-from .attempts import (
-    PROPOSAL_ATTEMPT_TRANSITION_SCHEMA,
-    ProposalAttemptRecorder,
-)
 from .protocols import (
     BranchControllerLike,
     ClassifierLike,
@@ -23,7 +19,5 @@ __all__ = [
     "CreativeLayerLike",
     "HypothesisStoreLike",
     "ProblemRuntimeLike",
-    "PROPOSAL_ATTEMPT_TRANSITION_SCHEMA",
-    "ProposalAttemptRecorder",
     "ProposalPipeline",
 ]

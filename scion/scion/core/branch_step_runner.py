@@ -1,4 +1,5 @@
 """Branch-step execution boundary for CampaignManager."""
+
 from __future__ import annotations
 
 import hashlib
@@ -8,6 +9,11 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, MutableMapping, Optional
 
 from scion.core.branch import BranchController, StateTransitionError
+from scion.core.candidate_evaluation import (
+    candidate_evaluation_kind,
+    candidate_evaluation_pending,
+    mark_candidate_evaluation_pending,
+)
 from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
@@ -39,10 +45,6 @@ from scion.core.scheduler import (
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
-from scion.core.verified_candidate_commit import (
-    verified_candidate_commit_kind,
-    verified_candidate_pending_evaluation,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +71,6 @@ class BranchStepRunner:
     persist_branch_state: Callable[[str], None]
     setup_workspace: Callable[..., Optional[str]]
     apply_patch: Callable[..., Any]
-    record_verification_pass: Callable[[Branch, str], None]
     evaluate: Callable[
         [Branch, str, HypothesisProposal],
         EvaluationExecutionResult,
@@ -88,9 +89,6 @@ class BranchStepRunner:
     campaign_id: str = ""
     apply_reconcile_candidate: Callable[..., Any] | None = None
     reject_reconcile_candidate: Callable[[Branch, str], Any] | None = None
-    record_reconcile_candidate_commit: Callable[..., str | None] | None = None
-    promote_reconcile_candidate: Callable[..., str] | None = None
-    commit_reconcile_candidate_promotion: Callable[[Branch], None] | None = None
 
     def _select_next(self, active: list[Branch]) -> SchedulerAction:
         return self.scheduler.select_next(active)
@@ -183,9 +181,7 @@ class BranchStepRunner:
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             return finalize(self.run_reconcile_step_callback(branch))
 
-        if branch.state == BranchState.EXPLORE and verified_candidate_pending_evaluation(
-            branch
-        ):
+        if branch.state == BranchState.EXPLORE and candidate_evaluation_pending(branch):
             try:
                 return finalize(self.run_eval_step_callback(branch))
             except RuntimeError as exc:
@@ -346,7 +342,9 @@ class BranchStepRunner:
             outcome = self._non_evaluated_outcome(
                 branch,
                 reason_code="EVAL_VERIFICATION_REUSE_INVALID",
-                detail=(verification_result.first_failure or "verification reuse invalid"),
+                detail=(
+                    verification_result.first_failure or "verification reuse invalid"
+                ),
             )
             self._record_execution_outcome(
                 branch,
@@ -482,9 +480,7 @@ class BranchStepRunner:
                 decision=result.decision if decision is not None else None,
                 failure_stage=failure_stage,
                 failure_detail=failure_detail,
-                verification_detail=_verification_result_detail(
-                    verification_result
-                ),
+                verification_detail=_verification_result_detail(verification_result),
                 hypothesis_id=h_record.hypothesis_id,
                 decision_reason_codes=self.decision_reason_codes_for(
                     bid,
@@ -499,7 +495,6 @@ class BranchStepRunner:
             )
         )
         return result
-
 
     def run_reconcile_step(self, branch: Branch) -> StepResult:
         """Attempt to rebase a stale branch on the new champion."""
@@ -566,7 +561,9 @@ class BranchStepRunner:
             )
 
         if patch is None:
-            logger.info("Branch %s: no patch to reconcile - abandoning stale branch", bid)
+            logger.info(
+                "Branch %s: no patch to reconcile - abandoning stale branch", bid
+            )
             return abandon_stale("no patch to reconcile")
 
         hypothesis = self.branch_hypotheses.get(bid)
@@ -650,9 +647,6 @@ class BranchStepRunner:
         transactional_callbacks = (
             self.apply_reconcile_candidate,
             self.reject_reconcile_candidate,
-            self.record_reconcile_candidate_commit,
-            self.promote_reconcile_candidate,
-            self.commit_reconcile_candidate_promotion,
         )
         if any(callback is None for callback in transactional_callbacks):
             return preserve_stale(
@@ -662,7 +656,16 @@ class BranchStepRunner:
 
         with self.champion_lock:
             champion = self.get_champion()
-            champion_workspace = champion.code_snapshot_path
+        champion_workspace = champion.code_snapshot_path
+        # ``setup_workspace(force_champion=True)`` owns its own champion-lock
+        # acquisition. Calling it while this non-reentrant lock is held would
+        # deadlock the reconcile path.
+        base_workspace = self.setup_workspace(branch, force_champion=True)
+        if base_workspace is None:
+            return preserve_stale(
+                reason_code="RECONCILE_BASE_WORKSPACE_MISSING",
+                detail="unable to materialize current champion base for reconcile",
+            )
         previous_evidence_summary = dict(branch.branch_evidence_summary or {})
         workspace: str | None = None
 
@@ -678,7 +681,7 @@ class BranchStepRunner:
             assert self.apply_reconcile_candidate is not None
             applied = self.apply_reconcile_candidate(
                 branch,
-                champion_workspace,
+                base_workspace,
                 patch,
                 hypothesis=hypothesis,
                 remember_patch=False,
@@ -753,7 +756,6 @@ class BranchStepRunner:
                 **execution_outcome_projection_kwargs(outcome),
             )
 
-        promoted = False
         with self.champion_lock:
             current_champion = self.get_champion()
             if not _same_champion_identity(champion, current_champion):
@@ -763,50 +765,23 @@ class BranchStepRunner:
                     detail="champion changed during reconcile verification",
                 )
             try:
-                assert self.record_reconcile_candidate_commit is not None
-                self.record_reconcile_candidate_commit(
-                    branch=branch,
-                    hypothesis=hypothesis,
-                    h_record=h_record,
-                    patch=patch,
-                    workspace=workspace,
-                    base_code_hash=champion.code_snapshot_hash,
-                    commit_kind="reconcile",
-                )
-            except BaseException:
-                reject_staging()
-                raise
-            try:
-                assert self.promote_reconcile_candidate is not None
-                workspace = self.promote_reconcile_candidate(
-                    branch,
-                    code_hash,
-                    workspace,
-                    h_record.hypothesis_id,
-                    terminalize_hypothesis_on_rollback=False,
-                    promotion_kind="reconcile",
-                )
-                promoted = True
+                # Reconcile moves the branch's scientific base to the current
+                # champion before evaluation, but its verified code remains
+                # staging until the subsequent Protocol Decision accepts it.
                 self.branch_controller.reconcile_stale(
                     bid,
                     success=True,
                     new_champion=champion,
                 )
+                mark_candidate_evaluation_pending(
+                    branch,
+                    hypothesis_id=h_record.hypothesis_id,
+                    kind="reconcile",
+                )
                 self.persist_branch_state(bid)
-                assert self.commit_reconcile_candidate_promotion is not None
-                self.commit_reconcile_candidate_promotion(branch)
             except BaseException:
-                if promoted:
-                    try:
-                        self.branch_controller.block_infra(bid)
-                    except Exception:
-                        logger.exception(
-                            "Branch %s: failed to install in-memory reconcile hold",
-                            bid,
-                        )
-                        branch.state = BranchState.BLOCKED_INFRA
-                else:
-                    branch.branch_evidence_summary = previous_evidence_summary
+                reject_staging()
+                branch.branch_evidence_summary = previous_evidence_summary
                 raise
         branch = self.branch_controller.get_branch(bid)
         if branch is None:
@@ -1031,7 +1006,7 @@ class BranchStepRunner:
     @staticmethod
     def _eval_action_label(branch: Branch) -> str:
         if branch.state in (BranchState.EXPLORE, BranchState.EXPLORE_EXPAND):
-            if verified_candidate_commit_kind(branch) == "reconcile":
+            if candidate_evaluation_kind(branch) == "reconcile":
                 return "reconcile"
             return "explore"
         if branch.state in (BranchState.VALIDATING, BranchState.VALIDATING_EXPAND):
@@ -1055,8 +1030,7 @@ def _eval_failure_detail(
     if protocol_result is None:
         return None, None
     reason_codes = {
-        str(code).lower()
-        for code in getattr(protocol_result, "reason_codes", ()) or ()
+        str(code).lower() for code in getattr(protocol_result, "reason_codes", ()) or ()
     }
     if "evaluation_failed" in reason_codes:
         detail = str(getattr(canary_result, "reason", "") or "evaluation failed")
@@ -1074,10 +1048,9 @@ def _annotate_protocol_accounting(
     stage = str(getattr(stage_obj, "value", stage_obj) or "")
     if stage not in {"screening", "validation", "frozen"}:
         return
-    formal_evaluated = (
-        getattr(protocol_result, "stats", None) is not None
-        and screened_experiment_effective(protocol_result)
-    )
+    formal_evaluated = getattr(
+        protocol_result, "stats", None
+    ) is not None and screened_experiment_effective(protocol_result)
     result.protocol_stage = stage  # type: ignore[assignment]
     result.formal_protocol_evaluated = formal_evaluated
     result.screened_experiment_effective = stage == "screening" and formal_evaluated
@@ -1179,8 +1152,6 @@ def _protocol_cache_stats(protocol_result: Any | None) -> dict[str, int] | None:
             int(getattr(protocol_result, "champion_cached_runtime_pairs", 0) or 0),
         ),
     }
-
-
 
 
 def _verification_result_detail(vresult: VerificationResult) -> str | None:

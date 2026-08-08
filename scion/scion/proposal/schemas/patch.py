@@ -27,7 +27,6 @@ def preflight_patch_exact_replace_shape(raw: Mapping[str, Any]) -> None:
         if str(change.get("edit_intent") or "").strip() != "exact_replace":
             continue
         file_path = str(change.get("file_path") or "").strip()
-        _require_source_digest(change, file_path, change_pointer)
         _require_old_string(change, file_path, change_pointer)
         _require_new_string(change, file_path, change_pointer)
 
@@ -43,30 +42,6 @@ def _patch_change_slots(
         if isinstance(item, Mapping):
             slots.append((f"/additional_changes/{index}", item))
     return slots
-
-
-def _require_source_digest(
-    change: Mapping[str, Any],
-    file_path: str,
-    change_pointer: str,
-) -> None:
-    if _source_digest_text(change.get("source_digest")):
-        return
-    reason = (
-        "exact_replace_missing_source_digest"
-        if "source_digest" not in change
-        else "exact_replace_empty_source_digest"
-    )
-    _raise_exact_replace_shape_error(
-        reason=reason,
-        field="source_digest",
-        file_path=file_path,
-        change_pointer=change_pointer,
-        detail=(
-            "exact_replace requires source_digest for the existing file. "
-            "Use the host-provided sha256 digest for that file."
-        ),
-    )
 
 
 def _require_old_string(
@@ -170,7 +145,6 @@ def _raise_exact_replace_shape_error(
         "file_path": file_path or "<same relative path>",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": "<host-provided sha256 digest>",
         "old_string": "<non-empty exact current text>",
         "new_string": "<replacement text; use \"\" for deletion>",
         "replace_all": False,
@@ -188,7 +162,6 @@ def _raise_exact_replace_shape_error(
         "guidance": (
             "A complete typed exact_replace object has this minimal JSON "
             "shape: action='modify', edit_intent='exact_replace', "
-            "source_digest='<host-provided sha256 digest>', "
             "old_string='<non-empty exact current text>', "
             "new_string='<replacement text>', replace_all=false. For deletion "
             "use new_string: \"\"; never omit new_string or set it to null."
@@ -196,22 +169,6 @@ def _raise_exact_replace_shape_error(
         "minimal_json_shape": minimal_shape,
     }
     raise PatchSchemaPreflightError(payload)
-
-
-def _source_digest_text(value: Any) -> str:
-    if isinstance(value, Mapping):
-        for key in ("sha256", "digest", "source_digest"):
-            text = str(value.get(key) or "").strip()
-            if text:
-                return _strip_digest_prefix(text)
-        return ""
-    if value is None:
-        return ""
-    return _strip_digest_prefix(str(value).strip())
-
-
-def _strip_digest_prefix(value: str) -> str:
-    return value[7:] if value.startswith("sha256:") else value
 
 
 class PatchFileChangeInput(BaseModel):
@@ -329,19 +286,13 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
             "type": "string",
             "enum": ["exact_replace", "full_file"],
             "description": (
-                "Existing files use action=modify with the current source_digest. "
-                "Choose exact_replace or explicit full_file/content_after based "
-                "on the algorithm change; create is only for new files."
+                "Existing files use action=modify. For localized existing-file "
+                "edits, prefer exact_replace so source outside the named selector "
+                "is preserved. Reserve full_file for creates, broad rewrites, or "
+                "an edit with no stable exact selector; provide content_after for "
+                "that complete-file result. "
+                "The host binds modifications to the current visible source."
             ),
-        },
-        "source_digest": {
-            "type": ["string", "object", "null"],
-            "description": (
-                "sha256 digest of the file content used for this edit. Required "
-                "and non-empty for every existing-file modify; null only for "
-                "creates of new files."
-            ),
-            "additionalProperties": True,
         },
         "old_string": {
             "type": "string",
@@ -398,8 +349,10 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                 "by Contract and applied in the same tainted candidate workspace. "
                 "When one existing file needs multiple non-contiguous edits, emit "
                 "multiple ordered exact_replace change objects for the same "
-                "file_path and bind each to the original visible source_digest. "
-                "The host applies and composes them serially. Do not mix same-file "
+                "file_path in application order. Repeat file_path, and make each "
+                "later old_string match the source produced by the earlier changes. "
+                "The host binds them to the original visible source, then applies "
+                "and composes them serially. Do not mix same-file "
                 "exact_replace edits with create, delete, or full_file; use one "
                 "full_file change instead."
             ),
@@ -415,10 +368,6 @@ PATCH_PROPOSAL_SCHEMA: Dict[str, Any] = {
                     "edit_intent": {
                         "type": "string",
                         "enum": ["exact_replace", "full_file"],
-                    },
-                    "source_digest": {
-                        "type": ["string", "object", "null"],
-                        "additionalProperties": True,
                     },
                     "old_string": {"type": "string"},
                     "new_string": {"type": "string"},

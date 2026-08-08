@@ -25,7 +25,7 @@ HYPOTHESIS_CONTEXT_OWNER_MAP = {
         (
             "problem_summary", "problem_object", "solver_mechanics",
             "champion_version", "research_surfaces", "available_actions",
-            "targetable_files", "champion_stats",
+            "existing_target_files", "create_path_patterns", "champion_stats",
             "objective_policy_guidance", "problem_measurement_diagnostics",
         ),
     ),
@@ -36,12 +36,16 @@ HYPOTHESIS_CONTEXT_OWNER_MAP = {
     **_owners(
         "static.task_constraints",
         (
-            "branch_id", "forced_research_target", "research_question", "seed",
+            "branch_id", "research_question", "seed",
         ),
     ),
     **_owners(
         "evidence.screening",
         ("experiment_history",),
+    ),
+    **_owners(
+        "evidence.safe_pre_protocol",
+        ("research_rejection_history",),
     ),
     RENDERER_INPUTS_KEY: "renderer_inputs",
     "_scion_prompt_manifest": "audit",

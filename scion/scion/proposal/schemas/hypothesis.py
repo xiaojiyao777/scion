@@ -17,7 +17,7 @@ class HypothesisProposalInput(BaseModel):
                 {
                     "if": {
                         "properties": {
-                            "action": {"enum": ["modify", "remove"]},
+                            "action": {"enum": ["modify", "create_new", "remove"]},
                         },
                         "required": ["action"],
                     },
@@ -44,7 +44,13 @@ class HypothesisProposalInput(BaseModel):
         description="One declared research surface.",
     )
     action: Literal["modify", "create_new", "remove"]
-    predicted_direction: Literal["improve", "tradeoff", "exploratory"]
+    predicted_direction: Literal["improve", "tradeoff", "exploratory"] = Field(
+        default="exploratory",
+        description=(
+            "Optional tainted research-intent label retained for lineage; "
+            "defaults to exploratory and never drives Decision."
+        ),
+    )
     target_weakness: str = Field(
         min_length=1,
         description="The concrete weakness addressed by the hypothesis.",
@@ -56,8 +62,8 @@ class HypothesisProposalInput(BaseModel):
     target_file: str | None = Field(
         default=None,
         description=(
-            "Required for modify/remove. For create_new, provide the new file "
-            "when the selected surface contract requires a file target."
+            "Required for every action. For create_new, this names the new "
+            "file bound to the subsequent code proposal."
         ),
     )
     suggested_weight: float | None = Field(
@@ -79,10 +85,8 @@ class HypothesisProposalInput(BaseModel):
 
     @model_validator(mode="after")
     def action_requires_target_file(self) -> "HypothesisProposalInput":
-        if self.action in {"modify", "remove"} and not (
-            self.target_file and self.target_file.strip()
-        ):
-            raise ValueError("target_file is required for modify/remove")
+        if not (self.target_file and self.target_file.strip()):
+            raise ValueError("target_file is required for every action")
         if self.target_file is not None and not self.target_file.strip():
             raise ValueError("target_file must be non-empty when provided")
         return self
@@ -103,7 +107,7 @@ Return exactly one JSON object with:
 - predicted_direction
 - target_weakness
 - expected_effect
-- target_file when required by the action or selected surface contract
+- target_file naming the file bound to the subsequent code proposal
 - suggested_weight only when relevant
 
 Do not add undeclared fields.

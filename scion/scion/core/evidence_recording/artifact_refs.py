@@ -37,6 +37,8 @@ def _read_partial_metrics_snapshot(raw_ref: Any) -> dict[str, Any]:
             "failed_pairs",
             "candidate_failed_pairs",
             "champion_failed_pairs",
+            "screening_evidence_status",
+            "screening_partial_champion_evidence",
             "runtime_confidence",
             "runtime_evidence_status",
             "runtime_evidence_policy",
@@ -98,6 +100,14 @@ def _in_flight_protocol_snapshot(progress: Mapping[str, Any]) -> dict[str, Any]:
             progress.get("candidate_failed_pairs")
         ),
         "champion_failed_pairs": _optional_int(progress.get("champion_failed_pairs")),
+        "screening_evidence_status": progress.get("screening_evidence_status"),
+        "screening_partial_champion_evidence": (
+            dict(progress["screening_partial_champion_evidence"])
+            if isinstance(
+                progress.get("screening_partial_champion_evidence"), Mapping
+            )
+            else None
+        ),
         "complete": complete,
         "decision_formed": False,
         "counts_toward_n_experiments": False,

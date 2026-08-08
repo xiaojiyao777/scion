@@ -34,7 +34,7 @@ def apply_exact_replace(
     expected_digest = digest_text(change.get("source_digest"))
     if not expected_digest:
         raise PatchEditProtocolError(
-            f"{change_pointer}: exact_replace requires source_digest"
+            f"{change_pointer}: exact_replace has no host source binding"
         )
     actual_digest = source_digest_for_content(before)
     original_digest = (

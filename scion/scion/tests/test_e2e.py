@@ -10,12 +10,13 @@ from typing import Any, List
 import pytest
 
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
-from scion.core.campaign import CampaignManager, VerificationGate
+from scion.core.campaign import CampaignManager
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, Decision,
     EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
 )
 from scion.proposal.mock_client import MockLLMClient
+from scion.verification.gate import VerificationGate
 
 # ---------------------------------------------------------------------------
 # Shared helpers (mirroring test_campaign.py conventions)
@@ -41,7 +42,10 @@ _VALID_HYPOTHESIS = {
 _VALID_PATCH = {
     "file_path": "operators/local_search.py",
     "action": "modify",
-    "code_content": _VALID_CODE,
+    "edit_intent": "exact_replace",
+    "old_string": "        return solution\n",
+    "new_string": "        candidate = solution\n        return candidate\n",
+    "replace_all": False,
     "test_hint": None,
 }
 
@@ -74,11 +78,9 @@ def _make_protocol_result(
         stats=stats,
         gate_outcome=gate_outcome,
         reason_codes=(
-            {
-                ExperimentStage.SCREENING: "SCREENING_PASS",
-                ExperimentStage.VALIDATION: "VALIDATION_PASS",
-                ExperimentStage.FROZEN: "FROZEN_PASS",
-            }[stage],
+            "SCREENING_FAIL_WIN_RATE"
+            if stage is ExperimentStage.SCREENING and gate_outcome == "fail"
+            else f"{stage.value.upper()}_{gate_outcome.upper()}",
         ),
         exposed_summary=f"stage={stage.value}",
         raw_metrics_ref="/tmp/e2e.json",
@@ -114,7 +116,9 @@ class _MockExperimentProtocol:
         champion_ws: str,
         hypothesis_action: str,
         expand: bool = False,
+        expand_round: int = 1,
     ) -> ProtocolResult:
+        del expand_round
         self.experiment_call_count += 1
         if self._results:
             return self._results.pop(0)
@@ -181,7 +185,17 @@ class TestFullMockCampaign:
 
     def test_runs_at_least_5_rounds_without_crash(self, tmp_path):
         """Campaign runs 5 steps without raising an exception."""
-        cm = _build_campaign(tmp_path)
+        protocol = _MockExperimentProtocol(
+            results=[
+                _make_protocol_result(
+                    ExperimentStage.SCREENING,
+                    gate_outcome="fail",
+                    win_rate=0.0,
+                )
+            ]
+            * 5
+        )
+        cm = _build_campaign(tmp_path, experiment_protocol=protocol)
 
         for _ in range(5):
             if cm.should_stop():
@@ -195,7 +209,25 @@ class TestFullMockCampaign:
 
     def test_at_least_one_explore_step(self, tmp_path):
         """At least one step must be of action type 'explore' or 'create_branch'."""
-        cm = _build_campaign(tmp_path)
+        client = MockLLMClient(
+            hypothesis_response=_VALID_HYPOTHESIS,
+            patch_response=_VALID_PATCH,
+        )
+        protocol = _MockExperimentProtocol(
+            results=[
+                _make_protocol_result(
+                    ExperimentStage.SCREENING,
+                    gate_outcome="fail",
+                    win_rate=0.0,
+                )
+            ]
+            * 5
+        )
+        cm = _build_campaign(
+            tmp_path,
+            llm_client=client,
+            experiment_protocol=protocol,
+        )
 
         results = []
         for _ in range(5):
@@ -206,6 +238,14 @@ class TestFullMockCampaign:
         explore_actions = {"explore", "create_branch"}
         assert any(r.action in explore_actions for r in results), (
             f"Expected at least one explore step; got: {[r.action for r in results]}"
+        )
+        assert protocol.experiment_call_count >= 2
+        assert client.call_count >= 4
+        branch = cm._branch_ctrl.get_branch(results[-1].branch_id)
+        workspace = Path(cm._branch_workspaces[branch.branch_id])
+        assert branch.branch_code_status == "clean"
+        assert (workspace / "operators" / "local_search.py").read_text() == (
+            _VALID_CODE
         )
 
     def test_lineage_queryable_via_get_state(self, tmp_path):

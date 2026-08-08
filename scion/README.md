@@ -2,9 +2,13 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: v0.3](https://img.shields.io/badge/version-v0.3-blue.svg)](#)
+[![Version: v0.4 direct--runtime](https://img.shields.io/badge/version-v0.4%20direct--runtime-blue.svg)](#)
 
 **Scion**（分支/嫁接）是一个面向组合优化问题的 **LLM 驱动算法自动改进框架**。它通过 LLM 的先验知识与推理能力，在人类定义的"算法沙盒"内自主探索、验证并迭代启发式算子，并通过参数层搜索优化算子配比。
+
+> **当前 v0.4 direct-runtime**：从 [`TASK.md`](TASK.md) 获取当前任务、授权和验收状态；运行语义见 [direct-runtime addendum](design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)，正式 CLI 入口是 `python -m scion.cli.main run`，操作步骤见 [实验运行手册](docs/operations/experiment-runbook.zh.md)。
+
+> **历史资料提示**：下文的 v0.2/v0.3 结果、两层搜索和 weight optimization 是历史记录，不是当前 v0.4 的运行入口、架构语义或验收依据。
 
 ## 核心理念
 
@@ -172,17 +176,15 @@ pip install -e .
 # v0.4 CLI campaign (需要 LLM API key)
 export SCION_API_KEY="your-api-key"
 export SCION_MODEL="claude-sonnet-4-6"
-cd scion
-python -m scion.cli.main run \
+cd /path/to/or-autoresearch-agent-v3-hotpath/scion
+PYTHONPATH=. python -m scion.cli.main run \
   --problem scion/problems/cvrp/problem.yaml \
   --protocol scion/problems/cvrp/formal/protocol.yaml \
   --split scion/problems/cvrp/formal/split_manifest.yaml \
   --seeds scion/problems/cvrp/formal/seed_ledger.yaml \
   --campaign-dir /tmp/scion_v04_run \
   --rounds 5 \
-  --time-limit-sec 10 \
-  --disable-early-stop \
-  --agentic-proposal
+  --time-limit-sec 10
 
 # controlled CVRP E2E smoke (不需要 LLM API key)
 python run_cvrp_controlled_e2e.py --output-dir /tmp/scion_cvrp_controlled
@@ -194,8 +196,8 @@ Historical v0.2/v0.3 launcher scripts are archived under
 ### 运行测试
 
 ```bash
-cd scion
-python -m pytest tests/unit/ -q
+cd /path/to/or-autoresearch-agent-v3-hotpath/scion
+PYTHONPATH=. python -m pytest scion/tests/unit/ -q
 ```
 
 ## 项目结构

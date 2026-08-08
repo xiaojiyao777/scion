@@ -16,11 +16,30 @@ from scion.core.paths import normalize_relative_patch_path
 _SENSITIVE_APIS = frozenset({"subprocess", "socket", "eval", "exec"})
 _SENSITIVE_OS_ATTRS = frozenset({"system", "popen", "execve", "execvp", "execv"})
 _SENSITIVE_OS_ENV_CALLS = frozenset({"getenv", "putenv", "unsetenv"})
-_REFLECTIVE_PRIMITIVES = frozenset(
-    {"getattr", "setattr", "delattr", "globals", "locals", "vars"}
-)
+_REFLECTIVE_PRIMITIVES = frozenset({"getattr"})
 _DANGEROUS_FILE_READ_ATTRS = frozenset(
     {"open", "read_text", "read_bytes", "readlink", "iterdir", "glob", "rglob"}
+)
+_CORE_FORBIDDEN_RECEIVER_CALLS = (
+    ("context", "baseline", "candidate code must not call context.baseline(...)"),
+)
+_SAFE_ALGORITHM_STDLIB = frozenset(
+    {
+        "__future__",
+        "abc",
+        "bisect",
+        "collections",
+        "copy",
+        "dataclasses",
+        "enum",
+        "functools",
+        "heapq",
+        "itertools",
+        "math",
+        "operator",
+        "statistics",
+        "typing",
+    }
 )
 
 
@@ -31,6 +50,7 @@ def check_import_whitelist(
     patch_graph: PatchSetGraph | None = None,
     is_editable_solver_file: Callable[[str], bool] | None = None,
     relative_import_file_exists: Callable[[str], bool] | None = None,
+    relative_import_source: Callable[[str], str | None] | None = None,
 ) -> CheckResult:
     t0 = time.monotonic_ns()
     if patch.action == "delete":
@@ -42,7 +62,11 @@ def check_import_whitelist(
             t0,
         )
 
-    whitelist = set(problem_spec.search_space.import_whitelist)
+    whitelist = {
+        *problem_spec.search_space.import_whitelist,
+        *_SAFE_ALGORITHM_STDLIB,
+        *_declared_runtime_modules(problem_spec),
+    }
 
     try:
         tree = ast.parse(patch.code_content)
@@ -63,7 +87,7 @@ def check_import_whitelist(
                 if not _in_whitelist(top, whitelist):
                     violations.append(alias.name)
         elif isinstance(node, ast.ImportFrom):
-            if (
+            same_patch_import = (
                 patch_graph is not None
                 and is_editable_solver_file is not None
                 and patch_graph.allows_same_patch_relative_import(
@@ -71,9 +95,8 @@ def check_import_whitelist(
                     node=node,
                     is_editable_solver_file=is_editable_solver_file,
                 )
-            ):
-                continue
-            if (
+            )
+            existing_relative_import = (
                 patch_graph is not None
                 and is_editable_solver_file is not None
                 and relative_import_file_exists is not None
@@ -84,7 +107,18 @@ def check_import_whitelist(
                     is_editable_solver_file=is_editable_solver_file,
                     relative_import_file_exists=relative_import_file_exists,
                 )
-            ):
+            )
+            if same_patch_import or existing_relative_import:
+                missing = _missing_relative_import_symbols(
+                    node,
+                    importer_path=patch.file_path,
+                    patch_graph=patch_graph,
+                    relative_import_source=relative_import_source,
+                )
+                if missing:
+                    violations.extend(
+                        f"missing relative import symbol: {name}" for name in missing
+                    )
                 continue
             if node.module:
                 top = node.module.split(".")[0]
@@ -131,6 +165,57 @@ def _allows_existing_relative_import(
     )
 
 
+def _missing_relative_import_symbols(
+    node: ast.ImportFrom,
+    *,
+    importer_path: str,
+    patch_graph: PatchSetGraph,
+    relative_import_source: Callable[[str], str | None] | None,
+) -> tuple[str, ...]:
+    if not node.module or any(alias.name == "*" for alias in node.names):
+        return ()
+    targets = patch_graph.relative_import_targets(
+        importer_path=importer_path,
+        node=node,
+    )
+    if len(targets) != 1:
+        return ()
+    target = targets[0]
+    source = patch_graph.source_for(target)
+    if source is None and relative_import_source is not None:
+        source = relative_import_source(target)
+    if source is None:
+        return ()
+    try:
+        exported = _top_level_names(ast.parse(source))
+    except SyntaxError:
+        return tuple(str(alias.name) for alias in node.names)
+    return tuple(
+        str(alias.name)
+        for alias in node.names
+        if str(alias.name) not in exported
+    )
+
+
+def _top_level_names(tree: ast.Module) -> set[str]:
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = list(node.targets) if isinstance(node, ast.Assign) else [node.target]
+            names.update(_assigned_name_targets(targets))
+        elif isinstance(node, ast.Import):
+            names.update(alias.asname or alias.name.split(".")[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            names.update(
+                alias.asname or alias.name
+                for alias in node.names
+                if alias.name != "*"
+            )
+    return names
+
+
 def check_sensitive_api(
     patch: PatchProposal,
     *,
@@ -171,6 +256,16 @@ def check_sensitive_api(
             forbidden_entrypoint_calls,
         )
     )
+    for receiver_name, attribute_name, message in _CORE_FORBIDDEN_RECEIVER_CALLS:
+        findings = _forbidden_receiver_attribute_call_findings(
+            tree,
+            receiver_name=receiver_name,
+            attribute_name=attribute_name,
+        )
+        if findings:
+            violations.append(
+                f"{message}: " + ", ".join(sorted(set(findings)))
+            )
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and _is_os_environ_attr(
             node,
@@ -223,6 +318,22 @@ def is_string_literal_node(node: ast.AST) -> bool:
 
 def _in_whitelist(module_top: str, whitelist: set) -> bool:
     return module_top in whitelist
+
+
+def _declared_runtime_modules(problem_spec: Any) -> set[str]:
+    dependencies = getattr(problem_spec, "runtime_dependencies", None)
+    if isinstance(dependencies, Mapping):
+        required = dependencies.get("required_python_modules", ())
+    else:
+        required = getattr(dependencies, "required_python_modules", ())
+    try:
+        return {
+            str(module).split(".", 1)[0].strip()
+            for module in required or ()
+            if str(module).strip()
+        }
+    except TypeError:
+        return set()
 
 
 def _collect_sensitive_aliases(
@@ -476,8 +587,13 @@ def _sensitive_call_violations(
         elif (
             _is_getattr_name(func.func, sensitive_call_aliases)
             and _getattr_uses_dynamic_attr_name(func)
+            and _dynamic_getattr_targets_sensitive_module(
+                func,
+                module_aliases=module_aliases,
+                dynamic_module_aliases=dynamic_module_aliases,
+            )
         ):
-            violations.append("getattr(..., dynamic_name)(...)")
+            violations.append("getattr(sensitive_module, dynamic_name)(...)")
 
     return violations
 
@@ -529,8 +645,6 @@ def _reflective_primitive_violation(
     imported_call_aliases: dict[str, tuple[str, str]],
     sensitive_call_aliases: dict[str, str],
 ) -> str | None:
-    if name in {"setattr", "delattr", "globals", "locals", "vars"}:
-        return f"{name}(...)"
     if name != "getattr":
         return None
     if _is_getattr_dynamic_import_call(
@@ -540,13 +654,32 @@ def _reflective_primitive_violation(
         sensitive_call_aliases=sensitive_call_aliases,
     ):
         return "getattr(__import__(...), ...)"
-    if _getattr_uses_dynamic_attr_name(node):
-        return "getattr(..., dynamic_name)"
+    if _getattr_uses_dynamic_attr_name(node) and _dynamic_getattr_targets_sensitive_module(
+        node,
+        module_aliases=module_aliases,
+        dynamic_module_aliases=set(),
+    ):
+        return "getattr(sensitive_module, dynamic_name)"
     return None
 
 
 def _getattr_uses_dynamic_attr_name(node: ast.Call) -> bool:
     return len(node.args) >= 2 and not is_string_literal_node(node.args[1])
+
+
+def _dynamic_getattr_targets_sensitive_module(
+    node: ast.Call,
+    *,
+    module_aliases: dict[str, str],
+    dynamic_module_aliases: set[str],
+) -> bool:
+    if not node.args or not isinstance(node.args[0], ast.Name):
+        return False
+    object_name = node.args[0].id
+    if object_name in dynamic_module_aliases:
+        return True
+    module_name = module_aliases.get(object_name, object_name)
+    return module_name in {"os", "subprocess", "socket", "importlib"}
 
 
 def _is_getattr_name(

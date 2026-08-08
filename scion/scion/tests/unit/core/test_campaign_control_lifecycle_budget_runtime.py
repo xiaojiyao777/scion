@@ -7,10 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from scion.core.execution_outcome import ExecutionOutcome
-from scion.core.production_boundary import (
-    production_boundary_errors,
-    production_boundary_identity_hashes,
-)
+from scion.core.production_boundary import production_boundary_errors
 from scion.problem.spec import ObjectiveMetricSpec
 
 
@@ -606,7 +603,7 @@ class TestProgrammaticRuntimeVerificationDefault:
                 adapter=SimpleNamespace(spec=SimpleNamespace(id="other_problem")),
             )
 
-    def test_production_boundary_rejects_same_generic_id_different_protocol_spec(
+    def test_production_boundary_accepts_same_id_without_spec_hash_parity(
         self,
         tmp_path,
     ):
@@ -626,11 +623,7 @@ class TestProgrammaticRuntimeVerificationDefault:
             seed_ledger=self._production_seeds(),
         )
 
-        assert any(
-            "experiment_protocol.problem_spec stable identity hash must match"
-            in error
-            for error in errors
-        )
+        assert errors == ()
 
     def test_production_boundary_rejects_different_adapter_problem_id(
         self,
@@ -678,7 +671,7 @@ class TestProgrammaticRuntimeVerificationDefault:
 
         assert errors == ()
 
-    def test_production_boundary_rejects_adapter_explicit_problem_hash_mismatch(
+    def test_production_boundary_ignores_adapter_self_declared_problem_hash(
         self,
         tmp_path,
     ):
@@ -699,11 +692,7 @@ class TestProgrammaticRuntimeVerificationDefault:
             seed_ledger=self._production_seeds(),
         )
 
-        assert any(
-            "adapter.spec problem_spec_hash must match campaign problem_spec"
-            in error
-            for error in errors
-        )
+        assert errors == ()
 
     def test_production_boundary_rejects_adapter_without_visible_generic_spec(
         self,
@@ -724,7 +713,7 @@ class TestProgrammaticRuntimeVerificationDefault:
 
         assert "adapter.spec is required" in errors
 
-    def test_production_boundary_accepts_matching_generic_runtime_identity(
+    def test_production_boundary_accepts_matching_runtime_capabilities(
         self,
         tmp_path,
     ):
@@ -741,20 +730,27 @@ class TestProgrammaticRuntimeVerificationDefault:
             adapter=adapter,
             split_manifest=split_manifest,
             seed_ledger=seed_ledger,
-        )
-        hashes = production_boundary_identity_hashes(
-            problem_spec=campaign_spec,
-            experiment_protocol=protocol,
-            adapter=adapter,
-            split_manifest=split_manifest,
-            seed_ledger=seed_ledger,
+            verification_gate=_AlwaysPassVerification(),
         )
 
         assert errors == ()
-        assert hashes["problem_spec_hash"] == hashes["protocol_problem_spec_hash"]
-        assert hashes["adapter_spec_hash"]
-        assert hashes["split_manifest_hash"]
-        assert hashes["seed_ledger_hash"]
+
+    def test_production_boundary_requires_verification_run_capability(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        campaign_spec = self._production_spec(base._spec)
+
+        errors = production_boundary_errors(
+            problem_spec=campaign_spec,
+            experiment_protocol=self._production_protocol(
+                problem_spec=campaign_spec,
+            ),
+            adapter=self._adapter_for(campaign_spec),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+            verification_gate=object(),
+        )
+
+        assert "verification_gate.run is required" in errors
 
     def test_production_boundary_rejects_parameter_search(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())

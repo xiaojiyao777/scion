@@ -9,12 +9,19 @@ from dataclasses import dataclass, replace
 from typing import Any, Callable, Iterable, Mapping, MutableMapping, Optional, Protocol
 
 from scion.core.branch import BranchController, StateTransitionError
+from scion.core.candidate_disposition import (
+    CandidateDisposition,
+    CandidateDispositionMapper,
+    CandidateDispositionPlan,
+)
+from scion.core.candidate_evaluation import (
+    candidate_evaluation_kind,
+    candidate_evaluation_pending,
+    mark_candidate_evaluation_completed,
+    mark_candidate_evaluation_pending,
+)
 from scion.core.decision_lifecycle_actions import (
     update_branch_protocol_evidence_summary as _update_branch_protocol_evidence_summary,
-)
-from scion.core.decision_completion_transaction import (
-    DecisionCompletionIntent,
-    DecisionCompletionStore,
 )
 from scion.core.models import (
     Branch,
@@ -22,32 +29,20 @@ from scion.core.models import (
     CanaryResult,
     ContractResult,
     Decision,
+    DecisionFeatures,
+    DecisionOutcome,
     FailureEvent,
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
     ProtocolResult,
-    StepRecord,
     VerificationResult,
 )
 from scion.core.promotion_service import PromotionCommitError, PromotionPlan
 from scion.core.step_result import StepResult
-from scion.core.verified_candidate_commit import (
-    mark_verified_candidate_evaluation_completed,
-    verified_candidate_pending_evaluation,
-)
 from scion.core.telemetry_validation import screened_experiment_effective
-from scion.proposal.context_manager.manager import persist_canonical_screening_record
 
 logger = logging.getLogger(__name__)
-
-_ATOMIC_TERMINAL_DECISIONS = frozenset(
-    {
-        Decision.CONTINUE_EXPLORE,
-        Decision.VALIDATION_REPAIR_REQUIRED,
-        Decision.ABANDON,
-    }
-)
 
 
 class HypothesisStoreLike(Protocol):
@@ -100,14 +95,13 @@ class DecisionFinalizer:
         Optional[tuple[str, ...]],
     ]
     discard_branch_workspace: Callable[[str], None]
-    archive_workspace: Callable[[str, str], None]
-    cleanup_workspace: Callable[[str], None]
     persist_branch_state: Callable[[str], None]
     record_formal_candidate_artifact: FormalCandidateArtifactRecorder | None = None
     decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
-    decision_completion_store: DecisionCompletionStore | None = None
-    current_round_num: Callable[[], int] = lambda: 0
-    complete_decision_cleanup: Callable[[DecisionCompletionIntent], None] | None = None
+    decision_features_for: Callable[[str], DecisionFeatures | None] = lambda _bid: None
+    pending_candidate_patch: Callable[[Branch], PatchProposal | None] | None = None
+    accept_candidate: Callable[[Branch, str, str], str] | None = None
+    reject_candidate: Callable[[Branch, str], Any] | None = None
 
     def apply(
         self,
@@ -134,14 +128,11 @@ class DecisionFinalizer:
             )
         )
         if (
-            self.decision_completion_store is not None
+            protocol_result is not None
             and decision is not Decision.PROMOTE
-            and (
-                verified_candidate_pending_evaluation(branch)
-                or decision in _ATOMIC_TERMINAL_DECISIONS
-            )
+            and candidate_evaluation_pending(branch)
         ):
-            return self._apply_transactional_nonpromotion(
+            return self._apply_nonpromotion(
                 branch=branch,
                 decision=decision,
                 hypothesis=hypothesis,
@@ -154,10 +145,7 @@ class DecisionFinalizer:
                 decision_reason_codes=effective_reason_codes,
                 proposal_attempt_ref=proposal_attempt_ref,
             )
-        # The outer Decision now exists.  Complete the pending-evaluation
-        # marker before any decision path persists branch/hypothesis state so
-        # reopen cannot repeat an already-decided Protocol.
-        mark_verified_candidate_evaluation_completed(branch)
+        mark_candidate_evaluation_completed(branch)
         _consume_completed_protocol_expansion(branch, protocol_result)
         patch = self.branch_patches.get(bid)
         if (
@@ -180,19 +168,6 @@ class DecisionFinalizer:
                 patch=patch,
                 protocol_result=protocol_result,
                 decision_reason_codes=effective_reason_codes,
-            )
-            self._record_formal_candidate_artifact(
-                branch=branch,
-                hypothesis=hypothesis,
-                h_record=h_record,
-                patch=patch,
-                protocol_result=protocol_result,
-                canary_result=canary_result,
-                contract_result=contract_result,
-                verification_result=verification_result,
-                decision=decision,
-                decision_reason_codes=effective_reason_codes,
-                proposal_attempt_ref=proposal_attempt_ref,
             )
 
         promote_plan: PromotionPlan | None = None
@@ -281,19 +256,6 @@ class DecisionFinalizer:
                 exc,
             )
 
-        self._record_formal_candidate_artifact(
-            branch=branch,
-            hypothesis=hypothesis,
-            h_record=h_record,
-            patch=patch,
-            protocol_result=protocol_result,
-            canary_result=canary_result,
-            contract_result=contract_result,
-            verification_result=verification_result,
-            decision=decision,
-            decision_reason_codes=effective_reason_codes,
-            proposal_attempt_ref=proposal_attempt_ref,
-        )
         self._persist_current_branch(bid)
         reason_suffix = (
             f"; reasons={','.join(effective_reason_codes)}"
@@ -310,7 +272,7 @@ class DecisionFinalizer:
             protocol_result,
         )
 
-    def _apply_transactional_nonpromotion(
+    def _apply_nonpromotion(
         self,
         *,
         branch: Branch,
@@ -325,13 +287,26 @@ class DecisionFinalizer:
         decision_reason_codes: Optional[tuple[str, ...]],
         proposal_attempt_ref: Mapping[str, Any] | None,
     ) -> StepResult:
-        """Commit the post-Protocol Branch/H state through one SQLite transaction."""
+        """Apply one completed Protocol decision directly and synchronously.
 
-        assert self.decision_completion_store is not None
+        The Protocol result, branch snapshot, hypothesis status, and ordinary
+        lineage are the scientific record.  There is deliberately no separate
+        intent, digest, CAS fence, or recovery lifecycle to attest the same
+        fact a second time.
+        """
         bid = branch.branch_id
+        candidate_kind = candidate_evaluation_kind(branch)
+        if candidate_kind is None:
+            raise RuntimeError("pending candidate evaluation kind is unavailable")
         patch = self.branch_patches.get(bid)
+        if patch is None and self.pending_candidate_patch is not None:
+            patch = self.pending_candidate_patch(branch)
+        disposition = self._candidate_disposition(
+            branch_id=bid,
+            decision=decision,
+            decision_reason_codes=decision_reason_codes,
+        )
         target = copy.deepcopy(branch)
-        mark_verified_candidate_evaluation_completed(target)
         _consume_completed_protocol_expansion(target, protocol_result)
 
         if decision == Decision.ABANDON:
@@ -355,8 +330,6 @@ class DecisionFinalizer:
                     protocol_result=protocol_result,
                     decision_reason_codes=decision_reason_codes,
                 )
-            target.branch_code_status = "clean"
-            target.direction = None
         else:
             _sync_retained_protocol_branch_evidence(
                 target,
@@ -366,7 +339,12 @@ class DecisionFinalizer:
                 decision_reason_codes=decision_reason_codes,
             )
 
+        # Keep an exact candidate closure as scientific replay evidence only.
+        # It is best-effort and cannot authorize, block, or recover a Decision.
         self._record_formal_candidate_artifact(
+            # Record against the detached candidate snapshot.  ``branch`` is
+            # about to be mutated by accept/reject, while the workspace below
+            # still points at the staging candidate.
             branch=target,
             hypothesis=hypothesis,
             h_record=h_record,
@@ -379,67 +357,21 @@ class DecisionFinalizer:
             decision_reason_codes=decision_reason_codes,
             proposal_attempt_ref=proposal_attempt_ref,
         )
-        persist_canonical_screening_record(
-            target,
-            StepRecord(
-                round_num=max(1, int(self.current_round_num())),
-                branch_id=bid,
-                hypothesis=hypothesis,
-                patch=patch,
-                contract_passed=contract_result.passed,
-                verification_passed=verification_result.passed,
-                protocol_result=protocol_result,
-                decision=decision,
-                failure_stage=None,
-                failure_detail=None,
-                hypothesis_id=h_record.hypothesis_id,
-                decision_reason_codes=tuple(decision_reason_codes or ()),
-                proposal_session_ref=(
-                    dict(proposal_attempt_ref)
-                    if isinstance(proposal_attempt_ref, Mapping)
-                    else None
-                ),
-                canary_result=canary_result,
-            ),
-        )
         if not (
-            decision
-            in (Decision.CONTINUE_EXPLORE, Decision.VALIDATION_REPAIR_REQUIRED)
-            and target.state
-            in (BranchState.EXPLORE, BranchState.STALE_WEIGHT_UPDATE)
+            decision in (Decision.CONTINUE_EXPLORE, Decision.VALIDATION_REPAIR_REQUIRED)
+            and target.state in (BranchState.EXPLORE, BranchState.STALE_WEIGHT_UPDATE)
         ):
             _apply_decision_to_detached_branch(target, decision)
 
-        terminal_h_status = (
-            "rejected"
-            if decision
-            in (
-                Decision.CONTINUE_EXPLORE,
-                Decision.VALIDATION_REPAIR_REQUIRED,
-                Decision.ABANDON,
-            )
-            else None
-        )
-        cleanup_action = (
-            "abandon_workspace" if decision == Decision.ABANDON else "none"
-        )
-        intent = self.decision_completion_store.prepare(
-            source_branch=branch,
-            target_branch=target,
-            hypothesis_record=h_record,
-            target_hypothesis_status=terminal_h_status,
-            decision=decision,
-            reason_codes=decision_reason_codes,
-            protocol_result=protocol_result,
-            cleanup_action=cleanup_action,
-        )
-
-        # Lineage is append-only evidence.  The typed intent is already durable,
-        # so a lineage failure/crash cannot make startup repeat Protocol.
+        # Append-only Decision lineage records the evaluated staging candidate.
+        # Write it while the detached target still describes that candidate:
+        # rejection restores the live branch to its clean parent and drops the
+        # pending patch binding. If lineage fails, leave that live candidate
+        # untouched and pending so no consumed-candidate/pending-marker split
+        # can be retried as a second Decision.
+        lineage_branch = copy.deepcopy(target)
         self._record_lineage(
-            # Lineage describes the evaluated pre-transition branch.  The
-            # target snapshot belongs only to decision completion/recovery.
-            branch=branch,
+            branch=lineage_branch,
             hypothesis=hypothesis,
             h_record=h_record,
             protocol_result=protocol_result,
@@ -448,15 +380,29 @@ class DecisionFinalizer:
             verification_result=verification_result,
             decision=decision,
             decision_reason_codes=decision_reason_codes,
-            event_id=intent.transaction_id,
+            patch=patch,
         )
-        self.decision_completion_store.commit_state(intent)
+        terminal_h_status, discard_restored_workspace = (
+            self._apply_candidate_disposition(
+                branch=branch,
+                target=target,
+                plan=disposition,
+            )
+        )
+        mark_candidate_evaluation_pending(
+            target,
+            hypothesis_id=h_record.hypothesis_id,
+            kind=candidate_kind,
+        )
+        mark_candidate_evaluation_completed(target)
         _install_branch_snapshot(self.branch_controller, branch, target)
-        # Preserve the campaign persistence callback boundary for status hooks
-        # and injected failures.  The authoritative Branch/H write above is
-        # already atomic; any exception here propagates with a replayable
-        # state_committed intent.
+        if terminal_h_status is not None:
+            self.hypothesis_store.mark_status(h_record.hypothesis_id, terminal_h_status)
+            h_record.status = terminal_h_status
         self.persist_branch_state(bid)
+
+        if discard_restored_workspace:
+            self.discard_branch_workspace(bid)
 
         if decision in (
             Decision.CONTINUE_EXPLORE,
@@ -466,9 +412,9 @@ class DecisionFinalizer:
             self.branch_hypotheses.pop(bid, None)
             self.branch_current_hypothesis.pop(bid, None)
         elif decision == Decision.ABANDON:
-            self._complete_abandon_cleanup(intent)
-
-        self.decision_completion_store.mark_committed(intent)
+            self.branch_hypotheses.pop(bid, None)
+            self.branch_patches.pop(bid, None)
+            self.branch_current_hypothesis.pop(bid, None)
         reason_codes = tuple(decision_reason_codes or ())
         reason = f"decision={decision.value}"
         if reason_codes:
@@ -484,22 +430,123 @@ class DecisionFinalizer:
             protocol_result,
         )
 
-    def _complete_abandon_cleanup(self, intent: DecisionCompletionIntent) -> None:
-        bid = intent.branch_id
-        if self.complete_decision_cleanup is not None:
-            self.complete_decision_cleanup(intent)
-            self.branch_workspaces.pop(bid, None)
-        else:
-            workspace = self.branch_workspaces.get(bid)
-            if workspace:
-                # Standalone finalizer compatibility. Campaign composition
-                # always provides the identity-checked transactional cleanup.
-                self.archive_workspace(workspace, bid)
-                self.cleanup_workspace(workspace)
-                self.branch_workspaces.pop(bid, None)
-        self.branch_hypotheses.pop(bid, None)
-        self.branch_patches.pop(bid, None)
-        self.branch_current_hypothesis.pop(bid, None)
+    def _candidate_disposition(
+        self,
+        *,
+        branch_id: str,
+        decision: Decision,
+        decision_reason_codes: Iterable[str] | None,
+    ) -> CandidateDispositionPlan:
+        features = self.decision_features_for(branch_id)
+        if features is None:
+            raise RuntimeError("candidate disposition DecisionFeatures are unavailable")
+        return CandidateDispositionMapper.map(
+            DecisionOutcome(
+                decision=decision,
+                reason_codes=tuple(decision_reason_codes or ()),
+                features_snapshot=features,
+            )
+        )
+
+    def _record_formal_candidate_artifact(
+        self,
+        *,
+        branch: Branch,
+        hypothesis: HypothesisProposal,
+        h_record: HypothesisRecord,
+        patch: PatchProposal | None,
+        protocol_result: ProtocolResult | None,
+        canary_result: CanaryResult,
+        contract_result: ContractResult,
+        verification_result: VerificationResult,
+        decision: Decision,
+        decision_reason_codes: tuple[str, ...] | None,
+        proposal_attempt_ref: Mapping[str, Any] | None,
+    ) -> None:
+        if self.record_formal_candidate_artifact is None or patch is None:
+            return
+        try:
+            artifact_ref = self.record_formal_candidate_artifact(
+                branch=branch,
+                hypothesis=hypothesis,
+                h_record=h_record,
+                patch=patch,
+                protocol_result=protocol_result,
+                canary_result=canary_result,
+                contract_result=contract_result,
+                verification_result=verification_result,
+                decision=decision,
+                decision_reason_codes=tuple(decision_reason_codes or ()),
+                workspace=self.branch_workspaces.get(branch.branch_id),
+                proposal_attempt_ref=proposal_attempt_ref,
+            )
+        except Exception as exc:  # noqa: BLE001 - replay evidence is non-authoritative
+            logger.debug(
+                "Branch %s: candidate replay evidence write failed: %s",
+                branch.branch_id,
+                exc,
+            )
+            return
+        if artifact_ref:
+            summary = dict(branch.branch_evidence_summary or {})
+            summary["formal_candidate_patch_artifact_ref"] = artifact_ref
+            branch.branch_evidence_summary = summary
+
+    def _apply_candidate_disposition(
+        self,
+        *,
+        branch: Branch,
+        target: Branch,
+        plan: CandidateDispositionPlan,
+    ) -> tuple[str, bool]:
+        disposition = plan.disposition
+        workspace = self.branch_workspaces.get(branch.branch_id)
+        if not workspace:
+            raise RuntimeError("pending candidate workspace is unavailable")
+
+        if disposition in {
+            CandidateDisposition.EXACT_REUSE,
+            CandidateDisposition.PROVISIONAL_HEAD,
+        }:
+            if self.accept_candidate is None:
+                raise RuntimeError("candidate acceptance callback is unavailable")
+            self.accept_candidate(branch, branch.current_code_hash or "", workspace)
+            target.current_code_hash = branch.current_code_hash
+            target.last_clean_code_hash = branch.last_clean_code_hash
+        elif disposition in {
+            CandidateDisposition.REJECT_TO_CODE_PARENT,
+            CandidateDisposition.REJECT_TERMINAL,
+        }:
+            if self.reject_candidate is None:
+                raise RuntimeError("candidate rejection callback is unavailable")
+            self.reject_candidate(branch, workspace)
+            target.current_code_hash = branch.current_code_hash
+            target.last_clean_code_hash = branch.last_clean_code_hash
+
+        if disposition is CandidateDisposition.REJECT_TO_CODE_PARENT:
+            target.branch_code_status = "clean"
+            target.direction = None
+        elif disposition is CandidateDisposition.PROVISIONAL_HEAD:
+            target.branch_code_status = "provisional"
+        elif disposition is CandidateDisposition.EXACT_REUSE:
+            target.branch_code_status = "clean"
+        elif disposition is not CandidateDisposition.REJECT_TERMINAL:
+            raise RuntimeError(
+                f"unsupported nonpromotion candidate disposition: {disposition.value}"
+            )
+
+        summary = dict(target.branch_evidence_summary or {})
+        summary["candidate_disposition"] = {
+            "schema_version": "candidate-disposition.v1",
+            "disposition": disposition.value,
+            "hypothesis_status": plan.hypothesis_status.value,
+            "rule": plan.rule.value,
+        }
+        target.branch_evidence_summary = summary
+        return (
+            plan.hypothesis_status.value,
+            disposition is CandidateDisposition.REJECT_TERMINAL,
+        )
 
     def _prepare_promotion(
         self,
@@ -553,11 +600,12 @@ class DecisionFinalizer:
         decision_reason_codes: Optional[tuple[str, ...]],
         event_id: Optional[str] = None,
         strict: bool = False,
+        patch: PatchProposal | None = None,
     ) -> None:
         args = (
             branch,
             hypothesis,
-            self.branch_patches.get(branch.branch_id),
+            patch if patch is not None else self.branch_patches.get(branch.branch_id),
             contract_result,
             verification_result,
             canary_result,
@@ -598,19 +646,6 @@ class DecisionFinalizer:
                 decision_reason_codes=decision_reason_codes,
             )
 
-        self._record_formal_candidate_artifact(
-            branch=branch,
-            hypothesis=hypothesis,
-            h_record=h_record,
-            patch=self.branch_patches.get(bid),
-            protocol_result=protocol_result,
-            canary_result=canary_result,
-            contract_result=contract_result,
-            verification_result=verification_result,
-            decision=decision,
-            decision_reason_codes=decision_reason_codes,
-            proposal_attempt_ref=proposal_attempt_ref,
-        )
         # Screening/validation continuation evolves the same V3 branch.  Keep
         # its verified workspace as the executable base for the next H/C turn;
         # discarding it here would make the prompt describe branch-current code
@@ -647,54 +682,6 @@ class DecisionFinalizer:
             reason=reason,
             attempt_kind="screening",
         )
-
-    def _record_formal_candidate_artifact(
-        self,
-        *,
-        branch: Branch,
-        hypothesis: HypothesisProposal,
-        h_record: HypothesisRecord,
-        patch: PatchProposal | None,
-        protocol_result: Optional[ProtocolResult],
-        canary_result: CanaryResult,
-        contract_result: ContractResult,
-        verification_result: VerificationResult,
-        decision: Decision,
-        decision_reason_codes: Optional[tuple[str, ...]],
-        proposal_attempt_ref: Mapping[str, Any] | None,
-    ) -> None:
-        if self.record_formal_candidate_artifact is None:
-            return
-        if not _should_reconcile_formal_candidate_artifact(
-            protocol_result=protocol_result,
-        ):
-            return
-        try:
-            artifact_ref = self.record_formal_candidate_artifact(
-                branch=branch,
-                hypothesis=hypothesis,
-                h_record=h_record,
-                patch=patch,
-                protocol_result=protocol_result,
-                canary_result=canary_result,
-                contract_result=contract_result,
-                verification_result=verification_result,
-                decision=decision,
-                decision_reason_codes=tuple(decision_reason_codes or ()),
-                workspace=self.branch_workspaces.get(branch.branch_id),
-                proposal_attempt_ref=proposal_attempt_ref,
-            )
-        except Exception as exc:  # pragma: no cover - audit artifact is best effort
-            logger.debug(
-                "Branch %s: formal candidate patch artifact write failed: %s",
-                branch.branch_id,
-                exc,
-            )
-            return
-        if artifact_ref:
-            summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
-            summary["formal_candidate_patch_artifact_ref"] = artifact_ref
-            branch.branch_evidence_summary = summary
 
     def _promote(
         self,
@@ -837,19 +824,6 @@ class DecisionFinalizer:
                 failure_category="infra",
                 failure_detail=str(exc),
             )
-        self._record_formal_candidate_artifact(
-            branch=branch,
-            hypothesis=hypothesis,
-            h_record=h_record,
-            patch=self.branch_patches.get(bid),
-            protocol_result=protocol_result,
-            canary_result=canary_result,
-            contract_result=contract_result,
-            verification_result=verification_result,
-            decision=Decision.PROMOTE,
-            decision_reason_codes=decision_reason_codes,
-            proposal_attempt_ref=proposal_attempt_ref,
-        )
         try:
             self._record_lineage(
                 branch=branch,
@@ -907,16 +881,7 @@ class DecisionFinalizer:
         decision_reason_codes: Optional[tuple[str, ...]],
     ) -> None:
         bid = branch.branch_id
-        workspace = self.branch_workspaces.pop(bid, None)
-        if workspace:
-            try:
-                self.archive_workspace(workspace, bid)
-            except Exception as exc:
-                logger.debug("Branch %s: archive failed: %s", bid, exc)
-            try:
-                self.cleanup_workspace(workspace)
-            except Exception:
-                pass
+        self.discard_branch_workspace(bid)
         self.branch_hypotheses.pop(bid, None)
         self.branch_patches.pop(bid, None)
         self.hypothesis_store.mark_status(h_record.hypothesis_id, "rejected")
@@ -960,36 +925,6 @@ def _install_branch_snapshot(
     if current is not branch:
         current.__dict__.clear()
         current.__dict__.update(copy.deepcopy(values))
-
-
-def _should_record_formal_candidate_artifact(
-    *,
-    patch: PatchProposal | None,
-    protocol_result: Optional[ProtocolResult],
-    canary_result: CanaryResult,
-    contract_result: ContractResult,
-    verification_result: VerificationResult,
-) -> bool:
-    if patch is None or protocol_result is None:
-        return False
-    if not (
-        contract_result.passed and verification_result.passed and canary_result.passed
-    ):
-        return False
-    if getattr(protocol_result, "stats", None) is None:
-        return False
-    return _stage_value(protocol_result) == "screening"
-
-
-def _should_reconcile_formal_candidate_artifact(
-    *,
-    protocol_result: Optional[ProtocolResult],
-) -> bool:
-    if protocol_result is None:
-        return False
-    if getattr(protocol_result, "stats", None) is None:
-        return False
-    return _stage_value(protocol_result) == "screening"
 
 
 def _with_protocol_accounting(
@@ -1112,7 +1047,7 @@ def _sync_retained_protocol_branch_evidence(
     )
     if branch.direction is None:
         branch.direction = (
-            f"{hypothesis.change_locus}: " f"{hypothesis.hypothesis_text or ''}"
+            f"{hypothesis.change_locus}: {hypothesis.hypothesis_text or ''}"
         )
     _update_branch_protocol_evidence_summary(
         branch,

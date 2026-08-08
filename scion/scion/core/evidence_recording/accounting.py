@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from scion.core.models import Decision, StepRecord
-from scion.core.proposal_trajectory_attempts import read_proposal_attempt_transitions
+from scion.core.proposal_trajectory_attempts import read_proposal_calls
 from scion.core.evidence_recording.accounting_quality_blocks import (
     QUALITY_BLOCK_KINDS,
     quality_block_ledger as _quality_block_ledger,
@@ -259,7 +259,7 @@ def proposal_accounting_fields(
 
 def _direct_attempt_accounting(campaign_dir: str | Path) -> dict[str, Any]:
     campaign_path = Path(campaign_dir)
-    inventory = read_proposal_attempt_transitions(campaign_path / "scion.db")
+    inventory = read_proposal_calls(campaign_path / "scion.db")
     stats = inventory.get("stats") if isinstance(inventory, Mapping) else {}
     attempts = inventory.get("attempts") if isinstance(inventory, Mapping) else []
     attempts = attempts if isinstance(attempts, list) else []
@@ -276,9 +276,9 @@ def _direct_attempt_accounting(campaign_dir: str | Path) -> dict[str, Any]:
             "code": counts["code"],
         },
         "source": {
-            "schema_version": "direct_proposal_accounting_source.v1",
+            "schema_version": "direct_proposal_call_accounting_source.v1",
             "artifact_ref": "scion.db",
-            "event_kind": "proposal_attempt_transition",
+            "event_kind": "proposal_call",
             "status": str((stats or {}).get("source_status") or "missing"),
             "invalid_row_count": int((stats or {}).get("invalid_row_count") or 0),
         },
@@ -348,9 +348,9 @@ def accounting_reconciliation_fields(
                 "attempt_count": 0,
                 "request_kind_counts": {"hypothesis": 0, "code": 0},
                 "source": {
-                    "schema_version": "direct_proposal_accounting_source.v1",
+                    "schema_version": "direct_proposal_call_accounting_source.v1",
                     "artifact_ref": "scion.db",
-                    "event_kind": "proposal_attempt_transition",
+                    "event_kind": "proposal_call",
                     "status": "missing",
                     "invalid_row_count": 0,
                 },
@@ -522,9 +522,9 @@ def accounting_reconciliation_fields(
             "attempt_count": 0,
             "request_kind_counts": {"hypothesis": 0, "code": 0},
             "source": {
-                "schema_version": "direct_proposal_accounting_source.v1",
+                "schema_version": "direct_proposal_call_accounting_source.v1",
                 "artifact_ref": "scion.db",
-                "event_kind": "proposal_attempt_transition",
+                "event_kind": "proposal_call",
                 "status": "missing",
                 "invalid_row_count": 0,
             },

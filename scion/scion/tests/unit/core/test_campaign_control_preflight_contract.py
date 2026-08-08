@@ -2,7 +2,9 @@
 
 from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
 import hashlib
+from scion.core.models import DecisionFeatures
 import scion.verification.tests as verification_tests
+from scion.problem.preflight import ResearchEnvironmentPreflightError
 from scion.verification.gate import VerificationGate
 
 
@@ -57,9 +59,27 @@ def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
             contract_passed=True,
             verification_passed=True,
             protocol_result=None,
-            decision=None,
+            decision=Decision.CONTINUE_EXPLORE,
             failure_stage=None,
             failure_detail=None,
+            decision_reason_codes=("SCREENING_UNCLEAR",),
+            decision_features_snapshot=DecisionFeatures(
+                branch_id=branch.branch_id,
+                hypothesis_action="create_new",
+                stage="screening",
+                contract_passed=True,
+                verification_passed=True,
+                canary_passed=True,
+                n_cases=1,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+                stale=False,
+                recent_failure_codes=(),
+                protocol_gate_outcome="unclear",
+                protocol_reason_codes=("SCREENING_UNCLEAR",),
+            ),
         )
     )
     captured_overrides: list[dict[str, str]] = []
@@ -99,7 +119,7 @@ def test_campaign_run_preflights_missing_runtime_dependency_before_proposal(
         RuntimeDependencySpec(required_python_modules=[missing]),
     )
 
-    with pytest.raises(RuntimeDependencyPreflightError) as excinfo:
+    with pytest.raises(ResearchEnvironmentPreflightError) as excinfo:
         cm.run(requested_rounds=1)
 
     assert missing in str(excinfo.value)
@@ -122,7 +142,7 @@ def test_campaign_run_preflights_missing_verification_pytest_before_proposal(
         lambda module_name: None if module_name == "pytest" else object(),
     )
 
-    with pytest.raises(RuntimeDependencyPreflightError) as excinfo:
+    with pytest.raises(ResearchEnvironmentPreflightError) as excinfo:
         cm.run(requested_rounds=1)
 
     assert "pytest" in str(excinfo.value)
@@ -167,15 +187,15 @@ class TestLastCleanCodeHash:
 
         cm.run_one_step()
 
-        # last_clean_code_hash must be None when record_candidate_code is called
+        # A fresh branch has no accepted branch head yet.  The candidate hash
+        # only becomes clean once the formal Decision accepts its staging tree.
         assert candidate_clean_at_apply, "record_candidate_code must be called"
-        assert candidate_clean_at_apply[0] is None, (
-            "last_clean_code_hash must be None immediately after apply_patch "
-            "(before verification); was set too early"
-        )
+        assert candidate_clean_at_apply[0] is None
+        assert clean_after_verify
+        assert clean_after_verify[-1] != candidate_clean_at_apply[0]
 
     def test_verification_fail_preserves_last_clean_hash(self, tmp_path):
-        """When verification fails, last_clean_code_hash must remain None (never updated)."""
+        """A verification failure restores the actual clean base workspace hash."""
         cm = _campaign(
             tmp_path,
             verification_gate=_AlwaysFailVerificationLight(),
@@ -189,7 +209,5 @@ class TestLastCleanCodeHash:
         branches = cm._branch_ctrl.get_active_branches()
         all_branches = list(cm._branch_ctrl._branches.values())
         for b in all_branches:
-            assert b.last_clean_code_hash is None, (
-                f"last_clean_code_hash must stay None after verification failure, "
-                f"but got {b.last_clean_code_hash!r} for branch {b.branch_id}"
-            )
+            assert b.last_clean_code_hash is not None
+            assert b.current_code_hash == b.last_clean_code_hash

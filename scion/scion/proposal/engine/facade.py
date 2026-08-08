@@ -9,9 +9,7 @@ from typing import Any, Dict, Mapping
 from scion.core.models import HypothesisProposal, PatchProposal
 from scion.proposal.context_owner_maps import proposal_context_snapshot
 from scion.proposal.context_snapshot import ProposalContextSnapshot
-from scion.proposal.prompt_projection_authority import (
-    ProposalPromptProjectionAuthority,
-)
+from scion.proposal.prompt_projection import project_prompt
 from scion.proposal.prompt_manifest import stable_digest
 from scion.proposal.schemas import PATCH_TOOL, bind_hypothesis_tool_to_context
 
@@ -19,9 +17,8 @@ from .parsing import _parse_hypothesis, _parse_patch
 from .provider_call import (
     PromptCallReceipt,
     PromptTurnSnapshot,
-    ProviderCallOwner,
+    ProviderCaller,
     _attach_prompt_call_receipt,
-    prompt_call_receipt_from_error,
 )
 
 
@@ -38,7 +35,7 @@ def build_prompt_turn_snapshot(
         if isinstance(context, ProposalContextSnapshot)
         else proposal_context_snapshot(kind, context)
     )
-    projection = ProposalPromptProjectionAuthority.project(kind, authoritative)
+    projection = project_prompt(kind, authoritative)
     render_context = projection.structured_context
     if kind == "hypothesis":
         provider_tool, allowed_change_loci = bind_hypothesis_tool_to_context(
@@ -80,7 +77,7 @@ class CreativeLayer:
         self._client = llm_client
         self._model = model or getattr(llm_client, "model", None) or "claude-opus-4-6"
         self._trace_dir = trace_dir
-        self._provider_calls = ProviderCallOwner(
+        self._provider_calls = ProviderCaller(
             self._client,
             self._model,
             trace_dir=self._trace_dir,
@@ -91,13 +88,13 @@ class CreativeLayer:
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
-        attempt_audit: Mapping[str, Any] | None = None,
+        call_context: Mapping[str, Any] | None = None,
     ) -> tuple[HypothesisProposal, PromptCallReceipt]:
         """Generate one direct-v3 hypothesis without a Scion output cap."""
         return self._generate_hypothesis_with_receipt(
             context,
             snapshot,
-            attempt_audit=attempt_audit,
+            call_context=call_context,
         )
 
     def _generate_hypothesis_with_receipt(
@@ -105,14 +102,14 @@ class CreativeLayer:
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
-        attempt_audit: Mapping[str, Any] | None = None,
+        call_context: Mapping[str, Any] | None = None,
     ) -> tuple[HypothesisProposal, PromptCallReceipt]:
         raw, receipt = self._provider_calls.call_with_receipt(
             request_kind="hypothesis",
             tool=dict(snapshot.provider_tool),
             context=context,
             snapshot=snapshot,
-            attempt_audit=attempt_audit,
+            call_context=call_context,
         )
         try:
             return (
@@ -137,13 +134,13 @@ class CreativeLayer:
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
-        attempt_audit: Mapping[str, Any] | None = None,
+        call_context: Mapping[str, Any] | None = None,
     ) -> tuple[PatchProposal, PromptCallReceipt]:
         """Generate one direct-v3 patch without a Scion output cap."""
         return self._generate_code_with_receipt(
             context,
             snapshot,
-            attempt_audit=attempt_audit,
+            call_context=call_context,
         )
 
     def _generate_code_with_receipt(
@@ -151,14 +148,14 @@ class CreativeLayer:
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
-        attempt_audit: Mapping[str, Any] | None = None,
+        call_context: Mapping[str, Any] | None = None,
     ) -> tuple[PatchProposal, PromptCallReceipt]:
         raw, receipt = self._provider_calls.call_with_receipt(
             request_kind="code",
             tool=dict(snapshot.provider_tool),
             context=context,
             snapshot=snapshot,
-            attempt_audit=attempt_audit,
+            call_context=call_context,
         )
         try:
             return _parse_patch(raw, context=context), receipt

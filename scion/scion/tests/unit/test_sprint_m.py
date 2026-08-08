@@ -5,21 +5,14 @@ import sqlite3
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, List
+from typing import Any
 from unittest.mock import patch
 
 import pytest
 
 from scion.config.problem import ParameterSearchConfig
 from scion.core.campaign import CampaignManager
-from scion.core.models import (
-    Branch, BranchState, CanaryResult, CheckResult, ChampionState,
-    Decision, EvalStats, ExperimentStage,
-    PatchProposal, ProtocolResult, VerificationResult,
-)
-from scion.lineage.branch_store import BranchStore, HypothesisStore
-from scion.lineage.registry import LineageRegistry
-from scion.proposal.llm_client import LLMBalanceError
+from scion.core.models import Branch, BranchState, CheckResult, ChampionState, VerificationResult
 from scion.proposal.mock_client import MockLLMClient
 from scion.proposal.edit_protocol import source_digest_for_content
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
@@ -279,51 +272,54 @@ class TestT2BranchStorePersistence:
 
 
 # ---------------------------------------------------------------------------
-# T3: Verification failures write experiment_events
+# T3: Verification failures remain typed research rejections
 # ---------------------------------------------------------------------------
 
-class TestT3VerificationFailEvents:
-    """Verification failures must write rows to experiment_events with event_kind='verification_fail'."""
+class TestT3VerificationRejections:
+    """Direct V3 records verification rejection on the step, not a lifecycle event."""
 
-    def test_heavy_verification_failure_writes_event(self, tmp_path):
-        """Heavy V-failure → 1 verification_fail event in experiment_events."""
-        cm = _campaign(tmp_path, verification_gate=HeavyFailVerificationGate())
-        cm.run_one_step()
-        db_path = str(Path(cm._materializer._champions_dir).parent / "scion.db")
-        with sqlite3.connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT * FROM experiment_events WHERE event_kind = 'verification_fail'"
-            ).fetchall()
-        assert len(rows) == 1, f"Expected 1 verification_fail event, got {len(rows)}"
-
-    def test_light_verification_failure_writes_event(self, tmp_path):
-        """Light V-failure (exhausted retries) → 1 verification_fail event in experiment_events."""
-        # MockLLMClient returns the same valid hypothesis each time → retries exhaust
-        cm = _campaign(tmp_path, verification_gate=LightFailVerificationGate())
-        cm.run_one_step()
-        db_path = str(Path(cm._materializer._champions_dir).parent / "scion.db")
-        with sqlite3.connect(db_path) as conn:
-            rows = conn.execute(
-                "SELECT * FROM experiment_events WHERE event_kind = 'verification_fail'"
-            ).fetchall()
-        # At minimum one event must be recorded for the light failure
-        assert len(rows) >= 1, f"Expected ≥1 verification_fail event for light failure, got {len(rows)}"
-
-    def test_verification_fail_event_has_correct_fields(self, tmp_path):
-        """verification_fail event must have branch_id, hypothesis_id, and stage='verification'."""
+    def test_heavy_verification_failure_is_a_typed_rejection(self, tmp_path):
+        """Heavy verification failure ends the candidate before evaluation."""
         cm = _campaign(tmp_path, verification_gate=HeavyFailVerificationGate())
         result = cm.run_one_step()
-        db_path = str(Path(cm._materializer._champions_dir).parent / "scion.db")
-        with sqlite3.connect(db_path) as conn:
-            conn.row_factory = sqlite3.Row
-            row = conn.execute(
-                "SELECT * FROM experiment_events WHERE event_kind = 'verification_fail' LIMIT 1"
-            ).fetchone()
-        assert row is not None
-        d = dict(row)
-        assert d.get("branch_id") is not None
-        assert d.get("stage") == "verification"
-        assert d.get("verification_passed") in (0, False, "False", "0", None) or not d.get("verification_passed")
+
+        assert result.failure_stage == "verification"
+        assert result.execution_outcome.value == "research_rejected"
+        assert result.execution_outcome_reason_code == "VERIFICATION_HEAVY_REJECTED"
+        assert result.decision is None
+        step = cm._step_history[-1]
+        assert step.verification_passed is False
+        assert step.protocol_result is None
+
+    def test_light_verification_failure_is_a_typed_rejection(self, tmp_path):
+        """Light verification failure has the same direct pre-evaluation shape."""
+        cm = _campaign(tmp_path, verification_gate=LightFailVerificationGate())
+        result = cm.run_one_step()
+
+        assert result.failure_stage == "verification"
+        assert result.execution_outcome.value == "research_rejected"
+        assert result.execution_outcome_reason_code == "VERIFICATION_LIGHT_REJECTED"
+        assert cm._step_history[-1].verification_passed is False
+
+    def test_verification_rejection_carries_check_provenance(self, tmp_path):
+        """The failure remains explainable without a second event lifecycle."""
+        cm = _campaign(tmp_path, verification_gate=HeavyFailVerificationGate())
+        result = cm.run_one_step()
+
+        assert result.branch_id is not None
+        assert result.execution_outcome_provenance["stage"] == "verification"
+        assert result.execution_outcome_provenance["severity"] == "heavy"
+        checks = result.execution_outcome_provenance["verification_checks"]
+        assert checks == [
+            {
+                "name": "V5",
+                "passed": False,
+                "severity": "heavy",
+                "detail": "regression detected",
+                "elapsed_ms": 0,
+                "metadata": {},
+            }
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +336,6 @@ class TestT4ChampionStorePersistence:
 
     def test_champion_store_promote_called_on_promote(self, tmp_path):
         """After a promotion, champion_store should have a record."""
-        from scion.core.models import EvalStats
         # Set up a campaign that will promote
         cm = _campaign(tmp_path, verification_gate=AlwaysPassVerificationGate())
         # Directly call _on_promote with a mock branch to test persistence

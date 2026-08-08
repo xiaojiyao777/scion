@@ -20,7 +20,8 @@ _DIRECT_V3_STATIC_CONTEXT_KEYS = frozenset(
         "objective_policy_guidance",
         "problem_measurement_diagnostics",
         "available_actions",
-        "targetable_files",
+        "existing_target_files",
+        "create_path_patterns",
         "champion_operators_code",
         "champion_stats",
     }

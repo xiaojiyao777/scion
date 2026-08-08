@@ -44,13 +44,6 @@ def _run(
     results: list[StepResult],
     *,
     rounds: int,
-    verify_research_rejection=lambda _marker: False,
-    get_research_rejection_counts=lambda: {
-        "total": 0,
-        "by_phase": {},
-        "by_reason": {},
-        "completion_ids": [],
-    },
 ) -> SimpleNamespace:
     calls = 0
     statuses: list[dict[str, Any]] = []
@@ -78,20 +71,16 @@ def _run(
         write_campaign_summary=lambda: None,
         get_final_wait_timeout=lambda: 0.0,
         wait_weight_opt_all=lambda timeout: None,
-        verify_research_rejection=verify_research_rejection,
-        get_research_rejection_counts=get_research_rejection_counts,
     )
     loop.run(requested_rounds=rounds)
     return SimpleNamespace(calls=calls, statuses=statuses, stopped=stopped_reasons)
 
 
-def _rejected(completion_digit: str, *, attempt_id: str) -> StepResult:
+def _rejected(*, lineage_event_id: str | None = None) -> StepResult:
     marker = ResearchRejectionDisposition(
         disposition=AttemptDisposition.ATTEMPT_REJECT_TO_BASE,
-        completion_id=completion_digit * 64,
-        campaign_id="campaign-1",
-        provider_attempt_id=attempt_id,
         rejection_phase="verification",
+        lineage_event_id=lineage_event_id,
     )
     return StepResult(
         action="explore",
@@ -127,7 +116,6 @@ def test_round_target_is_required_and_named_requested_rounds() -> None:
         ExecutionOutcome.BLOCKED_INFRA,
         ExecutionOutcome.RESOURCE_EXHAUSTED,
         ExecutionOutcome.INTERRUPTED,
-        ExecutionOutcome.RESEARCH_REJECTED,
     ],
 )
 def test_typed_non_evaluated_outcome_stops_current_invocation(
@@ -202,28 +190,10 @@ def test_committed_rejections_schedule_forward_until_formal_target(
     rejection_count: int,
 ) -> None:
     rejected = [
-        _rejected(str(index + 1), attempt_id=f"attempt-{index + 1}")
+        _rejected(lineage_event_id=f"event-{index + 1}")
         for index in range(rejection_count)
     ]
-    committed: list[ResearchRejectionDisposition] = []
-
-    def verify(marker: ResearchRejectionDisposition) -> bool:
-        if marker not in {item.attempt_disposition for item in rejected}:
-            return False
-        committed.append(marker)
-        return True
-
-    run = _run(
-        [*rejected, _evaluated()],
-        rounds=1,
-        verify_research_rejection=verify,
-        get_research_rejection_counts=lambda: {
-            "total": len(committed),
-            "by_phase": {"verification": len(committed)},
-            "by_reason": {"VERIFICATION_LIGHT_REJECTED": len(committed)},
-            "completion_ids": [item.completion_id for item in committed],
-        },
-    )
+    run = _run([*rejected, _evaluated()], rounds=1)
 
     assert run.calls == rejection_count + 1
     assert run.statuses[-1]["effective_rounds_completed"] == 1
@@ -231,18 +201,21 @@ def test_committed_rejections_schedule_forward_until_formal_target(
     assert run.statuses[-1]["research_rejection_audit"]["committed"] == (
         rejection_count
     )
+    assert run.statuses[-1]["research_rejection_audit"]["by_phase"] == {
+        "verification": rejection_count
+    }
+    assert run.statuses[-1]["research_rejection_audit"]["by_reason"] == {
+        "VERIFICATION_LIGHT_REJECTED": rejection_count
+    }
     assert "requested_rounds_completed" in run.stopped
 
 
-def test_repeated_committed_completion_is_non_progress() -> None:
-    rejected = _rejected("a", attempt_id="attempt-a")
-    run = _run(
-        [rejected, rejected, _evaluated()],
-        rounds=1,
-        verify_research_rejection=lambda marker: marker
-        == rejected.attempt_disposition,
-    )
+def test_repeated_research_rejections_are_audited_and_schedule_forward() -> None:
+    rejected = _rejected(lineage_event_id="same-lineage-event")
+    run = _run([rejected, rejected, _evaluated()], rounds=1)
 
-    assert run.calls == 2
-    assert "research_rejection_non_progress_identity_conflict" in run.stopped
-    assert run.statuses[-1]["effective_rounds_completed"] == 0
+    assert run.calls == 3
+    assert run.statuses[-1]["effective_rounds_completed"] == 1
+    assert run.statuses[-1]["scheduled_calls"] == 3
+    assert run.statuses[-1]["research_rejection_audit"]["committed"] == 2
+    assert "requested_rounds_completed" in run.stopped

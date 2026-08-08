@@ -1,4 +1,5 @@
 """Canonical patch artifacts for formally screened candidates."""
+
 from __future__ import annotations
 
 import difflib
@@ -237,15 +238,12 @@ class FormalCandidatePatchArtifactRecorder:
                 base_workspace=base_workspace,
                 is_proposal_change=(
                     self.schema == self.cumulative_schema
-                    or normalize_relative_patch_path(change.file_path)
-                    in proposal_paths
+                    or normalize_relative_patch_path(change.file_path) in proposal_paths
                 ),
                 repair_attribution=tuple(patch.repair_attribution or ()),
             )
             for change in (
-                proposal_changes
-                if self.schema == self.cumulative_schema
-                else changes
+                proposal_changes if self.schema == self.cumulative_schema else changes
             )
         ]
         proposal_target_files = [
@@ -265,9 +263,7 @@ class FormalCandidatePatchArtifactRecorder:
             "stage": stage,
             "decision": decision.value,
             "decision_reason_codes": list(decision_reason_codes or ()),
-            "branch_code_status": str(
-                getattr(branch, "branch_code_status", "") or ""
-            ),
+            "branch_code_status": str(getattr(branch, "branch_code_status", "") or ""),
             "target_files": [
                 normalize_relative_patch_path(change.file_path) for change in changes
             ],
@@ -356,9 +352,7 @@ class FormalCandidatePatchArtifactRecorder:
                     "parent_hypothesis_id": h_record.parent_hypothesis_id,
                     "inherited_files": inherited_files,
                     "candidate_attribution_scope": {
-                        "schema_version": (
-                            "formal-candidate-attribution-scope.v1"
-                        ),
+                        "schema_version": ("formal-candidate-attribution-scope.v1"),
                         "scope": (
                             "cumulative_branch_candidate_from_declared_champion_base"
                         ),
@@ -577,9 +571,7 @@ class FormalCandidatePatchArtifactRecorder:
             "stage": stage,
             "decision": decision.value,
             "decision_reason_codes": list(decision_reason_codes or ()),
-            "branch_code_status": str(
-                getattr(branch, "branch_code_status", "") or ""
-            ),
+            "branch_code_status": str(getattr(branch, "branch_code_status", "") or ""),
             "patch_digest": patch_digest,
             "raw_metrics_ref": raw_metrics_ref,
             "selected_surface": selected_surface,
@@ -615,48 +607,17 @@ def _proposal_attempt_join_fields(
     *,
     hypothesis_id: str,
 ) -> dict[str, str]:
-    """Project the terminal code-call ref and its hypothesis lineage."""
+    """Keep provider-call identity out of scientific candidate artifacts.
 
-    if not isinstance(proposal_attempt_ref, Mapping):
-        return {}
-    if proposal_attempt_ref.get("schema_version") != "proposal-attempt-ref.v1":
-        return {}
-    if (
-        proposal_attempt_ref.get("phase") != "code"
-        or proposal_attempt_ref.get("status") != "generated"
-        or str(proposal_attempt_ref.get("hypothesis_id") or "")
-        != str(hypothesis_id or "")
-        or proposal_attempt_ref.get("runtime_mode") != "direct_v3"
-    ):
-        return {}
-    required = {
-        "proposal_attempt_id": proposal_attempt_ref.get("attempt_id"),
-        "proposal_attempt_event_id": proposal_attempt_ref.get("lineage_event_id"),
-        "proposal_runtime_mode": proposal_attempt_ref.get("runtime_mode"),
-    }
-    optional = {
-        "proposal_hypothesis_attempt_id": proposal_attempt_ref.get(
-            "hypothesis_attempt_id"
-        ),
-        "proposal_attempt_continuation_of_attempt_id": proposal_attempt_ref.get(
-            "continuation_of_attempt_id"
-        ),
-    }
-    fields = {
-        key: str(value)
-        for key, value in required.items()
-        if value is not None and str(value)
-    }
-    if len(fields) != len(required):
-        return {}
-    fields.update(
-        {
-            key: str(value)
-            for key, value in optional.items()
-            if value is not None and str(value)
-        }
-    )
-    return fields
+    A formal candidate is identified by its exact patch and problem-owned
+    replay inputs.  Provider attempt, continuation, and transition identifiers
+    describe transport bookkeeping, not the candidate's scientific identity.
+    The arguments remain temporarily accepted while older callers migrate to
+    the smaller proposal-call API.
+    """
+
+    del proposal_attempt_ref, hypothesis_id
+    return {}
 
 
 def _changes_with_activation_files(
@@ -958,8 +919,7 @@ def _identity_manifest_changes(
     workspace: str,
 ) -> tuple[PatchFileChange, ...]:
     base_by_path = {
-        str(item["file_path"]): str(item["sha256"])
-        for item in base_manifest["files"]
+        str(item["file_path"]): str(item["sha256"]) for item in base_manifest["files"]
     }
     current_by_path = {
         str(item["file_path"]): str(item["sha256"])
@@ -1143,9 +1103,7 @@ def render_full_file_replacement_diff(
     for entry in files:
         if not isinstance(entry, Mapping):
             raise ValueError("formal artifact file entry must be an object")
-        file_path = normalize_relative_patch_path(
-            str(entry.get("file_path") or "")
-        )
+        file_path = normalize_relative_patch_path(str(entry.get("file_path") or ""))
         action = str(entry.get("action") or "").strip()
         if action not in {"create", "modify", "delete"}:
             raise ValueError(f"invalid formal artifact action: {file_path}")
@@ -1188,7 +1146,9 @@ def _restore_or_validate_artifact_text(path: Path, expected: str) -> None:
     try:
         actual = path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise ValueError(f"formal candidate artifact is unreadable: {path.name}") from exc
+        raise ValueError(
+            f"formal candidate artifact is unreadable: {path.name}"
+        ) from exc
     if actual != expected:
         raise ValueError(f"formal candidate artifact content mismatch: {path.name}")
 
@@ -1210,8 +1170,10 @@ def _render_candidate_diff(
             old_lines = []
         if change.action == "create":
             old_lines = []
-        new_lines = [] if change.action == "delete" else _split_keepends(
-            change.code_content or ""
+        new_lines = (
+            []
+            if change.action == "delete"
+            else _split_keepends(change.code_content or "")
         )
         fromfile = "/dev/null" if change.action == "create" else f"a/{file_rel}"
         tofile = "/dev/null" if change.action == "delete" else f"b/{file_rel}"

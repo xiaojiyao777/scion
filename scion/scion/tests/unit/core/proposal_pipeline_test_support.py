@@ -84,7 +84,7 @@ class FakeCreative:
         self.code_calls = 0
         self.hypothesis_context = None
         self.code_context = None
-        self.attempt_audits: dict[str, Mapping[str, Any]] = {}
+        self.call_contexts: dict[str, Mapping[str, Any]] = {}
         self.hypothesis = HypothesisProposal(
             hypothesis_text="Bounded route-pair search.",
             change_locus="local_search",
@@ -145,10 +145,10 @@ class FakeCreative:
         context,
         snapshot,
         *,
-        attempt_audit=None,
+        call_context=None,
     ):
-        if attempt_audit is not None:
-            self.attempt_audits["hypothesis"] = dict(attempt_audit)
+        if call_context is not None:
+            self.call_contexts["hypothesis"] = dict(call_context)
         return self.generate_hypothesis_with_receipt(context, snapshot)
 
     def generate_direct_code_with_receipt(
@@ -156,10 +156,10 @@ class FakeCreative:
         context,
         snapshot,
         *,
-        attempt_audit=None,
+        call_context=None,
     ):
-        if attempt_audit is not None:
-            self.attempt_audits["code"] = dict(attempt_audit)
+        if call_context is not None:
+            self.call_contexts["code"] = dict(call_context)
         return self.generate_code_with_receipt(context, snapshot)
 
 class FakeBranchController:
@@ -237,11 +237,6 @@ def _pipeline(
     creative: FakeCreative | None = None,
     lineage_registry=None,
     branch_workspace: str = "/tmp/branch",
-    forced_locus: str | None = "local_search",
-    persistent_forced_locus: str | None = None,
-    forced_surface_action: str | None = None,
-    forced_surface_target_file: str | None = None,
-    forced_surface_diagnostic: bool = False,
     problem_spec=None,
     split_manifest_hash: str | None = None,
     seed_ledger_hash: str | None = None,
@@ -296,14 +291,6 @@ def _pipeline(
         problem_spec_hash="spec-hash",
         split_manifest_hash=split_manifest_hash,
         seed_ledger_hash=seed_ledger_hash,
-        persistent_forced_locus=(
-            persistent_forced_locus
-            if persistent_forced_locus is not None
-            else forced_locus
-        ),
-        forced_surface_action=forced_surface_action,
-        forced_surface_target_file=forced_surface_target_file,
-        forced_surface_diagnostic=forced_surface_diagnostic,
     )
     return pipeline, branch, runtime, failures, balance_exhausted
 

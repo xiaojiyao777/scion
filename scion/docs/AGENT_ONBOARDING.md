@@ -1,6 +1,6 @@
 # Scion v0.4 direct-v3 Onboarding
 
-*Last updated: 2026-07-13*
+*Last updated: 2026-08-08*
 
 本文是维护者进入当前 Scion 的源码导览，不是历史实验汇总。v0.4 的目标是让同一套精简 V3 runtime 在 warehouse 与 CVRP 上都能进行有效算法研究，同时保留确定性的安全、科学与证据边界。
 
@@ -31,7 +31,7 @@ Scion 让模型提出算法假设和代码，但不让模型决定这些改动�
   -> Hypothesis Contract
   -> 仅在 H 批准后，最多一次 Code provider call
   -> Patch Contract
-  -> transactional Workspace
+  -> isolated staging Workspace
   -> Verification
   -> Protocol
   -> Safe Features
@@ -39,7 +39,7 @@ Scion 让模型提出算法假设和代码，但不让模型决定这些改动�
   -> Evidence + Lineage
 ```
 
-H 或 C 的结构化响应无效、provider/infra 失败、Contract 拒绝或 Verification 失败时，当前 campaign invocation 停止；框架不会自动重放同一调用、修补模型响应或恢复半次 provider call。新的模型调用只能来自显式的新 invocation，并形成新的 durable attempt。
+H 或 C 的结构化响应无效、provider/infra 失败，或其他 `NOT_EVALUATED` 结果时，当前 campaign invocation 停止。已记录的 Contract 或 Verification `RESEARCH_REJECTED` 则结束该 H/C，不作同一 H/C 的自动重放或修补，不计 formal round；scheduler 随后从 exact clean base 进入新的 H。每个新 provider call 都是独立的 `proposal_call.v1` typed event。
 
 ## 不可变边界
 
@@ -54,7 +54,7 @@ H 或 C 的结构化响应无效、provider/infra 失败、Contract 拒绝或 Ve
 
 - `ProblemRuntime` 构建 H/C 输入；`ProposalContextSnapshot` 是 provider 调用前的不可变上下文所有者。
 - H 获得当前问题事实、允许修改的研究对象、当前安全源码事实，以及每个可见 screening attempt 的一条 canonical record。
-- C 获得一个批准的 H 和完整 `SourceLedger`。ledger 对每个可见文件保留唯一 owner、provenance、完整内容和 digest；多文件算法改动不是例外路径。
+- C 获得一个批准的 H 和完整 `SourceLedger`。ledger 对每个可见文件保留路径与完整内容；多文件算法改动不是例外路径。
 - validation/frozen 原始记录、Decision 输入和其他禁止暴露的事实不得进入 proposal context。
 - production proposal path 不设置 Scion semantic token/item/file/tool/session budget，不做 top-N、截断、compact-to-fit、遗漏标记或摘要替代。
 - provider 必需的 transport ceiling 与 solver/subprocess 的科学 time limit 必须显式记录；它们不是 Scion 的语义研究预算或隐藏终止策略。
@@ -63,7 +63,7 @@ H 或 C 的结构化响应无效、provider/infra 失败、Contract 拒绝或 Ve
 
 | Owner | 只负责什么 | 不负责什么 |
 |---|---|---|
-| Contract | schema、editable/frozen path、action、source digest、import/API/interface、patch graph、C 与批准 H 的绑定 | 评价想法是否新颖、偏好某种算法机制、用 telemetry 文本给研究风格打分 |
+| Contract | schema、editable/frozen path、action、import/API/interface、patch graph、C 与批准 H 的绑定 | 评价想法是否新颖、偏好某种算法机制、用 telemetry 文本给研究风格打分 |
 | Verification | syntax、接口执行、state isolation、feasibility、objective recomputation、nondeterminism、crash、timeout、invalid solver output | 用比较性能提前替代 Protocol，因诊断 telemetry 不完整而要求模型重写 |
 | Protocol | screening/validation/frozen 隔离、seed/split、成对比较、统计与 typed scientific verdict | 请求另一轮 H/C，修改候选代码或把自由文本交给 Decision |
 | Decision | 把可信 Protocol verdict 与 hard-safety facts 确定性映射为 branch action | 重算统计阈值、解释模型 reasoning、按机制偏好改判 |
@@ -73,9 +73,9 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 
 ### 证据和晋升必须可追溯
 
-- provider call、context identity、H/C receipt、Contract、Verification、Protocol 与 Decision 必须能通过 durable refs 串起来。
+- provider call 的最小 append-only event、可用 trace、typed outcome、Contract、Verification、Protocol 与 Decision 必须能通过普通引用串起来；它们不构成 context identity 或 receipt 闭包。
 - lineage 是 append-only 事实；summary、analysis brief 和 inventory 是索引或投影，不是新的事实来源。
-- promotion 必须拥有完整 formal evidence，并通过原子 prepare/commit/recovery 边界。
+- promotion 必须拥有完整 formal evidence；普通 candidate cleanup 只能记录诊断，不能改写已经完成的科学 Decision。
 - `invalid_response`、`research_rejected`、`blocked_infra`、`interrupted` 与 `evaluated` 是不同结果，不能为了报表整洁而合并。
 
 ## 按执行顺序阅读源码
@@ -94,7 +94,7 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 - `scion/scion/core/evaluation_orchestrator.py`、`evaluation_pipeline.py`：候选进入 Protocol 与结果回传的边界；
 - `scion/scion/core/decision_finalizer.py`：Decision 后的状态与证据收口。
 
-阅读时逐个追踪 `ExecutionOutcome` 和 `StepResult`。任何非 `EVALUATED` 结果都会停止当前 outer-loop invocation；不要从 `--rounds` 猜测 provider 调用次数。
+阅读时逐个追踪 `ExecutionOutcome` 和 `StepResult`。已记录的 `RESEARCH_REJECTED` 不计 formal round，且 scheduler-forward 到新的 H；其他非 `EVALUATED` 结果停止当前 outer-loop invocation。不要从 `--rounds` 猜测 provider 调用次数。
 
 ### 2. Proposal 与 Context
 
@@ -102,7 +102,7 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 
 - `scion/scion/core/problem_runtime.py`：问题层如何提供 H/C 上下文；
 - `scion/scion/core/proposal_pipeline/facade.py`：direct H/C 调用的 host 边界；
-- `scion/scion/core/proposal_pipeline/direct_attempt_lifecycle.py`：durable attempt、receipt、绑定与 typed failure lane；
+- `scion/core/proposal_pipeline/call_journal.py`：`proposal_call.v1` 的最小 append-only H/C call event、可用 trace 与 typed outcome；
 - `scion/scion/proposal/context_snapshot.py`、`context_owner_maps.py`：安全字段、不可变 snapshot 与 provider-visible projection；
 - `scion/scion/proposal/context_manager/manager.py`：context 组合；
 - `scion/scion/proposal/context_manager/code_context.py`：`proposal-source-ledger.v2` 的构建与验证；
@@ -110,7 +110,7 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 - `scion/scion/proposal/schemas/`：H 与 typed multi-file patch schema；
 - `scion/scion/proposal/llm/`：transport、timeout、错误分类与 SDK policy。
 
-检查某次失败时，先确认 snapshot identity、durable attempt transition 和 receipt，再判断是 response invalid、infra failure 还是后续 gate 拒绝。不要仅凭日志里的自然语言归因。
+检查某次失败时，先确认完整 source/context、`proposal_call.v1` event、可用 trace 与 typed outcome，再判断是 response invalid、infra failure 还是后续 gate 拒绝。不要仅凭日志里的自然语言归因。
 
 ### 3. Contract -> Verification -> Protocol -> Decision
 
@@ -165,7 +165,7 @@ CVRP 的主要研究对象是完整 solver design。阅读：
 - `scion/scion/problems/cvrp/solver_design_provider.py` 与 `solver_design/`：problem-owned 源码/能力事实；
 - `scion/scion/problems/cvrp/policies/baseline_algorithm.py` 与 `policies/baseline_modules/`：当前可研究算法；
 - `scion/scion/problems/cvrp/contract_checks/`：CVRP 专属静态边界；
-- `scion/scion/problems/cvrp/formal/protocol.yaml`、`formal/split_manifest.yaml`、`formal/seed_ledger.yaml`：当前 formal launcher 的科学协议输入。
+- `scion/scion/problems/cvrp/formal/protocol.yaml`、`formal/split_manifest.yaml`、`formal/seed_ledger.yaml`：当前 formal CLI 直跑的科学协议输入。
 
 generic Contract 可以调用 CVRP-owned checks，但不得复制其中的 solver 结构或算法偏好。prompt 应开放研究对象，不得注入 successor 排名、denylist、target-file hint 或指定机制配方。
 
@@ -177,7 +177,7 @@ generic Contract 可以调用 CVRP-owned checks，但不得复制其中的 solve
 2. direct warehouse/CVRP outer smoke 证明控制流能够穿过 Contract -> Verification -> Protocol -> Decision。
 3. 从 exact clean commit 运行的正式 warehouse 与 open CVRP control，才可能证明模型做出了有效研究。
 
-框架测试、HTTP 200、非空 completion、生成 patch、进程正常退出或 postrun readiness 都不能单独证明算法研究有效。研究验收必须阅读实际 H、批准绑定、完整 patch、solver 行为变化、Protocol 结果与 full-solver outcome。
+框架测试、HTTP 200、非空 completion、生成 patch、进程正常退出或 report 状态都不能单独证明算法研究有效。研究验收必须阅读实际 H、批准绑定、完整 patch、solver 行为变化、Protocol 结果与 full-solver outcome。
 
 ## 修改纪律
 
@@ -191,16 +191,15 @@ generic Contract 可以调用 CVRP-owned checks，但不得复制其中的 solve
 
 ## 正式运行纪律
 
-正式实验只通过当前 direct launchers 准备：
-
-- `scion/tools/launch_warehouse_direct_campaign.py`；
-- `scion/tools/launch_cvrp_direct_campaign.py`。
+正式实验使用当前 CLI 直跑：在仓库根目录设置 `PYTHONPATH=.` 后，通过
+`python -m scion.cli.main run` 传入问题、protocol、split、seeds 与独立的
+`--campaign-dir`。已删除的 direct launcher、prepared/readiness 与 postrun
+工具不是当前入口。
 
 共同边界：
 
 - exact clean commit 和 clean worktree；
-- 对配置模型完成真实、非空 completion preflight；
-- prepared command 由当前真实 CLI 解析；
+- 由当前真实 CLI 解析并记录问题、protocol、split 与 seeds；
 - 不使用 forced surface/action/target；
 - 不从旧 campaign resume；
 - warehouse control 先行，通过逐层证据审核后再运行 clean/open CVRP；
@@ -221,9 +220,10 @@ WSL `scion`：
 - repo：`/home/xjy-ubuntu/research/or-autoresearch-agent`；
 - runner copy：`/home/xjy-ubuntu/research/or-autoresearch-agent-v04dev-runner-20260629`；
 - Python：`/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`；
-- 仅在重新确认连接、代码同步和 completion preflight 后用于大型或并发验证。
+- 仅在重新确认连接、代码同步和当前 CLI 配置后用于大型或并发验证。
 
-两边必须分别从相同 clean commit 重新生成 prepared root。不要跨机器复用 `run.sh`、`launch.env`、campaign state 或 readiness 结果，也不要假设 shell 环境变量会跨命令持久存在。
+两边必须从相同 clean commit 分别创建并运行独立 campaign。不要跨机器复用
+campaign state 或运行产物，也不要假设 shell 环境变量会跨命令持久存在。
 
 ## 开始工作前的检查
 
@@ -233,6 +233,6 @@ WSL `scion`：
 - 我是否保持完整安全上下文和 `SourceLedger`，没有引入内容丢失？
 - 我新增或修改的 gate 是否只保护它有权拥有的边界？
 - 我是否区分框架正确、运行有效和算法研究有效？
-- 若涉及正式实验，我是否确认 clean commit、completion preflight、无 forced binding、无 resume 和当前明确授权？
+- 若涉及正式实验，我是否确认 clean commit、当前 CLI 配置、无 forced binding、无 resume 和当前明确授权？
 
 如果其中任何一项答案不明确，先补证据，不要通过新增控制机制来掩盖不确定性。

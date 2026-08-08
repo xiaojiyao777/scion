@@ -27,7 +27,7 @@ class _TraceWriter:
         system_blocks: list[dict],
         context: Dict[str, Any],
         request_policy: Dict[str, Any] | None = None,
-        provider_call_attempt: Mapping[str, Any] | None = None,
+        provider_call_context: Mapping[str, Any] | None = None,
     ) -> str | None:
         if not self._trace_dir:
             return None
@@ -58,8 +58,8 @@ class _TraceWriter:
             payload["prompt_manifest"] = dict(prompt_manifest)
         if request_policy:
             payload["request_policy"] = dict(request_policy)
-        if provider_call_attempt:
-            payload["provider_call_attempt"] = dict(provider_call_attempt)
+        if provider_call_context:
+            payload["provider_call_context"] = dict(provider_call_context)
         _write_json(path, payload)
         return path
 

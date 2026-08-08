@@ -30,19 +30,6 @@ class WorkspaceMaterializerLike(Protocol):
         source_workspace: str,
     ) -> str: ...
 
-    def promote_candidate_workspace(
-        self,
-        candidate_workspace: str,
-        branch_id: str,
-        *,
-        base_code_hash: str | None = None,
-        hypothesis_id: str | None = None,
-        terminalize_hypothesis_on_rollback: bool = True,
-        promotion_kind: str = "explore",
-    ) -> str: ...
-
-    def finalize_candidate_promotion(self, branch_id: str) -> None: ...
-
     def cleanup_candidate_workspace(self, candidate_workspace: str) -> None: ...
 
     def compute_code_hash(self, workspace: str) -> str: ...
@@ -73,6 +60,9 @@ class PendingCandidate:
     code_hash: str
     patch: PatchProposal
     remember_patch: bool
+    base_workspace: str
+    base_code_hash: str | None
+    previous_branch_workspace: str | None
 
 
 @dataclass(frozen=True)
@@ -116,6 +106,12 @@ class WorkspaceLifecycleService:
         """Reuse a verified branch workspace or materialize from the champion."""
 
         bid = branch.branch_id
+        pending = self.pending_candidates.get(bid)
+        if not force_champion and pending is not None:
+            # A candidate may be awaiting the Protocol decision in this
+            # process. Keep retries on that exact staging tree rather than
+            # silently falling back to a clean parent workspace.
+            return pending.workspace
         if (
             not force_champion
             and self.branch_controller.get_code_base(bid) == "branch_workspace"
@@ -186,6 +182,7 @@ class WorkspaceLifecycleService:
         bid = branch.branch_id
         if bid in self.pending_candidates:
             raise RuntimeError(f"Branch {bid} already has a pending candidate")
+        base_code_hash = self.materializer.compute_code_hash(base_workspace)
         candidate = self.materializer.create_candidate_workspace(
             bid,
             base_workspace,
@@ -200,76 +197,66 @@ class WorkspaceLifecycleService:
             branch.branch_code_status = "clean"
             branch.updated_at = datetime.now()
             raise
-        self.pending_candidates[bid] = PendingCandidate(
+        pending = PendingCandidate(
             workspace=candidate,
             code_hash=code_hash,
             patch=patch,
             remember_patch=remember_patch,
+            base_workspace=base_workspace,
+            base_code_hash=base_code_hash,
+            previous_branch_workspace=self.branch_workspaces.get(bid),
         )
+        self.pending_candidates[bid] = pending
+        self.branch_workspaces[bid] = candidate
         try:
             self.branch_controller.record_candidate_code(bid, code_hash)
         except BaseException:
             self._rollback_pending_candidate(
                 branch,
-                pending=self.pending_candidates[bid],
+                pending=pending,
             )
             raise
         return AppliedPatch(workspace=candidate, code_hash=code_hash, patch=patch)
 
-    def promote_verified_candidate(
+    def accept_candidate(
         self,
         branch: Branch,
         code_hash: str,
         candidate_workspace: str,
-        hypothesis_id: str | None = None,
-        *,
-        terminalize_hypothesis_on_rollback: bool = True,
-        promotion_kind: str = "explore",
     ) -> str:
-        """Commit exactly one verified candidate as the durable branch source."""
+        """Accept verified staging as the branch workspace without journaling.
+
+        The staging directory remains in place: this is an in-process ownership
+        handoff for Protocol evaluation, not a filesystem promotion.
+        """
 
         bid = branch.branch_id
-        pending = self.pending_candidates.get(bid)
-        if pending is None:
-            raise RuntimeError(f"Branch {bid} has no pending candidate")
-        previous_last_clean_hash = branch.last_clean_code_hash
-        try:
-            self._require_pending_candidate(bid, candidate_workspace)
-            if pending.code_hash != code_hash:
-                raise RuntimeError(
-                    f"Branch {bid} candidate hash changed before promotion"
-                )
-            actual_hash = self.materializer.compute_code_hash(candidate_workspace)
-            if actual_hash != code_hash:
-                raise RuntimeError(
-                    f"Branch {bid} candidate workspace hash mismatch before promotion"
-                )
-            # Commit the in-memory identity first.  It is not durable until the
-            # caller persists the branch, and it can still be rolled back if the
-            # filesystem promotion fails.
-            self.branch_controller.record_verification_pass(bid, code_hash)
-            durable = self.materializer.promote_candidate_workspace(
-                candidate_workspace,
-                bid,
-                base_code_hash=previous_last_clean_hash,
-                hypothesis_id=hypothesis_id,
-                terminalize_hypothesis_on_rollback=(
-                    terminalize_hypothesis_on_rollback
-                ),
-                promotion_kind=promotion_kind,
+        pending = self._require_pending_candidate(bid, candidate_workspace)
+        if pending.code_hash != code_hash:
+            raise RuntimeError(f"Branch {bid} candidate hash changed before accept")
+        actual_hash = self.materializer.compute_code_hash(candidate_workspace)
+        if actual_hash != code_hash:
+            raise RuntimeError(
+                f"Branch {bid} candidate workspace hash mismatch before accept"
             )
+        try:
+            self.branch_controller.record_verification_pass(bid, code_hash)
         except BaseException:
-            branch.last_clean_code_hash = previous_last_clean_hash
             self._rollback_pending_candidate(branch, pending=pending)
             raise
+
         self.pending_candidates.pop(bid, None)
-        self.branch_workspaces[bid] = durable
+        self.branch_workspaces[bid] = pending.workspace
         if pending.remember_patch:
             self.branch_patches[bid] = pending.patch
-        return durable
+        self._cleanup_replaced_branch_workspace(pending)
+        return pending.workspace
 
-    def finalize_candidate_promotion(self, branch: Branch) -> None:
-        self.materializer.finalize_candidate_promotion(branch.branch_id)
+    def pending_candidate_patch(self, branch_id: str) -> PatchProposal | None:
+        """Return the in-process staging patch without accepting the candidate."""
+
+        pending = self.pending_candidates.get(branch_id)
+        return pending.patch if pending is not None else None
 
     def reject_candidate(
         self,
@@ -282,24 +269,6 @@ class WorkspaceLifecycleService:
         pending = self._require_pending_candidate(bid, candidate_workspace)
         return self._rollback_pending_candidate(branch, pending=pending)
 
-    def release_rejected_candidate_binding(
-        self,
-        branch: Branch,
-        candidate_workspace: str,
-    ) -> None:
-        """Drop process-local staging ownership after durable cleanup commits."""
-
-        bid = branch.branch_id
-        pending = self._require_pending_candidate(bid, candidate_workspace)
-        if os.path.exists(pending.workspace):
-            raise RuntimeError(
-                f"Branch {bid}: rejected candidate still exists after completion"
-            )
-        # ResearchRejectionCompletionStore has already installed and persisted
-        # the exact target Branch.  This method owns only the process-local
-        # staging binding; mutating Branch here would drift it from that commit.
-        self.pending_candidates.pop(bid, None)
-
     def _rollback_pending_candidate(
         self,
         branch: Branch,
@@ -310,10 +279,32 @@ class WorkspaceLifecycleService:
 
         bid = branch.branch_id
         self.pending_candidates.pop(bid, None)
-        branch.current_code_hash = branch.last_clean_code_hash
+        branch.current_code_hash = pending.base_code_hash
+        branch.last_clean_code_hash = pending.base_code_hash
         branch.branch_code_status = "clean"
         branch.updated_at = datetime.now()
+        if pending.previous_branch_workspace is None:
+            self.branch_workspaces.pop(bid, None)
+        else:
+            self.branch_workspaces[bid] = pending.previous_branch_workspace
         return self._cleanup_candidate_best_effort(pending.workspace, bid)
+
+    def _cleanup_replaced_branch_workspace(self, pending: PendingCandidate) -> None:
+        """Best-effort cleanup of the prior branch-owned workspace only."""
+
+        previous = pending.previous_branch_workspace
+        if not previous:
+            return
+        if os.path.realpath(previous) == os.path.realpath(pending.workspace):
+            return
+        try:
+            self.materializer.cleanup(previous)
+        except Exception as exc:
+            logger.warning(
+                "Accepted candidate cleanup left old branch workspace %s: %s",
+                previous,
+                exc,
+            )
 
     def _cleanup_candidate_best_effort(
         self,
@@ -351,9 +342,6 @@ class WorkspaceLifecycleService:
             raise RuntimeError(f"Branch {branch_id} candidate workspace changed")
         return pending
 
-    def record_verification_pass(self, branch: Branch, code_hash: str) -> None:
-        self.branch_controller.record_verification_pass(branch.branch_id, code_hash)
-
     def discard_branch_workspace(self, branch_id: str) -> None:
         workspace = self.branch_workspaces.pop(branch_id, None)
         if not workspace:
@@ -375,7 +363,7 @@ class WorkspaceLifecycleService:
         if not champion.operator_pool:
             return
         try:
-            from scion.runtime.pool_manager import PoolManager
+            from scion.runtime.pool_manager import PoolManager, read_registry
 
             pool_mgr = PoolManager(champion.operator_pool)
             candidate_pool = pool_mgr.build_candidate_pool(
@@ -384,6 +372,36 @@ class WorkspaceLifecycleService:
                 patch,
                 workspace=workspace,
             )
+            registry_path = os.path.join(workspace, "registry.yaml")
+            existing_pool = None
+            if os.path.isfile(registry_path):
+                try:
+                    existing_pool = read_registry(registry_path)
+                except Exception:
+                    # Preserve the existing repair behaviour for malformed files.
+                    existing_pool = None
+            if _operator_pool_semantics(existing_pool) == _operator_pool_semantics(
+                candidate_pool
+            ):
+                return
             pool_mgr.export_registry(candidate_pool, workspace)
         except Exception as exc:
             logger.debug("pool registry sync failed (non-fatal): %s", exc)
+
+
+def _operator_pool_semantics(pool: Any) -> tuple[tuple[Any, ...], ...] | None:
+    if not isinstance(pool, dict):
+        return None
+    return tuple(
+        sorted(
+            (
+                str(name),
+                str(operator.name),
+                str(operator.file_path),
+                str(operator.category),
+                round(float(operator.weight), 6),
+                str(operator.class_name),
+            )
+            for name, operator in pool.items()
+        )
+    )

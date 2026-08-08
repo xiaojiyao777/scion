@@ -11,14 +11,17 @@ from typing import Any, Iterable, Mapping, Optional
 
 from scion.core.models import Branch, ProtocolResult
 from scion.core.public_refs import public_artifact_ref, public_case_ref
-from scion.core.screening_visibility import runtime_aggregate_exclusion_for_protocol
+from scion.core.screening_visibility import (
+    runtime_aggregate_exclusion_for_protocol,
+    runtime_evidence_policy_for_protocol,
+)
 
 _DURABLE_SCREENING_KEYS = (
     "canonical_screening_history",
     "protocol_evidence_by_stage",
     "verified_branch_created_files",
     "verified_branch_touched_files",
-    "verified_candidate_commit",
+    "candidate_evaluation",
 )
 
 # These fields form one current-protocol projection.  Clear them together
@@ -59,6 +62,8 @@ _CURRENT_PROTOCOL_KEYS = frozenset(
         "runtime_delta_median_ms",
         "runtime_evidence_confidence",
         "runtime_evidence_status",
+        "runtime_evidence_policy",
+        "runtime_model",
         "runtime_pairs",
         "runtime_ratio_median",
         "runtime_regression_rate",
@@ -187,6 +192,10 @@ def _protocol_evidence_projection(
         for ref in (public_case_ref(case_id) for case_id in protocol_result.case_ids)
         if ref is not None
     ]
+    runtime_model = getattr(protocol_result, "runtime_model", None)
+    runtime_policy = (
+        runtime_evidence_policy_for_protocol(protocol_result) if runtime_model else {}
+    )
     return {
         "schema_version": "scion.branch_protocol_evidence.v1",
         "stage": _stage_value(protocol_result),
@@ -231,6 +240,14 @@ def _protocol_evidence_projection(
             getattr(protocol_result, "runtime_evidence_status", "")
             or getattr(stats, "runtime_evidence_status", "")
             or "unknown"
+        ),
+        **(
+            {
+                "runtime_model": runtime_model,
+                "runtime_evidence_policy": runtime_policy,
+            }
+            if runtime_model
+            else {}
         ),
         "runtime_cache": {
             "champion_cache_hits": max(

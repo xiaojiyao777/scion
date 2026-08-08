@@ -318,10 +318,8 @@ def test_status_and_summary_project_typed_research_rejection_disposition(
     recorder = EvidenceRecorder(campaign_id="campaign-1", campaign_dir=tmp_path)
     marker = ResearchRejectionDisposition(
         disposition=AttemptDisposition.ATTEMPT_REJECT_TO_BASE,
-        completion_id="a" * 64,
-        campaign_id="campaign-1",
-        provider_attempt_id="attempt-1",
         rejection_phase="verification",
+        lineage_event_id="event-1",
     )
     result = StepResult(
         action="explore",

@@ -19,14 +19,12 @@ from scion.core.models import (
     BranchState,
     CanaryResult,
     ChampionState,
-    Decision,
     FailureEvent,
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
     ProtocolResult,
     StepRecord,
-    VerificationResult,
 )
 from scion.core.evaluation_orchestrator import (
     EvaluationExecutionResult,
@@ -34,8 +32,9 @@ from scion.core.evaluation_orchestrator import (
 from scion.core.step_result import StepResult
 from scion.core.telemetry_validation import screened_experiment_effective
 from scion.core.verification_call import run_verification_gate
-from scion.core.verified_candidate_commit import (
-    discard_prepared_verified_candidate_commit,
+from scion.core.candidate_evaluation import (
+    CANDIDATE_EVALUATION_SUMMARY_KEY,
+    mark_candidate_evaluation_pending,
 )
 from scion.contract.result_payload import diagnostic_checks
 from scion.proposal.context_manager.code_context import branch_current_file_sources
@@ -101,10 +100,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     record_step: Callable[[StepRecord], None]
     setup_workspace: Callable[[Branch], Optional[str]]
     apply_patch: Callable[..., Any]
-    record_verification_pass: Callable[[Branch, str, str, str], str]
     reject_candidate_workspace: Callable[[Branch, str], None]
-    record_verified_candidate_commit: Callable[..., str | None]
-    commit_verified_candidate_promotion: Callable[[Branch], None]
     finalize_research_rejection: Callable[..., Any]
     evaluate: Callable[
         [Branch, str, HypothesisProposal],
@@ -114,8 +110,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     decision_reason_codes_for: Callable[
         [str, Optional[ProtocolResult]], Optional[Tuple[str, ...]]
     ]
-    proposal_failure_detail_for: Callable[[str], Optional[str]] = (
-        lambda _branch_id: None
+    proposal_failure_detail_for: Callable[[str], Optional[str]] = lambda _branch_id: (
+        None
     )
     proposal_execution_outcome_for: Callable[
         [str], Optional[ExecutionOutcomeRecord]
@@ -123,12 +119,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = (
         lambda _branch_id: None
     )
-    proposal_governance_envelope_for: Callable[[str], Any | None] = (
-        lambda _branch_id: None
-    )
     persist_branch_state: Callable[[str], None] = lambda _branch_id: None
-    update_status_progress: Callable[[dict[str, Any] | None], None] = (
-        lambda _payload: None
+    update_status_progress: Callable[[dict[str, Any] | None], None] = lambda _payload: (
+        None
     )
     step_history: Sequence[StepRecord] = ()
     decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
@@ -136,7 +129,6 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
         bid = branch.branch_id
-        self._proposal_session_ref_cache = {}
         rnum = self.increment_round()
         h_contract_diagnostics: tuple[dict[str, Any], ...] = ()
         branch.screening_expand_count = 0
@@ -222,24 +214,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             round_num=rnum,
             hypothesis=hypothesis,
         )
-        governance_envelope = self.proposal_governance_envelope_for(bid)
         session_ref = self._proposal_session_ref(bid)
-        envelope_digest = str(getattr(governance_envelope, "digest", "") or "")
-        governance_diagnostics = (
-            _advisory_contract_diagnostic(
-                "governance_envelope",
-                "host governance envelope consumed by the outer Contract",
-                metadata={"governance_envelope_digest": envelope_digest},
-            ),
-        )
-        c_result = self._validate_hypothesis(
-            hypothesis,
-            governance_envelope=governance_envelope,
-        )
-        h_contract_diagnostics = (
-            *diagnostic_checks(c_result),
-            *governance_diagnostics,
-        )
+        c_result = self._validate_hypothesis(branch, hypothesis)
+        h_contract_diagnostics = diagnostic_checks(c_result)
         if not c_result.passed:
             logger.info(
                 "Branch %s: hypothesis contract failed: %s",
@@ -319,9 +296,6 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
 
         if patch is None:
             detailed_failure = self.proposal_failure_detail_for(bid)
-            cache = getattr(self, "_proposal_session_ref_cache", None)
-            if isinstance(cache, dict):
-                cache.pop(bid, None)
             proposal_outcome = self.proposal_execution_outcome_for(bid)
             if proposal_outcome is None:
                 proposal_outcome = ExecutionOutcomeRecord(
@@ -526,10 +500,15 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             )
 
         materialization_champion = self.get_champion()
-        base_code_hash = (
-            branch.last_clean_code_hash
-            or branch.current_code_hash
-            or getattr(materialization_champion, "code_snapshot_hash", None)
+        candidate_parent_hash = branch.last_clean_code_hash or getattr(
+            materialization_champion,
+            "code_snapshot_hash",
+            None,
+        )
+        candidate_parent_scope = (
+            "declared_champion"
+            if candidate_parent_hash == branch.base_champion_hash
+            else "retained_branch_head"
         )
         try:
             self._emit_status_progress(
@@ -652,34 +631,18 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             code_hash = verification_outcome.code_hash
             vresult = verification_outcome.verification_result
 
-        try:
-            self.record_verified_candidate_commit(
-                branch=branch,
-                hypothesis=hypothesis,
-                h_record=h_record,
-                patch=patch,
-                workspace=workspace,
-                base_code_hash=base_code_hash,
-            )
-        except Exception:
-            self._rollback_candidate_after_precommit_exception(
-                branch=branch,
-                workspace=workspace,
-                hypothesis_id=h_record.hypothesis_id,
-            )
-            raise
-        try:
-            workspace = self.record_verification_pass(
-                branch,
-                code_hash,
-                workspace,
-                h_record.hypothesis_id,
-            )
-        except BaseException:
-            discard_prepared_verified_candidate_commit(branch)
-            raise
+        # Keep the verified candidate in staging until Protocol produces a
+        # typed Decision. Verification establishes evaluability; it does not
+        # yet make the candidate the branch's clean source.
+        previous_candidate_evaluation = (branch.branch_evidence_summary or {}).get(
+            CANDIDATE_EVALUATION_SUMMARY_KEY
+        )
+        mark_candidate_evaluation_pending(
+            branch,
+            hypothesis_id=h_record.hypothesis_id,
+            kind="explore",
+        )
         self.persist_branch_state(bid)
-        self.commit_verified_candidate_promotion(branch)
         self.failure_streak.clear()
         self.branch_hypotheses[bid] = hypothesis
         self.branch_current_hypothesis[bid] = h_record
@@ -689,8 +652,31 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             BranchState.STALE,
             BranchState.STALE_WEIGHT_UPDATE,
         ):
+            # The candidate has not reached Protocol, so it has no Decision
+            # that could own its staging tree. It cannot be safely carried
+            # across a fresh CLI process without inventing durable candidate
+            # recovery, so close this attempt as not evaluated.
+            self.reject_candidate_workspace(branch, workspace)
+            summary = dict(branch.branch_evidence_summary or {})
+            if previous_candidate_evaluation is None:
+                summary.pop(CANDIDATE_EVALUATION_SUMMARY_KEY, None)
+            else:
+                summary[CANDIDATE_EVALUATION_SUMMARY_KEY] = (
+                    previous_candidate_evaluation
+                )
+            branch.branch_evidence_summary = summary
+            self.branch_hypotheses.pop(bid, None)
+            self.branch_patches.pop(bid, None)
+            self.branch_current_hypothesis.pop(bid, None)
+            self.hypothesis_store.mark_status(h_record.hypothesis_id, "not_evaluated")
+            self.branch_controller.reconcile_stale(
+                bid,
+                success=False,
+                new_champion=self.get_champion(),
+            )
+            self.persist_branch_state(bid)
             logger.info(
-                "Branch %s: marked stale by async weight-opt during explore - deferring",
+                "Branch %s: marked stale by async weight-opt during explore - closed",
                 bid,
             )
             return self._finish_status_progress(
@@ -838,6 +824,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 attempt_kind=result.attempt_kind,
                 repair_policy_reason=result.repair_policy_reason or None,
                 repair_mechanism_ids=result.repair_mechanism_ids,
+                candidate_parent_scope=candidate_parent_scope,
                 **execution_outcome_projection_kwargs(execution_outcome),
             )
         )

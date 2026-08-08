@@ -68,7 +68,7 @@ class TestMockLLMClient:
         assert "file_path" in result
         assert "action" in result
         assert result["edit_intent"] == "exact_replace"
-        assert "source_digest" in result
+        assert "source_digest" not in result
         assert "old_string" in result
         assert "new_string" in result
 
@@ -289,6 +289,48 @@ def test_deepseek_openai_base_url_does_not_append_v1(monkeypatch):
         client._get_openai_client()
 
     assert fake_openai.OpenAI.call_args.kwargs["base_url"] == "https://api.deepseek.com"
+
+
+def test_terra_uses_explicit_scion_local_proxy_configuration(monkeypatch):
+    monkeypatch.setenv("SCION_MODEL", "gpt-5.6-terra")
+    monkeypatch.setenv("SCION_API_KEY", "pwd")
+    monkeypatch.setenv("SCION_BASE_URL", "http://127.0.0.1:8080")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-should-not-be-used")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "wrong-token")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://wrong.example")
+
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(arguments=json.dumps({"file_path": "x.py"}))
+    )
+    response = SimpleNamespace(
+        usage=SimpleNamespace(prompt_tokens=10, completion_tokens=2),
+        choices=[
+            SimpleNamespace(
+                finish_reason="tool_calls",
+                message=SimpleNamespace(tool_calls=[tool_call]),
+            )
+        ],
+    )
+    provider_client = MagicMock()
+    provider_client.chat.completions.create.return_value = response
+    fake_openai = MagicMock()
+    fake_openai.OpenAI.return_value = provider_client
+
+    with patch.dict("sys.modules", {"openai": fake_openai}):
+        client = LLMClient(timeout_sec=60)
+        result = client.call_with_tool("prompt", tool)
+
+    assert result == {"file_path": "x.py"}
+    assert client.model == "gpt-5.6-terra"
+    fake_openai.OpenAI.assert_called_once_with(
+        api_key="pwd",
+        base_url="http://127.0.0.1:8080/v1",
+        max_retries=0,
+    )
+    request = provider_client.chat.completions.create.call_args.kwargs
+    assert request["model"] == "gpt-5.6-terra"
+    assert client.get_last_usage_metadata()["model"] == "gpt-5.6-terra"
 
 
 def test_deepseek_chat_kwargs_include_thinking_and_max_effort(monkeypatch):

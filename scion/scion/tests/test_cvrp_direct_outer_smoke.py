@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import yaml
@@ -19,10 +20,14 @@ from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
 from scion.verification.gate import VerificationGate
 
-
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
 CONTROLLED_DIR = CVRP_DIR / "controlled"
-VRP_DIR = CVRP_DIR.parents[3] / "vrp"
+VRP_DIR = Path(
+    os.environ.get(
+        "SCION_CVRP_TEST_DATA_ROOT",
+        "/home/clawd/research/or-autoresearch-agent/vrp",
+    )
+).resolve()
 
 
 class _CountingMockLLM(MockLLMClient):
@@ -138,11 +143,16 @@ def _instrument(monkeypatch, owner, name, label, trace, counts) -> None:
 
 
 def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
+    assert (VRP_DIR / "cvrplib").is_dir()
+    monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", str(VRP_DIR))
     spec_v1 = _problem_v1()
     bridge = bridge_problem_spec_v1(spec_v1)
     adapter = load_problem_adapter(spec_v1)
     protocol_config = ProtocolConfig.from_yaml(CONTROLLED_DIR / "protocol.yaml")
     split_manifest = SplitManifest.from_yaml(CONTROLLED_DIR / "split_manifest.yaml")
+    split_manifest = split_manifest.model_copy(
+        update={"safe_data_roots": [str(VRP_DIR)]}
+    )
     seed_ledger = SeedLedgerConfig.from_yaml(CONTROLLED_DIR / "seed_ledger.yaml")
     runner = LocalSubprocessRunner(ResourceLimits(timeout_sec=10, memory_mb=1024))
     protocol = ExperimentProtocol(
@@ -213,20 +223,23 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
     assert step.protocol_result.stage == ExperimentStage.SCREENING
 
     events = campaign._registry.query_by_branch(step.branch_id)
-    transitions = [
-        json.loads(row["audit_payload_json"])
+    call_ref = step.proposal_session_ref
+    assert call_ref is not None
+    assert call_ref["phase"] == "code"
+    assert call_ref["status"] == "generated"
+    assert call_ref["hypothesis_id"] == step.hypothesis_id
+
+    call_rows = [
+        (row, json.loads(row["audit_payload_json"]))
         for row in reversed(events)
-        if row["event_kind"] == "proposal_attempt_transition"
+        if row["event_kind"] == "proposal_call"
     ]
-    assert [(item["phase"], item["status"]) for item in transitions] == [
-        ("hypothesis", "started"),
-        ("hypothesis", "generated"),
-        ("code", "started"),
-        ("code", "generated"),
-    ]
-    assert transitions[0]["attempt_id"] == transitions[1]["attempt_id"]
-    assert transitions[2]["attempt_id"] == transitions[3]["attempt_id"]
-    assert transitions[0]["attempt_id"] != transitions[2]["attempt_id"]
+    calls = [payload for _row, payload in call_rows]
+    assert [item["phase"] for item in calls] == ["hypothesis", "code"]
+    assert [item["status"] for item in calls] == ["generated", "generated"]
+    assert all(item["hypothesis_id"] == step.hypothesis_id for item in calls)
+    assert call_rows[1][0]["event_id"] == call_ref["lineage_event_id"]
+    assert all("attempt_id" not in item for item in calls)
 
     artifacts = list(
         (campaign_dir / "artifacts" / "formal_candidates").glob(

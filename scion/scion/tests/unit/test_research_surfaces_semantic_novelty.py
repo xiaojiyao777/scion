@@ -30,10 +30,10 @@ def test_patch_interface_uses_approved_surface_on_overlapping_targets() -> None:
     c7 = next(check for check in result.checks if check.name == "C7_interface")
 
     assert not c7.passed
-    assert "policy surface" in c7.detail
+    assert "missing required functions" in c7.detail
 
 
-def test_instance_identity_uses_approved_surface_on_overlapping_targets() -> None:
+def test_case_identity_semantics_are_deferred_beyond_contract() -> None:
     gate = _overlapping_surface_gate()
     patch = PatchProposal(
         file_path="shared/policy.py",
@@ -50,15 +50,11 @@ def test_instance_identity_uses_approved_surface_on_overlapping_targets() -> Non
         patch,
         approved_hypothesis=_budget_policy_hypothesis(),
     )
-    c9d = next(
-        check
+    assert result.passed
+    assert all(
+        check.name != "C9d_surface_instance_identity"
         for check in result.checks
-        if check.name == "C9d_surface_instance_identity"
     )
-
-    assert not c9d.passed
-    assert "budget_policy" in c9d.detail
-    assert "instance.name" in c9d.detail
 
 
 def test_contract_gate_fails_closed_on_unknown_surface_kind() -> None:

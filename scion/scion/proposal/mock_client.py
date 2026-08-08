@@ -1,7 +1,6 @@
 """MockLLMClient — deterministic stand-in for tests."""
 from __future__ import annotations
 
-import hashlib
 from typing import Any, Dict, Literal, Optional
 
 from scion.proposal.llm_client import (
@@ -34,9 +33,6 @@ _DEFAULT_PATCH_RESPONSE: Dict[str, Any] = {
     "file_path": "operators/local_search.py",
     "action": "modify",
     "edit_intent": "exact_replace",
-    "source_digest": hashlib.sha256(
-        _DEFAULT_LOCAL_SEARCH_SOURCE.encode("utf-8")
-    ).hexdigest(),
     "old_string": "        return solution\n",
     "new_string": "        return solution\n",
     "test_hint": "Test with small instances.",
@@ -131,10 +127,6 @@ def _normalise_patch_response_for_edit_protocol(
     ):
         patch.pop("code_content", None)
         patch.setdefault("edit_intent", "exact_replace")
-        patch.setdefault(
-            "source_digest",
-            hashlib.sha256(_DEFAULT_LOCAL_SEARCH_SOURCE.encode("utf-8")).hexdigest(),
-        )
         patch.setdefault("old_string", "        return solution\n")
         patch.setdefault("new_string", "        return solution\n")
     return patch

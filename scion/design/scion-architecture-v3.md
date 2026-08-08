@@ -28,6 +28,12 @@ blacklist 和 context compression 是早期实现示例，不是必须恢复的�
 [`scion-architecture-v3-v0.4-direct-runtime-addendum.md`](scion-architecture-v3-v0.4-direct-runtime-addendum.md)。
 该 addendum 只收窄运行机制，不改变本文件的权威边界。
 
+“边界做硬”指组件职责和信息流不变量必须真实成立，不指静态 gate、
+identity、hash 或 receipt 的数量。凡是可以由隔离执行和问题 Protocol
+直接测量的性质，不得用 host 偏好的代码形状提前替代；凡是不保护上述
+边界的自签发、自登记、自校验，也不构成可信性。摘要 digest 只可用于
+同一实验对象的确定性等价比较，不能自行成为 authority 或 lifecycle。
+
 ---
 
 ## 1. 设计原则

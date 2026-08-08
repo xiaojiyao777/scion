@@ -7,20 +7,14 @@ quality gates, retry advice, portfolio controls, or host-generated repairs.
 
 from __future__ import annotations
 
-import hashlib
-import json
-import math
 import os
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
 from scion.config.problem import ProblemSpec
-from scion.core.forced_surface import (
-    surface_action_allowed,
-    surface_target_files,
-    validate_forced_surface_request,
-)
+from scion.contract.patch_paths import matches_config_pattern
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -30,13 +24,13 @@ from scion.core.models import (
     patch_file_changes,
 )
 from scion.core.paths import normalize_relative_patch_path
+from scion.core.screening_visibility import runtime_evidence_policy_for_protocol
 from scion.measurement.consumer_view import measurement_consumer_view
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
     resolve_solver_design_prompt_provider,
     typed_research_question_payload,
 )
-from scion.proposal import hypothesis_generation_authority as _generation
 from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
     _build_problem_object,
@@ -47,10 +41,11 @@ from scion.proposal.context.problem_adapter import (
 from scion.proposal.context.surfaces import (
     _find_research_surface,
     _get_research_surfaces,
-    _hypothesis_visible_research_surfaces,
     _include_operator_files_for_research_code,
     _is_solver_design_context_surface,
     _solver_design_surface_names,
+    surface_action_allowed,
+    surface_target_files,
 )
 
 from .code_context import (
@@ -64,7 +59,6 @@ from .code_context import (
     branch_touched_files,
 )
 from .io import (
-    _available_hypothesis_actions,
     _expand_surface_targets_for_champion,
     _expand_surface_targets_for_root,
     _list_branch_surface_files,
@@ -79,301 +73,35 @@ from scion.proposal.solver_design_guidance import (
 )
 from scion.proposal.prompt_manifest import stable_digest
 
-_MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS = (
-    "pair_evidence",
-    "pair_rows",
-    "raw_pair",
-    "raw_calibration",
-    "calibration_pair",
-    "bks",
-    "validation_case",
-    "frozen_case",
-    "holdout",
-    "prompt_ratio",
-    "llm_text",
-    "opportunity",
-    "typed_attribution",
-    "telemetry",
-    "activation",
-    "mechanism",
-    "operator",
+_MEASUREMENT_VISIBLE_FIELDS_KEY = "proposal_visible_fields"
+_MEASUREMENT_VISIBLE_ENVELOPE_FIELDS = (
+    "schema_version",
+    "proposal_visibility_only",
+    "decision_features_excluded",
+)
+_MEASUREMENT_PRIVATE_FIELDS = frozenset(
+    {
+        "pair_evidence",
+        "pair_rows",
+        "raw_pair",
+        "raw_pair_rows",
+        "raw_calibration",
+        "raw_calibration_pair_rows",
+        "calibration_pair",
+        "calibration_ref",
+        "bks_gap_details",
+        "validation_case_details",
+        "frozen_case_details",
+        "holdout_rows",
+        "prompt_ratios",
+        "llm_text",
+    }
+)
+_RESEARCH_REJECTION_PHASES = frozenset(
+    {"hypothesis_contract", "patch_contract", "verification"}
 )
 
 CANONICAL_SCREENING_HISTORY_KEY = "canonical_screening_history"
-
-HypothesisCodeSource = _generation.HypothesisCodeSource
-HypothesisProblemEvidenceProjection = (
-    _generation.HypothesisProblemEvidenceProjection
-)
-
-_CHECKPOINT_A_EVIDENCE_KEYS = frozenset(
-    {
-        "problem_summary",
-        "problem_object",
-        "solver_mechanics",
-        "research_surfaces",
-        "available_actions",
-        "objective_policy_guidance",
-        "problem_measurement_diagnostics",
-        "research_question",
-        "forced_research_target",
-        "seed",
-        "experiment_history",
-        RENDERER_INPUTS_KEY,
-    }
-)
-_CHECKPOINT_A_OWNER_SOURCE_KEYS = frozenset(
-    {
-        "branch_id",
-        "branch_current_code",
-        "champion_operators_code",
-        "champion_stats",
-        "champion_version",
-        "targetable_files",
-    }
-)
-_CHECKPOINT_A_NESTED_OWNER_SOURCE_KEYS = frozenset(
-    {
-        "base_champion_hash",
-        "base_champion_id",
-        "base_champion_weight_revision",
-        "branch_current_code",
-        "branch_id",
-        "branch_owner",
-        "champion_code_snapshot_hash",
-        "champion_operators_code",
-        "champion_version",
-        "champion_weight_revision",
-        "code_hash",
-        "current_code_hash",
-        "h_bundle",
-        "last_clean_code_hash",
-        "owner_context",
-        "prior_head",
-        "selected_manifest_digest",
-        "snapshot_hash",
-        "source_kind",
-        "targetable_files",
-    }
-)
-
-
-class HypothesisProblemEvidenceRejectedError(RuntimeError):
-    """Configured problem evidence deterministically rejected one source."""
-
-
-class HypothesisProblemEvidenceUnknownError(RuntimeError):
-    """Unexpected work failed after the exact code source was claimed."""
-
-
-def _checkpoint_a_canonical_config(value: Mapping[str, Any]) -> bytes:
-    if type(value) is not dict:
-        raise HypothesisProblemEvidenceRejectedError(
-            "hypothesis problem evidence configuration must be an exact mapping"
-        )
-    unknown = set(value).difference(_CHECKPOINT_A_EVIDENCE_KEYS)
-    reserved = set(value).intersection(_CHECKPOINT_A_OWNER_SOURCE_KEYS)
-    if reserved:
-        raise HypothesisProblemEvidenceRejectedError(
-            "hypothesis problem evidence cannot configure owner/source key: "
-            f"{sorted(reserved)[0]}"
-        )
-    if unknown:
-        raise HypothesisProblemEvidenceRejectedError(
-            "hypothesis problem evidence key is not allowlisted: "
-            f"{sorted(str(key) for key in unknown)[0]}"
-        )
-    normalized = _checkpoint_a_json_value(value, path="$.problem_evidence")
-    if type(normalized) is not dict:
-        raise HypothesisProblemEvidenceRejectedError(
-            "hypothesis problem evidence configuration must be a mapping"
-        )
-    return _checkpoint_a_canonical_json_bytes(normalized)
-
-
-def _checkpoint_a_provider_context(configured_json: bytes) -> bytes:
-    """Deep-normalize one already detached configuration after leaf claim."""
-
-    try:
-        decoded = json.loads(configured_json.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise HypothesisProblemEvidenceRejectedError(
-            "configured hypothesis problem evidence is malformed"
-        ) from exc
-    normalized = _checkpoint_a_json_value(decoded, path="$.problem_evidence")
-    if type(normalized) is not dict:
-        raise HypothesisProblemEvidenceRejectedError(
-            "configured hypothesis problem evidence is not a mapping"
-        )
-    encoded = _checkpoint_a_canonical_json_bytes(normalized)
-    if encoded != configured_json:
-        raise HypothesisProblemEvidenceRejectedError(
-            "configured hypothesis problem evidence is not canonical"
-        )
-    if set(normalized).difference(_CHECKPOINT_A_EVIDENCE_KEYS):
-        raise HypothesisProblemEvidenceRejectedError(
-            "configured hypothesis problem evidence changed its allowlisted shape"
-        )
-    _checkpoint_a_reject_nested_owner_source_fields(
-        normalized,
-        path="$.problem_evidence",
-        root=True,
-    )
-    problem_summary = normalized.get("problem_summary")
-    if (
-        type(problem_summary) is not str
-        or not problem_summary
-        or problem_summary != problem_summary.strip()
-    ):
-        raise HypothesisProblemEvidenceRejectedError(
-            "hypothesis problem evidence requires an exact problem_summary"
-        )
-    surfaces = normalized.get("research_surfaces")
-    if type(surfaces) is not list or not surfaces:
-        raise HypothesisProblemEvidenceRejectedError(
-            "hypothesis problem evidence requires research_surfaces"
-        )
-    names: set[str] = set()
-    for index, surface in enumerate(surfaces):
-        if type(surface) is not dict:
-            raise HypothesisProblemEvidenceRejectedError(
-                "hypothesis research surface must be a mapping at "
-                f"index {index}"
-            )
-        name = surface.get("name")
-        if (
-            type(name) is not str
-            or not name
-            or name != name.strip()
-            or name in names
-        ):
-            raise HypothesisProblemEvidenceRejectedError(
-                "hypothesis research surface has invalid or duplicate name at "
-                f"index {index}"
-            )
-        names.add(name)
-    history = normalized.get("experiment_history", [])
-    if type(history) is not list or any(type(item) is not dict for item in history):
-        raise HypothesisProblemEvidenceRejectedError(
-            "hypothesis experiment_history must be a list of mappings"
-        )
-    return encoded
-
-
-def _checkpoint_a_reject_nested_owner_source_fields(
-    value: object,
-    *,
-    path: str,
-    root: bool = False,
-) -> None:
-    if type(value) is list:
-        for index, child in enumerate(value):
-            _checkpoint_a_reject_nested_owner_source_fields(
-                child,
-                path=f"{path}[{index}]",
-            )
-        return
-    if type(value) is not dict:
-        return
-    for key, child in value.items():
-        if not root and key in _CHECKPOINT_A_NESTED_OWNER_SOURCE_KEYS:
-            raise HypothesisProblemEvidenceRejectedError(
-                "hypothesis problem evidence contains nested owner/source key "
-                f"at {path}.{key}"
-            )
-        _checkpoint_a_reject_nested_owner_source_fields(
-            child,
-            path=f"{path}.{key}",
-        )
-
-
-def _checkpoint_a_evidence_governance(
-    *,
-    configured_json: bytes,
-    provider_context_json: bytes,
-) -> bytes:
-    return _checkpoint_a_canonical_json_bytes(
-        {
-            "configured_keys": sorted(json.loads(configured_json)),
-            "configured_problem_evidence_sha256": hashlib.sha256(
-                configured_json
-            ).hexdigest(),
-            "provider_context_sha256": hashlib.sha256(
-                provider_context_json
-            ).hexdigest(),
-            "schema_version": "hypothesis-problem-evidence-governance.v1",
-        }
-    )
-
-
-def _checkpoint_a_json_value(
-    value: Any,
-    *,
-    path: str,
-    active_ids: set[int] | None = None,
-) -> Any:
-    active = set() if active_ids is None else active_ids
-    value_type = type(value)
-    if value is None or value_type in {str, bool, int}:
-        return value
-    if value_type is float:
-        if not math.isfinite(value):
-            raise HypothesisProblemEvidenceRejectedError(
-                f"non-finite hypothesis problem evidence number at {path}"
-            )
-        return value
-    if value_type in {list, dict}:
-        value_id = id(value)
-        if value_id in active:
-            raise HypothesisProblemEvidenceRejectedError(
-                f"cyclic hypothesis problem evidence at {path}"
-            )
-        active.add(value_id)
-        try:
-            if value_type is list:
-                return [
-                    _checkpoint_a_json_value(
-                        child,
-                        path=f"{path}[{index}]",
-                        active_ids=active,
-                    )
-                    for index, child in enumerate(value)
-                ]
-            normalized: dict[str, Any] = {}
-            for key, child in value.items():
-                if type(key) is not str or not key or key != key.strip():
-                    raise HypothesisProblemEvidenceRejectedError(
-                        f"invalid hypothesis problem evidence key at {path}"
-                    )
-                normalized[key] = _checkpoint_a_json_value(
-                    child,
-                    path=f"{path}.{key}",
-                    active_ids=active,
-                )
-            return normalized
-        finally:
-            active.remove(value_id)
-    raise HypothesisProblemEvidenceRejectedError(
-        "hypothesis problem evidence must be primitive-only at "
-        f"{path}: {value_type.__name__}"
-    )
-
-
-def _checkpoint_a_canonical_json_bytes(value: Any) -> bytes:
-    try:
-        encoded = json.dumps(
-            value,
-            ensure_ascii=True,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-    except (TypeError, ValueError) as exc:
-        raise HypothesisProblemEvidenceRejectedError(
-            "hypothesis problem evidence cannot be canonically encoded"
-        ) from exc
-    return encoded.encode("utf-8")
-
 
 def _filter_hypothesis_prompt_steps(
     step_history: list[StepRecord],
@@ -397,95 +125,8 @@ class ContextManager:
         self,
         *,
         adapter: Any | None = None,
-        hypothesis_problem_evidence: Mapping[str, Any] | None = None,
     ) -> None:
         self._adapter = adapter
-        configured = (
-            {} if hypothesis_problem_evidence is None else hypothesis_problem_evidence
-        )
-        self.__checkpoint_a_problem_evidence_json = _checkpoint_a_canonical_config(
-            configured
-        )
-        self.__hypothesis_generation_authority: (
-            _generation._AuthorityHandle | None
-        ) = None
-
-    def _install_hypothesis_generation_authority(
-        self,
-        authority: _generation._AuthorityHandle,
-    ) -> None:
-        """Install this exact Context Manager's checkpoint-A handle once."""
-
-        if self.__hypothesis_generation_authority is not None:
-            raise _generation.HypothesisGenerationLifecycleError(
-                "ContextManager generation authority is already installed"
-            )
-        if self._adapter is not None:
-            raise HypothesisProblemEvidenceRejectedError(
-                "checkpoint-A ContextManager cannot retain an adapter callback"
-            )
-        _generation._require_authority(
-            authority,
-            role=_generation._AuthorityRole.CONTEXT_MANAGER,
-            owner=self,
-        )
-        self.__hypothesis_generation_authority = authority
-
-    def _require_hypothesis_generation_authority(
-        self,
-    ) -> _generation._AuthorityHandle:
-        authority = self.__hypothesis_generation_authority
-        if authority is None:
-            raise _generation.InvalidHypothesisGenerationCapabilityError(
-                "ContextManager generation authority is not installed"
-            )
-        _generation._require_authority(
-            authority,
-            role=_generation._AuthorityRole.CONTEXT_MANAGER,
-            owner=self,
-        )
-        return authority
-
-    def _project_hypothesis_problem_evidence(
-        self,
-        source: HypothesisCodeSource,
-    ) -> HypothesisProblemEvidenceProjection:
-        """Claim one exact source and bind detached configured problem evidence."""
-
-        authority = self._require_hypothesis_generation_authority()
-        _generation._claim_code_source_for_evidence(authority, source)
-        try:
-            provider_context_json = _checkpoint_a_provider_context(
-                self.__checkpoint_a_problem_evidence_json
-            )
-            governance_json = _checkpoint_a_evidence_governance(
-                configured_json=self.__checkpoint_a_problem_evidence_json,
-                provider_context_json=provider_context_json,
-            )
-            return _generation._issue_problem_evidence(
-                authority,
-                source,
-                provider_context_json=provider_context_json,
-                governance_json=governance_json,
-            )
-        except HypothesisProblemEvidenceRejectedError:
-            _generation._finish_problem_evidence_failure(
-                authority,
-                source,
-                rejected=True,
-            )
-            raise
-        except BaseException as exc:
-            _generation._finish_problem_evidence_failure(
-                authority,
-                source,
-                rejected=False,
-            )
-            if not isinstance(exc, Exception):
-                raise
-            raise HypothesisProblemEvidenceUnknownError(
-                "problem-evidence projection failed unexpectedly after claim"
-            ) from exc
 
     def build_hypothesis_context(
         self,
@@ -495,10 +136,6 @@ class ContextManager:
         step_history: Optional[list[StepRecord]] = None,
         campaign_branches: Optional[Sequence[Branch]] = None,
         branch_workspace: Optional[str] = None,
-        forced_locus: Optional[str] = None,
-        forced_action: Optional[str] = None,
-        forced_target_file: Optional[str] = None,
-        forced_surface_diagnostic: bool = False,
     ) -> dict[str, Any]:
         """Return the V3 round-one research context.
 
@@ -509,27 +146,11 @@ class ContextManager:
 
         adapter_spec = _get_adapter_problem_spec(self._adapter)
         research_surfaces = _get_research_surfaces(problem_spec, adapter_spec)
-        forced_request = (
-            validate_forced_surface_request(
-                problem_spec,
-                forced_locus,
-                action=forced_action,
-                target_file=forced_target_file,
-                adapter_spec=adapter_spec,
-            )
-            if forced_locus
-            else None
-        )
-        active_boundary_surfaces = (
-            []
-            if forced_request is not None
-            else _solver_design_surface_names(research_surfaces)
-        )
-        visible_surfaces = _hypothesis_visible_research_surfaces(
-            research_surfaces,
-            forced_surface=forced_request.surface if forced_request else None,
-            active_problem_boundary_surfaces=active_boundary_surfaces,
-        )
+        solver_design_surfaces = _solver_design_surface_names(research_surfaces)
+        # H receives every research surface declared safe by the problem. A
+        # problem-owned guidance provider may describe solver-design mechanics,
+        # but it does not acquire authority to hide other declared source.
+        visible_surfaces = research_surfaces
         include_operator_files = _include_operator_files_for_research_code(
             visible_surfaces
         )
@@ -549,29 +170,42 @@ class ContextManager:
             include_operator_files=include_operator_files,
             excluded_paths=branch_changed_paths,
         )
-        targetable_files = _targetable_files(
+        existing_target_files = _existing_target_files(
             champion,
             branch_workspace=branch_workspace,
             research_surfaces=visible_surfaces,
         )
-        available_actions = _available_hypothesis_actions(
-            _list_champion_operator_files(champion),
-            targetable_policy_files=_list_champion_surface_files(
-                champion,
-                research_surfaces=visible_surfaces,
-            ),
+        create_path_patterns = sorted(
+            {
+                str(pattern).lstrip("/")
+                for surface in visible_surfaces
+                if surface_action_allowed(surface, "create_new")
+                for pattern in surface_target_files(surface)
+                if _contains_glob_magic(str(pattern))
+                or str(pattern).lstrip("/") not in existing_target_files
+            }
         )
+        available_actions = _available_actions_for_context(
+            visible_surfaces,
+            existing_target_files=existing_target_files,
+        )
+        history_steps = step_history or []
         experiment_history = campaign_canonical_screening_history(
             branch,
             campaign_branches,
-            _filter_hypothesis_prompt_steps(step_history or []),
+            _filter_hypothesis_prompt_steps(history_steps),
+        )
+        rejection_history = campaign_research_rejection_history(
+            branch,
+            campaign_branches,
+            history_steps,
         )
         provider = (
             resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,
                 adapter=self._adapter,
             )
-            if active_boundary_surfaces
+            if solver_design_surfaces
             else None
         )
 
@@ -590,13 +224,16 @@ class ContextManager:
                 problem_spec,
             ),
             "available_actions": sorted(available_actions),
-            "targetable_files": targetable_files,
+            "existing_target_files": existing_target_files,
+            "create_path_patterns": create_path_patterns,
             "champion_operators_code": champion_source,
             "champion_stats": _champion_projection(champion),
             "experiment_history": experiment_history,
         }
         if branch_source:
             context["branch_current_code"] = branch_source
+        if rejection_history:
+            context["research_rejection_history"] = rejection_history
 
         measurement = _problem_measurement_diagnostics(
             problem_spec,
@@ -610,13 +247,6 @@ class ContextManager:
         )
         if research_question:
             context["research_question"] = research_question
-        if forced_request is not None:
-            context["forced_research_target"] = _forced_target_projection(
-                forced_request,
-                visible_surfaces,
-                diagnostic=forced_surface_diagnostic,
-            )
-
         guidance = materialize_solver_design_prompt_guidance(
             provider,
             context,
@@ -726,7 +356,7 @@ class ContextManager:
         return context
 
 
-def _targetable_files(
+def _existing_target_files(
     champion: ChampionState,
     *,
     branch_workspace: str | None,
@@ -739,8 +369,6 @@ def _targetable_files(
             research_surfaces=research_surfaces,
         )
     )
-    for surface in research_surfaces:
-        files.update(surface_target_files(surface))
     if branch_workspace:
         files.update(
             _list_branch_surface_files(
@@ -761,7 +389,45 @@ def _targetable_files(
             for path in surface_target_files(surface)
         ]
         files.update(_expand_surface_targets_for_champion(champion, declared))
-    return sorted(path for path in files if str(path).strip())
+    return sorted(
+        path
+        for path in files
+        if str(path).strip() and not _contains_glob_magic(str(path))
+    )
+
+
+def _available_actions_for_context(
+    research_surfaces: list[Any],
+    *,
+    existing_target_files: list[str],
+) -> list[str]:
+    """Project only actions that at least one declared surface can execute."""
+
+    available: set[str] = set()
+    existing = tuple(existing_target_files)
+    for surface in research_surfaces:
+        has_existing_target = any(
+            any(
+                _matches_surface_pattern(path, pattern)
+                for pattern in surface_target_files(surface)
+            )
+            for path in existing
+        )
+        if surface_action_allowed(surface, "create_new"):
+            available.add("create_new")
+        if has_existing_target and surface_action_allowed(surface, "modify"):
+            available.add("modify")
+        if has_existing_target and surface_action_allowed(surface, "remove"):
+            available.add("remove")
+    return sorted(available)
+
+
+def _contains_glob_magic(path: str) -> bool:
+    return any(character in path for character in "*?[")
+
+
+def _matches_surface_pattern(path: str, pattern: str) -> bool:
+    return matches_config_pattern(path, str(pattern).lstrip("/"))
 
 
 def _build_objective_policy_guidance(adapter_spec: Any | None) -> dict[str, Any]:
@@ -911,8 +577,15 @@ def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
         ),
     }
     has_current_patch = bool(proposal_changes)
+    clean_current_step_candidate = (
+        has_current_patch and step.candidate_parent_scope == "declared_champion"
+    )
     candidate_composition = {
-        "attribution_scope": "cumulative_branch_candidate",
+        "attribution_scope": (
+            "current_step_candidate"
+            if clean_current_step_candidate
+            else "cumulative_branch_candidate"
+        ),
         "protocol_comparison_scope": "candidate_vs_champion",
         "evaluation_candidate": (
             "branch_state_after_current_step_patch"
@@ -922,7 +595,7 @@ def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
         "current_step_change_scope": (
             "incremental_patch" if has_current_patch else "eval_only_reuse"
         ),
-        "incremental_effect_isolated": False,
+        "incremental_effect_isolated": clean_current_step_candidate,
         "current_step": _drop_empty(current_step),
     }
     screening_attempt_id = stable_digest(
@@ -1070,6 +743,125 @@ def campaign_canonical_screening_history(
         }
         for record, source_id in merged
     ]
+
+
+def campaign_research_rejection_history(
+    current_branch: Branch,
+    campaign_branches: Optional[Sequence[Branch]],
+    steps: Sequence[StepRecord],
+) -> list[dict[str, Any]]:
+    """Project minimal pre-Protocol rejection facts for a fresh H call.
+
+    Only typed Hypothesis Contract, Patch Contract, and Verification outcomes
+    are eligible. Provider prose, check details/metadata, Protocol results, and
+    evaluation-stage data never enter this projection.
+    """
+
+    known_branch_ids = {
+        str(getattr(branch, "branch_id", "") or "").strip()
+        for branch in campaign_branches or (current_branch,)
+    }
+    known_branch_ids.discard("")
+    known_branch_ids.add(current_branch.branch_id)
+
+    records: list[dict[str, Any]] = []
+    for step in steps:
+        phase = str(step.failure_stage or "").strip()
+        source_branch_id = str(step.branch_id or "").strip()
+        if (
+            phase not in _RESEARCH_REJECTION_PHASES
+            or source_branch_id not in known_branch_ids
+            or step.protocol_result is not None
+            or step.execution_outcome is not ExecutionOutcome.RESEARCH_REJECTED
+            or not _rejection_state_matches_phase(step, phase)
+        ):
+            continue
+        record = {
+            "round_num": int(step.round_num),
+            "source_branch_id": source_branch_id,
+            "relation": (
+                "current"
+                if source_branch_id == current_branch.branch_id
+                else "sibling"
+            ),
+            "phase": phase,
+            "reason_code": str(step.execution_outcome_reason_code or "").strip(),
+            "failed_check_codes": list(_failed_rejection_check_codes(step, phase)),
+            **_rejection_target_projection(step, phase),
+        }
+        records.append(_drop_empty(record))
+
+    records.sort(
+        key=lambda record: (
+            int(record["round_num"]),
+            str(record["source_branch_id"]),
+            str(record["phase"]),
+        )
+    )
+    return records
+
+
+def _rejection_state_matches_phase(step: StepRecord, phase: str) -> bool:
+    if phase == "hypothesis_contract":
+        return not step.contract_passed and step.patch is None
+    if phase == "patch_contract":
+        return not step.contract_passed and step.patch is not None
+    return (
+        phase == "verification"
+        and step.contract_passed
+        and not step.verification_passed
+    )
+
+
+def _failed_rejection_check_codes(
+    step: StepRecord,
+    phase: str,
+) -> tuple[str, ...]:
+    provenance = step.execution_outcome_provenance
+    if not isinstance(provenance, Mapping):
+        return ()
+    key = "contract_checks" if phase.endswith("contract") else "verification_checks"
+    checks = provenance.get(key, ())
+    if not isinstance(checks, (list, tuple)):
+        return ()
+    codes: list[str] = []
+    for check in checks:
+        if not isinstance(check, Mapping) or check.get("passed") is not False:
+            continue
+        code = str(check.get("name") or "").strip()
+        if code and code not in codes:
+            codes.append(code)
+    return tuple(codes)
+
+
+def _rejection_target_projection(
+    step: StepRecord,
+    phase: str,
+) -> dict[str, Any]:
+    hypothesis = step.hypothesis
+    projection: dict[str, Any] = {
+        "research_surface": str(hypothesis.change_locus or "").strip(),
+    }
+    if phase == "hypothesis_contract" or step.patch is None:
+        projection.update(
+            {
+                "action": str(hypothesis.action or "").strip(),
+                "target_file": str(hypothesis.target_file or "").strip(),
+            }
+        )
+        return _drop_empty(projection)
+
+    targets = []
+    for change in patch_file_changes(step.patch):
+        target_file = str(change.file_path or "").strip()
+        action = str(change.action or "").strip()
+        if target_file or action:
+            targets.append(
+                _drop_empty({"action": action, "target_file": target_file})
+            )
+    if targets:
+        projection["patch_targets"] = targets
+    return _drop_empty(projection)
 
 
 def persist_canonical_screening_record(
@@ -1250,33 +1042,16 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
     if is_proposal_mechanism_evidence_envelope(protocol.mechanism_evidence):
         mechanism_evidence = _primitive(protocol.mechanism_evidence)
     projected = _drop_empty(payload)
+    if getattr(protocol, "runtime_model", None):
+        projected["runtime_evidence_policy"] = (
+            runtime_evidence_policy_for_protocol(protocol)
+        )
     if mechanism_evidence is not None:
         # The verified generic envelope is already the visibility boundary.
         # Keep unavailable/empty problem-owned observations byte-for-byte;
         # interpreting them here would acquire problem semantics in core.
         projected["mechanism_evidence"] = mechanism_evidence
     return projected
-
-
-def _forced_target_projection(
-    request: Any,
-    surfaces: list[Any],
-    *,
-    diagnostic: bool,
-) -> dict[str, Any]:
-    surface = _find_research_surface(surfaces, request.surface)
-    return {
-        "source": "operator_diagnostic" if diagnostic else "campaign_request",
-        "surface": request.surface,
-        "action": request.action,
-        "target_file": request.target_file,
-        "declared_target_files": surface_target_files(surface) if surface else [],
-        "allowed_actions": [
-            action
-            for action in ("create_new", "modify", "remove")
-            if surface is not None and surface_action_allowed(surface, action)
-        ],
-    }
 
 
 def _problem_measurement_diagnostics(
@@ -1304,28 +1079,40 @@ def _problem_measurement_diagnostics(
         except Exception:
             adapter_payload = None
         if isinstance(adapter_payload, Mapping):
-            redacted = _redact_measurement_payload(adapter_payload)
-            if redacted:
-                payload["problem_owned_diagnostics"] = redacted
+            projected = _project_measurement_payload(adapter_payload)
+            if projected:
+                payload["problem_owned_diagnostics"] = projected
     return {
         key: value for key, value in payload.items() if value not in (None, "", [], {})
     }
 
 
-def _redact_measurement_payload(value: Any) -> Any:
+def _project_measurement_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    declared_fields = payload.get(_MEASUREMENT_VISIBLE_FIELDS_KEY, ())
+    if not isinstance(declared_fields, (list, tuple)) or not all(
+        isinstance(field, str) and field.strip() for field in declared_fields
+    ):
+        declared_fields = ()
+    visible_fields = tuple(
+        dict.fromkeys(str(field).strip() for field in declared_fields)
+    )
+    projected: dict[str, Any] = {}
+    for key in (*_MEASUREMENT_VISIBLE_ENVELOPE_FIELDS, *visible_fields):
+        if key in _MEASUREMENT_PRIVATE_FIELDS or key not in payload:
+            continue
+        projected[key] = _project_measurement_value(payload[key])
+    return projected
+
+
+def _project_measurement_value(value: Any) -> Any:
     if isinstance(value, Mapping):
-        projected: dict[str, Any] = {}
-        for raw_key, child in value.items():
-            key = str(raw_key)
-            lowered = key.lower()
-            if any(
-                fragment in lowered for fragment in _MEASUREMENT_FORBIDDEN_KEY_FRAGMENTS
-            ):
-                continue
-            projected[key] = _redact_measurement_payload(child)
-        return projected
+        return {
+            str(raw_key): _project_measurement_value(child)
+            for raw_key, child in value.items()
+            if str(raw_key) not in _MEASUREMENT_PRIVATE_FIELDS
+        }
     if isinstance(value, (list, tuple)):
-        return [_redact_measurement_payload(item) for item in value]
+        return [_project_measurement_value(item) for item in value]
     return _primitive(value)
 
 
@@ -1368,10 +1155,7 @@ def _drop_empty(value: Any) -> Any:
 __all__ = [
     "CANONICAL_SCREENING_HISTORY_KEY",
     "ContextManager",
-    "HypothesisCodeSource",
-    "HypothesisProblemEvidenceProjection",
-    "HypothesisProblemEvidenceRejectedError",
-    "HypothesisProblemEvidenceUnknownError",
+    "campaign_research_rejection_history",
     "canonical_screening_history",
     "canonical_screening_record",
     "persist_canonical_screening_record",

@@ -5,6 +5,7 @@ from dataclasses import replace
 import hashlib
 import json
 from pathlib import Path
+import threading
 from typing import Iterable
 
 import pytest
@@ -24,10 +25,12 @@ from scion.core.models import (
     ExperimentStage,
     HypothesisProposal,
     HypothesisRecord,
+    OperatorConfig,
     PatchProposal,
     ProtocolResult,
     VerificationResult,
 )
+from scion.core.workspace_lifecycle import WorkspaceLifecycleService
 from scion.runtime.workspace import WorkspaceMaterializer
 
 
@@ -38,6 +41,7 @@ class _FormalV3Harness:
         *,
         base_files: dict[str, str],
         editable_patterns: Iterable[str] = ("*.py",),
+        operator_pool: dict[str, OperatorConfig] | None = None,
     ) -> None:
         self.campaign_dir = tmp_path / "campaign"
         self.base_workspace = self.campaign_dir / "champions" / "v1"
@@ -50,20 +54,28 @@ class _FormalV3Harness:
             str(self.campaign_dir),
             editable_patterns=editable_patterns,
         )
-        self.branch = BranchController().create_branch(
-            ChampionState(
-                version=1,
-                operator_pool={},
-                solver_config_hash="solver-hash",
-                code_snapshot_path=str(self.base_workspace),
-                code_snapshot_hash="champion-hash",
-            )
+        self.champion = ChampionState(
+            version=1,
+            operator_pool=operator_pool or {},
+            solver_config_hash="solver-hash",
+            code_snapshot_path=str(self.base_workspace),
+            code_snapshot_hash="champion-hash",
         )
+        self.branch_controller = BranchController()
+        self.branch = self.branch_controller.create_branch(self.champion)
         self.workspace = Path(
             self.materializer.create_branch_workspace(
                 self.branch.branch_id,
                 str(self.base_workspace),
             )
+        )
+        self.lifecycle = WorkspaceLifecycleService(
+            materializer=self.materializer,
+            branch_controller=self.branch_controller,
+            branch_workspaces={self.branch.branch_id: str(self.workspace)},
+            branch_patches={},
+            champion_lock=threading.Lock(),
+            get_champion=lambda: self.champion,
         )
         self.recorder = FormalCandidatePatchArtifactRecorder(
             self.campaign_dir,
@@ -98,26 +110,31 @@ class _FormalV3Harness:
         hypothesis_id: str,
         parent_hypothesis_id: str | None = None,
     ) -> dict[str, object]:
-        self.branch.current_code_hash = self.materializer.apply_patch(
+        hypothesis = HypothesisProposal(
+            hypothesis_text=f"Boundary test {hypothesis_id}.",
+            change_locus="solver_design",
+            action=(
+                "remove"
+                if patch.action == "delete"
+                else "create_new"
+                if patch.action == "create"
+                else "modify"
+            ),
+            target_file=patch.file_path,
+        )
+        applied = self.lifecycle.apply_patch(
+            self.branch,
             str(self.workspace),
             patch,
+            hypothesis=hypothesis,
+            sync_registry=bool(self.champion.operator_pool),
         )
+        self.branch.current_code_hash = applied.code_hash
         self.branch.last_clean_code_hash = self.branch.current_code_hash
         target_file = patch.file_path
         artifact_ref = self.recorder.record(
             branch=self.branch,
-            hypothesis=HypothesisProposal(
-                hypothesis_text=f"Boundary test {hypothesis_id}.",
-                change_locus="solver_design",
-                action=(
-                    "remove"
-                    if patch.action == "delete"
-                    else "create_new"
-                    if patch.action == "create"
-                    else "modify"
-                ),
-                target_file=target_file,
-            ),
+            hypothesis=hypothesis,
             h_record=HypothesisRecord(
                 hypothesis_id=hypothesis_id,
                 parent_hypothesis_id=parent_hypothesis_id,
@@ -196,7 +213,9 @@ def test_v3_idempotent_record_restores_missing_proposal_diff_and_rejects_drift(
     candidate_diff = metadata_path.with_name("candidate.diff")
 
     proposal_diff.unlink()
-    index_path = harness.campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    index_path = (
+        harness.campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    )
     index_path.unlink()
     harness.record(patch, hypothesis_id="h-idempotent")
     assert proposal_diff.is_file()
@@ -209,9 +228,9 @@ def test_v3_idempotent_record_restores_missing_proposal_diff_and_rejects_drift(
 
     original_metadata = metadata_path.read_text(encoding="utf-8")
     tampered_metadata = json.loads(original_metadata)
-    tampered_metadata["replay_materialization"]["files"][0][
-        "code_content"
-    ] = "VALUE = 999\n"
+    tampered_metadata["replay_materialization"]["files"][0]["code_content"] = (
+        "VALUE = 999\n"
+    )
     metadata_path.write_text(
         json.dumps(tampered_metadata, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
@@ -246,13 +265,16 @@ def test_v3_repeat_screening_with_new_metrics_ref_gets_distinct_artifact(
     assert first["candidate_id"] != second["candidate_id"]
     assert first["experiment_ref"] == "metrics/screening.json"
     assert second["experiment_ref"] == "metrics/screening-repeat.json"
-    assert len(
-        list(
-            harness.campaign_dir.glob(
-                "artifacts/formal_candidates/*/*/candidate.patch.json"
+    assert (
+        len(
+            list(
+                harness.campaign_dir.glob(
+                    "artifacts/formal_candidates/*/*/candidate.patch.json"
+                )
             )
         )
-    ) == 2
+        == 2
+    )
 
 
 def test_v3_create_delete_then_revert_to_champion_has_empty_closure(
@@ -278,8 +300,7 @@ def test_v3_create_delete_then_revert_to_champion_has_empty_closure(
         hypothesis_id="h-r1",
     )
     r1_files = {
-        entry["file_path"]: entry
-        for entry in r1["replay_materialization"]["files"]
+        entry["file_path"]: entry for entry in r1["replay_materialization"]["files"]
     }
     assert r1_files["created.py"]["action"] == "create"
     assert r1_files["existing.py"]["action"] == "delete"
@@ -325,17 +346,13 @@ def test_v3_create_delete_then_revert_to_champion_has_empty_closure(
         generated_at="2026-07-15T00:00:00+00:00",
     )
     candidate = next(
-        item
-        for item in manifest["candidates"]
-        if item["hypothesis_id"] == "h-r2"
+        item for item in manifest["candidates"] if item["hypothesis_id"] == "h-r2"
     )
     assert candidate["target_files"] == []
     assert candidate["proposal_target_files"] == ["created.py", "existing.py"]
     replay = harness.materialize(r2, output_name="empty-closure-replay")
     assert not (replay / "created.py").exists()
-    assert (replay / "existing.py").read_text(encoding="utf-8") == (
-        "VALUE = 'base'\n"
-    )
+    assert (replay / "existing.py").read_text(encoding="utf-8") == ("VALUE = 'base'\n")
     assert harness.materializer.compute_code_hash(str(replay)) == (
         harness.branch.current_code_hash
     )
@@ -346,8 +363,27 @@ def test_v3_activation_file_is_separate_from_proposal_and_inherited_scope(
 ) -> None:
     harness = _FormalV3Harness(
         tmp_path,
-        base_files={"registry.yaml": "operators: []\n"},
+        base_files={
+            "operators/seed.py": "class Seed:\n    pass\n",
+            "registry.yaml": (
+                "operators:\n"
+                "  - name: seed\n"
+                "    file_path: operators/seed.py\n"
+                "    category: solver_design\n"
+                "    weight: 1.0\n"
+                "    class_name: Seed\n"
+            ),
+        },
         editable_patterns=("operators/*.py",),
+        operator_pool={
+            "seed": OperatorConfig(
+                name="seed",
+                file_path="operators/seed.py",
+                category="solver_design",
+                weight=1.0,
+                class_name="Seed",
+            )
+        },
     )
     artifact = harness.record(
         PatchProposal(

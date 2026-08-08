@@ -461,6 +461,9 @@ def _runtime_budget_diagnostic_from_protocol(protocol: Any) -> Mapping[str, Any]
 
 
 def _runtime_model_from_protocol(protocol: Any) -> str:
+    declared = str(getattr(protocol, "runtime_model", "") or "").strip()
+    if declared in {"comparative", "budget_exhausting"}:
+        return declared
     surface = getattr(protocol, "candidate_surface_runtime_summary", None)
     if not isinstance(surface, Mapping):
         return ""
@@ -480,6 +483,8 @@ def _status_value(value: Any) -> str:
 def _candidate_runtime_pair_count(summary: Any) -> int:
     if not isinstance(summary, Mapping):
         return 0
+    if "candidate_pairs" in summary:
+        return max(0, _safe_int(summary.get("candidate_pairs")))
     fields = summary.get("fields")
     if not isinstance(fields, Mapping):
         return 0
@@ -489,9 +494,9 @@ def _candidate_runtime_pair_count(summary: Any) -> int:
             continue
         present = _safe_int(field_summary.get("present"))
         missing = _safe_int(field_summary.get("missing"))
-        empty = _safe_int(field_summary.get("empty"))
-        failed = _safe_int(field_summary.get("failed"))
-        max_seen = max(max_seen, present + missing + empty + failed)
+        # ``empty`` and ``failed`` are diagnostic subsets of ``present``, not
+        # disjoint pair categories.  Counting them again inflates evidence.
+        max_seen = max(max_seen, present + missing)
     return max_seen
 
 

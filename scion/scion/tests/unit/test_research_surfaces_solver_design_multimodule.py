@@ -61,10 +61,7 @@ def test_contract_gate_allows_multimodule_scheduler_integration_edit(
         selected_surface="solver_design",
     )
 
-    c9e = next(
-        check for check in result.checks if check.name == "C9e_solver_design_integration"
-    )
-    assert c9e.passed
+    assert result.passed
 
 
 def test_contract_gate_allows_same_patch_recombination_relative_import(
@@ -115,14 +112,11 @@ def test_contract_gate_allows_same_patch_recombination_relative_import(
         for check in result.checks
         if check.name == "additional_changes[0].C8_import_whitelist"
     )
-    c9e = next(
-        check for check in result.checks if check.name == "C9e_solver_design_integration"
-    )
     assert c8.passed
-    assert c9e.passed
+    assert result.passed
 
 
-def test_contract_gate_attributes_same_patch_missing_import_symbol_to_c9e(
+def test_contract_gate_attributes_same_patch_missing_import_symbol_to_c8(
     tmp_path: Path,
 ) -> None:
     scheduler_path = "policies/baseline_modules/scheduler.py"
@@ -156,13 +150,9 @@ def test_contract_gate_attributes_same_patch_missing_import_symbol_to_c9e(
         for check in result.checks
         if check.name == "additional_changes[0].C8_import_whitelist"
     )
-    c9e = next(
-        check for check in result.checks if check.name == "C9e_solver_design_integration"
-    )
-    assert c8.passed
-    assert not c9e.passed
-    assert "missing_import_symbols" in c9e.detail
-    assert "_missing_recombination" in c9e.detail
+    assert not c8.passed
+    assert "missing relative import symbol" in c8.detail
+    assert "_missing_recombination" in c8.detail
 
 
 def test_contract_gate_resolves_imports_against_branch_base_snapshot(
@@ -209,19 +199,19 @@ def test_contract_gate_resolves_imports_against_branch_base_snapshot(
         base_snapshot_path=str(branch),
     )
 
-    champion_c9e = next(
+    champion_c8 = next(
         check
         for check in champion_result.checks
-        if check.name == "C9e_solver_design_integration"
+        if check.name == "C8_import_whitelist"
     )
-    branch_c9e = next(
+    branch_c8 = next(
         check
         for check in branch_result.checks
-        if check.name == "C9e_solver_design_integration"
+        if check.name == "C8_import_whitelist"
     )
-    assert not champion_c9e.passed
-    assert "_double_bridge" in champion_c9e.detail
-    assert branch_c9e.passed
+    assert not champion_c8.passed
+    assert "_double_bridge" in champion_c8.detail
+    assert branch_c8.passed
 
 
 def test_contract_gate_allows_branch_owned_relative_import_from_base_snapshot(

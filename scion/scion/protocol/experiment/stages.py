@@ -15,6 +15,7 @@ from scion.core.models import (
     PairwiseCaseFeedback,
     ProtocolResult,
     RunResult,
+    ScreeningPatternSummary,
 )
 from scion.core.runtime_budget_diagnostics import (
     format_runtime_budget_diagnostic,
@@ -166,6 +167,11 @@ def run_experiment(
     champion_cached_runtime_pairs = 0
     problem_runtime_pairs: list[dict[str, Any]] = []
     runtime_evidence_status = "sufficient"
+    runtime_model = getattr(
+        protocol.config.runtime,
+        "runtime_model",
+        "comparative",
+    )
     runtime_gate_visibility: dict[str, Any] = {}
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
     objective_semantics = protocol.objective_semantics
@@ -242,14 +248,21 @@ def run_experiment(
         runtime_confidence_snapshot = (
             "low_cached_champion" if champion_cached_runtime_pairs else "high"
         )
+        runtime_aggregate_excluded_snapshot = (
+            champion_cached_runtime_pairs > 0
+            and runtime_stats_snapshot["runtime_pairs"] <= 0
+        )
         runtime_evidence_policy = runtime_evidence_policy_summary(
             runtime_confidence=runtime_confidence_snapshot,
             runtime_evidence_status=runtime_evidence_status,
+            runtime_model=runtime_model,
             runtime_pairs=runtime_stats_snapshot["runtime_pairs"],
             champion_cached_runtime_pairs=champion_cached_runtime_pairs,
-            runtime_aggregate_excluded=(
-                champion_cached_runtime_pairs > 0
-                and runtime_stats_snapshot["runtime_pairs"] <= 0
+            runtime_aggregate_excluded=runtime_aggregate_excluded_snapshot,
+            candidate_runtime_pair_evidence_count=(
+                candidate_surface_runtime_summary.get("candidate_pairs", 0)
+                if runtime_aggregate_excluded_snapshot
+                else 0
             ),
         )
         with open(raw_ref, "w") as f:
@@ -280,6 +293,7 @@ def run_experiment(
                     "champion_failed_pairs": champion_failed_pairs,
                     "screening_evidence_status": _screening_evidence_status(
                         stage=stage,
+                        complete=complete,
                         champion_failed_pairs=champion_failed_pairs,
                     ),
                     "screening_partial_champion_evidence": (
@@ -628,8 +642,11 @@ def run_experiment(
                 continue
 
             if cand_r.output is None or champ_r.output is None:
+                candidate_output_missing = cand_r.output is None
+                champion_output_missing = champ_r.output is None
                 failed_pairs += 1
-                if cand_r.output is None:
+                if candidate_output_missing:
+                    candidate_failed_pairs += 1
                     _increment_category(candidate_runtime_categories, "invalid_output")
                     if candidate_first_runtime_failure is None:
                         candidate_first_runtime_failure = _runtime_failure_summary(
@@ -639,10 +656,18 @@ def run_experiment(
                             component="solver_output",
                             detail_summary="candidate solver succeeded without parsed output",
                         )
+                if champion_output_missing:
+                    champion_failed_pairs += 1
+                if candidate_output_missing and champion_output_missing:
+                    failure_side = "both"
+                elif candidate_output_missing:
+                    failure_side = "candidate"
+                else:
+                    failure_side = "champion"
                 failure_record = {
                     "case": case,
                     "seed": seed,
-                    "side": "unknown",
+                    "side": failure_side,
                     "comparison": "invalid",
                     "error_category": "missing_output",
                     **pair_budget_fields,
@@ -999,11 +1024,7 @@ def run_experiment(
             or champion_time_limit_samples_sec
             or [protocol.time_limit_sec]
         ),
-        runtime_model=getattr(
-            protocol.config.runtime,
-            "runtime_model",
-            "comparative",
-        ),
+        runtime_model=runtime_model,
         candidate_elapsed_ms=candidate_elapsed_samples_ms,
         champion_elapsed_ms=champion_elapsed_samples_ms,
         candidate_time_limit_sec=candidate_time_limit_samples_sec,
@@ -1077,13 +1098,20 @@ def run_experiment(
         f" runtime_confidence={runtime_confidence}"
         f" runtime_evidence_status={runtime_evidence_status}"
     )
+    runtime_aggregate_excluded = (
+        champion_cached_runtime_pairs > 0 and stats.runtime_pairs <= 0
+    )
     runtime_evidence_policy = runtime_evidence_policy_summary(
         runtime_confidence=runtime_confidence,
         runtime_evidence_status=runtime_evidence_status,
+        runtime_model=runtime_model,
         runtime_pairs=stats.runtime_pairs,
         champion_cached_runtime_pairs=champion_cached_runtime_pairs,
-        runtime_aggregate_excluded=(
-            champion_cached_runtime_pairs > 0 and stats.runtime_pairs <= 0
+        runtime_aggregate_excluded=runtime_aggregate_excluded,
+        candidate_runtime_pair_evidence_count=(
+            candidate_surface_runtime_summary.get("candidate_pairs", 0)
+            if runtime_aggregate_excluded
+            else 0
         ),
     )
     champion_cache_summary += (
@@ -1115,7 +1143,7 @@ def run_experiment(
             f"objective_semantics={objective_semantics} "
             f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs} "
             f"champion_failures={champion_failed_pairs} "
-            f"screening_evidence_status={_screening_evidence_status(stage=stage, champion_failed_pairs=champion_failed_pairs)} "
+            f"screening_evidence_status={_screening_evidence_status(stage=stage, complete=True, champion_failed_pairs=champion_failed_pairs)} "
             f"reason_codes={','.join(gate.reason_codes) or 'none'} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
             f"{phase_telemetry_summary}"
@@ -1193,6 +1221,7 @@ def run_experiment(
         champion_cached_runtime_pairs=champion_cached_runtime_pairs,
         runtime_confidence=runtime_confidence,
         runtime_evidence_status=runtime_evidence_status,
+        runtime_model=runtime_model,
         mechanism_evidence=problem_mechanism_evidence,
     )
     no_objective_effect = (
@@ -1241,8 +1270,11 @@ def _runtime_evidence_status(
 def _screening_evidence_status(
     *,
     stage: ExperimentStage,
+    complete: bool,
     champion_failed_pairs: int,
 ) -> str:
+    if not complete:
+        return "in_progress"
     if stage == ExperimentStage.SCREENING and champion_failed_pairs > 0:
         return "partial_champion_evidence"
     return "complete"

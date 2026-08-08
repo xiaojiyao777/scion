@@ -695,17 +695,6 @@ def _validate_adapter_identity(
             "loaded problem adapter id does not match problem spec: "
             f"adapter '{adapter_id}' vs spec '{expected_id}'"
         )
-    expected_import_path = _adapter_import_path(problem_spec)
-    adapter_import_path = _adapter_import_path(adapter_spec)
-    if (
-        expected_import_path
-        and adapter_import_path
-        and adapter_import_path != expected_import_path
-    ):
-        raise ProblemProviderError(
-            "loaded problem adapter import path does not match problem spec: "
-            f"adapter '{adapter_import_path}' vs spec '{expected_import_path}'"
-        )
 
 
 __all__ = [

@@ -4,6 +4,30 @@ from .campaign_test_support import *  # noqa: F401,F403
 from scion.core.execution_outcome import ExecutionOutcome
 
 class TestFullSuccessPath:
+    def test_validation_and_frozen_reuse_do_not_regenerate_h_or_c(self, tmp_path):
+        """One verified candidate owns H/C across exact stage reuse."""
+        llm = MockLLMClient(
+            hypothesis_response=_VALID_HYPOTHESIS,
+            patch_response=_VALID_PATCH,
+        )
+        cm = _campaign(
+            tmp_path,
+            llm_client=llm,
+            experiment_protocol=_promote_protocol(),
+        )
+
+        screening = cm.run_one_step()
+        assert screening.decision is Decision.QUEUE_VALIDATE
+        assert llm.call_count == 2
+
+        validation = cm.run_one_step()
+        assert validation.decision is Decision.QUEUE_FROZEN
+        assert llm.call_count == 2
+
+        frozen = cm.run_one_step()
+        assert frozen.decision is Decision.PROMOTE
+        assert llm.call_count == 2
+
     def test_screening_pass_queues_validate(self, tmp_path):
         """Screening pass → decision=QUEUE_VALIDATE, branch in READY_VALIDATE."""
         protocol = MockExperimentProtocol(

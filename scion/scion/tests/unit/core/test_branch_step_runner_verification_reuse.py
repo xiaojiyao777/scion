@@ -127,7 +127,6 @@ def _runner_for_outcome_test(
         persist_branch_state=lambda branch_id: None,
         setup_workspace=lambda *args, **kwargs: None,
         apply_patch=lambda *args, **kwargs: None,
-        record_verification_pass=lambda *args: None,
         evaluate=evaluate,
         apply_decision_and_finalize=lambda **kwargs: finalized.append(kwargs),
         record_step=recorded_steps.append,
@@ -277,7 +276,6 @@ def test_eval_step_records_screening_verification_reuse_marker() -> None:
         persist_branch_state=lambda branch_id: None,
         setup_workspace=lambda *args, **kwargs: None,
         apply_patch=lambda *args, **kwargs: None,
-        record_verification_pass=lambda branch, code_hash: None,
         evaluate=lambda branch, workspace, hypothesis: _evaluated(
             Decision.QUEUE_FROZEN,
             _protocol_result(),
@@ -354,7 +352,6 @@ def test_eval_step_blocks_reuse_when_current_hash_drifted(tmp_path) -> None:
         persist_branch_state=lambda branch_id: None,
         setup_workspace=lambda *args, **kwargs: None,
         apply_patch=lambda *args, **kwargs: None,
-        record_verification_pass=lambda branch, code_hash: None,
         evaluate=lambda *args, **kwargs: (_ for _ in ()).throw(
             AssertionError("protocol should not run after verification drift")
         ),

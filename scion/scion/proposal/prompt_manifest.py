@@ -32,7 +32,6 @@ def build_api_visible_prompt_manifest(
     phase: str,
     call_kind: str,
     prompt_context: Mapping[str, Any],
-    observations: tuple[Any, ...] | list[Any],
     call_index: int,
     system_blocks: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]] | None = None,
     user_prompt: str | None = None,
@@ -42,6 +41,12 @@ def build_api_visible_prompt_manifest(
 ) -> dict[str, Any]:
     """Record identity and exact byte-size facts for one provider call."""
 
+    experiment_history = prompt_context.get("experiment_history")
+    observation_count = (
+        len(experiment_history)
+        if isinstance(experiment_history, (list, tuple))
+        else 0
+    )
     rendered_system_blocks = tuple(system_blocks or ())
     system_texts = tuple(
         str(block.get("text") or "")
@@ -80,7 +85,7 @@ def build_api_visible_prompt_manifest(
                 + len(rendered_user_prompt)
             ),
         },
-        "observation_count": len(observations),
+        "observation_count": observation_count,
         "projection": "direct_v3_lossless",
     }
 

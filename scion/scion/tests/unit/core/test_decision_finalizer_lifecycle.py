@@ -5,6 +5,10 @@ from __future__ import annotations
 import pytest
 
 from scion.core.branch import BranchController
+from scion.core.candidate_evaluation import (
+    candidate_evaluation,
+    mark_candidate_evaluation_pending,
+)
 from scion.core.decision_finalizer import DecisionFinalizer
 from scion.core.decision_lifecycle_actions import (
     update_branch_screening_evidence_summary,
@@ -15,6 +19,7 @@ from scion.core.models import (
     ChampionState,
     ContractResult,
     Decision,
+    DecisionFeatures,
     EvalStats,
     ExperimentStage,
     HypothesisProposal,
@@ -74,6 +79,14 @@ def _fixture():
     def discard(branch_id: str) -> None:
         workspaces.pop(branch_id, None)
 
+    def accept(branch, code_hash: str, workspace: str) -> str:
+        branch.current_code_hash = code_hash
+        branch.last_clean_code_hash = code_hash
+        return workspace
+
+    def reject(branch, _workspace: str) -> None:
+        branch.current_code_hash = branch.last_clean_code_hash
+
     finalizer = DecisionFinalizer(
         branch_controller=controller,
         branch_store=None,
@@ -89,9 +102,9 @@ def _fixture():
         record_step_lineage=lambda *args, **_kwargs: lineage.append(args[7]),
         decision_reason_codes_for=lambda *_args: ("FORMAL_REASON",),
         discard_branch_workspace=discard,
-        archive_workspace=lambda *_args: None,
-        cleanup_workspace=lambda *_args: None,
         persist_branch_state=persisted.append,
+        accept_candidate=accept,
+        reject_candidate=reject,
     )
     return (
         finalizer,
@@ -133,17 +146,344 @@ def test_queue_validate_applies_formal_transition_without_advisory_override() ->
 
 def test_legacy_branch_without_pending_typed_marker_bypasses_transaction() -> None:
     finalizer, controller, branch, hypothesis, record, store, *_rest = _fixture()
-
-    class UnexpectedTransaction:
-        def prepare(self, **_kwargs):
-            raise AssertionError("legacy decision must not create a typed intent")
-
-    finalizer.decision_completion_store = UnexpectedTransaction()  # type: ignore[assignment]
     result = _apply(finalizer, branch, hypothesis, record, Decision.QUEUE_VALIDATE)
 
     assert result.decision is Decision.QUEUE_VALIDATE
     assert controller.get_branch(branch.branch_id).state is BranchState.READY_VALIDATE
     assert store.statuses == []
+
+
+def _screening_features(
+    branch_id: str,
+    *,
+    gate_outcome: str,
+) -> DecisionFeatures:
+    return DecisionFeatures(
+        branch_id=branch_id,
+        hypothesis_action="modify",
+        stage="screening",
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=2,
+        win_rate=0.0,
+        median_delta=-1.0,
+        ci_low=-2.0,
+        ci_high=-0.5,
+        stale=False,
+        recent_failure_codes=(),
+        protocol_gate_outcome=gate_outcome,  # type: ignore[arg-type]
+    )
+
+
+def _screening_protocol(gate_outcome: str) -> ProtocolResult:
+    return ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=2,
+            wins=0,
+            losses=2,
+            ties=0,
+            win_rate=0.0,
+            median_delta=-1.0,
+            ci_low=-2.0,
+            ci_high=-0.5,
+        ),
+        gate_outcome=gate_outcome,
+        reason_codes=("SCREENING_RESULT",),
+        exposed_summary="screening result",
+        raw_metrics_ref="metrics/screening.json",
+    )
+
+
+def test_pending_screening_fail_applies_directly_and_restores_parent() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
+    branch.current_code_hash = "candidate"
+    branch.last_clean_code_hash = "parent"
+    mark_candidate_evaluation_pending(
+        branch,
+        hypothesis_id=record.hypothesis_id,
+        kind="explore",
+    )
+    finalizer.decision_features_for = lambda bid: _screening_features(
+        bid,
+        gate_outcome="fail",
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=record,
+        protocol_result=_screening_protocol("fail"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+    )
+
+    assert result.decision is Decision.CONTINUE_EXPLORE
+    assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
+    assert branch.current_code_hash == branch.last_clean_code_hash == "parent"
+    assert branch.branch_code_status == "clean"
+    assert candidate_evaluation(branch) == {
+        "status": "completed",
+        "hypothesis_id": record.hypothesis_id,
+        "kind": "explore",
+    }
+    assert branch.branch_evidence_summary["candidate_disposition"]["disposition"] == (
+        "reject_to_code_parent"
+    )
+    assert store.statuses == [(record.hypothesis_id, "rejected")]
+
+
+def test_pending_screening_pass_keeps_exact_candidate_for_validation() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
+    mark_candidate_evaluation_pending(
+        branch,
+        hypothesis_id=record.hypothesis_id,
+        kind="explore",
+    )
+    finalizer.decision_features_for = lambda bid: _screening_features(
+        bid,
+        gate_outcome="pass",
+    )
+    branch.current_code_hash = "candidate"
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.QUEUE_VALIDATE,
+        hypothesis=hypothesis,
+        h_record=record,
+        protocol_result=_screening_protocol("pass"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+    )
+
+    assert result.decision is Decision.QUEUE_VALIDATE
+    assert controller.get_branch(branch.branch_id).state is BranchState.READY_VALIDATE
+    assert branch.branch_code_status == "clean"
+    assert candidate_evaluation(branch)["status"] == "completed"
+    assert branch.branch_evidence_summary["candidate_disposition"]["disposition"] == (
+        "exact_reuse"
+    )
+    assert store.statuses == [(record.hypothesis_id, "advanced")]
+
+
+def test_pending_patch_replay_evidence_precedes_acceptance() -> None:
+    fixture = _fixture()
+    finalizer, _controller, branch, hypothesis, record = fixture[:5]
+    pending_patch = fixture[8][branch.branch_id]
+    finalizer.branch_patches.clear()
+    finalizer.pending_candidate_patch = lambda _branch: pending_patch
+    recorded: list[str] = []
+
+    def record_artifact(**kwargs):
+        assert kwargs["workspace"] == "/tmp/workspace"
+        assert kwargs["patch"] is pending_patch
+        recorded.append("artifact")
+        return "artifacts/candidate.json"
+
+    original_accept = finalizer.accept_candidate
+
+    def accept_after_artifact(branch, code_hash, workspace):
+        assert recorded == ["artifact"]
+        assert original_accept is not None
+        return original_accept(branch, code_hash, workspace)
+
+    finalizer.record_formal_candidate_artifact = record_artifact
+    finalizer.accept_candidate = accept_after_artifact
+    mark_candidate_evaluation_pending(
+        branch,
+        hypothesis_id=record.hypothesis_id,
+        kind="explore",
+    )
+    finalizer.decision_features_for = lambda bid: _screening_features(
+        bid,
+        gate_outcome="pass",
+    )
+    branch.current_code_hash = "candidate"
+
+    finalizer.apply(
+        branch=branch,
+        decision=Decision.QUEUE_VALIDATE,
+        hypothesis=hypothesis,
+        h_record=record,
+        protocol_result=_screening_protocol("pass"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+    )
+
+    assert recorded == ["artifact"]
+    assert branch.branch_evidence_summary["formal_candidate_patch_artifact_ref"] == (
+        "artifacts/candidate.json"
+    )
+
+
+def test_rejected_candidate_lineage_keeps_candidate_hash_and_pending_patch() -> None:
+    fixture = _fixture()
+    finalizer, _controller, branch, hypothesis, record = fixture[:5]
+    pending_patch = fixture[8][branch.branch_id]
+    finalizer.branch_patches.clear()
+    finalizer.pending_candidate_patch = lambda _branch: pending_patch
+    lineage_args: list[tuple[object, ...]] = []
+    finalizer.record_step_lineage = lambda *args, **_kwargs: lineage_args.append(args)
+    branch.current_code_hash = "candidate"
+    branch.last_clean_code_hash = "parent"
+    mark_candidate_evaluation_pending(
+        branch,
+        hypothesis_id=record.hypothesis_id,
+        kind="explore",
+    )
+    finalizer.decision_features_for = lambda bid: _screening_features(
+        bid,
+        gate_outcome="fail",
+    )
+
+    finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=record,
+        protocol_result=_screening_protocol("fail"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+    )
+
+    assert len(lineage_args) == 1
+    assert lineage_args[0][0].current_code_hash == "candidate"
+    assert lineage_args[0][2] is pending_patch
+    assert branch.current_code_hash == "parent"
+
+
+def test_lineage_failure_leaves_pending_candidate_unconsumed() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis, record = fixture[:5]
+    pending_patch = fixture[8][branch.branch_id]
+    finalizer.branch_patches.clear()
+    finalizer.pending_candidate_patch = lambda _branch: pending_patch
+    branch.current_code_hash = "candidate"
+    branch.last_clean_code_hash = "parent"
+    mark_candidate_evaluation_pending(
+        branch,
+        hypothesis_id=record.hypothesis_id,
+        kind="explore",
+    )
+    finalizer.decision_features_for = lambda bid: _screening_features(
+        bid,
+        gate_outcome="fail",
+    )
+
+    def fail_lineage(*_args, **_kwargs):
+        raise OSError("lineage unavailable")
+
+    finalizer.record_step_lineage = fail_lineage
+
+    with pytest.raises(OSError, match="lineage unavailable"):
+        finalizer.apply(
+            branch=branch,
+            decision=Decision.CONTINUE_EXPLORE,
+            hypothesis=hypothesis,
+            h_record=record,
+            protocol_result=_screening_protocol("fail"),
+            canary_result=CanaryResult(passed=True),
+            contract_result=ContractResult(passed=True, checks=()),
+            verification_result=VerificationResult(passed=True, checks=()),
+            action_label="explore",
+            decision_reason_codes=("SCREENING_RESULT",),
+        )
+
+    assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
+    assert branch.current_code_hash == "candidate"
+    assert branch.last_clean_code_hash == "parent"
+    assert candidate_evaluation(branch) == {
+        "status": "pending",
+        "hypothesis_id": record.hypothesis_id,
+        "kind": "explore",
+    }
+
+
+def test_pending_unclear_screening_keeps_a_provisional_candidate() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
+    mark_candidate_evaluation_pending(
+        branch,
+        hypothesis_id=record.hypothesis_id,
+        kind="explore",
+    )
+    finalizer.decision_features_for = lambda bid: _screening_features(
+        bid,
+        gate_outcome="unclear",
+    )
+    branch.current_code_hash = "candidate"
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        h_record=record,
+        protocol_result=_screening_protocol("unclear"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+    )
+
+    assert result.decision is Decision.CONTINUE_EXPLORE
+    assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
+    assert branch.branch_code_status == "provisional"
+    assert branch.branch_evidence_summary["candidate_disposition"]["disposition"] == (
+        "provisional_head"
+    )
+    assert store.statuses == [(record.hypothesis_id, "provisional")]
+
+
+def test_pending_abandon_cleans_workspace_without_a_completion_intent() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
+    workspaces = fixture[6]
+    mark_candidate_evaluation_pending(
+        branch,
+        hypothesis_id=record.hypothesis_id,
+        kind="explore",
+    )
+    finalizer.decision_features_for = lambda bid: _screening_features(
+        bid,
+        gate_outcome="fail",
+    )
+    branch.current_code_hash = "candidate"
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.ABANDON,
+        hypothesis=hypothesis,
+        h_record=record,
+        protocol_result=_screening_protocol("fail"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+    )
+
+    assert result.decision is Decision.ABANDON
+    assert controller.get_branch(branch.branch_id).state is BranchState.ABANDONED
+    assert branch.branch_code_status == "abandoned"
+    assert workspaces == {}
+    assert store.statuses == [(record.hypothesis_id, "rejected")]
 
 
 def test_continue_explore_retains_verified_codebase_and_clears_attempt() -> None:

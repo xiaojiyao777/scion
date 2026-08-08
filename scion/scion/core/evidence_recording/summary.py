@@ -833,6 +833,7 @@ class CampaignSummaryMixin:
                 "runtime_pairs": stats.runtime_pairs,
                 "runtime_confidence": pr.runtime_confidence,
                 "runtime_evidence_confidence": pr.runtime_confidence,
+                "runtime_model": pr.runtime_model,
                 "runtime_evidence_status": getattr(
                     pr,
                     "runtime_evidence_status",

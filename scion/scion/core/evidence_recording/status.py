@@ -1,7 +1,6 @@
 """Status payload writer for campaign evidence recording."""
 from __future__ import annotations
 
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +40,8 @@ _PROTOCOL_STAGE_SCOPED_FIELDS = (
     "failed_pairs",
     "candidate_failed_pairs",
     "champion_failed_pairs",
+    "screening_evidence_status",
+    "screening_partial_champion_evidence",
     "raw_metrics_ref",
     "raw_metrics_ref_scope",
     "raw_metrics_internal_only",
@@ -847,6 +848,8 @@ class StatusWriterMixin:
             "failed_pairs",
             "candidate_failed_pairs",
             "champion_failed_pairs",
+            "screening_evidence_status",
+            "screening_partial_champion_evidence",
             "runtime_confidence",
             "runtime_evidence_status",
             "runtime_evidence_policy",

@@ -9,6 +9,7 @@ from scion.problem.bridge import legacy_problem_spec_from_v1
 from scion.problem.spec import ProblemSpecV1
 from scion.core.models import Branch, BranchState, ChampionState
 from scion.proposal.context.problem_adapter import _build_operator_interface_spec
+from scion.proposal.context.surfaces import _build_research_surfaces_block
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import build_prompt_turn_snapshot
 from scion.tests.unit.research_surface_helpers import _problem_payload
@@ -193,6 +194,11 @@ def test_problem_spec_accepts_v2_research_surface_and_exposes_legacy_fields(
     assert "evidence.mechanism_telemetry" not in rendered
     assert "novelty.strategy" not in rendered
     assert "novelty.signature_fields" not in rendered
+
+    hypothesis_context = _build_research_surfaces_block([surface])
+    assert "evidence.mechanism_telemetry" in hypothesis_context
+    assert '"activation_runtime_fields"' in hypothesis_context
+    assert '"mechanisms.{mechanism}.active"' in hypothesis_context
 
 
 def test_problem_spec_rejects_invalid_mechanism_telemetry_declaration(

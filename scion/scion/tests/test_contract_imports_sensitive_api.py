@@ -1,6 +1,6 @@
 """Focused tests split from test_contract.py."""
 
-from scion.contract.checks.security import check_sensitive_api
+from scion.contract.checks.security import check_import_whitelist, check_sensitive_api
 
 from .contract_test_support import *  # noqa: F401,F403
 
@@ -26,6 +26,23 @@ class TestC8ImportWhitelist:
         result = gate.validate_patch(patch)
         c8 = next(c for c in result.checks if c.name == "C8_import_whitelist")
         assert not c8.passed
+
+    def test_declared_runtime_dependency_is_allowed(self):
+        spec = make_spec(import_whitelist=("math",))
+        object.__setattr__(
+            spec,
+            "runtime_dependencies",
+            SimpleNamespace(required_python_modules=["numpy"]),
+        )
+        result = check_import_whitelist(
+            PatchProposal(
+                file_path="operators/op.py",
+                action="create",
+                code_content="import numpy as np\n",
+            ),
+            problem_spec=spec,
+        )
+        assert result.passed
 
 
 class TestC9SensitiveApi:
@@ -197,7 +214,7 @@ class TestC9SensitiveApi:
         assert not c9.passed
         assert "getattr(importlib, 'import_module')" in c9.detail
 
-    def test_reflective_dynamic_getattr_is_blocked(self, gate: ContractGate):
+    def test_reflective_dynamic_getattr_on_candidate_state_is_allowed(self, gate: ContractGate):
         code = (
             "class Op:\n"
             "    def execute(self, solution, rng):\n"
@@ -207,10 +224,9 @@ class TestC9SensitiveApi:
         patch = PatchProposal(file_path="operators/op.py", action="create", code_content=code)
         result = gate.validate_patch(patch)
         c9 = next(c for c in result.checks if c.name == "C9_sensitive_api")
-        assert not c9.passed
-        assert "dynamic_name" in c9.detail
+        assert c9.passed
 
-    def test_local_operator_telemetry_reflection_is_blocked(
+    def test_local_operator_telemetry_reflection_is_allowed(
         self,
         gate: ContractGate,
     ):
@@ -231,11 +247,9 @@ class TestC9SensitiveApi:
 
         c9 = check_sensitive_api(patch)
 
-        assert not c9.passed
-        assert "setattr" in c9.detail
-        assert "dynamic_name" in c9.detail
+        assert c9.passed
 
-    def test_setattr_on_solver_object_is_blocked(self, gate: ContractGate):
+    def test_setattr_on_solver_object_is_allowed(self, gate: ContractGate):
         code = (
             "class Op:\n"
             "    def execute(self, solution, rng):\n"
@@ -250,10 +264,9 @@ class TestC9SensitiveApi:
 
         c9 = check_sensitive_api(patch)
 
-        assert not c9.passed
-        assert "setattr" in c9.detail
+        assert c9.passed
 
-    def test_rebound_self_setattr_is_blocked(self, gate: ContractGate):
+    def test_rebound_self_setattr_is_allowed(self, gate: ContractGate):
         code = (
             "class Op:\n"
             "    def execute(self, solution, rng):\n"
@@ -269,10 +282,9 @@ class TestC9SensitiveApi:
 
         c9 = check_sensitive_api(patch)
 
-        assert not c9.passed
-        assert "setattr" in c9.detail
+        assert c9.passed
 
-    def test_staticmethod_parameter_named_self_setattr_is_blocked(
+    def test_staticmethod_parameter_named_self_setattr_is_allowed(
         self,
         gate: ContractGate,
     ):
@@ -292,8 +304,7 @@ class TestC9SensitiveApi:
 
         c9 = check_sensitive_api(patch)
 
-        assert not c9.passed
-        assert "setattr" in c9.detail
+        assert c9.passed
 
     def test_os_environ_is_blocked(self, gate: ContractGate):
         code = (

@@ -24,23 +24,15 @@ class AttemptDisposition(Enum):
 
 @dataclass(frozen=True)
 class ResearchRejectionDisposition:
-    """Immutable marker returned only after durable rejection completion."""
+    """Plain branch disposition after a rejected pre-Protocol candidate."""
 
     disposition: AttemptDisposition
-    completion_id: str
-    campaign_id: str
-    provider_attempt_id: str
     rejection_phase: str
+    lineage_event_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.disposition is not AttemptDisposition.ATTEMPT_REJECT_TO_BASE:
             raise ValueError("unsupported research rejection disposition")
-        if len(self.completion_id) != 64 or any(
-            char not in "0123456789abcdef" for char in self.completion_id
-        ):
-            raise ValueError("research rejection completion identity is invalid")
-        if not self.campaign_id or not self.provider_attempt_id:
-            raise ValueError("research rejection owner identity is incomplete")
         if self.rejection_phase not in {
             "hypothesis_contract",
             "patch_contract",
@@ -48,13 +40,11 @@ class ResearchRejectionDisposition:
         }:
             raise ValueError("research rejection phase is invalid")
 
-    def to_primitive(self) -> Dict[str, str]:
+    def to_primitive(self) -> Dict[str, str | None]:
         return {
             "disposition": self.disposition.value,
-            "completion_id": self.completion_id,
-            "campaign_id": self.campaign_id,
-            "provider_attempt_id": self.provider_attempt_id,
             "rejection_phase": self.rejection_phase,
+            "lineage_event_id": self.lineage_event_id,
         }
 
 

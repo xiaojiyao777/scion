@@ -607,7 +607,6 @@ _LEGACY_ADOPTION_TABLES: Final = (
     "champions",
     "weight_optimizations",
     "research_rejection_completion_intents",
-    "decision_completion_intents",
 )
 
 

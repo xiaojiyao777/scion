@@ -109,19 +109,15 @@ class TestCodeFailureDirect:
         with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
             rows = conn.execute(
                 "SELECT audit_payload_json FROM experiment_events "
-                "WHERE event_kind = 'proposal_attempt_transition' ORDER BY rowid"
+                "WHERE event_kind = 'proposal_call' ORDER BY rowid"
             ).fetchall()
         transitions = [json.loads(row[0]) for row in rows]
-        assert [item["phase"] for item in transitions[:4]] == [
+        assert [item["phase"] for item in transitions] == [
             "hypothesis",
-            "hypothesis",
-            "code",
             "code",
         ]
-        assert [item["status"] for item in transitions[:4]] == [
-            "started",
+        assert [item["status"] for item in transitions] == [
             "generated",
-            "started",
             "failed",
         ]
 

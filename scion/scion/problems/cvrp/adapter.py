@@ -7,19 +7,12 @@ from typing import Any, Mapping, Sequence
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.spec import ProblemSpecV1
 from scion.problems.cvrp.cvrplib import load_cvrplib_instance
-from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
+from scion.problems.cvrp.models import CvrpInstance
 from scion.problems.cvrp.solution_checks import (
-    _as_solution,
-    _extract_reported_objective,
-    _normalize_route,
     check_feasibility as _check_feasibility,
     check_solution_consistency as _check_solution_consistency,
     deserialize_solver_output as _deserialize_solver_output,
     recompute_objective as _recompute_objective,
-)
-from scion.problems.cvrp.surface_schema import (
-    _POLICY_PREVIEW_EXEC_TIMEOUT_SEC,
-    _POLICY_PREVIEW_TIME_LIMIT_SEC,
 )
 from scion.problems.cvrp.surface_rendering import (
     render_operator_interface as _render_operator_interface,
@@ -27,11 +20,6 @@ from scion.problems.cvrp.surface_rendering import (
     render_problem_summary as _render_problem_summary,
     render_research_surface_interface as _render_research_surface_interface,
     render_solver_mechanics as _render_solver_mechanics,
-)
-from scion.problems.cvrp.preview import common as _preview_common
-from scion.problems.cvrp.preview import synthetic as _preview_synthetic
-from scion.problems.cvrp.preview.dispatch import (
-    preview_research_surface_patch as _preview_research_surface_patch,
 )
 from scion.problems.cvrp.surface_policy import (
     ACTIVE_RESEARCH_SURFACE_NAMES,
@@ -49,21 +37,10 @@ __all__ = [
 class CvrpAdapter:
     def __init__(self, spec: ProblemSpecV1) -> None:
         self._spec = spec
-        self._contract_provider: Any | None = None
 
     @property
     def spec(self) -> ProblemSpecV1:
         return self._spec
-
-    def contract_check_provider(self) -> Any:
-        if self._contract_provider is None:
-            from scion.problems.cvrp.contract_checks import CvrpContractCheckProvider
-
-            self._contract_provider = CvrpContractCheckProvider()
-        return self._contract_provider
-
-    def active_subject_policy_provider(self) -> Any:
-        return self.contract_check_provider()
 
     def solver_design_prompt_provider(self) -> Any:
         from scion.problems.cvrp.solver_design_provider import (
@@ -128,6 +105,12 @@ class CvrpAdapter:
             "taint": "problem_owned_proposal_guidance",
             "proposal_visibility_only": True,
             "decision_features_excluded": True,
+            "proposal_visible_fields": [
+                "taint",
+                "measurement_context",
+                "feasibility",
+                "typed_attribution",
+            ],
             "measurement_context": {
                 "metric": "total_distance",
                 "objective": "minimize",
@@ -164,35 +147,6 @@ class CvrpAdapter:
                 ),
             },
         }
-
-    def preview_research_surface_patch(
-        self,
-        *,
-        patch: Any,
-        surface: Any | None = None,
-        base_workspace: str | None = None,
-        branch_workspace: str | None = None,
-    ) -> Mapping[str, Any]:
-        _preview_common._POLICY_PREVIEW_TIME_LIMIT_SEC = (
-            _POLICY_PREVIEW_TIME_LIMIT_SEC
-        )
-        _preview_synthetic._POLICY_PREVIEW_EXEC_TIMEOUT_SEC = (
-            _POLICY_PREVIEW_EXEC_TIMEOUT_SEC
-        )
-        _preview_synthetic._POLICY_PREVIEW_TIME_LIMIT_SEC = (
-            _POLICY_PREVIEW_TIME_LIMIT_SEC
-        )
-        preview_base_workspace = (
-            str(branch_workspace or "").strip()
-            or str(base_workspace or "").strip()
-            or str(getattr(self._spec, "root_dir", "") or "").strip()
-            or None
-        )
-        return _preview_research_surface_patch(
-            patch=patch,
-            surface=surface,
-            base_workspace=preview_base_workspace,
-        )
 
     def load_instance(self, instance_path: str) -> Any:
         suffix = Path(instance_path).suffix.lower()

@@ -19,6 +19,7 @@ from scion.proposal.edit_protocol.exact_replace import (
     validate_optional_source_digest as _validate_optional_source_digest,
 )
 from scion.proposal.edit_protocol.source_discovery import (
+    SourceRecord,
     source_digest_for_content,
     source_records_from_context as _source_records_from_context,
 )
@@ -60,13 +61,13 @@ def normalize_patch_typed_edits(
     writes canonical ``code_content`` values before Pydantic parsing.
     """
 
-    normalized = dict(raw)
+    source_records = _source_records_from_context(context)
+    normalized = _bind_host_source_digests(raw, source_records=source_records)
     try:
         preflight_patch_exact_replace_shape(normalized)
     except PatchSchemaPreflightError as exc:
         raise PatchEditProtocolError(str(exc)) from exc
 
-    source_records = _source_records_from_context(context)
     source_files = {
         path: record.content for path, record in source_records.items()
     }
@@ -94,25 +95,43 @@ def normalize_patch_typed_edits(
     return normalized, tuple(metadata)
 
 
-def build_patch_edit_source_manifest(context: Mapping[str, Any]) -> str:
-    """Render every source digest for model-facing typed edit prompts."""
+def _bind_host_source_digests(
+    raw: Mapping[str, Any],
+    *,
+    source_records: Mapping[str, SourceRecord],
+) -> dict[str, Any]:
+    """Attach source bindings from the validated host ledger, never model echo."""
 
-    source_records = _source_records_from_context(context)
-    if not source_records:
-        return "(no editable source digests available)"
-    lines = [
-        (
-            "Use these canonical sha256 source_digest values for "
-            "exact_replace edits. For create actions use null. Each record "
-            "also lists the source provenance used to compute the digest."
-        )
-    ]
-    for path, record in sorted(source_records.items()):
-        lines.append(
-            f"- {path}: source_digest={record.digest}; "
-            f"provenance={record.provenance}"
-        )
-    return "\n".join(lines)
+    def bind(change: Mapping[str, Any], pointer: str) -> dict[str, Any]:
+        bound = dict(change)
+        file_path = _normalize_path(bound.get("file_path"))
+        action = str(bound.get("action") or "modify").strip()
+        supplied_digest = _digest_text(bound.get("source_digest"))
+        record = source_records.get(file_path)
+        if action != "modify" or record is None:
+            if action != "modify":
+                bound.pop("source_digest", None)
+            return bound
+
+        host_digest = str(record.digest)
+        if supplied_digest and supplied_digest != host_digest:
+            raise PatchEditProtocolError(
+                f"{pointer}: stale_source for {file_path}: "
+                f"expected {supplied_digest}, current {host_digest}"
+            )
+        bound["source_digest"] = host_digest
+        return bound
+
+    normalized = bind(raw, "/")
+    additional = raw.get("additional_changes")
+    if isinstance(additional, list):
+        normalized["additional_changes"] = [
+            bind(item, f"/additional_changes/{index}")
+            if isinstance(item, Mapping)
+            else item
+            for index, item in enumerate(additional)
+        ]
+    return normalized
 
 
 def _normalize_change(
@@ -209,7 +228,7 @@ def _normalize_change(
             and not _digest_text(change.get("source_digest"))
         ):
             raise PatchEditProtocolError(
-                f"{change_pointer}: full_file modify requires source_digest"
+                f"{change_pointer}: full_file modify has no host source binding"
             )
         _validate_optional_source_digest(
             change,
@@ -666,7 +685,7 @@ def _validate_existing_file_full_file_modify(
         if before is not None
         else "action=modify declares an existing-file change, but no "
         "host-visible source was provided. Model-facing existing-file "
-        "modifies require host-visible source and source_digest."
+        "modifies require host-visible source."
     )
     payload = {
         "error": "patch_edit_protocol",
@@ -678,11 +697,10 @@ def _validate_existing_file_full_file_modify(
         "content_field": content_field,
         "detail": detail,
         "guidance": (
-            "Existing-file modify requires source_digest and either typed "
+            "Existing-file modify requires host-visible source and either typed "
             "exact_replace or explicit full_file/content_after; "
             "create is only for new files. "
-            "Rewrite this change as edit_intent='exact_replace': set "
-            "source_digest to the host-provided sha256 digest, omit "
+            "Rewrite this change as edit_intent='exact_replace': omit "
             "content_after/code_content, provide a non-empty "
             "old_string copied exactly from the current file, and "
             "provide new_string with only the replacement text. "
@@ -694,7 +712,6 @@ def _validate_existing_file_full_file_modify(
             "file_path": file_path,
             "action": "modify",
             "edit_intent": "exact_replace",
-            "source_digest": "<host-provided sha256 digest>",
             "old_string": "<non-empty exact current text>",
             "new_string": "<replacement text; use \"\" for deletion>",
             "replace_all": False,
@@ -728,12 +745,11 @@ def _validate_existing_file_create_action(
         "action": action,
         "source_digest": source_digest_for_content(before),
         "detail": (
-            "existing file requires action=modify with source_digest; "
-            "create is only for new files."
+            "existing file requires action=modify; create is only for new files."
         ),
         "guidance": (
-            "Rewrite this existing-file change with action='modify' and "
-            "the host-provided source_digest. Use exact_replace with a "
+            "Rewrite this existing-file change with action='modify'. The host "
+            "binds it to current source. Use exact_replace with a "
             "non-empty old_string/new_string pair, or explicit full_file "
             "with content_after. Use "
             "action='create' and edit_intent='full_file' only when the file "
@@ -743,7 +759,6 @@ def _validate_existing_file_create_action(
             "file_path": file_path,
             "action": "modify",
             "edit_intent": "exact_replace",
-            "source_digest": "<host-provided sha256 digest>",
             "old_string": "<non-empty exact current text>",
             "new_string": "<replacement text; use \"\" for deletion>",
             "replace_all": False,

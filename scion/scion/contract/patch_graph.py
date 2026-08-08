@@ -14,20 +14,27 @@ class PatchSetGraph:
     """Normalized candidate file graph for a primary patch plus additions."""
 
     actions_by_path: dict[str, str]
+    sources_by_path: dict[str, str]
 
     @classmethod
     def from_patch(cls, patch: PatchProposal) -> "PatchSetGraph":
         actions: dict[str, str] = {}
+        sources: dict[str, str] = {}
         for change in patch_file_changes(patch):
             try:
                 file_rel = normalize_relative_patch_path(change.file_path)
             except ValueError:
                 continue
             actions[file_rel] = str(change.action)
-        return cls(actions_by_path=actions)
+            if str(change.action) != "delete":
+                sources[file_rel] = str(change.code_content)
+        return cls(actions_by_path=actions, sources_by_path=sources)
 
     def is_created(self, file_rel: str) -> bool:
         return self.actions_by_path.get(file_rel) == "create"
+
+    def source_for(self, file_rel: str) -> str | None:
+        return self.sources_by_path.get(file_rel)
 
     def allows_same_patch_relative_import(
         self,

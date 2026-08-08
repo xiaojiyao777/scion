@@ -25,7 +25,7 @@ def test_campaign_run_preflight_exception_writes_terminal_artifacts(
     def raise_preflight() -> None:
         raise RuntimeError(exception_message)
 
-    monkeypatch.setattr(cm, "_run_runtime_preflight", raise_preflight)
+    monkeypatch.setattr(cm, "_run_research_environment_preflight", raise_preflight)
 
     with pytest.raises(RuntimeError, match="synthetic preflight failure"):
         cm.run(requested_rounds=2)
@@ -56,7 +56,7 @@ def test_campaign_run_one_step_exception_writes_partial_terminal_artifacts(
     monkeypatch,
 ) -> None:
     cm = _campaign(tmp_path)
-    cm._runtime_preflight_checked = True
+    cm._research_preflight_checked = True
     calls = 0
 
     def run_one_step() -> StepResult:

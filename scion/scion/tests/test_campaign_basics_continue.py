@@ -6,8 +6,7 @@ from pathlib import Path
 
 from .campaign_test_support import *  # noqa: F401,F403
 from scion.core.campaign_composition import _formal_candidate_base_workspace
-from scion.core.evidence_recording.replay_identity import stable_patch_digest
-from scion.core.models import HypothesisRecord, PatchFileChange
+from scion.core.models import HypothesisRecord
 from scion.proposal.llm_client import LLMProviderError
 
 class TestCampaignBasics:
@@ -99,10 +98,6 @@ class TestCampaignBasics:
             "stage": "screening",
             "tier": "marginal",
             "case_level_negative_cases": [{"case_id": "CMT4.vrp"}],
-            "formal_candidate_patch_artifact_ref": (
-                "artifacts/formal_candidates/8b1621af/"
-                "screening-active-demand-slack-candidate/candidate.patch.json"
-            ),
         }
         cm._branch_store.save(branch)
         active_hypothesis = HypothesisRecord(
@@ -116,72 +111,6 @@ class TestCampaignBasics:
             predicted_direction="improve",
         )
         cm._hyp_store.save(active_hypothesis)
-        artifact_dir = (
-            tmp_path
-            / "campaign"
-            / "artifacts"
-            / "formal_candidates"
-            / "8b1621af"
-            / "screening-active-demand-slack-candidate"
-        )
-        artifact_dir.mkdir(parents=True)
-        artifact_ref = (
-            "artifacts/formal_candidates/8b1621af/"
-            "screening-active-demand-slack-candidate/candidate.patch.json"
-        )
-        legacy_changes = [
-            PatchFileChange(
-                file_path="policies/baseline_modules/destroy_repair.py",
-                action="modify",
-                code_content="# restored destroy repair\n",
-            ),
-            PatchFileChange(
-                file_path="policies/baseline_algorithm.py",
-                action="modify",
-                code_content="# restored support file\n",
-            ),
-        ]
-        (artifact_dir / "candidate.patch.json").write_text(
-            json.dumps(
-                {
-                    "schema": "scion.formal_candidate_patch_artifact.v3",
-                    "branch_id": branch.branch_id,
-                    "hypothesis_id": "active-demand-slack",
-                    "patch": {
-                        "patch_digest": stable_patch_digest(legacy_changes),
-                        "files": [
-                            {
-                                "file_path": (
-                                    "policies/baseline_modules/destroy_repair.py"
-                                ),
-                                "action": "modify",
-                                "code_content": "# restored destroy repair\n",
-                            },
-                            {
-                                "file_path": "policies/baseline_algorithm.py",
-                                "action": "modify",
-                                "code_content": "# restored support file\n",
-                            },
-                        ]
-                    }
-                }
-            ),
-            encoding="utf-8",
-        )
-        index_dir = tmp_path / "campaign" / "artifacts" / "formal_candidates"
-        (index_dir / "index.jsonl").write_text(
-            json.dumps(
-                {
-                    "artifact_status": "recorded",
-                    "artifact_ref": artifact_ref,
-                    "branch_id": branch.branch_id,
-                    "hypothesis_id": "active-demand-slack",
-                    "stage": "screening",
-                }
-            )
-            + "\n",
-            encoding="utf-8",
-        )
 
         workspace = tmp_path / "campaign" / "workspaces" / branch.branch_id
         workspace.mkdir(parents=True)
@@ -218,18 +147,7 @@ class TestCampaignBasics:
         assert restored_hypothesis.hypothesis_text == (
             "Follow demand slack regret insertion."
         )
-        restored_patch = reopened._branch_patches[branch.branch_id]
-        assert restored_patch.file_path == (
-            "policies/baseline_modules/destroy_repair.py"
-        )
-        assert restored_patch.code_content == "# restored destroy repair\n"
-        assert restored_patch.additional_changes == (
-            PatchFileChange(
-                file_path="policies/baseline_algorithm.py",
-                action="modify",
-                code_content="# restored support file\n",
-            ),
-        )
+        assert branch.branch_id not in reopened._branch_patches
         assert reopened.get_state()["n_active_branches"] == 1
 
     def test_reopened_copied_campaign_reanchors_current_champion_snapshot(
@@ -404,16 +322,33 @@ class TestCampaignBasics:
 
 
 class TestContinueExplore:
-    def test_no_protocol_produces_continue_explore(self, tmp_path):
-        """Without experiment protocol, decision is CONTINUE_EXPLORE (no stats)."""
-        cm = _campaign(tmp_path, experiment_protocol=None)
+    def test_protocol_continue_produces_provisional_head(self, tmp_path):
+        """An explicit inconclusive Protocol verdict retains provisional code."""
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol(
+                [_make_protocol_result(ExperimentStage.SCREENING, gate_outcome="continue")]
+            ),
+        )
         result = cm.run_one_step()
-        # Decision should be CONTINUE_EXPLORE because there are no stats
         assert result.decision == Decision.CONTINUE_EXPLORE
+        branch = cm._branch_ctrl.get_branch(result.branch_id)
+        assert branch.branch_code_status == "provisional"
+        assert branch.branch_evidence_summary["candidate_disposition"] == {
+            "schema_version": "candidate-disposition.v1",
+            "disposition": "provisional_head",
+            "hypothesis_status": "provisional",
+            "rule": "protocol_provisional",
+        }
 
     def test_continue_explore_retains_verified_workspace(self, tmp_path):
         """CONTINUE_EXPLORE keeps the branch's executable verified codebase."""
-        cm = _campaign(tmp_path, experiment_protocol=None)
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol(
+                [_make_protocol_result(ExperimentStage.SCREENING, gate_outcome="continue")]
+            ),
+        )
         result = cm.run_one_step()
         assert result.branch_id is not None
         bid = result.branch_id
@@ -425,7 +360,12 @@ class TestContinueExplore:
 
     def test_continue_explore_clears_hypothesis(self, tmp_path):
         """After CONTINUE_EXPLORE, the branch hypothesis is cleared."""
-        cm = _campaign(tmp_path, experiment_protocol=None)
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol(
+                [_make_protocol_result(ExperimentStage.SCREENING, gate_outcome="continue")]
+            ),
+        )
         result = cm.run_one_step()
         bid = result.branch_id
         assert bid not in cm._branch_hypotheses
@@ -433,7 +373,12 @@ class TestContinueExplore:
 
     def test_continue_explore_branch_stays_in_explore(self, tmp_path):
         """Branch should remain in EXPLORE state after CONTINUE_EXPLORE."""
-        cm = _campaign(tmp_path, experiment_protocol=None)
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol(
+                [_make_protocol_result(ExperimentStage.SCREENING, gate_outcome="continue")]
+            ),
+        )
         result = cm.run_one_step()
         bid = result.branch_id
         branch = cm._branch_ctrl.get_branch(bid)
@@ -534,13 +479,15 @@ class TestContinueExplore:
         ]
         assert prior_aggregate["win_rate"] == 0.1
         assert prior_aggregate["median_delta"] == -12.0
-        assert "candidate = solution" in second_h_evidence["branch_current_code"]
-        assert "### operators/local_search.py" not in (
+        assert "candidate = solution" not in second_h_evidence.get(
+            "branch_current_code", ""
+        )
+        assert "### operators/local_search.py" in (
             second_h_static["champion_operators_code"]
         )
-        assert second_h_evidence["branch_current_code"].count(
-            "### operators/local_search.py"
-        ) == 1
+        assert "### operators/local_search.py" not in second_h_evidence.get(
+            "branch_current_code", ""
+        )
 
         code_calls = [
             call for call in llm.provider_calls if call["request_kind"] == "code"
@@ -554,11 +501,10 @@ class TestContinueExplore:
             for entry in source_ledger["entries"]
             if entry["path"] == "operators/local_search.py"
         )
-        assert prior_source["provenance"] == "branch_history_current"
-        assert "candidate = solution" in prior_source["content"]
+        assert "candidate = solution" not in prior_source["content"]
 
         workspace = Path(cm._branch_workspaces[r2.branch_id])
-        assert "candidate = solution" in (
+        assert "candidate = solution" not in (
             workspace / "operators" / "local_search.py"
         ).read_text()
         assert (workspace / "operators" / "other_op.py").is_file()
@@ -581,7 +527,7 @@ class TestContinueExplore:
         r1 = first.run_one_step()
         assert r1.decision == Decision.CONTINUE_EXPLORE
         first_workspace = Path(first._branch_workspaces[r1.branch_id])
-        assert "candidate = solution" in (
+        assert "candidate = solution" not in (
             first_workspace / "operators" / "local_search.py"
         ).read_text()
 
@@ -647,7 +593,7 @@ class TestContinueExplore:
             "aggregate"
         ]
         assert prior_aggregate["median_delta"] == -12.0
-        assert "candidate = solution" in h_evidence["branch_current_code"]
+        assert "candidate = solution" not in h_evidence.get("branch_current_code", "")
 
         code_call = next(
             call for call in llm.provider_calls if call["request_kind"] == "code"
@@ -660,11 +606,10 @@ class TestContinueExplore:
             for entry in c_context["proposal_source_ledger"]["entries"]
             if entry["path"] == "operators/local_search.py"
         )
-        assert prior_source["provenance"] == "branch_history_current"
-        assert "candidate = solution" in prior_source["content"]
+        assert "candidate = solution" not in prior_source["content"]
 
         workspace = Path(reopened._branch_workspaces[r2.branch_id])
-        assert "candidate = solution" in (
+        assert "candidate = solution" not in (
             workspace / "operators" / "local_search.py"
         ).read_text()
         assert (workspace / "operators" / "other_op.py").is_file()
@@ -705,7 +650,22 @@ class TestContinueExplore:
                 del request_kind
                 return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
-        cm = _campaign(tmp_path, llm_client=SequencedLLM(), experiment_protocol=None)
+        cm = _campaign(
+            tmp_path,
+            llm_client=SequencedLLM(),
+            experiment_protocol=MockExperimentProtocol(
+                [
+                    _make_protocol_result(
+                        ExperimentStage.SCREENING,
+                        gate_outcome="continue",
+                    ),
+                    _make_protocol_result(
+                        ExperimentStage.SCREENING,
+                        gate_outcome="continue",
+                    ),
+                ]
+            ),
+        )
 
         # First step: first hypothesis — counters start at 0
         r1 = cm.run_one_step()

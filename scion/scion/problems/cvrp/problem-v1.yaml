@@ -109,12 +109,16 @@ research_surfaces:
         - "policies/baseline_modules/*.py"
       create_new_allowed: true
       modify_allowed: true
-      remove_allowed: true
+      remove_allowed: false
       singleton: false
     target_files:
       - "policies/baseline_algorithm.py"
       - "policies/baseline_modules/*.py"
     interface:
+      entrypoint_files:
+        - "policies/baseline_algorithm.py"
+      support_files:
+        - "policies/baseline_modules/*.py"
       required_functions:
         - "solve"
       function_signatures:
@@ -288,7 +292,7 @@ research_surfaces:
       - "solve"
     create_new_allowed: true
     modify_allowed: true
-    remove_allowed: true
+    remove_allowed: false
 
 objective_policy:
   mode: lexicographic

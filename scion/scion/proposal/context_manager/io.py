@@ -6,9 +6,8 @@ import os
 from pathlib import Path
 from typing import Any, List, Mapping, Optional
 
-from scion.core.forced_surface import surface_target_files
 from scion.core.models import ChampionState
-from scion.proposal.context.surfaces import _surface_file_targets
+from scion.proposal.context.surfaces import _surface_file_targets, surface_target_files
 
 def _read_champion_operators(
     champion: ChampionState,
@@ -113,18 +112,6 @@ def _list_champion_surface_files(
             and os.path.isfile(os.path.join(champion.code_snapshot_path, file_rel))
         }
     )
-
-def _available_hypothesis_actions(
-    targetable_operator_files: List[str],
-    *,
-    targetable_policy_files: Optional[List[str]] = None,
-) -> set[str]:
-    actions = {"create_new"}
-    if targetable_operator_files or targetable_policy_files:
-        actions.add("modify")
-    if targetable_operator_files:
-        actions.add("remove")
-    return actions
 
 def _expand_surface_targets_for_champion(
     champion: ChampionState,

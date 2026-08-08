@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from scion.problems.cvrp.evidence import (
@@ -18,7 +19,12 @@ from scion.problems.cvrp.adapter import CvrpAdapter
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
 CONTROLLED_DIR = CVRP_DIR / "controlled"
-VRP_DIR = CVRP_DIR.parents[3] / "vrp"
+VRP_DIR = Path(
+    os.environ.get(
+        "SCION_CVRP_TEST_DATA_ROOT",
+        "/home/clawd/research/or-autoresearch-agent/vrp",
+    )
+).resolve()
 STAGES = ("screening", "validation", "frozen", "final")
 EXPECTED_TOP_LEVEL = (
     "README.md",

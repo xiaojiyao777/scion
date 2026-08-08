@@ -9,7 +9,11 @@ import pytest
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.config.protocol_config import ScreeningConfig
-from scion.core.screening_visibility_runtime import runtime_gate_visibility_summary
+from scion.core.screening_visibility_runtime import (
+    runtime_aggregate_exclusion_for_protocol,
+    runtime_evidence_policy_for_protocol,
+    runtime_gate_visibility_summary,
+)
 from scion.core.evidence_recording.artifact_refs import _read_partial_metrics_snapshot
 from scion.core.models import ExperimentStage, RunResult, SolverOutput
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
@@ -81,85 +85,141 @@ def test_repeated_champion_result_is_reused_and_candidate_still_runs(tmp_path):
     assert raw["pairs"][0]["runtime_ratio_high_confidence"] is False
 
 
-def test_cached_champion_runtime_tie_requires_fresh_runtime(tmp_path):
+def test_cached_champion_runtime_is_diagnostic_only_for_case_level_gate(tmp_path):
     case_path = tmp_path / "cases" / "case.json"
     case_path.parent.mkdir()
     case_path.write_text('{"input": 1}\n', encoding="utf-8")
     champion_ws = _workspace(tmp_path, "champion")
     candidate_ws = _workspace(tmp_path, "candidate")
     runner = _TieRuntimeRunner(champion_ws=champion_ws)
-    protocol = _protocol(tmp_path, runner, case_path)
+    protocol = _protocol(
+        tmp_path,
+        runner,
+        case_path,
+        problem_spec=_surface_problem_spec(),
+    )
 
     first = protocol.run_experiment(
         ExperimentStage.SCREENING,
         str(candidate_ws),
         str(champion_ws),
         "modify",
+        selected_surface="surface_a",
     )
     second = protocol.run_experiment(
         ExperimentStage.SCREENING,
         str(candidate_ws),
         str(champion_ws),
         "modify",
+        selected_surface="surface_a",
     )
 
-    assert first.gate_outcome == "pass"
-    assert first.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
+    assert first.gate_outcome == "fail"
+    assert first.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
     assert first.stats.runtime_pairs == 1
-    assert second.gate_outcome == "unclear"
-    assert second.reason_codes == ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
+    assert second.gate_outcome == "fail"
+    assert second.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
     assert second.stats.runtime_pairs == 0
     assert second.stats.champion_cached_runtime_pairs == 1
-    assert second.stats.runtime_evidence_status == "fresh_champion_required"
-    assert second.runtime_evidence_status == "fresh_champion_required"
-    assert "runtime_evidence_status=fresh_champion_required" in (second.exposed_summary)
+    assert second.stats.runtime_evidence_status == "insufficient"
+    assert second.runtime_evidence_status == "insufficient"
+    assert "runtime_evidence_status=insufficient" in (second.exposed_summary)
     assert "runtime_signal_role=audit_or_proposal_guidance_only" in (
         second.exposed_summary
     )
     assert "runtime_standalone_optimization_signal=false" in (second.exposed_summary)
-    assert "fresh_champion_required=true" in second.exposed_summary
+    assert "fresh_champion_required=true" not in second.exposed_summary
     assert (
-        "runtime_gate_reason_semantics=runtime_fresh_champion_required"
+        "runtime_gate_reason_semantics=objective_fail,runtime_incomplete_advisory"
         in second.exposed_summary
     )
     assert (
-        "runtime_rerun_recommendation=fresh_champion_re_evaluation_required"
+        "runtime_rerun_recommendation=runtime_evidence_advisory_only"
         in second.exposed_summary
     )
     assert runner.call_count(str(champion_ws)) == 1
 
     raw = json.loads(Path(second.raw_metrics_ref).read_text(encoding="utf-8"))
-    assert raw["runtime_evidence_status"] == "fresh_champion_required"
+    assert raw["runtime_evidence_status"] == "insufficient"
     assert raw["runtime_stats"]["runtime_pairs"] == 0
     assert raw["pairs"][0]["champion_result_source"] == "cached"
     policy = raw["runtime_evidence_policy"]
     assert policy["schema_version"] == "runtime_evidence_policy.v1"
     assert policy["runtime_evidence_confidence"] == "low_cached_champion"
-    assert policy["runtime_evidence_status"] == "fresh_champion_required"
-    assert policy["fresh_champion_required"] is True
+    assert policy["runtime_evidence_status"] == "insufficient"
+    assert policy["fresh_champion_required"] is False
     assert policy["runtime_aggregate_excluded"] is True
+    assert policy["candidate_runtime_pair_evidence_count"] == 1
     assert policy["standalone_optimization_signal"] is False
     assert policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
     assert policy["proposal_guidance_only"] is True
     assert policy["decision_features_excluded"] is True
-    assert "RUNTIME_EVIDENCE_FRESH_CHAMPION_REQUIRED" in (policy["policy_reason_codes"])
+    assert runtime_evidence_policy_for_protocol(second) == policy
+    assert "RUNTIME_EVIDENCE_INCOMPLETE" in policy["policy_reason_codes"]
     visibility = raw["runtime_gate_visibility"]
     assert visibility["schema_version"] == "runtime_gate_visibility.v1"
-    assert visibility["reason_semantics"] == ["runtime_fresh_champion_required"]
-    assert visibility["fresh_champion_required"] is True
+    assert visibility["reason_semantics"] == [
+        "objective_fail",
+        "runtime_incomplete_advisory",
+    ]
+    assert visibility["fresh_champion_required"] is False
     assert visibility["rerun_recommendation"] == (
-        "fresh_champion_re_evaluation_required"
+        "runtime_evidence_advisory_only"
     )
-    assert visibility["fresh_champion_requirement"] == (
-        "fresh_champion_re_evaluation_required_before_runtime_tie_advances"
-    )
+    assert "fresh_champion_requirement" not in visibility
     assert visibility["formal_rerun_scheduled"] is False
     assert visibility["decision_features_excluded"] is True
     status_snapshot = _read_partial_metrics_snapshot(second.raw_metrics_ref)
-    assert status_snapshot["runtime_evidence_status"] == "fresh_champion_required"
+    assert status_snapshot["runtime_evidence_status"] == "insufficient"
     assert status_snapshot["runtime_evidence_policy"] == policy
     assert status_snapshot["runtime_gate_visibility"] == visibility
     assert status_snapshot["champion_cached_runtime_pairs"] == 1
+    assert status_snapshot["screening_evidence_status"] == "complete"
+
+
+@pytest.mark.parametrize(
+    "surface_summary",
+    [
+        {
+            "candidate_pairs": 4,
+            "fields": {
+                "solver_algorithm_active": {
+                    "present": 4,
+                    "missing": 0,
+                    "empty": 0,
+                    "failed": 4,
+                }
+            },
+        },
+        {
+            "fields": {
+                "solver_algorithm_active": {
+                    "present": 4,
+                    "missing": 0,
+                    "empty": 0,
+                    "failed": 4,
+                }
+            },
+        },
+    ],
+)
+def test_candidate_runtime_pair_count_does_not_double_count_present_subsets(
+    surface_summary,
+):
+    protocol = SimpleNamespace(
+        stats=SimpleNamespace(runtime_pairs=0, runtime_evidence_status="insufficient"),
+        runtime_confidence="low_cached_champion",
+        runtime_evidence_status="insufficient",
+        runtime_model="budget_exhausting",
+        champion_cached_runtime_pairs=4,
+        candidate_surface_runtime_summary=surface_summary,
+    )
+
+    exclusion = runtime_aggregate_exclusion_for_protocol(protocol)
+    policy = runtime_evidence_policy_for_protocol(protocol)
+
+    assert exclusion["candidate_runtime_pair_evidence_count"] == 4
+    assert policy["candidate_runtime_pair_evidence_count"] == 4
 
 
 @pytest.mark.parametrize(
@@ -385,7 +445,13 @@ class _TieRuntimeRunner(_CountingRunner):
         return _run_result(score=1, elapsed_ms=50)
 
 
-def _protocol(tmp_path: Path, runner, case_path: Path) -> ExperimentProtocol:
+def _protocol(
+    tmp_path: Path,
+    runner,
+    case_path: Path,
+    *,
+    problem_spec=None,
+) -> ExperimentProtocol:
     return ExperimentProtocol(
         protocol_config=ProtocolConfig(
             screening=ScreeningConfig(n_cases_modify=1, n_cases_create=1)
@@ -411,6 +477,18 @@ def _protocol(tmp_path: Path, runner, case_path: Path) -> ExperimentProtocol:
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
+        problem_spec=problem_spec,
+    )
+
+
+def _surface_problem_spec():
+    return SimpleNamespace(
+        research_surfaces=[
+            SimpleNamespace(
+                name="surface_a",
+                evidence=SimpleNamespace(required_runtime_fields=["observed"]),
+            )
+        ]
     )
 
 

@@ -5,6 +5,7 @@ import random
 import types
 from typing import Any
 
+from scion.problems.cvrp.models import CvrpInstance
 from scion.problems.cvrp.preview.synthetic import _synthetic_preview_instance
 from scion.problems.cvrp.preview.synthetic import (
     _PolicyPreviewTimeout,

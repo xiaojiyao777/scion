@@ -24,7 +24,7 @@ from scion.core.models import (
 )
 from scion.core.decision_finalizer import _sync_terminal_branch_evidence
 from scion.lineage.branch_store import BranchStore, HypothesisStore
-from scion.lineage.champion_store import ChampionStore
+from scion.lineage.research_champion_store import ChampionStore
 from scion.lineage.registry import LineageRegistry
 
 # ---------------------------------------------------------------------------
@@ -480,7 +480,7 @@ class TestChampionStore:
         assert [(c.version, c.weight_revision) for c in history] == [(2, 0), (2, 1)]
         assert store.get_by_version_revision(2, 0).weight_revision == 0
 
-    def test_legacy_champions_table_migrates_to_weight_revision_pk(self, tmp_path):
+    def test_fresh_v3_store_rejects_legacy_champion_schema(self, tmp_path):
         import sqlite3
 
         db_path = tmp_path / "scion.db"
@@ -503,13 +503,8 @@ class TestChampionStore:
                 ) VALUES (1, '{}', 'cfg', '/tmp/snap/v1', 'hash1')
             """)
 
-        store = ChampionStore(str(db_path), str(tmp_path / "snaps"))
-        revised = _make_champion_state(1)
-        revised.weight_revision = 1
-        store.promote(revised)
-
-        assert store.get_by_version_revision(1, 0) is not None
-        assert store.get_by_version_revision(1, 1) is not None
+        with pytest.raises(RuntimeError, match="fresh V3 research schema"):
+            ChampionStore(str(db_path), str(tmp_path / "snaps"))
 
     def test_get_by_version(self, tmp_path):
         store = ChampionStore(str(tmp_path / "scion.db"), str(tmp_path / "snaps"))

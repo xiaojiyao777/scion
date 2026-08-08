@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import (
     Branch,
     BranchState,
@@ -25,9 +26,6 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problem.loader import load_problem_adapter
-from scion.postrun.direct_v3_prompt_visibility import (
-    direct_v3_code_source_visibility,
-)
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.manager import (
     CANONICAL_SCREENING_HISTORY_KEY,
@@ -70,6 +68,31 @@ def _runtime(problem_id: str):
     return spec, legacy, adapter, champion, branch
 
 
+def test_warehouse_hypothesis_context_exposes_all_declared_safe_surfaces_and_source() -> None:
+    spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
+
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+    )
+
+    assert {surface["name"] for surface in context["research_surfaces"]} == {
+        surface.name for surface in spec.research_surfaces or []
+    }
+    editable_operator_files = {
+        path.relative_to(Path(champion.code_snapshot_path)).as_posix()
+        for path in Path(champion.code_snapshot_path, "operators").glob("*.py")
+        if path.name not in {"__init__.py", "base.py"}
+    }
+    assert editable_operator_files
+    for file_rel in editable_operator_files:
+        assert f"### {file_rel}" in context["champion_operators_code"]
+        assert file_rel in context["existing_target_files"]
+    assert context["create_path_patterns"] == ["operators/*.py"]
+    assert "remove" not in context["available_actions"]
+
+
 @pytest.mark.parametrize("problem_id", ("warehouse_delivery", "cvrp"))
 def test_direct_v3_real_problem_response_uses_minimal_parser_path(
     problem_id: str,
@@ -107,7 +130,8 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     branch.direction = f"SENTINEL_{problem_id}_HOST_DIRECTION"
     objective_tail = f"SENTINEL_{problem_id}_OBJECTIVE"
     runtime_error_tail = f"SENTINEL_{problem_id}_RUNTIME_ERROR"
-    telemetry_noise = f"SENTINEL_{problem_id}_TELEMETRY_NOISE"
+    safe_diagnostic = f"SENTINEL_{problem_id}_SAFE_DIAGNOSTIC"
+    hidden_phase_telemetry = f"SENTINEL_{problem_id}_HIDDEN_PHASE_TELEMETRY"
     pre_protocol_noise = f"SENTINEL_{problem_id}_PRE_PROTOCOL_NOISE"
     forbidden_raw = f"FORBIDDEN_{problem_id}_RAW_PAIR"
     hypothesis = HypothesisProposal(
@@ -171,9 +195,9 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
                     median_deltas={"objective": 2.5},
                 ),
             ),
-            candidate_phase_telemetry_summary={"phase": telemetry_noise},
+            candidate_phase_telemetry_summary={"phase": hidden_phase_telemetry},
             candidate_operator_attempts=99,
-            mechanism_evidence={"mechanism": telemetry_noise},
+            mechanism_evidence={"mechanism": hidden_phase_telemetry},
             candidate_runtime_failure_categories={"crash": 1},
             candidate_first_runtime_failure={"detail": runtime_error_tail},
         ),
@@ -200,8 +224,11 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         failure_detail=pre_protocol_noise,
     )
     adapter_payload = dict(adapter.render_problem_measurement_diagnostics())
-    adapter_payload["opportunity_diagnostics"] = [telemetry_noise]
-    adapter_payload["phase_telemetry"] = [telemetry_noise]
+    visible_diagnostic_field = (
+        "typed_attribution" if problem_id == "cvrp" else "opportunity_diagnostics"
+    )
+    adapter_payload[visible_diagnostic_field] = [{"summary": safe_diagnostic}]
+    adapter_payload["phase_telemetry"] = [hidden_phase_telemetry]
     adapter_payload["raw_pair_rows"] = [forbidden_raw]
     monkeypatch.setattr(
         adapter,
@@ -260,7 +287,8 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert objective_tail in rendered
     assert "case-visible" in rendered
     assert runtime_error_tail in rendered
-    assert telemetry_noise not in rendered
+    assert safe_diagnostic in rendered
+    assert hidden_phase_telemetry not in rendered
     assert pre_protocol_noise not in rendered
     assert forbidden_raw not in rendered
     assert "problem_opportunity_summary" not in context
@@ -297,6 +325,202 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         "target_intent",
     ):
         assert forbidden not in lowered
+
+
+def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
+    sibling = Branch(
+        branch_id="prior-rejected-sibling",
+        state=BranchState.EXPLORE,
+        base_champion_id=champion.version,
+        base_champion_hash=champion.code_snapshot_hash,
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="FORBIDDEN_PROVIDER_HYPOTHESIS_PROSE",
+        change_locus="order_level",
+        action="modify",
+        target_file="operators/change_vehicle_type.py",
+    )
+    patch = PatchProposal(
+        file_path="operators/change_vehicle_type.py",
+        action="modify",
+        code_content="FORBIDDEN_REJECTED_PATCH_SOURCE",
+    )
+
+    def rejected_step(
+        *,
+        round_num: int,
+        phase: str,
+        reason_code: str,
+        check_code: str,
+        rejected_patch: PatchProposal | None,
+        source_branch_id: str = branch.branch_id,
+    ) -> StepRecord:
+        checks_key = (
+            "contract_checks" if phase.endswith("contract") else "verification_checks"
+        )
+        return StepRecord(
+            round_num=round_num,
+            branch_id=source_branch_id,
+            hypothesis=hypothesis,
+            patch=rejected_patch,
+            contract_passed=phase == "verification",
+            verification_passed=False,
+            protocol_result=None,
+            decision=None,
+            failure_stage=phase,
+            failure_detail="FORBIDDEN_PROVIDER_OR_CHECK_PROSE",
+            execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            execution_outcome_reason_code=reason_code,
+            execution_outcome_detail="FORBIDDEN_EXECUTION_DETAIL",
+            execution_outcome_provenance={
+                "stage": phase,
+                checks_key: [
+                    {
+                        "name": check_code,
+                        "passed": False,
+                        "severity": "heavy",
+                        "detail": "FORBIDDEN_CHECK_DETAIL",
+                        "metadata": {
+                            "validation_case_details": "FORBIDDEN_VALIDATION_RAW"
+                        },
+                    },
+                    {
+                        "name": "PASSED_CHECK_MUST_NOT_APPEAR",
+                        "passed": True,
+                    },
+                ],
+            },
+        )
+
+    steps = [
+        rejected_step(
+            round_num=1,
+            phase="hypothesis_contract",
+            reason_code="HYPOTHESIS_CONTRACT_REJECTED",
+            check_code="H3_target_matches_locus",
+            rejected_patch=None,
+        ),
+        rejected_step(
+            round_num=2,
+            phase="patch_contract",
+            reason_code="PATCH_CONTRACT_REJECTED",
+            check_code="C5_frozen_boundary",
+            rejected_patch=patch,
+        ),
+        rejected_step(
+            round_num=3,
+            phase="verification",
+            reason_code="VERIFICATION_HEAVY_REJECTED",
+            check_code="V6_feasibility",
+            rejected_patch=patch,
+            source_branch_id=sibling.branch_id,
+        ),
+        StepRecord(
+            round_num=4,
+            branch_id=branch.branch_id,
+            hypothesis=hypothesis,
+            patch=None,
+            contract_passed=False,
+            verification_passed=False,
+            protocol_result=None,
+            decision=None,
+            failure_stage="proposal_hypothesis",
+            failure_detail="FORBIDDEN_PROVIDER_FAILURE",
+        ),
+        *[
+            StepRecord(
+                round_num=round_num,
+                branch_id=branch.branch_id,
+                hypothesis=hypothesis,
+                patch=patch,
+                contract_passed=True,
+                verification_passed=False,
+                protocol_result=ProtocolResult(
+                    stage=stage,
+                    stats=EvalStats(
+                        n_cases=1,
+                        wins=0,
+                        losses=1,
+                        ties=0,
+                        win_rate=0.0,
+                        median_delta=-1.0,
+                        ci_low=-2.0,
+                        ci_high=0.0,
+                    ),
+                    gate_outcome="fail",
+                    reason_codes=(f"FORBIDDEN_{stage.value.upper()}_CODE",),
+                    exposed_summary=f"FORBIDDEN_{stage.value.upper()}_SUMMARY",
+                    raw_metrics_ref=f"private/FORBIDDEN_{stage.value.upper()}.json",
+                    case_ids=(f"FORBIDDEN_{stage.value.upper()}_CASE",),
+                ),
+                decision=None,
+                # Even malformed/mislabeled lifecycle input cannot cross the
+                # explicit pre-Protocol projection boundary.
+                failure_stage="verification",
+                failure_detail=f"FORBIDDEN_{stage.value.upper()}_DETAIL",
+            )
+            for round_num, stage in (
+                (5, ExperimentStage.VALIDATION),
+                (6, ExperimentStage.FROZEN),
+            )
+        ],
+    ]
+
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=steps,
+        campaign_branches=[branch, sibling],
+    )
+    rejection_history = context["research_rejection_history"]
+
+    assert [record["phase"] for record in rejection_history] == [
+        "hypothesis_contract",
+        "patch_contract",
+        "verification",
+    ]
+    assert rejection_history[0] == {
+        "round_num": 1,
+        "source_branch_id": branch.branch_id,
+        "relation": "current",
+        "phase": "hypothesis_contract",
+        "reason_code": "HYPOTHESIS_CONTRACT_REJECTED",
+        "failed_check_codes": ["H3_target_matches_locus"],
+        "research_surface": "order_level",
+        "action": "modify",
+        "target_file": "operators/change_vehicle_type.py",
+    }
+    assert rejection_history[1]["patch_targets"] == [
+        {"action": "modify", "target_file": "operators/change_vehicle_type.py"}
+    ]
+    assert rejection_history[2]["failed_check_codes"] == ["V6_feasibility"]
+    assert rejection_history[2]["source_branch_id"] == sibling.branch_id
+    assert rejection_history[2]["relation"] == "sibling"
+
+    snapshot = proposal_context_snapshot("hypothesis", context)
+    blocks, user_prompt = _split_hypothesis_context(
+        snapshot.inputs.provider_context(include_renderer_inputs=True)
+    )
+    rendered = "\n".join(block["text"] for block in blocks) + user_prompt
+    for forbidden in (
+        "FORBIDDEN_PROVIDER_HYPOTHESIS_PROSE",
+        "FORBIDDEN_REJECTED_PATCH_SOURCE",
+        "FORBIDDEN_PROVIDER_OR_CHECK_PROSE",
+        "FORBIDDEN_EXECUTION_DETAIL",
+        "FORBIDDEN_CHECK_DETAIL",
+        "FORBIDDEN_VALIDATION_RAW",
+        "FORBIDDEN_PROVIDER_FAILURE",
+        "PASSED_CHECK_MUST_NOT_APPEAR",
+        "FORBIDDEN_VALIDATION_CODE",
+        "FORBIDDEN_VALIDATION_SUMMARY",
+        "FORBIDDEN_VALIDATION_CASE",
+        "FORBIDDEN_FROZEN_CODE",
+        "FORBIDDEN_FROZEN_SUMMARY",
+        "FORBIDDEN_FROZEN_CASE",
+    ):
+        assert forbidden not in rendered
 
 
 def test_canonical_screening_history_deduplicates_durable_and_live_record() -> None:
@@ -348,6 +572,64 @@ def test_canonical_screening_history_deduplicates_durable_and_live_record() -> N
     assert len(context["experiment_history"]) == 1
     assert context["experiment_history"][0]["attempt_id"] == "same-hypothesis"
     assert persist_canonical_screening_record(branch, screening) is False
+
+
+def test_budget_exhausting_runtime_policy_reaches_canonical_h_history() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
+    screening = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Diagnose a budget-exhausting CVRP candidate.",
+            change_locus="solver_design",
+            action="modify",
+            target_file="policies/baseline_modules/local_search.py",
+        ),
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=0,
+                losses=1,
+                ties=0,
+                win_rate=0.0,
+                median_delta=-1.0,
+                ci_low=-2.0,
+                ci_high=0.0,
+                runtime_pairs=4,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="screening failed",
+            raw_metrics_ref="private/budget-exhausting.json",
+            runtime_model="budget_exhausting",
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="budget-exhausting-attempt",
+    )
+
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[screening],
+    )
+
+    policy = context["experiment_history"][0]["experiment_evidence"][
+        "runtime_evidence_policy"
+    ]
+    assert policy["runtime_model"] == "budget_exhausting"
+    assert policy["runtime_model_interpretation"] == (
+        "budget_exhausting_runtime_aggregates_observational_not_standalone"
+    )
+    assert policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
+    assert policy["standalone_optimization_signal"] is False
+    assert policy["decision_features_excluded"] is True
 
 
 def test_new_branch_sees_all_reopened_sibling_screenings_without_lifecycle_leaks(
@@ -637,9 +919,23 @@ def test_canonical_screening_history_rejects_conflicting_legacy_fact() -> None:
         )
 
 
-def test_canonical_screening_record_marks_incremental_patch_as_cumulative_state() -> (
-    None
-):
+@pytest.mark.parametrize(
+    (
+        "candidate_parent_scope",
+        "expected_attribution_scope",
+        "expected_incremental_effect_isolated",
+    ),
+    (
+        ("declared_champion", "current_step_candidate", True),
+        ("retained_branch_head", "cumulative_branch_candidate", False),
+        (None, "cumulative_branch_candidate", False),
+    ),
+)
+def test_canonical_screening_record_uses_host_owned_candidate_parent_scope(
+    candidate_parent_scope: str | None,
+    expected_attribution_scope: str,
+    expected_incremental_effect_isolated: bool,
+) -> None:
     hypothesis = HypothesisProposal(
         hypothesis_text="Add one integrated mechanism.",
         change_locus="solver_design",
@@ -686,18 +982,22 @@ def test_canonical_screening_record_marks_incremental_patch_as_cumulative_state(
         failure_stage=None,
         failure_detail=None,
         hypothesis_id="hypothesis-2",
+        candidate_parent_scope=candidate_parent_scope,
     )
 
     record = canonical_screening_record(step)
 
     composition = record["candidate_composition"]
-    assert composition["attribution_scope"] == "cumulative_branch_candidate"
+    assert composition["attribution_scope"] == expected_attribution_scope
     assert composition["protocol_comparison_scope"] == "candidate_vs_champion"
     assert composition["evaluation_candidate"] == (
         "branch_state_after_current_step_patch"
     )
     assert composition["current_step_change_scope"] == "incremental_patch"
-    assert composition["incremental_effect_isolated"] is False
+    assert (
+        composition["incremental_effect_isolated"]
+        is expected_incremental_effect_isolated
+    )
     assert composition["current_step"]["hypothesis_id"] == "hypothesis-2"
     assert composition["current_step"]["target_files"] == [
         "policies/scheduler.py",
@@ -1219,22 +1519,17 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     )
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
     ledger = context["proposal_source_ledger"]
-    visibility = direct_v3_code_source_visibility(context)
-    guarantees = visibility["code_phase_guarantees"]
     target = next(item for item in ledger["entries"] if item["path"] == target_file)
 
     assert target["visibility"] == "full_current"
     assert target["content"]
     assert target["digest"]
     assert context["approved_hypothesis"]["target_file"] == target_file
-    assert "Use direct attribute access" in user_prompt
-    assert "setattr, delattr, dynamic-name getattr" in user_prompt
+    assert "current visible source" in user_prompt
+    assert "source owner, provenance, and digest" not in user_prompt
+    assert "setattr, delattr, dynamic-name getattr" not in user_prompt
+    assert "globals, locals, or vars" not in user_prompt
     assert "process, network, environment, dynamic-import, or file APIs" in user_prompt
-    assert guarantees["target_source_visible"] is True
-    assert guarantees["protected_source_visible"] is True
-    assert guarantees["required_integration_source_visible"] is True
-    assert guarantees["algorithm_file_read_source_visible"] is True
-    assert guarantees["missing_required_source_paths"] == []
     assert "must-not-enter-code-context" not in rendered
     assert set(context).isdisjoint(
         {
@@ -1274,15 +1569,9 @@ def test_direct_v3_cvrp_create_ledger_proves_target_and_support_sources() -> Non
     )
     ledger = context["proposal_source_ledger"]
     target = next(item for item in ledger["entries"] if item["path"] == target_file)
-    guarantees = direct_v3_code_source_visibility(context)["code_phase_guarantees"]
 
     assert target["visibility"] == "new_file_placeholder"
     assert target_file not in ledger["views"]["api_reference"]
     assert ledger["views"]["api_reference"]
     assert ledger["views"]["integration_full"]
     assert ledger["views"]["champion_research"]
-    assert guarantees["target_source_visible"] is True
-    assert guarantees["protected_source_visible"] is True
-    assert guarantees["required_integration_source_visible"] is True
-    assert guarantees["algorithm_file_read_source_visible"] is True
-    assert guarantees["missing_required_source_paths"] == []

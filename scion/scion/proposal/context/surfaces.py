@@ -7,9 +7,8 @@ from the loaded problem spec or adapter.
 
 from __future__ import annotations
 
+import json
 from typing import Any
-
-from scion.core.forced_surface import surface_action_allowed, surface_target_files
 
 
 def _get_research_surfaces(problem_spec: Any, adapter_spec: Any = None) -> list[Any]:
@@ -25,66 +24,6 @@ def _find_research_surface(surfaces: list[Any], name: str) -> Any | None:
         if getattr(surface, "name", None) == name:
             return surface
     return None
-
-
-def _hypothesis_visible_research_surfaces(
-    surfaces: list[Any],
-    *,
-    forced_surface: str | None,
-    active_problem_boundary_surfaces: list[str],
-) -> list[Any]:
-    forced = str(forced_surface or "").strip()
-    if forced:
-        constrained = [
-            surface
-            for surface in surfaces
-            if str(getattr(surface, "name", "") or "").strip() == forced
-        ]
-        return constrained or surfaces
-    active = {
-        str(surface or "").strip()
-        for surface in active_problem_boundary_surfaces
-        if str(surface or "").strip()
-    }
-    if not active:
-        return surfaces
-    constrained = [
-        surface
-        for surface in surfaces
-        if str(getattr(surface, "name", "") or "").strip() in active
-    ]
-    return constrained or surfaces
-
-
-def _build_inactive_surface_exclusion_block(
-    surfaces: list[Any],
-    *,
-    visible_research_surfaces: list[Any],
-    active_problem_boundary_surfaces: list[str],
-) -> str:
-    if not active_problem_boundary_surfaces:
-        return ""
-    visible = {
-        str(getattr(surface, "name", "") or "").strip()
-        for surface in visible_research_surfaces
-    }
-    inactive = [
-        str(getattr(surface, "name", "") or "").strip()
-        for surface in surfaces
-        if str(getattr(surface, "name", "") or "").strip()
-        and str(getattr(surface, "name", "") or "").strip() not in visible
-    ]
-    if not inactive:
-        return ""
-    return (
-        "## Inactive/Legacy Surface Exclusion\n"
-        "Active problem-boundary control is in force. The surfaces below are "
-        "retained only for legacy compatibility, forced diagnostics, or "
-        "regression coverage; they are omitted from active hypothesis grounding "
-        "and must not replace the active solver-design research object:\n"
-        + "- inactive/legacy: "
-        + ", ".join(inactive)
-    )
 
 
 def _include_operator_files_for_research_code(surfaces: list[Any]) -> bool:
@@ -131,54 +70,6 @@ def _build_research_surface_interface_spec(surface: Any) -> str:
         include_research_grading_metadata=False,
     )
     return "\n".join(lines)
-
-
-def _build_forced_surface_constraint(
-    *,
-    surface: Any | None,
-    surface_name: str,
-    action: str | None,
-    target_file: str | None,
-    diagnostic: bool,
-) -> str:
-    lines = ["\n## MANDATORY SEARCH CONSTRAINT"]
-    if diagnostic:
-        lines.append(
-            "A diagnostic experiment-control hook is active for the next "
-            "hypothesis generation."
-        )
-    else:
-        lines.append(
-            "The campaign has detected saturation in the current search "
-            "direction and is forcing locus diversification."
-        )
-    lines.extend(
-        [
-            f"Your hypothesis MUST target research surface `{surface_name}`.",
-            f"Set `change_locus` to `{surface_name}`.",
-        ]
-    )
-    if action:
-        lines.append(f"Set `action` to `{action}`.")
-    elif surface is not None:
-        allowed = [
-            candidate
-            for candidate in ("create_new", "modify", "remove")
-            if surface_action_allowed(surface, candidate)
-        ]
-        if allowed:
-            lines.append(
-                "Choose one legal action for that surface: "
-                + ", ".join(allowed)
-                + "."
-            )
-    if target_file:
-        lines.append(f"Set `target_file` to `{target_file}`.")
-    elif surface is not None:
-        targets = surface_target_files(surface)
-        if targets:
-            lines.append("Declared target files: " + ", ".join(targets) + ".")
-    return "\n".join(lines) + "\n"
 
 
 def _append_research_surface_metadata(
@@ -435,6 +326,31 @@ def _format_bool(value: bool) -> str:
     return "true" if value else "false"
 
 
+def surface_action_allowed(surface: Any, action: str) -> bool:
+    """Return the action permission declared by one research surface."""
+
+    attr = {
+        "create_new": "create_new_allowed",
+        "modify": "modify_allowed",
+        "remove": "remove_allowed",
+    }.get(action)
+    if attr is None:
+        return False
+    targets = getattr(surface, "targets", None)
+    if targets is not None and hasattr(targets, attr):
+        return bool(getattr(targets, attr))
+    return bool(getattr(surface, attr, action in {"create_new", "modify"}))
+
+
+def surface_target_files(surface: Any) -> list[str]:
+    """Return the target patterns declared by one research surface."""
+
+    targets = getattr(surface, "targets", None)
+    if targets is not None and hasattr(targets, "files"):
+        return [str(path) for path in (getattr(targets, "files") or [])]
+    return [str(path) for path in (getattr(surface, "target_files", []) or [])]
+
+
 def _surface_file_targets(research_surfaces: list[Any]) -> list[str]:
     files: set[str] = set()
     for surface in research_surfaces:
@@ -447,7 +363,7 @@ def _surface_file_targets(research_surfaces: list[Any]) -> list[str]:
     return sorted(files)
 
 
-def _solver_design_surface_names(research_surfaces: List[Any]) -> list[str]:
+def _solver_design_surface_names(research_surfaces: list[Any]) -> list[str]:
     names: list[str] = []
     for surface in research_surfaces:
         name = str(getattr(surface, "name", "") or "").strip()
@@ -462,24 +378,6 @@ def _solver_design_surface_names(research_surfaces: List[Any]) -> list[str]:
         ):
             names.append(name)
     return names
-
-
-def _surface_target_files_for_names(
-    research_surfaces: List[Any],
-    names: List[str],
-) -> list[str]:
-    allowed = {str(name or "").strip() for name in names if str(name or "").strip()}
-    if not allowed:
-        return []
-    files: list[str] = []
-    for surface in research_surfaces:
-        name = str(getattr(surface, "name", "") or "").strip()
-        if name not in allowed:
-            continue
-        for target in surface_target_files(surface):
-            if target not in files:
-                files.append(target)
-    return sorted(files)
 
 
 def _json_ready_mechanism_telemetry(value: Any) -> dict[str, Any]:

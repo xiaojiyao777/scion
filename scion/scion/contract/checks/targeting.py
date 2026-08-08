@@ -10,7 +10,6 @@ from scion.contract.patch_paths import (
     patch_action_for_hypothesis_action,
 )
 from scion.contract.result_payload import check_result
-from scion.contract.repair_guidance import patch_primary_target_mismatch_template
 from scion.contract.surface_access import SurfaceAccess
 from scion.core.models import CheckResult, HypothesisProposal, HypothesisRecord, PatchProposal
 from scion.core.paths import normalize_relative_patch_path
@@ -54,7 +53,6 @@ def check_patch_action_target(
     surface_access: SurfaceAccess,
     selected_surface: str | None = None,
     enforce_hypothesis_target: bool = True,
-    additional_change_files: tuple[str, ...] = (),
 ) -> CheckResult:
     t0 = time.monotonic_ns()
     try:
@@ -103,14 +101,6 @@ def check_patch_action_target(
                     f"patch file_path '{file_rel}' does not match approved "
                     f"hypothesis target_file '{target_rel}'",
                     t0,
-                    metadata={
-                        "repair_template": patch_primary_target_mismatch_template(
-                            patch,
-                            hypothesis_target_file=target_rel,
-                            patch_primary_file=file_rel,
-                            additional_change_files=additional_change_files,
-                        )
-                    },
                 )
         selected_name = _selected_surface_name(hypothesis) or selected_surface
         surface = surface_access.surface_by_name(selected_name or "")

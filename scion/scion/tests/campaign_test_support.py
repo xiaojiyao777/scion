@@ -10,7 +10,7 @@ from typing import Any, Dict, List
 import pytest
 
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
-from scion.core.campaign import CampaignManager, VerificationGate, StepResult
+from scion.core.campaign import CampaignManager, StepResult
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, Decision,
     EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
@@ -21,6 +21,7 @@ from scion.evidence.final_evidence_refs import (
 )
 from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
+from scion.verification.gate import VerificationGate
 
 
 # ---------------------------------------------------------------------------

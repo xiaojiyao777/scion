@@ -179,7 +179,7 @@ def _unknown_patch_fields_message(
         "For extra file edits, put each edit object in additional_changes[]. "
         "When one existing file needs multiple non-contiguous edits, emit "
         "multiple ordered exact_replace change objects for the same file_path "
-        "and bind each to the original visible source_digest. The host applies "
-        "and composes them serially. Do not mix same-file exact_replace edits "
+        "in source order. The host binds, applies, and composes them serially. "
+        "Do not mix same-file exact_replace edits "
         "with create, delete, or full_file; use one full_file change instead."
     )

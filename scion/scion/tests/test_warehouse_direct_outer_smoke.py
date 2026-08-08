@@ -218,7 +218,7 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
     )
     assert durable is not None
     assert durable["reason_code"] == "PROPOSAL_RESPONSE_INVALID"
-    assert durable["provenance"]["owner"] == "direct_proposal_provider"
+    assert durable["provenance"]["owner"] == "proposal_pipeline"
     assert durable["provenance"]["stage"] == "proposal_hypothesis"
 
 
@@ -325,40 +325,25 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
     assert step.protocol_result.stage == ExperimentStage.SCREENING
     assert step.decision is not None
 
-    attempt_ref = step.proposal_session_ref
-    assert attempt_ref is not None
-    assert attempt_ref["runtime_mode"] == "direct_v3"
-    assert attempt_ref["phase"] == "code"
-    assert attempt_ref["status"] == "generated"
+    call_ref = step.proposal_session_ref
+    assert call_ref is not None
+    assert call_ref["phase"] == "code"
+    assert call_ref["status"] == "generated"
+    assert call_ref["hypothesis_id"] == step.hypothesis_id
 
     events = campaign._registry.query_by_branch(step.branch_id)
-    transition_rows = [
+    call_rows = [
         (row, json.loads(row["audit_payload_json"]))
         for row in reversed(events)
-        if row["event_kind"] == "proposal_attempt_transition"
+        if row["event_kind"] == "proposal_call"
     ]
-    transitions = [payload for _row, payload in transition_rows]
-    assert [event["phase"] for event in transitions] == [
-        "hypothesis",
-        "hypothesis",
-        "code",
-        "code",
-    ]
-    assert [event["status"] for event in transitions] == [
-        "started",
-        "generated",
-        "started",
-        "generated",
-    ]
-    hypothesis_attempt_id = transitions[0]["attempt_id"]
-    code_attempt_id = transitions[2]["attempt_id"]
-    assert transitions[1]["attempt_id"] == hypothesis_attempt_id
-    assert transitions[3]["attempt_id"] == code_attempt_id
-    assert hypothesis_attempt_id != code_attempt_id
-    assert transitions[2]["continuation_of_attempt_id"] == hypothesis_attempt_id
-    assert transitions[3]["continuation_of_attempt_id"] == hypothesis_attempt_id
-    assert code_attempt_id == attempt_ref["attempt_id"]
-    assert transition_rows[3][0]["event_id"] == attempt_ref["lineage_event_id"]
+    calls = [payload for _row, payload in call_rows]
+    assert [event["phase"] for event in calls] == ["hypothesis", "code"]
+    assert [event["status"] for event in calls] == ["generated", "generated"]
+    assert all(event["hypothesis_id"] == step.hypothesis_id for event in calls)
+    assert call_rows[1][0]["event_id"] == call_ref["lineage_event_id"]
+    assert all("attempt_id" not in event for event in calls)
+    assert all("continuation" not in key for event in calls for key in event)
 
     candidate_paths = list(
         (campaign_dir / "artifacts" / "formal_candidates").glob(
@@ -367,13 +352,8 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
     )
     assert len(candidate_paths) == 1
     candidate = json.loads(candidate_paths[0].read_text(encoding="utf-8"))
-    assert candidate["proposal_attempt_id"] == attempt_ref["attempt_id"]
-    assert candidate["proposal_attempt_event_id"] == attempt_ref["lineage_event_id"]
-    assert candidate["proposal_hypothesis_attempt_id"] == hypothesis_attempt_id
-    assert candidate["proposal_attempt_continuation_of_attempt_id"] == (
-        hypothesis_attempt_id
-    )
-    assert candidate["proposal_runtime_mode"] == "direct_v3"
+    assert all("proposal_attempt" not in key for key in candidate)
+    assert "proposal_runtime_mode" not in candidate
     index_rows = [
         json.loads(line)
         for line in (
@@ -382,13 +362,8 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
         if line.strip()
     ]
     assert len(index_rows) == 1
-    assert index_rows[0]["proposal_attempt_id"] == attempt_ref["attempt_id"]
-    assert index_rows[0]["proposal_attempt_event_id"] == attempt_ref["lineage_event_id"]
-    assert index_rows[0]["proposal_hypothesis_attempt_id"] == hypothesis_attempt_id
-    assert index_rows[0]["proposal_attempt_continuation_of_attempt_id"] == (
-        hypothesis_attempt_id
-    )
-    assert index_rows[0]["proposal_runtime_mode"] == "direct_v3"
+    assert all("proposal_attempt" not in key for key in index_rows[0])
+    assert "proposal_runtime_mode" not in index_rows[0]
 
     decision_field_names = {field.name for field in fields(DecisionFeatures)}
     assert all("proposal_attempt" not in name for name in decision_field_names)

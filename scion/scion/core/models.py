@@ -2,8 +2,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Literal, Union, Any, Dict, List, Tuple
-import uuid
+from typing import Optional, Literal, Any, Dict, List, Tuple
 
 from scion.core.execution_outcome import (
     ExecutionOutcome,
@@ -225,6 +224,7 @@ class ProtocolResult:
     champion_cached_runtime_pairs: int = 0
     runtime_confidence: str = "high"
     runtime_evidence_status: str = "sufficient"
+    runtime_model: Optional[Literal["comparative", "budget_exhausting"]] = None
     opportunity_status: str = "unknown"
     opportunity_diagnostics: Tuple[str, ...] = ()
     mechanism_evidence: Dict[str, Any] = field(default_factory=dict)
@@ -490,6 +490,8 @@ class StepRecord:
               Only set to a real Decision value when the Decision Engine actually ran.
     hypothesis_id: the original HypothesisRecord.hypothesis_id for lifecycle tracking.
     decision_reason_codes: formal Decision outcome reason codes.
+    candidate_parent_scope: host-owned source fact captured before applying the
+                            current patch; None preserves conservative legacy output.
     """
     round_num: int
     branch_id: str
@@ -526,6 +528,9 @@ class StepRecord:
     candidate_construction_errors: int = 0
     candidate_portfolio_errors: int = 0
     candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
+    candidate_parent_scope: Optional[
+        Literal["declared_champion", "retained_branch_head"]
+    ] = None
     scheduler_slot: str = ""
     scheduler_reason: str = ""
     scheduler_audit_metadata: Dict[str, Any] = field(default_factory=dict)

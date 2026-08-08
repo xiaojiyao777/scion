@@ -4,8 +4,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
-from scion.core.problem_identity import problem_id_anchor, stable_identity_hash
-from scion.verification.gate import VerificationGate
+from scion.core.problem_identity import problem_id_anchor
 from scion.verification.requirements import requires_adapter_for_runtime
 
 
@@ -119,46 +118,12 @@ def production_boundary_errors(
     return tuple(errors)
 
 
-def production_boundary_identity_hashes(
-    *,
-    problem_spec: Any | None,
-    experiment_protocol: Any | None,
-    adapter: Any | None,
-    split_manifest: Any | None,
-    seed_ledger: Any | None,
-) -> dict[str, str | None]:
-    """Return stable generic identity hashes visible at the production boundary."""
-
-    return {
-        "problem_spec_hash": stable_identity_hash(problem_spec),
-        "protocol_problem_spec_hash": stable_identity_hash(
-            _attr(experiment_protocol, "_problem_spec", None)
-            if experiment_protocol is not None
-            else None
-        ),
-        "adapter_spec_hash": stable_identity_hash(_visible_adapter_spec(adapter))
-        if adapter is not None
-        else None,
-        "split_manifest_hash": stable_identity_hash(split_manifest),
-        "seed_ledger_hash": stable_identity_hash(seed_ledger),
-    }
-
-
 def _verification_gate_errors(verification_gate: Any | None) -> tuple[str, ...]:
     if verification_gate is None:
         return ()
-
-    errors: list[str] = []
-    if not isinstance(verification_gate, VerificationGate):
-        errors.append("verification_gate must be a VerificationGate instance")
-        return tuple(errors)
-    if _attr(verification_gate, "_strict_runtime_checks", None) is not True:
-        errors.append("verification_gate must enable strict runtime checks")
-    if _attr(verification_gate, "_require_adapter_for_runtime", None) is not True:
-        errors.append(
-            "verification_gate must require adapter for runtime verification"
-        )
-    return tuple(errors)
+    if not callable(_attr(verification_gate, "run", None)):
+        return ("verification_gate.run is required",)
+    return ()
 
 
 def _missing_stage_values(obj: Any | None, label: str) -> tuple[str, ...]:
@@ -179,27 +144,9 @@ def _adapter_spec_errors(
     if adapter is None:
         return ()
     adapter_spec = _visible_adapter_spec(adapter)
-    explicit_hash = _explicit_problem_spec_hash(adapter)
-    if explicit_hash is None:
-        explicit_hash = _explicit_problem_spec_hash(adapter_spec)
-    expected_hash = _canonical_problem_spec_hash(problem_spec)
-    errors: list[str] = []
-    if (
-        explicit_hash is not None
-        and expected_hash is not None
-        and explicit_hash != expected_hash
-    ):
-        errors.append(
-            "adapter.spec problem_spec_hash must match campaign problem_spec "
-            f"{expected_hash!r}; got {explicit_hash!r}"
-        )
     if adapter_spec is None:
-        if explicit_hash is not None and not errors:
-            return ()
-        errors.append("adapter.spec is required")
-        return tuple(errors)
-    errors.extend(_adapter_identity_compatibility_errors(problem_spec, adapter_spec))
-    return tuple(errors)
+        return ("adapter.spec is required",)
+    return _adapter_identity_compatibility_errors(problem_spec, adapter_spec)
 
 
 def _problem_spec_match_errors(
@@ -224,17 +171,6 @@ def _problem_spec_match_errors(
         errors.append(
             f"{label} must match campaign problem_spec identity "
             f"{campaign_id!r}; got {candidate_id!r}"
-        )
-    campaign_hash = stable_identity_hash(campaign_spec)
-    candidate_hash = stable_identity_hash(candidate_spec)
-    if (
-        campaign_hash is not None
-        and candidate_hash is not None
-        and campaign_hash != candidate_hash
-    ):
-        errors.append(
-            f"{label} stable identity hash must match campaign problem_spec "
-            f"{campaign_hash!r}; got {candidate_hash!r}"
         )
     return tuple(errors)
 
@@ -368,28 +304,10 @@ def _visible_adapter_spec(adapter: Any) -> Any | None:
     return spec
 
 
-def _explicit_problem_spec_hash(value: Any | None) -> str | None:
-    if value is None:
-        return None
-    return _clean_text(_attr(value, "problem_spec_hash", None))
-
-
-def _canonical_problem_spec_hash(problem_spec: Any | None) -> str | None:
-    spec_v1 = _attr(problem_spec, "spec_v1", None)
-    if spec_v1 is not None:
-        return stable_identity_hash(spec_v1)
-    return stable_identity_hash(problem_spec)
-
-
 def _problem_identity(problem_spec: Any | None) -> str | None:
     if problem_spec is None:
         return None
     return problem_id_anchor(problem_spec)
-
-
-def _clean_text(value: Any) -> str | None:
-    text = str(value or "").strip()
-    return text or None
 
 
 def _non_empty_sequence(value: Any) -> bool:
@@ -411,6 +329,5 @@ __all__ = [
     "is_adapter_backed_production_campaign",
     "is_adapter_backed_production_spec",
     "production_boundary_errors",
-    "production_boundary_identity_hashes",
     "validate_production_campaign_boundary",
 ]

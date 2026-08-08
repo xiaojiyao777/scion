@@ -11,7 +11,7 @@ class TestContractFailStepRecord:
         cm = _campaign(tmp_path)
 
         # Make validate_hypothesis always fail
-        cm._contract_gate.validate_hypothesis = lambda hyp, *, governance_envelope=None: ContractResult(
+        cm._contract_gate.validate_hypothesis = lambda hyp, **_kwargs: ContractResult(
             passed=False, checks=(), failure_reason="forced contract failure"
         )
 

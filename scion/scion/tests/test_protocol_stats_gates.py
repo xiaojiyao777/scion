@@ -144,14 +144,14 @@ def test_screening_gate_pass():
     assert result.outcome == "pass"
 
 
-def test_screening_gate_marginal_delta_aligns_with_decision_path():
+def test_screening_gate_does_not_advance_below_practical_delta():
     stats = _make_stats(win_rate=0.7, median_delta=0.01)
     config = ProtocolConfig.model_validate({"practical_delta_screen": 2.0})
 
     result = screening_gate(stats, config)
 
-    assert result.outcome == "pass"
-    assert result.reason_codes == ("SCREENING_PASS_MARGINAL_DELTA",)
+    assert result.outcome == "expand"
+    assert result.reason_codes == ("SCREENING_EXPAND_CASE_LEVEL_UNCERTAIN",)
 
 
 def test_screening_gate_high_win_negative_effect_is_not_pass():
@@ -159,10 +159,8 @@ def test_screening_gate_high_win_negative_effect_is_not_pass():
 
     result = screening_gate(stats, _cfg)
 
-    assert result.outcome == "unclear"
-    assert result.reason_codes == (
-        "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT",
-    )
+    assert result.outcome == "expand"
+    assert result.reason_codes == ("SCREENING_EXPAND_CASE_LEVEL_UNCERTAIN",)
 
 
 def test_screening_gate_fail():
@@ -171,7 +169,7 @@ def test_screening_gate_fail():
     assert result.outcome == "fail"
 
 
-def test_screening_gate_passes_runtime_tie_improvement():
+def test_screening_runtime_tie_does_not_replace_objective_improvement():
     stats = _make_stats(
         wins=0,
         losses=0,
@@ -185,11 +183,11 @@ def test_screening_gate_passes_runtime_tie_improvement():
         runtime_pairs=10,
     )
     result = screening_gate(stats, _cfg)
-    assert result.outcome == "pass"
-    assert result.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
-def test_runtime_tie_with_cached_champion_requires_fresh_runtime():
+def test_cached_runtime_is_diagnostic_not_a_screening_gate():
     stats = _make_stats(
         wins=0,
         losses=0,
@@ -206,8 +204,8 @@ def test_runtime_tie_with_cached_champion_requires_fresh_runtime():
 
     result = screening_gate(stats, _cfg)
 
-    assert result.outcome == "unclear"
-    assert result.reason_codes == ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
 def test_budget_exhausting_cached_runtime_tie_does_not_require_fresh_runtime():
@@ -234,7 +232,7 @@ def test_budget_exhausting_cached_runtime_tie_does_not_require_fresh_runtime():
     assert "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" not in result.reason_codes
 
 
-def test_budget_exhausting_runtime_tie_speedup_still_passes_screening():
+def test_budget_exhausting_runtime_tie_does_not_pass_screening():
     stats = _make_stats(
         wins=0,
         losses=0,
@@ -253,8 +251,8 @@ def test_budget_exhausting_runtime_tie_speedup_still_passes_screening():
 
     result = screening_gate(stats, config)
 
-    assert result.outcome == "pass"
-    assert result.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
 @pytest.mark.parametrize("gate_func", (validation_gate, frozen_gate))
@@ -276,8 +274,8 @@ def test_validation_and_frozen_cached_runtime_tie_cannot_pass(gate_func):
 
     result = gate_func(stats, _cfg)
 
-    assert result.outcome == "unclear"
-    assert result.reason_codes == ("RUNTIME_TIE_FRESH_CHAMPION_REQUIRED",)
+    assert result.outcome == "fail"
+    assert "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" not in result.reason_codes
 
 
 def test_screening_gate_expand():
@@ -286,7 +284,7 @@ def test_screening_gate_expand():
     assert result.outcome == "expand"
 
 
-def test_trajectory_divergent_tie_heavy_screening_expands_below_half_win_rate():
+def test_pair_signal_cannot_override_case_win_rate():
     stats = _make_stats(
         wins=3,
         losses=4,
@@ -306,13 +304,11 @@ def test_trajectory_divergent_tie_heavy_screening_expands_below_half_win_rate():
 
     result = screening_gate(stats, config)
 
-    assert result.outcome == "expand"
-    assert result.reason_codes == (
-        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
-    )
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
-def test_trajectory_divergent_all_tie_screening_expands_as_low_snr():
+def test_all_case_ties_do_not_advance_screening():
     stats = _make_stats(
         wins=0,
         losses=0,
@@ -332,10 +328,8 @@ def test_trajectory_divergent_all_tie_screening_expands_as_low_snr():
 
     result = screening_gate(stats, config)
 
-    assert result.outcome == "expand"
-    assert result.reason_codes == (
-        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
-    )
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
 def test_trajectory_stable_tie_heavy_screening_still_fails_below_half_win_rate():
@@ -359,7 +353,7 @@ def test_trajectory_stable_tie_heavy_screening_still_fails_below_half_win_rate()
     assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
-def test_budget_exhausting_runtime_regression_does_not_block_low_snr_expand():
+def test_budget_exhausting_runtime_does_not_override_case_failure():
     stats = _make_stats(
         wins=3,
         losses=4,
@@ -383,13 +377,11 @@ def test_budget_exhausting_runtime_regression_does_not_block_low_snr_expand():
 
     result = screening_gate(stats, config)
 
-    assert result.outcome == "expand"
-    assert result.reason_codes == (
-        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
-    )
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
-def test_budget_exhausting_runtime_ratio_does_not_block_low_snr_expand():
+def test_budget_exhausting_runtime_ratio_does_not_override_case_failure():
     stats = _make_stats(
         wins=3,
         losses=4,
@@ -415,14 +407,12 @@ def test_budget_exhausting_runtime_ratio_does_not_block_low_snr_expand():
 
     result = screening_gate(stats, config)
 
-    assert result.outcome == "expand"
-    assert result.reason_codes == (
-        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
-    )
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
 @pytest.mark.parametrize("gate_func", (screening_gate, validation_gate, frozen_gate))
-def test_protocol_gate_owns_runtime_regression_threshold(gate_func):
+def test_generic_runtime_ratio_does_not_override_problem_objective(gate_func):
     stats = _make_stats(
         win_rate=1.0,
         median_delta=10.0,
@@ -434,8 +424,8 @@ def test_protocol_gate_owns_runtime_regression_threshold(gate_func):
 
     result = gate_func(stats, _cfg)
 
-    assert result.outcome == "fail"
-    assert result.reason_codes == ("RUNTIME_REGRESSION",)
+    assert result.outcome == "pass"
+    assert "RUNTIME_REGRESSION" not in result.reason_codes
 
 
 def test_budget_exhausting_protocol_does_not_apply_comparative_runtime_threshold():
@@ -457,7 +447,7 @@ def test_budget_exhausting_protocol_does_not_apply_comparative_runtime_threshold
     assert result.reason_codes == ("FROZEN_PASS",)
 
 
-def test_expanded_screening_protocol_owns_borderline_advance():
+def test_expanded_screening_cannot_advance_below_case_threshold():
     stats = _make_stats(
         win_rate=0.50,
         median_delta=100.0,
@@ -469,10 +459,6 @@ def test_expanded_screening_protocol_owns_borderline_advance():
             "gates": {
                 "screening": {
                     "win_rate_min": 0.55,
-                    "expanded_borderline_advance": {
-                        "enabled": True,
-                        "win_rate_window": 0.05,
-                    },
                 }
             }
         }
@@ -482,14 +468,13 @@ def test_expanded_screening_protocol_owns_borderline_advance():
     expanded = screening_gate(stats, config, expanded=True)
 
     assert initial.outcome == "expand"
-    assert expanded.outcome == "pass"
+    assert expanded.outcome == "unclear"
     assert expanded.reason_codes == (
-        "SCREENING_EXPAND_EXHAUSTED_BORDERLINE_POLICY_PASS",
-        "SCREENING_BELOW_WIN_RATE_MIN_ALLOWED_BY_POLICY",
+        "SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN",
     )
 
 
-def test_expanded_screening_protocol_owns_pair_signal_advance():
+def test_expanded_screening_pair_signal_cannot_advance_candidate():
     stats = _make_stats(
         wins=5,
         losses=4,
@@ -508,19 +493,6 @@ def test_expanded_screening_protocol_owns_pair_signal_advance():
             "gates": {
                 "screening": {
                     "win_rate_min": 0.60,
-                    "expanded_borderline_advance": {
-                        "enabled": True,
-                        "win_rate_window": 0.10,
-                        "require_median_delta_nonnegative": True,
-                        "require_ci_low_nonnegative": True,
-                        "allow_pair_level_signal": True,
-                        "pair_win_rate_min": 0.50,
-                        "min_pair_total": 16,
-                        "min_pair_wins": 8,
-                        "min_pair_win_loss_margin": 1,
-                        "pair_non_tie_win_rate_min": 0.60,
-                        "max_pair_loss_rate": 0.40,
-                    },
                 }
             },
         }
@@ -528,24 +500,13 @@ def test_expanded_screening_protocol_owns_pair_signal_advance():
 
     result = screening_gate(stats, config, expanded=True)
 
-    assert result.outcome == "pass"
-    assert result.reason_codes == (
-        "SCREENING_EXPAND_EXHAUSTED_PAIR_SIGNAL_POLICY_PASS",
-        "SCREENING_PAIR_LEVEL_SIGNAL_DIAGNOSTIC_VALIDATE",
-    )
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
-@pytest.mark.parametrize(
-    ("median_delta", "outcome", "reason_code"),
-    (
-        (5.0, "pass", "VALIDATION_EXPAND_EXHAUSTED_MARGINAL_PASS"),
-        (-5.0, "fail", "VALIDATION_EXPAND_EXHAUSTED_FAIL"),
-    ),
-)
+@pytest.mark.parametrize("median_delta", (5.0, -5.0))
 def test_expanded_validation_protocol_owns_final_verdict(
     median_delta,
-    outcome,
-    reason_code,
 ):
     stats = _make_stats(
         win_rate=0.70,
@@ -556,11 +517,13 @@ def test_expanded_validation_protocol_owns_final_verdict(
 
     result = validation_gate(stats, _cfg, expanded=True)
 
-    assert result.outcome == outcome
-    assert result.reason_codes == (reason_code,)
+    assert result.outcome == "fail"
+    assert result.reason_codes == (
+        "VALIDATION_EXPAND_EXHAUSTED_INSUFFICIENT_EVIDENCE",
+    )
 
 
-def test_budget_exhausting_high_runtime_ratio_does_not_block_low_snr_expand():
+def test_budget_exhausting_high_runtime_ratio_does_not_override_case_failure():
     stats = _make_stats(
         wins=3,
         losses=4,
@@ -586,10 +549,8 @@ def test_budget_exhausting_high_runtime_ratio_does_not_block_low_snr_expand():
 
     result = screening_gate(stats, config)
 
-    assert result.outcome == "expand"
-    assert result.reason_codes == (
-        "SCREENING_EXPAND_LOW_SNR_TRAJECTORY_DIVERGENT",
-    )
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
 def test_trajectory_divergent_negative_delta_still_fails_screening():
@@ -663,11 +624,11 @@ def test_trajectory_divergent_candidate_failure_still_fails_screening():
     assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
-def test_screening_gate_small_nonnegative_delta_is_marginal_screening_pass():
+def test_screening_gate_small_nonnegative_delta_does_not_pass():
     stats = _make_stats(win_rate=0.7, median_delta=0.0001)
     result = screening_gate(stats, _cfg)
-    assert result.outcome == "pass"
-    assert result.reason_codes == ("SCREENING_PASS_MARGINAL_DELTA",)
+    assert result.outcome == "expand"
+    assert result.reason_codes == ("SCREENING_EXPAND_CASE_LEVEL_UNCERTAIN",)
 
 
 def test_validation_gate_pass():
@@ -689,7 +650,7 @@ def test_validation_gate_uses_hierarchical_status():
     assert result.reason_codes == ("VALIDATION_PASS_HIERARCHICAL",)
 
 
-def test_validation_gate_passes_runtime_tie_improvement():
+def test_validation_runtime_tie_does_not_replace_objective_improvement():
     stats = _make_stats(
         wins=0,
         losses=0,
@@ -704,8 +665,8 @@ def test_validation_gate_passes_runtime_tie_improvement():
         runtime_pairs=10,
     )
     result = validation_gate(stats, _cfg)
-    assert result.outcome == "pass"
-    assert result.reason_codes == ("VALIDATION_PASS_RUNTIME_TIE_IMPROVEMENT",)
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",)
 
 
 def test_validation_gate_fail_ci_negative():
@@ -849,7 +810,7 @@ def test_frozen_gate_pass():
     assert result.outcome == "pass"
 
 
-def test_frozen_gate_passes_runtime_tie_improvement():
+def test_frozen_runtime_tie_does_not_replace_objective_improvement():
     stats = _make_stats(
         wins=0,
         losses=0,
@@ -864,8 +825,8 @@ def test_frozen_gate_passes_runtime_tie_improvement():
         runtime_pairs=10,
     )
     result = frozen_gate(stats, _cfg)
-    assert result.outcome == "pass"
-    assert result.reason_codes == ("FROZEN_PASS_RUNTIME_TIE_IMPROVEMENT",)
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("FROZEN_FAIL_NO_HIERARCHICAL_GAIN",)
 
 
 def test_frozen_gate_rejects_hierarchical_uncertain_even_if_legacy_ci_nonnegative():

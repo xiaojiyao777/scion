@@ -8,9 +8,6 @@ from __future__ import annotations
 
 from scion.cli.app import app, inspect_app, report_app
 from scion.cli.commands.common import get_registry as _get_registry
-from scion.cli.commands.common import (
-    validate_cli_forced_surface as _validate_cli_forced_surface,
-)
 
 
 def main() -> None:
@@ -27,5 +24,4 @@ __all__ = [
     "report_app",
     "main",
     "_get_registry",
-    "_validate_cli_forced_surface",
 ]

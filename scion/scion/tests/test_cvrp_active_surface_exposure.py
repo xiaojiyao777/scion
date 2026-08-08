@@ -76,7 +76,9 @@ def test_cvrp_hypothesis_context_exposes_only_solver_design_as_active_surface(
         assert surface_name not in {
             surface["name"] for surface in ctx["research_surfaces"]
         }
-    assert "policies/baseline_algorithm.py" in ctx["targetable_files"]
-    assert "policies/baseline_modules/*.py" in ctx["targetable_files"]
-    assert "policies/baseline_policy.py" not in ctx["targetable_files"]
-    assert "policies/main_search_strategy.py" not in ctx["targetable_files"]
+    assert "policies/baseline_algorithm.py" in ctx["existing_target_files"]
+    assert "policies/baseline_modules/*.py" in ctx["create_path_patterns"]
+    assert ctx["available_actions"] == ["create_new", "modify"]
+    assert all("*" not in path for path in ctx["existing_target_files"])
+    assert "policies/baseline_policy.py" not in ctx["existing_target_files"]
+    assert "policies/main_search_strategy.py" not in ctx["existing_target_files"]

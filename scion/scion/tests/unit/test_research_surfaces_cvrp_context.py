@@ -1,12 +1,27 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 
-from scion.core.models import Branch, BranchState, ChampionState, HypothesisProposal
+from scion.core.models import (
+    Branch,
+    BranchState,
+    ChampionState,
+    Decision,
+    DecisionFeatures,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    PatchProposal,
+    ProtocolResult,
+    StepRecord,
+)
 from scion.problem.bridge import legacy_problem_spec_from_v1, load_problem_spec_v1_from_yaml
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.problems.cvrp.solver_design.manifest import SOLVER_DESIGN_API_MANIFEST_FILES
 from scion.proposal.context_manager import ContextManager
+from scion.proposal.context_manager.code_context import _step_can_own_branch_source
+from scion.proposal.edit_protocol.source_discovery import source_digest_for_content
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
@@ -44,6 +59,167 @@ def _runtime():
         base_champion_hash="h",
     )
     return spec, legacy, champion, branch
+
+
+def _decision_features(
+    branch: Branch,
+    *,
+    gate: str = "fail",
+    stage: str = "screening",
+) -> DecisionFeatures:
+    return DecisionFeatures(
+        branch_id=branch.branch_id,
+        hypothesis_action="modify",
+        stage=stage,  # type: ignore[arg-type]
+        contract_passed=True,
+        verification_passed=True,
+        canary_passed=True,
+        n_cases=1,
+        win_rate=0.0,
+        median_delta=-1.0,
+        ci_low=-2.0,
+        ci_high=0.0,
+        stale=False,
+        recent_failure_codes=(),
+        protocol_gate_outcome=gate,  # type: ignore[arg-type]
+        protocol_reason_codes=(f"{stage.upper()}_{gate.upper()}",),
+    )
+
+
+def _verified_source_step(
+    branch: Branch,
+    *,
+    decision: Decision | None = Decision.CONTINUE_EXPLORE,
+    features: DecisionFeatures | None = None,
+    reason_codes: tuple[str, ...] = ("SCREENING_FAIL",),
+    content: str = "# REJECTED_ANCESTRY_SENTINEL\n",
+) -> StepRecord:
+    target = "policies/baseline_modules/scheduler.py"
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Exercise branch source ownership.",
+        change_locus="solver_design",
+        action="modify",
+        target_file=target,
+    )
+    return StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=hypothesis,
+        patch=PatchProposal(target, "modify", content),
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=0,
+                losses=1,
+                ties=0,
+                win_rate=0.0,
+                median_delta=-1.0,
+                ci_low=-2.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL",),
+            exposed_summary="failed",
+            raw_metrics_ref="metrics/round-1.json",
+        ),
+        decision=decision,
+        failure_stage=None,
+        failure_detail=None,
+        decision_reason_codes=reason_codes,
+        decision_features_snapshot=features,
+    )
+
+
+def test_branch_source_ownership_fails_closed_without_exact_disposition() -> None:
+    _spec, _legacy, _champion, branch = _runtime()
+    rejected = _verified_source_step(
+        branch,
+        features=_decision_features(branch),
+    )
+
+    assert _step_can_own_branch_source(rejected) is False
+    assert _step_can_own_branch_source(replace(rejected, decision=None)) is False
+    assert (
+        _step_can_own_branch_source(
+            replace(rejected, decision_features_snapshot=None)
+        )
+        is False
+    )
+    assert (
+        _step_can_own_branch_source(replace(rejected, decision_reason_codes=()))
+        is False
+    )
+
+
+def test_branch_source_ownership_keeps_explicit_retaining_dispositions() -> None:
+    _spec, _legacy, _champion, branch = _runtime()
+    base = _verified_source_step(branch)
+    provisional = replace(
+        base,
+        decision=Decision.CONTINUE_EXPLORE,
+        decision_reason_codes=("SCREENING_UNCLEAR",),
+        decision_features_snapshot=_decision_features(branch, gate="unclear"),
+    )
+    exact_reuse = replace(
+        base,
+        decision=Decision.EXPAND_SCREENING,
+        decision_reason_codes=("SCREENING_EXPAND",),
+        decision_features_snapshot=_decision_features(branch, gate="expand"),
+    )
+    promoted = replace(
+        base,
+        decision=Decision.PROMOTE,
+        decision_reason_codes=("FROZEN_PASS",),
+        decision_features_snapshot=_decision_features(
+            branch,
+            gate="pass",
+            stage="frozen",
+        ),
+    )
+
+    assert _step_can_own_branch_source(provisional) is True
+    assert _step_can_own_branch_source(exact_reuse) is True
+    assert _step_can_own_branch_source(promoted) is True
+
+
+def test_cvrp_source_ledger_does_not_expose_ambiguous_rejected_history() -> None:
+    spec, legacy, champion, branch = _runtime()
+    rejected_sentinel = "# REJECTED_ANCESTRY_SENTINEL\n"
+    rejected = _verified_source_step(
+        branch,
+        features=None,
+        content=rejected_sentinel,
+    )
+    fresh = HypothesisProposal(
+        hypothesis_text="Try a fresh local-search mechanism.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/local_search.py",
+    )
+
+    context = ContextManager(adapter=CvrpAdapter(spec)).build_code_context(
+        branch,
+        fresh,
+        champion,
+        legacy,
+        branch_workspace=str(_CVRP_ROOT),
+        step_history=[rejected],
+    )
+    ledger = context["proposal_source_ledger"]
+    scheduler_path = "policies/baseline_modules/scheduler.py"
+    scheduler = next(
+        entry for entry in ledger["entries"] if entry["path"] == scheduler_path
+    )
+    clean_source = (_CVRP_ROOT / scheduler_path).read_text()
+
+    assert scheduler["content"] == clean_source
+    assert scheduler["digest"] == source_digest_for_content(clean_source)
+    assert scheduler["provenance"] != "branch_history_current"
+    assert rejected_sentinel.strip() not in scheduler["content"]
+    assert scheduler_path not in ledger["views"]["branch_current"]
 
 
 def test_direct_cvrp_declared_sources_have_one_full_source_owner() -> None:
@@ -103,10 +279,12 @@ def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:
     assert context["research_question"]["schema_version"] == (
         "scion.typed_research_question.v1"
     )
-    assert "policies/baseline_algorithm.py" in context["targetable_files"]
-    assert "policies/baseline_modules/*.py" in context["targetable_files"]
+    assert "policies/baseline_algorithm.py" in context["existing_target_files"]
+    assert "policies/baseline_modules/*.py" in context["create_path_patterns"]
+    assert context["available_actions"] == ["create_new", "modify"]
+    assert all("*" not in path for path in context["existing_target_files"])
     for path in _active_solver_source_paths():
-        assert path in context["targetable_files"]
+        assert path in context["existing_target_files"]
         assert context["champion_operators_code"].count(
             f"### {path} (research surface)"
         ) == 1

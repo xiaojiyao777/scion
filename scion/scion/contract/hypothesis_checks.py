@@ -1,10 +1,8 @@
 """Hypothesis and mechanism-binding checks for ContractGate."""
 from __future__ import annotations
 
-import hashlib
-import json
 import time
-from typing import Any, Mapping
+from typing import Callable
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import (
@@ -39,151 +37,6 @@ def check_hypothesis_schema(
     return _cr("C1_schema", passed, "heavy", detail, t0)
 
 
-def check_governance_constraints(
-    h: HypothesisProposal,
-    *,
-    governance_envelope: Any | None,
-) -> CheckResult:
-    """Fail closed only on host-owned target and active-surface constraints."""
-
-    t0 = time.monotonic_ns()
-    if governance_envelope is None:
-        return _cr(
-            "C0_governance_constraints",
-            True,
-            "light",
-            "no host governance constraints declared",
-            t0,
-        )
-    to_primitive = getattr(governance_envelope, "to_primitive", None)
-    if not callable(to_primitive):
-        return _cr(
-            "C0_governance_constraints",
-            False,
-            "heavy",
-            "governance envelope does not expose to_primitive()",
-            t0,
-        )
-    payload = to_primitive()
-    if not isinstance(payload, dict):
-        return _cr(
-            "C0_governance_constraints",
-            False,
-            "heavy",
-            "governance envelope primitive must be an object",
-            t0,
-        )
-
-    actual_surface = str(h.change_locus or "").strip()
-    actual_action = str(h.action or "").strip()
-    actual_target = str(h.target_file or "").strip()
-    task_authority = payload.get("provider_task_constraint_authority")
-    forced_constraint_active = False
-    if task_authority is not None:
-        if not isinstance(task_authority, Mapping):
-            return _cr(
-                "C0_governance_constraints",
-                False,
-                "heavy",
-                "provider task constraint authority must be an object",
-                t0,
-            )
-        provider_keys = task_authority.get("provider_keys")
-        expected_digest = str(
-            task_authority.get("provider_values_digest") or ""
-        ).strip()
-        allowed_keys = {
-            "forced_surface",
-            "forced_action",
-            "forced_target_file",
-        }
-        if (
-            not isinstance(provider_keys, list)
-            or not provider_keys
-            or any(key not in allowed_keys for key in provider_keys)
-            or not expected_digest
-        ):
-            return _cr(
-                "C0_governance_constraints",
-                False,
-                "heavy",
-                "provider task constraint authority is incomplete",
-                t0,
-            )
-        inactive_digests = {
-            hashlib.sha256(
-                json.dumps(
-                    {key: inactive for key in provider_keys},
-                    ensure_ascii=True,
-                    separators=(",", ":"),
-                    sort_keys=False,
-                ).encode("utf-8")
-            ).hexdigest()
-            for inactive in (None, "")
-        }
-        if expected_digest in inactive_digests:
-            task_authority = None
-        actual_values = {
-            key: {
-                "forced_surface": actual_surface,
-                "forced_action": actual_action,
-                "forced_target_file": actual_target or None,
-            }[key]
-            for key in provider_keys
-        }
-        actual_digest = hashlib.sha256(
-            json.dumps(
-                actual_values,
-                ensure_ascii=True,
-                separators=(",", ":"),
-                sort_keys=False,
-            ).encode("utf-8")
-        ).hexdigest()
-        if task_authority is not None and actual_digest != expected_digest:
-            return _cr(
-                "C0_governance_constraints",
-                False,
-                "heavy",
-                "formal hypothesis contradicts provider-visible host task constraints",
-                t0,
-            )
-        forced_constraint_active = (
-            task_authority is not None and "forced_surface" in provider_keys
-        )
-
-    boundary_value = payload.get("active_problem_boundary_surfaces")
-    if isinstance(boundary_value, str):
-        active_surfaces = (boundary_value.strip(),) if boundary_value.strip() else ()
-    elif isinstance(boundary_value, (list, tuple, set, frozenset)):
-        active_surfaces = tuple(
-            str(item or "").strip()
-            for item in boundary_value
-            if str(item or "").strip()
-        )
-    else:
-        active_surfaces = ()
-    if (
-        not forced_constraint_active
-        and active_surfaces
-        and actual_surface not in active_surfaces
-    ):
-        return _cr(
-            "C0_governance_constraints",
-            False,
-            "heavy",
-            "change_locus must stay inside active problem surfaces "
-            f"{list(active_surfaces)!r}; got {actual_surface!r}",
-            t0,
-        )
-    return _cr(
-        "C0_governance_constraints",
-        True,
-        "light",
-        "host target and active-surface constraints satisfied",
-        t0,
-    )
-
-
 def check_change_locus(
     h: HypothesisProposal,
     *,
@@ -210,6 +63,7 @@ def check_action_target(
     h: HypothesisProposal,
     *,
     surface_access: SurfaceAccess,
+    file_exists: Callable[[str], bool] | None = None,
 ) -> CheckResult:
     t0 = time.monotonic_ns()
     passed = True
@@ -230,7 +84,11 @@ def check_action_target(
                 t0,
             )
 
-    if h.action in ("modify", "remove"):
+    target_file = str(h.target_file or "")
+    if target_file and any(character in target_file for character in "*?["):
+        passed = False
+        detail = "target_file must name one concrete file, not a glob pattern"
+    elif h.action in ("modify", "remove"):
         if not h.target_file:
             passed = False
             detail = f"action='{h.action}' requires target_file"
@@ -243,6 +101,12 @@ def check_action_target(
                 f"target_file '{h.target_file}' is not in target files "
                 f"{surface_access.surface_target_files(surface)}"
             )
+        elif file_exists is not None and not file_exists(h.target_file):
+            passed = False
+            detail = f"action='{h.action}' requires an existing target_file"
+    elif h.action == "create_new" and not h.target_file:
+        passed = False
+        detail = "action='create_new' requires target_file"
     elif (
         h.action == "create_new"
         and h.target_file
@@ -254,5 +118,13 @@ def check_action_target(
             f"target_file '{h.target_file}' is not in target files "
             f"{surface_access.surface_target_files(surface)}"
         )
+    elif (
+        h.action == "create_new"
+        and h.target_file
+        and file_exists is not None
+        and file_exists(h.target_file)
+    ):
+        passed = False
+        detail = "action='create_new' requires a target_file that does not exist"
 
     return _cr("C3_action_target", passed, "heavy", detail, t0)

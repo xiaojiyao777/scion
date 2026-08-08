@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from scion.core.screening_visibility import mechanism_evidence_for_protocol
 from scion.problems.cvrp.evidence import search_allocation
 from scion.problems.cvrp.models import CvrpInstance, CvrpNode
 from scion.problems.cvrp.proposal_mechanism_evidence import (
     CvrpProposalMechanismEvidenceProvider,
 )
+from scion.proposal.context_owner_maps import proposal_context_snapshot
 from scion.protocol.experiment.proposal_evidence import (
     problem_proposal_mechanism_evidence,
 )
@@ -357,7 +360,10 @@ def test_instance_feasibility_prefers_allowed_routes_and_hides_failures(
         "observed_cases": 2,
         "unavailable_cases": 1,
         "reference_route_cases": 2,
-        "reference_route_source_counts": {"allowed_routes": 1, "bks_routes": 1},
+        "reference_route_source_counts": {
+            "allowed_routes": 1,
+            "benchmark_reference_routes": 1,
+        },
     }
     assert feasibility["summary"]["reference_route_count"] == {
         "min": 2,
@@ -850,6 +856,71 @@ def _instance(
         allowed_routes=allowed_routes,
         bks_routes=reference_routes,
     )
+
+
+def test_benchmark_reference_aggregate_passes_h_context_and_raw_bks_key_fails(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        search_allocation,
+        "load_cvrplib_instance",
+        lambda _path: _instance(reference_routes=2),
+    )
+    envelope = problem_proposal_mechanism_evidence(
+        stage="screening",
+        selected_surface="solver_design",
+        runtime_pairs=[
+            {
+                "case_path": "/private/screening-reference.vrp",
+                "candidate_runtime": {_ELAPSED_FOR_TEST: 1},
+            }
+        ],
+        adapter=SimpleNamespace(
+            proposal_mechanism_evidence_provider=(
+                lambda: CvrpProposalMechanismEvidenceProvider()
+            )
+        ),
+    )
+    context = {
+        "problem_summary": "CVRP",
+        "branch_id": "branch-1",
+        "research_surfaces": [],
+        "champion_operators_code": "# source",
+        "champion_stats": {},
+        "experiment_history": [
+            {"experiment_evidence": {"mechanism_evidence": envelope}}
+        ],
+    }
+
+    snapshot = proposal_context_snapshot("hypothesis", context)
+    provider_context = snapshot.inputs.provider_context()
+    rendered = json.dumps(provider_context, sort_keys=True)
+    source_counts = envelope["evidence"]["instance_feasibility"]["coverage"][
+        "reference_route_source_counts"
+    ]
+
+    assert source_counts == {
+        "allowed_routes": 0,
+        "benchmark_reference_routes": 1,
+    }
+    assert '"benchmark_reference_routes": 1' in rendered
+    assert '"bks_routes":' not in rendered
+    assert "/private/" not in rendered
+
+    unsafe_context = json.loads(json.dumps(context))
+    unsafe_counts = unsafe_context["experiment_history"][0][
+        "experiment_evidence"
+    ]["mechanism_evidence"]["evidence"]["instance_feasibility"]["coverage"][
+        "reference_route_source_counts"
+    ]
+    unsafe_counts["bks_routes"] = unsafe_counts.pop(
+        "benchmark_reference_routes"
+    )
+    with pytest.raises(
+        ValueError,
+        match=r"forbidden proposal context field.*bks_routes",
+    ):
+        proposal_context_snapshot("hypothesis", unsafe_context)
 
 
 def test_problem_owned_search_allocation_envelope_remains_proposal_only() -> None:

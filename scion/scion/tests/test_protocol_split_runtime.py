@@ -119,7 +119,7 @@ def test_explicit_legacy_protocol_marks_objective_semantics(tmp_path):
     assert all(p["objective_semantics"] == "legacy_all_minimize" for p in raw["pairs"])
 
 
-def test_run_experiment_screening_gate_sees_runtime_tie_improvement(tmp_path):
+def test_run_experiment_keeps_runtime_tie_as_diagnostic_only(tmp_path):
     runner = MagicMock()
     pair = [
         _make_run_result(1, 900, elapsed_ms=1000),
@@ -132,7 +132,7 @@ def test_run_experiment_screening_gate_sees_runtime_tie_improvement(tmp_path):
         ExperimentStage.SCREENING, "/cand", "/champ", "modify"
     )
 
-    assert result.gate_outcome == "pass"
-    assert result.reason_codes == ("SCREENING_PASS_RUNTIME_TIE_IMPROVEMENT",)
+    assert result.gate_outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
     assert result.stats.median_delta == pytest.approx(0.0)
     assert result.stats.runtime_ratio_median == pytest.approx(0.1)

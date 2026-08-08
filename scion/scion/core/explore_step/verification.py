@@ -19,6 +19,7 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.step_result import StepResult
+from scion.proposal.context_manager.code_context import branch_current_file_sources
 
 from .common import (
     _VerificationOutcome,
@@ -30,13 +31,16 @@ logger = logging.getLogger(__name__)
 class VerificationMixin:
     def _validate_hypothesis(
         self,
+        branch: Branch,
         hypothesis: HypothesisProposal,
-        *,
-        governance_envelope: Any | None = None,
     ) -> Any:
         return self.contract_gate.validate_hypothesis(
             hypothesis,
-            governance_envelope=governance_envelope,
+            base_snapshot_path=self.branch_workspaces.get(branch.branch_id),
+            base_file_overrides=branch_current_file_sources(
+                branch,
+                self.step_history,
+            ),
         )
 
     def _handle_verification_failure(
@@ -163,14 +167,7 @@ class VerificationMixin:
         self,
         branch_id: str,
     ) -> Optional[dict[str, Any]]:
-        cache = getattr(self, "_proposal_session_ref_cache", None)
-        if isinstance(cache, dict):
-            if branch_id not in cache:
-                cache[branch_id] = self.proposal_session_ref_for(branch_id)
-            ref = cache[branch_id]
-        else:
-            ref = self.proposal_session_ref_for(branch_id)
-        return ref
+        return self.proposal_session_ref_for(branch_id)
 
 
 def build_verification_detail(vresult: VerificationResult) -> Optional[str]:

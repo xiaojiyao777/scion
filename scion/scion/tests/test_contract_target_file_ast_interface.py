@@ -1,68 +1,37 @@
 """Focused tests split from test_contract.py."""
 
-import hashlib
-import json
-
 from .contract_test_support import *  # noqa: F401,F403
 
 
-class TestC0GovernanceEnvelope:
-    @pytest.mark.parametrize(
-        ("actual_surface", "actual_target"),
-        (
-            ("crossover", "operators/sel.py"),
-            ("selection", "operators/other.py"),
+def test_additional_helper_module_does_not_need_operator_entrypoint(
+    gate: ContractGate,
+) -> None:
+    patch = PatchProposal(
+        file_path="operators/main.py",
+        action="create",
+        code_content=(
+            "class MainOperator:\n"
+            "    def execute(self, solution, rng):\n"
+            "        return solution\n"
+        ),
+        additional_changes=(
+            SimpleNamespace(
+                file_path="operators/helper.py",
+                action="create",
+                code_content="def score(value):\n    return value\n",
+            ),
         ),
     )
-    def test_outer_contract_rejects_host_target_mismatch(
-        self,
-        gate: ContractGate,
-        actual_surface: str,
-        actual_target: str,
-    ) -> None:
-        hypothesis = HypothesisProposal(
-            hypothesis_text="Change one valid operator.",
-            change_locus=actual_surface,
-            action="modify",
-            target_file=actual_target,
-        )
-        expected_values = {
-            "forced_surface": "selection",
-            "forced_action": "modify",
-            "forced_target_file": "operators/sel.py",
-        }
-        expected_digest = hashlib.sha256(
-            json.dumps(
-                expected_values,
-                ensure_ascii=True,
-                separators=(",", ":"),
-                sort_keys=False,
-            ).encode("utf-8")
-        ).hexdigest()
-        envelope = SimpleNamespace(
-            to_primitive=lambda: {
-                "provider_task_constraint_authority": {
-                    "provider_keys": list(expected_values),
-                    "provider_values_digest": expected_digest,
-                    "authority_ref": "provider_visible_task_constraints",
-                }
-            },
-            digest="governance-test-digest",
-        )
 
-        result = gate.validate_hypothesis(
-            hypothesis,
-            governance_envelope=envelope,
-        )
+    result = gate.validate_patch(patch)
 
-        c0 = next(
-            check
-            for check in result.checks
-            if check.name == "C0_governance_constraints"
-        )
-        assert not result.passed
-        assert not c0.passed
-        assert "contradicts provider-visible host task constraints" in c0.detail
+    helper_c7 = next(
+        check
+        for check in result.checks
+        if check.name == "additional_changes[0].C7_interface"
+    )
+    assert helper_c7.passed
+    assert "helper module" in helper_c7.detail
 
 class TestC2ChangeLocus:
     def test_valid_category_passes(self, gate: ContractGate):
@@ -123,7 +92,7 @@ class TestC3ActionTarget:
         c3 = next(c for c in result.checks if c.name == "C3_action_target")
         assert not c3.passed
 
-    def test_create_new_passes_without_target(self, gate: ContractGate):
+    def test_create_new_requires_target_for_h_to_c_binding(self, gate: ContractGate):
         h = HypothesisProposal(
             hypothesis_text="create new operator",
             change_locus="selection",
@@ -132,7 +101,65 @@ class TestC3ActionTarget:
         )
         result = gate.validate_hypothesis(h)
         c3 = next(c for c in result.checks if c.name == "C3_action_target")
-        assert c3.passed
+        assert not c3.passed
+        assert "requires target_file" in c3.detail
+
+    def test_action_target_is_checked_against_real_source(self, spec, tmp_path):
+        snapshot = tmp_path / "snapshot"
+        operators = snapshot / "operators"
+        operators.mkdir(parents=True)
+        (operators / "sel.py").write_text("VALUE = 1\n", encoding="utf-8")
+        bounded_gate = ContractGate(spec, champion_snapshot_path=str(snapshot))
+
+        modify_existing = HypothesisProposal(
+            hypothesis_text="modify existing operator",
+            change_locus="selection",
+            action="modify",
+            target_file="operators/sel.py",
+        )
+        assert bounded_gate.validate_hypothesis(modify_existing).passed
+
+        remove_missing = HypothesisProposal(
+            hypothesis_text="remove missing operator",
+            change_locus="selection",
+            action="remove",
+            target_file="operators/missing.py",
+        )
+        result = bounded_gate.validate_hypothesis(remove_missing)
+        c3 = next(check for check in result.checks if check.name == "C3_action_target")
+        assert not c3.passed
+        assert "requires an existing target_file" in c3.detail
+
+        create_existing = HypothesisProposal(
+            hypothesis_text="create over an existing operator",
+            change_locus="selection",
+            action="create_new",
+            target_file="operators/sel.py",
+        )
+        result = bounded_gate.validate_hypothesis(create_existing)
+        c3 = next(check for check in result.checks if check.name == "C3_action_target")
+        assert not c3.passed
+        assert "does not exist" in c3.detail
+
+        create_concrete = HypothesisProposal(
+            hypothesis_text="create a new operator",
+            change_locus="selection",
+            action="create_new",
+            target_file="operators/new_selection.py",
+        )
+        assert bounded_gate.validate_hypothesis(create_concrete).passed
+
+    def test_literal_glob_is_never_an_action_target(self, gate: ContractGate):
+        hypothesis = HypothesisProposal(
+            hypothesis_text="modify a declared family",
+            change_locus="selection",
+            action="modify",
+            target_file="operators/*.py",
+        )
+        result = gate.validate_hypothesis(hypothesis)
+        c3 = next(check for check in result.checks if check.name == "C3_action_target")
+        assert not c3.passed
+        assert "concrete file" in c3.detail
 
 
 class TestC4FileWhitelist:

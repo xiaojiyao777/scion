@@ -70,7 +70,7 @@ research_surfaces:
         - "operators/*.py"
       create_new_allowed: true
       modify_allowed: true
-      remove_allowed: true
+      remove_allowed: false
       singleton: false
     evidence:
       optional_runtime_fields:
@@ -101,7 +101,7 @@ research_surfaces:
         - "operators/*.py"
       create_new_allowed: true
       modify_allowed: true
-      remove_allowed: true
+      remove_allowed: false
       singleton: false
     evidence:
       optional_runtime_fields:

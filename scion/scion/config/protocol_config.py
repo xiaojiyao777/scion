@@ -357,43 +357,6 @@ class SmokePrescreenConfig(BaseModel):
     notes: str = ""
 
 
-class ExpandedBorderlineAdvanceConfig(BaseModel):
-    """Policy for advancing borderline candidates after screening expand is exhausted."""
-
-    enabled: bool = False
-    """Whether below-threshold expanded screening results may queue validation."""
-
-    win_rate_window: float = Field(default=0.05, ge=0.0, le=1.0)
-    """Allowed shortfall below screening.win_rate_min."""
-
-    require_median_delta_nonnegative: bool = True
-    """Require median_delta >= 0; missing median_delta fails closed."""
-
-    require_ci_low_nonnegative: bool = False
-    """Require ci_low >= 0 when screening produces CI evidence."""
-
-    allow_pair_level_signal: bool = False
-    """Allow measurable pair-level signal to enter validation after expand."""
-
-    pair_win_rate_min: float = Field(default=0.5, ge=0.0, le=1.0)
-    """Minimum pair win rate across all evaluated pairs for diagnostic advance."""
-
-    min_pair_total: int = Field(default=0, ge=0)
-    """Minimum number of evaluated pairs required for diagnostic advance."""
-
-    min_pair_wins: int = Field(default=0, ge=0)
-    """Minimum pair wins required for diagnostic advance."""
-
-    min_pair_win_loss_margin: int = Field(default=1, ge=0)
-    """Minimum pair_wins - pair_losses margin for diagnostic advance."""
-
-    pair_non_tie_win_rate_min: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    """Minimum pair win rate over non-tie pairs, when configured."""
-
-    max_pair_loss_rate: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    """Maximum pair loss rate across all evaluated pairs, when configured."""
-
-
 class ScreeningGate(BaseModel):
     """Screening 门控阈值。"""
 
@@ -402,12 +365,6 @@ class ScreeningGate(BaseModel):
 
     median_delta_min: str | float = "practical_delta_screen"
     """最小中位 delta（可引用 problem.yaml 中的配置键名）。"""
-
-    expanded_borderline_advance: ExpandedBorderlineAdvanceConfig = Field(
-        default_factory=ExpandedBorderlineAdvanceConfig
-    )
-    """Explicit policy for expanded-screening borderline advancement."""
-
 
 class ValidationGate(BaseModel):
     """Validation 门控阈值。"""

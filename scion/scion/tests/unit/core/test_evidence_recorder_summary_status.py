@@ -11,7 +11,7 @@ from scion.core.run_validity import (
     RUN_VALIDITY_VALID_BUT_INCOMPLETE,
     RUN_VALIDITY_VALID_PARTIAL_INTERRUPTED,
 )
-from scion.core.models import CaseAggregateFeedback, Decision
+from scion.core.models import CaseAggregateFeedback, Decision, DecisionFeatures
 from scion.core.evidence_recording.accounting_quality_blocks import (
     quality_block_ledger,
 )
@@ -187,6 +187,7 @@ def test_campaign_summary_exposes_screening_visibility_fields(
         champion_cache_misses=3,
         champion_cached_runtime_pairs=4,
         runtime_confidence="low_cached_champion",
+        runtime_model="budget_exhausting",
         opportunity_status="opportunity_poor",
         opportunity_diagnostics=("primary mechanism did not trigger",),
         mechanism_evidence={
@@ -221,6 +222,16 @@ def test_campaign_summary_exposes_screening_visibility_fields(
     assert protocol_summary["champion_cached_runtime_pairs"] == 4
     assert protocol_summary["runtime_confidence"] == "low_cached_champion"
     assert protocol_summary["runtime_evidence_confidence"] == "low_cached_champion"
+    assert protocol_summary["runtime_model"] == "budget_exhausting"
+    assert protocol_summary["runtime_evidence_policy"]["runtime_model"] == (
+        "budget_exhausting"
+    )
+    assert protocol_summary["runtime_evidence_policy"][
+        "runtime_model_interpretation"
+    ] == "budget_exhausting_runtime_aggregates_observational_not_standalone"
+    assert protocol_summary["runtime_evidence_policy"][
+        "decision_features_excluded"
+    ] is True
     assert protocol_summary["opportunity_status"] == "opportunity_poor"
     assert protocol_summary["opportunity_diagnostics"] == [
         "primary mechanism did not trigger"
@@ -454,10 +465,16 @@ def test_status_promotes_runtime_budget_diagnostic_top_level(tmp_path: Path) -> 
                 "complete": True,
                 "total_pairs": 16,
                 "attempted_pairs": 16,
-                "valid_pairs": 16,
-                "failed_pairs": 0,
+                "valid_pairs": 15,
+                "failed_pairs": 1,
                 "candidate_failed_pairs": 0,
-                "champion_failed_pairs": 0,
+                "champion_failed_pairs": 1,
+                "screening_evidence_status": "partial_champion_evidence",
+                "screening_partial_champion_evidence": {
+                    "reason_code": "SCREENING_PARTIAL_CHAMPION_EVIDENCE",
+                    "champion_failed_pairs": 1,
+                    "decision_complete_evidence": False,
+                },
                 "candidate_surface_runtime_summary": {
                     "runtime_budget_diagnostic": diagnostic,
                 },
@@ -490,6 +507,30 @@ def test_status_promotes_runtime_budget_diagnostic_top_level(tmp_path: Path) -> 
     assert status["in_flight_protocol"]["runtime_budget_diagnostic_code"] == (
         "SCREENING_RUNTIME_BUDGET_SATURATION"
     )
+    assert status["current_progress"]["screening_evidence_status"] == (
+        "partial_champion_evidence"
+    )
+    assert status["current_progress"]["failed_pairs"] == 1
+    assert status["current_progress"]["candidate_failed_pairs"] == 0
+    assert status["current_progress"]["champion_failed_pairs"] == 1
+    assert status["current_progress"]["screening_partial_champion_evidence"] == {
+        "reason_code": "SCREENING_PARTIAL_CHAMPION_EVIDENCE",
+        "champion_failed_pairs": 1,
+        "decision_complete_evidence": False,
+    }
+    assert status["in_flight_protocol"]["screening_evidence_status"] == (
+        "partial_champion_evidence"
+    )
+    assert status["in_flight_protocol"]["failed_pairs"] == 1
+    assert status["in_flight_protocol"]["candidate_failed_pairs"] == 0
+    assert status["in_flight_protocol"]["champion_failed_pairs"] == 1
+    assert status["in_flight_protocol"][
+        "screening_partial_champion_evidence"
+    ] == status["current_progress"]["screening_partial_champion_evidence"]
+    assert {
+        "screening_evidence_status",
+        "screening_partial_champion_evidence",
+    }.isdisjoint(DecisionFeatures.__dataclass_fields__)
 
 
 

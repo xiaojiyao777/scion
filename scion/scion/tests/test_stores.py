@@ -4,7 +4,6 @@ import pytest
 import os
 import uuid
 from scion.core.models import Branch, BranchState, HypothesisRecord
-from scion.core.proposal_pipeline.direct_attempt_lifecycle import DirectAttemptLifecycle
 from scion.lineage.registry import LineageRegistry
 from scion.lineage.branch_store import BranchStore, HypothesisStore
 from scion.proposal.engine import _parse_hypothesis
@@ -64,7 +63,7 @@ def test_minimal_hypothesis_survives_store_and_attempt_digest(tmp_path):
         "expected_effect": "faster convergence",
     }
     proposal = _parse_hypothesis(raw)
-    digest = DirectAttemptLifecycle.hypothesis_digest(proposal)
+    digest = stable_digest(asdict(proposal), length=64)
     registry = LineageRegistry(str(tmp_path / "scion.db"))
     store = HypothesisStore(registry)
     store.save(
@@ -86,7 +85,7 @@ def test_minimal_hypothesis_survives_store_and_attempt_digest(tmp_path):
     assert loaded.proposal_digest == digest
     assert digest == stable_digest(asdict(proposal), length=64)
     changed = replace(proposal, expected_effect="more stable convergence")
-    assert DirectAttemptLifecycle.hypothesis_digest(changed) != digest
+    assert stable_digest(asdict(changed), length=64) != digest
 
 
 def test_hypothesis_store_mark_status(tmp_path):

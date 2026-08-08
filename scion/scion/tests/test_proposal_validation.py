@@ -19,6 +19,7 @@ def _minimal_hypothesis(**overrides: object) -> dict[str, object]:
         "hypothesis_text": "Try a focused local-search change.",
         "change_locus": "local_search",
         "action": "create_new",
+        "target_file": "operators/new_local_search.py",
         "predicted_direction": "improve",
         "target_weakness": "slow convergence",
         "expected_effect": "faster convergence",
@@ -55,13 +56,33 @@ def test_hypothesis_parser_rejects_descriptive_change_locus_suffix() -> None:
 
 @pytest.mark.parametrize(
     "missing_field",
-    ["hypothesis_text", "change_locus", "action", "predicted_direction", "target_weakness", "expected_effect"],
+    ["hypothesis_text", "change_locus", "action", "target_weakness", "expected_effect"],
 )
 def test_hypothesis_rejects_each_missing_required_field(missing_field: str):
     raw = _minimal_hypothesis()
     del raw[missing_field]
     with pytest.raises(ProposalValidationError):
         _parse_hypothesis(raw)
+
+
+def test_hypothesis_defaults_missing_predicted_direction_to_exploratory():
+    raw = _minimal_hypothesis()
+    del raw["predicted_direction"]
+
+    result = _parse_hypothesis(raw)
+
+    direction_schema = HYPOTHESIS_PROPOSAL_SCHEMA["properties"][
+        "predicted_direction"
+    ]
+    assert result.predicted_direction == "exploratory"
+    assert "predicted_direction" not in HYPOTHESIS_PROPOSAL_SCHEMA["required"]
+    assert direction_schema["default"] == "exploratory"
+    assert direction_schema["enum"] == ["improve", "tradeoff", "exploratory"]
+
+
+def test_hypothesis_rejects_invalid_predicted_direction():
+    with pytest.raises(ProposalValidationError):
+        _parse_hypothesis(_minimal_hypothesis(predicted_direction="certain"))
 
 
 @pytest.mark.parametrize(
@@ -79,10 +100,12 @@ def test_hypothesis_rejects_removed_provider_fields(removed_field: str):
         _parse_hypothesis(raw)
 
 
-@pytest.mark.parametrize("action", ["modify", "remove"])
+@pytest.mark.parametrize("action", ["modify", "create_new", "remove"])
 def test_hypothesis_file_actions_require_target_file(action: str):
     with pytest.raises(ProposalValidationError):
-        _parse_hypothesis(_minimal_hypothesis(action=action))
+        raw = _minimal_hypothesis(action=action)
+        del raw["target_file"]
+        _parse_hypothesis(raw)
 
 
 def test_hypothesis_schema_is_exactly_the_model_schema():

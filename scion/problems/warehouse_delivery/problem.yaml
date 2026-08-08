@@ -31,7 +31,7 @@ research_surfaces:
         - "operators/*.py"
       create_new_allowed: true
       modify_allowed: true
-      remove_allowed: true
+      remove_allowed: false
       singleton: false
   - name: vehicle_level
     kind: operator
@@ -41,7 +41,7 @@ research_surfaces:
         - "operators/*.py"
       create_new_allowed: true
       modify_allowed: true
-      remove_allowed: true
+      remove_allowed: false
       singleton: false
 search_space:
   # LLM may edit any .py file in operators/ except base.py and __init__.py

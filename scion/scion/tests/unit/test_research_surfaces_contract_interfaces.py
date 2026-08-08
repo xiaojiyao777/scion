@@ -157,7 +157,7 @@ def test_contract_gate_validates_declared_module_function_signatures(
     assert c7.passed
 
 
-def test_contract_gate_validates_declared_static_return_values(
+def test_contract_gate_defers_return_value_semantics_to_verification(
     tmp_path: Path,
 ) -> None:
     payload = _problem_payload(str(tmp_path))
@@ -216,8 +216,7 @@ def test_contract_gate_validates_declared_static_return_values(
         )
     )
     c7 = next(check for check in bad_literal.checks if check.name == "C7_interface")
-    assert not c7.passed
-    assert "expected one of" in c7.detail
+    assert c7.passed
 
     bad_range = gate.validate_patch(
         PatchProposal(
@@ -232,8 +231,7 @@ def test_contract_gate_validates_declared_static_return_values(
         )
     )
     c7 = next(check for check in bad_range.checks if check.name == "C7_interface")
-    assert not c7.passed
-    assert "outside declared range" in c7.detail
+    assert c7.passed
 
 
 def test_contract_gate_uses_v2_targets_actions_and_interface(

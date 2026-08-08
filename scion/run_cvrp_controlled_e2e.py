@@ -224,7 +224,6 @@ def _make_campaign(output_dir: Path) -> CampaignManager:
         experiment_protocol=protocol,
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
-        force_surface="solver_design",
     )
 
 

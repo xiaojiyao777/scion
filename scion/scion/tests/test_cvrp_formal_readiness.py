@@ -225,7 +225,11 @@ def test_formal_split_case_resolves_strict_via_declared_problem_data_root(
     monkeypatch,
 ) -> None:
     case = "cvrplib/A/A-n32-k5.vrp"
-    monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", str(VRP_DIR))
+    data_root = tmp_path / "data-root"
+    case_path = data_root / case
+    case_path.parent.mkdir(parents=True)
+    case_path.write_text("NAME : fixture\n", encoding="utf-8")
+    monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", str(data_root))
     split = SplitManifest(
         version="0.4-cvrp-formal-readiness",
         screening=[case],
@@ -254,8 +258,8 @@ def test_formal_split_case_resolves_strict_via_declared_problem_data_root(
     )
     validate_case_path_resolution(resolution, strict=True)
     assert resolution.status == "resolved_safe_data_root"
-    assert resolution.resolved == str((VRP_DIR / case).resolve())
-    assert resolution.matched_root == str(VRP_DIR.resolve())
+    assert resolution.resolved == str(case_path.resolve())
+    assert resolution.matched_root == str(data_root.resolve())
 
 
 def test_formal_final_evidence_contract_is_post_campaign_only() -> None:

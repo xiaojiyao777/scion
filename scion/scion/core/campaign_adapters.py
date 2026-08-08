@@ -15,8 +15,6 @@ from scion.core.evaluation_orchestrator import (
 from scion.core.explore_step_pipeline import ExploreStepPipeline
 from scion.core.features import SafeFeatureExtractor
 from scion.core.models import (
-    CanaryResult,
-    Decision,
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
@@ -113,16 +111,6 @@ def _branch_step_runner_for(owner: Any) -> BranchStepRunner:
             pass
         return SimpleNamespace(code_hash=code_hash)
 
-    def record_verification_pass(branch: Branch, code_hash: str) -> None:
-        lifecycle = getattr(owner, "_workspace_lifecycle", None)
-        if lifecycle is not None:
-            lifecycle.record_verification_pass(branch, code_hash)
-            return
-        try:
-            owner._branch_ctrl.record_verification_pass(branch.branch_id, code_hash)
-        except Exception:
-            pass
-
     def missing_eval_step(branch: Branch) -> StepResult:
         raise RuntimeError("eval step callback is not available")
 
@@ -134,20 +122,7 @@ def _branch_step_runner_for(owner: Any) -> BranchStepRunner:
         )
 
     lifecycle = getattr(owner, "_workspace_lifecycle", None)
-    verified_commits = getattr(owner, "_verified_candidate_commits", None)
-    materializer = getattr(owner, "_materializer", None)
-    transactional_reconcile = (
-        lifecycle is not None
-        and verified_commits is not None
-        and materializer is not None
-    )
-
-    def commit_reconcile_candidate_promotion(branch: Branch) -> None:
-        if not transactional_reconcile:
-            raise RuntimeError("transactional reconcile service is unavailable")
-        verified_commits.mark_promotion_committed(branch)
-        getattr(owner, "_persist_branch_state", lambda _bid: None)(branch.branch_id)
-        lifecycle.finalize_candidate_promotion(branch)
+    transactional_reconcile = lifecycle is not None
 
     return BranchStepRunner(
         branch_controller=owner._branch_ctrl,
@@ -176,7 +151,6 @@ def _branch_step_runner_for(owner: Any) -> BranchStepRunner:
             owner, "_setup_workspace", lambda branch, force_champion=False: None
         ),
         apply_patch=apply_patch,
-        record_verification_pass=record_verification_pass,
         evaluate=getattr(
             owner,
             "_evaluate",
@@ -236,24 +210,6 @@ def _branch_step_runner_for(owner: Any) -> BranchStepRunner:
         reject_reconcile_candidate=(
             lifecycle.reject_candidate if transactional_reconcile else None
         ),
-        record_reconcile_candidate_commit=(
-            (
-                lambda **kwargs: verified_commits.record(
-                    **kwargs,
-                    materializer=materializer,
-                )
-            )
-            if transactional_reconcile
-            else None
-        ),
-        promote_reconcile_candidate=(
-            lifecycle.promote_verified_candidate if transactional_reconcile else None
-        ),
-        commit_reconcile_candidate_promotion=(
-            commit_reconcile_candidate_promotion
-            if transactional_reconcile
-            else None
-        ),
     )
 
 
@@ -277,24 +233,6 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
             )
         return lifecycle.apply_candidate_patch(branch, workspace, patch, **kwargs)
 
-    def record_verification_pass(
-        branch: Branch,
-        code_hash: str,
-        workspace: str,
-        hypothesis_id: str,
-    ) -> str:
-        lifecycle = getattr(owner, "_workspace_lifecycle", None)
-        if lifecycle is None:
-            raise RuntimeError(
-                "transactional workspace lifecycle is required for promotion"
-            )
-        return lifecycle.promote_verified_candidate(
-            branch,
-            code_hash,
-            workspace,
-            hypothesis_id,
-        )
-
     def reject_candidate_workspace(branch: Branch, workspace: str) -> None:
         lifecycle = getattr(owner, "_workspace_lifecycle", None)
         if lifecycle is None:
@@ -302,23 +240,6 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
                 "transactional workspace lifecycle is required for rejection"
             )
         lifecycle.reject_candidate(branch, workspace)
-
-    def record_verified_candidate_commit(**kwargs: Any) -> str | None:
-        recorder = getattr(owner, "_verified_candidate_commits", None)
-        materializer = getattr(owner, "_materializer", None)
-        if recorder is None or materializer is None:
-            return None
-        return recorder.record(**kwargs, materializer=materializer)
-
-    def commit_verified_candidate_promotion(branch: Branch) -> None:
-        recorder = getattr(owner, "_verified_candidate_commits", None)
-        if recorder is None:
-            return
-        recorder.mark_promotion_committed(branch)
-        getattr(owner, "_persist_branch_state", lambda _bid: None)(branch.branch_id)
-        lifecycle = getattr(owner, "_workspace_lifecycle", None)
-        if lifecycle is not None:
-            lifecycle.finalize_candidate_promotion(branch)
 
     def missing_generate_hypothesis(
         branch: Branch,
@@ -362,10 +283,7 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
         record_step=getattr(owner, "_record_step", lambda step: None),
         setup_workspace=getattr(owner, "_setup_workspace", lambda branch: None),
         apply_patch=apply_patch,
-        record_verification_pass=record_verification_pass,
         reject_candidate_workspace=reject_candidate_workspace,
-        record_verified_candidate_commit=record_verified_candidate_commit,
-        commit_verified_candidate_promotion=commit_verified_candidate_promotion,
         finalize_research_rejection=getattr(
             getattr(owner, "_research_rejection_finalizer", None),
             "finalize",
@@ -405,11 +323,6 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
         proposal_execution_outcome_for=getattr(
             owner,
             "_proposal_execution_outcome_for",
-            lambda branch_id: None,
-        ),
-        proposal_governance_envelope_for=getattr(
-            owner,
-            "_proposal_governance_envelope_for",
             lambda branch_id: None,
         ),
         get_current_round=lambda: getattr(owner, "_round_num", 0),

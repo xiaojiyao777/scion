@@ -160,7 +160,9 @@ class MyOp:
         assert r.passed is False
         assert "do not match declared prefix" in r.detail
 
-    def test_surface_policy_static_return_constraint_fails_ast(self, tmp_path):
+    def test_surface_policy_static_return_constraint_is_not_host_graded(
+        self, tmp_path
+    ):
         patch = PatchProposal(
             file_path="policies/search_policy.py",
             action="modify",
@@ -179,8 +181,8 @@ class MyOp:
             selected_surface="search_policy",
         )
 
-        assert r.passed is False
-        assert "outside declared range" in r.detail
+        assert r.passed is True
+        assert r.name == "V2_interface"
 
     def test_valid_surface_policy_module_without_class_passes_ast(self, tmp_path):
         patch = PatchProposal(

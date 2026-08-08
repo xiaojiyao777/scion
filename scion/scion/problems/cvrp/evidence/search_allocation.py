@@ -1156,7 +1156,7 @@ def _instance_feasibility(
         "min_route_slack": [],
     }
     observed = unavailable = reference_cases = feasible = infeasible = 0
-    source_counts = {"allowed_routes": 0, "bks_routes": 0}
+    source_counts = {"allowed_routes": 0, "benchmark_reference_routes": 0}
     for case_path in case_paths:
         try:
             instance = load_cvrplib_instance(case_path)
@@ -1184,7 +1184,7 @@ def _instance_feasibility(
             source_counts["allowed_routes"] += 1
         elif bks_routes is not None:
             reference = bks_routes
-            source_counts["bks_routes"] += 1
+            source_counts["benchmark_reference_routes"] += 1
         else:
             continue
 

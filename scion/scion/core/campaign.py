@@ -16,7 +16,6 @@ from scion.core.campaign_adapters import (
     _lookup_decision_reason_codes,
     _workspace_service_for,
 )
-from scion.core.branch import StateTransitionError
 from scion.core.branch_cards import (
     branch_card_context,
     branch_prompt_card,
@@ -41,8 +40,6 @@ from scion.core.scheduler import (
 )
 from scion.core.step_result import StepResult
 from scion.core.workspace_lifecycle import WorkspaceLifecycleService
-from scion.verification.gate import VerificationGate
-
 logger = logging.getLogger(__name__)
 
 
@@ -84,23 +81,8 @@ class CampaignManager:
         operator_execute_signature: Optional[str] = None,
         allow_non_strict_runtime_verification: bool = False,
         allow_skeleton_mode: bool = False,
-        force_surface: Optional[str] = None,
-        force_action: Optional[str] = None,
-        force_target_file: Optional[str] = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
-        from scion.core.forced_surface import validate_forced_surface_request
-
-        forced_request = None
-        if force_surface is not None:
-            forced_request = validate_forced_surface_request(
-                problem_spec,
-                force_surface,
-                action=force_action,
-                target_file=force_target_file,
-                adapter_spec=getattr(adapter, "spec", None)
-                or getattr(adapter, "_spec", None),
-            )
 
         compose_campaign_services(
             self,
@@ -117,9 +99,6 @@ class CampaignManager:
             operator_execute_signature=operator_execute_signature,
             allow_non_strict_runtime_verification=allow_non_strict_runtime_verification,
             allow_skeleton_mode=allow_skeleton_mode,
-            force_surface=forced_request.surface if forced_request else None,
-            force_action=forced_request.action if forced_request else None,
-            force_target_file=forced_request.target_file if forced_request else None,
         )
 
     # ------------------------------------------------------------------
@@ -192,12 +171,12 @@ class CampaignManager:
     def run(self, requested_rounds: int) -> None:
         """Run toward the operator-selected number of formal evaluated rounds."""
         try:
-            self._run_runtime_preflight()
+            self._run_research_environment_preflight()
             self._campaign_loop.run(requested_rounds=requested_rounds)
         except Exception as exc:
             reason = (
                 "preflight_exception"
-                if not getattr(self, "_runtime_preflight_checked", False)
+                if not getattr(self, "_research_preflight_checked", False)
                 else "unhandled_exception"
             )
             self._finalize_unhandled_run_exception(
@@ -327,20 +306,22 @@ class CampaignManager:
         )
         return loop_status
 
-    def _run_runtime_preflight(self) -> None:
-        """Validate problem-owned runtime dependencies before proposal work."""
-        if getattr(self, "_runtime_preflight_checked", False):
+    def _run_research_environment_preflight(self) -> None:
+        """Validate the complete problem environment once before proposal work."""
+        if getattr(self, "_research_preflight_checked", False):
             return
-        from scion.problem.preflight import run_runtime_preflight
+        from scion.problem.preflight import run_research_environment_preflight
 
-        run_runtime_preflight(self._spec, adapter=self._adapter)
-        verification_preflight = getattr(self._vgate, "run_preflight", None)
-        if callable(verification_preflight):
-            verification_preflight()
-        self._runtime_preflight_checked = True
+        run_research_environment_preflight(
+            self._spec,
+            adapter=self._adapter,
+            verification_gate=self._vgate,
+        )
+        self._research_preflight_checked = True
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
+        self._run_research_environment_preflight()
         return _branch_step_runner_for(self).run_one_step()
 
     def should_stop(self) -> bool:
@@ -607,9 +588,6 @@ class CampaignManager:
     def _proposal_session_ref_for(self, branch_id: str) -> Optional[Dict[str, Any]]:
         return self._proposal_pipeline.pop_proposal_attempt_ref(branch_id)
 
-    def _proposal_governance_envelope_for(self, branch_id: str) -> Any | None:
-        return self._proposal_pipeline.pop_governance_envelope(branch_id)
-
     # ------------------------------------------------------------------
     # Round 2: generate code
     # ------------------------------------------------------------------
@@ -617,16 +595,7 @@ class CampaignManager:
     def _round2_generate_code(
         self, branch: Branch, hypothesis: HypothesisProposal,
     ) -> Optional[PatchProposal]:
-        try:
-            return self._proposal_pipeline.generate_code(
-                branch,
-                hypothesis,
-            )
-        finally:
-            explore_pipeline = getattr(self, "_explore_step_pipeline", None)
-            cache = getattr(explore_pipeline, "_proposal_session_ref_cache", None)
-            if isinstance(cache, dict):
-                cache.pop(branch.branch_id, None)
+        return self._proposal_pipeline.generate_code(branch, hypothesis)
 
     # ------------------------------------------------------------------
     # Workspace setup

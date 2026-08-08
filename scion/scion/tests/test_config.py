@@ -87,9 +87,7 @@ def test_protocol_config_defaults():
     assert 0.0 < config.validation_win_rate_threshold <= 1.0
     assert config.min_practical_delta > 0.0
     assert config.measurement_governance == "on"
-    borderline = config.gates.screening.expanded_borderline_advance
-    assert borderline.enabled is False
-    assert borderline.win_rate_window == pytest.approx(0.05)
+    assert not hasattr(config.gates.screening, "expanded_borderline_advance")
 
 
 def test_protocol_config_resolves_problem_measurement_practical_delta():
@@ -317,19 +315,6 @@ def test_protocol_config_from_yaml(tmp_path):
         "gates": {
             "screening": {
                 "win_rate_min": 0.6,
-                "expanded_borderline_advance": {
-                    "enabled": True,
-                    "win_rate_window": 0.04,
-                    "require_median_delta_nonnegative": True,
-                    "require_ci_low_nonnegative": True,
-                    "allow_pair_level_signal": True,
-                    "pair_win_rate_min": 0.50,
-                    "min_pair_total": 8,
-                    "min_pair_wins": 4,
-                    "min_pair_win_loss_margin": 2,
-                    "pair_non_tie_win_rate_min": 0.60,
-                    "max_pair_loss_rate": 0.40,
-                },
             },
             "validation": {"win_rate_min": 0.7},
         }
@@ -341,22 +326,11 @@ def test_protocol_config_from_yaml(tmp_path):
     assert config.validation.n_cases == 5
     assert config.frozen.n_cases == 3
     assert config.screening_win_rate_threshold == pytest.approx(0.6)
-    borderline = config.gates.screening.expanded_borderline_advance
-    assert borderline.enabled is True
-    assert borderline.win_rate_window == pytest.approx(0.04)
-    assert borderline.require_median_delta_nonnegative is True
-    assert borderline.require_ci_low_nonnegative is True
-    assert borderline.allow_pair_level_signal is True
-    assert borderline.pair_win_rate_min == pytest.approx(0.50)
-    assert borderline.min_pair_total == 8
-    assert borderline.min_pair_wins == 4
-    assert borderline.min_pair_win_loss_margin == 2
-    assert borderline.pair_non_tie_win_rate_min == pytest.approx(0.60)
-    assert borderline.max_pair_loss_rate == pytest.approx(0.40)
+    assert not hasattr(config.gates.screening, "expanded_borderline_advance")
     assert config.validation_win_rate_threshold == pytest.approx(0.7)
 
 
-def test_cvrp_formal_protocol_enables_pair_signal_diagnostic_validation():
+def test_cvrp_formal_protocol_uses_case_level_gates():
     protocol_path = os.path.join(
         os.path.dirname(__file__),
         "..",
@@ -370,20 +344,10 @@ def test_cvrp_formal_protocol_enables_pair_signal_diagnostic_validation():
 
     assert config.gates.screening.win_rate_min == pytest.approx(0.6)
     assert config.gates.validation.win_rate_min == pytest.approx(0.66)
-    borderline = config.gates.screening.expanded_borderline_advance
-    assert borderline.enabled is True
-    assert borderline.win_rate_window == pytest.approx(0.10)
-    assert borderline.allow_pair_level_signal is True
-    assert borderline.pair_win_rate_min == pytest.approx(0.50)
-    assert borderline.min_pair_total == 16
-    assert borderline.min_pair_wins == 8
-    assert borderline.min_pair_win_loss_margin == 1
-    assert borderline.pair_non_tie_win_rate_min == pytest.approx(0.60)
-    assert borderline.max_pair_loss_rate == pytest.approx(0.40)
-    assert borderline.require_ci_low_nonnegative is True
+    assert not hasattr(config.gates.screening, "expanded_borderline_advance")
 
 
-def test_warehouse_prod_protocol_enables_conservative_pair_signal_diagnostic_validation():
+def test_warehouse_prod_protocol_uses_case_level_gates():
     protocol_path = os.path.join(
         os.path.dirname(__file__),
         "..",
@@ -397,18 +361,7 @@ def test_warehouse_prod_protocol_enables_conservative_pair_signal_diagnostic_val
 
     assert config.gates.screening.win_rate_min == pytest.approx(0.55)
     assert config.gates.validation.win_rate_min == pytest.approx(0.55)
-    borderline = config.gates.screening.expanded_borderline_advance
-    assert borderline.enabled is True
-    assert borderline.win_rate_window == pytest.approx(0.05)
-    assert borderline.require_median_delta_nonnegative is True
-    assert borderline.require_ci_low_nonnegative is False
-    assert borderline.allow_pair_level_signal is True
-    assert borderline.pair_win_rate_min == pytest.approx(0.46)
-    assert borderline.min_pair_total == 12
-    assert borderline.min_pair_wins == 6
-    assert borderline.min_pair_win_loss_margin == 4
-    assert borderline.pair_non_tie_win_rate_min == pytest.approx(0.68)
-    assert borderline.max_pair_loss_rate == pytest.approx(0.25)
+    assert not hasattr(config.gates.screening, "expanded_borderline_advance")
 
 
 def test_protocol_config_runtime_governance_from_yaml(tmp_path):

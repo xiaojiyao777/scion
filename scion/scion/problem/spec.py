@@ -92,6 +92,8 @@ class ResearchSurfaceReturnValueSpec(_Strict):
 
 
 class ResearchSurfaceInterfaceSpec(_Strict):
+    entrypoint_files: list[str] = Field(default_factory=list)
+    support_files: list[str] = Field(default_factory=list)
     required_functions: list[str] = Field(default_factory=list)
     function_signatures: dict[str, list[str]] = Field(default_factory=dict)
     return_contract: str = ""

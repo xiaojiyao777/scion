@@ -184,13 +184,26 @@ def test_warehouse_legacy_and_package_specs_share_measurement_declaration() -> N
 
 def test_warehouse_legacy_and_package_specs_share_semantics() -> None:
     repo_root = Path(__file__).resolve().parents[2]
+    legacy_yaml = repo_root / "problems" / "warehouse_delivery" / "problem.yaml"
     legacy_path = repo_root / "problems" / "warehouse_delivery" / "problem-v1.yaml"
     package_path = PROBLEMS_DIR / "warehouse_delivery" / "problem-v1.yaml"
 
+    legacy_config = ProblemSpec.from_yaml(str(legacy_yaml))
     legacy = load_problem_spec_v1_from_yaml(legacy_path)
     package = load_problem_spec_v1_from_yaml(package_path)
 
     assert legacy.model_dump(mode="json") == package.model_dump(mode="json")
+    assert all(
+        surface["targets"]["remove_allowed"] is False
+        for surface in legacy_config.research_surfaces
+    )
+    for spec in (legacy, package):
+        assert spec.research_surfaces
+        assert all(
+            surface.targets is not None
+            and surface.targets.remove_allowed is False
+            for surface in spec.research_surfaces
+        )
     rendered = str(
         [surface.model_dump(mode="json") for surface in legacy.research_surfaces]
     ).lower()

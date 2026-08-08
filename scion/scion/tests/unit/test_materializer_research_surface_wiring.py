@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import fnmatch
-import hashlib
 import shutil
 from pathlib import Path
 from typing import Any
 
-from scion.cli.commands import init_run as init_run_cmd
 from scion.config.problem import (
     ProblemSpec,
     ProtocolConfig,
@@ -20,7 +17,6 @@ from scion.core.models import ChampionState, PatchProposal
 from scion.external_ingest.ingest import ExternalProposalIngestor
 import scion.external_ingest.ingest as ingest_module
 from scion.proposal.mock_client import MockLLMClient
-import scion.runtime.workspace as workspace_module
 
 
 SOLVER_DESIGN_PATTERNS = (
@@ -116,7 +112,7 @@ def test_campaign_composition_passes_cvrp_solver_design_editable_patterns(
     monkeypatch.setattr(campaign_composition, "WorkspaceMaterializer", FakeMaterializer)
 
     cvrp_spec = ProblemSpec.from_yaml(
-        str(Path("scion/scion/problems/cvrp/problem.yaml").resolve())
+        str(Path(__file__).resolve().parents[2] / "problems" / "cvrp" / "problem.yaml")
     )
     champion_root = tmp_path / "champion"
     champion_root.mkdir()
@@ -141,72 +137,6 @@ def test_campaign_composition_passes_cvrp_solver_design_editable_patterns(
     assert instances[0].editable_patterns == SOLVER_DESIGN_PATTERNS
     assert "operators/*.py" not in instances[0].editable_patterns
     assert "policies/*.py" not in instances[0].editable_patterns
-
-
-def test_cli_initial_champion_hash_uses_exact_editable_identity(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    instances: list[Any] = []
-
-    class HashingMaterializer:
-        def __init__(
-            self,
-            campaign_dir: str,
-            *,
-            frozen_patterns: frozenset[str] | None = None,
-            editable_patterns: tuple[str, ...] = (),
-        ) -> None:
-            self.campaign_dir = campaign_dir
-            self.frozen_patterns = frozen_patterns
-            self.editable_patterns = editable_patterns or frozenset()
-            instances.append(self)
-
-        def compute_snapshot_hash(self, workspace: str) -> str:
-            root = Path(workspace)
-            h = hashlib.sha256()
-            for path in sorted(root.rglob("*.py")):
-                rel = path.relative_to(root).as_posix()
-                if any(
-                    fnmatch.fnmatchcase(rel, pattern)
-                    for pattern in self.editable_patterns
-                ):
-                    h.update(rel.encode())
-                    h.update(path.read_bytes())
-            return h.hexdigest()
-
-    monkeypatch.setattr(workspace_module, "WorkspaceMaterializer", HashingMaterializer)
-
-    root = tmp_path / "solver"
-    _write_solver_design_workspace(root)
-    spec = _solver_design_spec(root)
-
-    initial_hash = init_run_cmd._compute_initial_champion_snapshot_hash(
-        tmp_path / "campaign",
-        spec,
-    )
-    (root / "policies" / "search_policy.py").write_text(
-        "def choose():\n"
-        "    return 'changed-but-not-declared'\n",
-        encoding="utf-8",
-    )
-    after_undeclared_policy_hash = init_run_cmd._compute_initial_champion_snapshot_hash(
-        tmp_path / "campaign",
-        spec,
-    )
-    (root / "policies" / "baseline_modules" / "acceptance.py").write_text(
-        "def accept(candidate):\n"
-        "    return False\n",
-        encoding="utf-8",
-    )
-    after_editable_module_hash = init_run_cmd._compute_initial_champion_snapshot_hash(
-        tmp_path / "campaign",
-        spec,
-    )
-
-    assert instances[0].editable_patterns == SOLVER_DESIGN_PATTERNS
-    assert after_undeclared_policy_hash == initial_hash
-    assert after_editable_module_hash != initial_hash
 
 
 def test_external_ingest_materializer_uses_same_editable_identity(

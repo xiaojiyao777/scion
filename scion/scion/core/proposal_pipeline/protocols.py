@@ -18,7 +18,7 @@ class CreativeLayerLike(Protocol):
         context: dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
-        attempt_audit: dict[str, Any],
+        call_context: dict[str, Any],
     ) -> tuple[HypothesisProposal, PromptCallReceipt]:
         ...
 
@@ -27,7 +27,7 @@ class CreativeLayerLike(Protocol):
         context: dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
-        attempt_audit: dict[str, Any],
+        call_context: dict[str, Any],
     ) -> tuple[PatchProposal, PromptCallReceipt]: ...
 
 

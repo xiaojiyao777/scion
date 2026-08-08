@@ -50,7 +50,6 @@ def _runner(action: SchedulerAction, recorded: list[StepResult]) -> BranchStepRu
         persist_branch_state=lambda _branch_id: None,
         setup_workspace=lambda *_args, **_kwargs: None,
         apply_patch=lambda *_args, **_kwargs: None,
-        record_verification_pass=lambda *_args: None,
         evaluate=lambda *_args: None,  # type: ignore[arg-type]
         apply_decision_and_finalize=lambda **_kwargs: StepResult(action="explore"),
         record_step=lambda _step: None,

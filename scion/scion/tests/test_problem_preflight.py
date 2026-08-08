@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 
 import pytest
 
 from scion.problem.preflight import (
+    ResearchEnvironmentPreflightError,
     RuntimeDependencyPreflightError,
+    run_research_environment_preflight,
     run_runtime_preflight,
 )
 from scion.problem.spec import RuntimeDependencySpec
@@ -51,3 +54,100 @@ def test_adapter_owned_preflight_hook_can_fail_closed() -> None:
 
     with pytest.raises(RuntimeDependencyPreflightError, match="adapter-owned"):
         run_runtime_preflight(_Spec(), adapter=Adapter())
+
+
+def test_research_environment_preflight_materializes_surface_and_verification(
+    tmp_path,
+) -> None:
+    operators = tmp_path / "operators"
+    operators.mkdir()
+    (operators / "move.py").write_text("VALUE = 1\n", encoding="utf-8")
+    spec = SimpleNamespace(
+        root_dir=str(tmp_path),
+        research_surfaces=[
+            SimpleNamespace(
+                name="moves",
+                kind="operator",
+                targets=SimpleNamespace(
+                    files=["operators/*.py"],
+                    create_new_allowed=True,
+                    modify_allowed=True,
+                    remove_allowed=False,
+                ),
+            )
+        ],
+    )
+
+    class VerificationGate:
+        calls = 0
+
+        def run_preflight(self) -> None:
+            self.calls += 1
+
+    verification = VerificationGate()
+    report = run_research_environment_preflight(
+        spec,
+        verification_gate=verification,
+    )
+
+    assert report.passed is True
+    assert report.checks == (
+        "runtime_dependencies",
+        "research_surfaces",
+        "problem_guidance",
+        "verification_environment",
+    )
+    assert verification.calls == 1
+
+
+def test_research_environment_preflight_rejects_unmaterialized_surface(
+    tmp_path,
+) -> None:
+    spec = SimpleNamespace(
+        root_dir=str(tmp_path),
+        research_surfaces=[
+            SimpleNamespace(
+                name="missing",
+                kind="operator",
+                targets=SimpleNamespace(
+                    files=["operators/*.py"],
+                    create_new_allowed=False,
+                    modify_allowed=True,
+                    remove_allowed=False,
+                ),
+            )
+        ],
+    )
+
+    with pytest.raises(
+        ResearchEnvironmentPreflightError,
+        match="no materialized target source",
+    ):
+        run_research_environment_preflight(spec)
+
+
+def test_solver_design_surface_requires_materializable_guidance(tmp_path) -> None:
+    policies = tmp_path / "policies"
+    policies.mkdir()
+    (policies / "solver.py").write_text("VALUE = 1\n", encoding="utf-8")
+    spec = SimpleNamespace(
+        root_dir=str(tmp_path),
+        research_surfaces=[
+            SimpleNamespace(
+                name="solver_design",
+                kind="solver_design",
+                targets=SimpleNamespace(
+                    files=["policies/solver.py"],
+                    create_new_allowed=False,
+                    modify_allowed=True,
+                    remove_allowed=False,
+                ),
+            )
+        ],
+    )
+
+    with pytest.raises(
+        ResearchEnvironmentPreflightError,
+        match="no prompt guidance provider",
+    ):
+        run_research_environment_preflight(spec)

@@ -4,9 +4,15 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Mapping, Optional, Sequence
 
+from scion.core.candidate_disposition import (
+    CandidateDisposition,
+    CandidateDispositionError,
+    CandidateDispositionMapper,
+)
 from scion.core.models import (
     Branch,
     ChampionState,
+    DecisionOutcome,
     StepRecord,
     patch_file_changes,
 )
@@ -42,8 +48,32 @@ def _verified_branch_steps(
     return tuple(
         step
         for step in _branch_steps(branch, steps)
-        if step.verification_passed and step.patch is not None
+        if step.verification_passed
+        and step.patch is not None
+        and _step_can_own_branch_source(step)
     )
+
+
+def _step_can_own_branch_source(step: StepRecord) -> bool:
+    """Accept branch source only for an explicit code-retaining disposition."""
+
+    if step.decision is None or step.decision_features_snapshot is None:
+        return False
+    try:
+        plan = CandidateDispositionMapper.map(
+            DecisionOutcome(
+                decision=step.decision,
+                reason_codes=tuple(step.decision_reason_codes or ()),
+                features_snapshot=step.decision_features_snapshot,
+            )
+        )
+    except (CandidateDispositionError, TypeError):
+        return False
+    return plan.disposition in {
+        CandidateDisposition.PROVISIONAL_HEAD,
+        CandidateDisposition.EXACT_REUSE,
+        CandidateDisposition.PROMOTE_EXACT,
+    }
 
 
 def _clean_history_path(value: Any) -> str:

@@ -1,6 +1,7 @@
 """Lineage/event helpers for explore-step execution."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any, Mapping
 
@@ -13,6 +14,8 @@ from .common import (
     _PROPOSAL_PREMISE_CONTRADICTED,
     _proposal_session_ref_failure_code,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ExploreStepEventMixin:

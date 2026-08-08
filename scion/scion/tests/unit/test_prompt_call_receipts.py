@@ -39,7 +39,6 @@ _PATCH_RESPONSE = {
     "file_path": "operators/bounded_receipt.py",
     "action": "create",
     "edit_intent": "full_file",
-    "source_digest": None,
     "content_after": "def bounded_receipt(solution):\n    return solution\n",
     "full_file_reason": "Create the approved new research-surface file.",
     "evidence_refs": [],
@@ -49,12 +48,33 @@ _PATCH_RESPONSE = {
 def test_patch_tool_consistently_supports_ordered_same_file_exact_replace() -> None:
     guidance = "multiple ordered exact_replace change objects"
     assert guidance in PATCH_TOOL["description"]
-    assert guidance in (
-        PATCH_TOOL["input_schema"]["properties"]["additional_changes"][
-            "description"
-        ]
+    schema_guidance = " ".join(
+        (
+            PATCH_TOOL["input_schema"]["properties"]["edit_intent"][
+                "description"
+            ],
+            PATCH_TOOL["input_schema"]["properties"]["additional_changes"][
+                "description"
+            ],
+        )
     )
+    assert guidance in schema_guidance
     assert "exactly one change object per file_path" not in PATCH_TOOL["description"]
+    code_snapshot = build_prompt_turn_snapshot("code", _code_context())
+    code_guidance = code_snapshot.user_prompt
+    for expected in (
+        "localized existing-file edits",
+        "prefer exact_replace",
+        "source outside the named selector is preserved",
+        "application order",
+        "later old_string",
+        "source produced by the earlier changes",
+        "full_file for creates, broad rewrites",
+        "no stable exact selector",
+    ):
+        assert expected in PATCH_TOOL["description"]
+        assert expected in schema_guidance
+        assert expected in code_guidance
 
 
 class _CaptureClient:
@@ -93,9 +113,15 @@ class _CaptureClient:
 
 
 class _DirectOpenAIClient(LLMClient):
-    def __init__(self, *, length_response: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        length_response: bool = False,
+        omit_predicted_direction: bool = False,
+    ) -> None:
         super().__init__(model="gpt-5.6-sol")
         self.length_response = length_response
+        self.omit_predicted_direction = omit_predicted_direction
         self.calls_seen: list[str] = []
 
     def _tool_call_once(
@@ -111,7 +137,10 @@ class _DirectOpenAIClient(LLMClient):
         if self.length_response:
             return {}
         if tool["name"] == "generate_hypothesis":
-            return dict(_HYPOTHESIS_RESPONSE)
+            response = dict(_HYPOTHESIS_RESPONSE)
+            if self.omit_predicted_direction:
+                del response["predicted_direction"]
+            return response
         return dict(_PATCH_RESPONSE)
 
 
@@ -130,7 +159,8 @@ def _hypothesis_context() -> dict:
         "champion_operators_code": "class Control: pass",
         "champion_stats": {"version": 1, "operators": []},
         "available_actions": ["create_new"],
-        "targetable_files": ["operators/*.py"],
+        "existing_target_files": [],
+        "create_path_patterns": ["operators/*.py"],
         "experiment_history": [],
         "branch_id": "branch-receipt",
         "champion_version": 1,
@@ -202,6 +232,7 @@ def test_prompt_call_receipt_uses_one_snapshot_for_manifest_trace_and_provider(
     assert trace["prompt_manifest"]["prompt_hash"] == expected_hash
     assert trace["prompt_manifest"]["context_digest"] == snapshot.context_digest
     assert trace["prompt_manifest"]["projection"] == "direct_v3_lossless"
+    assert trace["prompt_manifest"]["observation_count"] == 0
     assert client.tools[0]["input_schema"]["properties"]["change_locus"][
         "enum"
     ] == ["local_search"]
@@ -210,6 +241,32 @@ def test_prompt_call_receipt_uses_one_snapshot_for_manifest_trace_and_provider(
     ]
     assert trace["tool_schema"]["properties"]["change_locus"]["enum"] == [
         "local_search"
+    ]
+
+
+def test_missing_predicted_direction_defaults_after_one_provider_call(
+    tmp_path: Path,
+) -> None:
+    client = _DirectOpenAIClient(omit_predicted_direction=True)
+    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
+    context = _hypothesis_context()
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+
+    hypothesis, receipt = creative.generate_direct_hypothesis_with_receipt(
+        context,
+        snapshot,
+    )
+
+    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    schema = trace["tool_schema"]
+    assert hypothesis.predicted_direction == "exploratory"
+    assert client.calls_seen == ["generate_hypothesis"]
+    assert receipt.ok is True
+    assert "predicted_direction" not in schema["required"]
+    assert schema["properties"]["predicted_direction"]["enum"] == [
+        "improve",
+        "tradeoff",
+        "exploratory",
     ]
 
 
@@ -318,7 +375,7 @@ def test_receipt_uses_authoritative_owner_without_exposing_audit_context(
     assert "trace-context-sentinel" not in json.dumps(vars(receipt), sort_keys=True)
 
     original_call_count = len(client.calls)
-    with pytest.raises(ValueError, match="provider context does not match"):
+    with pytest.raises(ValueError, match="provider context differs"):
         creative.generate_direct_hypothesis_with_receipt(
             {
                 **provider_context,
@@ -326,22 +383,22 @@ def test_receipt_uses_authoritative_owner_without_exposing_audit_context(
             },
             turn,
         )
-    with pytest.raises(ValueError, match="not bound to authoritative context"):
+    with pytest.raises(ValueError, match="context reference changed"):
         creative.generate_direct_hypothesis_with_receipt(
             provider_context,
             replace(turn, authoritative_context_ref="forged-authority-ref"),
         )
-    with pytest.raises(ValueError, match="context digest does not match authority"):
+    with pytest.raises(ValueError, match="context digest changed"):
         creative.generate_direct_hypothesis_with_receipt(
             provider_context,
             replace(turn, context_digest="0" * 64),
         )
-    with pytest.raises(ValueError, match="does not match authority"):
+    with pytest.raises(ValueError, match="phase does not match request"):
         creative.generate_direct_hypothesis_with_receipt(
             provider_context,
             replace(turn, render_kind="code"),
         )
-    with pytest.raises(ValueError, match="no authoritative context owner"):
+    with pytest.raises(ValueError, match="no ProposalContextSnapshot"):
         creative.generate_direct_hypothesis_with_receipt(
             provider_context,
             replace(turn, authoritative_context=None),
@@ -349,7 +406,7 @@ def test_receipt_uses_authoritative_owner_without_exposing_audit_context(
     assert len(client.calls) == original_call_count
 
 
-def test_provider_call_attempt_identity_is_host_audit_only(
+def test_provider_call_context_is_trace_diagnostics_only(
     tmp_path: Path,
 ) -> None:
     client = _CaptureClient()
@@ -361,25 +418,23 @@ def test_provider_call_attempt_identity_is_host_audit_only(
     provider_context = authority.inputs.provider_context(
         include_renderer_inputs=True
     )
-    audit = {
-        "schema_version": "provider-call-attempt-audit.v1",
-        "attempt_id": "attempt-host-only-sentinel",
+    call_context = {
+        "schema_version": "proposal-call-context.v1",
+        "campaign_id": "campaign-host-only-sentinel",
+        "branch_id": "branch-host-only-sentinel",
         "phase": "hypothesis",
-        "attempt_kind": "initial",
-        "continuation_of_attempt_id": None,
-        "hypothesis_attempt_id": "attempt-host-only-sentinel",
-        "started_lineage_event_id": "event-host-only-sentinel",
+        "hypothesis_id": None,
     }
 
     _, receipt = creative.generate_direct_hypothesis_with_receipt(
         provider_context,
         snapshot,
-        attempt_audit=audit,
+        call_context=call_context,
     )
 
-    assert receipt.attempt_id == audit["attempt_id"]
-    assert receipt.attempt_started_event_id == audit["started_lineage_event_id"]
-    assert receipt.continuation_of_attempt_id is None
+    assert not hasattr(receipt, "attempt_id")
+    assert not hasattr(receipt, "attempt_started_event_id")
+    assert not hasattr(receipt, "continuation_of_attempt_id")
     provider_prompt, provider_system_blocks, _request_kind = client.calls[0]
     provider_bytes = json.dumps(
         {
@@ -388,10 +443,10 @@ def test_provider_call_attempt_identity_is_host_audit_only(
         },
         sort_keys=True,
     )
-    assert audit["attempt_id"] not in provider_bytes
-    assert audit["started_lineage_event_id"] not in provider_bytes
+    assert call_context["campaign_id"] not in provider_bytes
+    assert call_context["branch_id"] not in provider_bytes
     trace = _trace_from_ref(tmp_path, receipt.trace_ref)
-    assert trace["provider_call_attempt"] == audit
+    assert trace["provider_call_context"] == call_context
 
 
 def test_direct_context_preserves_complete_authoritative_inputs(
@@ -494,7 +549,8 @@ def test_direct_context_preserves_complete_authoritative_inputs(
             "objective_policy_guidance",
             "problem_measurement_diagnostics",
             "available_actions",
-            "targetable_files",
+            "existing_target_files",
+            "create_path_patterns",
             "champion_operators_code",
             "champion_stats",
         }
@@ -534,6 +590,7 @@ def test_direct_context_preserves_complete_authoritative_inputs(
     assert manifest["schema_version"] == "api-visible-prompt-manifest.v4"
     assert manifest["context_digest"] == snapshot.context_digest
     assert manifest["projection"] == "direct_v3_lossless"
+    assert manifest["observation_count"] == len(context["experiment_history"])
     assert manifest["provider_visible_size"]["system_block_count"] == len(
         snapshot.system_blocks
     )
@@ -760,14 +817,12 @@ def test_keyboard_interrupt_is_receipted_without_a_second_provider_call(
         creative.generate_direct_hypothesis_with_receipt(
             context,
             snapshot,
-            attempt_audit={
-                "schema_version": "provider-call-attempt-audit.v1",
-                "attempt_id": "attempt-interrupted",
+            call_context={
+                "schema_version": "proposal-call-context.v1",
+                "campaign_id": "campaign-interrupted",
+                "branch_id": "branch-interrupted",
                 "phase": "hypothesis",
-                "attempt_kind": "initial",
-                "continuation_of_attempt_id": None,
-                "hypothesis_attempt_id": "attempt-interrupted",
-                "started_lineage_event_id": "event-started",
+                "hypothesis_id": None,
             },
         )
 
@@ -775,8 +830,7 @@ def test_keyboard_interrupt_is_receipted_without_a_second_provider_call(
     assert len(client.calls) == 1
     receipt = prompt_call_receipt_from_error(caught.value)
     assert receipt is not None
-    assert receipt.attempt_id == "attempt-interrupted"
-    assert receipt.attempt_started_event_id == "event-started"
+    assert not hasattr(receipt, "attempt_id")
     assert receipt.provider_ok is False
     assert receipt.ok is False
     assert receipt.error_category == "provider_call_interrupted"
@@ -852,7 +906,7 @@ def test_caller_supplied_context_manifest_is_rejected_before_provider(
     }
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
-    with pytest.raises(ValueError, match="provider context does not match"):
+    with pytest.raises(ValueError, match="provider context differs"):
         creative.generate_direct_hypothesis_with_receipt(context, snapshot)
 
     assert client.calls == []

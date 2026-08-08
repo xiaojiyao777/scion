@@ -44,21 +44,6 @@ def materialize_solver_design_prompt_guidance(
     }
 
 
-def solver_design_provider_identity(provider: Any) -> dict[str, Any]:
-    """Return the primitive identity of a stateless problem provider."""
-
-    state = getattr(provider, "__dict__", None)
-    if state not in (None, {}):
-        raise TypeError("stateful solver-design prompt provider is not primitive-safe")
-    provider_type = type(provider)
-    return {
-        "__scion_python_object__": (
-            f"{provider_type.__module__}.{provider_type.__qualname__}"
-        ),
-        "state": {},
-    }
-
-
 def _provider_lines(
     provider: Any,
     method_name: str,
@@ -77,5 +62,4 @@ __all__ = [
     "RENDERER_INPUTS_KEY",
     "SOLVER_DESIGN_GUIDANCE_KEY",
     "materialize_solver_design_prompt_guidance",
-    "solver_design_provider_identity",
 ]

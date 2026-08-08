@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import yaml
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
-from scion.core.models import ChampionState, Decision, ExperimentStage
+from scion.core.models import ChampionState, ExperimentStage
 from scion.evidence import attach_final_evidence_package
 from scion.problems.cvrp.evidence import (
     CvrpManifestEvaluationConfig,
@@ -28,7 +29,12 @@ from scion.verification.gate import VerificationGate
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
 CONTROLLED_DIR = CVRP_DIR / "controlled"
-VRP_DIR = CVRP_DIR.parents[3] / "vrp"
+VRP_DIR = Path(
+    os.environ.get(
+        "SCION_CVRP_TEST_DATA_ROOT",
+        "/home/clawd/research/or-autoresearch-agent/vrp",
+    )
+).resolve()
 CONTROLLED_CANARY = "controlled/data/synthetic_controlled_canary_5.vrp"
 
 
@@ -64,6 +70,9 @@ def _load_controlled_runtime(
     bridge = bridge_problem_spec_v1(spec_v1)
     protocol_config = ProtocolConfig.from_yaml(CONTROLLED_DIR / "protocol.yaml")
     split_manifest = SplitManifest.from_yaml(CONTROLLED_DIR / "split_manifest.yaml")
+    split_manifest = split_manifest.model_copy(
+        update={"safe_data_roots": [str(VRP_DIR)]}
+    )
     seed_ledger = SeedLedgerConfig.from_yaml(CONTROLLED_DIR / "seed_ledger.yaml")
     runner = LocalSubprocessRunner(ResourceLimits(timeout_sec=10, memory_mb=1024))
     protocol = ExperimentProtocol(
@@ -144,7 +153,6 @@ def _make_campaign(tmp_path: Path) -> CampaignManager:
         experiment_protocol=proto,
         adapter=adapter,
         operator_execute_signature=bridge.operator_execute_signature,
-        force_surface="solver_design",
     )
 
 
@@ -156,7 +164,9 @@ def test_controlled_protocol_split_seed_load_and_use_vrp_paths() -> None:
     assert protocol.version == "0.4-cvrp-controlled-smoke"
     assert len(split_manifest.screening) == 12
     assert all(path.startswith("cvrplib/") for path in split_manifest.screening)
-    assert Path(split_manifest.safe_data_roots[0]) == VRP_DIR
+    assert Path(split_manifest.safe_data_roots[0]) == (
+        CONTROLLED_DIR / "../../../../../vrp"
+    ).resolve()
     assert split_manifest.canary == [CONTROLLED_CANARY]
     assert seed_ledger.screening == [0]
     assert seed_ledger.canary == [0]

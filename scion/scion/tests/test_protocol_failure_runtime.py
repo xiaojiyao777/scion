@@ -1,6 +1,96 @@
 """Focused tests split from test_protocol.py."""
 
+import uuid
+
+from scion.config.problem import ProtocolConfig
+from scion.core.decision import DecisionEngine
+from scion.core.features import SafeFeatureExtractor
+from scion.core.models import (
+    Branch,
+    BranchState,
+    CanaryResult,
+    ContractResult,
+    Decision,
+    VerificationResult,
+)
+from scion.protocol.experiment.stages import _screening_evidence_status
+
 from .protocol_test_support import *  # noqa: F401,F403
+
+
+def _decision_for_screening_result(result):
+    branch = Branch(
+        branch_id=str(uuid.uuid4()),
+        state=BranchState.EXPLORE,
+        base_champion_id=0,
+        base_champion_hash="champion",
+    )
+    features = SafeFeatureExtractor().extract(
+        branch,
+        "modify",
+        ContractResult(passed=True, checks=()),
+        VerificationResult(passed=True, checks=()),
+        CanaryResult(passed=True),
+        result,
+    )
+    return DecisionEngine(ProtocolConfig()).decide(features)
+
+
+@pytest.mark.parametrize(
+    ("complete", "champion_failed_pairs", "expected"),
+    [
+        (False, 0, "in_progress"),
+        (False, 1, "in_progress"),
+        (True, 0, "complete"),
+        (True, 1, "partial_champion_evidence"),
+    ],
+)
+def test_screening_evidence_status_tracks_snapshot_lifecycle(
+    complete,
+    champion_failed_pairs,
+    expected,
+):
+    assert (
+        _screening_evidence_status(
+            stage=ExperimentStage.SCREENING,
+            complete=complete,
+            champion_failed_pairs=champion_failed_pairs,
+        )
+        == expected
+    )
+
+
+def test_screening_raw_metrics_remain_in_progress_until_final_snapshot(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 1000),
+        _make_run_result(1, 900),
+    ] * 4
+    proto = _make_protocol(runner, tmp_path)
+    snapshots = []
+
+    def capture_snapshot(**payload):
+        raw_ref = payload.get("raw_metrics_ref")
+        if raw_ref:
+            with open(raw_ref, encoding="utf-8") as stream:
+                snapshots.append(json.load(stream))
+
+    proto.set_progress_callback(capture_snapshot)
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    incomplete = [snapshot for snapshot in snapshots if not snapshot["complete"]]
+    assert incomplete
+    assert {
+        snapshot["screening_evidence_status"] for snapshot in incomplete
+    } == {"in_progress"}
+    final = json.loads(open(result.raw_metrics_ref, encoding="utf-8").read())
+    assert final["complete"] is True
+    assert final["screening_evidence_status"] == "complete"
 
 
 def test_run_experiment_screening_fail(tmp_path):
@@ -241,12 +331,118 @@ def test_missing_output_records_both_elapsed_values(tmp_path):
     )
 
     raw = json.loads(open(result.raw_metrics_ref).read())
+    assert result.stats.candidate_failed_pairs == 4
+    assert result.stats.champion_failed_pairs == 0
     assert raw["failed_pairs"] == 4
+    assert raw["candidate_failed_pairs"] == 4
+    assert raw["champion_failed_pairs"] == 0
     assert len(raw["failures"]) == 4
     assert result.pair_feedback == ()
+    assert all(f["side"] == "candidate" for f in raw["failures"])
     assert all(f["candidate_elapsed_ms"] == 95 for f in raw["failures"])
     assert all(f["champion_elapsed_ms"] == 80 for f in raw["failures"])
     assert all(p["runtime_delta_ms"] == 15 for p in raw["pairs"])
+
+
+def test_mixed_screening_candidate_missing_output_is_a_hard_failure(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 1000),
+        _make_run_result(1, 800),
+    ] * 3 + [
+        _make_run_result(2, 1000),
+        _make_missing_output(),
+    ]
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.stats.valid_pairs == 3
+    assert result.stats.failed_pairs == 1
+    assert result.stats.candidate_failed_pairs == 1
+    assert result.stats.champion_failed_pairs == 0
+    # Protocol still owns its preregistered scientific threshold. Decision's
+    # existing hard-safety boundary owns candidate execution failures.
+    assert result.gate_outcome == "pass"
+    decision = _decision_for_screening_result(result)
+    assert decision.decision is Decision.ABANDON
+    assert decision.reason_codes == ("CANDIDATE_RUNTIME_FAILURE",)
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["valid_pairs"] == result.stats.valid_pairs
+    assert raw["failed_pairs"] == result.stats.failed_pairs
+    assert raw["candidate_failed_pairs"] == result.stats.candidate_failed_pairs
+    assert raw["champion_failed_pairs"] == result.stats.champion_failed_pairs
+    assert raw["screening_evidence_status"] == "complete"
+    assert raw["failures"][-1]["side"] == "candidate"
+
+
+def test_mixed_screening_champion_missing_output_is_partial_evidence(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 1000),
+        _make_run_result(1, 800),
+    ] * 3 + [
+        _make_missing_output(),
+        _make_run_result(1, 800),
+    ]
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.stats.valid_pairs == 3
+    assert result.stats.failed_pairs == 1
+    assert result.stats.candidate_failed_pairs == 0
+    assert result.stats.champion_failed_pairs == 1
+    assert result.gate_outcome == "unclear"
+    assert "SCREENING_PARTIAL_CHAMPION_EVIDENCE" in result.reason_codes
+    decision = _decision_for_screening_result(result)
+    assert decision.decision is Decision.CONTINUE_EXPLORE
+    assert decision.reason_codes == ("SCREENING_PARTIAL_CHAMPION_EVIDENCE",)
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["valid_pairs"] == result.stats.valid_pairs
+    assert raw["failed_pairs"] == result.stats.failed_pairs
+    assert raw["candidate_failed_pairs"] == result.stats.candidate_failed_pairs
+    assert raw["champion_failed_pairs"] == result.stats.champion_failed_pairs
+    assert raw["screening_evidence_status"] == "partial_champion_evidence"
+    assert raw["failures"][-1]["side"] == "champion"
+
+
+def test_both_missing_outputs_count_one_failed_pair_and_both_sides(tmp_path):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 1000),
+        _make_run_result(1, 800),
+    ] * 3 + [
+        _make_missing_output(),
+        _make_missing_output(),
+    ]
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
+    )
+
+    assert result.stats.valid_pairs == 3
+    assert result.stats.failed_pairs == 1
+    assert result.stats.candidate_failed_pairs == 1
+    assert result.stats.champion_failed_pairs == 1
+    decision = _decision_for_screening_result(result)
+    assert decision.decision is Decision.ABANDON
+    assert decision.reason_codes == ("CANDIDATE_RUNTIME_FAILURE",)
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["valid_pairs"] == result.stats.valid_pairs
+    assert raw["failed_pairs"] == result.stats.failed_pairs
+    assert raw["candidate_failed_pairs"] == result.stats.candidate_failed_pairs
+    assert raw["champion_failed_pairs"] == result.stats.champion_failed_pairs
+    assert raw["screening_evidence_status"] == "partial_champion_evidence"
+    assert raw["failures"][-1]["side"] == "both"
 
 
 def test_validation_fails_when_candidate_timeout_makes_evidence_incomplete(tmp_path):

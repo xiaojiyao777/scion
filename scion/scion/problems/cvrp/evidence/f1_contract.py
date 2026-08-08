@@ -107,12 +107,6 @@ _PROTECTED_AUTHORITIES = {
     "candidate.patch.json": (
         "cb3ba6ce68e8134b7b1322fea50e6a1134b51374254da3eacfce51472096b43a"
     ),
-    "campaign/artifacts/verified_candidate_commits/"
-    "3203548d-f2dd-46ab-a055-e3efb53033e6/"
-    "1bc9ebd2-325a-42ce-bdee-44375b90f0d7-"
-    "a1f60586095a150251d0ff0156085b5c9cff5bacecda893a3f45c35967b40760.json": (
-        "a1f60586095a150251d0ff0156085b5c9cff5bacecda893a3f45c35967b40760"
-    ),
     "campaign/artifacts/formal_candidates/3203548d/"
     "screening-86816129-fe73-4e1f-8ecc-be93a600eaae-fd7e5088f03c7a3c/"
     "candidate.diff": (
@@ -127,12 +121,6 @@ _PROTECTED_AUTHORITIES = {
     "screening-86816129-fe73-4e1f-8ecc-be93a600eaae-fd7e5088f03c7a3c/"
     "candidate.patch.json": (
         "36565e454e3364d7924ac8b702abb05f384fd52394238598da97011265807e02"
-    ),
-    "campaign/artifacts/verified_candidate_commits/"
-    "3203548d-f2dd-46ab-a055-e3efb53033e6/"
-    "86816129-fe73-4e1f-8ecc-be93a600eaae-"
-    "247f3205f9cd7a5f11df545d6605d4186b04ec31dd21391da68bcd6a9c098c70.json": (
-        "247f3205f9cd7a5f11df545d6605d4186b04ec31dd21391da68bcd6a9c098c70"
     ),
     "campaign/metrics/83fe3b49-df68-4b14-8c74-7e6f0d2f62a8.json": (
         "e8318925fa3157cbc1d537d22b7be8755b346bd916999ecbacf5de2fa6b99bd8"

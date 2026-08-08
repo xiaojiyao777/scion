@@ -21,13 +21,6 @@ class CampaignLoop:
     write_campaign_summary: Callable[[], None]
     get_final_wait_timeout: Callable[[], float]
     wait_weight_opt_all: Callable[[float], None]
-    verify_research_rejection: Callable[[Any], bool] = lambda _marker: False
-    get_research_rejection_counts: Callable[[], dict[str, Any]] = lambda: {
-        "total": 0,
-        "by_phase": {},
-        "by_reason": {},
-        "completion_ids": [],
-    }
 
     def run(self, requested_rounds: int) -> None:
         """Target formal evaluated rounds without retrying a provider outcome."""
@@ -41,10 +34,11 @@ class CampaignLoop:
         failure_category_counts: dict[str, int] = {}
         last_failure_category = ""
         final_reason: str | None = None
-        rejection_audit = dict(self.get_research_rejection_counts())
-        seen_rejection_completion_ids = set(
-            str(value) for value in rejection_audit.get("completion_ids", ())
-        )
+        rejection_audit: dict[str, Any] = {
+            "total": 0,
+            "by_phase": {},
+            "by_reason": {},
+        }
         last_research_rejection: dict[str, str] | None = None
 
         def loop_status() -> dict[str, Any]:
@@ -101,34 +95,27 @@ class CampaignLoop:
 
             if outcome is ExecutionOutcome.RESEARCH_REJECTED:
                 marker = getattr(result, "attempt_disposition", None)
-                try:
-                    authorized = bool(self.verify_research_rejection(marker))
-                except Exception:
-                    authorized = False
-                completion_id = str(getattr(marker, "completion_id", "") or "")
-                if not authorized:
-                    final_reason = (
-                        "research_rejection_completion_uncommitted"
-                        if marker is not None
-                        else "execution_research_rejected"
-                    )
+                if marker is None:
+                    final_reason = "research_rejection_disposition_missing"
                     self.write_status(
                         last_result=result,
                         stopped_reason=final_reason,
                         loop_status=loop_status(),
                     )
                     break
-                if completion_id in seen_rejection_completion_ids:
-                    final_reason = "research_rejection_non_progress_identity_conflict"
-                    self.write_status(
-                        last_result=result,
-                        stopped_reason=final_reason,
-                        loop_status=loop_status(),
-                    )
-                    break
-                seen_rejection_completion_ids.add(completion_id)
                 last_research_rejection = marker.to_primitive()
-                rejection_audit = dict(self.get_research_rejection_counts())
+                phase = str(getattr(marker, "rejection_phase", "") or "unknown")
+                reason = str(
+                    getattr(result, "execution_outcome_reason_code", "")
+                    or "unknown"
+                )
+                rejection_audit["total"] += 1
+                rejection_audit["by_phase"][phase] = (
+                    rejection_audit["by_phase"].get(phase, 0) + 1
+                )
+                rejection_audit["by_reason"][reason] = (
+                    rejection_audit["by_reason"].get(reason, 0) + 1
+                )
                 self.write_status(last_result=result, loop_status=loop_status())
                 continue
 
