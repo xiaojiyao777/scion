@@ -80,6 +80,13 @@ warehouse 数据默认位于：
 /home/clawd/research/scion-data
 ```
 
+该默认根对应 production split。使用 `problem.yaml`、`protocol.yaml`、
+`split_manifest.yaml` 的 synthetic control 时必须显式设置：
+
+```bash
+export SCION_WAREHOUSE_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/surrogate
+```
+
 CVRP 使用现有只读数据根：
 
 ```text
@@ -123,6 +130,7 @@ prepared root。
 cd "$REPO_ROOT"
 export PYTHONPATH="$REPO_ROOT"
 export CAMPAIGN_DIR="$EXPERIMENTS_ROOT/warehouse-control-$(git rev-parse --short HEAD)"
+export SCION_WAREHOUSE_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/surrogate
 
 "$PY" -m scion.cli.main run \
   --problem problems/warehouse_delivery/problem.yaml \
