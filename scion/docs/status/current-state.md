@@ -241,6 +241,17 @@ candidate-local rejection as invocation-terminal `NOT_EVALUATED`. R6 is valid
 partial science showing one improvement plus post-promotion research
 continuity, not a completed 36-stage run or evidence of repeated optimization.
 
+R7 used the corrected revision in a fresh matched root and completed four
+formal stages with 62/62 valid pairs. Its first candidate expanded screening
+and then failed; its second passed screening but regressed in validation
+(median primary delta `-15`, confidence interval `[-24, -0.5]`) and was
+abandoned. The third H completed, but its C ended upstream without a terminal
+response after about 29.8 seconds. Scion correctly recorded `BLOCKED_INFRA`
+and stopped at 4/36. Proxy authentication and the single active account
+remained healthy after exit. R7 is useful partial negative science, not a
+promotion or continuity result; the failed C is sealed and will not be
+retried.
+
 ### CVRP
 
 Campaign:
@@ -424,8 +435,9 @@ run, not solver-evidence acceptance by itself.
 The prior lightweight-runtime milestone is accepted at `4d637959`; the active
 `TASK.md` is not closed. Warehouse has reached synthetic champion v2 in both
 R3 and R6. R6 also proved post-promotion research continuity, but stopped at
-17/36 and did not reach v3. CVRP has no Protocol-complete promotion. Closure
-still requires Warehouse continuous promotions, retained replay improvement,
-one CVRP screening -> validation -> frozen promotion, and an independent B0
-comparison. Deployment, packaging, builds, root/systemd and Trust/Hash work
-are neither prerequisites nor completion claims.
+17/36 and did not reach v3. R7 stopped at 4/36 on an intermittent terminal-less
+provider C and produced no promotion. CVRP has no Protocol-complete promotion.
+Closure still requires Warehouse continuous promotions, retained replay
+improvement, one CVRP screening -> validation -> frozen promotion, and an
+independent B0 comparison. Deployment, packaging, builds, root/systemd and
+Trust/Hash work are neither prerequisites nor completion claims.

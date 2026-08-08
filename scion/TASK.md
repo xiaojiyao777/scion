@@ -160,6 +160,7 @@ They do not block this task and cannot satisfy it.
 | R12 | resolved launch invalidity | R4 passed the literal `<stdin>` as the proxy key because of an operator-side `jq input_filename` mistake. It stopped on the first H with 401, 0 evaluated stages and 0 experiments. | Seal R4 with no scientific conclusion. R5 uses one exact key extraction plus a silent authenticated `/v1/models` check in a fresh root. |
 | R13 | resolved infrastructure exclusion | R5 authenticated and completed H, but its first C stream ended upstream after 2,022 partial events without a terminal event; the proxy intentionally returned 504. There were 0 evaluated stages and 0 experiments. | Seal R5 with no C/source or scientific conclusion. R6 is a fresh matched campaign with new H/C; do not replay the failed C or change Scion/proxy configuration from one intermittent event. |
 | R14 | proven and corrected on the current branch | R6 produced one complete Warehouse promotion and then fourteen more formal screenings, but stopped at 17/36 when a provider-complete C used an `exact_replace` selector absent from the visible source. Proposal ownership misclassified that tainted-content rejection as terminal `NOT_EVALUATED`. | Keep exact source binding strict, classify malformed/schema-invalid H/C and unapplicable typed edits as `RESEARCH_REJECTED`, release only that H/C, and scheduler-forward to a fresh H on the clean base. Never retry the failed call; local context/binding, missing outcome, provider-without-terminal-response, infra, resource and interruption outcomes still stop. |
+| R15 | resolved infrastructure exclusion | R7 completed three screening and one validation stage with 62/62 valid pairs, then its third C ended upstream without a terminal event. The runtime correctly stopped `BLOCKED_INFRA`; proxy authentication/account state remained healthy. | Seal R7 as 4/36 valid partial science with two candidate negatives and no promotion. Do not replay its failed C. One fresh matched R8 may sample new H/C without changing framework, proxy configuration or scientific inputs. |
 
 ## Modular execution plan
 
@@ -283,6 +284,12 @@ They do not block this task and cannot satisfy it.
   that H/C and schedules a fresh H from the clean base; it does not retry the
   old call or install an execution hold. True local/provider/infra/resource/
   interruption failures remain fail-closed.
+- [x] Exclude R7 as a complete continuity result while retaining its bounded
+  partial science. It completed 62/62 pairs across three screening stages and
+  one validation stage; one candidate failed expanded screening and one passed
+  screening then failed validation. The third C had no terminal provider
+  response, so the run correctly stopped `BLOCKED_INFRA` at 4/36 with no
+  promotion.
 - [ ] Run a fresh uninterrupted Terra synthetic Warehouse campaign with a
   pre-registered 36 formal-stage horizon. Do not split it into fresh roots when
   a candidate is queued for expansion/validation/frozen. This horizon covers
@@ -381,7 +388,8 @@ CVRP acceptance:
 is closed as a scientific negative; S2/S3 are complete. Warehouse R6 produced
 one Protocol-complete synthetic promotion (`v1 -> v2`) and continued for
 fourteen formal post-promotion screenings, but stopped at 17/36 on the now-
-corrected proposal-rejection route. Continuous multiple promotion and the
-required `v3` champion remain unproven. The current full suite passed 1965
-tests with one skip. S6 final closure remains pending, and CVRP still has no
-Protocol-complete promotion.
+corrected proposal-rejection route. R7 added four valid formal stages and two
+candidate negatives before an intermittent terminal-less provider C; it had no
+promotion. Continuous multiple promotion and the required `v3` champion remain
+unproven. The current full suite passed 1965 tests with one skip. S6 final
+closure remains pending, and CVRP still has no Protocol-complete promotion.
