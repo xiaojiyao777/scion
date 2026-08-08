@@ -216,17 +216,63 @@ class TestStalePath:
         assert fresh_result.branch_id != result.branch_id
         assert fresh_result.decision is Decision.CONTINUE_EXPLORE
 
-    def test_stale_branch_reconcile_with_no_patch_abandons(self, tmp_path):
-        """STALE branch with no stored patch → reconcile fails → ABANDONED."""
+    def test_stale_branch_reconcile_with_no_patch_closes_lifecycle(self, tmp_path):
+        """A stale branch without a candidate closes without a research outcome."""
         cm = _campaign(tmp_path)
-        # Create a branch then mark it stale without any patch
+        # A promotion/weight update can stale an old branch before it owns a patch.
         branch = cm._branch_ctrl.create_branch(cm._champion)
-        cm._branch_ctrl.mark_all_stale(new_champion_id=2)
+        affected = cm._branch_ctrl.mark_stale_for_weight_update(
+            champion_version=cm._champion.version,
+        )
+        assert affected == [branch.branch_id]
+        assert branch.state is BranchState.STALE_WEIGHT_UPDATE
 
         result = cm.run_one_step()
         assert result.action == "reconcile"
+        assert result.attempt_kind == "reconcile_lifecycle"
+        assert result.execution_outcome is None
+        assert result.attempt_disposition is None
         branch_state = cm._branch_ctrl.get_branch(branch.branch_id)
         assert branch_state.state == BranchState.ABANDONED
+
+    def test_two_patchless_stale_branches_retire_before_new_v2_research(
+        self,
+        tmp_path,
+    ):
+        cm = _campaign(
+            tmp_path,
+            experiment_protocol=MockExperimentProtocol(
+                [_make_protocol_result(ExperimentStage.SCREENING)]
+            ),
+        )
+        old_branches = [
+            cm._branch_ctrl.create_branch(cm._champion),
+            cm._branch_ctrl.create_branch(cm._champion),
+        ]
+        champion = _install_changed_champion_and_mark_stale(
+            cm,
+            tmp_path,
+            old_branches[0].branch_id,
+        )
+        cm._persist_branch_state(old_branches[1].branch_id)
+
+        cm.run(requested_rounds=1)
+
+        assert champion.version == 2
+        assert all(
+            branch.state is BranchState.ABANDONED for branch in old_branches
+        )
+        new_branches = [
+            branch
+            for branch in cm._branch_ctrl._branches.values()
+            if branch.branch_id not in {old.branch_id for old in old_branches}
+        ]
+        assert len(new_branches) == 1
+        assert new_branches[0].base_champion_id == champion.version
+        status = json.loads((tmp_path / "campaign" / "status.json").read_text())
+        assert status["campaign_loop"]["scheduled_calls"] == 3
+        assert status["campaign_loop"]["effective_rounds_completed"] == 1
+        assert status["stopped_reason"] == "requested_rounds_completed"
 
     def test_reconcile_verification_reject_preserves_old_durable_source(
         self,

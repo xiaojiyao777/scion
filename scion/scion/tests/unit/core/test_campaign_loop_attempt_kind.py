@@ -13,6 +13,7 @@ from scion.core.execution_outcome import (
     ExecutionOutcome,
     ResearchRejectionDisposition,
 )
+from scion.core.models import Decision
 from scion.core.step_result import StepResult
 
 
@@ -218,4 +219,101 @@ def test_repeated_research_rejections_are_audited_and_schedule_forward() -> None
     assert run.statuses[-1]["effective_rounds_completed"] == 1
     assert run.statuses[-1]["scheduled_calls"] == 3
     assert run.statuses[-1]["research_rejection_audit"]["committed"] == 2
+    assert "requested_rounds_completed" in run.stopped
+
+
+def test_post_promotion_stale_lifecycle_schedules_forward_through_36_stages() -> None:
+    stale_lifecycle = StepResult(
+        action="reconcile",
+        branch_id="old-promoted-peer",
+        reason="no patch to reconcile",
+        attempt_kind="reconcile_lifecycle",
+    )
+    stages = ("screening", "validation", "frozen")
+    formal_results = [
+        _evaluated(stages[index % len(stages)], branch_id=f"forward-{index}")
+        for index in range(36)
+    ]
+
+    run = _run([stale_lifecycle, *formal_results], rounds=36)
+
+    assert run.calls == 37
+    status = run.statuses[-1]
+    assert status["effective_rounds_completed"] == 36
+    assert status["scheduled_calls"] == 37
+    assert status["protocol_stage_counts"] == {
+        "screening": 12,
+        "validation": 12,
+        "frozen": 12,
+    }
+    assert status["research_rejection_audit"]["committed"] == 0
+    assert "research_rejection_disposition_missing" not in run.stopped
+    assert "requested_rounds_completed" in run.stopped
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("decision", Decision.ABANDON),
+        ("protocol_stage", "screening"),
+        ("formal_protocol_evaluated", True),
+        ("screened_experiment_effective", True),
+        ("execution_outcome_reason_code", "UNBOUND_REASON"),
+        ("execution_outcome_detail", "unbound detail"),
+        ("execution_outcome_provenance", {"unbound": True}),
+        ("attempt_disposition", _rejected().attempt_disposition),
+        ("failure_stage", "verification"),
+        ("failure_detail", "unbound failure"),
+        ("failure_category", "research_rejected"),
+    ),
+)
+def test_reconcile_lifecycle_with_attempt_evidence_does_not_scheduler_forward(
+    field: str,
+    value: object,
+) -> None:
+    lifecycle = StepResult(
+        action="reconcile",
+        branch_id="stale-branch",
+        attempt_kind="reconcile_lifecycle",
+    )
+    setattr(lifecycle, field, value)
+
+    run = _run([lifecycle, _evaluated()], rounds=1)
+
+    assert run.calls == 1
+    assert run.statuses[-1]["effective_rounds_completed"] == 0
+    assert "execution_outcome_missing" in run.stopped
+
+
+@pytest.mark.parametrize("failure_stage", ("patch_contract", "verification"))
+def test_markerless_typed_rejection_schedules_forward_and_audits_failure_stage(
+    failure_stage: str,
+) -> None:
+    reason_code = f"{failure_stage.upper()}_REJECTED"
+    rejected = StepResult(
+        action="reconcile",
+        branch_id="stale-branch",
+        reason="reconcile candidate rejected",
+        attempt_kind="reconcile_lifecycle",
+        failure_stage=failure_stage,
+        failure_detail="candidate rejected before Protocol",
+        failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
+        execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        execution_outcome_reason_code=reason_code,
+    )
+
+    run = _run([rejected, _evaluated()], rounds=1)
+
+    assert run.calls == 2
+    status = run.statuses[-1]
+    assert status["effective_rounds_completed"] == 1
+    assert status["research_rejection_audit"] == {
+        "committed": 1,
+        "by_phase": {failure_stage: 1},
+        "by_reason": {reason_code: 1},
+        "last": {
+            "rejection_phase": failure_stage,
+            "reason_code": reason_code,
+        },
+    }
     assert "requested_rounds_completed" in run.stopped

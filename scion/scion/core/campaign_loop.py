@@ -93,21 +93,28 @@ class CampaignLoop:
                     failure_category_counts.get(failure_category, 0) + 1
                 )
 
+            if _is_non_attempt_reconcile_lifecycle(result):
+                self.write_status(last_result=result, loop_status=loop_status())
+                continue
+
             if outcome is ExecutionOutcome.RESEARCH_REJECTED:
                 marker = getattr(result, "attempt_disposition", None)
-                if marker is None:
-                    final_reason = "research_rejection_disposition_missing"
-                    self.write_status(
-                        last_result=result,
-                        stopped_reason=final_reason,
-                        loop_status=loop_status(),
-                    )
-                    break
-                last_research_rejection = marker.to_primitive()
-                phase = str(getattr(marker, "rejection_phase", "") or "unknown")
+                phase = str(
+                    getattr(marker, "rejection_phase", "")
+                    or getattr(result, "failure_stage", "")
+                    or "unknown"
+                )
                 reason = str(
                     getattr(result, "execution_outcome_reason_code", "")
                     or "unknown"
+                )
+                last_research_rejection = (
+                    marker.to_primitive()
+                    if marker is not None
+                    else {
+                        "rejection_phase": phase,
+                        "reason_code": reason,
+                    }
                 )
                 rejection_audit["total"] += 1
                 rejection_audit["by_phase"][phase] = (
@@ -169,6 +176,28 @@ def _attempt_kind(result: StepResult) -> str:
 
     kind = str(getattr(result, "attempt_kind", "") or "")
     return kind or "other"
+
+
+def _is_non_attempt_reconcile_lifecycle(result: StepResult) -> bool:
+    """Recognize stale-branch housekeeping that produced no research attempt."""
+
+    return (
+        result.action == "reconcile"
+        and _attempt_kind(result) == "reconcile_lifecycle"
+        and result.execution_outcome is None
+        and not result.execution_outcome_reason_code
+        and not result.execution_outcome_detail
+        and not result.execution_outcome_provenance
+        and result.decision is None
+        and result.protocol_stage is None
+        and not result.formal_protocol_evaluated
+        and not result.screened_experiment_effective
+        and result.attempt_disposition is None
+        and result.failure_stage is None
+        and result.failure_detail is None
+        and result.failure_category is None
+        and not result.stopped
+    )
 
 
 def _protocol_stage_for_result(result: StepResult) -> str:

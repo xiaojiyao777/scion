@@ -511,11 +511,7 @@ class BranchStepRunner:
                     pass
                 self.branch_current_hypothesis.pop(bid, None)
 
-        def abandon_stale(
-            reason: str,
-            *,
-            hypothesis_status: str = "rejected",
-        ) -> StepResult:
+        def close_stale(hypothesis_status: str = "rejected") -> None:
             cleanup(hypothesis_status)
             self.branch_controller.reconcile_stale(
                 bid,
@@ -523,6 +519,13 @@ class BranchStepRunner:
                 new_champion=self.get_champion(),
             )
             self.persist_branch_state(bid)
+
+        def abandon_stale(
+            reason: str,
+            *,
+            hypothesis_status: str = "rejected",
+        ) -> StepResult:
+            close_stale(hypothesis_status)
             return StepResult(
                 action="reconcile",
                 branch_id=bid,
@@ -562,7 +565,13 @@ class BranchStepRunner:
             logger.info(
                 "Branch %s: no patch to reconcile - abandoning stale branch", bid
             )
-            return abandon_stale("no patch to reconcile")
+            close_stale()
+            return StepResult(
+                action="reconcile",
+                branch_id=bid,
+                reason="no patch to reconcile",
+                attempt_kind="reconcile_lifecycle",
+            )
 
         hypothesis = self.branch_hypotheses.get(bid)
         if hypothesis is None or h_record is None:
