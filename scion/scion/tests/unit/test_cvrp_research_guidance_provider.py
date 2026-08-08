@@ -40,7 +40,8 @@ def test_cvrp_direct_guidance_is_open_and_source_grounded() -> None:
     assert contract.continuity_requirements == ()
     assert "policies/baseline_algorithm.py" in rendered
     assert "policies/baseline_modules" in rendered
-    assert "SourceLedger" in rendered
+    assert "complete visible source map" in rendered
+    assert "SourceLedger" not in rendered
     assert "solve(instance, rng, time_limit_sec, context)" in rendered
     assert "accepted route-state transitions" in rendered
     assert "final total_distance" in rendered

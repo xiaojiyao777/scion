@@ -12,16 +12,17 @@ The active branch is `codex/v04-solver-improvement-research`, based on the
 accepted lightweight runtime baseline `4d637959`.
 
 The active completion target is retained solver improvement on both Warehouse
-and CVRP/VRP. Warehouse must recover continuous same-campaign optimization and
-CVRP must produce a real algorithmic promotion; valid negative observations no
-longer close `TASK.md` by themselves.
+and CVRP/VRP. Warehouse has recovered continuous same-campaign optimization
+and now needs independent held-out retention plus production transfer. CVRP
+must still produce a real algorithmic promotion; valid negative observations
+alone do not close `TASK.md`.
 
-Distribution, deployment, installation, packaging, builds, root/systemd,
-fixed-source acceptance, Trust/Hash work, object identities, signing,
-registration, leases, capability graphs, and repeated closures are out of
-scope. No root command is required for the current work. Historical W3/root
-artifacts remain historical evidence only and are not part of this branch's
-acceptance.
+Distribution, deployment, installation, packaging, builds, root/systemd and
+source-acceptance machinery are out of scope. Object identity, signing,
+registration, leases, capability graphs, hash chains and repeated self-proof
+closures are also out of scope. No root command is required for the current
+work. Historical W3/root artifacts remain historical evidence only and are not
+part of this branch's acceptance.
 
 ## Active V3 path
 
@@ -89,8 +90,8 @@ W3 installation stacks.
   modify/remove require a real existing file and create requires a real new
   path. Warehouse no longer advertises unsupported remove behavior.
 - Removed model-facing source digest/provenance echo requirements. The host
-  derives the stale-source binding from the verified SourceLedger; mismatched
-  compatibility digests and tampered ledgers still fail.
+  applies an edit only to the complete source value the provider actually saw;
+  ordinary source/content inequality still fails.
 - Replaced telemetry/mechanism keyword redaction with problem-owned structured
   visibility. Safe attribution and activation facts remain visible while raw
   validation/frozen/holdout and private pair/calibration structures remain
@@ -106,7 +107,7 @@ W3 installation stacks.
   win rate, practical delta, and confidence rules. Pair and runtime signals are
   diagnostic only unless a problem explicitly declares runtime as an objective
   or hard constraint.
-- Added transparent Warehouse pool/iteration/stagnation/registration mechanics
+- Added transparent Warehouse pool/iteration/stagnation/operator-wiring mechanics
   and safe headroom/noise facts to H context, and added the accepted concise
   CVRP cross-campaign prior. Neither enters DecisionFeatures or selects a
   mechanism.
@@ -124,14 +125,14 @@ W3 installation stacks.
   not write current campaign evidence, call H/C, decide promotion or confer
   authority.
 - Reduced provider context to one frozen validated value plus ordinary
-  context/prompt equality. Prompt manifests, prompt/context identities and
-  receipt authority no longer sit on H/C; trace and call-journal persistence
-  are best-effort diagnostics, while the approved-H-to-C binding remains.
+  context/prompt equality. No prompt/context identity or receipt layer sits on
+  H/C; trace and call-journal persistence are best-effort diagnostics, while
+  the approved-H-to-C binding remains.
 - Removed active promotion dossier generation, registry hashing, automatic
   summary closure and formal-readiness projection. Optional reporting cannot
   turn a persisted scientific promotion into a recovery failure. Validation
-  and frozen reuse keep the substantive present/equal code-hash and clean-state
-  checks without generating an audit hash over those same facts.
+  and frozen reuse keep the substantive present/equal source and clean-state
+  checks without generating another proof object over those same facts.
 - Removed `attempt_disposition` as a CampaignLoop scheduling authority. A
   typed pre-Protocol research rejection now schedules forward directly; the
   old marker is optional diagnostics only. A patchless stale branch retires as
@@ -180,8 +181,8 @@ Campaign:
 Every `subcategory_splits` delta was zero, so all observed effects were on the
 secondary cost objective.  R2 visibly narrowed the broad R1 idea after seeing
 its negative evidence; R3 pivoted to vehicle elimination.  Operator files were
-registered and eligible, but there are no direct per-operator invocation
-counters, so attribution remains candidate/pool-level.
+present in the pool and eligible, but there are no direct per-operator
+invocation counters, so attribution remains candidate/pool-level.
 
 The pre-registered exact R3 eval-only completion is now final. Expanded
 screening passed on 14 cases (8W/0L/6T, median `+950`, CI `[400,4900]`), but
@@ -252,6 +253,35 @@ remained healthy after exit. R7 is useful partial negative science, not a
 promotion or continuity result; the failed C is sealed and will not be
 retried.
 
+R8 then completed the matched continuity question in its declared fresh root:
+`/home/clawd/research/scion-experiments/v04-warehouse-v3-continuity-synth-36r-r8-gpt56terra-20260808T201033Z-claw/campaign`.
+The wrapper exited 0 with `valid / complete` and
+`requested_rounds_completed`. It completed all 36 formal stages (29 screening,
+five validation and two frozen), with 534/534 valid pairs and zero candidate or
+champion failed pairs. The run made 29 H and 28 C calls. One Verification
+undefined-name rejection and one schema-invalid H were typed
+`RESEARCH_REJECTED`; the scheduler moved to fresh H calls without retrying or
+stopping the campaign.
+
+Two exact candidates completed the whole promotion funnel. Candidate
+`89f3edbb...` created a bounded fragmented-subcategory repack operator and
+promoted v1 to v2: validation was 18/18 pair wins with median primary delta
+`+21`, CI `[7.5, 43]`; frozen was 12/12 pair wins with median `+22`, CI
+`[4, 38]`. Candidate `3f204b01...` then improved the v2-based rebuild path and
+promoted v2 to v3: validation was 18/18 pair wins with median `+4.5`, CI
+`[1, 34.5]`; frozen was 12/12 pair wins with median `+15`, CI `[1, 42]`.
+After reaching v3, R8 completed sixteen more formal screenings.
+
+R8 therefore proves same-campaign continuous Warehouse research through
+`v1 -> v2 -> v3`. The claim remains
+`PROMOTION_CONTINUITY_OBSERVED_REPLAY_PENDING`, not retained improvement. A
+separate no-LLM preregistration fixes three comparisons (v2-v1, v3-v2 and
+v3-v1) on 12 R8-unseen frozen cases and seeds 11/73/509, for 108 formal pairs.
+The terminal audit and exact claim boundary are recorded in
+`docs/experiments/v0.4/v0.4-warehouse-v3-continuity-synthetic-36stage-r8-postrun-20260808.md`;
+the fixed held-out design is in
+`docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-preregistration-20260808.md`.
+
 ### CVRP
 
 Campaign:
@@ -304,15 +334,16 @@ The detailed evidence and claim boundary are in
 - Local existing-file authoring now consistently prefers ordered
   `exact_replace` edits and preserves source outside the selector.  A regression
   reproduces the CVRP R1 terminal-return hazard without adding a style gate.
-- Prompt-manifest `observation_count` now comes from the same complete
-  `experiment_history` that H receives; the old zero was accounting-only, not
-  context loss.
+- H-visible `observation_count` now comes from the same complete
+  `experiment_history` that H receives; the old zero in optional diagnostics
+  was accounting-only, not context loss.
 - A clean current-step candidate based on the declared champion is now marked
   `incremental_effect_isolated=true`; cumulative/provisional ancestry remains
   false.
-- Warehouse registry synchronization preserves original bytes when operator
-  semantics are unchanged, and one lifecycle writer owns real create/remove
-  changes.  Rejected created operators leave the clean registry untouched.
+- Warehouse operator-pool configuration synchronization preserves original
+  bytes when operator semantics are unchanged, and one lifecycle writer owns
+  real create/remove changes. Rejected created operators leave the clean pool
+  configuration untouched.
 - Raw/status Protocol snapshots now distinguish `in_progress`, `complete`, and
   `partial_champion_evidence`; raw and canonical candidate runtime-pair counts
   agree and remain outside `DecisionFeatures`.
@@ -433,11 +464,11 @@ run, not solver-evidence acceptance by itself.
 ## Closure status
 
 The prior lightweight-runtime milestone is accepted at `4d637959`; the active
-`TASK.md` is not closed. Warehouse has reached synthetic champion v2 in both
-R3 and R6. R6 also proved post-promotion research continuity, but stopped at
-17/36 and did not reach v3. R7 stopped at 4/36 on an intermittent terminal-less
-provider C and produced no promotion. CVRP has no Protocol-complete promotion.
-Closure still requires Warehouse continuous promotions, retained replay
-improvement, one CVRP screening -> validation -> frozen promotion, and an
-independent B0 comparison. Deployment, packaging, builds, root/systemd and
-Trust/Hash work are neither prerequisites nor completion claims.
+`TASK.md` is not closed. Warehouse R8 completed 36/36 stages and reached
+synthetic champion v3 through two exact promotions in one campaign. Continuous
+promotion is now established; the pre-registered 108-pair held-out replay and
+the production-transfer rung remain. CVRP has no Protocol-complete promotion.
+Closure still requires Warehouse retained replay evidence, one CVRP screening
+-> validation -> frozen promotion, and an independent B0 comparison.
+Deployment, packaging, builds, root/systemd and self-proof infrastructure are
+neither prerequisites nor completion claims.

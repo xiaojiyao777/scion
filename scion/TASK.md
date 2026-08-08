@@ -150,7 +150,7 @@ They do not block this task and cannot satisfy it.
 | R2 | proven | v0.3 synthetic campaigns ran 25-66 rounds; first promotion appeared at rounds 4-19. | A 3R campaign cannot test continuous promotion. |
 | R3 | proven | Current production Warehouse has near-saturated split objective and noisy cost effects; v0.3 multi-promotion used high-headroom synthetic cases. | Use synthetic recovery and production transfer as different controls. |
 | R4 | proven baseline deviation; corrected on current branch; causal effect unproven | The accepted baseline mapped screening `fail` to clean-parent rejection, contrary to V3 §11.2. | Keep the lightweight provisional branch head and test it without changing promotion gates. |
-| R5 | proven context gap | Warehouse H context omits solver mechanics such as pool size, iteration/stagnation limits, weights and registration semantics. | Add transparent problem-owned mechanics, not a gate. |
+| R5 | proven context gap | Warehouse H context omits solver mechanics such as pool size, iteration/stagnation limits, weights and operator-pool wiring. | Add transparent problem-owned mechanics, not a gate. |
 | R6 | observed attribution limit | Create-new Warehouse operators alter both mechanism and pool allocation; direct invocation/adoption is not visible. | Use minimal problem-owned counters only for analysis; never Decision. |
 | R7 | proven | CVRP candidates often combine an algorithm idea with broad rewrites or large runtime cost. | Test one mechanism and preserve unrelated source before formal scale-up. |
 | R8 | proven | Several CVRP changes were inactive or activated too late; others consumed ALNS opportunity. | Run a small mechanism assay before expensive formal screening. |
@@ -161,6 +161,7 @@ They do not block this task and cannot satisfy it.
 | R13 | resolved infrastructure exclusion | R5 authenticated and completed H, but its first C stream ended upstream after 2,022 partial events without a terminal event; the proxy intentionally returned 504. There were 0 evaluated stages and 0 experiments. | Seal R5 with no C/source or scientific conclusion. R6 is a fresh matched campaign with new H/C; do not replay the failed C or change Scion/proxy configuration from one intermittent event. |
 | R14 | proven and corrected on the current branch | R6 produced one complete Warehouse promotion and then fourteen more formal screenings, but stopped at 17/36 when a provider-complete C used an `exact_replace` selector absent from the visible source. Proposal ownership misclassified that tainted-content rejection as terminal `NOT_EVALUATED`. | Keep exact source binding strict, classify malformed/schema-invalid H/C and unapplicable typed edits as `RESEARCH_REJECTED`, release only that H/C, and scheduler-forward to a fresh H on the clean base. Never retry the failed call; local context/binding, missing outcome, provider-without-terminal-response, infra, resource and interruption outcomes still stop. |
 | R15 | resolved infrastructure exclusion | R7 completed three screening and one validation stage with 62/62 valid pairs, then its third C ended upstream without a terminal event. The runtime correctly stopped `BLOCKED_INFRA`; proxy authentication/account state remained healthy. | Seal R7 as 4/36 valid partial science with two candidate negatives and no promotion. Do not replay its failed C. One fresh matched R8 may sample new H/C without changing framework, proxy configuration or scientific inputs. |
+| R16 | proven; retained replay pending | R8 completed all 36 formal stages and 534/534 pairs, continued through two candidate-local research rejections, and promoted exact candidates `89f3edbb...` and `3f204b01...` from v1 to v2 to v3 in one campaign. | Continuous agent research and the in-campaign v3 endpoint are observed. Run the separately pre-registered held-out v2-v1, v3-v2 and v3-v1 comparisons before claiming retained improvement. |
 
 ## Modular execution plan
 
@@ -290,16 +291,22 @@ They do not block this task and cannot satisfy it.
   screening then failed validation. The third C had no terminal provider
   response, so the run correctly stopped `BLOCKED_INFRA` at 4/36 with no
   promotion.
-- [ ] Run a fresh uninterrupted Terra synthetic Warehouse campaign with a
+- [x] Run a fresh uninterrupted Terra synthetic Warehouse campaign with a
   pre-registered 36 formal-stage horizon. Do not split it into fresh roots when
   a candidate is queued for expansion/validation/frozen. This horizon covers
   the historical round-19 second-promotion tail; a 12-stage run is diagnostic
-  only and cannot establish continuous promotion.
-- [ ] If the first campaign does not reach v3, run at most two matched repeats
+  only and cannot establish continuous promotion. R8 completed `36/36`,
+  promoted `v1 -> v2 -> v3`, and preserved exact candidates across both
+  validation/frozen funnels.
+- [x] If the first campaign does not reach v3, run at most two matched repeats
   before changing framework or problem context. Report first-promotion round,
-  promotion funnel, branch depth and exact failure class.
+  promotion funnel, branch depth and exact failure class. R8 was the second and
+  final matched repeat and reached v3, so no further matched Warehouse root is
+  authorized before the independent replay.
 - [ ] Independently replay every promoted champion against its immediate parent
-  and replay the final champion against v1 on declared held-out evidence.
+  and replay the final champion against v1 on declared held-out evidence. The
+  R8 comparison is frozen in
+  `docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-preregistration-20260808.md`.
 - [ ] After synthetic continuity is demonstrated, run the pre-registered
   production transfer rung. Start with one uninterrupted 12-stage shakedown;
   use a 24-stage matched matrix only if the shakedown shows a valid funnel or a
@@ -328,10 +335,12 @@ Warehouse acceptance:
   bounded, embedded-only SWAP* that is excluded from initial VNS and has a
   strict time/attempt allowance; the provider remains free to choose another
   source-grounded direction.
-- [ ] Before formal screening, run a problem-owned public development assay on
-  unseen development cases. Inspect feasibility, direct mechanism effect,
-  elapsed share and ALNS opportunity. These facts decide whether to spend the
-  formal run; they are not Contract or promotion gates.
+- [ ] Run the existing first formal screening once on the exact candidate, then
+  pause before validation/frozen for a problem-owned public development assay
+  on non-formal development cases. Inspect feasibility, direct mechanism
+  effect, elapsed share and ALNS opportunity. This is an observation used to
+  interpret or stop the candidate, not a Contract, Verification, Protocol or
+  promotion gate, and it requires no new framework seam.
 - [ ] If the implementation is inactive, incorrect or starves search, stop that
   exact candidate. Permit at most one new-H/new-C implementation refinement of
   the same mechanism; never retry the same provider call.
@@ -384,12 +393,15 @@ CVRP acceptance:
 
 ## Status
 
-**Active: S4 Warehouse continuous-optimization experiment, then S5 CVRP.** S1
+**Active: S4 Warehouse held-out replay, then S5 CVRP.** S1
 is closed as a scientific negative; S2/S3 are complete. Warehouse R6 produced
 one Protocol-complete synthetic promotion (`v1 -> v2`) and continued for
 fourteen formal post-promotion screenings, but stopped at 17/36 on the now-
 corrected proposal-rejection route. R7 added four valid formal stages and two
 candidate negatives before an intermittent terminal-less provider C; it had no
-promotion. Continuous multiple promotion and the required `v3` champion remain
-unproven. The current full suite passed 1965 tests with one skip. S6 final
-closure remains pending, and CVRP still has no Protocol-complete promotion.
+promotion. R8 then completed 36/36 stages and 534/534 pairs and promoted
+`v1 -> v2 -> v3` in one uninterrupted campaign. This establishes the
+in-campaign continuous-optimization endpoint; retained improvement remains
+pending on the pre-registered 108-pair held-out comparison. The current full
+suite passed 1965 tests with one skip. S6 final closure remains pending, and
+CVRP still has no Protocol-complete promotion.
