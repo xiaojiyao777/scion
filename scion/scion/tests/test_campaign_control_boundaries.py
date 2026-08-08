@@ -16,7 +16,7 @@ from scion.config.problem import (
 from scion.core.campaign import CampaignManager
 from scion.core.campaign_composition import required_service_names
 from scion.core.models import ChampionState
-from scion.core.problem_identity import problem_id_anchor, stable_identity_hash
+from scion.core.problem_identity import problem_id_anchor
 from scion.proposal.mock_client import MockLLMClient
 
 
@@ -57,7 +57,7 @@ def test_campaign_composition_installs_key_services(tmp_path):
         assert getattr(manager, name) is not None
 
 
-def test_campaign_composition_passes_problem_identity_anchors_to_proposal_pipeline(
+def test_campaign_composition_passes_problem_id_anchor_to_proposal_pipeline(
     tmp_path,
 ):
     code_dir = tmp_path / "code"
@@ -103,9 +103,9 @@ def test_campaign_composition_passes_problem_identity_anchors_to_proposal_pipeli
     assert manager._campaign_id
     assert pipeline.campaign_id == manager._campaign_id
     assert pipeline.problem_id == problem_id_anchor(spec)
-    assert pipeline.problem_spec_hash == stable_identity_hash(spec)
-    assert pipeline.split_manifest_hash == stable_identity_hash(split_manifest)
-    assert pipeline.seed_ledger_hash == stable_identity_hash(seed_ledger)
+    assert not hasattr(pipeline, "problem_spec_hash")
+    assert not hasattr(pipeline, "split_manifest_hash")
+    assert not hasattr(pipeline, "seed_ledger_hash")
 
 
 def test_campaign_composition_persists_initial_champion(tmp_path):

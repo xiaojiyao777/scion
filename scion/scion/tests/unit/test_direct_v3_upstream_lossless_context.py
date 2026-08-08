@@ -91,6 +91,20 @@ def test_warehouse_hypothesis_context_exposes_all_declared_safe_surfaces_and_sou
         assert file_rel in context["existing_target_files"]
     assert context["create_path_patterns"] == ["operators/*.py"]
     assert "remove" not in context["available_actions"]
+    mechanics = context["solver_mechanics"]
+    assert "top-40 elitist solution pool" in mechanics
+    assert "at most 200 iterations" in mechanics
+    assert "30 consecutive iterations" in mechanics
+    assert "move_order=0.2" in mechanics
+    assert "create_new" in mechanics
+    diagnostics = context["problem_measurement_diagnostics"][
+        "problem_owned_diagnostics"
+    ]
+    assert diagnostics["aggregate_objective_headroom"][
+        "theoretical_lower_bounds"
+    ] == {"subcategory_splits": 0}
+    assert diagnostics["aggregate_noise_context"]["mde_at_power_80"] == 577.5
+    assert diagnostics["aggregate_noise_context"]["n_pairs"] > 0
 
 
 @pytest.mark.parametrize("problem_id", ("warehouse_delivery", "cvrp"))

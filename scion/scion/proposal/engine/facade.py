@@ -10,15 +10,14 @@ from scion.core.models import HypothesisProposal, PatchProposal
 from scion.proposal.context_owner_maps import proposal_context_snapshot
 from scion.proposal.context_snapshot import ProposalContextSnapshot
 from scion.proposal.prompt_projection import project_prompt
-from scion.proposal.prompt_manifest import stable_digest
 from scion.proposal.schemas import PATCH_TOOL, bind_hypothesis_tool_to_context
 
 from .parsing import _parse_hypothesis, _parse_patch
 from .provider_call import (
-    PromptCallReceipt,
+    ProviderCallDiagnostics,
     PromptTurnSnapshot,
     ProviderCaller,
-    _attach_prompt_call_receipt,
+    _attach_provider_call_diagnostics,
 )
 
 
@@ -48,10 +47,8 @@ def build_prompt_turn_snapshot(
         render_kind=kind,
         system_blocks=tuple(dict(block) for block in projection.system_blocks),
         user_prompt=str(projection.user_prompt),
-        context_digest=stable_digest(render_context, length=64),
         provider_tool=provider_tool,
         allowed_change_loci=allowed_change_loci,
-        authoritative_context_ref=authoritative.snapshot_id,
         authoritative_context=authoritative,
     )
 
@@ -83,28 +80,28 @@ class CreativeLayer:
             trace_dir=self._trace_dir,
         )
 
-    def generate_direct_hypothesis_with_receipt(
+    def generate_direct_hypothesis(
         self,
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
         call_context: Mapping[str, Any] | None = None,
-    ) -> tuple[HypothesisProposal, PromptCallReceipt]:
+    ) -> tuple[HypothesisProposal, ProviderCallDiagnostics]:
         """Generate one direct-v3 hypothesis without a Scion output cap."""
-        return self._generate_hypothesis_with_receipt(
+        return self._generate_hypothesis(
             context,
             snapshot,
             call_context=call_context,
         )
 
-    def _generate_hypothesis_with_receipt(
+    def _generate_hypothesis(
         self,
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
         call_context: Mapping[str, Any] | None = None,
-    ) -> tuple[HypothesisProposal, PromptCallReceipt]:
-        raw, receipt = self._provider_calls.call_with_receipt(
+    ) -> tuple[HypothesisProposal, ProviderCallDiagnostics]:
+        raw, diagnostics = self._provider_calls.call(
             request_kind="hypothesis",
             tool=dict(snapshot.provider_tool),
             context=context,
@@ -117,40 +114,40 @@ class CreativeLayer:
                     raw,
                     allowed_change_loci=snapshot.allowed_change_loci,
                 ),
-                receipt,
+                diagnostics,
             )
         except Exception as exc:
             failed = replace(
-                receipt,
+                diagnostics,
                 ok=False,
                 error_category="response_parse_failed",
                 error_type=type(exc).__name__,
             )
-            _attach_prompt_call_receipt(exc, failed)
+            _attach_provider_call_diagnostics(exc, failed)
             raise
 
-    def generate_direct_code_with_receipt(
+    def generate_direct_code(
         self,
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
         call_context: Mapping[str, Any] | None = None,
-    ) -> tuple[PatchProposal, PromptCallReceipt]:
+    ) -> tuple[PatchProposal, ProviderCallDiagnostics]:
         """Generate one direct-v3 patch without a Scion output cap."""
-        return self._generate_code_with_receipt(
+        return self._generate_code(
             context,
             snapshot,
             call_context=call_context,
         )
 
-    def _generate_code_with_receipt(
+    def _generate_code(
         self,
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
         call_context: Mapping[str, Any] | None = None,
-    ) -> tuple[PatchProposal, PromptCallReceipt]:
-        raw, receipt = self._provider_calls.call_with_receipt(
+    ) -> tuple[PatchProposal, ProviderCallDiagnostics]:
+        raw, diagnostics = self._provider_calls.call(
             request_kind="code",
             tool=dict(snapshot.provider_tool),
             context=context,
@@ -158,13 +155,13 @@ class CreativeLayer:
             call_context=call_context,
         )
         try:
-            return _parse_patch(raw, context=context), receipt
+            return _parse_patch(raw, context=context), diagnostics
         except Exception as exc:
             failed = replace(
-                receipt,
+                diagnostics,
                 ok=False,
                 error_category="response_parse_failed",
                 error_type=type(exc).__name__,
             )
-            _attach_prompt_call_receipt(exc, failed)
+            _attach_provider_call_diagnostics(exc, failed)
             raise

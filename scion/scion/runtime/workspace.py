@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import stat
@@ -25,6 +26,7 @@ from scion.core.research_surface_index import normalize_editable_identity_patter
 
 # Generic runtime has no problem-specific frozen files by default.
 _DEFAULT_FROZEN_PATTERNS = frozenset()
+logger = logging.getLogger(__name__)
 
 
 class FrozenFileError(Exception):
@@ -146,6 +148,50 @@ class WorkspaceMaterializer:
         shutil.copytree(src, candidate, symlinks=False)
         _make_tree_writable(candidate)
         return str(candidate)
+
+    def adopt_candidate_workspace(
+        self,
+        candidate_workspace: str,
+        branch_id: str,
+    ) -> str:
+        """Move verified staging to the ordinary durable branch path.
+
+        This is a local filesystem handoff, not a promotion or authority
+        protocol.  A temporary backup only protects the preceding branch tree
+        while the two renames occur and is removed before return.
+        """
+
+        candidate = Path(candidate_workspace).resolve()
+        expected_parent = (self._candidate_workspaces_dir / branch_id).resolve()
+        if candidate.parent != expected_parent or not candidate.is_dir():
+            raise ValueError("candidate workspace is not owned by the branch")
+
+        durable = self._workspaces_dir / branch_id
+        backup = self._workspaces_dir / f".{branch_id}.adopt-backup-{uuid.uuid4().hex}"
+        try:
+            if durable.exists():
+                durable.rename(backup)
+            candidate.rename(durable)
+        except BaseException:
+            if durable.exists() and not candidate.exists():
+                durable.rename(candidate)
+            if backup.exists() and not durable.exists():
+                backup.rename(durable)
+            raise
+        if backup.exists():
+            try:
+                _make_tree_writable(backup)
+                shutil.rmtree(backup)
+            except OSError as exc:
+                # The candidate rename is already committed.  Old-tree debris
+                # cannot turn a successful local handoff into a false rollback.
+                logger.warning(
+                    "Could not remove replaced branch workspace %s: %s",
+                    backup,
+                    exc,
+                )
+        _prune_empty_candidate_parent(expected_parent, self._candidate_workspaces_dir)
+        return str(durable)
 
     def cleanup_candidate_workspace(self, candidate_workspace: str) -> None:
         """Delete an isolated candidate without touching its durable base."""

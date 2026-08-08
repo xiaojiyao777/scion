@@ -23,11 +23,11 @@ from scion.core.models import (
 from scion.proposal.context_owner_maps import proposal_context_snapshot
 from scion.proposal.context_snapshot import ProposalContextSnapshot
 from scion.proposal.engine import (
-    PromptCallReceipt,
+    ProviderCallDiagnostics,
     PromptTurnSnapshot,
     ProposalValidationError,
     build_prompt_turn_snapshot,
-    prompt_call_receipt_from_error,
+    provider_call_diagnostics_from_error,
 )
 from scion.proposal.llm_client import (
     LLMAuthError,
@@ -83,9 +83,6 @@ class ProposalPipeline(ProposalRecordMixin):
     lineage_registry: Any | None = None
     campaign_id: str = ""
     problem_id: str | None = None
-    problem_spec_hash: str | None = None
-    split_manifest_hash: str | None = None
-    seed_ledger_hash: str | None = None
     _call_journal: ProposalCallJournal = field(init=False, repr=False)
     _call_refs: dict[str, Mapping[str, Any]] = field(
         init=False,
@@ -153,15 +150,15 @@ class ProposalPipeline(ProposalRecordMixin):
             )
             return None, None
 
-        receipt: PromptCallReceipt | None = None
+        diagnostics: ProviderCallDiagnostics | None = None
         try:
-            hypothesis, receipt = self._generate_hypothesis_call(
+            hypothesis, diagnostics = self._generate_hypothesis_call(
                 branch_id,
                 context_snapshot,
                 prompt_snapshot,
             )
         except KeyboardInterrupt as exc:
-            receipt = prompt_call_receipt_from_error(exc)
+            diagnostics = provider_call_diagnostics_from_error(exc)
             outcome = self._outcome(
                 branch,
                 phase="hypothesis",
@@ -169,7 +166,7 @@ class ProposalPipeline(ProposalRecordMixin):
                 reason_code="PROPOSAL_PROVIDER_INTERRUPTED",
                 detail=f"provider_call_interrupted:{type(exc).__name__}",
                 error=exc,
-                receipt=receipt,
+                diagnostics=diagnostics,
             )
             install_branch_execution_hold(branch, outcome)
             self._append_call(
@@ -177,7 +174,7 @@ class ProposalPipeline(ProposalRecordMixin):
                 phase="hypothesis",
                 status="interrupted",
                 hypothesis_id=None,
-                receipt=receipt,
+                diagnostics=diagnostics,
                 outcome=outcome,
             )
             raise
@@ -208,14 +205,14 @@ class ProposalPipeline(ProposalRecordMixin):
                 reason_code="HYPOTHESIS_STORE_WRITE_FAILED",
                 detail=f"hypothesis_store_write_failed:{type(exc).__name__}",
                 error=exc,
-                receipt=receipt,
+                diagnostics=diagnostics,
             )
             self._append_call(
                 branch_id=branch_id,
                 phase="hypothesis",
                 status="generated",
                 hypothesis_id=record.hypothesis_id,
-                receipt=receipt,
+                diagnostics=diagnostics,
                 outcome=outcome,
             )
             raise
@@ -224,7 +221,7 @@ class ProposalPipeline(ProposalRecordMixin):
             phase="hypothesis",
             status="generated",
             hypothesis_id=record.hypothesis_id,
-            receipt=receipt,
+            diagnostics=diagnostics,
             outcome=None,
         )
         return hypothesis, record
@@ -263,14 +260,14 @@ class ProposalPipeline(ProposalRecordMixin):
             return None
 
         try:
-            patch, receipt = self._generate_code_call(
+            patch, diagnostics = self._generate_code_call(
                 branch_id,
                 record.hypothesis_id,
                 context_snapshot,
                 prompt_snapshot,
             )
         except KeyboardInterrupt as exc:
-            receipt = prompt_call_receipt_from_error(exc)
+            diagnostics = provider_call_diagnostics_from_error(exc)
             outcome = self._outcome(
                 branch,
                 phase="code",
@@ -278,7 +275,7 @@ class ProposalPipeline(ProposalRecordMixin):
                 reason_code="PROPOSAL_PROVIDER_INTERRUPTED",
                 detail=f"provider_call_interrupted:{type(exc).__name__}",
                 error=exc,
-                receipt=receipt,
+                diagnostics=diagnostics,
             )
             install_branch_execution_hold(branch, outcome)
             self._append_call(
@@ -286,7 +283,7 @@ class ProposalPipeline(ProposalRecordMixin):
                 phase="code",
                 status="interrupted",
                 hypothesis_id=record.hypothesis_id,
-                receipt=receipt,
+                diagnostics=diagnostics,
                 outcome=outcome,
             )
             raise
@@ -321,7 +318,7 @@ class ProposalPipeline(ProposalRecordMixin):
             phase="code",
             status="generated",
             hypothesis_id=record.hypothesis_id,
-            receipt=receipt,
+            diagnostics=diagnostics,
             outcome=None,
         )
         return patch
@@ -353,10 +350,8 @@ class ProposalPipeline(ProposalRecordMixin):
         branch_id: str,
         context_snapshot: ProposalContextSnapshot,
         prompt_snapshot: PromptTurnSnapshot,
-    ) -> tuple[HypothesisProposal, PromptCallReceipt]:
-        method = getattr(self.creative, "generate_direct_hypothesis_with_receipt", None)
-        if not callable(method):
-            raise TypeError("direct hypothesis requires a receipt-aware API")
+    ) -> tuple[HypothesisProposal, ProviderCallDiagnostics]:
+        method = self.creative.generate_direct_hypothesis
         context = context_snapshot.inputs.provider_context(
             include_renderer_inputs=True
         )
@@ -375,10 +370,8 @@ class ProposalPipeline(ProposalRecordMixin):
         hypothesis_id: str,
         context_snapshot: ProposalContextSnapshot,
         prompt_snapshot: PromptTurnSnapshot,
-    ) -> tuple[PatchProposal, PromptCallReceipt]:
-        method = getattr(self.creative, "generate_direct_code_with_receipt", None)
-        if not callable(method):
-            raise TypeError("direct code requires a receipt-aware API")
+    ) -> tuple[PatchProposal, ProviderCallDiagnostics]:
+        method = self.creative.generate_direct_code
         context = context_snapshot.inputs.provider_context(
             include_renderer_inputs=True
         )
@@ -438,7 +431,7 @@ class ProposalPipeline(ProposalRecordMixin):
         hypothesis_id: str | None = None,
         balance: bool = False,
     ) -> None:
-        receipt = prompt_call_receipt_from_error(error)
+        diagnostics = provider_call_diagnostics_from_error(error)
         invalid = isinstance(error, (LLMFormatError, ProposalValidationError))
         outcome_value = (
             ExecutionOutcome.RESOURCE_EXHAUSTED
@@ -461,7 +454,7 @@ class ProposalPipeline(ProposalRecordMixin):
             reason_code=reason_code,
             detail=str(error),
             error=error,
-            receipt=receipt,
+            diagnostics=diagnostics,
         )
         self.hypothesis_failure_details[branch.branch_id] = str(error)
         self._append_call(
@@ -469,7 +462,7 @@ class ProposalPipeline(ProposalRecordMixin):
             phase=phase,
             status="failed",
             hypothesis_id=hypothesis_id,
-            receipt=receipt,
+            diagnostics=diagnostics,
             outcome=outcome,
         )
         if balance:
@@ -489,14 +482,10 @@ class ProposalPipeline(ProposalRecordMixin):
         *,
         hypothesis_id: str | None = None,
     ) -> None:
-        receipt = prompt_call_receipt_from_error(error)
-        if receipt is None:
+        diagnostics = provider_call_diagnostics_from_error(error)
+        if diagnostics is None:
             return
-        blocked = receipt.error_category in {
-            "provider_call_failed",
-            "trace_start_failed",
-            "trace_finish_failed",
-        }
+        blocked = diagnostics.error_category == "provider_call_failed"
         outcome = self._outcome(
             branch,
             phase=phase,
@@ -510,16 +499,16 @@ class ProposalPipeline(ProposalRecordMixin):
                 if blocked
                 else "PROPOSAL_POST_PROVIDER_INVALID"
             ),
-            detail=f"{receipt.error_category}:{type(error).__name__}",
+            detail=f"{diagnostics.error_category}:{type(error).__name__}",
             error=error,
-            receipt=receipt,
+            diagnostics=diagnostics,
         )
         self._append_call(
             branch_id=branch.branch_id,
             phase=phase,
             status="failed",
             hypothesis_id=hypothesis_id,
-            receipt=receipt,
+            diagnostics=diagnostics,
             outcome=outcome,
         )
 
@@ -541,7 +530,7 @@ class ProposalPipeline(ProposalRecordMixin):
             reason_code=reason_code,
             detail=detail,
             error=error,
-            receipt=None,
+            diagnostics=None,
         )
         self.hypothesis_failure_details[branch.branch_id] = detail
         if route_infra:
@@ -560,7 +549,7 @@ class ProposalPipeline(ProposalRecordMixin):
         reason_code: str,
         detail: str,
         error: BaseException | None,
-        receipt: PromptCallReceipt | None,
+        diagnostics: ProviderCallDiagnostics | None,
     ) -> ExecutionOutcomeRecord:
         provenance: dict[str, Any] = {
             "owner": "proposal_pipeline",
@@ -569,8 +558,8 @@ class ProposalPipeline(ProposalRecordMixin):
         }
         if error is not None:
             provenance["error_type"] = type(error).__name__
-        if receipt is not None and receipt.error_category:
-            provenance["error_category"] = receipt.error_category
+        if diagnostics is not None and diagnostics.error_category:
+            provenance["error_category"] = diagnostics.error_category
         record = ExecutionOutcomeRecord(
             outcome=outcome,
             reason_code=reason_code,
@@ -587,7 +576,7 @@ class ProposalPipeline(ProposalRecordMixin):
         phase: str,
         status: str,
         hypothesis_id: str | None,
-        receipt: PromptCallReceipt | None,
+        diagnostics: ProviderCallDiagnostics | None,
         outcome: ExecutionOutcomeRecord | None,
     ) -> None:
         self._call_refs[branch_id] = self._call_journal.append(
@@ -595,7 +584,7 @@ class ProposalPipeline(ProposalRecordMixin):
             phase=phase,
             status=status,
             hypothesis_id=hypothesis_id,
-            receipt=receipt,
+            diagnostics=diagnostics,
             execution_outcome=outcome,
         )
 

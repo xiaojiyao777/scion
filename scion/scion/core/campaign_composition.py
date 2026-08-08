@@ -34,13 +34,6 @@ from scion.core.evaluation_orchestrator import EvaluationOrchestrator
 from scion.core.evidence_recorder import EvidenceRecorder
 from scion.core.explore_step_pipeline import ExploreStepPipeline
 from scion.core.failure_lifecycle import FailureLifecycleService
-from scion.core.formal_candidate_artifacts import (
-    FormalCandidatePatchArtifactRecorder,
-)
-from scion.core.promotion_dossier import (
-    promotion_dossier_ref,
-    write_promotion_dossier,
-)
 from scion.core.models import (
     ChampionState,
     HypothesisProposal,
@@ -52,7 +45,7 @@ from scion.core.production_boundary import (
     validate_production_campaign_boundary,
 )
 from scion.core.problem_runtime import ProblemRuntime
-from scion.core.problem_identity import problem_id_anchor, stable_identity_hash
+from scion.core.problem_identity import problem_id_anchor
 from scion.core.promotion_lifecycle import PromotionLifecycleService
 from scion.core.promotion_service import PromotionService
 from scion.core.research_rejection_finalizer import ResearchRejectionFinalizer
@@ -215,12 +208,6 @@ def compose_campaign_services(
         promote_branch=owner._transition_promoted_branch,
         mark_stale=owner._branch_ctrl.mark_all_stale,
         persist_branch_states=owner._persist_all_branch_states,
-        after_commit=lambda plan: write_promotion_dossier(
-            campaign_dir=owner._campaign_dir,
-            campaign_id=owner._campaign_id,
-            plan=plan,
-            step_history=owner._step_history,
-        ),
         read_weights_fn=_read_promotion_weights,
     )
 
@@ -237,9 +224,6 @@ def compose_campaign_services(
         state_provider=owner.get_state_snapshot,
         model_id=getattr(llm_client, "model", None),
         protocol_version=getattr(protocol_config, "version", None),
-        problem_spec_hash=stable_identity_hash(problem_spec),
-        split_manifest_hash=stable_identity_hash(owner._split_manifest),
-        seed_ledger_hash=stable_identity_hash(owner._seed_ledger),
         family_taxonomy=family_taxonomy,
     )
     owner._champion_store = ChampionStore(
@@ -313,9 +297,6 @@ def compose_campaign_services(
         lineage_registry=owner._registry,
         campaign_id=owner._campaign_id,
         problem_id=problem_id_anchor(problem_spec),
-        problem_spec_hash=stable_identity_hash(problem_spec),
-        split_manifest_hash=stable_identity_hash(owner._split_manifest),
-        seed_ledger_hash=stable_identity_hash(owner._seed_ledger),
     )
     owner._research_rejection_finalizer = ResearchRejectionFinalizer(
         campaign_id=owner._campaign_id,
@@ -359,18 +340,6 @@ def compose_campaign_services(
             "execution",
             "async",
         ),
-        promotion_dossier_ref_for=lambda version: promotion_dossier_ref(
-            owner._campaign_dir,
-            version,
-        ),
-    )
-    formal_candidate_artifacts = FormalCandidatePatchArtifactRecorder(
-        owner._campaign_dir,
-        protocol_version=getattr(protocol_config, "version", None),
-        problem_spec_hash=stable_identity_hash(problem_spec),
-        split_manifest_hash=stable_identity_hash(owner._split_manifest),
-        seed_ledger_hash=stable_identity_hash(owner._seed_ledger),
-        identity_manifest_for=owner._materializer.editable_identity_manifest,
     )
     owner._decision_finalizer = DecisionFinalizer(
         branch_controller=owner._branch_ctrl,
@@ -391,15 +360,6 @@ def compose_campaign_services(
             owner
         ).discard_branch_workspace(branch_id),
         persist_branch_state=owner._persist_branch_state,
-        record_formal_candidate_artifact=lambda **kwargs: (
-            formal_candidate_artifacts.record(
-                **kwargs,
-                base_workspace=_formal_candidate_base_workspace(
-                    owner,
-                    kwargs["branch"],
-                ),
-            )
-        ),
         decision_features_for=lambda branch_id: owner._decision_feature_snapshots.get(
             branch_id
         ),
@@ -559,45 +519,6 @@ def required_service_names() -> tuple[str, ...]:
         "_proposal_pipeline",
         "_campaign_loop",
     )
-
-
-def _formal_candidate_base_workspace(owner: Any, branch: Any) -> str:
-    """Resolve the exact champion snapshot declared by the branch lineage."""
-
-    champion = next(
-        (
-            candidate
-            for candidate in reversed(owner._champion_store.get_history())
-            if candidate.version == branch.base_champion_id
-            and candidate.code_snapshot_hash == branch.base_champion_hash
-        ),
-        None,
-    )
-    if champion is None:
-        raise ValueError(
-            "formal candidate base champion is missing: "
-            f"version={branch.base_champion_id} hash={branch.base_champion_hash}"
-        )
-    local = _reanchor_current_champion_snapshot(owner, champion)
-    campaign_dir = Path(owner._campaign_dir).resolve()
-    expected_local = campaign_dir / "champions" / f"champion_v{champion.version}"
-    try:
-        local_path = Path(local.code_snapshot_path).resolve()
-        resolved_expected = expected_local.resolve()
-        local_path.relative_to(campaign_dir)
-    except (OSError, RuntimeError, ValueError) as exc:
-        raise ValueError(
-            "formal candidate base champion has no verified campaign-local snapshot"
-        ) from exc
-    if local_path != resolved_expected or not local_path.is_dir():
-        raise ValueError(
-            "formal candidate base champion has no verified campaign-local snapshot"
-        )
-    if owner._materializer.compute_snapshot_hash(str(local_path)) != (
-        branch.base_champion_hash
-    ):
-        raise ValueError("formal candidate base champion snapshot hash mismatch")
-    return str(local_path)
 
 
 def _persist_initial_champion(owner: Any) -> None:

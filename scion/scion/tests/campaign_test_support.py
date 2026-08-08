@@ -15,10 +15,6 @@ from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, Decision,
     EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
 )
-from scion.evidence.final_evidence_refs import (
-    FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
-    FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
-)
 from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 from scion.verification.gate import VerificationGate

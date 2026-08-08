@@ -241,23 +241,14 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
     assert call_rows[1][0]["event_id"] == call_ref["lineage_event_id"]
     assert all("attempt_id" not in item for item in calls)
 
-    artifacts = list(
-        (campaign_dir / "artifacts" / "formal_candidates").glob(
-            "**/candidate.patch.json"
-        )
-    )
-    assert len(artifacts) == 1
-    candidate = json.loads(artifacts[0].read_text(encoding="utf-8"))
-    files = candidate["patch"]["files"]
-    changed_files = {item["file_path"] for item in files}
-    assert changed_files == {
-        "policies/baseline_modules/construction.py",
-        "policies/baseline_modules/scheduler.py",
-    }
-    content_by_file = {item["file_path"]: item["code_content"] for item in files}
-    assert "def _elite_seed_probe(instance):" in content_by_file[
-        "policies/baseline_modules/construction.py"
-    ]
-    assert "_elite_seed_probe(instance)" in content_by_file[
-        "policies/baseline_modules/scheduler.py"
-    ]
+    # The active path retains the evaluated multi-file source directly in the
+    # branch workspace; it does not emit a second identity/hash closure.
+    assert not (campaign_dir / "artifacts" / "formal_candidates").exists()
+    workspace = Path(campaign._branch_workspaces[step.branch_id])
+    assert workspace.is_dir()
+    assert "def _elite_seed_probe(instance):" in (
+        workspace / "policies" / "baseline_modules" / "construction.py"
+    ).read_text(encoding="utf-8")
+    assert "_elite_seed_probe(instance)" in (
+        workspace / "policies" / "baseline_modules" / "scheduler.py"
+    ).read_text(encoding="utf-8")

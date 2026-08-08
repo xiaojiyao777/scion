@@ -59,6 +59,8 @@ WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS = (
     "objective_model",
     "measurable_opportunity_classes",
     "opportunity_diagnostics",
+    "aggregate_objective_headroom",
+    "aggregate_noise_context",
     "policy",
 )
 WAREHOUSE_ADAPTER_FORBIDDEN_KEY_FRAGMENTS = (
@@ -315,7 +317,7 @@ def _measurement_guidance_lines(
             "No aggregate measurement handoff was supplied.",
             "Choose the algorithmic direction from source and branch evidence.",
         )
-    return (
+    lines = [
         f"Metric: {diagnostics.get('metric')}",
         f"Unit: {diagnostics.get('unit')}",
         f"Runtime model: {diagnostics.get('runtime_model')}",
@@ -324,7 +326,34 @@ def _measurement_guidance_lines(
         f"Practical formal delta: {diagnostics.get('practical_validate_delta')}",
         f"Screening MDE at 80% power: {diagnostics.get('screening_mde_at_power_80')}",
         f"Summary: {diagnostics.get('summary')}",
-    )
+    ]
+    headroom = diagnostics.get("aggregate_objective_headroom")
+    if isinstance(headroom, Mapping):
+        lower_bounds = headroom.get("theoretical_lower_bounds")
+        if isinstance(lower_bounds, Mapping):
+            lines.append(
+                "Structural primary lower bound: "
+                f"subcategory_splits={lower_bounds.get('subcategory_splits')}"
+            )
+        lines.append(
+            "Numeric champion aggregate headroom: "
+            f"{headroom.get('current_champion_numeric_aggregate')}"
+        )
+        lines.append(f"Headroom interpretation: {headroom.get('interpretation')}")
+
+    noise = diagnostics.get("aggregate_noise_context")
+    if isinstance(noise, Mapping):
+        lines.extend(
+            (
+                "Aggregate noise context: "
+                f"p90_abs={noise.get('noise_band_p90_abs')}, "
+                f"n_pairs={noise.get('n_pairs')}",
+                "Signal context: "
+                f"tier={noise.get('signal_to_noise_tier')}, "
+                f"evidence={noise.get('calibration_evidence_level')}",
+            )
+        )
+    return tuple(lines)
 
 
 def _warehouse_adapter_opportunity_projection(spec: Any) -> dict[str, Any]:

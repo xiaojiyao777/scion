@@ -1,7 +1,13 @@
-"""Build and execute fixed-candidate replay artifacts."""
+"""Evaluate recorded candidates without reopening the research campaign.
+
+This module deliberately has one small job: select a recorded candidate from a
+campaign, reconstruct it from full-file replacements, and run the
+problem-owned Protocol.  Candidate identifiers are selectors, not authority;
+replay identity, attribution, leases, signatures, and digest chains are not
+part of this eval-only path.
+"""
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 import shutil
@@ -11,62 +17,20 @@ from typing import Any, Callable, Mapping, Sequence
 
 import yaml
 
-from scion.core.evidence_recording.replay_identity import (
-    formal_replay_identity_missing_keys,
-)
-from scion.runtime.workspace import compute_snapshot_hash_for_files
-
 
 SCHEMA_VERSION = "scion.fixed_candidate_replay_manifest.v1"
 COMPARISON_SCHEMA_VERSION = "scion.fixed_candidate_replay_comparison.v1"
 DEFAULT_MANIFEST_FILENAME = "fixed_candidate_replay_manifest.v1.json"
 DEFAULT_COMPARISON_FILENAME = "fixed_candidate_replay_comparison.v1.json"
-REPLAY_ARMS = ["on", "record_only"]
+REPLAY_ARMS = ["on"]
 REPLAY_STAGES = ["screening", "validation", "frozen"]
 DEFAULT_REPLAY_STAGES = ["screening"]
-MEASUREMENT_GOVERNANCE_BY_ARM = {
-    "on": "on",
-    "record_only": "off_record_only",
-}
-FORMAL_CANDIDATE_PATCH_SCHEMA_V1 = "scion.formal_candidate_patch_artifact.v1"
-FORMAL_CANDIDATE_PATCH_SCHEMA_V2 = "scion.formal_candidate_patch_artifact.v2"
-FORMAL_CANDIDATE_PATCH_SCHEMA_V3 = "scion.formal_candidate_patch_artifact.v3"
-_OPAQUE_CHAMPION_WORKSPACE_REF_RE = re.compile(
-    r"artifact:champion_v(?P<champion_id>[0-9]+)#[0-9a-f]{12}"
+
+_CHAMPION_REF_RE = re.compile(r"champions/champion_v(?P<version>[0-9]+)")
+_OPAQUE_CHAMPION_REF_RE = re.compile(
+    r"artifact:champion_v(?P<version>[0-9]+)(?:#[^/]*)?"
 )
-_SOURCE_ATTRIBUTION_KEYS = frozenset(
-    {
-        "schema_version",
-        "origin",
-        "source_ledger_owner",
-        "source_provenance",
-        "source_visibility",
-        "source_digest",
-    }
-)
-_SOURCE_LEDGER_OWNERS = frozenset(
-    {
-        "approved_target",
-        "branch_current_integration",
-        "branch_helper",
-        "champion_api_support",
-    }
-)
-_SOURCE_ATTRIBUTION_ORIGINS = frozenset(
-    {
-        "proposal_source_ledger",
-        "base_workspace",
-        "new_file",
-        "runtime_activation",
-    }
-)
-_V3_MATERIALIZATION_SOURCE_ATTRIBUTION_ORIGINS = (
-    _SOURCE_ATTRIBUTION_ORIGINS | {"inherited_verified_branch"}
-)
-_CANDIDATE_ATTRIBUTION_KEYS = frozenset({"schema_version", "scope"})
-_CANDIDATE_ATTRIBUTION_SCOPES = frozenset(
-    {"current_proposal", "inherited_verified", "runtime_activation"}
-)
+_PLAIN_ID_FIELDS = ("candidate_id", "hypothesis_id", "branch_id")
 
 
 def build_fixed_candidate_replay_manifest(
@@ -78,175 +42,80 @@ def build_fixed_candidate_replay_manifest(
     candidate_ids: Sequence[str] | None = None,
     hypothesis_ids: Sequence[str] | None = None,
     stages: Sequence[str] | None = None,
-    external_candidate_artifacts: Sequence[str | Path] | None = None,
+    replay_arms: Sequence[str] | None = None,
+    conditional_stage_progression: bool = False,
+    expand_screening: bool = False,
     generated_at: str | None = None,
 ) -> dict[str, Any]:
-    """Return a deterministic manifest for fixed-candidate governance replay.
+    """Build a manifest from candidates recorded inside one source campaign."""
 
-    The builder reads ``formal_candidates/index.jsonl`` rows and referenced
-    ``candidate.patch.json`` files by default. Human-approved external
-    full-file candidate artifacts may also be included explicitly; they remain
-    report/replay material and never become Decision input. The builder never
-    materializes workspaces, runs protocol replay, or mutates campaign state.
-    """
-
+    _require_on_arm(source_arm, label="source_arm")
+    arm_filter = _replay_arm_filter(replay_arms)
+    stage_filter = _stage_filter(stages)
     if max_candidates is not None and max_candidates < 0:
         raise ValueError("max_candidates must be non-negative")
-    explicit_stage_filter = stages is not None
-    stage_filter = _stage_filter(stages)
-    external_artifacts = [Path(path) for path in (external_candidate_artifacts or ())]
-    index_path, source_campaign_dir = _resolve_manifest_source(
-        source,
-        require_index=not external_artifacts,
-    )
-    rows = _read_index_rows(index_path) if index_path is not None else []
+    if not _clean_str(comparison_id):
+        raise ValueError("comparison_id must be non-empty")
+
+    index_path, campaign_dir = resolve_formal_candidate_index(source)
     candidate_filter = _candidate_filter(
         candidate_ids=candidate_ids,
         hypothesis_ids=hypothesis_ids,
     )
-    filtered_out_row_count = 0
+    selected: list[dict[str, Any]] = []
+    omitted: list[dict[str, Any]] = []
+    filtered_out = 0
 
-    candidates: list[dict[str, Any]] = []
-    omitted_rows: list[dict[str, Any]] = []
-    for row_index, row in enumerate(rows):
+    for row_index, row in enumerate(_read_index_rows(index_path)):
         if not _row_matches_candidate_filter(row, candidate_filter):
-            filtered_out_row_count += 1
+            filtered_out += 1
             continue
-        row_reasons = _row_omission_reasons(
+        reasons, artifact_ref, metadata = _inspect_index_candidate(
             row,
-            explicit_stage_filter=explicit_stage_filter,
+            campaign_dir=campaign_dir,
+            explicit_stage_filter=stages is not None,
         )
-        artifact_ref = _clean_str(row.get("artifact_ref"))
-        metadata_path = _resolve_artifact_path(
-            artifact_ref,
-            campaign_dir=source_campaign_dir,
-            index_dir=index_path.parent if index_path is not None else source_campaign_dir,
-        )
-        metadata: Mapping[str, Any] | None = None
-
-        if not row_reasons:
-            if metadata_path is None:
-                row_reasons.append("missing_artifact_ref")
-            elif not metadata_path.is_file():
-                row_reasons.append("candidate_patch_missing")
-            else:
-                try:
-                    loaded = json.loads(metadata_path.read_text(encoding="utf-8"))
-                except (OSError, json.JSONDecodeError):
-                    row_reasons.append("candidate_patch_unreadable")
-                else:
-                    if not isinstance(loaded, Mapping):
-                        row_reasons.append("candidate_patch_invalid")
-                    else:
-                        metadata = loaded
-                        row_reasons.extend(
-                            _metadata_omission_reasons(
-                                metadata,
-                                explicit_stage_filter=explicit_stage_filter,
-                            )
-                        )
-
-        if row_reasons:
-            omitted_rows.append(_omitted_row(row_index, row, row_reasons))
+        if reasons:
+            omitted.append(_omitted_row(row_index, row, reasons))
             continue
-
         assert metadata is not None
-        for stage_index, stage in enumerate(stage_filter):
-            if max_candidates is not None and len(candidates) >= max_candidates:
-                omitted_rows.append(
-                    _omitted_row(row_index, row, ["max_candidates_exceeded"])
-                )
-                continue
-            candidates.append(
-                _candidate_manifest_entry(
-                    row_index=row_index,
-                    stage_index=stage_index,
-                    stage=stage,
-                    row=row,
-                    metadata=metadata,
-                    artifact_ref=artifact_ref,
-                )
-            )
-
-    external_omitted_rows: list[dict[str, Any]] = []
-    for artifact_index, artifact_path in enumerate(external_artifacts):
-        artifact_ref = str(artifact_path.expanduser().resolve())
-        try:
-            metadata = _load_json_object(Path(artifact_ref))
-        except (OSError, json.JSONDecodeError, ValueError) as exc:
-            external_omitted_rows.append(
-                _omitted_row(
-                    len(rows) + artifact_index,
-                    {
-                        "candidate_id": f"external-candidate-{artifact_index + 1}",
-                        "stage": ",".join(stage_filter),
-                        "artifact_ref": artifact_ref,
-                        "artifact_status": "external",
-                        "replay_identity_status": "external",
-                    },
-                    ["external_candidate_artifact_unreadable", type(exc).__name__],
-                )
-            )
+        if max_candidates is not None and len(selected) >= max_candidates:
+            omitted.append(_omitted_row(row_index, row, ["max_candidates_exceeded"]))
             continue
-        if "patch" not in metadata or "base" not in metadata:
-            external_omitted_rows.append(
-                _omitted_row(
-                    len(rows) + artifact_index,
-                    {
-                        "candidate_id": _clean_str(metadata.get("candidate_id"))
-                        or f"external-candidate-{artifact_index + 1}",
-                        "stage": ",".join(stage_filter),
-                        "artifact_ref": artifact_ref,
-                        "artifact_status": "external",
-                        "replay_identity_status": "external",
-                    },
-                    ["external_candidate_missing_base_or_patch"],
-                )
+        selected.append(
+            _candidate_source_entry(
+                row_index=row_index,
+                row=row,
+                metadata=metadata,
+                artifact_ref=artifact_ref,
             )
-            continue
-        for stage_index, stage in enumerate(stage_filter):
-            if max_candidates is not None and len(candidates) >= max_candidates:
-                external_omitted_rows.append(
-                    _omitted_row(
-                        len(rows) + artifact_index,
-                        {
-                            "candidate_id": _clean_str(metadata.get("candidate_id"))
-                            or f"external-candidate-{artifact_index + 1}",
-                            "stage": stage,
-                            "artifact_ref": artifact_ref,
-                            "artifact_status": "external",
-                            "replay_identity_status": "external",
-                        },
-                        ["max_candidates_exceeded"],
-                    )
-                )
-                continue
-            candidates.append(
-                _external_candidate_manifest_entry(
-                    row_index=len(rows) + artifact_index,
-                    stage_index=stage_index,
-                    stage=stage,
-                    metadata=metadata,
-                    artifact_ref=artifact_ref,
-                )
-            )
-    omitted_rows.extend(external_omitted_rows)
+        )
 
+    candidates = [
+        {
+            **candidate,
+            "stage": stage,
+            "replay_stage": stage,
+        }
+        for candidate in selected
+        for stage in stage_filter
+    ]
     return {
         "schema_version": SCHEMA_VERSION,
-        "comparison_id": comparison_id,
-        "source_campaign_dir": str(source_campaign_dir),
-        "source_arm": source_arm,
+        "comparison_id": _clean_str(comparison_id),
+        "source_campaign_dir": str(campaign_dir),
+        "source_arm": "on",
         "generated_at": generated_at or _utc_now_iso(),
         "candidate_filter": candidate_filter,
         "stage_filter": stage_filter,
-        "filtered_out_row_count": filtered_out_row_count,
+        "filtered_out_row_count": filtered_out,
         "candidate_count": len(candidates),
-        "causal_candidate_pairing": bool(candidates),
-        "external_candidate_artifact_count": len(external_artifacts),
-        "replay_arms": list(REPLAY_ARMS),
+        "source_candidate_count": len(selected),
+        "replay_arms": arm_filter,
+        "conditional_stage_progression": bool(conditional_stage_progression),
+        "expand_screening": bool(expand_screening),
         "candidates": candidates,
-        "omitted_rows": omitted_rows,
+        "omitted_rows": omitted,
     }
 
 
@@ -260,24 +129,17 @@ def write_fixed_candidate_replay_manifest(
     candidate_ids: Sequence[str] | None = None,
     hypothesis_ids: Sequence[str] | None = None,
     stages: Sequence[str] | None = None,
-    external_candidate_artifacts: Sequence[str | Path] | None = None,
+    replay_arms: Sequence[str] | None = None,
+    conditional_stage_progression: bool = False,
+    expand_screening: bool = False,
 ) -> Path:
-    """Build and write a fixed-candidate replay manifest JSON artifact."""
+    """Build and write an eval-only manifest."""
 
-    external_artifacts = list(external_candidate_artifacts or ())
-    index_path, source_campaign_dir = _resolve_manifest_source(
-        source,
-        require_index=not external_artifacts,
-    )
+    index_path, _ = resolve_formal_candidate_index(source)
     destination = (
-        Path(output_path)
+        Path(output_path).expanduser().resolve()
         if output_path is not None
-        else (
-            index_path.parent
-            if index_path is not None
-            else source_campaign_dir
-        )
-        / DEFAULT_MANIFEST_FILENAME
+        else index_path.parent / DEFAULT_MANIFEST_FILENAME
     )
     manifest = build_fixed_candidate_replay_manifest(
         source,
@@ -287,7 +149,9 @@ def write_fixed_candidate_replay_manifest(
         candidate_ids=candidate_ids,
         hypothesis_ids=hypothesis_ids,
         stages=stages,
-        external_candidate_artifacts=external_artifacts,
+        replay_arms=replay_arms,
+        conditional_stage_progression=conditional_stage_progression,
+        expand_screening=expand_screening,
     )
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(_manifest_json(manifest), encoding="utf-8")
@@ -295,7 +159,7 @@ def write_fixed_candidate_replay_manifest(
 
 
 def resolve_formal_candidate_index(source: str | Path) -> tuple[Path, Path]:
-    """Resolve a campaign directory or formal candidate index path."""
+    """Resolve the standard candidate index and its owning campaign."""
 
     source_path = Path(source).expanduser().resolve()
     if source_path.is_dir():
@@ -308,303 +172,14 @@ def resolve_formal_candidate_index(source: str | Path) -> tuple[Path, Path]:
                 "source must be a campaign directory or formal_candidates/index.jsonl"
             )
         campaign_dir = _infer_campaign_dir_from_index(index_path)
+    expected = (
+        campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
+    ).resolve()
+    if index_path != expected:
+        raise ValueError("candidate index must be inside its source campaign")
     if not index_path.is_file():
         raise FileNotFoundError(f"formal candidate index not found: {index_path}")
-    return index_path, campaign_dir
-
-
-def _resolve_manifest_source(
-    source: str | Path,
-    *,
-    require_index: bool,
-) -> tuple[Path | None, Path]:
-    source_path = Path(source).expanduser().resolve()
-    if source_path.is_dir():
-        campaign_dir = source_path
-        index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    else:
-        index_path = source_path
-        if index_path.name != "index.jsonl":
-            raise ValueError(
-                "source must be a campaign directory or formal_candidates/index.jsonl"
-            )
-        campaign_dir = _infer_campaign_dir_from_index(index_path)
-    if index_path.is_file():
-        return index_path, campaign_dir
-    if require_index:
-        raise FileNotFoundError(f"formal candidate index not found: {index_path}")
-    return None, campaign_dir
-
-
-def _infer_campaign_dir_from_index(index_path: Path) -> Path:
-    parts = index_path.parts
-    if len(parts) >= 3 and parts[-3:-1] == ("artifacts", "formal_candidates"):
-        return index_path.parents[2]
-    return index_path.parent
-
-
-def _read_index_rows(index_path: Path) -> list[Mapping[str, Any]]:
-    rows: list[Mapping[str, Any]] = []
-    with index_path.open(encoding="utf-8") as fh:
-        for line_number, line in enumerate(fh, start=1):
-            text = line.strip()
-            if not text:
-                continue
-            try:
-                row = json.loads(text)
-            except json.JSONDecodeError as exc:
-                raise ValueError(
-                    f"invalid JSON in formal candidate index line {line_number}"
-                ) from exc
-            if not isinstance(row, Mapping):
-                raise ValueError(
-                    f"formal candidate index line {line_number} is not a JSON object"
-                )
-            rows.append(row)
-    return rows
-
-
-def _candidate_filter(
-    *,
-    candidate_ids: Sequence[str] | None,
-    hypothesis_ids: Sequence[str] | None,
-) -> dict[str, list[str]]:
-    return {
-        "candidate_ids": _sorted_clean_strings(candidate_ids),
-        "hypothesis_ids": _sorted_clean_strings(hypothesis_ids),
-    }
-
-
-def _row_matches_candidate_filter(
-    row: Mapping[str, Any],
-    candidate_filter: Mapping[str, Sequence[str]],
-) -> bool:
-    candidate_ids = set(candidate_filter.get("candidate_ids") or ())
-    hypothesis_ids = set(candidate_filter.get("hypothesis_ids") or ())
-    if not candidate_ids and not hypothesis_ids:
-        return True
-    candidate_id = _clean_str(row.get("candidate_id"))
-    hypothesis_id = _clean_str(row.get("hypothesis_id"))
-    return candidate_id in candidate_ids or hypothesis_id in hypothesis_ids
-
-
-def _stage_filter(stages: Sequence[str] | None) -> list[str]:
-    clean = _ordered_clean_strings(stages or DEFAULT_REPLAY_STAGES)
-    if not clean:
-        clean = list(DEFAULT_REPLAY_STAGES)
-    unsupported = [stage for stage in clean if stage not in REPLAY_STAGES]
-    if unsupported:
-        raise ValueError(f"unsupported replay stage(s): {unsupported}")
-    return clean
-
-
-def _row_omission_reasons(
-    row: Mapping[str, Any],
-    *,
-    explicit_stage_filter: bool,
-) -> list[str]:
-    reasons: list[str] = []
-    if _clean_str(row.get("artifact_status")) != "recorded":
-        if _clean_str(row.get("artifact_status")) == "omitted":
-            reasons.append(
-                _clean_str(row.get("artifact_omitted_reason"))
-                or "artifact_omitted"
-            )
-        else:
-            reasons.append("artifact_not_recorded")
-    row_stage = _clean_str(row.get("stage")) or "screening"
-    if not explicit_stage_filter and row_stage != "screening":
-        reasons.append("non_screening_stage")
-    if not _clean_str(row.get("artifact_ref")):
-        reasons.append("missing_artifact_ref")
-    if _clean_str(row.get("replay_identity_status")) != "complete":
-        reasons.append("replay_identity_not_complete")
-    missing_keys = _string_list(row.get("missing_replay_identity_keys"))
-    if missing_keys:
-        reasons.append("missing_replay_identity_keys")
-    return _dedupe(reasons)
-
-
-def _metadata_omission_reasons(
-    metadata: Mapping[str, Any],
-    *,
-    explicit_stage_filter: bool,
-) -> list[str]:
-    reasons: list[str] = []
-    metadata_stage = _clean_str(metadata.get("stage")) or "screening"
-    if not explicit_stage_filter and metadata_stage != "screening":
-        reasons.append("candidate_patch_non_screening_stage")
-    replay_identity = metadata.get("replay_identity")
-    if not isinstance(replay_identity, Mapping):
-        reasons.append("candidate_patch_missing_replay_identity")
-        return reasons
-    identity_status = _clean_str(
-        replay_identity.get("identity_status") or replay_identity.get("status")
-    )
-    if identity_status != "complete":
-        reasons.append("candidate_patch_replay_identity_not_complete")
-    if formal_replay_identity_missing_keys(replay_identity):
-        reasons.append("candidate_patch_missing_replay_identity_keys")
-    artifact_schema = _clean_str(metadata.get("schema"))
-    if artifact_schema not in {
-        FORMAL_CANDIDATE_PATCH_SCHEMA_V1,
-        FORMAL_CANDIDATE_PATCH_SCHEMA_V2,
-        FORMAL_CANDIDATE_PATCH_SCHEMA_V3,
-    }:
-        reasons.append("candidate_patch_schema_unsupported")
-    elif artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
-        try:
-            _validated_file_source_attributions(metadata)
-        except ValueError:
-            reasons.append("candidate_patch_source_attribution_invalid")
-    elif artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
-        try:
-            _validated_v3_replay_materialization(metadata)
-        except ValueError:
-            reasons.append("candidate_patch_replay_materialization_invalid")
-    return _dedupe(reasons)
-
-
-def _candidate_manifest_entry(
-    *,
-    row_index: int,
-    stage_index: int,
-    stage: str,
-    row: Mapping[str, Any],
-    metadata: Mapping[str, Any],
-    artifact_ref: str,
-) -> dict[str, Any]:
-    replay_identity = metadata.get("replay_identity")
-    assert isinstance(replay_identity, Mapping)
-    patch = metadata.get("patch") if isinstance(metadata.get("patch"), Mapping) else {}
-    base = metadata.get("base") if isinstance(metadata.get("base"), Mapping) else {}
-    replay_metadata = (
-        metadata.get("replay_metadata")
-        if isinstance(metadata.get("replay_metadata"), Mapping)
-        else {}
-    )
-    patch_digest = _clean_str(
-        replay_identity.get("patch_digest")
-        or replay_identity.get("patch_hash")
-        or patch.get("patch_digest")
-        or row.get("patch_digest")
-    )
-    raw_metrics_ref = _clean_str(
-        replay_identity.get("raw_metrics_ref")
-        or replay_metadata.get("raw_metrics_ref")
-        or metadata.get("experiment_ref")
-    )
-    candidate_id = _clean_str(metadata.get("candidate_id") or row.get("candidate_id"))
-    if stage_index:
-        candidate_id = f"{candidate_id}-{stage}"
-    source_stage = _clean_str(metadata.get("stage") or row.get("stage")) or "screening"
-    return {
-        "candidate_order_index": row_index,
-        "candidate_id": candidate_id,
-        "branch_id": _clean_str(metadata.get("branch_id") or row.get("branch_id")),
-        "lineage_id": _clean_str(metadata.get("lineage_id")),
-        "hypothesis_id": _clean_str(
-            metadata.get("hypothesis_id") or row.get("hypothesis_id")
-        ),
-        "stage": stage,
-        "source_stage": source_stage,
-        "replay_stage": stage,
-        "artifact_ref": artifact_ref,
-        "target_files": _target_files(metadata),
-        **_manifest_source_attribution_fields(metadata),
-        "selected_surface": _clean_str(
-            replay_identity.get("selected_surface")
-            or replay_metadata.get("selected_surface")
-        ),
-        "hypothesis_action": _hypothesis_action(metadata),
-        "patch_digest": patch_digest,
-        "patch_hash": _clean_str(replay_identity.get("patch_hash") or patch_digest),
-        "code_hash": _clean_str(replay_identity.get("code_hash")),
-        "base_champion_id": _clean_str(base.get("base_champion_id")),
-        "base_champion_hash": _clean_str(base.get("base_champion_hash")),
-        "problem_spec_hash": _clean_str(replay_identity.get("problem_spec_hash")),
-        "split_manifest_hash": _clean_str(replay_identity.get("split_manifest_hash")),
-        "seed_ledger_hash": _clean_str(replay_identity.get("seed_ledger_hash")),
-        "protocol_version": _clean_str(replay_identity.get("protocol_version")),
-        "raw_metrics_ref": raw_metrics_ref,
-        "source_raw_metrics_ref": raw_metrics_ref,
-        "decision": _clean_str(metadata.get("decision")),
-        "decision_reason_codes": _string_list(metadata.get("decision_reason_codes")),
-        "audit_flags": {
-            "decision_features_excluded": True,
-            "proposal_text_excluded": True,
-            "replay_materialized_from_artifact": True,
-            "external_candidate_artifact": False,
-        },
-    }
-
-
-def _external_candidate_manifest_entry(
-    *,
-    row_index: int,
-    stage_index: int,
-    stage: str,
-    metadata: Mapping[str, Any],
-    artifact_ref: str,
-) -> dict[str, Any]:
-    candidate_id = (
-        _clean_str(metadata.get("candidate_id"))
-        or f"external-candidate-{row_index + 1}"
-    )
-    if stage_index:
-        candidate_id = f"{candidate_id}-{stage}"
-    patch = metadata.get("patch") if isinstance(metadata.get("patch"), Mapping) else {}
-    base = metadata.get("base") if isinstance(metadata.get("base"), Mapping) else {}
-    replay_identity = (
-        metadata.get("replay_identity")
-        if isinstance(metadata.get("replay_identity"), Mapping)
-        else {}
-    )
-    patch_digest = _clean_str(
-        replay_identity.get("patch_digest")
-        or replay_identity.get("patch_hash")
-        or patch.get("patch_digest")
-        or metadata.get("patch_digest")
-        or _full_file_patch_digest(patch)
-    )
-    return {
-        "candidate_order_index": row_index,
-        "candidate_id": candidate_id,
-        "branch_id": _clean_str(metadata.get("branch_id")) or "external",
-        "lineage_id": _clean_str(metadata.get("lineage_id")),
-        "hypothesis_id": _clean_str(metadata.get("hypothesis_id")),
-        "stage": stage,
-        "source_stage": _clean_str(metadata.get("stage")) or "external",
-        "replay_stage": stage,
-        "artifact_ref": artifact_ref,
-        "target_files": _target_files(metadata),
-        **_manifest_source_attribution_fields(metadata),
-        "selected_surface": _clean_str(
-            replay_identity.get("selected_surface")
-            or metadata.get("selected_surface")
-        ),
-        "hypothesis_action": _hypothesis_action(metadata),
-        "patch_digest": patch_digest,
-        "patch_hash": _clean_str(replay_identity.get("patch_hash") or patch_digest),
-        "code_hash": _clean_str(replay_identity.get("code_hash")),
-        "base_champion_id": _clean_str(base.get("base_champion_id")),
-        "base_champion_hash": _clean_str(base.get("base_champion_hash")),
-        "problem_spec_hash": _clean_str(replay_identity.get("problem_spec_hash")),
-        "split_manifest_hash": _clean_str(replay_identity.get("split_manifest_hash")),
-        "seed_ledger_hash": _clean_str(replay_identity.get("seed_ledger_hash")),
-        "protocol_version": _clean_str(replay_identity.get("protocol_version")),
-        "raw_metrics_ref": "",
-        "source_raw_metrics_ref": "",
-        "decision": "external_replay_candidate",
-        "decision_reason_codes": ["EXTERNAL_CANDIDATE_REPLAY_ONLY"],
-        "audit_flags": {
-            "decision_features_excluded": True,
-            "proposal_text_excluded": True,
-            "replay_materialized_from_artifact": True,
-            "external_candidate_artifact": True,
-            "external_candidate_not_promotion_evidence": True,
-        },
-    }
+    return index_path, campaign_dir.resolve()
 
 
 def execute_fixed_candidate_replay(
@@ -620,26 +195,37 @@ def execute_fixed_candidate_replay(
     protocol_factory: Callable[..., Any] | None = None,
     comparison_output_path: str | Path | None = None,
 ) -> Path:
-    """Replay fixed candidates under each manifest arm and write comparison JSON.
-
-    This executor is intentionally posthoc: it materializes workspaces under
-    ``output_dir`` and invokes the manifest-declared protocol stage.  It does
-    not touch campaign state, branch lifecycle, Decision, scheduler, or
-    promotion state.
-    """
+    """Run the fixed candidate through the problem-owned Protocol only."""
 
     manifest_file = Path(manifest_path).expanduser().resolve()
     manifest = _load_manifest(manifest_file)
-    source_campaign_dir = Path(_required_str(manifest, "source_campaign_dir")).resolve()
+    _require_on_arm(_required_str(manifest, "source_arm"), label="source_arm")
     arms = _manifest_replay_arms(manifest)
-    candidates = list(_manifest_candidates(manifest))
+    source_campaign_dir = Path(
+        _required_str(manifest, "source_campaign_dir")
+    ).expanduser().resolve()
+    if not source_campaign_dir.is_dir():
+        raise FileNotFoundError(f"source campaign not found: {source_campaign_dir}")
+    candidates = _manifest_candidates(manifest)
+    conditional = bool(manifest.get("conditional_stage_progression", False))
+    expand_screening = bool(manifest.get("expand_screening", False))
     problem_path = Path(problem_yaml_path).expanduser().resolve()
     if protocol_factory is None:
         _require_problem_spec_v1_for_fixed_replay(problem_path)
+    if max_candidates is not None and max_candidates < 0:
+        raise ValueError("max_candidates must be non-negative")
+
+    groups = (
+        _candidate_stage_groups(candidates)
+        if conditional
+        else [[candidate] for candidate in candidates]
+    )
     if max_candidates is not None:
-        if max_candidates < 0:
-            raise ValueError("max_candidates must be non-negative")
-        candidates = candidates[:max_candidates]
+        if conditional:
+            groups = groups[:max_candidates]
+        else:
+            groups = groups[:max_candidates]
+    evaluated_candidates = [candidate for group in groups for candidate in group]
 
     out_dir = Path(output_dir).expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -648,52 +234,71 @@ def execute_fixed_candidate_replay(
         if comparison_output_path is not None
         else out_dir / DEFAULT_COMPARISON_FILENAME
     )
+    protocol_path_resolved = _optional_resolved_path(protocol_path)
+    split_path_resolved = _optional_resolved_path(split_path)
+    seeds_path_resolved = _optional_resolved_path(seeds_path)
     rows: list[dict[str, Any]] = []
 
-    for candidate in candidates:
-        for arm in arms:
-            rows.append(
-                _execute_replay_row(
-                    manifest=manifest,
-                    manifest_path=manifest_file,
-                    candidate=candidate,
-                    arm=arm,
-                    source_campaign_dir=source_campaign_dir,
-                    problem_yaml_path=problem_path,
-                    protocol_path=Path(protocol_path).expanduser().resolve()
-                    if protocol_path is not None
-                    else None,
-                    split_path=Path(split_path).expanduser().resolve()
-                    if split_path is not None
-                    else None,
-                    seeds_path=Path(seeds_path).expanduser().resolve()
-                    if seeds_path is not None
-                    else None,
-                    output_dir=out_dir,
-                    time_limit_sec=time_limit_sec,
-                    protocol_factory=protocol_factory,
+    def run(candidate: Mapping[str, Any], *, expand: bool) -> dict[str, Any]:
+        return _execute_replay_row(
+            manifest_path=manifest_file,
+            candidate=candidate,
+            arm=arms[0],
+            source_campaign_dir=source_campaign_dir,
+            problem_yaml_path=problem_path,
+            protocol_path=protocol_path_resolved,
+            split_path=split_path_resolved,
+            seeds_path=seeds_path_resolved,
+            output_dir=out_dir,
+            time_limit_sec=time_limit_sec,
+            protocol_factory=protocol_factory,
+            expand=expand,
+        )
+
+    for group in groups:
+        blocked_by: Mapping[str, Any] | None = None
+        for candidate in group:
+            stage = _stage_name(candidate)
+            expanded = expand_screening and stage == "screening"
+            if blocked_by is not None:
+                rows.append(
+                    _skipped_replay_row(
+                        candidate,
+                        expanded=expanded,
+                        blocked_by=blocked_by,
+                    )
                 )
-            )
+                continue
+            row = run(candidate, expand=expanded)
+            rows.append(row)
+            if (
+                conditional
+                and stage == "validation"
+                and row.get("status") == "completed"
+                and _clean_str(row.get("gate_outcome")) == "expand"
+            ):
+                row = run(candidate, expand=True)
+                rows.append(row)
+            if conditional and (
+                row.get("status") != "completed"
+                or _clean_str(row.get("gate_outcome")) != "pass"
+            ):
+                blocked_by = row
 
     artifact = {
         "schema_version": COMPARISON_SCHEMA_VERSION,
         "source_manifest_ref": str(manifest_file),
-        "source_manifest_schema_version": _clean_str(manifest.get("schema_version")),
         "source_campaign_dir": str(source_campaign_dir),
         "comparison_id": _clean_str(manifest.get("comparison_id")),
         "generated_at": _utc_now_iso(),
-        "replay_arms": arms,
+        "replay_arm": "on",
+        "conditional_stage_progression": conditional,
+        "expand_screening": expand_screening,
         "stage_filter": _string_list(manifest.get("stage_filter"))
         or list(DEFAULT_REPLAY_STAGES),
-        "candidate_count": len(candidates),
+        "candidate_count": len(evaluated_candidates),
         "row_count": len(rows),
-        "decision_features_excluded": True,
-        "promotion_state_mutated": False,
-        "campaign_state_mutated": False,
-        "scheduler_state_mutated": False,
-        "comparison_is_decision_input": False,
-        "raw_paired_rows_excluded": True,
-        "measurement_diagnostics_excluded": True,
+        "evaluation_only": True,
         "rows": rows,
     }
     comparison_path.parent.mkdir(parents=True, exist_ok=True)
@@ -709,77 +314,29 @@ def materialize_candidate_workspace(
     output_dir: str | Path,
     arm: str,
 ) -> Path:
-    """Copy the base champion workspace and apply full-file patch entries."""
+    """Copy ``champions/champion_vN`` and apply safe full-file replacements."""
 
-    artifact_schema = _clean_str(candidate_patch.get("schema"))
-    v3_materialization: Mapping[str, Any] | None = None
-    if artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
-        _validated_file_source_attributions(candidate_patch)
-    elif artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
-        v3_materialization = _validated_v3_replay_materialization(candidate_patch)
-
+    _require_on_arm(arm, label="arm")
+    _validate_plain_candidate_fields(candidate, candidate_patch)
     source_dir = Path(source_campaign_dir).expanduser().resolve()
     base_workspace = resolve_candidate_base_workspace(
         candidate_patch,
         source_campaign_dir=source_dir,
     )
-    if v3_materialization is not None:
-        _validate_workspace_identity(
-            base_workspace,
-            v3_materialization["base_identity_manifest"],
-            label="base",
-        )
-        _validate_materialization_base_files(
-            base_workspace,
-            v3_materialization["files"],
-        )
-
-    candidate_id = _safe_path_token(_clean_str(candidate.get("candidate_id")) or "candidate")
-    arm_token = _safe_path_token(arm)
+    files = _candidate_files(candidate_patch)
+    candidate_id = _safe_path_token(
+        _required_str(candidate_patch, "candidate_id")
+    )
     destination_root = Path(output_dir).expanduser().resolve()
-    workspace = destination_root / "materialized" / candidate_id / arm_token
+    workspace = destination_root / "materialized" / candidate_id / "on"
     _assert_descendant(workspace, destination_root)
     if workspace.exists():
         shutil.rmtree(workspace)
     workspace.parent.mkdir(parents=True, exist_ok=True)
     shutil.copytree(base_workspace, workspace)
     _make_tree_user_writable(workspace)
-
-    if v3_materialization is not None:
-        files = v3_materialization["files"]
-    else:
-        patch = candidate_patch.get("patch")
-        if not isinstance(patch, Mapping):
-            raise ValueError("candidate patch missing patch object")
-        files = patch.get("files")
-        if not isinstance(files, list) or not files:
-            raise ValueError("candidate patch missing patch.files")
     for entry in files:
-        if not isinstance(entry, Mapping):
-            raise ValueError("patch.files entries must be objects")
         _apply_full_file_patch_entry(workspace, entry)
-    if v3_materialization is not None:
-        final_code_hash = _validate_workspace_identity(
-            workspace,
-            v3_materialization["candidate_identity_manifest"],
-            label="candidate",
-        )
-        replay_identity = candidate_patch.get("replay_identity")
-        current = candidate_patch.get("current")
-        expected_hashes = {
-            _clean_str(
-                replay_identity.get("code_hash")
-                if isinstance(replay_identity, Mapping)
-                else ""
-            ),
-            _clean_str(
-                current.get("current_code_hash")
-                if isinstance(current, Mapping)
-                else ""
-            ),
-        }
-        if expected_hashes != {final_code_hash}:
-            raise ValueError("materialized candidate final code_hash mismatch")
     return workspace
 
 
@@ -788,519 +345,181 @@ def resolve_candidate_base_workspace(
     *,
     source_campaign_dir: str | Path,
 ) -> Path:
-    """Resolve a replay base, including identity-bound copied-campaign refs."""
+    """Resolve only a champion snapshot owned by the source campaign."""
 
     source_dir = Path(source_campaign_dir).expanduser().resolve()
     base = candidate_patch.get("base")
     if not isinstance(base, Mapping):
         raise ValueError("candidate patch missing base metadata")
-    base_ref = _clean_str(base.get("base_workspace_ref"))
-    if not base_ref:
-        raise ValueError("candidate patch missing base.base_workspace_ref")
-
-    if not base_ref.startswith("artifact:"):
-        base_workspace = _resolve_required_relative_path(
-            base_ref,
-            root=source_dir,
-            label="base.base_workspace_ref",
-        )
-    else:
-        if (
-            _clean_str(candidate_patch.get("schema"))
-            != FORMAL_CANDIDATE_PATCH_SCHEMA_V3
-        ):
-            raise ValueError(
-                "opaque base workspace refs require a v3 candidate patch"
-            )
-        match = _OPAQUE_CHAMPION_WORKSPACE_REF_RE.fullmatch(base_ref)
-        base_champion_id = _clean_str(base.get("base_champion_id"))
-        if match is None or match.group("champion_id") != base_champion_id:
-            raise ValueError(
-                "opaque base workspace ref does not match base_champion_id"
-            )
-        materialization = candidate_patch.get("replay_materialization")
-        base_identity = (
-            materialization.get("base_identity_manifest")
-            if isinstance(materialization, Mapping)
-            else None
-        )
-        validated_identity = _validated_identity_manifest_metadata(
-            base_identity,
-            label="base",
-        )
-        base_champion_hash = _clean_str(base.get("base_champion_hash"))
-        if not _is_sha256(base_champion_hash):
-            raise ValueError("opaque base workspace ref champion hash is invalid")
-        base_workspace = (
-            source_dir / "champions" / f"champion_v{base_champion_id}"
-        ).resolve()
-        _assert_descendant(base_workspace, source_dir)
-
+    base_ref = _required_str(base, "base_workspace_ref")
+    match = _CHAMPION_REF_RE.fullmatch(base_ref)
+    if match is None:
+        match = _OPAQUE_CHAMPION_REF_RE.fullmatch(base_ref)
+    if match is None:
+        raise ValueError("candidate base must be champions/champion_vN in source campaign")
+    version = match.group("version")
+    declared_version = _clean_str(base.get("base_champion_id"))
+    if declared_version and declared_version != version:
+        raise ValueError("base_champion_id does not match base workspace")
+    base_workspace = (source_dir / "champions" / f"champion_v{version}").resolve()
+    _assert_descendant(base_workspace, source_dir)
     if not base_workspace.is_dir():
         raise FileNotFoundError(f"base workspace not found: {base_workspace}")
-    if base_ref.startswith("artifact:"):
-        _validate_workspace_identity(
-            base_workspace,
-            validated_identity,
-            label="base",
-        )
-        identity_files = [
-            base_workspace / entry["file_path"]
-            for entry in validated_identity["files"]
-        ]
-        local_snapshot_hash = compute_snapshot_hash_for_files(
-            base_workspace,
-            identity_files,
-        )
-        if local_snapshot_hash != base_champion_hash:
-            raise ValueError(
-                "opaque base workspace ref local snapshot hash mismatch"
-            )
     return base_workspace
 
 
-def _manifest_source_attribution_fields(
-    metadata: Mapping[str, Any],
-) -> dict[str, Any]:
-    artifact_schema = _clean_str(metadata.get("schema"))
-    if artifact_schema == FORMAL_CANDIDATE_PATCH_SCHEMA_V3:
-        materialization = _validated_v3_replay_materialization(metadata)
-        return {
-            "file_source_attributions": _validated_source_attributions_for_files(
-                materialization["files"],
-                label="replay_materialization.files",
-                allow_empty=True,
-                allowed_origins=(
-                    _V3_MATERIALIZATION_SOURCE_ATTRIBUTION_ORIGINS
-                ),
-            ),
-            "proposal_file_source_attributions": (
-                _validated_file_source_attributions(metadata)
-            ),
-            "proposal_target_files": _string_list(
-                metadata.get("proposal_target_files")
-            ),
-            "inherited_files": _string_list(metadata.get("inherited_files")),
-            "activation_files": _string_list(metadata.get("activation_files")),
-            "proposal_patch_digest": _clean_str(
-                metadata.get("proposal_patch_digest")
-            ),
-            "formal_patch_digest": _clean_str(metadata.get("formal_patch_digest")),
-            "candidate_attribution_scope": dict(
-                metadata.get("candidate_attribution_scope") or {}
-            ),
-        }
-    if artifact_schema != FORMAL_CANDIDATE_PATCH_SCHEMA_V2:
-        return {}
-    return {
-        "file_source_attributions": _validated_file_source_attributions(metadata)
-    }
-
-
-def _validated_file_source_attributions(
-    metadata: Mapping[str, Any],
-) -> list[dict[str, Any]]:
-    patch = metadata.get("patch")
-    files = patch.get("files") if isinstance(patch, Mapping) else None
-    if not isinstance(files, list) or not files:
-        raise ValueError("candidate patch missing patch.files source attribution")
-    return _validated_source_attributions_for_files(
-        files,
-        label="patch.files",
-    )
-
-
-def _validated_source_attributions_for_files(
-    files: list[Any],
-    *,
-    label: str,
-    allow_empty: bool = False,
-    allowed_origins: frozenset[str] = _SOURCE_ATTRIBUTION_ORIGINS,
-) -> list[dict[str, Any]]:
-    if not files and not allow_empty:
-        raise ValueError(f"candidate patch missing {label} source attribution")
-    result: list[dict[str, Any]] = []
-    seen: set[str] = set()
-    for entry in files:
-        if not isinstance(entry, Mapping):
-            raise ValueError("candidate patch file source attribution is invalid")
-        file_path = _clean_str(entry.get("file_path"))
-        _validate_patch_relative_path(file_path)
-        if file_path in seen:
-            raise ValueError(f"duplicate candidate patch file: {file_path}")
-        seen.add(file_path)
-        attribution = entry.get("source_attribution")
-        if not isinstance(attribution, Mapping) or set(attribution) != _SOURCE_ATTRIBUTION_KEYS:
-            raise ValueError(f"missing source attribution for patch file: {file_path}")
-        if attribution.get("schema_version") != "formal-file-source-attribution.v1":
-            raise ValueError(f"unsupported source attribution schema: {file_path}")
-        origin = _clean_str(attribution.get("origin"))
-        owner = _clean_str(attribution.get("source_ledger_owner"))
-        provenance = _clean_str(attribution.get("source_provenance"))
-        visibility = _clean_str(attribution.get("source_visibility"))
-        digest = _clean_str(attribution.get("source_digest"))
-        if origin not in allowed_origins or not provenance:
-            raise ValueError(f"invalid source attribution origin: {file_path}")
-        if origin == "proposal_source_ledger":
-            if owner not in _SOURCE_LEDGER_OWNERS:
-                raise ValueError(f"invalid source ledger owner: {file_path}")
-        elif owner:
-            raise ValueError(f"non-ledger source attribution has owner: {file_path}")
-        action = _clean_str(entry.get("action")) or "modify"
-        if action == "create":
-            if visibility not in {"new_file_placeholder", "new_file_absent"} or digest:
-                raise ValueError(f"invalid create source attribution: {file_path}")
-        elif action in {"modify", "delete"}:
-            if visibility != "full_current" or not _is_sha256(digest):
-                raise ValueError(f"invalid existing-file source attribution: {file_path}")
-        else:
-            raise ValueError(f"invalid patch action for source attribution: {file_path}")
-        result.append({"file_path": file_path, **dict(attribution)})
-    return result
-
-
-def _validated_v3_replay_materialization(
-    metadata: Mapping[str, Any],
-) -> dict[str, Any]:
-    patch = metadata.get("patch")
-    if not isinstance(patch, Mapping):
-        raise ValueError("candidate patch missing patch object")
-    proposal_files = patch.get("files")
-    if not isinstance(proposal_files, list) or not proposal_files:
-        raise ValueError("candidate patch missing patch.files")
-    _validated_source_attributions_for_files(proposal_files, label="patch.files")
-    proposal_digest = _stable_file_entries_digest(
-        proposal_files,
-        label="patch.files",
-    )
-    if {
-        _clean_str(patch.get("patch_digest")),
-        _clean_str(metadata.get("proposal_patch_digest")),
-    } != {proposal_digest}:
-        raise ValueError("proposal patch digest mismatch")
-
-    raw_materialization = metadata.get("replay_materialization")
-    if not isinstance(raw_materialization, Mapping):
-        raise ValueError("candidate patch missing replay_materialization")
-    if (
-        raw_materialization.get("schema_version")
-        != "scion.replay_materialization.v1"
-        or raw_materialization.get("representation")
-        != "cumulative_full_file_replacement"
-    ):
-        raise ValueError("unsupported replay materialization")
-    files = raw_materialization.get("files")
-    if not isinstance(files, list):
-        raise ValueError("replay_materialization.files must be a list")
-    _validated_source_attributions_for_files(
-        files,
-        label="replay_materialization.files",
-        allow_empty=True,
-        allowed_origins=_V3_MATERIALIZATION_SOURCE_ATTRIBUTION_ORIGINS,
-    )
-    formal_digest = _stable_file_entries_digest(
-        files,
-        label="replay_materialization.files",
-    )
-    replay_identity = metadata.get("replay_identity")
-    if not isinstance(replay_identity, Mapping):
-        raise ValueError("candidate patch missing replay_identity")
-    digest_fields = {
-        _clean_str(raw_materialization.get("patch_digest")),
-        _clean_str(metadata.get("formal_patch_digest")),
-        _clean_str(replay_identity.get("patch_digest")),
-        _clean_str(replay_identity.get("patch_hash")),
-    }
-    if digest_fields != {formal_digest}:
-        raise ValueError("formal replay materialization digest mismatch")
-
-    base_identity = _validated_identity_manifest_metadata(
-        raw_materialization.get("base_identity_manifest"),
-        label="base",
-    )
-    candidate_identity = _validated_identity_manifest_metadata(
-        raw_materialization.get("candidate_identity_manifest"),
-        label="candidate",
-    )
-    current = metadata.get("current")
-    current_code_hash = _clean_str(
-        current.get("current_code_hash") if isinstance(current, Mapping) else ""
-    )
-    if {
-        candidate_identity["code_hash"],
-        _clean_str(replay_identity.get("code_hash")),
-        current_code_hash,
-    } != {candidate_identity["code_hash"]}:
-        raise ValueError("candidate identity code_hash mismatch")
-
-    proposal_paths = [_required_entry_path(entry) for entry in proposal_files]
-    materialization_paths = [_required_entry_path(entry) for entry in files]
-    if _string_list(metadata.get("proposal_target_files")) != proposal_paths:
-        raise ValueError("proposal target file scope mismatch")
-    if _string_list(metadata.get("target_files")) != materialization_paths:
-        raise ValueError("formal target file scope mismatch")
-
-    scope_by_path: dict[str, str] = {}
-    for entry in files:
-        path = _required_entry_path(entry)
-        attribution = entry.get("candidate_attribution")
-        if (
-            not isinstance(attribution, Mapping)
-            or set(attribution) != _CANDIDATE_ATTRIBUTION_KEYS
-            or attribution.get("schema_version")
-            != "formal-file-candidate-attribution.v1"
-        ):
-            raise ValueError(f"invalid candidate attribution: {path}")
-        scope = _clean_str(attribution.get("scope"))
-        if scope not in _CANDIDATE_ATTRIBUTION_SCOPES:
-            raise ValueError(f"invalid candidate attribution scope: {path}")
-        scope_by_path[path] = scope
-        source = entry.get("source_attribution")
-        assert isinstance(source, Mapping)
-        origin = _clean_str(source.get("origin"))
-        if scope == "inherited_verified" and origin != "inherited_verified_branch":
-            raise ValueError(f"inherited file source attribution mismatch: {path}")
-        if scope == "runtime_activation" and origin != "runtime_activation":
-            raise ValueError(f"activation file source attribution mismatch: {path}")
-        if scope == "current_proposal" and origin in {
-            "inherited_verified_branch",
-            "runtime_activation",
-        }:
-            raise ValueError(f"proposal file source attribution mismatch: {path}")
-
-    materialized_proposal_files = sorted(
-        path for path, scope in scope_by_path.items() if scope == "current_proposal"
-    )
-    inherited_files = sorted(
-        path for path, scope in scope_by_path.items() if scope == "inherited_verified"
-    )
-    activation_files = sorted(
-        path for path, scope in scope_by_path.items() if scope == "runtime_activation"
-    )
-    if _string_list(metadata.get("inherited_files")) != inherited_files:
-        raise ValueError("inherited file scope mismatch")
-    if _string_list(metadata.get("activation_files")) != activation_files:
-        raise ValueError("activation file scope mismatch")
-    if _string_list(raw_materialization.get("inherited_files")) != inherited_files:
-        raise ValueError("materialization inherited file scope mismatch")
-    if _string_list(raw_materialization.get("activation_files")) != activation_files:
-        raise ValueError("materialization activation file scope mismatch")
-
-    candidate_scope = metadata.get("candidate_attribution_scope")
-    expected_scope = {
-        "schema_version": "formal-candidate-attribution-scope.v1",
-        "scope": "cumulative_branch_candidate_from_declared_champion_base",
-        "proposal_target_files": proposal_paths,
-        "materialized_proposal_files": materialized_proposal_files,
-        "inherited_files": inherited_files,
-        "activation_files": activation_files,
-    }
-    if (
-        not isinstance(candidate_scope, Mapping)
-        or dict(candidate_scope) != expected_scope
-    ):
-        raise ValueError("candidate attribution scope mismatch")
-
-    return {
-        **dict(raw_materialization),
-        "files": files,
-        "base_identity_manifest": base_identity,
-        "candidate_identity_manifest": candidate_identity,
-    }
-
-
-def _required_entry_path(entry: Any) -> str:
-    if not isinstance(entry, Mapping):
-        raise ValueError("patch file entry must be an object")
-    file_path = _clean_str(entry.get("file_path"))
-    _validate_patch_relative_path(file_path)
-    return file_path
-
-
-def _stable_file_entries_digest(files: list[Any], *, label: str) -> str:
-    payload: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for entry in files:
-        path = _required_entry_path(entry)
-        if path in seen:
-            raise ValueError(f"duplicate {label} file: {path}")
-        seen.add(path)
-        action = _clean_str(entry.get("action"))
-        if action not in {"create", "modify", "delete"}:
-            raise ValueError(f"invalid {label} action: {path}")
-        if "code_content" not in entry:
-            raise ValueError(f"missing {label} code_content: {path}")
-        content = str(entry.get("code_content") or "")
-        code_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        if _clean_str(entry.get("code_sha256")) != code_sha:
-            raise ValueError(f"{label} code_sha256 mismatch: {path}")
-        payload.append(
-            {"file_path": path, "action": action, "code_sha256": code_sha}
-        )
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _validated_identity_manifest_metadata(
-    value: Any,
-    *,
-    label: str,
-) -> dict[str, Any]:
-    if not isinstance(value, Mapping):
-        raise ValueError(f"missing {label} identity manifest")
-    if value.get("schema_version") != "scion.editable_identity_manifest.v1":
-        raise ValueError(f"unsupported {label} identity manifest")
-    files = value.get("files")
-    code_hash = _clean_str(value.get("code_hash"))
-    if not isinstance(files, list) or not _is_sha256(code_hash):
-        raise ValueError(f"invalid {label} identity manifest")
-    normalized: list[dict[str, str]] = []
-    seen: set[str] = set()
-    for entry in files:
-        path = _required_entry_path(entry)
-        sha = _clean_str(entry.get("sha256"))
-        if path in seen or not _is_sha256(sha):
-            raise ValueError(f"invalid {label} identity manifest file: {path}")
-        seen.add(path)
-        normalized.append({"file_path": path, "sha256": sha})
-    if normalized != sorted(normalized, key=lambda item: item["file_path"]):
-        raise ValueError(f"non-canonical {label} identity manifest order")
-    return {
-        "schema_version": "scion.editable_identity_manifest.v1",
-        "files": normalized,
-        "code_hash": code_hash,
-    }
-
-
-def _validate_patch_relative_path(value: str) -> None:
-    rel = Path(value)
-    if not value or "\\" in value or rel.is_absolute() or any(
-        part in {"", ".", ".."} for part in rel.parts
-    ):
-        raise ValueError(f"unsafe patch file path: {value}")
-
-
-def _is_sha256(value: str) -> bool:
-    return len(value) == 64 and all(char in "0123456789abcdef" for char in value)
-
-
-def _target_files(metadata: Mapping[str, Any]) -> list[str]:
-    if "target_files" in metadata:
-        return _string_list(metadata.get("target_files"))
-    patch = metadata.get("patch")
-    if not isinstance(patch, Mapping):
-        return []
-    changes = patch.get("files")
-    if not isinstance(changes, list):
-        return []
-    return [
-        _clean_str(item.get("file_path"))
-        for item in changes
-        if isinstance(item, Mapping) and _clean_str(item.get("file_path"))
-    ]
-
-
-def _hypothesis_action(metadata: Mapping[str, Any]) -> str:
-    action = _clean_str(metadata.get("hypothesis_action"))
-    if action:
-        return action
-    hypothesis = metadata.get("hypothesis")
-    if isinstance(hypothesis, Mapping):
-        action = _clean_str(hypothesis.get("action"))
-        if action:
-            return action
-    patch = metadata.get("patch")
-    if isinstance(patch, Mapping):
-        files = patch.get("files")
-        if isinstance(files, list):
-            actions = {
-                _clean_str(item.get("action"))
-                for item in files
-                if isinstance(item, Mapping) and _clean_str(item.get("action"))
-            }
-            if actions == {"create"}:
-                return "create_new"
-            if actions == {"delete"}:
-                return "remove"
-    return "modify"
-
-
-def _full_file_patch_digest(patch: Mapping[str, Any]) -> str:
-    files = patch.get("files")
-    if not isinstance(files, list) or not files:
-        return ""
-    payload: list[dict[str, str]] = []
-    for item in files:
-        if not isinstance(item, Mapping):
-            return ""
-        file_path = _clean_str(item.get("file_path") or item.get("path"))
-        if not file_path:
-            return ""
-        payload.append(
-            {
-                "file_path": file_path,
-                "action": _clean_str(item.get("action")) or "modify",
-                "code_sha256": _clean_str(item.get("code_sha256")),
-                "code_content_sha256": hashlib.sha256(
-                    str(item.get("code_content") or "").encode("utf-8")
-                ).hexdigest()
-                if "code_content" in item
-                else "",
-            }
-        )
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode(
-        "utf-8"
-    )
-    return hashlib.sha256(encoded).hexdigest()
-
-
-def _omitted_row(
-    row_index: int,
+def _inspect_index_candidate(
     row: Mapping[str, Any],
-    reasons: list[str],
-) -> dict[str, Any]:
-    return {
-        "candidate_order_index": row_index,
-        "candidate_id": _clean_str(row.get("candidate_id")),
-        "branch_id": _clean_str(row.get("branch_id")),
-        "hypothesis_id": _clean_str(row.get("hypothesis_id")),
-        "stage": _clean_str(row.get("stage")),
-        "artifact_ref": _clean_str(row.get("artifact_ref")),
-        "artifact_status": _clean_str(row.get("artifact_status")),
-        "replay_identity_status": _clean_str(row.get("replay_identity_status")),
-        "missing_replay_identity_keys": _string_list(
-            row.get("missing_replay_identity_keys")
-        ),
-        "reasons": _dedupe(reasons),
-    }
-
-
-def _resolve_artifact_path(
-    artifact_ref: str,
     *,
     campaign_dir: Path,
-    index_dir: Path,
-) -> Path | None:
+    explicit_stage_filter: bool,
+) -> tuple[list[str], str, Mapping[str, Any] | None]:
+    reasons: list[str] = []
+    if _clean_str(row.get("artifact_status")) not in {"", "recorded"}:
+        reasons.append("artifact_not_recorded")
+    if not explicit_stage_filter and (
+        _clean_str(row.get("stage")) or "screening"
+    ) != "screening":
+        reasons.append("non_screening_stage")
+    artifact_ref = _clean_str(row.get("artifact_ref"))
+    if not artifact_ref:
+        return _dedupe([*reasons, "missing_artifact_ref"]), "", None
+    try:
+        artifact_path = _resolve_campaign_artifact(artifact_ref, campaign_dir)
+    except ValueError:
+        return _dedupe([*reasons, "artifact_path_outside_campaign"]), artifact_ref, None
+    if not artifact_path.is_file():
+        return _dedupe([*reasons, "candidate_patch_missing"]), artifact_ref, None
+    try:
+        metadata = _load_json_object(artifact_path)
+    except (OSError, json.JSONDecodeError, ValueError):
+        return _dedupe([*reasons, "candidate_patch_unreadable"]), artifact_ref, None
+    for key in _PLAIN_ID_FIELDS:
+        row_value = _clean_str(row.get(key))
+        artifact_value = _clean_str(metadata.get(key))
+        if not row_value or not artifact_value or row_value != artifact_value:
+            reasons.append(f"candidate_patch_{key}_mismatch")
+    try:
+        resolve_candidate_base_workspace(
+            metadata,
+            source_campaign_dir=campaign_dir,
+        )
+        _candidate_files(metadata)
+    except (OSError, ValueError):
+        reasons.append("candidate_patch_not_materializable")
+    return _dedupe(reasons), artifact_ref, metadata
+
+
+def _candidate_source_entry(
+    *,
+    row_index: int,
+    row: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+    artifact_ref: str,
+) -> dict[str, Any]:
+    source_stage = _clean_str(metadata.get("stage") or row.get("stage")) or "screening"
+    replay_metadata = metadata.get("replay_metadata")
+    if not isinstance(replay_metadata, Mapping):
+        replay_metadata = {}
+    return {
+        "candidate_order_index": row_index,
+        "candidate_id": _required_str(metadata, "candidate_id"),
+        "branch_id": _required_str(metadata, "branch_id"),
+        "lineage_id": _clean_str(metadata.get("lineage_id")),
+        "hypothesis_id": _required_str(metadata, "hypothesis_id"),
+        "source_stage": source_stage,
+        "artifact_ref": artifact_ref,
+        "target_files": [
+            _required_entry_path(entry) for entry in _candidate_files(metadata)
+        ],
+        "selected_surface": _clean_str(
+            replay_metadata.get("selected_surface")
+            or metadata.get("selected_surface")
+        ),
+        "hypothesis_action": _hypothesis_action(metadata),
+        "source_raw_metrics_ref": _clean_str(
+            replay_metadata.get("raw_metrics_ref") or metadata.get("experiment_ref")
+        ),
+    }
+
+
+def _candidate_files(candidate_patch: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    materialization = candidate_patch.get("replay_materialization")
+    if isinstance(materialization, Mapping):
+        representation = _clean_str(materialization.get("representation"))
+        if representation and representation != "cumulative_full_file_replacement":
+            raise ValueError("unsupported replay materialization representation")
+        raw_files = materialization.get("files")
+        allow_empty = True
+    else:
+        patch = candidate_patch.get("patch")
+        raw_files = patch.get("files") if isinstance(patch, Mapping) else None
+        allow_empty = False
+    if not isinstance(raw_files, list) or (not raw_files and not allow_empty):
+        raise ValueError("candidate artifact has no full-file replacements")
+    files: list[Mapping[str, Any]] = []
+    seen: set[str] = set()
+    for raw_entry in raw_files:
+        if not isinstance(raw_entry, Mapping):
+            raise ValueError("candidate file entry must be an object")
+        path = _required_entry_path(raw_entry)
+        if path in seen:
+            raise ValueError(f"duplicate candidate file: {path}")
+        seen.add(path)
+        action = _clean_str(raw_entry.get("action")) or "modify"
+        if action not in {"create", "modify", "delete"}:
+            raise ValueError(f"unsupported candidate file action: {action}")
+        if action != "delete" and "code_content" not in raw_entry:
+            raise ValueError(f"candidate file missing code_content: {path}")
+        files.append(raw_entry)
+    return files
+
+
+def _apply_full_file_patch_entry(workspace: Path, entry: Mapping[str, Any]) -> None:
+    relative_path = _required_entry_path(entry)
+    target = _workspace_child(workspace, relative_path)
+    action = _clean_str(entry.get("action")) or "modify"
+    if action == "create":
+        if target.exists():
+            raise ValueError(f"candidate create target already exists: {relative_path}")
+    elif action in {"modify", "delete"}:
+        if not target.is_file():
+            raise ValueError(f"candidate {action} target is missing: {relative_path}")
+    else:
+        raise ValueError(f"unsupported candidate file action: {action}")
+    if action == "delete":
+        target.unlink()
+        return
+    content = entry.get("code_content")
+    if not isinstance(content, str):
+        raise ValueError(f"candidate file content must be text: {relative_path}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+
+
+def _resolve_campaign_artifact(artifact_ref: str, campaign_dir: Path) -> Path:
     ref = artifact_ref.split("#", 1)[0].strip()
     if not ref:
-        return None
+        raise ValueError("empty artifact path")
     path = Path(ref).expanduser()
-    if path.is_absolute():
-        return path
-    campaign_candidate = campaign_dir / path
-    if campaign_candidate.exists():
-        return campaign_candidate
-    index_candidate = index_dir / path
-    if index_candidate.exists():
-        return index_candidate
-    return campaign_candidate
+    resolved = path.resolve() if path.is_absolute() else (campaign_dir / path).resolve()
+    _assert_descendant(resolved, campaign_dir)
+    return resolved
+
+
+def _validate_plain_candidate_fields(
+    candidate: Mapping[str, Any],
+    candidate_patch: Mapping[str, Any],
+) -> None:
+    for key in _PLAIN_ID_FIELDS:
+        manifest_value = _required_str(candidate, key)
+        artifact_value = _required_str(candidate_patch, key)
+        if manifest_value != artifact_value:
+            raise ValueError(f"candidate artifact {key} does not match manifest")
 
 
 def _execute_replay_row(
     *,
-    manifest: Mapping[str, Any],
     manifest_path: Path,
     candidate: Mapping[str, Any],
     arm: str,
@@ -1312,16 +531,14 @@ def _execute_replay_row(
     output_dir: Path,
     time_limit_sec: int | None,
     protocol_factory: Callable[..., Any] | None,
+    expand: bool,
 ) -> dict[str, Any]:
-    row = _base_comparison_row(candidate, arm)
+    row = _base_comparison_row(candidate)
+    row["expanded"] = expand
     try:
         artifact_ref = _required_str(candidate, "artifact_ref")
-        patch_path = _resolve_artifact_path(
-            artifact_ref,
-            campaign_dir=source_campaign_dir,
-            index_dir=manifest_path.parent,
-        )
-        if patch_path is None or not patch_path.is_file():
+        patch_path = _resolve_campaign_artifact(artifact_ref, source_campaign_dir)
+        if not patch_path.is_file():
             raise FileNotFoundError(f"candidate.patch.json not found: {artifact_ref}")
         candidate_patch = _load_json_object(patch_path)
         workspace = materialize_candidate_workspace(
@@ -1331,7 +548,7 @@ def _execute_replay_row(
             output_dir=output_dir,
             arm=arm,
         )
-        champion_ws = resolve_candidate_base_workspace(
+        champion_workspace = resolve_candidate_base_workspace(
             candidate_patch,
             source_campaign_dir=source_campaign_dir,
         )
@@ -1347,18 +564,18 @@ def _execute_replay_row(
             protocol_factory=protocol_factory,
         )
         selected_surface = _clean_str(candidate.get("selected_surface")) or None
-        hypothesis_action = _clean_str(candidate.get("hypothesis_action")) or "modify"
+        action = _clean_str(candidate.get("hypothesis_action")) or "modify"
         canary = protocol.run_canary(
             str(workspace),
-            str(champion_ws),
+            str(champion_workspace),
             selected_surface=selected_surface,
         )
-        stage = _stage_from_candidate(candidate)
         result = protocol.run_experiment(
-            stage,
+            _stage_from_candidate(candidate),
             str(workspace),
-            str(champion_ws),
-            hypothesis_action,
+            str(champion_workspace),
+            action,
+            expand=expand,
             selected_surface=selected_surface,
         )
         row.update(
@@ -1375,43 +592,70 @@ def _execute_replay_row(
                 ),
             }
         )
-    except Exception as exc:  # keep row-level errors audit-visible
+    except Exception as exc:  # one bad row remains visible without losing the report
         row.update(
             {
                 "status": "error",
-                "error": {
-                    "type": type(exc).__name__,
-                    "message": str(exc),
-                },
+                "error": {"type": type(exc).__name__, "message": str(exc)},
             }
         )
     return row
 
 
-def _base_comparison_row(candidate: Mapping[str, Any], arm: str) -> dict[str, Any]:
-    measurement_governance = _measurement_governance_for_arm(arm)
+def _candidate_stage_groups(
+    candidates: Sequence[Mapping[str, Any]],
+) -> list[list[Mapping[str, Any]]]:
+    grouped: dict[tuple[int, str], list[Mapping[str, Any]]] = {}
+    for candidate in candidates:
+        key = (
+            int(candidate.get("candidate_order_index", 0)),
+            _clean_str(candidate.get("artifact_ref")),
+        )
+        grouped.setdefault(key, []).append(candidate)
+    stage_order = {stage: index for index, stage in enumerate(REPLAY_STAGES)}
+    result: list[list[Mapping[str, Any]]] = []
+    for group in grouped.values():
+        names = [_stage_name(candidate) for candidate in group]
+        if len(names) != len(set(names)):
+            raise ValueError("conditional replay candidate has duplicate stages")
+        result.append(sorted(group, key=lambda item: stage_order[_stage_name(item)]))
+    return result
+
+
+def _skipped_replay_row(
+    candidate: Mapping[str, Any],
+    *,
+    expanded: bool,
+    blocked_by: Mapping[str, Any],
+) -> dict[str, Any]:
+    row = _base_comparison_row(candidate)
+    row.update(
+        {
+            "status": "skipped",
+            "expanded": expanded,
+            "skip_reason": "PREVIOUS_STAGE_NOT_PASSED",
+            "blocked_by_stage": _clean_str(blocked_by.get("stage")),
+            "blocked_by_status": _clean_str(blocked_by.get("status")),
+            "blocked_by_gate_outcome": _clean_str(blocked_by.get("gate_outcome")),
+        }
+    )
+    return row
+
+
+def _base_comparison_row(candidate: Mapping[str, Any]) -> dict[str, Any]:
     return {
         "candidate_order_index": candidate.get("candidate_order_index"),
         "candidate_id": _clean_str(candidate.get("candidate_id")),
         "branch_id": _clean_str(candidate.get("branch_id")),
         "hypothesis_id": _clean_str(candidate.get("hypothesis_id")),
-        "stage": _clean_str(candidate.get("stage")) or "screening",
+        "stage": _stage_name(candidate),
         "source_stage": _clean_str(candidate.get("source_stage")),
-        "replay_stage": _clean_str(candidate.get("replay_stage"))
-        or _clean_str(candidate.get("stage"))
-        or "screening",
-        "arm": arm,
-        "measurement_governance": measurement_governance,
-        "measurement_governance_off": measurement_governance == "off_record_only",
-        "patch_digest": _clean_str(candidate.get("patch_digest")),
-        "patch_hash": _clean_str(candidate.get("patch_hash")),
+        "replay_stage": _stage_name(candidate),
+        "arm": "on",
         "artifact_ref": _clean_str(candidate.get("artifact_ref")),
         "selected_surface": _clean_str(candidate.get("selected_surface")),
         "hypothesis_action": _clean_str(candidate.get("hypothesis_action")) or "modify",
         "source_raw_metrics_ref": _clean_str(candidate.get("source_raw_metrics_ref")),
-        "decision_features_excluded": True,
-        "promotion_state_mutated": False,
-        "campaign_state_mutated": False,
     }
 
 
@@ -1449,23 +693,23 @@ def _build_protocol(
     from scion.runtime.subprocess_runner import LocalSubprocessRunner
 
     _require_problem_spec_v1_for_fixed_replay(problem_yaml_path)
-    problem_spec_v1 = load_problem_spec_v1_from_yaml(problem_yaml_path)
-    bridge = bridge_problem_spec_v1(problem_spec_v1)
+    bridge = bridge_problem_spec_v1(load_problem_spec_v1_from_yaml(problem_yaml_path))
     config_dir = problem_yaml_path.parent
-    resolved_protocol_path = protocol_path or config_dir / "protocol.yaml"
-    resolved_split_path = split_path or config_dir / "split_manifest.yaml"
-    resolved_seeds_path = seeds_path or config_dir / "seed_ledger.yaml"
     protocol_config = ProtocolConfig.from_yaml(
-        resolved_protocol_path
-    ).with_problem_measurement(bridge.problem_spec, governance_mode=arm)
-    split_manifest = SplitManifest.from_yaml(resolved_split_path)
-    seed_ledger = SeedLedgerConfig.from_yaml(resolved_seeds_path)
+        protocol_path or config_dir / "protocol.yaml"
+    ).with_problem_measurement(bridge.problem_spec, governance_mode="on")
+    split_manifest = SplitManifest.from_yaml(
+        split_path or config_dir / "split_manifest.yaml"
+    )
+    seed_ledger = SeedLedgerConfig.from_yaml(
+        seeds_path or config_dir / "seed_ledger.yaml"
+    )
     metrics_dir = (
         output_dir
         / "metrics"
         / _safe_path_token(_clean_str(candidate.get("candidate_id")) or "candidate")
-        / _safe_path_token(_clean_str(candidate.get("stage")) or "screening")
-        / _safe_path_token(arm)
+        / _safe_path_token(_stage_name(candidate))
+        / "on"
     )
     limit = int(time_limit_sec) if time_limit_sec is not None else 300
     return ExperimentProtocol(
@@ -1490,135 +734,147 @@ def _require_problem_spec_v1_for_fixed_replay(problem_yaml_path: Path) -> None:
             "fixed replay requires ProblemSpecV1; use problem-v1.yaml for "
             f"--problem (failed to parse {problem_yaml_path}: {exc})"
         ) from exc
-    if not isinstance(payload, Mapping):
+    if not isinstance(payload, Mapping) or payload.get("spec_version") != "problem-v1":
         raise ValueError(
-            _fixed_replay_problem_spec_v1_error(problem_yaml_path, "<non-object>")
-        )
-    spec_version = _clean_str(payload.get("spec_version"))
-    if spec_version != "problem-v1":
-        raise ValueError(
-            _fixed_replay_problem_spec_v1_error(
-                problem_yaml_path,
-                spec_version or "<missing>",
-            )
+            "fixed replay requires ProblemSpecV1; use problem-v1.yaml for --problem"
         )
 
 
-def _fixed_replay_problem_spec_v1_error(
-    problem_yaml_path: Path,
-    spec_version: str,
-) -> str:
-    sibling = problem_yaml_path.with_name("problem-v1.yaml")
-    if sibling != problem_yaml_path and sibling.is_file():
-        hint = f"suggested path: {sibling}"
-    else:
-        hint = "provide a ProblemSpecV1 YAML, usually problem-v1.yaml"
+def _infer_campaign_dir_from_index(index_path: Path) -> Path:
+    parts = index_path.parts
+    if len(parts) >= 3 and parts[-3:-1] == ("artifacts", "formal_candidates"):
+        return index_path.parents[2].resolve()
+    raise ValueError("candidate index must be artifacts/formal_candidates/index.jsonl")
+
+
+def _read_index_rows(index_path: Path) -> list[Mapping[str, Any]]:
+    rows: list[Mapping[str, Any]] = []
+    with index_path.open(encoding="utf-8") as handle:
+        for line_number, line in enumerate(handle, start=1):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"invalid JSON in formal candidate index line {line_number}"
+                ) from exc
+            if not isinstance(row, Mapping):
+                raise ValueError(
+                    f"formal candidate index line {line_number} is not an object"
+                )
+            rows.append(row)
+    return rows
+
+
+def _candidate_filter(
+    *,
+    candidate_ids: Sequence[str] | None,
+    hypothesis_ids: Sequence[str] | None,
+) -> dict[str, list[str]]:
+    return {
+        "candidate_ids": sorted(set(_string_list(candidate_ids))),
+        "hypothesis_ids": sorted(set(_string_list(hypothesis_ids))),
+    }
+
+
+def _row_matches_candidate_filter(
+    row: Mapping[str, Any],
+    candidate_filter: Mapping[str, Sequence[str]],
+) -> bool:
+    candidate_ids = set(candidate_filter.get("candidate_ids") or ())
+    hypothesis_ids = set(candidate_filter.get("hypothesis_ids") or ())
+    if not candidate_ids and not hypothesis_ids:
+        return True
     return (
-        "fixed replay requires ProblemSpecV1; use problem-v1.yaml for --problem "
-        f"(got spec_version={spec_version!r} at {problem_yaml_path}; {hint})"
+        _clean_str(row.get("candidate_id")) in candidate_ids
+        or _clean_str(row.get("hypothesis_id")) in hypothesis_ids
     )
 
 
-def _apply_full_file_patch_entry(workspace: Path, entry: Mapping[str, Any]) -> None:
-    relative_path = _clean_str(entry.get("file_path") or entry.get("path"))
-    if not relative_path:
-        raise ValueError("patch file entry missing file_path")
-    target = _workspace_child(workspace, relative_path)
-    action = _clean_str(entry.get("action")) or "modify"
-    if action == "delete":
-        if target.exists():
-            target.unlink()
-        return
-    if "code_content" not in entry:
-        raise ValueError(f"patch file entry missing code_content: {relative_path}")
-    content = str(entry.get("code_content") or "")
-    expected_sha = _clean_str(entry.get("code_sha256"))
-    if expected_sha:
-        actual_sha = hashlib.sha256(content.encode("utf-8")).hexdigest()
-        if actual_sha != expected_sha:
-            raise ValueError(f"code_sha256 mismatch for patch file: {relative_path}")
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(content, encoding="utf-8")
+def _stage_filter(stages: Sequence[str] | None) -> list[str]:
+    clean = list(dict.fromkeys(_string_list(stages or DEFAULT_REPLAY_STAGES)))
+    if not clean:
+        clean = list(DEFAULT_REPLAY_STAGES)
+    unsupported = [stage for stage in clean if stage not in REPLAY_STAGES]
+    if unsupported:
+        raise ValueError(f"unsupported replay stage(s): {unsupported}")
+    return clean
 
 
-def _validate_materialization_base_files(
-    base_workspace: Path,
-    files: list[Any],
-) -> None:
-    for entry in files:
-        if not isinstance(entry, Mapping):
-            raise ValueError("replay materialization file entry must be an object")
-        relative_path = _required_entry_path(entry)
-        target = _workspace_child(base_workspace, relative_path)
-        action = _clean_str(entry.get("action"))
-        expected_base_sha = _clean_str(entry.get("base_sha256"))
-        if action == "create":
-            if target.exists() or expected_base_sha:
-                raise ValueError(
-                    f"replay create does not match champion base: {relative_path}"
-                )
-        else:
-            if not target.is_file() or not _is_sha256(expected_base_sha):
-                raise ValueError(
-                    f"replay existing file missing champion identity: {relative_path}"
-                )
-            actual_base_sha = hashlib.sha256(target.read_bytes()).hexdigest()
-            if actual_base_sha != expected_base_sha:
-                raise ValueError(
-                    f"replay base_sha256 mismatch: {relative_path}"
-                )
-        expected_current_sha = _clean_str(entry.get("workspace_current_sha256"))
-        if action == "delete":
-            if expected_current_sha:
-                raise ValueError(
-                    f"deleted replay file has current digest: {relative_path}"
-                )
-        elif expected_current_sha != _clean_str(entry.get("code_sha256")):
-            raise ValueError(
-                f"replay current file digest mismatch: {relative_path}"
-            )
+def _replay_arm_filter(replay_arms: Sequence[str] | None) -> list[str]:
+    clean = list(dict.fromkeys(_string_list(replay_arms or REPLAY_ARMS)))
+    if clean != ["on"]:
+        raise ValueError("fixed replay supports only the on arm")
+    return clean
 
 
-def _validate_workspace_identity(
-    workspace: Path,
-    manifest: Mapping[str, Any],
-    *,
-    label: str,
-) -> str:
-    validated = _validated_identity_manifest_metadata(manifest, label=label)
-    digest = hashlib.sha256()
-    for entry in validated["files"]:
-        relative_path = entry["file_path"]
-        target = _workspace_child(workspace, relative_path)
-        if not target.is_file():
-            raise ValueError(f"{label} identity file missing: {relative_path}")
-        content = target.read_bytes()
-        if hashlib.sha256(content).hexdigest() != entry["sha256"]:
-            raise ValueError(f"{label} identity file digest mismatch: {relative_path}")
-        digest.update(relative_path.encode())
-        digest.update(content)
-    code_hash = digest.hexdigest()
-    if code_hash != validated["code_hash"]:
-        raise ValueError(f"{label} identity code_hash mismatch")
-    return code_hash
+def _manifest_replay_arms(manifest: Mapping[str, Any]) -> list[str]:
+    arms = manifest.get("replay_arms")
+    if not isinstance(arms, list):
+        raise ValueError("manifest replay_arms must be a list")
+    return _replay_arm_filter(arms)
+
+
+def _manifest_candidates(manifest: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    candidates = manifest.get("candidates")
+    if not isinstance(candidates, list):
+        raise ValueError("manifest candidates must be a list")
+    if any(not isinstance(candidate, Mapping) for candidate in candidates):
+        raise ValueError("manifest candidate entries must be objects")
+    return list(candidates)
+
+
+def _load_manifest(path: Path) -> Mapping[str, Any]:
+    manifest = _load_json_object(path)
+    if manifest.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError(f"unsupported fixed-candidate replay manifest: {path}")
+    return manifest
+
+
+def _load_json_object(path: Path) -> Mapping[str, Any]:
+    loaded = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(loaded, Mapping):
+        raise ValueError(f"JSON artifact is not an object: {path}")
+    return loaded
+
+
+def _hypothesis_action(metadata: Mapping[str, Any]) -> str:
+    action = _clean_str(metadata.get("hypothesis_action"))
+    if action:
+        return action
+    hypothesis = metadata.get("hypothesis")
+    if isinstance(hypothesis, Mapping) and _clean_str(hypothesis.get("action")):
+        return _clean_str(hypothesis.get("action"))
+    actions = {
+        _clean_str(entry.get("action"))
+        for entry in _candidate_files(metadata)
+        if _clean_str(entry.get("action"))
+    }
+    if actions == {"create"}:
+        return "create_new"
+    if actions == {"delete"}:
+        return "remove"
+    return "modify"
+
+
+def _required_entry_path(entry: Mapping[str, Any]) -> str:
+    value = _clean_str(entry.get("file_path") or entry.get("path"))
+    rel = Path(value)
+    if (
+        not value
+        or "\\" in value
+        or rel.is_absolute()
+        or any(part in {"", ".", ".."} for part in rel.parts)
+    ):
+        raise ValueError(f"unsafe candidate file path: {value}")
+    return value
 
 
 def _workspace_child(workspace: Path, relative_path: str) -> Path:
-    rel = Path(relative_path)
-    if rel.is_absolute() or any(part in {"", ".", ".."} for part in rel.parts):
-        raise ValueError(f"unsafe patch file path: {relative_path}")
-    target = (workspace / rel).resolve()
+    target = (workspace / relative_path).resolve()
     _assert_descendant(target, workspace.resolve())
     return target
-
-
-def _resolve_required_relative_path(value: str, *, root: Path, label: str) -> Path:
-    rel = Path(value).expanduser()
-    if rel.is_absolute() or any(part in {"", ".", ".."} for part in rel.parts):
-        raise ValueError(f"{label} must be a safe relative path")
-    resolved = (root / rel).resolve()
-    _assert_descendant(resolved, root)
-    return resolved
 
 
 def _assert_descendant(path: Path, root: Path) -> None:
@@ -1629,76 +885,29 @@ def _assert_descendant(path: Path, root: Path) -> None:
 
 
 def _make_tree_user_writable(root: Path) -> None:
-    """Ensure replay materialization can patch copied champion snapshots."""
-
     for path in [root, *root.rglob("*")]:
         try:
             mode = path.stat().st_mode
-            path.chmod(mode | _user_write_bits(path))
+            path.chmod(mode | (0o700 if path.is_dir() else 0o600))
         except OSError:
             continue
 
 
-def _user_write_bits(path: Path) -> int:
-    return 0o700 if path.is_dir() else 0o600
-
-
-def _load_manifest(path: Path) -> Mapping[str, Any]:
-    data = _load_json_object(path)
-    if _clean_str(data.get("schema_version")) != SCHEMA_VERSION:
-        raise ValueError(f"unsupported fixed-candidate replay manifest: {path}")
-    return data
-
-
-def _load_json_object(path: Path) -> Mapping[str, Any]:
-    loaded = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(loaded, Mapping):
-        raise ValueError(f"JSON artifact is not an object: {path}")
-    return loaded
-
-
-def _manifest_candidates(manifest: Mapping[str, Any]) -> list[Mapping[str, Any]]:
-    candidates = manifest.get("candidates")
-    if not isinstance(candidates, list):
-        raise ValueError("manifest candidates must be a list")
-    return [item for item in candidates if isinstance(item, Mapping)]
-
-
-def _manifest_replay_arms(manifest: Mapping[str, Any]) -> list[str]:
-    arms = manifest.get("replay_arms")
-    if not isinstance(arms, list) or not arms:
-        raise ValueError("manifest replay_arms must be a non-empty list")
-    clean = [_clean_str(arm) for arm in arms]
-    unsupported = [arm for arm in clean if arm not in REPLAY_ARMS]
-    if unsupported:
-        raise ValueError(f"unsupported replay arm(s): {unsupported}")
-    return clean
-
-
-def _required_str(data: Mapping[str, Any], key: str) -> str:
-    value = _clean_str(data.get(key))
-    if not value:
-        raise ValueError(f"missing required field: {key}")
-    return value
-
-
-def _measurement_governance_for_arm(arm: str) -> str:
-    if arm not in MEASUREMENT_GOVERNANCE_BY_ARM:
-        raise ValueError(f"unsupported replay arm: {arm}")
-    return MEASUREMENT_GOVERNANCE_BY_ARM[arm]
+def _stage_name(candidate: Mapping[str, Any]) -> str:
+    stage = _clean_str(candidate.get("stage")) or "screening"
+    if stage not in REPLAY_STAGES:
+        raise ValueError(f"unsupported replay stage: {stage}")
+    return stage
 
 
 def _stage_from_candidate(candidate: Mapping[str, Any]) -> Any:
     from scion.core.models import ExperimentStage
 
-    stage = _clean_str(candidate.get("stage")) or "screening"
-    if stage == "screening":
-        return ExperimentStage.SCREENING
-    if stage == "validation":
-        return ExperimentStage.VALIDATION
-    if stage == "frozen":
-        return ExperimentStage.FROZEN
-    raise ValueError(f"unsupported replay stage: {stage}")
+    return {
+        "screening": ExperimentStage.SCREENING,
+        "validation": ExperimentStage.VALIDATION,
+        "frozen": ExperimentStage.FROZEN,
+    }[_stage_name(candidate)]
 
 
 def _stats_payload(stats: Any) -> dict[str, Any]:
@@ -1721,6 +930,38 @@ def _canary_payload(canary: Any) -> dict[str, Any]:
         "passed": bool(getattr(canary, "passed", False)),
         "reason": getattr(canary, "reason", None),
     }
+
+
+def _omitted_row(
+    row_index: int,
+    row: Mapping[str, Any],
+    reasons: Sequence[str],
+) -> dict[str, Any]:
+    return {
+        "candidate_order_index": row_index,
+        "candidate_id": _clean_str(row.get("candidate_id")),
+        "branch_id": _clean_str(row.get("branch_id")),
+        "hypothesis_id": _clean_str(row.get("hypothesis_id")),
+        "stage": _clean_str(row.get("stage")),
+        "artifact_ref": _clean_str(row.get("artifact_ref")),
+        "reasons": _dedupe(list(reasons)),
+    }
+
+
+def _required_str(data: Mapping[str, Any], key: str) -> str:
+    value = _clean_str(data.get(key))
+    if not value:
+        raise ValueError(f"missing required field: {key}")
+    return value
+
+
+def _require_on_arm(value: str, *, label: str) -> None:
+    if _clean_str(value) != "on":
+        raise ValueError(f"{label} must be on for eval-only fixed replay")
+
+
+def _optional_resolved_path(value: str | Path | None) -> Path | None:
+    return Path(value).expanduser().resolve() if value is not None else None
 
 
 def _safe_path_token(value: str) -> str:
@@ -1751,22 +992,14 @@ def _string_list(value: Any) -> list[str]:
     return []
 
 
-def _sorted_clean_strings(value: Sequence[str] | None) -> list[str]:
-    return sorted(set(_string_list(value)))
-
-
-def _ordered_clean_strings(value: Sequence[str] | None) -> list[str]:
-    return list(dict.fromkeys(_string_list(value)))
-
-
 def _dedupe(values: list[str]) -> list[str]:
     return list(dict.fromkeys(value for value in values if value))
 
 
 __all__ = [
     "COMPARISON_SCHEMA_VERSION",
-    "DEFAULT_MANIFEST_FILENAME",
     "DEFAULT_COMPARISON_FILENAME",
+    "DEFAULT_MANIFEST_FILENAME",
     "REPLAY_ARMS",
     "SCHEMA_VERSION",
     "build_fixed_candidate_replay_manifest",

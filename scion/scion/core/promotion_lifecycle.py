@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, Callable, Mapping, MutableMapping, Sequence
 
 from scion.core.branch import BranchController, StateTransitionError
@@ -34,7 +34,6 @@ class PromotionLifecycleService:
     get_weight_opt_coord: Callable[[], Any]
     get_weight_opt_committer: Callable[[], Any]
     get_parameter_search_execution: Callable[[], str]
-    promotion_dossier_ref_for: Callable[[int], str | None]
 
     def on_promote(self, branch: Branch) -> None:
         """Compatibility entry for callers that already hold a frozen branch."""
@@ -73,12 +72,6 @@ class PromotionLifecycleService:
                 champion=champion_for_prepare,
             )
         )
-        dossier_ref = self.promotion_dossier_ref_for(plan.new_champion_version)
-        if dossier_ref:
-            plan = replace(
-                plan,
-                champion=replace(plan.champion, promotion_dossier_ref=dossier_ref),
-            )
         return plan
 
     def require_promotable_branch(self, branch: Branch) -> None:

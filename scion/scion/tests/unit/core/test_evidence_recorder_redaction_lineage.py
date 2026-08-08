@@ -5,10 +5,6 @@ from dataclasses import replace
 import pytest
 
 from scion.core.decision_features_serialization import DECISION_FEATURES_SCHEMA
-from scion.core.evidence_recording.replay_identity import (
-    FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS,
-    FORMAL_REPLAY_IDENTITY_SCHEMA,
-)
 from scion.core.models import DecisionFeatures
 
 from .evidence_recorder_test_support import *  # noqa: F401,F403
@@ -289,21 +285,8 @@ def test_promotion_lineage_payload_includes_decision_reason_champion_and_metrics
     assert metadata["current_champion_version"] == 8
     audit_payload = json.loads(event["audit_payload_json"])
     assert audit_payload["internal_only"] is True
-    assert audit_payload["raw_metrics_internal_only"] is True
-    assert audit_payload["raw_metrics_ref_scope"] == "public_artifact_ref"
-    assert audit_payload["raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert audit_payload["protocol_raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert audit_payload["protocol_raw_metrics_ref_scope"] == "public_artifact_ref"
-    assert audit_payload["metrics_refs"]["raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert audit_payload["metrics_refs"]["raw_metrics_ref_scope"] == (
-        "public_artifact_ref"
-    )
-    assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref"] == (
-        event["raw_metrics_ref"]
-    )
-    assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref_scope"] == (
-        "public_artifact_ref"
-    )
+    assert "raw_metrics_ref" not in audit_payload
+    assert "metrics_refs" not in audit_payload
     assert not contains_absolute_path(audit_payload)
     assert metadata["decision_reason_codes"] == ["frozen_positive", "runtime_ok"]
     audit_only_keys = {
@@ -472,16 +455,13 @@ def test_protocol_decision_persists_explicit_decision_features_snapshot(
     assert summary["steps"][0]["decision_features"] == event_features
 
 
-def test_formal_lineage_audit_payload_includes_replay_identity_key_set(
+def test_lineage_event_keeps_research_facts_without_replay_identity_mirror(
     tmp_path: Path,
 ) -> None:
     recorder = EvidenceRecorder(
         campaign_id="camp-1",
         campaign_dir=tmp_path,
         protocol_version="protocol-v3",
-        problem_spec_hash="problem-hash",
-        split_manifest_hash="split-hash",
-        seed_ledger_hash="seed-hash",
     )
     protocol_result = replace(
         _protocol_result(str(tmp_path / "metrics" / "formal.json")),
@@ -500,68 +480,41 @@ def test_formal_lineage_audit_payload_includes_replay_identity_key_set(
         champion=_champion(),
         hypothesis_id="hyp-1",
     )
-    same_patch_event = recorder.build_step_lineage_event(
-        branch=_branch(),
-        hypothesis=_hypothesis("Different free-text rationale."),
-        patch=_patch(),
-        contract_result=ContractResult(passed=True, checks=()),
-        verification_result=VerificationResult(passed=True, checks=()),
-        canary_result=CanaryResult(passed=True),
-        protocol_result=protocol_result,
-        decision=Decision.PROMOTE,
-        champion=_champion(),
-        hypothesis_id="hyp-2",
-    )
-    changed_patch_event = recorder.build_step_lineage_event(
-        branch=_branch(),
-        hypothesis=_hypothesis(),
-        patch=PatchProposal(
-            file_path="operators/local_search.py",
-            action="modify",
-            code_content="class LocalSearch:\n    marker = 1\n",
-        ),
-        contract_result=ContractResult(passed=True, checks=()),
-        verification_result=VerificationResult(passed=True, checks=()),
-        canary_result=CanaryResult(passed=True),
-        protocol_result=protocol_result,
-        decision=Decision.PROMOTE,
-        champion=_champion(),
-        hypothesis_id="hyp-3",
-    )
-
     audit_payload = json.loads(event["audit_payload_json"])
-    same_patch_payload = json.loads(same_patch_event["audit_payload_json"])
-    changed_patch_payload = json.loads(changed_patch_event["audit_payload_json"])
-    replay_identity = audit_payload["replay_identity"]
-    required_keys = set(FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS)
 
-    assert required_keys.issubset(audit_payload)
-    assert required_keys.issubset(replay_identity)
-    assert replay_identity["schema"] == FORMAL_REPLAY_IDENTITY_SCHEMA
-    for key in required_keys:
-        assert audit_payload[key]
-        assert replay_identity[key]
-        assert replay_identity[key] != "unknown"
-    assert replay_identity["identity_status"] == "complete"
-    assert replay_identity["status"] == "complete"
-    assert replay_identity["missing_identity_keys"] == []
-    assert replay_identity["missing_keys"] == []
-    assert replay_identity["degraded_markers"] == []
-    assert audit_payload["problem_spec_hash"] == "problem-hash"
-    assert audit_payload["split_manifest_hash"] == "split-hash"
-    assert audit_payload["seed_ledger_hash"] == "seed-hash"
-    assert audit_payload["selected_surface"] == "local_search"
-    assert audit_payload["protocol_version"] == "protocol-v3"
-    assert audit_payload["raw_metrics_ref"] == "metrics/formal.json"
+    assert event["campaign_id"] == "camp-1"
+    assert event["branch_id"] == "branch-1"
+    assert event["hypothesis_id"] == "hyp-1"
+    assert event["code_hash"] == "candidate-hash"
+    assert event["stage"] == "screening"
+    assert json.loads(event["case_ids"]) == ["case-1", "case-2"]
+    assert json.loads(event["seed_set"]) == [11, 13]
+    assert event["raw_metrics_ref"] == "metrics/formal.json"
     assert event["protocol_version"] == "protocol-v3"
-    assert audit_payload["patch_digest"] == audit_payload["patch_hash"]
-    assert len(audit_payload["patch_digest"]) == 64
-    assert same_patch_payload["patch_digest"] == audit_payload["patch_digest"]
-    assert changed_patch_payload["patch_digest"] != audit_payload["patch_digest"]
+    assert event["decision"] == "promote"
+    assert audit_payload["selected_surface"] == "local_search"
+    assert audit_payload["verification_checks"] == []
+    forbidden = {
+        "replay_identity",
+        "problem_spec_hash",
+        "split_manifest_hash",
+        "seed_ledger_hash",
+        "patch_digest",
+        "patch_hash",
+        "code_hash",
+        "identity_status",
+        "missing_identity_keys",
+        "missing_keys",
+        "identity_degraded",
+        "degraded_markers",
+        "raw_metrics_ref",
+        "metrics_refs",
+    }
+    assert forbidden.isdisjoint(audit_payload)
     assert not contains_absolute_path(audit_payload)
 
 
-def test_formal_lineage_audit_payload_marks_missing_replay_identity_degraded(
+def test_lineage_event_without_protocol_has_no_missing_identity_state(
     tmp_path: Path,
 ) -> None:
     recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
@@ -580,30 +533,19 @@ def test_formal_lineage_audit_payload_marks_missing_replay_identity_degraded(
     )
 
     audit_payload = json.loads(event["audit_payload_json"])
-    replay_identity = audit_payload["replay_identity"]
-    required_keys = set(FORMAL_REPLAY_IDENTITY_REQUIRED_KEYS)
+    serialized = json.dumps(audit_payload, sort_keys=True)
 
-    for key in required_keys:
-        assert key in audit_payload
-        assert key in replay_identity
-        assert audit_payload[key]
-        assert replay_identity[key]
-    assert replay_identity["schema"] == FORMAL_REPLAY_IDENTITY_SCHEMA
-    assert replay_identity["identity_status"] == "degraded"
-    assert replay_identity["status"] == "degraded"
-    assert replay_identity["identity_degraded"] is True
-    assert replay_identity["degraded_markers"] == ["missing_replay_identity"]
-    assert set(replay_identity["missing_identity_keys"]) == {
-        "problem_spec_hash",
-        "split_manifest_hash",
-        "seed_ledger_hash",
-        "protocol_version",
-        "raw_metrics_ref",
-    }
-    assert replay_identity["missing_keys"] == replay_identity["missing_identity_keys"]
-    assert audit_payload["patch_digest"] != "unknown"
+    assert event["code_hash"] == "candidate-hash"
+    assert event["stage"] == ""
+    assert json.loads(event["case_ids"]) == []
+    assert json.loads(event["seed_set"]) == []
+    assert event["raw_metrics_ref"] == ""
     assert audit_payload["selected_surface"] == "local_search"
-    assert audit_payload["raw_metrics_ref"] == "unknown"
+    assert "replay_identity" not in serialized
+    assert "identity_status" not in serialized
+    assert "missing_identity" not in serialized
+    assert "patch_hash" not in serialized
+    assert "patch_digest" not in serialized
 
 
 def test_internal_audit_verification_check_detail_is_redacted(tmp_path: Path) -> None:
@@ -684,21 +626,8 @@ def test_db_audit_payload_uses_public_raw_metrics_refs(tmp_path: Path) -> None:
     assert not contains_absolute_path(event["raw_metrics_ref"])
     assert not contains_absolute_path(audit_payload)
     assert audit_payload["internal_only"] is True
-    assert audit_payload["raw_metrics_internal_only"] is True
-    assert audit_payload["raw_metrics_ref_scope"] == "public_artifact_ref"
-    assert audit_payload["raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert audit_payload["protocol_raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert audit_payload["protocol_raw_metrics_ref_scope"] == "public_artifact_ref"
-    assert audit_payload["metrics_refs"]["raw_metrics_ref"] == event["raw_metrics_ref"]
-    assert audit_payload["metrics_refs"]["raw_metrics_ref_scope"] == (
-        "public_artifact_ref"
-    )
-    assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref"] == (
-        event["raw_metrics_ref"]
-    )
-    assert audit_payload["metrics_refs"]["protocol_raw_metrics_ref_scope"] == (
-        "public_artifact_ref"
-    )
+    assert "raw_metrics_ref" not in audit_payload
+    assert "metrics_refs" not in audit_payload
 
 
 def test_lineage_write_failures_degrade_summary_status_without_failing_step(
@@ -757,7 +686,6 @@ def test_lineage_write_failures_degrade_summary_status_without_failing_step(
         assert outcome["errors"][0]["operation"] == operation
         assert summary["lineage_integrity"]["status"] == "degraded"
         assert summary["evidence_integrity"]["status"] == "degraded"
-        assert summary["formal_readiness"]["lineage_integrity_status"] == "degraded"
         assert summary["run_validity"]["integrity_status"] == "degraded"
         assert "lineage_registry_write_degraded" in summary["run_validity"]["warnings"]
         assert status["lineage_integrity"]["status"] == "degraded"

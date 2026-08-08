@@ -114,12 +114,7 @@ def resolve_active_subject_policy_provider(
     return _resolve_provider(
         problem_spec=problem_spec,
         adapter=adapter,
-        factory_names=(
-            "active_subject_policy_provider",
-            "contract_check_provider",
-            "contract_checks_provider",
-            "solver_design_provider",
-        ),
+        factory_names=("active_subject_policy_provider", "solver_design_provider"),
     )
 
 
@@ -323,7 +318,6 @@ def _active_subject_code_constraint_providers(
         ("solver_design_prompt_provider",),
         ("proposal_prompt_provider",),
         ("prompt_provider",),
-        ("contract_check_provider", "contract_checks_provider"),
     )
     owners = (adapter, problem_spec)
     _validate_adapter_identity(adapter=adapter, problem_spec=problem_spec)

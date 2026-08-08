@@ -11,6 +11,7 @@ from scion.core.execution_outcome import (
     branch_execution_hold,
     install_branch_execution_hold,
 )
+from scion.core.scheduler import Scheduler
 
 from .campaign_test_support import *  # noqa: F401,F403
 
@@ -88,6 +89,8 @@ class TestCodeFailureDirect:
                 results=[_make_protocol_result(ExperimentStage.SCREENING)]
             ),
         )
+        cm._scheduler = Scheduler(max_active_branches=1)
+        cm._branch_step_runner.scheduler = cm._scheduler
 
         r1 = cm.run_one_step()
         assert r1.branch_id is not None
@@ -125,6 +128,8 @@ class TestCodeFailureDirect:
         """A later scheduler tick cannot implicitly continue the failed C call."""
         llm = self._make_always_fail_code_llm()
         cm = _campaign(tmp_path, llm_client=llm)
+        cm._scheduler = Scheduler(max_active_branches=1)
+        cm._branch_step_runner.scheduler = cm._scheduler
 
         r1 = cm.run_one_step()
         bid = r1.branch_id

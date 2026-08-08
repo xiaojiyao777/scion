@@ -2,1174 +2,534 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from typer.testing import CliRunner
 
 from scion.cli.main import app
-from scion.core.branch import BranchController
 from scion.core.fixed_candidate_replay import (
     COMPARISON_SCHEMA_VERSION,
     SCHEMA_VERSION,
     build_fixed_candidate_replay_manifest,
     execute_fixed_candidate_replay,
     materialize_candidate_workspace,
+    resolve_candidate_base_workspace,
 )
-from scion.core.formal_candidate_artifacts import FormalCandidatePatchArtifactRecorder
-from scion.core.models import (
-    CanaryResult,
-    ChampionState,
-    ContractResult,
-    Decision,
-    EvalStats,
-    ExperimentStage,
-    HypothesisProposal,
-    HypothesisRecord,
-    PatchProposal,
-    ProtocolResult,
-    VerificationResult,
-)
-from scion.runtime.workspace import WorkspaceMaterializer
 
 
 runner = CliRunner()
 
 
-def test_builds_manifest_from_recorded_screening_candidate(tmp_path: Path) -> None:
-    campaign_dir = tmp_path / "campaign"
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    artifact_ref = _write_candidate_artifact(campaign_dir, "candidate-a")
-    _append_index_row(
-        index_path,
+def test_manifest_selects_historical_v3_shape_without_identity_or_hash_gates(
+    tmp_path: Path,
+) -> None:
+    campaign = _write_campaign(tmp_path)
+    artifact = _artifact_path(campaign)
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    payload["replay_identity"] = {
+        "identity_status": "degraded",
+        "missing_keys": ["all_old_identity_fields"],
+        "patch_digest": "intentionally-wrong",
+        "code_hash": "intentionally-wrong",
+    }
+    payload["replay_materialization"].update(
         {
-            "candidate_id": "candidate-a",
-            "branch_id": "branch-a",
-            "hypothesis_id": "hyp-a",
-            "stage": "screening",
-            "patch_digest": "patch-digest-a",
-            "artifact_ref": artifact_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
+            "patch_digest": "intentionally-wrong",
+            "base_identity_manifest": {"invalid": True},
+            "candidate_identity_manifest": {"invalid": True},
+        }
     )
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
 
     manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="record_only",
-        comparison_id="cmp-001",
-        generated_at="2026-06-12T00:00:00+00:00",
+        campaign,
+        source_arm="on",
+        comparison_id="warehouse-r3-s1",
+        candidate_ids=["candidate-a"],
+        max_candidates=1,
+        stages=["screening", "validation", "frozen"],
+        replay_arms=["on"],
+        conditional_stage_progression=True,
+        expand_screening=True,
+        generated_at="2026-08-08T00:00:00+00:00",
     )
 
     assert manifest["schema_version"] == SCHEMA_VERSION
-    assert manifest["comparison_id"] == "cmp-001"
-    assert manifest["source_arm"] == "record_only"
-    assert manifest["candidate_count"] == 1
-    assert manifest["causal_candidate_pairing"] is True
-    assert manifest["replay_arms"] == ["on", "record_only"]
+    assert manifest["source_arm"] == "on"
+    assert manifest["replay_arms"] == ["on"]
+    assert manifest["source_candidate_count"] == 1
+    assert manifest["candidate_count"] == 3
     assert manifest["omitted_rows"] == []
-
-    candidate = manifest["candidates"][0]
-    assert candidate == {
-        "candidate_order_index": 0,
-        "candidate_id": "candidate-a",
-        "branch_id": "branch-a",
-        "lineage_id": "lineage-a",
-        "hypothesis_id": "hyp-a",
-        "stage": "screening",
-        "source_stage": "screening",
-        "replay_stage": "screening",
-        "artifact_ref": artifact_ref,
-        "target_files": ["solver.py"],
-        "selected_surface": "repair",
-        "hypothesis_action": "modify",
-        "patch_digest": "patch-digest-a",
-        "patch_hash": "patch-digest-a",
-        "code_hash": "code-hash-a",
-        "base_champion_id": "champion-1",
-        "base_champion_hash": "champion-hash-a",
-        "problem_spec_hash": "problem-hash-a",
-        "split_manifest_hash": "split-hash-a",
-        "seed_ledger_hash": "seed-hash-a",
-        "protocol_version": "protocol-v3",
-        "raw_metrics_ref": "metrics/screening.json",
-        "source_raw_metrics_ref": "metrics/screening.json",
-        "decision": "continue_explore",
-        "decision_reason_codes": ["SCREENING_FAIL_WIN_RATE"],
-        "audit_flags": {
-            "decision_features_excluded": True,
-            "proposal_text_excluded": True,
-            "replay_materialized_from_artifact": True,
-            "external_candidate_artifact": False,
-        },
-    }
-    rendered = json.dumps(manifest, sort_keys=True)
-    assert "code_content" not in rendered
-    assert "TAINTED" not in rendered
-    assert "bks_gap" not in rendered
-    assert "aa_rows" not in rendered
-
-
-def test_omits_candidates_without_replayable_screening_artifacts(
-    tmp_path: Path,
-) -> None:
-    campaign_dir = tmp_path / "campaign"
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    missing_artifact_ref = (
-        "artifacts/formal_candidates/missing/candidate.patch.json"
-    )
-    missing_identity_ref = _write_candidate_artifact(
-        campaign_dir,
-        "candidate-missing-identity",
-        identity_overrides={
-            "identity_status": "degraded",
-            "status": "degraded",
-            "seed_ledger_hash": "unknown",
-            "missing_identity_keys": ["seed_ledger_hash"],
-            "missing_keys": ["seed_ledger_hash"],
-        },
-    )
-    validation_ref = _write_candidate_artifact(
-        campaign_dir,
-        "candidate-validation",
-        stage="validation",
-    )
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-missing-artifact",
-            "branch_id": "branch-missing-artifact",
-            "hypothesis_id": "hyp-missing-artifact",
-            "stage": "screening",
-            "artifact_ref": missing_artifact_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
-    )
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-missing-identity",
-            "branch_id": "branch-missing-identity",
-            "hypothesis_id": "hyp-missing-identity",
-            "stage": "screening",
-            "artifact_ref": missing_identity_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "degraded",
-            "missing_replay_identity_keys": ["seed_ledger_hash"],
-        },
-    )
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-validation",
-            "branch_id": "branch-validation",
-            "hypothesis_id": "hyp-validation",
-            "stage": "validation",
-            "artifact_ref": validation_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
-    )
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-omitted",
-            "branch_id": "branch-omitted",
-            "hypothesis_id": "hyp-omitted",
-            "stage": "screening",
-            "artifact_ref": None,
-            "artifact_status": "omitted",
-            "artifact_omitted_reason": "missing_replay_identity",
-            "replay_identity_status": "degraded",
-            "missing_replay_identity_keys": ["problem_spec_hash"],
-        },
-    )
-
-    manifest = build_fixed_candidate_replay_manifest(
-        index_path,
-        source_arm="on",
-        comparison_id="cmp-omit",
-        generated_at="2026-06-12T00:00:00+00:00",
-    )
-
-    assert manifest["candidate_count"] == 0
-    assert manifest["causal_candidate_pairing"] is False
-    assert [row["candidate_id"] for row in manifest["omitted_rows"]] == [
-        "candidate-missing-artifact",
-        "candidate-missing-identity",
-        "candidate-validation",
-        "candidate-omitted",
-    ]
-    reasons_by_id = {
-        row["candidate_id"]: row["reasons"] for row in manifest["omitted_rows"]
-    }
-    assert reasons_by_id["candidate-missing-artifact"] == ["candidate_patch_missing"]
-    assert reasons_by_id["candidate-missing-identity"] == [
-        "replay_identity_not_complete",
-        "missing_replay_identity_keys",
-    ]
-    assert reasons_by_id["candidate-validation"] == ["non_screening_stage"]
-    assert reasons_by_id["candidate-omitted"] == [
-        "missing_replay_identity",
-        "missing_artifact_ref",
-        "replay_identity_not_complete",
-        "missing_replay_identity_keys",
-    ]
-
-
-def test_manifest_filters_candidates_by_candidate_or_hypothesis_id(
-    tmp_path: Path,
-) -> None:
-    campaign_dir = tmp_path / "campaign"
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    for candidate_id, hypothesis_id in [
-        ("candidate-a", "hyp-a"),
-        ("candidate-b", "hyp-b"),
-        ("candidate-c", "hyp-c"),
-    ]:
-        artifact_ref = _write_candidate_artifact(campaign_dir, candidate_id)
-        _append_index_row(
-            index_path,
-            {
-                "candidate_id": candidate_id,
-                "branch_id": f"branch-{candidate_id}",
-                "hypothesis_id": hypothesis_id,
-                "stage": "screening",
-                "patch_digest": f"patch-digest-{candidate_id}",
-                "artifact_ref": artifact_ref,
-                "artifact_status": "recorded",
-                "replay_identity_status": "complete",
-                "missing_replay_identity_keys": [],
-            },
-        )
-
-    manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="on",
-        comparison_id="cmp-filter",
-        candidate_ids=["candidate-b"],
-        hypothesis_ids=["hyp-c"],
-        generated_at="2026-06-12T00:00:00+00:00",
-    )
-
-    assert manifest["candidate_filter"] == {
-        "candidate_ids": ["candidate-b"],
-        "hypothesis_ids": ["hyp-c"],
-    }
-    assert manifest["filtered_out_row_count"] == 1
-    assert manifest["candidate_count"] == 2
-    assert [row["candidate_id"] for row in manifest["candidates"]] == [
-        "candidate-b",
-        "candidate-c",
-    ]
-    assert manifest["omitted_rows"] == []
-
-
-def test_builds_manifest_for_requested_validation_stage(tmp_path: Path) -> None:
-    campaign_dir = tmp_path / "campaign"
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    screening_ref = _write_candidate_artifact(
-        campaign_dir,
-        "candidate-screening",
-        stage="screening",
-    )
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-screening",
-            "branch_id": "branch-screening",
-            "hypothesis_id": "hyp-screening",
-            "stage": "screening",
-            "patch_digest": "patch-digest-screening",
-            "artifact_ref": screening_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
-    )
-
-    manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="on",
-        comparison_id="cmp-validation",
-        stages=["validation", "frozen"],
-        generated_at="2026-06-12T00:00:00+00:00",
-    )
-
-    assert manifest["stage_filter"] == ["validation", "frozen"]
-    assert manifest["candidate_count"] == 2
-    assert [candidate["stage"] for candidate in manifest["candidates"]] == [
+    assert [row["stage"] for row in manifest["candidates"]] == [
+        "screening",
         "validation",
         "frozen",
     ]
-    assert {candidate["source_stage"] for candidate in manifest["candidates"]} == {
-        "screening",
+    assert {row["candidate_id"] for row in manifest["candidates"]} == {
+        "candidate-a"
     }
-    assert manifest["omitted_rows"] == []
+    rendered = json.dumps(manifest, sort_keys=True)
+    assert "replay_identity" not in rendered
+    assert "digest" not in rendered
+    assert "hash" not in rendered
+    assert "attribution" not in rendered
 
 
-def test_builds_manifest_from_external_candidate_artifact_without_index(
+@pytest.mark.parametrize("field", ["candidate_id", "hypothesis_id", "branch_id"])
+def test_manifest_requires_plain_index_and_artifact_fields_to_match(
     tmp_path: Path,
+    field: str,
 ) -> None:
-    campaign_dir = tmp_path / "campaign-without-index"
-    campaign_dir.mkdir()
-    _write_base_workspace(campaign_dir)
-    artifact_path = _write_external_candidate_artifact(
-        campaign_dir,
-        "candidate-external",
-        patch_code_content="VALUE = 'external-candidate'\n",
-    )
+    campaign = _write_campaign(tmp_path)
+    artifact = _artifact_path(campaign)
+    payload = json.loads(artifact.read_text(encoding="utf-8"))
+    payload[field] = "different"
+    artifact.write_text(json.dumps(payload), encoding="utf-8")
 
     manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="record_only",
-        comparison_id="cmp-external",
-        stages=["frozen"],
-        external_candidate_artifacts=[artifact_path],
-        generated_at="2026-06-12T00:00:00+00:00",
+        campaign,
+        source_arm="on",
+        comparison_id="mismatch",
     )
 
-    assert manifest["source_campaign_dir"] == str(campaign_dir.resolve())
-    assert manifest["stage_filter"] == ["frozen"]
-    assert manifest["external_candidate_artifact_count"] == 1
-    assert manifest["candidate_count"] == 1
-    candidate = manifest["candidates"][0]
-    assert candidate["candidate_id"] == "candidate-external"
-    assert candidate["stage"] == "frozen"
-    assert candidate["source_stage"] == "external"
-    assert candidate["artifact_ref"] == str(artifact_path.resolve())
-    assert candidate["decision"] == "external_replay_candidate"
-    assert candidate["audit_flags"]["external_candidate_artifact"] is True
-    assert candidate["audit_flags"]["external_candidate_not_promotion_evidence"] is True
-    rendered = json.dumps(manifest, sort_keys=True)
-    assert "code_content" not in rendered
-    assert "TAINTED" not in rendered
-    assert "bks_gap" not in rendered
+    assert manifest["candidate_count"] == 0
+    assert manifest["omitted_rows"][0]["reasons"] == [
+        f"candidate_patch_{field}_mismatch"
+    ]
 
-    manifest_path = tmp_path / "external-manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    comparison_path = execute_fixed_candidate_replay(
-        manifest_path,
-        problem_yaml_path=tmp_path / "problem-v1.yaml",
-        output_dir=tmp_path / "replay-external",
-        protocol_factory=_fake_protocol_factory,
+
+def test_manifest_rejects_artifact_outside_source_campaign(tmp_path: Path) -> None:
+    campaign = _write_campaign(tmp_path)
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}", encoding="utf-8")
+    index = campaign / "artifacts" / "formal_candidates" / "index.jsonl"
+    row = json.loads(index.read_text(encoding="utf-8"))
+    row["artifact_ref"] = str(outside)
+    index.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign,
+        source_arm="on",
+        comparison_id="outside",
     )
 
-    comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
-    assert comparison["stage_filter"] == ["frozen"]
-    assert {row["stage"] for row in comparison["rows"]} == {"frozen"}
-    assert {row["status"] for row in comparison["rows"]} == {"completed"}
-    assert {row["raw_metrics_ref"] for row in comparison["rows"]} == {
-        "metrics/on/frozen.json",
-        "metrics/record_only/frozen.json",
-    }
+    assert manifest["candidate_count"] == 0
+    assert manifest["omitted_rows"][0]["reasons"] == [
+        "artifact_path_outside_campaign"
+    ]
 
 
-def test_cli_writes_fixed_candidate_replay_manifest(tmp_path: Path) -> None:
-    campaign_dir = tmp_path / "campaign"
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    for candidate_id in ["candidate-cli", "candidate-other"]:
-        artifact_ref = _write_candidate_artifact(campaign_dir, candidate_id)
-        _append_index_row(
-            index_path,
-            {
-                "candidate_id": candidate_id,
-                "branch_id": "branch-cli",
-                "hypothesis_id": f"hyp-{candidate_id}",
-                "stage": "screening",
-                "patch_digest": "patch-digest-a",
-                "artifact_ref": artifact_ref,
-                "artifact_status": "recorded",
-                "replay_identity_status": "complete",
-                "missing_replay_identity_keys": [],
-            },
+def test_fixed_replay_accepts_only_one_on_arm(tmp_path: Path) -> None:
+    campaign = _write_campaign(tmp_path)
+    with pytest.raises(ValueError, match="source_arm must be on"):
+        build_fixed_candidate_replay_manifest(
+            campaign,
+            source_arm="record_only",
+            comparison_id="bad-source-arm",
         )
-    output_path = tmp_path / "manifest.json"
-
-    result = runner.invoke(
-        app,
-        [
-            "report",
-            "fixed-candidate-replay-manifest",
-            "--source",
-            str(campaign_dir),
-            "--source-arm",
-            "record_only",
-            "--comparison-id",
-            "cmp-cli",
-            "--candidate-id",
-            "candidate-cli",
-            "--output",
-            str(output_path),
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    summary = json.loads(result.output)
-    assert summary["candidate_count"] == 1
-    assert summary["filtered_out_row_count"] == 1
-    assert summary["omitted_row_count"] == 0
-    assert summary["manifest_path"] == str(output_path)
-    manifest = json.loads(output_path.read_text(encoding="utf-8"))
-    assert manifest["comparison_id"] == "cmp-cli"
-    assert manifest["candidate_filter"]["candidate_ids"] == ["candidate-cli"]
-    assert manifest["candidates"][0]["candidate_id"] == "candidate-cli"
+    with pytest.raises(ValueError, match="supports only the on arm"):
+        build_fixed_candidate_replay_manifest(
+            campaign,
+            source_arm="on",
+            comparison_id="bad-replay-arm",
+            replay_arms=["on", "record_only"],
+        )
 
 
-def test_cli_writes_external_stage_fixed_candidate_manifest(tmp_path: Path) -> None:
-    campaign_dir = tmp_path / "campaign-without-index"
-    campaign_dir.mkdir()
-    _write_base_workspace(campaign_dir)
-    artifact_path = _write_external_candidate_artifact(
-        campaign_dir,
-        "candidate-cli-external",
-        patch_code_content="VALUE = 'cli-external'\n",
-    )
-    output_path = tmp_path / "external-manifest.json"
-
-    result = runner.invoke(
-        app,
-        [
-            "report",
-            "fixed-candidate-replay-manifest",
-            "--source",
-            str(campaign_dir),
-            "--source-arm",
-            "record_only",
-            "--comparison-id",
-            "cmp-cli-external",
-            "--stage",
-            "frozen",
-            "--external-candidate-artifact",
-            str(artifact_path),
-            "--output",
-            str(output_path),
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    summary = json.loads(result.output)
-    assert summary["candidate_count"] == 1
-    assert summary["stage_filter"] == ["frozen"]
-    assert summary["external_candidate_artifact_count"] == 1
-    manifest = json.loads(output_path.read_text(encoding="utf-8"))
-    assert manifest["candidates"][0]["candidate_id"] == "candidate-cli-external"
-    assert manifest["candidates"][0]["stage"] == "frozen"
-
-
-def test_materializes_candidate_workspace_and_rejects_path_traversal(
+def test_materialization_uses_cumulative_files_and_ignores_identity_noise(
     tmp_path: Path,
 ) -> None:
-    campaign_dir = tmp_path / "campaign"
-    base_workspace = campaign_dir / "workspaces" / "champion"
-    base_workspace.mkdir(parents=True)
-    (base_workspace / "solver.py").write_text("BASE = True\n", encoding="utf-8")
-    operators_dir = base_workspace / "operators"
-    operators_dir.mkdir()
-    readonly_target = operators_dir / "existing.py"
-    readonly_target.write_text("VALUE = 'base'\n", encoding="utf-8")
-    readonly_target.chmod(0o400)
-    operators_dir.chmod(0o500)
-    code_content = "BASE = False\n"
-    operator_code = "VALUE = 'candidate'\n"
-    candidate = {"candidate_id": "candidate-safe"}
-    candidate_patch = {
-        "base": {"base_workspace_ref": "workspaces/champion"},
-        "patch": {
-            "files": [
-                {
-                    "file_path": "solver.py",
-                    "code_content": code_content,
-                    "code_sha256": _sha256(code_content),
-                },
-                {
-                    "file_path": "operators/existing.py",
-                    "code_content": operator_code,
-                    "code_sha256": _sha256(operator_code),
-                }
-            ]
-        },
-    }
+    campaign = _write_campaign(tmp_path)
+    artifact = json.loads(_artifact_path(campaign).read_text(encoding="utf-8"))
+    artifact["patch"]["files"][0]["code_content"] = "proposal-only\n"
+    artifact["replay_materialization"].update(
+        {
+            "patch_digest": "wrong",
+            "base_identity_manifest": {"invalid": True},
+            "candidate_identity_manifest": {"invalid": True},
+        }
+    )
+    candidate = _candidate_manifest_row(campaign)
 
     workspace = materialize_candidate_workspace(
         candidate=candidate,
-        candidate_patch=candidate_patch,
-        source_campaign_dir=campaign_dir,
-        output_dir=tmp_path / "replay",
+        candidate_patch=artifact,
+        source_campaign_dir=campaign,
+        output_dir=tmp_path / "out",
         arm="on",
     )
 
-    assert (workspace / "solver.py").read_text(encoding="utf-8") == code_content
-    assert (
-        workspace / "operators" / "existing.py"
-    ).read_text(encoding="utf-8") == operator_code
+    assert (workspace / "solver.py").read_text(encoding="utf-8") == "candidate\n"
+    assert (workspace / "unchanged.txt").read_text(encoding="utf-8") == "base\n"
 
-    unsafe_patch = {
-        "base": {"base_workspace_ref": "workspaces/champion"},
-        "patch": {
-            "files": [
-                {
-                    "file_path": "../escape.py",
-                    "code_content": "bad = True\n",
-                }
-            ]
-        },
+
+def test_legacy_patch_files_remain_readable(tmp_path: Path) -> None:
+    campaign = _write_campaign(tmp_path)
+    artifact = json.loads(_artifact_path(campaign).read_text(encoding="utf-8"))
+    artifact.pop("replay_materialization")
+    artifact["patch"] = {
+        "files": [
+            {
+                "file_path": "solver.py",
+                "action": "modify",
+                "code_content": "legacy\n",
+                "code_sha256": "ignored",
+            }
+        ]
     }
-    try:
-        materialize_candidate_workspace(
-            candidate=candidate,
-            candidate_patch=unsafe_patch,
-            source_campaign_dir=campaign_dir,
-            output_dir=tmp_path / "replay",
-            arm="record_only",
-        )
-    except ValueError as exc:
-        assert "unsafe patch file path" in str(exc)
-    else:
-        raise AssertionError("path traversal patch should have been rejected")
+
+    workspace = materialize_candidate_workspace(
+        candidate=_candidate_manifest_row(campaign),
+        candidate_patch=artifact,
+        source_campaign_dir=campaign,
+        output_dir=tmp_path / "out",
+        arm="on",
+    )
+
+    assert (workspace / "solver.py").read_text(encoding="utf-8") == "legacy\n"
 
 
 @pytest.mark.parametrize(
-    "schema",
-    (
-        "scion.formal_candidate_patch_artifact.v1",
-        "scion.formal_candidate_patch_artifact.v2",
-    ),
+    "base_ref",
+    ["../outside", "/tmp/outside", "workspaces/branch-a", "champions/not-a-version"],
 )
-def test_materializer_rejects_opaque_base_refs_before_v3(
+def test_base_is_limited_to_source_campaign_champion_snapshots(
     tmp_path: Path,
-    schema: str,
+    base_ref: str,
 ) -> None:
-    campaign_dir = tmp_path / "campaign"
-    base_workspace = campaign_dir / "champions" / "champion_v1"
-    base_workspace.mkdir(parents=True)
-    (base_workspace / "solver.py").write_text("BASE = True\n", encoding="utf-8")
-    code_content = "BASE = False\n"
-    candidate_patch = {
-        "schema": schema,
-        "base": {
-            "base_champion_id": 1,
-            "base_champion_hash": "a" * 64,
-            "base_workspace_ref": "artifact:champion_v1#0123456789ab",
-        },
-        "patch": {
-            "files": [
-                {
-                    "file_path": "solver.py",
-                    "action": "modify",
-                    "code_content": code_content,
-                    "code_sha256": _sha256(code_content),
-                    "source_attribution": {
-                        "schema_version": "formal-file-source-attribution.v1",
-                        "origin": "base_workspace",
-                        "source_ledger_owner": "",
-                        "source_provenance": "champion_base",
-                        "source_visibility": "full_current",
-                        "source_digest": _sha256("BASE = True\n"),
-                    },
-                }
-            ]
-        },
-    }
+    campaign = _write_campaign(tmp_path)
+    artifact = json.loads(_artifact_path(campaign).read_text(encoding="utf-8"))
+    artifact["base"]["base_workspace_ref"] = base_ref
 
-    with pytest.raises(
-        ValueError,
-        match="opaque base workspace refs require a v3 candidate patch",
-    ):
-        materialize_candidate_workspace(
-            candidate={"candidate_id": "candidate-opaque-legacy"},
-            candidate_patch=candidate_patch,
-            source_campaign_dir=campaign_dir,
-            output_dir=tmp_path / "replay",
-            arm="on",
+    with pytest.raises(ValueError, match="champions/champion_vN"):
+        resolve_candidate_base_workspace(
+            artifact,
+            source_campaign_dir=campaign,
         )
 
 
-def test_executor_accepts_identity_bound_v3_opaque_base_with_registry(
+def test_materialization_rejects_unsafe_path_action_and_missing_content(
     tmp_path: Path,
 ) -> None:
-    campaign_dir = tmp_path / "campaign"
-    artifact_ref = _write_v3_opaque_candidate(campaign_dir)
-    artifact = json.loads((campaign_dir / artifact_ref).read_text(encoding="utf-8"))
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": artifact["candidate_id"],
-            "branch_id": artifact["branch_id"],
-            "hypothesis_id": artifact["hypothesis_id"],
-            "stage": artifact["stage"],
-            "patch_digest": artifact["formal_patch_digest"],
-            "artifact_ref": artifact_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
+    campaign = _write_campaign(tmp_path)
+    base = json.loads(_artifact_path(campaign).read_text(encoding="utf-8"))
+    cases = [
+        ({"file_path": "../escape.py", "action": "modify", "code_content": "x"}, "unsafe"),
+        ({"file_path": "solver.py", "action": "chmod", "code_content": "x"}, "unsupported"),
+        ({"file_path": "solver.py", "action": "modify"}, "code_content"),
+    ]
+    for index, (entry, message) in enumerate(cases):
+        artifact = dict(base)
+        artifact["replay_materialization"] = {
+            "representation": "cumulative_full_file_replacement",
+            "files": [entry],
+        }
+        with pytest.raises(ValueError, match=message):
+            materialize_candidate_workspace(
+                candidate=_candidate_manifest_row(campaign),
+                candidate_patch=artifact,
+                source_campaign_dir=campaign,
+                output_dir=tmp_path / f"out-{index}",
+                arm="on",
+            )
+
+
+def test_conditional_protocol_chain_expands_screening_and_validation_once(
+    tmp_path: Path,
+) -> None:
+    campaign = _write_campaign(tmp_path)
+    manifest_path = _write_manifest(
+        campaign,
+        tmp_path,
+        stages=["screening", "validation", "frozen"],
+        conditional=True,
+        expand_screening=True,
     )
-    manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="record_only",
-        comparison_id="cmp-v3-opaque-registry",
-        generated_at="2026-07-16T00:00:00+00:00",
+    protocol = _FakeProtocol(
+        outcomes={
+            ("screening", True): "pass",
+            ("validation", False): "expand",
+            ("validation", True): "pass",
+            ("frozen", False): "pass",
+        }
     )
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     comparison_path = execute_fixed_candidate_replay(
         manifest_path,
-        problem_yaml_path=tmp_path / "problem-v1.yaml",
-        output_dir=tmp_path / "replay",
-        protocol_factory=_fake_protocol_factory,
+        problem_yaml_path=tmp_path / "unused-problem.yaml",
+        output_dir=tmp_path / "result",
+        protocol_factory=lambda **_: protocol,
     )
-
     comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
-    assert comparison["rows"]
-    assert all(row["status"] == "completed" for row in comparison["rows"])
 
-
-def test_executor_writes_two_arm_rows_with_distinct_measurement_governance(
-    tmp_path: Path,
-) -> None:
-    campaign_dir = tmp_path / "campaign"
-    _write_base_workspace(campaign_dir)
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    artifact_ref = _write_candidate_artifact(
-        campaign_dir,
-        "candidate-exec",
-        base_workspace_ref="workspaces/champion",
-        patch_code_content="VALUE = 'candidate'\n",
-    )
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-exec",
-            "branch_id": "branch-a",
-            "hypothesis_id": "hyp-a",
-            "stage": "screening",
-            "patch_digest": "patch-digest-a",
-            "artifact_ref": artifact_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
-    )
-    manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="record_only",
-        comparison_id="cmp-exec",
-        generated_at="2026-06-12T00:00:00+00:00",
-    )
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-
-    comparison_path = execute_fixed_candidate_replay(
-        manifest_path,
-        problem_yaml_path=tmp_path / "problem-v1.yaml",
-        output_dir=tmp_path / "replay",
-        protocol_factory=_fake_protocol_factory,
-    )
-
-    comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
     assert comparison["schema_version"] == COMPARISON_SCHEMA_VERSION
-    assert comparison["decision_features_excluded"] is True
-    assert comparison["promotion_state_mutated"] is False
-    assert comparison["campaign_state_mutated"] is False
-    rows = comparison["rows"]
-    assert len(rows) == 2
-    assert {row["candidate_id"] for row in rows} == {"candidate-exec"}
-    assert {row["patch_digest"] for row in rows} == {"patch-digest-a"}
-    assert {row["measurement_governance"] for row in rows} == {
-        "on",
-        "off_record_only",
-    }
-    assert all(row["status"] == "completed" for row in rows)
-    assert all(row["canary"]["passed"] is True for row in rows)
-    rendered = json.dumps(comparison, sort_keys=True)
-    assert "code_content" not in rendered
-    assert "TAINTED" not in rendered
-    assert "bks_gap" not in rendered
-    assert "aa_rows" not in rendered
+    assert comparison["replay_arm"] == "on"
+    assert comparison["evaluation_only"] is True
+    assert comparison["candidate_count"] == 3
+    assert comparison["row_count"] == 4
+    assert [(row["stage"], row["expanded"]) for row in comparison["rows"]] == [
+        ("screening", True),
+        ("validation", False),
+        ("validation", True),
+        ("frozen", False),
+    ]
+    assert [row["gate_outcome"] for row in comparison["rows"]] == [
+        "pass",
+        "expand",
+        "pass",
+        "pass",
+    ]
+    assert protocol.calls == [
+        ("screening", True),
+        ("validation", False),
+        ("validation", True),
+        ("frozen", False),
+    ]
 
 
-def test_executor_runs_requested_validation_stage(tmp_path: Path) -> None:
-    campaign_dir = tmp_path / "campaign"
-    _write_base_workspace(campaign_dir)
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    artifact_ref = _write_candidate_artifact(
-        campaign_dir,
-        "candidate-validation-exec",
-        stage="screening",
-        base_workspace_ref="workspaces/champion",
-        patch_code_content="VALUE = 'candidate-validation'\n",
+def test_conditional_failure_skips_later_stages(tmp_path: Path) -> None:
+    campaign = _write_campaign(tmp_path)
+    manifest_path = _write_manifest(
+        campaign,
+        tmp_path,
+        stages=["screening", "validation", "frozen"],
+        conditional=True,
+        expand_screening=True,
     )
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-validation-exec",
-            "branch_id": "branch-a",
-            "hypothesis_id": "hyp-a",
-            "stage": "screening",
-            "patch_digest": "patch-digest-a",
-            "artifact_ref": artifact_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
-    )
-    manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="record_only",
-        comparison_id="cmp-validation-exec",
-        stages=["validation"],
-        generated_at="2026-06-12T00:00:00+00:00",
-    )
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    protocol = _FakeProtocol(outcomes={("screening", True): "fail"})
 
     comparison_path = execute_fixed_candidate_replay(
         manifest_path,
-        problem_yaml_path=tmp_path / "problem-v1.yaml",
-        output_dir=tmp_path / "replay",
-        protocol_factory=_fake_protocol_factory,
+        problem_yaml_path=tmp_path / "unused-problem.yaml",
+        output_dir=tmp_path / "result",
+        protocol_factory=lambda **_: protocol,
+    )
+    comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
+
+    assert [row["status"] for row in comparison["rows"]] == [
+        "completed",
+        "skipped",
+        "skipped",
+    ]
+    assert all(
+        row.get("skip_reason") == "PREVIOUS_STAGE_NOT_PASSED"
+        for row in comparison["rows"][1:]
+    )
+    assert protocol.calls == [("screening", True)]
+
+
+def test_cli_builds_single_arm_conditional_manifest(tmp_path: Path) -> None:
+    campaign = _write_campaign(tmp_path)
+    output = tmp_path / "manifest.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "report",
+            "fixed-candidate-replay-manifest",
+            "--source",
+            str(campaign),
+            "--source-arm",
+            "on",
+            "--comparison-id",
+            "cli-s1",
+            "--candidate-id",
+            "candidate-a",
+            "--max-candidates",
+            "1",
+            "--stage",
+            "screening",
+            "--stage",
+            "validation",
+            "--stage",
+            "frozen",
+            "--replay-arm",
+            "on",
+            "--conditional-stages",
+            "--expand-screening",
+            "--output",
+            str(output),
+        ],
     )
 
-    comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
-    assert comparison["stage_filter"] == ["validation"]
-    assert {row["stage"] for row in comparison["rows"]} == {"validation"}
-    assert {row["raw_metrics_ref"] for row in comparison["rows"]} == {
-        "metrics/on/validation.json",
-        "metrics/record_only/validation.json",
-    }
+    assert result.exit_code == 0, result.output
+    summary = json.loads(result.output)
+    assert summary["candidate_count"] == 3
+    assert summary["replay_arms"] == ["on"]
+    assert summary["conditional_stage_progression"] is True
+    assert summary["expand_screening"] is True
 
 
-def test_executor_rejects_legacy_problem_yaml_before_replay_rows(
-    tmp_path: Path,
-) -> None:
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(
+def _write_campaign(tmp_path: Path) -> Path:
+    campaign = tmp_path / "campaign"
+    champion = campaign / "champions" / "champion_v1"
+    champion.mkdir(parents=True)
+    (champion / "solver.py").write_text("champion\n", encoding="utf-8")
+    (champion / "unchanged.txt").write_text("base\n", encoding="utf-8")
+    artifact = (
+        campaign
+        / "artifacts"
+        / "formal_candidates"
+        / "branch-a"
+        / "candidate.patch.json"
+    )
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text(
         json.dumps(
             {
-                "schema_version": SCHEMA_VERSION,
-                "comparison_id": "cmp-legacy-problem",
-                "source_campaign_dir": str(tmp_path / "campaign"),
-                "replay_arms": ["on", "record_only"],
-                "candidates": [],
+                "schema": "scion.formal_candidate_patch_artifact.v3",
+                "candidate_id": "candidate-a",
+                "hypothesis_id": "hypothesis-a",
+                "branch_id": "branch-a",
+                "lineage_id": "branch-a",
+                "stage": "screening",
+                "hypothesis_action": "modify",
+                "base": {
+                    "base_champion_id": 1,
+                    "base_workspace_ref": "champions/champion_v1",
+                    "base_champion_hash": "ignored",
+                },
+                "patch": {
+                    "patch_digest": "ignored",
+                    "files": [
+                        {
+                            "file_path": "solver.py",
+                            "action": "modify",
+                            "code_content": "proposal\n",
+                            "code_sha256": "ignored",
+                            "source_attribution": {"ignored": True},
+                        }
+                    ],
+                },
+                "replay_materialization": {
+                    "schema_version": "scion.replay_materialization.v1",
+                    "representation": "cumulative_full_file_replacement",
+                    "files": [
+                        {
+                            "file_path": "solver.py",
+                            "action": "modify",
+                            "code_content": "candidate\n",
+                            "code_sha256": "ignored",
+                            "base_sha256": "ignored",
+                            "source_attribution": {"ignored": True},
+                            "candidate_attribution": {"ignored": True},
+                        }
+                    ],
+                },
+                "replay_metadata": {"selected_surface": "repair"},
             }
         ),
         encoding="utf-8",
     )
-    legacy_problem = (
-        Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "problem.yaml"
-    )
-    output_dir = tmp_path / "replay"
-
-    with pytest.raises(ValueError) as excinfo:
-        execute_fixed_candidate_replay(
-            manifest_path,
-            problem_yaml_path=legacy_problem,
-            output_dir=output_dir,
+    index = campaign / "artifacts" / "formal_candidates" / "index.jsonl"
+    index.write_text(
+        json.dumps(
+            {
+                "candidate_id": "candidate-a",
+                "hypothesis_id": "hypothesis-a",
+                "branch_id": "branch-a",
+                "stage": "screening",
+                "artifact_status": "recorded",
+                "artifact_ref": str(artifact.relative_to(campaign)),
+                "replay_identity_status": "degraded",
+                "patch_digest": "ignored",
+            }
         )
-
-    message = str(excinfo.value)
-    assert "fixed replay requires ProblemSpecV1" in message
-    assert "use problem-v1.yaml" in message
-    assert "problem-v1.yaml" in message
-    assert "ValidationError" not in message
-    assert "Field required" not in message
-    assert not output_dir.exists()
-
-
-def test_cli_executes_fixed_candidate_replay_with_row_error_summary(
-    tmp_path: Path,
-) -> None:
-    campaign_dir = tmp_path / "campaign"
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    artifact_ref = _write_candidate_artifact(
-        campaign_dir,
-        "candidate-cli-exec",
-        base_workspace_ref="workspaces/missing-champion",
-        patch_code_content="VALUE = 'candidate'\n",
-    )
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-cli-exec",
-            "branch_id": "branch-a",
-            "hypothesis_id": "hyp-a",
-            "stage": "screening",
-            "patch_digest": "patch-digest-a",
-            "artifact_ref": artifact_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
-    )
-    manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="record_only",
-        comparison_id="cmp-cli-exec",
-        generated_at="2026-06-12T00:00:00+00:00",
-    )
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    output_dir = tmp_path / "replay-cli"
-
-    result = runner.invoke(
-        app,
-        [
-            "report",
-            "fixed-candidate-replay",
-            "--manifest",
-            str(manifest_path),
-            "--problem",
-            str(Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "problem-v1.yaml"),
-            "--protocol",
-            str(Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "protocol.yaml"),
-            "--split",
-            str(Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "split_manifest.yaml"),
-            "--seeds",
-            str(Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "seed_ledger.yaml"),
-            "--output-dir",
-            str(output_dir),
-            "--time-limit-sec",
-            "1",
-        ],
-    )
-
-    assert result.exit_code == 0, result.output
-    summary = json.loads(result.output)
-    assert summary["row_count"] == 2
-    assert summary["error_count"] == 2
-    assert summary["schema_version"] == COMPARISON_SCHEMA_VERSION
-    comparison = json.loads(Path(summary["comparison_path"]).read_text(encoding="utf-8"))
-    assert len(comparison["rows"]) == 2
-    assert {row["status"] for row in comparison["rows"]} == {"error"}
-
-
-def test_cli_fixed_candidate_replay_rejects_legacy_problem_yaml(
-    tmp_path: Path,
-) -> None:
-    campaign_dir = tmp_path / "campaign"
-    index_path = campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-    artifact_ref = _write_candidate_artifact(campaign_dir, "candidate-legacy-problem")
-    _append_index_row(
-        index_path,
-        {
-            "candidate_id": "candidate-legacy-problem",
-            "branch_id": "branch-a",
-            "hypothesis_id": "hyp-a",
-            "stage": "screening",
-            "patch_digest": "patch-digest-a",
-            "artifact_ref": artifact_ref,
-            "artifact_status": "recorded",
-            "replay_identity_status": "complete",
-            "missing_replay_identity_keys": [],
-        },
-    )
-    manifest = build_fixed_candidate_replay_manifest(
-        campaign_dir,
-        source_arm="record_only",
-        comparison_id="cmp-cli-legacy-problem",
-        generated_at="2026-06-12T00:00:00+00:00",
-    )
-    manifest_path = tmp_path / "manifest.json"
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    output_dir = tmp_path / "replay-cli"
-    legacy_problem = (
-        Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "problem.yaml"
-    )
-
-    result = runner.invoke(
-        app,
-        [
-            "report",
-            "fixed-candidate-replay",
-            "--manifest",
-            str(manifest_path),
-            "--problem",
-            str(legacy_problem),
-            "--output-dir",
-            str(output_dir),
-        ],
-    )
-
-    assert result.exit_code == 1
-    assert "fixed replay requires ProblemSpecV1" in result.output
-    assert "use problem-v1.yaml" in result.output
-    assert "problem-v1.yaml" in result.output
-    assert "ValidationError" not in result.output
-    assert "Field required" not in result.output
-    assert not output_dir.exists()
-
-
-def _write_candidate_artifact(
-    campaign_dir: Path,
-    candidate_id: str,
-    *,
-    stage: str = "screening",
-    identity_overrides: dict[str, object] | None = None,
-    base_workspace_ref: str = "workspaces/champion",
-    patch_code_content: str = "TAINTED patch body should not be copied",
-) -> str:
-    artifact_ref = (
-        f"artifacts/formal_candidates/branch-a/{candidate_id}/candidate.patch.json"
-    )
-    metadata_path = campaign_dir / artifact_ref
-    metadata_path.parent.mkdir(parents=True, exist_ok=True)
-    replay_identity = {
-        "schema": "scion.formal_replay_identity.v1",
-        "problem_spec_hash": "problem-hash-a",
-        "split_manifest_hash": "split-hash-a",
-        "seed_ledger_hash": "seed-hash-a",
-        "patch_digest": "patch-digest-a",
-        "patch_hash": "patch-digest-a",
-        "selected_surface": "repair",
-        "protocol_version": "protocol-v3",
-        "raw_metrics_ref": "metrics/screening.json",
-        "code_hash": "code-hash-a",
-        "identity_status": "complete",
-        "status": "complete",
-        "missing_identity_keys": [],
-        "missing_keys": [],
-    }
-    replay_identity.update(identity_overrides or {})
-    metadata = {
-        "schema": "scion.formal_candidate_patch_artifact.v1",
-        "candidate_id": candidate_id,
-        "branch_id": "branch-a",
-        "lineage_id": "lineage-a",
-        "hypothesis_id": "hyp-a",
-        "stage": stage,
-        "decision": "continue_explore",
-        "decision_reason_codes": ["SCREENING_FAIL_WIN_RATE"],
-        "target_files": ["solver.py"],
-        "base": {
-            "base_champion_id": "champion-1",
-            "base_champion_hash": "champion-hash-a",
-            "base_workspace_ref": base_workspace_ref,
-        },
-        "patch": {
-            "patch_digest": "patch-digest-a",
-            "files": [
-                {
-                    "file_path": "solver.py",
-                    "action": "modify",
-                    "code_sha256": _sha256(patch_code_content),
-                    "code_content": patch_code_content,
-                }
-            ],
-        },
-        "replay_identity": replay_identity,
-        "replay_metadata": {
-            "raw_metrics_ref": "metrics/screening.json",
-            "selected_surface": "repair",
-        },
-        "hypothesis": {
-            "action": "modify",
-            "rationale_text": "TAINTED hypothesis text should not be copied",
-        },
-        "prompt_text": "TAINTED prompt text should not be copied",
-        "raw_measurement_diagnostics": {
-            "bks_gap": 0.1,
-            "aa_rows": [{"case": "raw"}],
-        },
-    }
-    metadata_path.write_text(json.dumps(metadata), encoding="utf-8")
-    return artifact_ref
-
-
-def _write_external_candidate_artifact(
-    campaign_dir: Path,
-    candidate_id: str,
-    *,
-    patch_code_content: str,
-) -> Path:
-    artifact_path = campaign_dir / "external" / f"{candidate_id}.patch.json"
-    artifact_path.parent.mkdir(parents=True, exist_ok=True)
-    metadata = {
-        "schema": "scion.external_full_file_candidate_patch.v1",
-        "candidate_id": candidate_id,
-        "selected_surface": "solver_design",
-        "base": {
-            "base_champion_id": "champion-1",
-            "base_champion_hash": "champion-hash-a",
-            "base_workspace_ref": "workspaces/champion",
-        },
-        "patch": {
-            "files": [
-                {
-                    "file_path": "solver.py",
-                    "action": "modify",
-                    "code_sha256": _sha256(patch_code_content),
-                    "code_content": patch_code_content,
-                }
-            ],
-        },
-        "prompt_text": "TAINTED external notes should not be copied",
-        "raw_measurement_diagnostics": {"bks_gap": 0.1},
-    }
-    artifact_path.write_text(json.dumps(metadata), encoding="utf-8")
-    return artifact_path
-
-
-def _write_v3_opaque_candidate(campaign_dir: Path) -> str:
-    base_workspace = campaign_dir / "champions" / "champion_v1"
-    base_workspace.mkdir(parents=True)
-    (base_workspace / "solver.py").write_text("VALUE = 0\n", encoding="utf-8")
-    (base_workspace / "registry.yaml").write_text(
-        "operators:\n- name: baseline\n",
+        + "\n",
         encoding="utf-8",
     )
-    materializer = WorkspaceMaterializer(
-        str(campaign_dir),
-        editable_patterns=("solver.py",),
+    return campaign
+
+
+def _artifact_path(campaign: Path) -> Path:
+    return (
+        campaign
+        / "artifacts"
+        / "formal_candidates"
+        / "branch-a"
+        / "candidate.patch.json"
     )
-    base_code_hash = materializer.compute_code_hash(str(base_workspace))
-    base_snapshot_hash = materializer.compute_snapshot_hash(str(base_workspace))
-    assert base_code_hash != base_snapshot_hash
-    branch = BranchController().create_branch(
-        ChampionState(
-            version=1,
-            operator_pool={},
-            solver_config_hash="solver-hash",
-            code_snapshot_path=str(base_workspace),
-            code_snapshot_hash=base_snapshot_hash,
-        )
+
+
+def _candidate_manifest_row(campaign: Path) -> dict[str, Any]:
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign,
+        source_arm="on",
+        comparison_id="materialize",
     )
-    workspace = materializer.create_branch_workspace(
-        branch.branch_id,
-        str(base_workspace),
+    return manifest["candidates"][0]
+
+
+def _write_manifest(
+    campaign: Path,
+    tmp_path: Path,
+    *,
+    stages: list[str],
+    conditional: bool,
+    expand_screening: bool,
+) -> Path:
+    manifest = build_fixed_candidate_replay_manifest(
+        campaign,
+        source_arm="on",
+        comparison_id="execute",
+        stages=stages,
+        replay_arms=["on"],
+        conditional_stage_progression=conditional,
+        expand_screening=expand_screening,
+        generated_at="2026-08-08T00:00:00+00:00",
     )
-    patch = PatchProposal("solver.py", "modify", "VALUE = 1\n")
-    branch.current_code_hash = materializer.apply_patch(workspace, patch)
-    branch.last_clean_code_hash = branch.current_code_hash
-    recorder = FormalCandidatePatchArtifactRecorder(
-        campaign_dir,
-        protocol_version="protocol-v3",
-        problem_spec_hash="problem-hash",
-        split_manifest_hash="split-hash",
-        seed_ledger_hash="seed-hash",
-        identity_manifest_for=materializer.editable_identity_manifest,
-    )
-    artifact_ref = recorder.record(
-        branch=branch,
-        hypothesis=HypothesisProposal(
-            hypothesis_text="Exercise opaque replay through the executor.",
-            change_locus="solver_design",
-            action="modify",
-            target_file="solver.py",
-        ),
-        h_record=HypothesisRecord(
-            hypothesis_id="h-v3-opaque-executor",
-            branch_id=branch.branch_id,
-            change_locus="solver_design",
-            action="modify",
-            status="running",
-            target_file="solver.py",
-        ),
-        patch=patch,
-        protocol_result=ProtocolResult(
-            stage=ExperimentStage.SCREENING,
-            stats=EvalStats(
-                n_cases=1,
-                wins=1,
-                losses=0,
-                ties=0,
-                win_rate=1.0,
-                median_delta=1.0,
-                ci_low=0.0,
-                ci_high=2.0,
-            ),
-            gate_outcome="expand",
-            reason_codes=("SCREENING_EXPAND",),
-            exposed_summary="opaque executor fixture",
-            raw_metrics_ref="metrics/screening.json",
-        ),
-        canary_result=CanaryResult(passed=True),
-        contract_result=ContractResult(passed=True, checks=()),
-        verification_result=VerificationResult(passed=True, checks=()),
-        decision=Decision.EXPAND_SCREENING,
-        decision_reason_codes=("SCREENING_EXPAND",),
-        workspace=workspace,
-        base_workspace=str(base_workspace),
-    )
-    assert artifact_ref
-    artifact_path = campaign_dir / artifact_ref
-    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
-    artifact["base"]["base_workspace_ref"] = (
-        "artifact:champion_v1#0123456789ab"
-    )
-    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
-    return artifact_ref
+    path = tmp_path / "fixed_candidate_replay_manifest.v1.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    return path
 
 
 class _FakeProtocol:
-    def __init__(self, arm: str) -> None:
-        self._arm = arm
+    def __init__(self, *, outcomes: dict[tuple[str, bool], str]) -> None:
+        self.outcomes = outcomes
+        self.calls: list[tuple[str, bool]] = []
 
     def run_canary(
         self,
-        candidate_ws: str,
-        champion_ws: str,
+        candidate_workspace: str,
+        champion_workspace: str,
         *,
-        selected_surface: str | None = None,
-    ) -> CanaryResult:
-        return CanaryResult(passed=True, reason=None)
+        selected_surface: str | None,
+    ) -> Any:
+        assert candidate_workspace != champion_workspace
+        assert selected_surface == "repair"
+        return SimpleNamespace(passed=True, reason=None)
 
     def run_experiment(
         self,
-        stage: ExperimentStage,
-        candidate_ws: str,
-        champion_ws: str,
+        stage: Any,
+        candidate_workspace: str,
+        champion_workspace: str,
         hypothesis_action: str,
-        **kwargs: object,
-    ) -> ProtocolResult:
-        assert stage in {
-            ExperimentStage.SCREENING,
-            ExperimentStage.VALIDATION,
-            ExperimentStage.FROZEN,
-        }
-        assert hypothesis_action == "modify"
-        return ProtocolResult(
-            stage=stage,
-            stats=EvalStats(
+        *,
+        expand: bool,
+        selected_surface: str | None,
+    ) -> Any:
+        del candidate_workspace, champion_workspace
+        stage_name = str(getattr(stage, "value", stage))
+        self.calls.append((stage_name, expand))
+        outcome = self.outcomes.get((stage_name, expand), "fail")
+        return SimpleNamespace(
+            raw_metrics_ref=f"metrics/{stage_name}-{expand}.json",
+            stats=SimpleNamespace(
                 n_cases=1,
-                wins=1,
-                losses=0,
+                wins=1 if outcome == "pass" else 0,
+                losses=0 if outcome == "pass" else 1,
                 ties=0,
-                win_rate=1.0,
-                median_delta=0.1,
-                ci_low=0.0,
-                ci_high=0.2,
+                win_rate=1.0 if outcome == "pass" else 0.0,
+                median_delta=1.0 if outcome == "pass" else -1.0,
+                ci_low=0.5 if outcome == "pass" else -1.5,
+                ci_high=1.5 if outcome == "pass" else -0.5,
             ),
-            gate_outcome="pass",
-            reason_codes=(f"{stage.value.upper()}_PASS",),
-            exposed_summary="filtered summary",
-            raw_metrics_ref=f"metrics/{self._arm}/{stage.value}.json",
-            objective_semantics="declared_objectives_lexicographic",
+            gate_outcome=outcome,
+            reason_codes=(outcome.upper(),),
+            objective_semantics="lower_is_better",
+            hypothesis_action=hypothesis_action,
+            selected_surface=selected_surface,
         )
-
-
-def _fake_protocol_factory(**kwargs: object) -> _FakeProtocol:
-    return _FakeProtocol(str(kwargs["arm"]))
-
-
-def _write_base_workspace(campaign_dir: Path) -> None:
-    workspace = campaign_dir / "workspaces" / "champion"
-    workspace.mkdir(parents=True, exist_ok=True)
-    (workspace / "solver.py").write_text("VALUE = 'champion'\n", encoding="utf-8")
-
-
-def _sha256(value: str) -> str:
-    import hashlib
-
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _append_index_row(index_path: Path, row: dict[str, object]) -> None:
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-    with index_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, sort_keys=True) + "\n")

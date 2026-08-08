@@ -45,9 +45,11 @@ def test_cvrp_direct_guidance_is_open_and_source_grounded() -> None:
     assert "accepted route-state transitions" in rendered
     assert "final total_distance" in rendered
     assert "feasibility" in rendered
+    assert "smallest causal implementation" in rendered
+    assert "Preserve unrelated code" in rendered
 
 
-def test_cvrp_guidance_does_not_compile_history_or_target_steering() -> None:
+def test_cvrp_guidance_adds_factual_prior_without_target_steering() -> None:
     contract = build_cvrp_research_guidance_contract(
         measurement_opportunity_diagnostics=_measurement()
     )
@@ -56,6 +58,16 @@ def test_cvrp_guidance_does_not_compile_history_or_target_steering() -> None:
         measurement_opportunity_diagnostics=_measurement()
     )
     focus_text = str(focus).lower()
+
+    assert "cross-campaign research prior" in rendered
+    assert "neutral or negative on final total_distance" in rendered
+    assert "broad removal of vns was also negative" in rendered
+    assert "8w/2l/2t with median +6.5" in rendered
+    assert "5w/1l/2t with median +7" in rendered
+    assert "missed its 0.66 win-rate threshold at 0.625" in rendered
+    assert "zero alns iterations" in rendered
+    assert "regressed on all four seeds (-22, -210, -90, -21)" in rendered
+    assert "does not require swap*" in rendered
 
     for forbidden in (
         "successor",

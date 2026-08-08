@@ -1,7 +1,6 @@
 """Promotion service shell for champion snapshot prepare and commit."""
 from __future__ import annotations
 
-import hashlib
 import os
 import shutil
 from dataclasses import dataclass, field
@@ -58,7 +57,6 @@ class PromotionPlan:
     branch_id: str
     candidate_snapshot_ref: str
     new_champion_version: int
-    registry_hash: Optional[str]
     weight_revision: int
     champion: ChampionState
     current_weights: Mapping[str, float] = field(default_factory=dict)
@@ -129,7 +127,6 @@ class PromotionService:
         mark_stale: StaleHook | None = None,
         persist_branch_states: Callable[[], None] | None = None,
         on_promoted_branch: BranchHook | None = None,
-        after_commit: PlanHook | None = None,
         read_registry_fn: Callable[[str], Mapping[str, OperatorConfig]] = read_registry,
         read_weights_fn: Callable[[str], Mapping[str, float]] = read_weights,
         clock: Callable[[], str] | None = None,
@@ -145,7 +142,6 @@ class PromotionService:
         self._mark_stale = mark_stale
         self._persist_branch_states = persist_branch_states
         self._on_promoted_branch = on_promoted_branch
-        self._after_commit = after_commit
         self._read_registry = read_registry_fn
         self._read_weights = read_weights_fn
         self._clock = clock or (lambda: datetime.now().isoformat())
@@ -212,9 +208,6 @@ class PromotionService:
                 lambda: self._on_promoted_branch(plan.branch_id, plan.champion),
             )
 
-        if self._after_commit is not None:
-            run_phase("after_commit", lambda: self._after_commit(plan))
-
         return PromotionCommitResult(
             branch_id=plan.branch_id,
             champion_version=plan.new_champion_version,
@@ -270,7 +263,6 @@ class PromotionService:
             operator_pool = dict(request.previous_operator_pool)
 
         snapshot_hash = self._materializer.compute_snapshot_hash(str(snapshot_path))
-        registry_hash = _sha256_file(registry_path) if registry_path.exists() else None
         champion = ChampionState(
             version=new_version,
             operator_pool=operator_pool,
@@ -284,14 +276,7 @@ class PromotionService:
             branch_id=request.branch_id,
             candidate_snapshot_ref=str(snapshot_path),
             new_champion_version=new_version,
-            registry_hash=registry_hash,
             weight_revision=request.champion_weight_revision,
             champion=champion,
             current_weights=current_weights,
         )
-
-
-def _sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
-    h.update(path.read_bytes())
-    return h.hexdigest()

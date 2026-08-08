@@ -321,7 +321,8 @@ def test_campaign_summary_persists_compact_direct_attempt_ref(tmp_path: Path) ->
     assert persisted["status"] == "generated"
     assert persisted["lineage_event_id"] == "event-1"
     assert persisted["hypothesis_id"] == "hypothesis-1"
-    assert persisted["prompt_hash"] == "prompt-hash"
+    assert "prompt_hash" not in persisted
+    assert "prompt_manifest_ref" not in persisted
 
 
 def test_scheduler_metadata_persists_to_summary_and_lineage(tmp_path: Path) -> None:

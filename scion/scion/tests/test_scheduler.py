@@ -35,18 +35,18 @@ def test_empty_portfolio_creates_branch_when_slot_available() -> None:
     assert action.reason == "active_slot_available"
 
 
-def test_default_serial_iteration_reuses_existing_explore_branch() -> None:
+def test_default_v3_portfolio_admits_three_natural_directions() -> None:
     scheduler = Scheduler()
     branch = _branch(BranchState.EXPLORE, "scientific-direction")
 
-    assert scheduler.max_active_branches == 1
+    assert scheduler.max_active_branches == 3
     assert scheduler.select_next([]).action == "create_new"
 
     action = scheduler.select_next([branch])
 
-    assert action.action == "run_existing"
-    assert action.branch is branch
-    assert action.reason == "state_priority_explore_fifo"
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.reason == "active_slot_available"
 
 
 def test_state_priority_is_frozen_validate_stale_then_running() -> None:

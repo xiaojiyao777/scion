@@ -161,7 +161,7 @@ def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay
     tmp_path: Path,
 ) -> None:
     campaign_dir = tmp_path / "campaign"
-    base_workspace = campaign_dir / "workspaces" / "champion"
+    base_workspace = campaign_dir / "champions" / "champion_v1"
     candidate_workspace = campaign_dir / "workspaces" / "candidate"
     base_workspace.mkdir(parents=True)
     candidate_workspace.mkdir(parents=True)
@@ -300,25 +300,19 @@ def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay
 
     manifest = build_fixed_candidate_replay_manifest(
         campaign_dir,
-        source_arm="record_only",
+        source_arm="on",
         comparison_id="multi-file-source-attribution",
         generated_at="2026-07-13T00:00:00+00:00",
     )
     candidate = manifest["candidates"][0]
-    assert candidate["file_source_attributions"] == [
-        {"file_path": "solver.py", **files["solver.py"]["source_attribution"]},
-        {
-            "file_path": "scheduler.py",
-            **files["scheduler.py"]["source_attribution"],
-        },
-    ]
+    assert candidate["target_files"] == ["solver.py", "scheduler.py"]
 
     replay_workspace = materialize_candidate_workspace(
         candidate=candidate,
         candidate_patch=artifact,
         source_campaign_dir=campaign_dir,
         output_dir=tmp_path / "replay",
-        arm="record_only",
+        arm="on",
     )
     assert (replay_workspace / "solver.py").read_text(encoding="utf-8") == (
         patch.code_content
@@ -327,25 +321,11 @@ def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay
         patch.additional_changes[0].code_content
     )
 
-    corrupted = deepcopy(artifact)
-    corrupted["patch"]["files"][1]["source_attribution"][
-        "source_ledger_owner"
-    ] = "renderer_guess"
-    with pytest.raises(ValueError, match="invalid source ledger owner"):
-        materialize_candidate_workspace(
-            candidate=candidate,
-            candidate_patch=corrupted,
-            source_campaign_dir=campaign_dir,
-            output_dir=tmp_path / "invalid-replay",
-            arm="record_only",
-        )
-
-
 def test_v3_replay_materializes_cumulative_branch_from_champion(
     tmp_path: Path,
 ) -> None:
     campaign_dir = tmp_path / "campaign"
-    base_workspace = campaign_dir / "workspaces" / "champion"
+    base_workspace = campaign_dir / "champions" / "champion_v1"
     base_workspace.mkdir(parents=True)
     base_contents = {
         "a.py": "A = 'base'\n",
@@ -536,7 +516,7 @@ def test_v3_replay_materializes_cumulative_branch_from_champion(
 
     manifest = build_fixed_candidate_replay_manifest(
         campaign_dir,
-        source_arm="record_only",
+        source_arm="on",
         comparison_id="cumulative-r1-r2",
         generated_at="2026-07-15T00:00:00+00:00",
     )
@@ -545,16 +525,13 @@ def test_v3_replay_materializes_cumulative_branch_from_champion(
         for candidate in manifest["candidates"]
         if candidate["hypothesis_id"] == "h-r2"
     )
-    assert r2_candidate["patch_digest"] == r2_artifact["formal_patch_digest"]
-    assert r2_candidate["proposal_patch_digest"] == r2_artifact[
-        "proposal_patch_digest"
-    ]
+    assert r2_candidate["target_files"] == ["a.py", "b.py", "c.py"]
     replay_workspace = materialize_candidate_workspace(
         candidate=r2_candidate,
         candidate_patch=r2_artifact,
         source_campaign_dir=campaign_dir,
         output_dir=tmp_path / "replay-v3",
-        arm="record_only",
+        arm="on",
     )
     for file_path in ("a.py", "b.py", "c.py"):
         assert (replay_workspace / file_path).read_bytes() == (
@@ -563,16 +540,3 @@ def test_v3_replay_materializes_cumulative_branch_from_champion(
     assert materializer.compute_code_hash(str(replay_workspace)) == (
         branch.current_code_hash
     )
-
-    corrupted = deepcopy(r2_artifact)
-    corrupted["replay_materialization"]["files"][0]["source_attribution"][
-        "origin"
-    ] = "runtime_activation"
-    with pytest.raises(ValueError, match="inherited file source attribution mismatch"):
-        materialize_candidate_workspace(
-            candidate=r2_candidate,
-            candidate_patch=corrupted,
-            source_campaign_dir=campaign_dir,
-            output_dir=tmp_path / "invalid-v3-replay",
-            arm="record_only",
-        )

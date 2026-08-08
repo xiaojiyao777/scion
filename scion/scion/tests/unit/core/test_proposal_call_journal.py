@@ -4,7 +4,7 @@ import json
 
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.proposal_pipeline.call_journal import ProposalCallJournal
-from scion.proposal.engine import PromptCallReceipt
+from scion.proposal.engine import ProviderCallDiagnostics
 
 
 class MemoryRegistry:
@@ -16,15 +16,12 @@ class MemoryRegistry:
         return f"event-{len(self.events)}"
 
 
-def _receipt(kind: str, *, ok: bool = True) -> PromptCallReceipt:
+def _diagnostics(kind: str, *, ok: bool = True) -> ProviderCallDiagnostics:
     trace_ref = f"artifacts/llm_traces/{kind}.json"
-    return PromptCallReceipt(
+    return ProviderCallDiagnostics(
         request_kind=kind,
         trace_ref=trace_ref,
-        prompt_manifest_ref=f"{trace_ref}#/prompt_manifest",
         raw_response_ref=f"{trace_ref}#/response" if ok else None,
-        prompt_hash=f"{kind}-prompt",
-        context_digest=f"{kind}-context",
         provider_ok=ok,
         ok=ok,
         error_category=None if ok else "response_parse_failed",
@@ -35,14 +32,14 @@ def _receipt(kind: str, *, ok: bool = True) -> PromptCallReceipt:
 def test_append_records_one_complete_call_without_attempt_identity() -> None:
     registry = MemoryRegistry()
     journal = ProposalCallJournal(registry, "campaign-1")
-    receipt = _receipt("code")
+    diagnostics = _diagnostics("code")
 
     ref = journal.append(
         branch_id="branch-1",
         phase="code",
         status="generated",
         hypothesis_id="hypothesis-1",
-        receipt=receipt,
+        diagnostics=diagnostics,
     )
 
     assert len(registry.events) == 1
@@ -50,14 +47,9 @@ def test_append_records_one_complete_call_without_attempt_identity() -> None:
     assert event["event_kind"] == "proposal_call"
     assert event["stage"] == "proposal_code"
     payload = json.loads(event["audit_payload_json"])
-    assert payload["receipt"] == {
+    assert payload["diagnostics"] == {
         "request_kind": "code",
-        "context_digest": "code-context",
-        "prompt_hash": "code-prompt",
         "trace_ref": "artifacts/llm_traces/code.json",
-        "prompt_manifest_ref": (
-            "artifacts/llm_traces/code.json#/prompt_manifest"
-        ),
         "raw_response_ref": "artifacts/llm_traces/code.json#/response",
         "provider_ok": True,
         "ok": True,
@@ -72,9 +64,6 @@ def test_append_records_one_complete_call_without_attempt_identity() -> None:
         "status": "generated",
         "hypothesis_id": "hypothesis-1",
         "artifact_ref": "artifacts/llm_traces/code.json",
-        "prompt_manifest_ref": (
-            "artifacts/llm_traces/code.json#/prompt_manifest"
-        ),
     }
     serialized = json.dumps({"event": event, "ref": ref})
     for forbidden in ("attempt_id", "continuation", "capability", "permit", "lease"):
@@ -96,7 +85,7 @@ def test_failure_outcome_is_in_the_same_single_call_event() -> None:
         phase="code",
         status="failed",
         hypothesis_id="hypothesis-1",
-        receipt=_receipt("code", ok=False),
+        diagnostics=_diagnostics("code", ok=False),
         execution_outcome=outcome,
     )
 
@@ -105,3 +94,25 @@ def test_failure_outcome_is_in_the_same_single_call_event() -> None:
     assert payload["execution_outcome"] == outcome.to_primitive()
     assert ref["failure_code"] == "PROPOSAL_RESPONSE_INVALID"
     assert ref["primary_failure"]["detail"] == outcome.detail
+
+
+def test_registry_write_failure_does_not_block_the_call_result() -> None:
+    class BrokenRegistry:
+        def record_event(self, event: dict) -> str:
+            raise OSError("diagnostic storage unavailable")
+
+    ref = ProposalCallJournal(BrokenRegistry(), "campaign-1").append(
+        branch_id="branch-1",
+        phase="hypothesis",
+        status="generated",
+        hypothesis_id="hypothesis-1",
+        diagnostics=_diagnostics("hypothesis"),
+    )
+
+    assert ref == {
+        "schema_version": "proposal-call-ref.v1",
+        "phase": "hypothesis",
+        "status": "generated",
+        "hypothesis_id": "hypothesis-1",
+        "artifact_ref": "artifacts/llm_traces/hypothesis.json",
+    }

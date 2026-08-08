@@ -1,19 +1,12 @@
-"""Traced provider calls and diagnostic receipts for direct V3."""
+"""Provider calls with optional, non-authoritative diagnostics for direct V3."""
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Mapping
 
 from scion.core.public_refs import public_artifact_ref
 from scion.proposal.context_snapshot import ProposalContextSnapshot
-from scion.proposal.prompt_manifest import (
-    build_api_visible_prompt_manifest,
-    stable_digest,
-)
-from scion.proposal.prompt_manifest_accounting import _provider_prompt_hash
-
 from .trace import _TraceWriter, _client_request_policy
 
 
@@ -24,10 +17,8 @@ class PromptTurnSnapshot:
     render_kind: str
     system_blocks: tuple[Mapping[str, Any], ...]
     user_prompt: str
-    context_digest: str
     provider_tool: Mapping[str, Any]
     allowed_change_loci: tuple[str, ...] = ()
-    authoritative_context_ref: str | None = None
     authoritative_context: ProposalContextSnapshot | None = field(
         default=None,
         repr=False,
@@ -36,15 +27,12 @@ class PromptTurnSnapshot:
 
 
 @dataclass(frozen=True)
-class PromptCallReceipt:
-    """Diagnostic result of one provider request; never an authority token."""
+class ProviderCallDiagnostics:
+    """Best-effort observations about one provider request."""
 
     request_kind: str
     trace_ref: str | None
-    prompt_manifest_ref: str | None
     raw_response_ref: str | None
-    prompt_hash: str
-    context_digest: str
     provider_ok: bool
     ok: bool
     error_category: str | None = None
@@ -52,20 +40,22 @@ class PromptCallReceipt:
     trace_persistence_error: str | None = None
 
 
-_PROMPT_CALL_RECEIPT_ATTR = "_scion_prompt_call_receipt"
+_PROVIDER_CALL_DIAGNOSTICS_ATTR = "_scion_provider_call_diagnostics"
 
 
-def prompt_call_receipt_from_error(error: BaseException) -> PromptCallReceipt | None:
-    receipt = getattr(error, _PROMPT_CALL_RECEIPT_ATTR, None)
-    return receipt if isinstance(receipt, PromptCallReceipt) else None
-
-
-def _attach_prompt_call_receipt(
+def provider_call_diagnostics_from_error(
     error: BaseException,
-    receipt: PromptCallReceipt,
+) -> ProviderCallDiagnostics | None:
+    diagnostics = getattr(error, _PROVIDER_CALL_DIAGNOSTICS_ATTR, None)
+    return diagnostics if isinstance(diagnostics, ProviderCallDiagnostics) else None
+
+
+def _attach_provider_call_diagnostics(
+    error: BaseException,
+    diagnostics: ProviderCallDiagnostics,
 ) -> None:
     try:
-        setattr(error, _PROMPT_CALL_RECEIPT_ATTR, receipt)
+        setattr(error, _PROVIDER_CALL_DIAGNOSTICS_ATTR, diagnostics)
     except Exception:
         return
 
@@ -84,7 +74,7 @@ class ProviderCaller:
         self._model = model
         self._trace_dir = trace_dir
 
-    def call_with_receipt(
+    def call(
         self,
         *,
         request_kind: str,
@@ -92,7 +82,7 @@ class ProviderCaller:
         context: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
         call_context: Mapping[str, Any] | None = None,
-    ) -> tuple[Dict[str, Any], PromptCallReceipt]:
+    ) -> tuple[Dict[str, Any], ProviderCallDiagnostics]:
         """Call once; optional call context is opaque trace diagnostics only."""
 
         diagnostic_context = dict(call_context or {})
@@ -103,15 +93,6 @@ class ProviderCaller:
         )
 
         rendered_system_blocks = [dict(block) for block in snapshot.system_blocks]
-        prompt_hash = _provider_prompt_hash(
-            snapshot.system_blocks,
-            snapshot.user_prompt,
-        )
-        trace_context = _context_with_embedded_prompt_manifest(
-            context,
-            snapshot=snapshot,
-            request_kind=request_kind,
-        )
         trace = _TraceWriter(self._trace_dir)
         request_policy = _client_request_policy(
             self._client,
@@ -119,6 +100,7 @@ class ProviderCaller:
             tool=tool,
             model=self._model,
         )
+        trace_persistence_error: str | None = None
         try:
             trace_path = trace.write_start(
                 request_kind=request_kind,
@@ -126,33 +108,15 @@ class ProviderCaller:
                 tool=tool,
                 prompt=snapshot.user_prompt,
                 system_blocks=rendered_system_blocks,
-                context=trace_context,
+                context=context,
                 request_policy=request_policy,
                 provider_call_context=diagnostic_context,
             )
-        except KeyboardInterrupt as exc:
-            receipt = _failed_receipt(
-                request_kind,
-                snapshot,
-                prompt_hash,
-                error_category="provider_call_interrupted",
-                error=exc,
-            )
-            _attach_prompt_call_receipt(exc, receipt)
-            raise
         except Exception as exc:
-            receipt = _failed_receipt(
-                request_kind,
-                snapshot,
-                prompt_hash,
-                error_category="trace_start_failed",
-                error=exc,
-            )
-            _attach_prompt_call_receipt(exc, receipt)
-            raise
+            trace_path = None
+            trace_persistence_error = f"trace_start_failed:{type(exc).__name__}"
 
         trace_ref = _public_trace_ref(trace_path, trace_dir=self._trace_dir)
-        manifest_ref = f"{trace_ref}#/prompt_manifest" if trace_ref else None
         raw_response_ref = f"{trace_ref}#/response" if trace_ref else None
         try:
             raw = self._call_provider(
@@ -168,16 +132,14 @@ class ProviderCaller:
                 client=self._client,
                 error="provider_call_interrupted",
             )
-            receipt = _failed_receipt(
+            diagnostics = _failed_diagnostics(
                 request_kind,
-                snapshot,
-                prompt_hash,
                 trace_ref=trace_ref,
-                prompt_manifest_ref=manifest_ref,
                 error_category="provider_call_interrupted",
                 error=exc,
+                trace_persistence_error=trace_persistence_error,
             )
-            _attach_prompt_call_receipt(exc, receipt)
+            _attach_provider_call_diagnostics(exc, diagnostics)
             raise
         except Exception as exc:
             trace_error = _finish_trace_best_effort(
@@ -186,17 +148,14 @@ class ProviderCaller:
                 client=self._client,
                 error=str(exc),
             )
-            receipt = _failed_receipt(
+            diagnostics = _failed_diagnostics(
                 request_kind,
-                snapshot,
-                prompt_hash,
                 trace_ref=trace_ref,
-                prompt_manifest_ref=manifest_ref,
                 error_category="provider_call_failed",
                 error=exc,
-                trace_persistence_error=trace_error,
+                trace_persistence_error=trace_error or trace_persistence_error,
             )
-            _attach_prompt_call_receipt(exc, receipt)
+            _attach_provider_call_diagnostics(exc, diagnostics)
             raise
 
         try:
@@ -206,42 +165,16 @@ class ProviderCaller:
                 response=raw,
                 llm_usage=_client_usage_metadata(self._client),
             )
-        except KeyboardInterrupt as exc:
-            receipt = _failed_receipt(
-                request_kind,
-                snapshot,
-                prompt_hash,
-                trace_ref=trace_ref,
-                prompt_manifest_ref=manifest_ref,
-                provider_ok=True,
-                error_category="provider_call_interrupted",
-                error=exc,
-            )
-            _attach_prompt_call_receipt(exc, receipt)
-            raise
         except Exception as exc:
-            receipt = _failed_receipt(
-                request_kind,
-                snapshot,
-                prompt_hash,
-                trace_ref=trace_ref,
-                prompt_manifest_ref=manifest_ref,
-                provider_ok=True,
-                error_category="trace_finish_failed",
-                error=exc,
-                trace_persistence_error=f"trace_finish_failed:{type(exc).__name__}",
-            )
-            _attach_prompt_call_receipt(exc, receipt)
-            raise
-        return raw, PromptCallReceipt(
+            raw_response_ref = None
+            trace_persistence_error = f"trace_finish_failed:{type(exc).__name__}"
+        return raw, ProviderCallDiagnostics(
             request_kind=request_kind,
             trace_ref=trace_ref,
-            prompt_manifest_ref=manifest_ref,
             raw_response_ref=raw_response_ref,
-            prompt_hash=prompt_hash,
-            context_digest=snapshot.context_digest,
             provider_ok=True,
             ok=True,
+            trace_persistence_error=trace_persistence_error,
         )
 
     def _call_provider(
@@ -261,25 +194,19 @@ class ProviderCaller:
         )
 
 
-def _failed_receipt(
+def _failed_diagnostics(
     request_kind: str,
-    snapshot: PromptTurnSnapshot,
-    prompt_hash: str,
     *,
     error_category: str,
     error: BaseException,
     trace_ref: str | None = None,
-    prompt_manifest_ref: str | None = None,
     provider_ok: bool = False,
     trace_persistence_error: str | None = None,
-) -> PromptCallReceipt:
-    return PromptCallReceipt(
+) -> ProviderCallDiagnostics:
+    return ProviderCallDiagnostics(
         request_kind=request_kind,
         trace_ref=trace_ref,
-        prompt_manifest_ref=prompt_manifest_ref,
         raw_response_ref=None,
-        prompt_hash=prompt_hash,
-        context_digest=snapshot.context_digest,
         provider_ok=provider_ok,
         ok=False,
         error_category=error_category,
@@ -320,8 +247,6 @@ def _validate_provider_context(
         raise ValueError("provider snapshot has no ProposalContextSnapshot")
     if authoritative.phase != request_kind or snapshot.render_kind != request_kind:
         raise ValueError("provider snapshot phase does not match request")
-    if snapshot.authoritative_context_ref != authoritative.snapshot_id:
-        raise ValueError("provider snapshot context reference changed")
     expected_context = authoritative.inputs.provider_context(
         include_renderer_inputs=True
     )
@@ -331,33 +256,10 @@ def _validate_provider_context(
     from scion.proposal.prompt_projection import project_prompt
 
     projected = project_prompt(request_kind, authoritative)
-    if stable_digest(projected.structured_context, length=64) != snapshot.context_digest:
-        raise ValueError("provider snapshot context digest changed")
     if projected.system_blocks != snapshot.system_blocks:
         raise ValueError("provider snapshot system blocks changed")
     if projected.user_prompt != snapshot.user_prompt:
         raise ValueError("provider snapshot user prompt changed")
-
-
-def _context_with_embedded_prompt_manifest(
-    context: Mapping[str, Any],
-    *,
-    snapshot: PromptTurnSnapshot,
-    request_kind: str,
-) -> Dict[str, Any]:
-    traced = dict(context)
-    traced["_scion_prompt_manifest"] = build_api_visible_prompt_manifest(
-        session_id=f"prompt-call-{uuid.uuid4()}",
-        phase=request_kind,
-        call_kind=request_kind,
-        prompt_context=context,
-        call_index=1,
-        system_blocks=snapshot.system_blocks,
-        user_prompt=snapshot.user_prompt,
-        context_digest_override=snapshot.context_digest,
-        authoritative_context_ref=snapshot.authoritative_context_ref,
-    )
-    return traced
 
 
 def _public_trace_ref(
@@ -383,8 +285,8 @@ def _client_usage_metadata(client: Any) -> Dict[str, Any] | None:
 
 
 __all__ = [
-    "PromptCallReceipt",
+    "ProviderCallDiagnostics",
     "PromptTurnSnapshot",
     "ProviderCaller",
-    "prompt_call_receipt_from_error",
+    "provider_call_diagnostics_from_error",
 ]

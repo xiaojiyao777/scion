@@ -2,6 +2,7 @@
 
 from .campaign_test_support import *  # noqa: F401,F403
 from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.scheduler import Scheduler
 
 class TestFullSuccessPath:
     def test_validation_and_frozen_reuse_do_not_regenerate_h_or_c(self, tmp_path):
@@ -376,6 +377,8 @@ class TestContractFailure:
                 results=[_make_protocol_result(ExperimentStage.SCREENING)]
             ),
         )
+        cm._scheduler = Scheduler(max_active_branches=1)
+        cm._branch_step_runner.scheduler = cm._scheduler
         # Step 1: contract fails
         r1 = cm.run_one_step()
         assert r1.decision is None

@@ -49,7 +49,6 @@ class CandidateDisposition(Enum):
     """Code-ownership consequence of one completed Decision."""
 
     EXACT_REUSE = "exact_reuse"
-    REJECT_TO_CODE_PARENT = "reject_to_code_parent"
     PROVISIONAL_HEAD = "provisional_head"
     REJECT_TERMINAL = "reject_terminal"
     PROMOTE_EXACT = "promote_exact"
@@ -68,7 +67,7 @@ class CandidateDispositionRule(Enum):
     """Stable audit name for the pure mapping rule that produced a plan."""
 
     EXACT_STAGE_REUSE = "exact_stage_reuse"
-    PROTOCOL_FAIL_REJECT = "protocol_fail_reject"
+    VERIFIED_SCREENING_CONTINUATION = "verified_screening_continuation"
     PROTOCOL_PROVISIONAL = "protocol_provisional"
     PARTIAL_CHAMPION_PROVISIONAL = "partial_champion_provisional"
     TERMINAL_REJECT = "terminal_reject"
@@ -291,11 +290,13 @@ def _map_facts(facts: _CandidateDispositionFacts) -> CandidateDispositionPlan:
 
     if decision is Decision.CONTINUE_EXPLORE:
         if gate is ProtocolGateOutcome.FAIL:
+            if facts.stage is not ExperimentStage.SCREENING:
+                raise _unsupported(facts)
             return _plan(
                 facts,
-                CandidateDisposition.REJECT_TO_CODE_PARENT,
-                CandidateHypothesisStatus.REJECTED,
-                CandidateDispositionRule.PROTOCOL_FAIL_REJECT,
+                CandidateDisposition.PROVISIONAL_HEAD,
+                CandidateHypothesisStatus.PROVISIONAL,
+                CandidateDispositionRule.VERIFIED_SCREENING_CONTINUATION,
             )
         if gate in {
             ProtocolGateOutcome.UNCLEAR,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import replace
 import hashlib
 import json
@@ -44,7 +43,7 @@ class _FormalV3Harness:
         operator_pool: dict[str, OperatorConfig] | None = None,
     ) -> None:
         self.campaign_dir = tmp_path / "campaign"
-        self.base_workspace = self.campaign_dir / "champions" / "v1"
+        self.base_workspace = self.campaign_dir / "champions" / "champion_v1"
         self.base_workspace.mkdir(parents=True)
         for relative_path, content in base_files.items():
             target = self.base_workspace / relative_path
@@ -166,11 +165,15 @@ class _FormalV3Harness:
         output_name: str,
     ) -> Path:
         return materialize_candidate_workspace(
-            candidate={"candidate_id": artifact["candidate_id"]},
+            candidate={
+                "candidate_id": artifact["candidate_id"],
+                "hypothesis_id": artifact["hypothesis_id"],
+                "branch_id": artifact["branch_id"],
+            },
             candidate_patch=artifact,
             source_campaign_dir=self.campaign_dir,
             output_dir=self.campaign_dir / output_name,
-            arm="record_only",
+            arm="on",
         )
 
 
@@ -341,7 +344,7 @@ def test_v3_create_delete_then_revert_to_champion_has_empty_closure(
     assert r2["replay_materialization"]["files"] == []
     manifest = build_fixed_candidate_replay_manifest(
         harness.campaign_dir,
-        source_arm="record_only",
+        source_arm="on",
         comparison_id="empty-closure",
         generated_at="2026-07-15T00:00:00+00:00",
     )
@@ -349,7 +352,6 @@ def test_v3_create_delete_then_revert_to_champion_has_empty_closure(
         item for item in manifest["candidates"] if item["hypothesis_id"] == "h-r2"
     )
     assert candidate["target_files"] == []
-    assert candidate["proposal_target_files"] == ["created.py", "existing.py"]
     replay = harness.materialize(r2, output_name="empty-closure-replay")
     assert not (replay / "created.py").exists()
     assert (replay / "existing.py").read_text(encoding="utf-8") == ("VALUE = 'base'\n")
@@ -410,39 +412,19 @@ def test_v3_activation_file_is_separate_from_proposal_and_inherited_scope(
     ).read_bytes()
 
 
-@pytest.mark.parametrize(
-    "corruption, expected_error",
-    (
-        ("closure", "formal replay materialization digest mismatch"),
-        ("content", "code_sha256 mismatch"),
-        ("base_identity", "base identity file digest mismatch"),
-        ("final_hash", "candidate identity code_hash mismatch"),
-    ),
-)
-def test_v3_materialization_rejects_closure_content_and_identity_tampering(
+def test_v3_materialization_ignores_legacy_identity_manifests_and_hashes(
     tmp_path: Path,
-    corruption: str,
-    expected_error: str,
 ) -> None:
     harness = _FormalV3Harness(tmp_path, base_files={"solver.py": "VALUE = 0\n"})
     artifact = harness.record(
         PatchProposal("solver.py", "modify", "VALUE = 1\n"),
         hypothesis_id="h-tamper",
     )
-    corrupted = deepcopy(artifact)
-    closure = corrupted["replay_materialization"]
+    closure = artifact["replay_materialization"]
     assert isinstance(closure, dict)
-    if corruption == "closure":
-        closure["files"] = []
-    elif corruption == "content":
-        closure["files"][0]["code_content"] = "VALUE = 999\n"
-    elif corruption == "base_identity":
-        closure["base_identity_manifest"]["files"][0]["sha256"] = "0" * 64
-    else:
-        wrong_hash = "0" * 64
-        closure["candidate_identity_manifest"]["code_hash"] = wrong_hash
-        corrupted["current"]["current_code_hash"] = wrong_hash
-        corrupted["replay_identity"]["code_hash"] = wrong_hash
-
-    with pytest.raises(ValueError, match=expected_error):
-        harness.materialize(corrupted, output_name=f"tampered-{corruption}")
+    closure["patch_digest"] = "not-used"
+    closure["base_identity_manifest"] = {"invalid": True}
+    closure["candidate_identity_manifest"] = {"invalid": True}
+    artifact["replay_identity"] = {"identity_status": "degraded"}
+    replay = harness.materialize(artifact, output_name="identity-noise")
+    assert (replay / "solver.py").read_text(encoding="utf-8") == "VALUE = 1\n"

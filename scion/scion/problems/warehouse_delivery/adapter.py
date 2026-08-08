@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import os
 import sys
 from typing import Any, Mapping, Sequence
@@ -150,6 +151,49 @@ Both order-level and vehicle-level research remain open. Inspect the current
 champion source and branch evidence before choosing which surface and algorithmic
 idea to investigate."""
 
+    def render_solver_mechanics(self) -> str:
+        """Render proposal-only search-loop and registry semantics."""
+
+        config = _load_warehouse_solver_config(self._root)
+        registry = _load_warehouse_registry(self._root)
+        pool_size = getattr(config, "pool_size", "unknown")
+        max_iterations = getattr(
+            config,
+            "max_iterations",
+            getattr(self._spec.solver, "max_iter", "unknown"),
+        )
+        no_improve_limit = getattr(config, "no_improve_limit", "unknown")
+        registry_summary = ", ".join(
+            f"{entry['name']}={entry['weight']:g}" for entry in registry
+        ) or "unavailable"
+
+        return f"""\
+### Active Warehouse Solver Mechanics
+- `greedy_init` constructs one starting solution. `run_vns` copies it to a
+  top-{pool_size} elitist solution pool ordered by the declared lexicographic
+  objective.
+- The search runs for at most {max_iterations} iterations and stops after
+  {no_improve_limit} consecutive iterations without a new pool-best objective.
+  The runner may also supply a wall-clock limit; the loop polls it between
+  iterations and pool members.
+- For every pool solution in an iteration, one registered operator is selected
+  from normalized cumulative registry weights, invoked with the shared seeded
+  `random.Random`, and checked by the fixed feasibility oracle. Feasible outputs
+  are merged with the old pool and only the best {pool_size} survive.
+- Current registry weights: {registry_summary}.
+- A `modify` candidate keeps the matched operator's weight. A `create_new`
+  candidate is automatically registered, receives `suggested_weight` when
+  supplied (otherwise 0.1), and then all candidate weights are normalized to
+  sum to 1. Creating an operator therefore also changes every existing
+  operator's selection share; no manual registry edit is required.
+- Same-seed runs are deterministic, but changed RNG consumption or pool state
+  can produce a divergent downstream trajectory. Interpret final paired
+  objectives rather than assuming step-by-step coupling.
+
+These mechanics are proposal context only. Solver, registry, feasibility,
+Protocol, and Decision behavior remain fixed outside the declared operator
+research surface."""
+
     def render_operator_interface(self) -> str:
         base_py_path = os.path.join(self._root, "operators", "base.py")
         try:
@@ -224,6 +268,10 @@ idea to investigate."""
     def render_problem_measurement_diagnostics(self) -> Mapping[str, Any]:
         """Return safe, proposal-visible warehouse research opportunities."""
 
+        from scion.measurement.consumer_view import measurement_consumer_view
+
+        measurement = measurement_consumer_view(self._spec)
+
         return {
             "schema_version": "warehouse_research_opportunity_diagnostic.v2",
             "proposal_visibility_only": True,
@@ -232,6 +280,8 @@ idea to investigate."""
                 "objective_model",
                 "measurable_opportunity_classes",
                 "opportunity_diagnostics",
+                "aggregate_objective_headroom",
+                "aggregate_noise_context",
                 "policy",
             ],
             "objective_model": {
@@ -270,10 +320,44 @@ idea to investigate."""
                     ),
                 }
             ],
+            "aggregate_objective_headroom": {
+                "schema_version": "warehouse_aggregate_objective_headroom.v1",
+                "availability": "structural_only",
+                "objective_mode": self._spec.objective_policy.mode,
+                "theoretical_lower_bounds": {"subcategory_splits": 0},
+                "current_champion_numeric_aggregate": (
+                    "not_available_from_source_only"
+                ),
+                "interpretation": (
+                    "Per-case primary headroom is the current champion's "
+                    "subcategory_splits down to the structural lower bound 0. "
+                    "A total_cost reduction is relevant only when every "
+                    "higher-priority metric ties. Numeric champion headroom "
+                    "must come from visible canonical experiment evidence; it "
+                    "is not inferred from source or hidden evaluation cases."
+                ),
+            },
+            "aggregate_noise_context": {
+                "schema_version": "warehouse_aggregate_noise_context.v1",
+                "metric": measurement.effect_metric,
+                "unit": measurement.effect_unit,
+                "mde_at_power_80": measurement.mde_at_power_80,
+                "noise_band_p90_abs": measurement.noise_band_p90_abs,
+                "n_pairs": measurement.n_pairs,
+                "pairing_validity": measurement.pairing_validity,
+                "signal_to_noise_tier": measurement.signal_to_noise_tier,
+                "calibration_evidence_level": measurement.evidence_depth,
+                "interpretation": (
+                    "Use these aggregate calibration facts to size and explain "
+                    "an expected effect. They are not candidate thresholds, "
+                    "case outcomes, or Decision inputs."
+                ),
+            },
             "policy": (
-                "These aggregate facts support hypothesis formation only. They "
-                "contain no hidden evaluation-case details and do not constrain "
-                "which algorithmic mechanism the agent may investigate."
+                "These structural headroom and aggregate calibration facts "
+                "support hypothesis formation only. They contain no hidden "
+                "evaluation-case details and do not constrain which algorithmic "
+                "mechanism the agent may investigate."
             ),
         }
 
@@ -510,6 +594,49 @@ def _render_objective_implication(spec: ProblemSpecV1) -> str:
         "metrics are preserved within tolerance. Lower-priority moves should include "
         "a guard that returns the original solution if they would harm a protected metric."
     )
+
+
+def _load_warehouse_solver_config(root: str) -> Any | None:
+    """Load current solver settings for proposal rendering."""
+
+    try:
+        module = _import_module(root, "config.py", "_scion_warehouse_prompt_config")
+        config_class = getattr(module, "Config", None)
+        return config_class() if callable(config_class) else None
+    except (OSError, ImportError, AttributeError, TypeError, RuntimeError):
+        return None
+
+
+def _load_warehouse_registry(root: str) -> list[dict[str, str | float]]:
+    """Read safe operator names and weights from the current registry."""
+
+    import yaml  # noqa: PLC0415
+
+    registry_path = os.path.join(root, "registry.yaml")
+    try:
+        with open(registry_path, encoding="utf-8") as fh:
+            payload = yaml.safe_load(fh)
+    except (OSError, yaml.YAMLError):
+        return []
+    if not isinstance(payload, Mapping):
+        return []
+    operators = payload.get("operators")
+    if not isinstance(operators, list):
+        return []
+
+    registry: list[dict[str, str | float]] = []
+    for entry in operators:
+        if not isinstance(entry, Mapping):
+            continue
+        name = str(entry.get("name") or "").strip()
+        try:
+            weight = float(entry.get("weight"))
+        except (TypeError, ValueError):
+            continue
+        if not name or not math.isfinite(weight) or weight < 0:
+            continue
+        registry.append({"name": name, "weight": weight})
+    return registry
 
 
 def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> str:

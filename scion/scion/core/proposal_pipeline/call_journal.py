@@ -2,11 +2,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Mapping
 
 from scion.core.execution_outcome import ExecutionOutcomeRecord
-from scion.proposal.engine import PromptCallReceipt
+from scion.proposal.engine import ProviderCallDiagnostics
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,7 +26,7 @@ class ProposalCallJournal:
         phase: str,
         status: str,
         hypothesis_id: str | None,
-        receipt: PromptCallReceipt | None,
+        diagnostics: ProviderCallDiagnostics | None,
         execution_outcome: ExecutionOutcomeRecord | None = None,
     ) -> Mapping[str, Any]:
         if phase not in {"hypothesis", "code"}:
@@ -38,7 +41,7 @@ class ProposalCallJournal:
             "phase": phase,
             "status": status,
             "hypothesis_id": hypothesis_id,
-            "receipt": _receipt_payload(receipt),
+            "diagnostics": _diagnostics_payload(diagnostics),
             "execution_outcome": (
                 execution_outcome.to_primitive()
                 if execution_outcome is not None
@@ -47,20 +50,26 @@ class ProposalCallJournal:
         }
         lineage_event_id = None
         if self.lineage_registry is not None:
-            lineage_event_id = self.lineage_registry.record_event(
-                {
-                    "campaign_id": self.campaign_id,
-                    "branch_id": branch_id,
-                    "hypothesis_id": hypothesis_id,
-                    "event_kind": "proposal_call",
-                    "stage": f"proposal_{phase}",
-                    "audit_payload_json": json.dumps(
-                        payload,
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                }
-            )
+            try:
+                lineage_event_id = self.lineage_registry.record_event(
+                    {
+                        "campaign_id": self.campaign_id,
+                        "branch_id": branch_id,
+                        "hypothesis_id": hypothesis_id,
+                        "event_kind": "proposal_call",
+                        "stage": f"proposal_{phase}",
+                        "audit_payload_json": json.dumps(
+                            payload,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                    }
+                )
+            except Exception as exc:
+                logger.debug(
+                    "proposal-call journal write failed: %s",
+                    type(exc).__name__,
+                )
 
         ref: dict[str, Any] = {
             "schema_version": "proposal-call-ref.v1",
@@ -70,41 +79,38 @@ class ProposalCallJournal:
         }
         if lineage_event_id:
             ref["lineage_event_id"] = str(lineage_event_id)
-        if receipt is not None:
-            if receipt.trace_ref:
-                ref["artifact_ref"] = receipt.trace_ref
-            if receipt.prompt_manifest_ref:
-                ref["prompt_manifest_ref"] = receipt.prompt_manifest_ref
-            if receipt.error_category:
-                ref["failure_category"] = receipt.error_category
+        if diagnostics is not None:
+            if diagnostics.trace_ref:
+                ref["artifact_ref"] = diagnostics.trace_ref
+            if diagnostics.error_category:
+                ref["failure_category"] = diagnostics.error_category
         if execution_outcome is not None:
             ref["failure_code"] = execution_outcome.reason_code
             ref["primary_failure"] = {
                 "stage": f"proposal_{phase}",
                 "code": execution_outcome.reason_code,
                 "category": (
-                    receipt.error_category if receipt is not None else None
+                    diagnostics.error_category if diagnostics is not None else None
                 ),
                 "detail": execution_outcome.detail,
             }
         return ref
 
 
-def _receipt_payload(receipt: PromptCallReceipt | None) -> dict[str, Any] | None:
-    if receipt is None:
+def _diagnostics_payload(
+    diagnostics: ProviderCallDiagnostics | None,
+) -> dict[str, Any] | None:
+    if diagnostics is None:
         return None
     return {
-        "request_kind": receipt.request_kind,
-        "context_digest": receipt.context_digest,
-        "prompt_hash": receipt.prompt_hash,
-        "trace_ref": receipt.trace_ref,
-        "prompt_manifest_ref": receipt.prompt_manifest_ref,
-        "raw_response_ref": receipt.raw_response_ref,
-        "provider_ok": receipt.provider_ok,
-        "ok": receipt.ok,
-        "error_category": receipt.error_category,
-        "error_type": receipt.error_type,
-        "trace_persistence_error": receipt.trace_persistence_error,
+        "request_kind": diagnostics.request_kind,
+        "trace_ref": diagnostics.trace_ref,
+        "raw_response_ref": diagnostics.raw_response_ref,
+        "provider_ok": diagnostics.provider_ok,
+        "ok": diagnostics.ok,
+        "error_category": diagnostics.error_category,
+        "error_type": diagnostics.error_type,
+        "trace_persistence_error": diagnostics.trace_persistence_error,
     }
 
 

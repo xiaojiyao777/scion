@@ -1,9 +1,9 @@
 """Direct, problem-owned CVRP research guidance.
 
 This module describes the optimization objective, the CVRP-owned source and
-interface boundary, measurement interpretation, and causal attribution.  It
-does not encode experiment history or select a mechanism, module, or file for
-the next proposal.
+interface boundary, measurement interpretation, causal attribution, and a
+compact cross-campaign research prior.  The prior is proposal context only; it
+does not select a mechanism, module, or file for the next proposal.
 """
 
 from __future__ import annotations
@@ -38,7 +38,38 @@ SOLVER_DESIGN_SOURCE_GUIDANCE = (
     "`solve(instance, rng, time_limit_sec, context)` interface. Use the "
     "complete SourceLedger and operator interface supplied with the proposal "
     "context as the authority for visible symbols and editable files. Keep "
-    "generic Scion core, Protocol, DecisionFeatures, and `solver.py` unchanged."
+    "generic Scion core, Protocol, DecisionFeatures, and `solver.py` unchanged. "
+    "Prefer the smallest causal implementation that can test the hypothesis. "
+    "Preserve unrelated code, imports, scheduling, telemetry, and terminal "
+    "return behavior; use multiple owner files only when the same mechanism "
+    "genuinely requires them."
+)
+CROSS_CAMPAIGN_RESEARCH_PRIOR = (
+    (
+        "Previously evaluated route-segment and cross-route exchanges, "
+        "destroy-size schedules, insertion-cost lookahead, construction-seed "
+        "selection, route-pair overlap targeting, double-bridge moves, and "
+        "adaptive embedded-VNS allocation were neutral or negative on final "
+        "total_distance. Broad removal of VNS was also negative. These are "
+        "observations, not proposal prohibitions."
+    ),
+    (
+        "The strongest unresolved SWAP* signal was cumulative rather than "
+        "isolated: an earlier expanded validation was 8W/2L/2T with median "
+        "+6.5 but its frozen run was incomplete, while a later H1+SWAP* "
+        "validation was 5W/1L/2T with median +7 and missed its 0.66 win-rate "
+        "threshold at 0.625. Neither result promoted SWAP* as an isolated "
+        "improvement."
+    ),
+    (
+        "The later SWAP* path was directly active, but initial VNS used about "
+        "46 seconds per route pair on tai150a, left zero ALNS iterations, and "
+        "regressed on all four seeds (-22, -210, -90, -21). A proposal that "
+        "revisits this evidence should separate initial from embedded "
+        "activation and protect downstream search allocation. This does not "
+        "require SWAP*, any particular surface, action, or target, or revisiting "
+        "this line at all."
+    ),
 )
 FEASIBILITY_GUIDANCE = (
     "A candidate result is interpretable only when capacity, customer "
@@ -74,7 +105,7 @@ def build_cvrp_research_guidance_contract(
     *,
     measurement_opportunity_diagnostics: Mapping[str, Any] | None = None,
 ) -> ResearchGuidanceContract:
-    """Build open CVRP guidance without historical target steering."""
+    """Build open CVRP guidance with factual prior but no target steering."""
 
     problem_family = CVRP_PROBLEM_FAMILY
     if context is not None and context.problem_family:
@@ -144,6 +175,12 @@ def build_cvrp_research_guidance_contract(
                 category="measurement_guidance",
                 title="Measurement interpretation",
                 lines=(MEASUREMENT_GUIDANCE,),
+            ),
+            GuidanceBlock(
+                block_id="cvrp_cross_campaign_prior",
+                category="research_prior",
+                title="Cross-campaign research prior",
+                lines=CROSS_CAMPAIGN_RESEARCH_PRIOR,
             ),
         ),
         measurement_summary=_measurement_summary(measurement),

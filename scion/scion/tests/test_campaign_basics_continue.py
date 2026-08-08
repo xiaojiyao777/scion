@@ -5,8 +5,8 @@ import shutil
 from pathlib import Path
 
 from .campaign_test_support import *  # noqa: F401,F403
-from scion.core.campaign_composition import _formal_candidate_base_workspace
 from scion.core.models import HypothesisRecord
+from scion.core.scheduler import Scheduler
 from scion.proposal.llm_client import LLMProviderError
 
 class TestCampaignBasics:
@@ -63,6 +63,8 @@ class TestCampaignBasics:
         assert summary["n_active_branches"] == 1
         assert summary["branches"][0]["state"] == branch.state.value
         assert summary["proposal_runtime_mode"] == "direct_v3"
+        assert summary["formal_candidate_artifact_count"] is None
+        assert not (tmp_path / "campaign" / "artifacts" / "formal_candidates").exists()
         with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
             row = conn.execute(
                 "SELECT state, failure_codes FROM branches WHERE branch_id = ?",
@@ -72,19 +74,8 @@ class TestCampaignBasics:
         assert row[0] == branch.state.value
         assert row[0] != BranchState.ABANDONED.value
         assert "MAX_ROUNDS_EXHAUSTED" not in (row[1] or "")
-        assert summary["final_evidence_refs"]["status"] == (
-            FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED
-        )
-        assert summary["final_evidence_refs"]["reason_code"] == (
-            FINAL_EVIDENCE_REASON_NORMAL_COMPLETION
-        )
-        assert summary["final_evidence_refs"]["required_for_formal_readiness"] is False
-        assert summary["formal_readiness"] == {
-            "formal_ready": False,
-            "missing": [],
-            "status": FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
-            "reason_code": FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
-        }
+        assert "final_evidence_refs" not in summary
+        assert "formal_readiness" not in summary
 
     def test_reopened_campaign_restores_champion_active_branch_and_workspace(
         self, tmp_path
@@ -172,53 +163,6 @@ class TestCampaignBasics:
         assert reopened._champion.code_snapshot_path == str(
             tmp_path / "campaign" / "champions" / "champion_v1"
         )
-        branch = reopened._branch_ctrl.create_branch(reopened._champion)
-        assert _formal_candidate_base_workspace(reopened, branch) == str(
-            tmp_path / "campaign" / "champions" / "champion_v1"
-        )
-
-        local_snapshot = tmp_path / "campaign" / "champions" / "champion_v1"
-        reopened._champion_store._conn.execute(
-            "UPDATE champions SET code_snapshot_path = ? WHERE version = 1",
-            (str(local_snapshot),),
-        )
-        reopened._champion_store._conn.commit()
-        target = local_snapshot / "operators" / "local_search.py"
-        original = target.read_text(encoding="utf-8")
-        target.chmod(0o600)
-        target.write_text("# snapshot tampered\n", encoding="utf-8")
-        with pytest.raises(ValueError, match="snapshot hash mismatch"):
-            _formal_candidate_base_workspace(reopened, branch)
-
-        target.write_text(original, encoding="utf-8")
-        local_snapshot.rename(local_snapshot.with_name("removed_champion_v1"))
-        with pytest.raises(ValueError, match="no verified campaign-local snapshot"):
-            _formal_candidate_base_workspace(reopened, branch)
-
-    def test_nested_campaign_formal_candidate_base_fails_without_local_snapshot(
-        self, tmp_path
-    ):
-        problem_root = tmp_path / "problem"
-        (problem_root / "operators").mkdir(parents=True)
-        (problem_root / "operators" / "local_search.py").write_text(_VALID_CODE)
-        (problem_root / "solver.py").write_text(_VALID_CODE)
-        manager = CampaignManager(
-            problem_spec=_make_problem_spec(str(problem_root)),
-            protocol_config=_make_protocol_config(),
-            split_manifest=_make_split_manifest(),
-            seed_ledger=_make_seed_ledger(),
-            llm_client=MockLLMClient(
-                hypothesis_response=_VALID_HYPOTHESIS,
-                patch_response=_VALID_PATCH,
-            ),
-            champion=_make_champion(str(problem_root)),
-            campaign_dir=str(problem_root / "campaign"),
-            verification_gate=AlwaysPassVerificationGate(),
-        )
-        branch = manager._branch_ctrl.create_branch(manager._champion)
-
-        with pytest.raises(ValueError, match="no verified campaign-local snapshot"):
-            _formal_candidate_base_workspace(manager, branch)
 
     def test_final_round_leaves_validation_for_next_invocation(self, tmp_path):
         cm = _campaign(
@@ -452,6 +396,8 @@ class TestContinueExplore:
                 ]
             ),
         )
+        cm._scheduler = Scheduler(max_active_branches=1)
+        cm._branch_step_runner.scheduler = cm._scheduler
         r1 = cm.run_one_step()
         r2 = cm.run_one_step()
         assert r1.decision == Decision.CONTINUE_EXPLORE
@@ -479,13 +425,13 @@ class TestContinueExplore:
         ]
         assert prior_aggregate["win_rate"] == 0.1
         assert prior_aggregate["median_delta"] == -12.0
-        assert "candidate = solution" not in second_h_evidence.get(
+        assert "candidate = solution" in second_h_evidence.get(
             "branch_current_code", ""
         )
-        assert "### operators/local_search.py" in (
+        assert "### operators/local_search.py" not in (
             second_h_static["champion_operators_code"]
         )
-        assert "### operators/local_search.py" not in second_h_evidence.get(
+        assert "### operators/local_search.py" in second_h_evidence.get(
             "branch_current_code", ""
         )
 
@@ -501,10 +447,10 @@ class TestContinueExplore:
             for entry in source_ledger["entries"]
             if entry["path"] == "operators/local_search.py"
         )
-        assert "candidate = solution" not in prior_source["content"]
+        assert "candidate = solution" in prior_source["content"]
 
         workspace = Path(cm._branch_workspaces[r2.branch_id])
-        assert "candidate = solution" not in (
+        assert "candidate = solution" in (
             workspace / "operators" / "local_search.py"
         ).read_text()
         assert (workspace / "operators" / "other_op.py").is_file()
@@ -524,10 +470,12 @@ class TestContinueExplore:
                 ]
             ),
         )
+        first._scheduler = Scheduler(max_active_branches=1)
+        first._branch_step_runner.scheduler = first._scheduler
         r1 = first.run_one_step()
         assert r1.decision == Decision.CONTINUE_EXPLORE
         first_workspace = Path(first._branch_workspaces[r1.branch_id])
-        assert "candidate = solution" not in (
+        assert "candidate = solution" in (
             first_workspace / "operators" / "local_search.py"
         ).read_text()
 
@@ -573,6 +521,8 @@ class TestContinueExplore:
                 [_make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass")]
             ),
         )
+        reopened._scheduler = Scheduler(max_active_branches=1)
+        reopened._branch_step_runner.scheduler = reopened._scheduler
         assert reopened._branch_workspaces[r1.branch_id] == str(first_workspace)
 
         r2 = reopened.run_one_step()
@@ -593,7 +543,7 @@ class TestContinueExplore:
             "aggregate"
         ]
         assert prior_aggregate["median_delta"] == -12.0
-        assert "candidate = solution" not in h_evidence.get("branch_current_code", "")
+        assert "candidate = solution" in h_evidence.get("branch_current_code", "")
 
         code_call = next(
             call for call in llm.provider_calls if call["request_kind"] == "code"
@@ -606,10 +556,10 @@ class TestContinueExplore:
             for entry in c_context["proposal_source_ledger"]["entries"]
             if entry["path"] == "operators/local_search.py"
         )
-        assert "candidate = solution" not in prior_source["content"]
+        assert "candidate = solution" in prior_source["content"]
 
         workspace = Path(reopened._branch_workspaces[r2.branch_id])
-        assert "candidate = solution" not in (
+        assert "candidate = solution" in (
             workspace / "operators" / "local_search.py"
         ).read_text()
         assert (workspace / "operators" / "other_op.py").is_file()
@@ -666,6 +616,8 @@ class TestContinueExplore:
                 ]
             ),
         )
+        cm._scheduler = Scheduler(max_active_branches=1)
+        cm._branch_step_runner.scheduler = cm._scheduler
 
         # First step: first hypothesis — counters start at 0
         r1 = cm.run_one_step()

@@ -346,7 +346,7 @@ def test_staging_keeps_base_untouched_and_retry_points_to_candidate(
     assert pending.previous_branch_workspace == base_workspace
 
 
-def test_accept_candidate_keeps_exact_staging_workspace_as_durable(
+def test_accept_candidate_adopts_exact_staging_content_at_durable_path(
     tmp_path: Path,
 ) -> None:
     service, branch, _, _, workspaces, patches, base_workspace = _staging_service(
@@ -362,10 +362,12 @@ def test_accept_candidate_keeps_exact_staging_workspace_as_durable(
 
     accepted = service.accept_candidate(branch, applied.code_hash, applied.workspace)
 
-    assert accepted == applied.workspace
-    assert workspaces[branch.branch_id] == applied.workspace
+    expected = tmp_path / "campaign" / "workspaces" / branch.branch_id
+    assert Path(accepted) == expected
+    assert workspaces[branch.branch_id] == str(expected)
     assert Path(accepted).is_dir()
-    assert not Path(base_workspace).exists()
+    assert not Path(applied.workspace).exists()
+    assert (expected / "operators" / "solver.py").read_text() == "VALUE = 1\n"
     assert service.pending_candidates == {}
     assert patches[branch.branch_id] is patch
     assert branch.current_code_hash == applied.code_hash
@@ -395,6 +397,26 @@ def test_reject_candidate_restores_prior_branch_workspace_and_parent_hash(
     assert (
         Path(base_workspace) / "operators" / "solver.py"
     ).read_text() == "VALUE = 0\n"
+
+
+def test_reject_candidate_restores_provisional_base_status(tmp_path: Path) -> None:
+    service, branch, controller, materializer, workspaces, _, base_workspace = (
+        _staging_service(tmp_path)
+    )
+    controller.record_verification_pass(
+        branch.branch_id,
+        materializer.compute_code_hash(base_workspace),
+    )
+    branch.branch_code_status = "provisional"
+    parent_hash = branch.last_clean_code_hash
+    applied = service.apply_candidate_patch(branch, base_workspace, _candidate_patch())
+
+    service.reject_candidate(branch, applied.workspace)
+
+    assert workspaces[branch.branch_id] == base_workspace
+    assert branch.current_code_hash == parent_hash
+    assert branch.last_clean_code_hash == parent_hash
+    assert branch.branch_code_status == "provisional"
 
 
 def test_record_candidate_code_failure_restores_prior_workspace_mapping(

@@ -30,6 +30,12 @@ class WorkspaceMaterializerLike(Protocol):
         source_workspace: str,
     ) -> str: ...
 
+    def adopt_candidate_workspace(
+        self,
+        candidate_workspace: str,
+        branch_id: str,
+    ) -> str: ...
+
     def cleanup_candidate_workspace(self, candidate_workspace: str) -> None: ...
 
     def compute_code_hash(self, workspace: str) -> str: ...
@@ -63,6 +69,7 @@ class PendingCandidate:
     base_workspace: str
     base_code_hash: str | None
     previous_branch_workspace: str | None
+    previous_branch_code_status: str
 
 
 @dataclass(frozen=True)
@@ -193,9 +200,6 @@ class WorkspaceLifecycleService:
                 self.sync_pool_registry(candidate, hypothesis, patch)
         except BaseException:
             self._cleanup_candidate_best_effort(candidate, bid)
-            branch.current_code_hash = branch.last_clean_code_hash
-            branch.branch_code_status = "clean"
-            branch.updated_at = datetime.now()
             raise
         pending = PendingCandidate(
             workspace=candidate,
@@ -205,6 +209,7 @@ class WorkspaceLifecycleService:
             base_workspace=base_workspace,
             base_code_hash=base_code_hash,
             previous_branch_workspace=self.branch_workspaces.get(bid),
+            previous_branch_code_status=branch.branch_code_status,
         )
         self.pending_candidates[bid] = pending
         self.branch_workspaces[bid] = candidate
@@ -224,11 +229,7 @@ class WorkspaceLifecycleService:
         code_hash: str,
         candidate_workspace: str,
     ) -> str:
-        """Accept verified staging as the branch workspace without journaling.
-
-        The staging directory remains in place: this is an in-process ownership
-        handoff for Protocol evaluation, not a filesystem promotion.
-        """
+        """Accept verified staging as the ordinary durable branch workspace."""
 
         bid = branch.branch_id
         pending = self._require_pending_candidate(bid, candidate_workspace)
@@ -239,18 +240,26 @@ class WorkspaceLifecycleService:
             raise RuntimeError(
                 f"Branch {bid} candidate workspace hash mismatch before accept"
             )
+        previous_current = branch.current_code_hash
+        previous_clean = branch.last_clean_code_hash
+        self.branch_controller.record_verification_pass(bid, code_hash)
         try:
-            self.branch_controller.record_verification_pass(bid, code_hash)
+            durable = self.materializer.adopt_candidate_workspace(
+                candidate_workspace,
+                bid,
+            )
         except BaseException:
-            self._rollback_pending_candidate(branch, pending=pending)
+            branch.current_code_hash = previous_current
+            branch.last_clean_code_hash = previous_clean
+            branch.branch_code_status = pending.previous_branch_code_status
+            branch.updated_at = datetime.now()
             raise
 
         self.pending_candidates.pop(bid, None)
-        self.branch_workspaces[bid] = pending.workspace
+        self.branch_workspaces[bid] = durable
         if pending.remember_patch:
             self.branch_patches[bid] = pending.patch
-        self._cleanup_replaced_branch_workspace(pending)
-        return pending.workspace
+        return durable
 
     def pending_candidate_patch(self, branch_id: str) -> PatchProposal | None:
         """Return the in-process staging patch without accepting the candidate."""
@@ -275,36 +284,19 @@ class WorkspaceLifecycleService:
         *,
         pending: PendingCandidate,
     ) -> CandidateCleanupReport:
-        """Restore semantic clean state even when staging cleanup leaves debris."""
+        """Restore the exact preceding branch state despite staging debris."""
 
         bid = branch.branch_id
         self.pending_candidates.pop(bid, None)
         branch.current_code_hash = pending.base_code_hash
         branch.last_clean_code_hash = pending.base_code_hash
-        branch.branch_code_status = "clean"
+        branch.branch_code_status = pending.previous_branch_code_status
         branch.updated_at = datetime.now()
         if pending.previous_branch_workspace is None:
             self.branch_workspaces.pop(bid, None)
         else:
             self.branch_workspaces[bid] = pending.previous_branch_workspace
         return self._cleanup_candidate_best_effort(pending.workspace, bid)
-
-    def _cleanup_replaced_branch_workspace(self, pending: PendingCandidate) -> None:
-        """Best-effort cleanup of the prior branch-owned workspace only."""
-
-        previous = pending.previous_branch_workspace
-        if not previous:
-            return
-        if os.path.realpath(previous) == os.path.realpath(pending.workspace):
-            return
-        try:
-            self.materializer.cleanup(previous)
-        except Exception as exc:
-            logger.warning(
-                "Accepted candidate cleanup left old branch workspace %s: %s",
-                previous,
-                exc,
-            )
 
     def _cleanup_candidate_best_effort(
         self,

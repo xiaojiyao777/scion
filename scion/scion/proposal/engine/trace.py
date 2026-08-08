@@ -8,9 +8,6 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Mapping
 
-from scion.proposal.prompt_manifest_accounting import _provider_prompt_hash
-
-
 class _TraceWriter:
     """Persist the exact provider request and its terminal response."""
 
@@ -32,19 +29,16 @@ class _TraceWriter:
         if not self._trace_dir:
             return None
         os.makedirs(self._trace_dir, exist_ok=True)
-        prompt_hash = _prompt_hash(system_blocks, prompt)
         trace_id = (
             f"{datetime.now().strftime('%Y%m%dT%H%M%S%f')}_"
-            f"{request_kind}_{prompt_hash[:10]}_{uuid.uuid4().hex[:8]}"
+            f"{request_kind}_{uuid.uuid4().hex[:8]}"
         )
         path = os.path.join(self._trace_dir, f"{trace_id}.json")
-        prompt_manifest = context.get("_scion_prompt_manifest")
         payload: Dict[str, Any] = {
             "trace_id": trace_id,
             "request_kind": request_kind,
             "model": model,
             "tool_name": tool.get("name"),
-            "prompt_hash": prompt_hash,
             "created_at": datetime.now().isoformat(),
             "branch_id": context.get("branch_id"),
             "champion_version": context.get("champion_version"),
@@ -54,8 +48,6 @@ class _TraceWriter:
             or tool.get("function", {}).get("parameters"),
             "ok": None,
         }
-        if isinstance(prompt_manifest, Mapping):
-            payload["prompt_manifest"] = dict(prompt_manifest)
         if request_policy:
             payload["request_policy"] = dict(request_policy)
         if provider_call_context:
@@ -89,10 +81,6 @@ class _TraceWriter:
         _write_json(path, payload)
 
 
-def _prompt_hash(system_blocks: list[dict], prompt: str) -> str:
-    return _provider_prompt_hash(system_blocks, prompt)
-
-
 def _write_json(path: str, payload: Dict[str, Any]) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, indent=2, default=str)
@@ -115,6 +103,5 @@ def _client_request_policy(
 __all__ = [
     "_TraceWriter",
     "_client_request_policy",
-    "_prompt_hash",
     "_write_json",
 ]

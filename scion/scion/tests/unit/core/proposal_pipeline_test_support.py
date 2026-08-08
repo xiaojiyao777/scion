@@ -22,10 +22,9 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.proposal_pipeline import ProposalPipeline
-from scion.proposal.engine import PromptCallReceipt
+from scion.proposal.engine import ProviderCallDiagnostics
 
 from ..source_ledger_test_support import ledgerize_code_context
-from scion.proposal.prompt_manifest_accounting import _provider_prompt_hash
 from scion.core.public_refs import contains_absolute_path
 from scion.proposal.engine import ProposalValidationError
 from scion.proposal.llm_client import LLMBalanceError
@@ -118,29 +117,17 @@ class FakeCreative:
         return self.patch
 
     @staticmethod
-    def _receipt(snapshot) -> PromptCallReceipt:
+    def _diagnostics(snapshot) -> ProviderCallDiagnostics:
         trace_ref = f"artifacts/llm_traces/{snapshot.render_kind}-fixture.json"
-        return PromptCallReceipt(
+        return ProviderCallDiagnostics(
             request_kind=snapshot.render_kind,
             trace_ref=trace_ref,
-            prompt_manifest_ref=f"{trace_ref}#/prompt_manifest",
             raw_response_ref=f"{trace_ref}#/response",
-            prompt_hash=_provider_prompt_hash(
-                snapshot.system_blocks,
-                snapshot.user_prompt,
-            ),
-            context_digest=snapshot.context_digest,
             provider_ok=True,
             ok=True,
         )
 
-    def generate_hypothesis_with_receipt(self, context, snapshot):
-        return self.generate_hypothesis(context), self._receipt(snapshot)
-
-    def generate_code_with_receipt(self, context, snapshot):
-        return self.generate_code(context), self._receipt(snapshot)
-
-    def generate_direct_hypothesis_with_receipt(
+    def generate_direct_hypothesis(
         self,
         context,
         snapshot,
@@ -149,9 +136,9 @@ class FakeCreative:
     ):
         if call_context is not None:
             self.call_contexts["hypothesis"] = dict(call_context)
-        return self.generate_hypothesis_with_receipt(context, snapshot)
+        return self.generate_hypothesis(context), self._diagnostics(snapshot)
 
-    def generate_direct_code_with_receipt(
+    def generate_direct_code(
         self,
         context,
         snapshot,
@@ -160,7 +147,7 @@ class FakeCreative:
     ):
         if call_context is not None:
             self.call_contexts["code"] = dict(call_context)
-        return self.generate_code_with_receipt(context, snapshot)
+        return self.generate_code(context), self._diagnostics(snapshot)
 
 class FakeBranchController:
     def __init__(self, branches):
@@ -238,8 +225,6 @@ def _pipeline(
     lineage_registry=None,
     branch_workspace: str = "/tmp/branch",
     problem_spec=None,
-    split_manifest_hash: str | None = None,
-    seed_ledger_hash: str | None = None,
 ):
     if lineage_registry is None:
         lineage_registry = MemoryLineageRegistry()
@@ -288,9 +273,6 @@ def _pipeline(
         lineage_registry=lineage_registry,
         campaign_id="camp-1",
         problem_id="toy",
-        problem_spec_hash="spec-hash",
-        split_manifest_hash=split_manifest_hash,
-        seed_ledger_hash=seed_ledger_hash,
     )
     return pipeline, branch, runtime, failures, balance_exhausted
 

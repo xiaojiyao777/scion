@@ -73,9 +73,9 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 
 ### 证据和晋升必须可追溯
 
-- provider call 的最小 append-only event、可用 trace、typed outcome、Contract、Verification、Protocol 与 Decision 必须能通过普通引用串起来；它们不构成 context identity 或 receipt 闭包。
+- provider call 的普通 append-only event、typed outcome、Contract、Verification、Protocol 与 Decision 应能通过普通引用串起来；trace 若成功写入仅作诊断，trace/journal 写失败不能丢弃有效 H/C。它们不构成 context identity 或 receipt 闭包。
 - lineage 是 append-only 事实；summary、analysis brief 和 inventory 是索引或投影，不是新的事实来源。
-- promotion 必须拥有完整 formal evidence；普通 candidate cleanup 只能记录诊断，不能改写已经完成的科学 Decision。
+- promotion 必须拥有完整的 declared screening、validation、frozen Protocol evidence；普通 candidate cleanup 或可选报告写入只能记录诊断，不能改写已经完成的科学 Decision。
 - `invalid_response`、`research_rejected`、`blocked_infra`、`interrupted` 与 `evaluated` 是不同结果，不能为了报表整洁而合并。
 
 ## 按执行顺序阅读源码
@@ -128,12 +128,13 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 接着读：
 
 - `scion/scion/core/evidence_recording/`：durable event、accounting、summary 和 artifact refs；
-- `scion/scion/core/formal_candidate_artifacts.py`：formal candidate 与 source/context 身份；
 - `scion/scion/core/proposal_trajectory_artifacts.py`、`proposal_trajectory_attempts.py`：direct attempt 轨迹；
 - `scion/scion/lineage/registry.py`、`branch_store.py`、`champion_store.py`；
 - `scion/scion/core/public_refs.py`、`promotion_service.py`、`promotion_lifecycle.py`。
 
-报告字段与 durable event 不一致时，以 durable event、formal candidate、Protocol raw metrics 和 lineage refs 为依据，并把投影漂移本身记为框架缺陷。
+当前 campaign 不生成 formal-candidate identity/hash 闭包。报告字段与 durable event
+不一致时，以 step history、branch workspace、champion snapshot、Protocol raw metrics
+和 lineage refs 为依据，并把投影漂移本身记为框架缺陷。
 
 ### 5. Generic/problem 边界
 

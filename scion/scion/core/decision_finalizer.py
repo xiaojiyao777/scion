@@ -71,9 +71,6 @@ class LineageRecorder(Protocol):
     ) -> None: ...
 
 
-FormalCandidateArtifactRecorder = Callable[..., Optional[str]]
-
-
 @dataclass
 class DecisionFinalizer:
     """Apply deterministic decision side effects after feature extraction."""
@@ -96,7 +93,6 @@ class DecisionFinalizer:
     ]
     discard_branch_workspace: Callable[[str], None]
     persist_branch_state: Callable[[str], None]
-    record_formal_candidate_artifact: FormalCandidateArtifactRecorder | None = None
     decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
     decision_features_for: Callable[[str], DecisionFeatures | None] = lambda _bid: None
     pending_candidate_patch: Callable[[Branch], PatchProposal | None] | None = None
@@ -143,7 +139,6 @@ class DecisionFinalizer:
                 verification_result=verification_result,
                 action_label=action_label,
                 decision_reason_codes=effective_reason_codes,
-                proposal_attempt_ref=proposal_attempt_ref,
             )
         mark_candidate_evaluation_completed(branch)
         _consume_completed_protocol_expansion(branch, protocol_result)
@@ -218,7 +213,6 @@ class DecisionFinalizer:
                 action_label=action_label,
                 decision=decision,
                 decision_reason_codes=effective_reason_codes,
-                proposal_attempt_ref=proposal_attempt_ref,
             )
             return _with_protocol_accounting(result, protocol_result)
 
@@ -235,7 +229,6 @@ class DecisionFinalizer:
                 verification_result=verification_result,
                 action_label=action_label,
                 decision_reason_codes=effective_reason_codes,
-                proposal_attempt_ref=proposal_attempt_ref,
             )
             return _with_protocol_accounting(result, protocol_result)
 
@@ -285,7 +278,6 @@ class DecisionFinalizer:
         verification_result: VerificationResult,
         action_label: str,
         decision_reason_codes: Optional[tuple[str, ...]],
-        proposal_attempt_ref: Mapping[str, Any] | None,
     ) -> StepResult:
         """Apply one completed Protocol decision directly and synchronously.
 
@@ -339,24 +331,6 @@ class DecisionFinalizer:
                 decision_reason_codes=decision_reason_codes,
             )
 
-        # Keep an exact candidate closure as scientific replay evidence only.
-        # It is best-effort and cannot authorize, block, or recover a Decision.
-        self._record_formal_candidate_artifact(
-            # Record against the detached candidate snapshot.  ``branch`` is
-            # about to be mutated by accept/reject, while the workspace below
-            # still points at the staging candidate.
-            branch=target,
-            hypothesis=hypothesis,
-            h_record=h_record,
-            patch=patch,
-            protocol_result=protocol_result,
-            canary_result=canary_result,
-            contract_result=contract_result,
-            verification_result=verification_result,
-            decision=decision,
-            decision_reason_codes=decision_reason_codes,
-            proposal_attempt_ref=proposal_attempt_ref,
-        )
         if not (
             decision in (Decision.CONTINUE_EXPLORE, Decision.VALIDATION_REPAIR_REQUIRED)
             and target.state in (BranchState.EXPLORE, BranchState.STALE_WEIGHT_UPDATE)
@@ -389,6 +363,17 @@ class DecisionFinalizer:
                 plan=disposition,
             )
         )
+        if (
+            disposition.disposition
+            in {
+                CandidateDisposition.PROVISIONAL_HEAD,
+                CandidateDisposition.EXACT_REUSE,
+            }
+            and target.direction is None
+        ):
+            target.direction = (
+                f"{hypothesis.change_locus}: {hypothesis.hypothesis_text or ''}"
+            )
         mark_candidate_evaluation_pending(
             target,
             hypothesis_id=h_record.hypothesis_id,
@@ -448,50 +433,6 @@ class DecisionFinalizer:
             )
         )
 
-    def _record_formal_candidate_artifact(
-        self,
-        *,
-        branch: Branch,
-        hypothesis: HypothesisProposal,
-        h_record: HypothesisRecord,
-        patch: PatchProposal | None,
-        protocol_result: ProtocolResult | None,
-        canary_result: CanaryResult,
-        contract_result: ContractResult,
-        verification_result: VerificationResult,
-        decision: Decision,
-        decision_reason_codes: tuple[str, ...] | None,
-        proposal_attempt_ref: Mapping[str, Any] | None,
-    ) -> None:
-        if self.record_formal_candidate_artifact is None or patch is None:
-            return
-        try:
-            artifact_ref = self.record_formal_candidate_artifact(
-                branch=branch,
-                hypothesis=hypothesis,
-                h_record=h_record,
-                patch=patch,
-                protocol_result=protocol_result,
-                canary_result=canary_result,
-                contract_result=contract_result,
-                verification_result=verification_result,
-                decision=decision,
-                decision_reason_codes=tuple(decision_reason_codes or ()),
-                workspace=self.branch_workspaces.get(branch.branch_id),
-                proposal_attempt_ref=proposal_attempt_ref,
-            )
-        except Exception as exc:  # noqa: BLE001 - replay evidence is non-authoritative
-            logger.debug(
-                "Branch %s: candidate replay evidence write failed: %s",
-                branch.branch_id,
-                exc,
-            )
-            return
-        if artifact_ref:
-            summary = dict(branch.branch_evidence_summary or {})
-            summary["formal_candidate_patch_artifact_ref"] = artifact_ref
-            branch.branch_evidence_summary = summary
-
     def _apply_candidate_disposition(
         self,
         *,
@@ -513,20 +454,14 @@ class DecisionFinalizer:
             self.accept_candidate(branch, branch.current_code_hash or "", workspace)
             target.current_code_hash = branch.current_code_hash
             target.last_clean_code_hash = branch.last_clean_code_hash
-        elif disposition in {
-            CandidateDisposition.REJECT_TO_CODE_PARENT,
-            CandidateDisposition.REJECT_TERMINAL,
-        }:
+        elif disposition is CandidateDisposition.REJECT_TERMINAL:
             if self.reject_candidate is None:
                 raise RuntimeError("candidate rejection callback is unavailable")
             self.reject_candidate(branch, workspace)
             target.current_code_hash = branch.current_code_hash
             target.last_clean_code_hash = branch.last_clean_code_hash
 
-        if disposition is CandidateDisposition.REJECT_TO_CODE_PARENT:
-            target.branch_code_status = "clean"
-            target.direction = None
-        elif disposition is CandidateDisposition.PROVISIONAL_HEAD:
+        if disposition is CandidateDisposition.PROVISIONAL_HEAD:
             target.branch_code_status = "provisional"
         elif disposition is CandidateDisposition.EXACT_REUSE:
             target.branch_code_status = "clean"
@@ -633,7 +568,6 @@ class DecisionFinalizer:
         action_label: str,
         decision: Decision,
         decision_reason_codes: Optional[tuple[str, ...]],
-        proposal_attempt_ref: Mapping[str, Any] | None,
     ) -> StepResult:
         bid = branch.branch_id
         if (
@@ -696,7 +630,6 @@ class DecisionFinalizer:
         verification_result: VerificationResult,
         action_label: str,
         decision_reason_codes: Optional[tuple[str, ...]],
-        proposal_attempt_ref: Mapping[str, Any] | None,
     ) -> StepResult:
         bid = branch.branch_id
         promotion_event_id = str(uuid.uuid4())
@@ -704,29 +637,9 @@ class DecisionFinalizer:
             promote_plan.champion,
             promotion_experiment_id=promotion_event_id,
         )
-        promotion_metadata = dict(promote_plan.metadata or {})
-        promotion_metadata.update(
-            {
-                "promotion_experiment_id": promotion_event_id,
-                "branch_id": bid,
-                "hypothesis_id": h_record.hypothesis_id,
-                "base_champion_version": getattr(branch, "base_champion_id", None),
-                "candidate_code_hash": (
-                    getattr(branch, "current_code_hash", None)
-                    or getattr(branch, "last_clean_code_hash", None)
-                ),
-                "patch": self.branch_patches.get(bid),
-                "protocol_result": protocol_result,
-                "decision_reason_codes": tuple(decision_reason_codes or ()),
-                "branch_evidence_summary": dict(
-                    getattr(branch, "branch_evidence_summary", {}) or {}
-                ),
-            }
-        )
         promote_plan = replace(
             promote_plan,
             champion=promoted_champion,
-            metadata=promotion_metadata,
         )
         try:
             self.commit_promote_plan(promote_plan)

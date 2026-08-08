@@ -47,10 +47,9 @@ _RESEARCH_STATES = frozenset({BranchState.EXPLORE})
 _TERMINAL_STATES = frozenset(
     {BranchState.PROMOTED, BranchState.ABANDONED, BranchState.PARKED_LINEAGE}
 )
-# v0.4 direct runtime defaults to one branch so an EXPLORE continuation can
-# consume that branch's preceding screening evidence on the next invocation.
-# Broader portfolios remain an explicit scheduler configuration for ablation.
-_DEFAULT_MAX_ACTIVE_BRANCHES = 1
+# V3 sections 11.1 and 12.2: keep depth within a direction while allowing up to
+# three naturally divergent directions.  Slot admission remains evidence-blind.
+_DEFAULT_MAX_ACTIVE_BRANCHES = 3
 
 
 class Scheduler:

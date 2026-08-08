@@ -49,6 +49,11 @@ _VALID_PATCH = {
     "test_hint": None,
 }
 
+_VALID_CODE_AFTER_PATCH = _VALID_CODE.replace(
+    "        return solution\n",
+    "        candidate = solution\n        return candidate\n",
+)
+
 
 def _make_problem_spec(root_dir: str) -> ProblemSpec:
     return ProblemSpec(
@@ -243,9 +248,9 @@ class TestFullMockCampaign:
         assert client.call_count >= 4
         branch = cm._branch_ctrl.get_branch(results[-1].branch_id)
         workspace = Path(cm._branch_workspaces[branch.branch_id])
-        assert branch.branch_code_status == "clean"
+        assert branch.branch_code_status == "provisional"
         assert (workspace / "operators" / "local_search.py").read_text() == (
-            _VALID_CODE
+            _VALID_CODE_AFTER_PATCH
         )
 
     def test_lineage_queryable_via_get_state(self, tmp_path):

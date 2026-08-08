@@ -129,7 +129,7 @@ def build_promotion_dossier(
                 getattr(plan.champion, "code_snapshot_path", None),
                 base_dir=campaign_dir,
             ),
-            "registry_hash": plan.registry_hash,
+            "registry_hash": getattr(plan, "registry_hash", None),
         },
     }
 

@@ -2,24 +2,26 @@
 
 *Last updated: 2026-08-08*
 
-Read `TASK.md` first. `design/scion-architecture-v3.md` is the architecture
-authority and `design/scion-architecture-v3-v0.4-direct-runtime-addendum.md`
-narrows obsolete retry, budget, compaction, and steering examples.
+Read `TASK.md` first. `design/scion-architecture-v3.md` is the sole architecture
+authority. `design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` only
+describes the current lightweight implementation and cannot override V3.
 
 ## Current objective
 
-The active branch is `codex/v04-v3-research-hotpath`, based on
-`origin/v0.4-dev` at `317fcb545217c990fc204c9d3e85c3e801bce740`.
+The active branch is `codex/v04-solver-improvement-research`, based on the
+accepted lightweight runtime baseline `4d637959`.
 
-The v0.4 completion target is research effectiveness on both Warehouse and
-CVRP/VRP. Scion must let an agent form a substantive problem-owned hypothesis,
-edit the real solver, cross executable Verification, receive case-level
-Protocol evidence, and adapt its next direction from prior safe evidence.
+The active completion target is retained solver improvement on both Warehouse
+and CVRP/VRP. Warehouse must recover continuous same-campaign optimization and
+CVRP must produce a real algorithmic promotion; valid negative observations no
+longer close `TASK.md` by themselves.
 
-Deployment, root installation, systemd, packaging, fixed-source acceptance,
-signing, leases, capability graphs, and repeated hash closures are out of scope.
-No root command is required for the current work. Historical W3/root artifacts
-remain historical evidence only and are not part of this branch's acceptance.
+Distribution, deployment, installation, packaging, builds, root/systemd,
+fixed-source acceptance, Trust/Hash work, object identities, signing,
+registration, leases, capability graphs, and repeated closures are out of
+scope. No root command is required for the current work. Historical W3/root
+artifacts remain historical evidence only and are not part of this branch's
+acceptance.
 
 ## Active V3 path
 
@@ -34,8 +36,15 @@ complete problem facts + complete current source + prior safe evidence
   -> problem-owned case-level Protocol
   -> Safe Features
   -> deterministic Decision
-  -> clean parent, provisional head, exact reuse, or promotion
+  -> exact stage reuse, verified provisional head, or promotion
 ```
+
+Per V3 §11.2, Contract and Verification success followed by completed
+screening retains the evaluated code as the branch's provisional head even
+when screening fails to promote it. Verification failure alone returns to the
+last clean branch source, or champion when the branch has never verified code.
+The Scheduler admits at most three active branches by default, using state
+priority/FIFO without forced diversity or mechanism classification.
 
 The production import boundary no longer imports the dormant authority,
 capability, lease, signing, proposal-attempt-owner, root, systemd, packaging, or
@@ -58,13 +67,14 @@ W3 installation stacks.
 - Deleted the now-unused promotion journal/crash-recovery façade and the
   Decision/research-rejection receipt/archive APIs and their dedicated tests.
   The active path keeps staging create/apply/accept/reject, scientific
-  code/snapshot equality, champion snapshots, generic research-surface archive,
-  and formal replay evidence; it does not build a second recovery authority
-  around an in-process candidate.
-- Wired typed candidate disposition into production. Protocol `fail` restores
-  the clean code parent, `unclear/continue` retains an explicit provisional
-  head, and screening/validation expansion reuses the exact candidate without
-  another provider call.
+  source equality, champion snapshots, ordinary branch lineage and
+  problem-owned Protocol evidence; it does not build a second artifact,
+  recovery or replay authority around an in-process candidate.
+- Wired typed candidate disposition into production. Completed screening keeps
+  the verified candidate as an explicit provisional branch head, including on
+  Protocol `fail`; Verification rejection restores the clean code parent, and
+  screening/validation expansion reuses the exact candidate without another
+  provider call.
 - Removed forced surface/action/target controls from CLI, composition, context,
   prompts, and proposal execution. H sees all problem-declared safe surfaces
   and their complete current source.
@@ -96,13 +106,47 @@ W3 installation stacks.
   win rate, practical delta, and confidence rules. Pair and runtime signals are
   diagnostic only unless a problem explicitly declares runtime as an objective
   or hard constraint.
+- Added transparent Warehouse pool/iteration/stagnation/registration mechanics
+  and safe headroom/noise facts to H context, and added the accepted concise
+  CVRP cross-campaign prior. Neither enters DecisionFeatures or selects a
+  mechanism.
+- Removed the dormant problem-specific algorithm-shape Contract dispatchers and
+  preview/static-quality stack. The active Contract remains structural; solver
+  behavior remains Verification/Protocol-owned.
+- Removed the active formal-candidate artifact recorder and its composition
+  wiring. Active lineage now keeps ordinary campaign/branch/H references, one
+  exact branch-source equality value, declared stage inputs, public raw-metrics
+  reference, verification checks and Protocol/Decision facts. It does not echo
+  problem/split/seed hashes, patch digests, replay-identity payloads or
+  complete/degraded identity states.
+- Historical fixed-candidate evaluation has a read-only local safe-path
+  compatibility reader for the old full-file replacement artifacts. It does
+  not write current campaign evidence, call H/C, decide promotion or confer
+  authority.
+- Reduced provider context to one frozen validated value plus ordinary
+  context/prompt equality. Prompt manifests, prompt/context identities and
+  receipt authority no longer sit on H/C; trace and call-journal persistence
+  are best-effort diagnostics, while the approved-H-to-C binding remains.
+- Removed active promotion dossier generation, registry hashing, automatic
+  summary closure and formal-readiness projection. Optional reporting cannot
+  turn a persisted scientific promotion into a recovery failure. Validation
+  and frozen reuse keep the substantive present/equal code-hash and clean-state
+  checks without generating an audit hash over those same facts.
 
-## Formal research controls
+The combined hot-path regression set passed 180 tests. After all three
+subtractions were integrated and the tree was frozen, the complete suite passed
+`1949 passed, 1 skipped` in 628.19 seconds. This validates the pre-experiment
+runtime checkpoint; it does not satisfy the Warehouse or CVRP solver-evidence
+acceptance criteria.
+
+## Historical lightweight research controls
 
 Both fresh controls used `gpt-5.6-terra` through the local Codex proxy and the
 same non-root direct-v3 composition.  All H/C traces report the Terra model and
 the OpenAI-compatible transport.  The proxy does not expose its resolved
-upstream alias, so no stronger backend-identity claim is made.
+upstream alias, so the record makes only the transport/model claim it directly
+observed. These controls predate the current provisional-head and active
+artifact simplifications; their recorded outcomes remain historical facts.
 
 ### Warehouse
 
@@ -193,13 +237,12 @@ The detailed evidence and claim boundary are in
 - A focused routing test proves explicit `SCION_MODEL=gpt-5.6-terra` plus
   `SCION_BASE_URL=http://127.0.0.1:8080` selects the local OpenAI-compatible
   path even when conflicting Anthropic fallback variables exist.
-- Formal candidate replay evidence now reads the exact pending staging patch
-  before disposition. The evidence writer is best-effort and non-authoritative:
-  it cannot accept, reject, recover, or otherwise gate the Decision.
-- Append-only Decision lineage also snapshots the evaluated staging candidate
-  and its pending patch before a negative disposition restores the clean parent,
-  so the scientific event cannot silently degrade into parent code plus an empty
-  patch.
+- At the time of these controls, the then-active formal-candidate evidence
+  writer read pending staging before disposition, and Decision lineage captured
+  the evaluated candidate before clean-parent restoration. This preserves how
+  the historical campaigns were interpreted. The writer and its identity/hash
+  closure have since been removed from the active campaign; ordinary branch,
+  step and Protocol evidence now carry the current scientific record.
 - If an asynchronous champion update makes a branch stale after Verification
   but before Protocol, Scion now rejects staging and terminalizes that H as
   `not_evaluated`. The branch becomes `ABANDONED`; a fresh invocation starts
@@ -223,8 +266,9 @@ Warehouse:
 - new subcategory-consolidation operator; Contract and Verification passed;
 - 20/20 valid screening pairs, zero failures, median delta 0 on both declared
   objectives, then `SCREENING_FAIL_WIN_RATE` / `continue_explore`;
-- one replay-complete formal candidate artifact and zero remaining candidate
-  workspace paths after Decision.
+- the then-active recorder wrote one replayable historical candidate artifact;
+  zero candidate workspace paths remained after Decision. Current campaigns do
+  not write that artifact type.
 
 CVRP:
 `/home/clawd/research/scion-experiments/v04-cvrp-v3-minimal-terra-1r-20260808T132654Z-claw/campaign`
@@ -236,28 +280,45 @@ CVRP:
 - 32/32 valid screening pairs, zero failures, case win rate 0.375, median
   distance delta -0.25 with fleet violation unchanged, then
   `SCREENING_FAIL_WIN_RATE` / `continue_explore`;
-- one replay-complete formal candidate artifact and zero remaining candidate
-  workspace paths after Decision.
+- the then-active recorder wrote one replayable historical candidate artifact;
+  zero candidate workspace paths remained after Decision. Current campaigns do
+  not write that artifact type.
 
 An earlier Warehouse launch ending in local-proxy HTTP 401 stopped before a
 valid H/C attempt and remains excluded infrastructure evidence.  The completed
 runs used the authenticated local proxy key only in their child-process
 environment; the key was not printed or persisted.
 
-## Validation status
+These controls predate the current V3 §11.2 disposition correction. Their
+recorded clean-parent outcomes remain historical facts and are not rewritten;
+new campaigns must retain every Contract/Verification-passing, completed
+screening candidate as the provisional branch head.
 
-Focused slices for the final staging/replay/runtime cleanup are green (`75
-passed` before the full suite and `65 passed` after final formatting).  Both
-real direct outer smokes pass, and both fresh Terra regressions above write
-exactly one replayable formal candidate artifact.
+## Accepted baseline validation
 
-Using the required `claw` interpreter, the complete default suite now runs with
+Focused slices for the baseline's former staging/replay/runtime cleanup were
+green (`75 passed` before its full suite and `65 passed` after final
+formatting). Both real direct outer smokes passed. The two fresh Terra
+regressions above each wrote one artifact under the historical recorder; that
+is not a current acceptance requirement.
+
+At baseline `4d637959`, using the required `claw` interpreter, the complete
+default suite ran with
 no file exclusion: `1946 passed, 1 skipped, 0 failed` in 619.61 seconds.  All
 144 changed/new Python files pass critical Ruff syntax/name checks; the 14
 final research-hot-path files pass formatter check; all of `scion/scion`
 passes explicit `compileall`; and `git diff --check` is clean.  A repository-
 wide formatter sweep would mechanically reformat 108 older changed files, so
-it was intentionally not applied as unrelated churn.
+it was intentionally not applied as unrelated churn. These baseline results do
+not by themselves validate the active S2/S3 changes or satisfy the new solver-
+improvement acceptance.
+
+For the active S2/S3 implementation, the focused V3 integration set passed 270
+tests. After removing the active lineage identity mirror, the
+evidence/proposal/composition set passed 58 tests and the campaign/preflight
+integration set passed 43 tests; critical Ruff `E9/F63/F7/F82` and changed-file
+diff checks passed. These are focused results only. The S6 full-suite run after
+all active edits remains pending.
 
 ## Known residuals
 
@@ -272,16 +333,18 @@ it was intentionally not applied as unrelated churn.
 3. Neither problem declares rename/permutation invariance.  No universal
    metamorphic gate is pending; a problem may add a probe later only when its
    semantics declare the transformation meaningful.
-4. Fresh one-active-branch controls are the v0.4 acceptance path.  Legacy
-   multi-branch stale/reconcile recovery is not allowed to reintroduce object
-   authority, signed identity, or closure machinery.
+4. The prior one-active-branch controls are historical baseline evidence. The
+   current runtime admits at most three active branches; this must remain a
+   lightweight V3 scheduler and must not reintroduce object authority, signed
+   identity, lease, or closure machinery.
 
 ## Closure status
 
-`TASK.md` M0-M7 and the cross-problem completion matrix are satisfied.  v0.4 is
-closed for the stated research-effectiveness scope: Warehouse and CVRP both
-demonstrate substantive H/C research on the same small V3 path, real solver
-comparisons, deterministic problem-owned negative Decisions, inspectable
-lineage/replay evidence, and clean rejected ancestry.  No solver improvement,
-validation, frozen-holdout, deployment, packaging, or trust-system claim is
-made.
+The prior lightweight-runtime milestone is accepted at `4d637959`; the active
+`TASK.md` is not closed. Warehouse remains at v1 in the fresh controls, its
+promising expanded-screening stage is unfinished, and CVRP has no
+Protocol-complete promotion. Closure now requires Warehouse continuous
+promotions, retained replay improvement, one CVRP screening -> validation ->
+frozen promotion, and an independent B0 comparison. Deployment, packaging,
+builds, root/systemd and
+Trust/Hash work are neither prerequisites nor completion claims.

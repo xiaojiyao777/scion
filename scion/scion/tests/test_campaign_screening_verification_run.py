@@ -44,10 +44,10 @@ def _install_changed_champion_and_mark_stale(cm, tmp_path, branch_id):
 
 
 class TestScreeningFail:
-    def test_screening_fail_rejects_candidate_and_keeps_branch_research_open(
+    def test_screening_fail_keeps_verified_candidate_and_branch_research_open(
         self, tmp_path
     ):
-        """A regressive candidate ends without turning one result into branch policy."""
+        """V3 §11.2 iterates from verified code without promoting it."""
         protocol = MockExperimentProtocol(
             results=[
                 _make_protocol_result(
@@ -63,7 +63,6 @@ class TestScreeningFail:
         cm = _campaign(tmp_path, experiment_protocol=protocol)
         clean_workspace = Path(cm._champion.code_snapshot_path)
         clean_source = (clean_workspace / "operators" / "local_search.py").read_text()
-        clean_hash = cm._materializer.compute_code_hash(str(clean_workspace))
 
         result = cm.run_one_step()
 
@@ -72,13 +71,13 @@ class TestScreeningFail:
         assert result.decision == Decision.CONTINUE_EXPLORE
         assert branch.state == BranchState.EXPLORE
         assert cm._step_history[-1].protocol_result.gate_outcome == "fail"
-        assert (workspace / "operators" / "local_search.py").read_text() == (
-            clean_source
-        )
-        assert cm._materializer.compute_code_hash(str(workspace)) == clean_hash
-        assert branch.current_code_hash == clean_hash
-        assert branch.last_clean_code_hash == clean_hash
-        assert branch.branch_code_status == "clean"
+        candidate_source = (workspace / "operators" / "local_search.py").read_text()
+        assert candidate_source != clean_source
+        candidate_hash = cm._materializer.compute_code_hash(str(workspace))
+        assert branch.current_code_hash == candidate_hash
+        assert branch.last_clean_code_hash == candidate_hash
+        assert branch.branch_code_status == "provisional"
+        assert branch.direction is not None
         marker = candidate_evaluation(branch)
         assert marker is not None
         assert marker["status"] == "completed"
@@ -128,8 +127,13 @@ class TestScreeningFail:
         branch = cm._branch_ctrl.get_branch(result.branch_id)
         assert result.decision is expected_decision
         assert len(created_staging) == 1
-        assert cm._branch_workspaces[result.branch_id] == created_staging[0]
-        assert Path(created_staging[0]).is_dir()
+        durable_workspace = Path(cm._branch_workspaces[result.branch_id])
+        assert durable_workspace == tmp_path / "campaign" / "workspaces" / result.branch_id
+        assert durable_workspace.is_dir()
+        assert not Path(created_staging[0]).exists()
+        assert cm._materializer.compute_code_hash(str(durable_workspace)) == (
+            branch.last_clean_code_hash
+        )
         assert cm._workspace_lifecycle.pending_candidates == {}
         assert branch.current_code_hash == branch.last_clean_code_hash
         assert branch.branch_code_status == "clean"

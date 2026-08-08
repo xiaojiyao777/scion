@@ -51,6 +51,9 @@ DECISION_FEATURES_REPORT_METADATA_DENYLIST = {
     "mechanism_rankings",
     "run_status",
     "signal_to_noise_tier",
+    "solver_mechanics",
+    "aggregate_objective_headroom",
+    "aggregate_noise_context",
 }
 
 def test_decision_features_immutability():

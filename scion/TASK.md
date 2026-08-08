@@ -1,395 +1,346 @@
-# Scion v0.4 V3 Research-Effectiveness Task
+# Scion v0.4 Solver-Improvement Research Task
 
-*Working branch: `codex/v04-v3-research-hotpath`*
-*Accepted starting point: `origin/v0.4-dev` at `317fcb54`*
+*Working branch: `codex/v04-solver-improvement-research`*
+
+*Accepted runtime baseline: `4d637959`*
+
 *Last updated: 2026-08-08*
 
-This is the active task source.  `scion/design/scion-architecture-v3.md` is the
-architecture authority; the direct-runtime addendum only narrows obsolete
-retry, budget, and context examples.  `scion/docs/status/current-state.md`
-records current evidence.  Long chronology belongs in experiment reports, not
-here.
+This is the active task source. `design/scion-architecture-v3.md` is the
+sole architecture authority. The direct-runtime addendum may explain an
+implementation choice, but it may not reverse a V3 research boundary.
+`docs/status/current-state.md` records accepted evidence; detailed chronology
+belongs in experiment reports.
 
 ## Objective
 
-Close v0.4 only when a Scion agent demonstrates useful research behavior on
-both Warehouse and CVRP/VRP:
+The previous stage proved that the lightweight direct-V3 runtime can produce
+valid Warehouse and CVRP research observations. It did **not** prove solver
+improvement: both champions remained at v1. This stage is complete only when
+Scion demonstrates retained algorithmic improvement, not merely valid negative
+research.
+
+The required end state is:
+
+1. **Warehouse continuity:** one fresh, uninterrupted campaign produces at
+   least two Protocol-complete structural promotions (`v1 -> v2 -> v3` or
+   later), and the final champion independently beats both v1 and its immediate
+   predecessor on the declared held-out evidence.
+2. **Warehouse transfer:** production-style Warehouse obtains at least one
+   independently supported promotion, or a pre-registered matched experiment
+   establishes that the remaining limitation is production headroom/noise
+   rather than framework continuity. Multi-promotion is not required on
+   production because v0.3 never established it there.
+3. **CVRP improvement:** one exact candidate passes screening, validation and
+   complete frozen holdout, receives deterministic `PROMOTE`, and independently
+   improves the original B0 champion without feasibility or fleet regression.
+
+If a finite experimental rung is negative, record the conclusion and redesign
+the next rung. Do not relabel a scientifically valid negative result as task
+completion.
+
+## V3 non-negotiable boundary
+
+The active path remains:
 
 ```text
-complete problem facts + complete current source + prior safe evidence
-  -> one Hypothesis provider call
+complete safe problem facts + complete current branch source + prior safe evidence
+  -> one structured Hypothesis call
   -> structural Hypothesis Contract
-  -> one Code provider call bound to the approved H
+  -> one approved-H-bound Code call
   -> structural Patch Contract
   -> isolated Workspace
   -> executable Verification
-  -> problem-owned comparative Protocol
+  -> problem-owned paired Protocol
   -> Safe Features
   -> deterministic Decision
-  -> evidence-informed next research direction
+  -> exact stage reuse, branch iteration, or promotion
 ```
 
-The target is not a deployment system.  The target is an agent that proposes a
-substantive algorithmic idea, implements it correctly, measures it against the
-champion on real solver cases, interprets the trusted outcome through the
-framework, and changes or deepens direction using prior structured evidence.
-
-Framework tests are necessary but do not close this task.  A scientifically
-valid negative candidate may prove effective research; a pile of passing
-identity, packaging, or lifecycle tests does not.
-
-## V3 boundary
-
-The active research path retains only these hard boundaries:
-
-1. LLM output is tainted and may propose only structured H and C objects.
-2. Contract checks schema, editable source boundary, interface, approved-H
-   binding, and forbidden APIs.  It does not grade novelty or research style.
-3. Verification checks that the candidate imports, runs, preserves feasibility
-   and objective semantics, and does not leak state.
-4. Protocol owns case/seed comparison and statistical verdicts.
-5. Decision reads only typed Safe Features, never provider prose.
-6. Workspace isolation prevents candidate code from mutating the champion.
-7. Minimal append-only lineage records H, C, verification, protocol, and
-   decision so the research path can be inspected and replayed.
-8. Warehouse and CVRP own their algorithm semantics, mechanism attribution,
-   cases, metrics, and protocol interpretation.
-
-Determinism is retained where it establishes scientific equivalence: exact
-candidate source, exact case/seed set, champion/candidate pairing, and replayed
-Protocol/Decision results.  A content digest may be used as a compact equality
-check, but a digest is not authority and must not create another lifecycle.
+- LLM output is tainted proposal material. It never selects Protocol outcomes,
+  Decision actions, cases, seeds, or promotion.
+- Contract protects schema, approved-H binding, editable/frozen paths, public
+  interface, import resolution, injected randomness, and dangerous host
+  capabilities. It must not grade algorithm taste, patch style, novelty,
+  activation, or expected performance.
+- Verification owns import, execution, feasibility, objective semantics,
+  determinism, state isolation, and declared behavioral invariants.
+- Protocol owns paired comparisons and statistical gates. Decision consumes
+  only typed Safe Features.
+- Exact source, case/seed pairing, and stage reuse provide scientific
+  determinism. Digests may compare content but confer no authority and create
+  no lifecycle.
+- A branch is one iterative research direction. Per V3 §11.2, a candidate that
+  passes Verification and completes screening remains the branch's current
+  code for the next same-branch H, even when screening does not promote it.
+  Verification failure returns to the last clean branch source; a branch that
+  has never verified code starts from champion.
+- Promotion still requires the unchanged screening -> validation -> frozen
+  Protocol. A provisional branch head is never a champion.
 
 ## Explicitly out of scope
 
-For the whole v0.4 research-effectiveness scope, including after the controls
-pass, do not spend implementation or review time on:
+Do not spend implementation, review, experiment, or root time on:
 
-- root-owned installation, `/var/lib/scion`, systemd, D-Bus, cgroups, service
-  units, `StartUnit`, nonce ledgers, or loaded-manager acceptance;
-- distribution, deployment, wheels, packaging, reproducible builds, release
-  artifacts, or remote installation;
-- fixed-source acceptance, Git mirrors, source-signing flows, review-closure
-  ingestion, or root trust receipts;
-- object identity graphs, revision leases, issue/claim/spend capabilities,
-  signing or registration protocols, durable-owner authorities, or nested
-  intent/commit/closure receipts for one local research fact;
-- duplicate hashes of the same in-process object, hash chains, or repeated
-  reopen proofs that do not protect a V3 scientific boundary;
-- automatic provider retry, Scion prompt/token/file/session budgets,
-  truncation, top-k context selection, novelty gates, blacklists, forced
-  mechanisms, or host-selected target files in formal controls.
+- distribution, deployment, installation, packaging, wheels, reproducible
+  builds, release artifacts, systemd, D-Bus, cgroups, or `StartUnit`;
+- root-owned source acceptance, Git mirrors, source signing, review closures,
+  loaded-manager acceptance, or `/var/lib/scion` receipts;
+- object identities, capabilities, leases, issuance/claim/spend flows,
+  registration, nonce ledgers, owner authorities, or repeated
+  intent/commit/closure self-proof;
+- duplicate hashes, hash chains, or reopen proofs for facts already present in
+  ordinary branch/source/evidence state;
+- provider retry, Scion token/file/session budgets, truncation, top-k context,
+  summary substitution, forced mechanisms, forced surfaces/actions/targets,
+  novelty gates, or host-authored algorithm-quality gates;
+- tuning Protocol thresholds, cases, seeds, or time limits after observing a
+  candidate result.
 
-Existing deployment and authority prototypes remain historical branches.  They
-are neither deleted as evidence nor imported into the active research path.
-They do not block experiments and do not count toward v0.4 completion.
+Historical deployment and authority prototypes remain historical evidence.
+They do not block this task and cannot satisfy it.
 
-## What “effective research” means
+## Evidence already accepted
 
-A problem control is effective only when all applicable claims are supported:
+### Previous lightweight V3 stage
 
-- **Research process:** the provider makes substantive H/C changes, receives
-  complete current source and prior safe observations, and visibly adapts its
-  next H after a result.
-- **Executable validity:** the patch crosses Contract and Verification and the
-  real solver produces comparable results without framework noise.
-- **Scientific validity:** Protocol uses the declared split/seeds and Decision
-  matches its typed outcome.
-- **Attribution:** the observed effect can be associated with a problem-owned
-  mechanism or constraint, including a well-explained negative result.
-- **Lineage:** the human-readable chain from H to C to measurement to decision
-  is complete without requiring an authority graph to understand it.
-- **Retained improvement:** claimed only after independent validation.  It is
-  not required for a valid negative research-process result.
+- Baseline commit `4d637959` passed the complete suite:
+  `1946 passed, 1 skipped, 0 failed`, plus compileall, focused Ruff/format and
+  diff checks.
+- Warehouse 3R produced 44/44 valid pairs; CVRP 4R produced 128/128 valid
+  pairs. Every candidate crossed Contract, Verification and real Protocol.
+- Both experiments remained at champion v1. They establish runtime validity,
+  not retained improvement.
 
-## Current obstacles
+### Warehouse historical control
 
-### O1. Trust machinery has displaced the research loop
+- v0.3 synthetic Warehouse really did promote: 6/6 campaigns promoted, with
+  10 structural promotions. The strongest campaign promoted at rounds
+  8/19/24/41 and reached v5; independent frozen replay beat v1 on all 12/12
+  pairs for each final champion.
+- v0.3 production was much weaker: corrected Sonnet runs produced one
+  promotion per campaign; GPT-mini produced none. Therefore synthetic
+  multi-promotion and production single-promotion are separate claims.
+- Current 3R production evidence is not a regression comparison. Its third
+  candidate reached 3W/0L/3T, median cost improvement +950 and CI [0, 10025],
+  then stopped in `EXPLORE_EXPAND` with exact candidate reuse queued. The later
+  1R run was a fresh root and did not continue that candidate.
 
-The dormant/experimental owner stack contains object identities, capabilities,
-leases, signed transitions, duplicated digests, and closure graphs.  Parts of
-that stack are imported by Contract and proposal rendering even though the
-normal direct-v3 path already has plain typed inputs.  This increases failure
-surface and makes debugging provider or solver behavior harder.
+### CVRP historical control
 
-**Required correction:** production composition must not import the dormant
-authority graph.  Remove or quarantine unused owner/capability modules and
-delete their production-facing adapters and tests.
+- Repeated successor work has already rejected or failed to resolve segment
+  exchange, broad cross-exchange, destroy-size, lookahead repair, seed
+  selection, route-pair overlap, double bridge, generic VNS allocation, and
+  several pool/recombination variants. A new campaign currently sees little of
+  this cross-campaign scientific history and can repeat an old weak direction.
+- The strongest unresolved line is bounded SWAP*: historical screening and
+  validation were positive, and frozen observations were descriptively
+  positive, but frozen evidence was incomplete because champion runs timed
+  out. The cumulative implementation also starved ALNS on Tai cases, so it is
+  not promotable as-is.
+- The current B0 solver spends most search time in embedded VNS. Pure ALNS and
+  globally disabling embedded VNS are both known regressions. The useful
+  question is mechanism-level allocation, not a global VNS switch.
 
-### O2. Provider-call persistence is over-specified
+## Root-cause register
 
-The active proposal path wraps one H/C pair in attempt IDs, continuation IDs,
-prompt receipts, transition records, formal-candidate bindings, and repeated
-identity checks.  V3 requires one durable call and lineage, not a local PKI.
-
-**Required correction:** one small append-only call record per H or C, with
-phase, branch/H reference, provider outcome, and trace reference.  No lease,
-issue/claim/spend state, capability, or nested closure.
-
-### O3. Research rejection and code ancestry can obstruct iteration
-
-A malformed or Verification-rejected C must remain evidence but must not
-become the next executable source.  A completed pre-Protocol rejection should
-allow a fresh H on the clean base without retrying the same provider call.
-Protocol-negative code must follow typed problem-owned disposition: clean
-pivot, exact evaluation reuse, or explicit provisional same-mechanism work.
-
-**Required correction:** make clean/current/provisional candidate ownership
-plain branch state and test it through behavior, not object authority.
-
-### O4. Context correctness must serve research quality
-
-H needs the full safe problem context, complete verified current source, and
-every visible screening observation.  C needs the approved H and the complete
-source it may edit.  Repeated source fingerprints, prompt-signing, or compact
-owner projections must not replace the actual content.
-
-**Required correction:** keep one transparent `ProposalContextSnapshot` and a
-plain, complete `SourceLedger` file map.  Tests assert visible content and
-source boundaries directly.
-
-### O5. Launch and postrun tooling obscures the shortest real path
-
-The direct CLI already constructs `LocalSubprocessRunner`, Verification,
-Protocol, and `CampaignManager`.  Root/systemd W3 launch code is unnecessary.
-Large prepared-handoff/report surfaces may remain optional diagnostics but
-must not gate a fresh research run.
-
-**Required correction:** provide and test one short non-root Warehouse command
-and one short non-root CVRP command.  Both create a fresh campaign root and run
-the real solver directly.
-
-### O6. Tests can prove plumbing while research remains unknown
-
-Mock tests and identity/reopen matrices cannot answer whether the agent forms a
-useful hypothesis, implements it, learns from results, and improves its next
-direction.
-
-**Required correction:** after the minimal no-LLM control, run fresh generative
-controls and review the H/C content, solver behavior, Protocol evidence, and
-direction change as first-class artifacts.
-
-### O7. Formal gates can imitate control while blocking research
-
-The previous Contract mixed V3 boundaries with host preferences about solver
-shape: forced loci/targets, fixed constructors, frozen scheduler loops,
-forbidden internal bridge methods, helper reachability, static return-value
-guesses, case-name syntax, and telemetry naming.  These checks can reject a
-scientifically useful algorithm before it reaches the isolated Workspace.
-
-**Required correction:** classify every gate as (A) a V3 structural/capability
-boundary, (B) executable behavior owned by Verification or Protocol, or (C)
-host steering to remove.  Contract keeps typed H/C structure, editable/frozen
-paths, approved-H binding, syntax, real public entrypoints, import resolution,
-dangerous capabilities, and injected RNG.  Feasibility, determinism,
-case-identity robustness, mechanism activation, and performance are measured
-after materialization.  Internal code shape is agent-owned.
+| ID | Status | Finding | Consequence |
+|---|---|---|---|
+| R1 | proven | Warehouse 3R ended with an exact candidate queued for screening expansion. | Finish queued stages before diagnosing search failure. |
+| R2 | proven | v0.3 synthetic campaigns ran 25-66 rounds; first promotion appeared at rounds 4-19. | A 3R campaign cannot test continuous promotion. |
+| R3 | proven | Current production Warehouse has near-saturated split objective and noisy cost effects; v0.3 multi-promotion used high-headroom synthetic cases. | Use synthetic recovery and production transfer as different controls. |
+| R4 | proven baseline deviation; corrected on current branch; causal effect unproven | The accepted baseline mapped screening `fail` to clean-parent rejection, contrary to V3 §11.2. | Keep the lightweight provisional branch head and test it without changing promotion gates. |
+| R5 | proven context gap | Warehouse H context omits solver mechanics such as pool size, iteration/stagnation limits, weights and registration semantics. | Add transparent problem-owned mechanics, not a gate. |
+| R6 | observed attribution limit | Create-new Warehouse operators alter both mechanism and pool allocation; direct invocation/adoption is not visible. | Use minimal problem-owned counters only for analysis; never Decision. |
+| R7 | proven | CVRP candidates often combine an algorithm idea with broad rewrites or large runtime cost. | Test one mechanism and preserve unrelated source before formal scale-up. |
+| R8 | proven | Several CVRP changes were inactive or activated too late; others consumed ALNS opportunity. | Run a small mechanism assay before expensive formal screening. |
+| R9 | proven | CVRP campaigns repeat known failures because accepted cross-campaign conclusions are absent from H context. | Add a short problem-owned research prior, with no target prescription. |
+| R10 | proven | Repeated pair trees make later prompts grow sharply while adding little new information. | Use fresh one-candidate lines now; later allow only reversible lossless factoring. |
 
 ## Modular execution plan
 
-### M0 — Scope reset
+### S0 - Preserve and pre-register
 
-- [x] Stop the W3 root/source-acceptance/systemd candidate path before launch.
-- [x] Preserve its historical branch and root receipts as non-blocking evidence.
-- [x] Create a clean simplification branch from accepted `origin/v0.4-dev`.
-- [x] Make V3 research effectiveness, not deployment closure, the task owner.
+- [x] Commit the completed lightweight V3 runtime as `4d637959`.
+- [x] Fast-forward `v0.4-dev` to that commit while preserving unrelated user
+  worktree changes and the named overlap stash.
+- [x] Create `codex/v04-solver-improvement-research`.
+- [x] Independently review v0.3 Warehouse promotions, current Warehouse
+  blockers, and historical/current CVRP evidence.
+- [ ] Record exact experiment inputs, campaign root, model
+  (`gpt-5.6-terra`), local Codex proxy, case/seed manifests, time limits and
+  stop conditions before every new run.
 
-### M1 — Remove authority machinery from the proposal/Contract hot path
+### S1 - Finish the truncated Warehouse candidate
 
-- [x] Remove dormant hypothesis-generation authority imports and generated-
-  capability APIs from `ContractGate`, prompt projection, context management,
-  and provider-call code.
-- [x] Remove dormant Campaign owner/lease/registry modules that have no active
-  V3 research responsibility.
-- [x] Keep ordinary typed H/Patch structural Contract behavior and focused
-  tests green while removing authority coupling.
-- [x] Prove production import closure contains no dormant authority, lease,
-  signing, issue/claim/spend, root, systemd, packaging, or W3 installation
-  module.
+- [ ] Materialize the exact Warehouse 3R round-3 MergeVehicles candidate and
+  its exact v1 champion without another provider call.
+- [ ] Run the queued expanded screening population. If Protocol passes, drain
+  validation and frozen with the same source; otherwise stop that candidate.
+- [ ] Classify the result as `TRUNCATED_QUEUE_CONFIRMED` or
+  `SCIENTIFIC_NEGATIVE`. This diagnostic does not by itself prove continuous
+  agent research.
 
-### M1B — Reduce Contract to the V3 boundary
+### S2 - Restore the small V3 research semantics
 
-- [x] Audit C0–C9 and classify each check as Contract, Verification/Protocol,
-  or host steering.
-- [x] Remove C0 forced governance, C9d case-identity syntax, C9e problem-shape
-  steering, and C4b retry/repair metadata from the Contract path.
-- [x] Allow additional helper modules, safe algorithm stdlib, declared runtime
-  dependencies, ordinary reflection, multi-file edits, and internal scheduler
-  or state-model redesign.
-- [x] Retain C1–C6, loader-backed public entrypoint/signature checks, same-patch
-  and branch-base import-symbol resolution, dangerous process/network/file/env/
-  dynamic-import APIs, `context.baseline` prohibition, and static global-random
-  rejection.
-- [x] Put real import/execution, output/feasibility semantics, declared
-  case/seed pairing, mechanism evidence, and comparative effect in
-  Verification/Protocol.  Rename/permutation probes are required only when a
-  problem declares that invariance; they are not a universal Contract gate.
-- [x] Move problem-provider availability to campaign preflight without turning
-  infrastructure failure into a candidate Patch rejection.
-- [x] Make `target_file` mandatory for `create_new` H so every accepted H has
-  the exact file binding required to build C's complete SourceLedger.
+- [x] Change screening-fail disposition from clean-parent rejection to a
+  provisional verified branch head, while leaving champion, Protocol and
+  promotion state unchanged.
+- [x] Restore V3 branch depth/breadth semantics without forced diversity: up
+  to three active branches, FIFO/state priority, one natural direction per
+  branch, complete branch evidence, and exact branch-current source.
+- [x] Set branch direction from its first retained verified H and expose it as
+  context; do not add a mechanism classifier or same-mechanism gate.
+- [x] Add concise Warehouse solver mechanics and safe aggregate objective
+  headroom/noise facts to proposal-only problem context.
+- [x] Add a concise CVRP cross-campaign research prior and explicit request for
+  the smallest causal implementation that preserves unrelated code. The prior
+  informs but does not select surface, action, target or Decision.
+- [x] Add no framework mechanism counter or gate in this stage. If a later
+  measured attribution question justifies a minimal counter, keep it
+  problem-owned, observational and absent from Contract, Safe Features and
+  Decision.
+- [x] Delete or quarantine the remaining dead problem-specific algorithm-shape
+  Contract checks encountered on this path; behavior belongs in Verification
+  or Protocol.
+- [x] Remove formal-candidate identity manifests, source-owner attribution,
+  duplicate digests and replay-closure recording from the active campaign.
+  The active lineage now records ordinary campaign/branch/H references, one
+  exact branch-source equality value, stage inputs, metrics, verification and
+  Protocol/Decision facts. Historical candidate evaluation may use only a
+  local safe-path compatibility reader for cumulative full-file replacements;
+  that reader is not an active writer or authority.
+- [x] Reduce provider context to one frozen, validated value boundary with
+  ordinary value/prompt equality. Remove active prompt manifests, context and
+  snapshot identities, prompt hashes and receipt authority; trace and H/C call
+  journal persistence are best-effort diagnostics and cannot discard a valid
+  provider result. Keep the H-to-C approved-hypothesis binding.
+- [x] Remove active promotion dossiers, registry hashes, summary closure and
+  formal-readiness projection. Champion persistence and ordinary promotion
+  lineage remain, but observer/report writes no longer form a second promotion
+  gate. Remove the validation/frozen verification audit hash while retaining
+  required branch code equality and clean-state checks.
 
-### M1C — Remove remaining host steering from the research interface
+### S3 - Focused implementation verification
 
-- [x] Delete the forced surface/action/target CLI, composition, context, prompt,
-  and proposal-pipeline chain; open research sees every declared safe surface.
-- [x] Remove problem-specific C9e/provider resolution from generic Contract;
-  missing problem infrastructure is preflight failure, never Patch rejection.
-- [x] Remove prompt-only novelty, digest/provenance, and ordinary-reflection
-  prohibitions that disagree with the retained V3 Contract.
-- [x] Replace telemetry/mechanism keyword filtering with typed safe-evidence
-  projection; exclude raw validation/frozen/holdout evidence structurally.
-- [x] Collapse duplicate CLI/Campaign/Verification preflights to one typed
-  pre-H environment check without self-hash or exact-class parity gates.
+- [x] Test the disposition truth table, branch source reuse, clean fallback
+  after Verification failure, exact stage reuse and three-branch scheduling.
+- [x] Test that Warehouse mechanics/headroom and CVRP prior are visible to H
+  but absent from DecisionFeatures.
+- [x] Test that no removed host algorithm-shape check blocks a valid
+  executable candidate.
+- [x] Run focused Contract, proposal, workspace, Verification, Protocol,
+  Decision and campaign tests; run focused lint and diff-check changed files.
+  The focused V3 integration set passed 270 tests; after the active lineage
+  simplification, the evidence/proposal/composition set passed 58 tests and
+  the campaign/preflight integration set passed 43 tests. Critical
+  Ruff `E9/F63/F7/F82` and changed-file diff checks passed. These focused
+  results do not replace the S6 full-suite run. The combined prompt, Decision,
+  promotion, summary, Warehouse/CVRP smoke and fixed-replay regression set then
+  passed 180 tests after the final hot-path subtraction. The stable pre-S1
+  checkpoint then passed the complete suite: `1949 passed, 1 skipped` in
+  628.19 seconds. S6 remains open because the final solver-evidence state still
+  requires its own post-experiment regression run.
 
-### M2 — Simplify the active H/C lifecycle
+### S4 - Warehouse recovery ladder
 
-- [x] Replace `DirectAttemptLifecycle` and transition-closure persistence with
-  one minimal append-only H/C call record.
-- [x] Keep exactly one H call and one approved-H-bound C call per normal
-  evaluated attempt; provider retry remains zero.
-- [x] Keep provider trace and error classification for diagnosis without making
-  transport metadata a scientific gate.
-- [x] Remove proposal-attempt identity from formal candidate and Decision
-  surfaces.
+- [ ] Run a fresh uninterrupted Terra synthetic Warehouse campaign with a
+  pre-registered 36 formal-stage horizon. Do not split it into fresh roots when
+  a candidate is queued for expansion/validation/frozen. This horizon covers
+  the historical round-19 second-promotion tail; a 12-stage run is diagnostic
+  only and cannot establish continuous promotion.
+- [ ] If the first campaign does not reach v3, run at most two matched repeats
+  before changing framework or problem context. Report first-promotion round,
+  promotion funnel, branch depth and exact failure class.
+- [ ] Independently replay every promoted champion against its immediate parent
+  and replay the final champion against v1 on declared held-out evidence.
+- [ ] After synthetic continuity is demonstrated, run the pre-registered
+  production transfer rung. Start with one uninterrupted 12-stage shakedown;
+  use a 24-stage matched matrix only if the shakedown shows a valid funnel or a
+  clearly powered negative question.
+- [ ] Do not enable parameter/weight search until two structural promotions are
+  demonstrated. If later tested, keep it as a separate off/on ablation so it
+  cannot masquerade as structural research ability.
 
-### M3 — Make continuation and SourceLedger research-oriented
+Warehouse acceptance:
 
-- [x] Represent candidate disposition as plain typed branch state.
-- [x] Ensure rejected code cannot enter current source, promotion ancestry, or
-  the next clean pivot.
-- [x] Wire the existing typed disposition truth table into production: Protocol
-  `fail` restores the clean code parent, while `unclear/continue` alone may
-  retain an explicit provisional same-mechanism head.
-- [x] Continue after a completed H/Contract/Patch/Verification rejection with a
-  new H on the clean base, without retry or attempt budget.
-- [x] Give H complete safe observations and C a complete transparent source
-  ledger; add no compression, duplicate signature, or host steering.
-- [x] Keep reopen outside the fresh v0.4 acceptance path.  A supported reopen
-  may read only minimal branch/source/evidence state; ambiguous state stops and
-  must not be reconstructed through an authority graph.
+- one fresh campaign reaches at least v3 through two exact
+  screening->validation->frozen promotions;
+- no promotion depends on incomplete pairs, cached-only runtime, threshold
+  changes, seed shopping or framework failure;
+- final replay supports retained improvement over v1 and the immediate parent;
+- production transfer is either positively promoted or negatively resolved by
+  the pre-registered matched experiment.
 
-### M3B — Make scientific gates problem-owned and case-level
+### S5 - CVRP single-mechanism research ladder
 
-- [x] Screening and validation decisions use declared case-level win/loss,
-  practical delta, and confidence rules; pair rows remain explanatory evidence.
-- [x] Remove pair-level, marginal-delta, and generic runtime-tie shortcuts that
-  can advance a candidate outside the problem's declared objective.
-- [x] Use runtime only when the problem declares it as an objective or hard
-  constraint; Warehouse must not be promoted or rejected by generic runtime.
-- [x] Keep metamorphic probes problem-owned and add them only where semantics
-  declare rename/permutation invariance.  Neither current formal problem
-  declares such an invariant, so no universal probe was added.
-- [x] Record mechanism activation in Protocol evidence without making missing
-  telemetry or a canary non-trigger a candidate rejection.
+- [ ] Freeze the current B0 ALNS+VNS champion and declared ProblemSpec,
+  Protocol, split and seed inputs. Do not
+  globally disable VNS or weaken the canonical baseline.
+- [ ] Give the agent the accepted research prior, then use a fresh
+  one-candidate line. The leading evidence-backed direction is an isolated,
+  bounded, embedded-only SWAP* that is excluded from initial VNS and has a
+  strict time/attempt allowance; the provider remains free to choose another
+  source-grounded direction.
+- [ ] Before formal screening, run a problem-owned public development assay on
+  unseen development cases. Inspect feasibility, direct mechanism effect,
+  elapsed share and ALNS opportunity. These facts decide whether to spend the
+  formal run; they are not Contract or promotion gates.
+- [ ] If the implementation is inactive, incorrect or starves search, stop that
+  exact candidate. Permit at most one new-H/new-C implementation refinement of
+  the same mechanism; never retry the same provider call.
+- [ ] Run existing formal screening only for a mechanism-supported candidate.
+  Queue validation/expanded validation and complete frozen using exact source
+  reuse and no further provider call.
+- [ ] If SWAP* is negative, test the next pre-registered line: deterministic
+  route-cap-aware regret repair with existing-route insertion and at most one
+  bounded ejection. Do not combine the two mechanisms before each is isolated.
+- [ ] Only after a direct mechanism win may a separate allocation experiment
+  bound its cadence/time share while retaining all canonical VNS components.
 
-### M4 — Minimal end-to-end control
+CVRP acceptance:
 
-- [x] Run focused Contract/proposal/workspace/verification/protocol/decision
-  tests.
-- [x] Run one real Warehouse no-LLM control through the production Campaign
-  composition and real solver.
-- [x] Assert the observable order `H -> H Contract -> C -> Patch Contract ->
-  Workspace -> Verification -> Protocol -> Decision`.
-- [x] Assert absence of root, systemd, packaging, capability, lease, signing,
-  registration, or closure dependencies on that path.
+- one exact candidate completes all declared pairs with no feasibility, fleet,
+  candidate-runtime or champion-runtime failure;
+- existing Protocol passes screening, validation and frozen without threshold,
+  manifest or budget changes made after results;
+- deterministic Decision promotes to champion v2 or later;
+- independent final comparison against original B0 confirms retained distance
+  improvement and states the exact case-family scope.
 
-### M5 — Fresh Warehouse generative control
+### S6 - Close only on solver evidence
 
-- [x] Start one fresh non-root direct-v3 Warehouse root on the executed
-  simplified working-tree snapshot, with no force surface/action/target and no
-  resume.
-- [x] Complete at least two formal Protocol observations.
-- [x] Require at least one substantive problem-owned algorithm edit.
-- [x] Verify the next H uses prior structured evidence and changes or deepens
-  direction for a scientifically intelligible reason.
-- [x] Independently review H/C quality, solver activation, Protocol correctness,
-  attribution, and lineage.  A negative result is acceptable; framework noise
-  is not.
+- [ ] Run the full relevant suite plus focused formatter/linter and diff check.
+- [ ] Update `docs/status/current-state.md` with exact campaign roots and honest
+  claim boundaries.
+- [ ] Write one cross-problem report separating framework behavior,
+  mechanism-level evidence, formal promotion and independent replay.
+- [ ] Mark this task complete only when both Warehouse and CVRP acceptance
+  blocks are satisfied.
 
-### M6 — Fresh CVRP/VRP generative control
+## Experiment discipline
 
-- [x] Start one fresh non-root direct-v3 CVRP root from the same runtime design,
-  with no force surface/action/target and no resume.
-- [x] Complete enough formal observations to demonstrate a real direction
-  change or mechanism refinement; target four unless evidence justifies a
-  smaller terminal result.
-- [x] Exclude rejected ancestry.  If validation/frozen is queued, reuse the
-  exact evaluated candidate without another H/C call; this negative control
-  queued no such stage.
-- [x] Inspect operator activation and solver allocation so objective effects
-  are not attributed to inactive code.
-- [x] Independently review research quality and scientific validity.
+- Main Python: `/home/clawd/miniconda3/envs/claw/bin/python`.
+- Model: `gpt-5.6-terra` through the local Codex proxy at
+  `http://127.0.0.1:8080`.
+- Use a fresh campaign root for each pre-registered arm. A queued stage within
+  one arm must drain on the same exact candidate and campaign state.
+- No provider call is retried. A new implementation correction is a new H/C
+  candidate with its own evidence.
+- Do not change framework source while an experiment is running.
+- Poll long runs observationally at low frequency. Polling must not launch,
+  retry or mutate a campaign.
+- Preserve terminal roots, user documents, unrelated worktree changes and the
+  overlap stash.
+- The main session owns V3 architecture, TASK/current-state, experimental
+  ordering and final claims. Subagents receive bounded review, implementation
+  or analysis tasks.
 
-The exact campaign roots, per-round outcomes, attribution limits, independent
-reviews, and claim boundary are recorded in
-`docs/experiments/v0.4/v0.4-v3-lightweight-research-effectiveness-gpt56terra-20260808.md`.
-Warehouse completed 3 formal observations with 44/44 valid pairs; CVRP
-completed 4 with 128/128 valid pairs.  Both used `gpt-5.6-terra` through the
-local Codex proxy.  Neither produced a validated improvement, and none is
-claimed.
+## Status
 
-### M7 — Close v0.4
-
-- [x] Run the full relevant Scion suite, compileall, formatting, and diff check.
-- [x] Remove dead authority/deployment hot-path tests and update architecture
-  docs to the actual smaller runtime.
-- [x] Update `current-state.md` with exact Warehouse and CVRP evidence.
-- [x] Close only when the completion matrix below is satisfied.
-
-Closure evidence:
-
-- the complete default suite runs without exclusions: `1946 passed, 1 skipped,
-  0 failed`; all 144 changed/new Python files pass critical Ruff checks, the 14
-  final research-hot-path files pass formatter check, the complete package
-  passes `compileall`, and `git diff --check` is clean;
-- the obsolete DecisionCompletion, promotion-journal/crash-recovery, and
-  Decision/research-rejection receipt paths and their dedicated tests are gone;
-- fresh post-correction Terra regressions are valid and complete at
-  `/home/clawd/research/scion-experiments/v04-warehouse-v3-minimal-terra-1r-20260808T132138Z-claw/campaign`
-  and
-  `/home/clawd/research/scion-experiments/v04-cvrp-v3-minimal-terra-1r-20260808T132654Z-claw/campaign`;
-  they completed 20/20 and 32/32 valid pairs respectively, with one
-  replay-complete formal artifact and no candidate staging residue in each.
-
-## Completion matrix
-
-| Problem | Mandatory research-process claim | Mandatory scientific claim | Improvement claim |
-|---|---|---|---|
-| Warehouse | Fresh direct-v3 control completes at least two formal observations, makes a substantive problem-owned algorithm edit, and adapts direction from prior structured evidence without framework/gate noise. | The real solver and declared Protocol produce an attributable Warehouse mechanism or constraint result, even if negative. | Made only if an exact candidate receives independent validation support. |
-| CVRP/VRP | Fresh multi-round control performs a substantive mechanism edit/refinement or pivot, excludes rejected ancestry, and is replayable from minimal lineage. | Allocation/activation evidence and independent Protocol support at least one useful or clearly negative mechanism conclusion. | Made only after independent validation. It is not required for a scientifically valid negative research-process result. |
-
-Cross-problem completion additionally requires that both controls use the same
-small V3 framework path and that neither depends on deployment or authority
-machinery.
-
-**Status: satisfied.**  The multi-round M5/M6 controls establish research
-process and scientific validity; the final one-round controls establish that
-the corrected smaller runtime still executes that same path on both problems.
-Neither evidence set supports an improvement, validation, frozen-holdout,
-deployment, packaging, or trust-system claim.
-
-## Verification discipline
-
-- Main development/test Python:
-  `/home/clawd/miniconda3/envs/claw/bin/python`.
-- Run focused affected tests first, then the relevant full suite, compileall,
-  formatter, and `git diff --check`.
-- Use fresh campaign roots.  Terminal historical roots remain read-only.
-- Poll long experiments observationally at low frequency; polling cannot start
-  another provider call.
-- Preserve user-owned documents and unrelated worktree changes.
-- The main session owns architecture, TASK/current-state, stage ordering, and
-  final acceptance.  Subagents receive bounded implementation, test, review,
-  or experiment-analysis tasks and may not expand scope.
-
-## Pointers
-
-- V3 authority: `scion/design/scion-architecture-v3.md`
-- Direct-runtime interpretation:
-  `scion/design/scion-architecture-v3-v0.4-direct-runtime-addendum.md`
-- Current state: `scion/docs/status/current-state.md`
-- Current launch: `python -m scion.cli.main run`; arguments and control
-  procedure: `scion/docs/operations/experiment-runbook.zh.md`
-- Main research-effectiveness audit:
-  `scion/reports/v04-v3-runtime-and-research-effectiveness-audit-20260712.md`
+**Active: S1 evaluation readiness, then S4/S5 experiments.** S2/S3 are complete
+at focused-test scope; S6 full-suite closure remains pending. The prior
+lightweight runtime is closed and merged locally. Solver-improvement acceptance
+is not yet satisfied: Warehouse is v1 in the current fresh controls, the
+promising Warehouse stage is truncated, and CVRP has no Protocol-complete
+promotion.

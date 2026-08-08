@@ -139,12 +139,12 @@ def register_report_commands(report_app: typer.Typer) -> None:
         source_arm: str = typer.Option(
             ...,
             "--source-arm",
-            help="Measurement governance arm that produced the source candidates",
+            help="Source evaluation arm; eval-only fixed replay accepts on",
         ),
         comparison_id: str = typer.Option(
             ...,
             "--comparison-id",
-            help="Stable identifier for the ON vs record_only comparison",
+            help="Label for this eval-only replay",
         ),
         output: Optional[str] = typer.Option(
             None,
@@ -175,13 +175,22 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 "may be supplied multiple times. Defaults to screening."
             ),
         ),
-        external_candidate_artifact: Optional[list[str]] = typer.Option(
+        replay_arm: Optional[list[str]] = typer.Option(
             None,
-            "--external-candidate-artifact",
+            "--replay-arm",
             help=(
-                "External full-file candidate.patch.json artifact to include; "
-                "may be supplied multiple times"
+                "Evaluation arm to run; eval-only fixed replay accepts one on arm"
             ),
+        ),
+        conditional_stages: bool = typer.Option(
+            False,
+            "--conditional-stages",
+            help="Run each requested stage only when the preceding stage passes",
+        ),
+        expand_screening: bool = typer.Option(
+            False,
+            "--expand-screening",
+            help="Use the expanded screening population for screening rows",
         ),
     ) -> None:
         """Build a fixed-candidate replay manifest from formal artifacts."""
@@ -199,7 +208,9 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 candidate_ids=candidate_id,
                 hypothesis_ids=hypothesis_id,
                 stages=stage,
-                external_candidate_artifacts=external_candidate_artifact,
+                replay_arms=replay_arm,
+                conditional_stage_progression=conditional_stages,
+                expand_screening=expand_screening,
             )
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -217,9 +228,11 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "filtered_out_row_count": manifest.get("filtered_out_row_count", 0),
                     "omitted_row_count": len(manifest["omitted_rows"]),
                     "stage_filter": manifest.get("stage_filter", []),
-                    "external_candidate_artifact_count": manifest.get(
-                        "external_candidate_artifact_count", 0
+                    "replay_arms": manifest.get("replay_arms", []),
+                    "conditional_stage_progression": manifest.get(
+                        "conditional_stage_progression", False
                     ),
+                    "expand_screening": manifest.get("expand_screening", False),
                     "schema_version": manifest["schema_version"],
                 },
                 indent=2,

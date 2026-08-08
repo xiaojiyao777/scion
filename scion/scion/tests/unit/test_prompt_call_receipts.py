@@ -14,14 +14,13 @@ from scion.proposal.engine import (
     CreativeLayer,
     ProposalValidationError,
     build_prompt_turn_snapshot,
-    prompt_call_receipt_from_error,
+    provider_call_diagnostics_from_error,
 )
 from scion.proposal.llm_client import (
     LLMFormatError,
     LLMClient,
     LLMProviderError,
 )
-from scion.proposal.prompt_manifest_accounting import _provider_prompt_hash
 from scion.proposal.schemas import HYPOTHESIS_TOOL, PATCH_TOOL
 
 
@@ -196,7 +195,7 @@ def _trace_from_ref(root: Path, trace_ref: str) -> dict:
     return json.loads((root / path_part).read_text(encoding="utf-8"))
 
 
-def test_prompt_call_receipt_uses_one_snapshot_for_manifest_trace_and_provider(
+def test_provider_call_uses_one_snapshot_for_trace_and_provider(
     tmp_path: Path,
 ) -> None:
     client = _CaptureClient()
@@ -204,35 +203,25 @@ def test_prompt_call_receipt_uses_one_snapshot_for_manifest_trace_and_provider(
     context = _hypothesis_context()
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
-    hypothesis, receipt = creative.generate_direct_hypothesis_with_receipt(
+    hypothesis, diagnostics = creative.generate_direct_hypothesis(
         context,
         snapshot,
     )
 
-    expected_hash = _provider_prompt_hash(
-        snapshot.system_blocks,
-        snapshot.user_prompt,
-    )
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert hypothesis.hypothesis_text == _HYPOTHESIS_RESPONSE["hypothesis_text"]
     assert client.calls == [
         (snapshot.user_prompt, list(snapshot.system_blocks), "hypothesis")
     ]
-    assert receipt.request_kind == "hypothesis"
-    assert receipt.context_digest == snapshot.context_digest
-    assert receipt.prompt_hash == expected_hash
-    assert receipt.ok is True
-    assert receipt.provider_ok is True
-    assert receipt.error_category is None
-    assert receipt.prompt_manifest_ref == f"{receipt.trace_ref}#/prompt_manifest"
+    assert diagnostics.request_kind == "hypothesis"
+    assert diagnostics.ok is True
+    assert diagnostics.provider_ok is True
+    assert diagnostics.error_category is None
     assert trace["system_blocks"] == list(snapshot.system_blocks)
     assert trace["user_prompt"] == snapshot.user_prompt
-    assert trace["prompt_hash"] == expected_hash
-    assert trace["prompt_manifest"]["artifact_kind"] == "api_visible_prompt_manifest"
-    assert trace["prompt_manifest"]["prompt_hash"] == expected_hash
-    assert trace["prompt_manifest"]["context_digest"] == snapshot.context_digest
-    assert trace["prompt_manifest"]["projection"] == "direct_v3_lossless"
-    assert trace["prompt_manifest"]["observation_count"] == 0
+    assert "prompt_hash" not in trace
+    assert "prompt_manifest" not in trace
     assert client.tools[0]["input_schema"]["properties"]["change_locus"][
         "enum"
     ] == ["local_search"]
@@ -252,16 +241,17 @@ def test_missing_predicted_direction_defaults_after_one_provider_call(
     context = _hypothesis_context()
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
-    hypothesis, receipt = creative.generate_direct_hypothesis_with_receipt(
+    hypothesis, diagnostics = creative.generate_direct_hypothesis(
         context,
         snapshot,
     )
 
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     schema = trace["tool_schema"]
     assert hypothesis.predicted_direction == "exploratory"
     assert client.calls_seen == ["generate_hypothesis"]
-    assert receipt.ok is True
+    assert diagnostics.ok is True
     assert "predicted_direction" not in schema["required"]
     assert schema["properties"]["predicted_direction"]["enum"] == [
         "improve",
@@ -286,17 +276,17 @@ def test_provider_response_cannot_append_description_to_change_locus(
         ProposalValidationError,
         match="must exactly match one provider-visible research surface",
     ) as caught:
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+        creative.generate_direct_hypothesis(context, snapshot)
 
     assert len(client.calls) == 1
     assert client.tools[0]["input_schema"]["properties"]["change_locus"][
         "enum"
     ] == ["local_search"]
-    receipt = prompt_call_receipt_from_error(caught.value)
-    assert receipt is not None
-    assert receipt.provider_ok is True
-    assert receipt.ok is False
-    assert receipt.error_category == "response_parse_failed"
+    diagnostics = provider_call_diagnostics_from_error(caught.value)
+    assert diagnostics is not None
+    assert diagnostics.provider_ok is True
+    assert diagnostics.ok is False
+    assert diagnostics.error_category == "response_parse_failed"
 
 
 def test_hypothesis_tool_enum_is_generic_across_visible_surfaces(
@@ -313,7 +303,7 @@ def test_hypothesis_tool_enum_is_generic_across_visible_surfaces(
     }
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
-    creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+    creative.generate_direct_hypothesis(context, snapshot)
 
     assert client.tools[0]["input_schema"]["properties"]["change_locus"][
         "enum"
@@ -343,17 +333,12 @@ def test_hypothesis_tool_rejects_invalid_visible_surface_contract_before_call(
         build_prompt_turn_snapshot("hypothesis", context)
 
 
-def test_receipt_uses_authoritative_owner_without_exposing_audit_context(
+def test_provider_call_uses_frozen_owned_context_value(
     tmp_path: Path,
 ) -> None:
     client = _CaptureClient()
     creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
-    raw_context = {
-        **_hypothesis_context(),
-        "_scion_trace_context": {
-            "host_only_marker": "trace-context-sentinel",
-        },
-    }
+    raw_context = _hypothesis_context()
     turn = build_prompt_turn_snapshot("hypothesis", raw_context)
     authority = turn.authoritative_context
     assert authority is not None
@@ -361,49 +346,40 @@ def test_receipt_uses_authoritative_owner_without_exposing_audit_context(
         include_renderer_inputs=True
     )
 
-    _, receipt = creative.generate_direct_hypothesis_with_receipt(
+    _, diagnostics = creative.generate_direct_hypothesis(
         provider_context,
         turn,
     )
 
-    assert receipt.context_digest == turn.context_digest
-    assert turn.authoritative_context_ref == authority.snapshot_id
-    assert authority.governance_envelope.to_primitive() == {}
-    assert "_scion_trace_context" not in provider_context
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
-    assert "trace-context-sentinel" not in json.dumps(trace, sort_keys=True)
-    assert "trace-context-sentinel" not in json.dumps(vars(receipt), sort_keys=True)
+    assert diagnostics.ok is True
+    assert authority.inputs.provider_context(include_renderer_inputs=True) == raw_context
 
     original_call_count = len(client.calls)
     with pytest.raises(ValueError, match="provider context differs"):
-        creative.generate_direct_hypothesis_with_receipt(
+        creative.generate_direct_hypothesis(
             {
                 **provider_context,
-                "_scion_trace_context": raw_context["_scion_trace_context"],
+                "unexpected_host_sidecar": "not provider input",
             },
             turn,
         )
-    with pytest.raises(ValueError, match="context reference changed"):
-        creative.generate_direct_hypothesis_with_receipt(
-            provider_context,
-            replace(turn, authoritative_context_ref="forged-authority-ref"),
-        )
-    with pytest.raises(ValueError, match="context digest changed"):
-        creative.generate_direct_hypothesis_with_receipt(
-            provider_context,
-            replace(turn, context_digest="0" * 64),
-        )
     with pytest.raises(ValueError, match="phase does not match request"):
-        creative.generate_direct_hypothesis_with_receipt(
+        creative.generate_direct_hypothesis(
             provider_context,
             replace(turn, render_kind="code"),
         )
     with pytest.raises(ValueError, match="no ProposalContextSnapshot"):
-        creative.generate_direct_hypothesis_with_receipt(
+        creative.generate_direct_hypothesis(
             provider_context,
             replace(turn, authoritative_context=None),
         )
     assert len(client.calls) == original_call_count
+
+    with pytest.raises(ValueError, match="no exact extractor owner"):
+        build_prompt_turn_snapshot(
+            "hypothesis",
+            {**raw_context, "_scion_trace_context": {"host_only": True}},
+        )
 
 
 def test_provider_call_context_is_trace_diagnostics_only(
@@ -426,15 +402,15 @@ def test_provider_call_context_is_trace_diagnostics_only(
         "hypothesis_id": None,
     }
 
-    _, receipt = creative.generate_direct_hypothesis_with_receipt(
+    _, diagnostics = creative.generate_direct_hypothesis(
         provider_context,
         snapshot,
         call_context=call_context,
     )
 
-    assert not hasattr(receipt, "attempt_id")
-    assert not hasattr(receipt, "attempt_started_event_id")
-    assert not hasattr(receipt, "continuation_of_attempt_id")
+    assert not hasattr(diagnostics, "attempt_id")
+    assert not hasattr(diagnostics, "attempt_started_event_id")
+    assert not hasattr(diagnostics, "continuation_of_attempt_id")
     provider_prompt, provider_system_blocks, _request_kind = client.calls[0]
     provider_bytes = json.dumps(
         {
@@ -445,7 +421,8 @@ def test_provider_call_context_is_trace_diagnostics_only(
     )
     assert call_context["campaign_id"] not in provider_bytes
     assert call_context["branch_id"] not in provider_bytes
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert trace["provider_call_context"] == call_context
 
 
@@ -523,7 +500,7 @@ def test_direct_context_preserves_complete_authoritative_inputs(
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
     assert client.calls == []
 
-    _, receipt = creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+    _, diagnostics = creative.generate_direct_hypothesis(context, snapshot)
 
     provider_prompt, provider_system_blocks, request_kind = client.calls[0]
     provider_bytes = json.dumps(
@@ -572,31 +549,16 @@ def test_direct_context_preserves_complete_authoritative_inputs(
     ):
         assert forbidden_marker not in provider_bytes.lower()
 
-    expected_hash = _provider_prompt_hash(
-        snapshot.system_blocks,
-        snapshot.user_prompt,
-    )
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert request_kind == "hypothesis"
-    assert snapshot.context_digest == receipt.context_digest
     assert client.calls == [
         (snapshot.user_prompt, list(snapshot.system_blocks), "hypothesis")
     ]
     assert trace["system_blocks"] == list(snapshot.system_blocks)
     assert trace["user_prompt"] == snapshot.user_prompt
-    assert expected_hash == receipt.prompt_hash == trace["prompt_hash"]
-    assert trace["prompt_manifest"]["prompt_hash"] == expected_hash
-    manifest = trace["prompt_manifest"]
-    assert manifest["schema_version"] == "api-visible-prompt-manifest.v4"
-    assert manifest["context_digest"] == snapshot.context_digest
-    assert manifest["projection"] == "direct_v3_lossless"
-    assert manifest["observation_count"] == len(context["experiment_history"])
-    assert manifest["provider_visible_size"]["system_block_count"] == len(
-        snapshot.system_blocks
-    )
-    assert manifest["provider_visible_size"]["user_prompt_chars"] == len(
-        snapshot.user_prompt
-    )
+    assert "prompt_hash" not in trace
+    assert "prompt_manifest" not in trace
 
     distinct_branch_code = "SENTINEL_DISTINCT_BRANCH_CODE"
     distinct_snapshot = build_prompt_turn_snapshot(
@@ -622,32 +584,27 @@ def test_direct_v3_context_fails_closed_for_unsupported_non_json_value() -> None
         )
 
 
-def test_code_prompt_call_receipt_preserves_snapshot_identity(tmp_path: Path) -> None:
+def test_code_provider_call_preserves_prompt_value(tmp_path: Path) -> None:
     response = dict(_PATCH_RESPONSE)
     client = _CaptureClient(response=response, expected_tool="generate_patch")
     creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
     context = _code_context()
     snapshot = build_prompt_turn_snapshot("code", context)
 
-    patch, receipt = creative.generate_direct_code_with_receipt(context, snapshot)
+    patch, diagnostics = creative.generate_direct_code(context, snapshot)
 
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
-    expected_hash = _provider_prompt_hash(
-        snapshot.system_blocks,
-        snapshot.user_prompt,
-    )
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert patch.file_path == response["file_path"]
     assert client.calls == [
         (snapshot.user_prompt, list(snapshot.system_blocks), "code")
     ]
-    assert receipt.request_kind == "code"
-    assert receipt.context_digest == snapshot.context_digest
-    assert receipt.prompt_hash == expected_hash
-    assert receipt.provider_ok is receipt.ok is True
+    assert diagnostics.request_kind == "code"
+    assert diagnostics.provider_ok is diagnostics.ok is True
     assert trace["system_blocks"] == list(snapshot.system_blocks)
     assert trace["user_prompt"] == snapshot.user_prompt
-    assert trace["prompt_hash"] == expected_hash
-    assert trace["prompt_manifest"]["prompt_hash"] == expected_hash
+    assert "prompt_hash" not in trace
+    assert "prompt_manifest" not in trace
 
 
 def test_direct_hypothesis_and_code_use_provider_managed_output_without_cap(
@@ -660,20 +617,21 @@ def test_direct_hypothesis_and_code_use_provider_managed_output_without_cap(
         "hypothesis",
         hypothesis_context,
     )
-    _, hypothesis_receipt = creative.generate_direct_hypothesis_with_receipt(
+    _, hypothesis_diagnostics = creative.generate_direct_hypothesis(
         hypothesis_context,
         hypothesis_snapshot,
     )
     code_context = _code_context()
     code_snapshot = build_prompt_turn_snapshot("code", code_context)
-    _, code_receipt = creative.generate_direct_code_with_receipt(
+    _, code_diagnostics = creative.generate_direct_code(
         code_context,
         code_snapshot,
     )
 
     assert client.calls_seen == ["generate_hypothesis", "generate_patch"]
-    for receipt in (hypothesis_receipt, code_receipt):
-        trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    for diagnostics in (hypothesis_diagnostics, code_diagnostics):
+        assert diagnostics.trace_ref is not None
+        trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
         assert trace["request_policy"]["output_token_policy"] == (
             "provider_managed"
         )
@@ -706,10 +664,10 @@ def test_direct_provider_response_rejects_removed_governance_fields(
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
     with pytest.raises(ProposalValidationError, match="extra_forbidden"):
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+        creative.generate_direct_hypothesis(context, snapshot)
 
 
-def test_direct_hypothesis_and_code_receipts_use_provider_managed_output(
+def test_direct_hypothesis_and_code_diagnostics_use_provider_managed_output(
     tmp_path: Path,
 ) -> None:
     client = _DirectOpenAIClient()
@@ -717,20 +675,21 @@ def test_direct_hypothesis_and_code_receipts_use_provider_managed_output(
     context = _hypothesis_context()
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
-    _, hypothesis_receipt = creative.generate_direct_hypothesis_with_receipt(
+    _, hypothesis_diagnostics = creative.generate_direct_hypothesis(
         context,
         snapshot,
     )
     code_context = _code_context()
     code_snapshot = build_prompt_turn_snapshot("code", code_context)
-    _, code_receipt = creative.generate_direct_code_with_receipt(
+    _, code_diagnostics = creative.generate_direct_code(
         code_context,
         code_snapshot,
     )
 
     assert client.calls_seen == ["generate_hypothesis", "generate_patch"]
-    for receipt in (hypothesis_receipt, code_receipt):
-        trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    for diagnostics in (hypothesis_diagnostics, code_diagnostics):
+        assert diagnostics.trace_ref is not None
+        trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
         assert trace["request_policy"]["output_token_policy"] == "provider_managed"
         assert trace["request_policy"]["output_token_parameter"] == "omitted"
         assert "max_tokens" not in trace["request_policy"]
@@ -746,16 +705,17 @@ def test_provider_length_response_typed_failure_has_no_truncation_retry(
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
     with pytest.raises(LLMFormatError) as caught:
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+        creative.generate_direct_hypothesis(context, snapshot)
 
     assert client.calls_seen == ["generate_hypothesis"]
-    receipt = prompt_call_receipt_from_error(caught.value)
-    assert receipt is not None
-    assert receipt.provider_ok is False
-    assert receipt.ok is False
-    assert receipt.error_category == "provider_call_failed"
-    assert receipt.error_type == "LLMFormatError"
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    diagnostics = provider_call_diagnostics_from_error(caught.value)
+    assert diagnostics is not None
+    assert diagnostics.provider_ok is False
+    assert diagnostics.ok is False
+    assert diagnostics.error_category == "provider_call_failed"
+    assert diagnostics.error_type == "LLMFormatError"
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert trace["request_policy"]["output_token_policy"] == "provider_managed"
     assert "max_tokens" not in trace["request_policy"]
     assert "truncation_retries" not in trace["request_policy"]
@@ -763,14 +723,14 @@ def test_provider_length_response_typed_failure_has_no_truncation_retry(
     assert "llm_retry_summary" not in trace
 
 
-def test_consecutive_calls_attach_current_error_receipt_without_shared_stale_state(
+def test_consecutive_calls_attach_current_diagnostics_without_shared_stale_state(
     tmp_path: Path,
 ) -> None:
     client = _CaptureClient()
     creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
     first_context = _hypothesis_context()
     first_snapshot = build_prompt_turn_snapshot("hypothesis", first_context)
-    _, first_receipt = creative.generate_direct_hypothesis_with_receipt(
+    _, first_diagnostics = creative.generate_direct_hypothesis(
         first_context,
         first_snapshot,
     )
@@ -780,28 +740,27 @@ def test_consecutive_calls_attach_current_error_receipt_without_shared_stale_sta
     second_snapshot = build_prompt_turn_snapshot("hypothesis", second_context)
 
     with pytest.raises(LLMProviderError) as caught:
-        creative.generate_direct_hypothesis_with_receipt(
+        creative.generate_direct_hypothesis(
             second_context,
             second_snapshot,
         )
 
-    receipt = prompt_call_receipt_from_error(caught.value)
-    assert receipt is not None
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
-    assert receipt is not first_receipt
-    assert receipt.context_digest != first_receipt.context_digest
-    assert receipt.request_kind == "hypothesis"
-    assert receipt.context_digest == second_snapshot.context_digest
-    assert receipt.ok is False
-    assert receipt.provider_ok is False
-    assert receipt.error_category == "provider_call_failed"
-    assert receipt.error_type == "LLMProviderError"
+    diagnostics = provider_call_diagnostics_from_error(caught.value)
+    assert diagnostics is not None
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
+    assert diagnostics is not first_diagnostics
+    assert diagnostics.request_kind == "hypothesis"
+    assert diagnostics.ok is False
+    assert diagnostics.provider_ok is False
+    assert diagnostics.error_category == "provider_call_failed"
+    assert diagnostics.error_type == "LLMProviderError"
     assert trace["ok"] is False
-    assert trace["prompt_manifest"]["prompt_hash"] == receipt.prompt_hash
+    assert trace["branch_id"] == second_context["branch_id"]
     assert trace["error"] == "synthetic provider interruption"
 
 
-def test_keyboard_interrupt_is_receipted_without_a_second_provider_call(
+def test_keyboard_interrupt_is_diagnosed_without_a_second_provider_call(
     tmp_path: Path,
 ) -> None:
     interruption = KeyboardInterrupt("operator interrupt")
@@ -814,7 +773,7 @@ def test_keyboard_interrupt_is_receipted_without_a_second_provider_call(
     context = authority.inputs.provider_context(include_renderer_inputs=True)
 
     with pytest.raises(KeyboardInterrupt) as caught:
-        creative.generate_direct_hypothesis_with_receipt(
+        creative.generate_direct_hypothesis(
             context,
             snapshot,
             call_context={
@@ -828,20 +787,21 @@ def test_keyboard_interrupt_is_receipted_without_a_second_provider_call(
 
     assert caught.value is interruption
     assert len(client.calls) == 1
-    receipt = prompt_call_receipt_from_error(caught.value)
-    assert receipt is not None
-    assert not hasattr(receipt, "attempt_id")
-    assert receipt.provider_ok is False
-    assert receipt.ok is False
-    assert receipt.error_category == "provider_call_interrupted"
-    assert receipt.error_type == "KeyboardInterrupt"
-    assert receipt.raw_response_ref is None
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    diagnostics = provider_call_diagnostics_from_error(caught.value)
+    assert diagnostics is not None
+    assert not hasattr(diagnostics, "attempt_id")
+    assert diagnostics.provider_ok is False
+    assert diagnostics.ok is False
+    assert diagnostics.error_category == "provider_call_interrupted"
+    assert diagnostics.error_type == "KeyboardInterrupt"
+    assert diagnostics.raw_response_ref is None
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert trace["ok"] is False
     assert trace["error"] == "provider_call_interrupted"
 
 
-def test_parse_failure_keeps_successful_provider_trace_receipt(
+def test_parse_failure_keeps_successful_provider_trace_diagnostics(
     tmp_path: Path,
 ) -> None:
     client = _CaptureClient(response={"hypothesis_text": "missing required fields"})
@@ -850,22 +810,22 @@ def test_parse_failure_keeps_successful_provider_trace_receipt(
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
     with pytest.raises(ProposalValidationError) as caught:
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+        creative.generate_direct_hypothesis(context, snapshot)
 
-    receipt = prompt_call_receipt_from_error(caught.value)
-    assert receipt is not None
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
-    assert receipt.provider_ok is True
-    assert receipt.ok is False
-    assert receipt.error_category == "response_parse_failed"
-    assert receipt.error_type == "ProposalValidationError"
-    assert receipt.raw_response_ref == f"{receipt.trace_ref}#/response"
+    diagnostics = provider_call_diagnostics_from_error(caught.value)
+    assert diagnostics is not None
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
+    assert diagnostics.provider_ok is True
+    assert diagnostics.ok is False
+    assert diagnostics.error_category == "response_parse_failed"
+    assert diagnostics.error_type == "ProposalValidationError"
+    assert diagnostics.raw_response_ref == f"{diagnostics.trace_ref}#/response"
     assert trace["ok"] is True
     assert trace["response"] == {"hypothesis_text": "missing required fields"}
-    assert trace["prompt_manifest"]["prompt_hash"] == receipt.prompt_hash
 
 
-def test_direct_strict_parse_failure_is_terminal_and_receipted(
+def test_direct_strict_parse_failure_is_terminal_and_diagnosed(
     tmp_path: Path,
 ) -> None:
     response = {
@@ -878,41 +838,38 @@ def test_direct_strict_parse_failure_is_terminal_and_receipted(
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
     with pytest.raises(ProposalValidationError, match="forbidden") as caught:
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+        creative.generate_direct_hypothesis(context, snapshot)
 
-    receipt = prompt_call_receipt_from_error(caught.value)
+    diagnostics = provider_call_diagnostics_from_error(caught.value)
     assert len(client.calls) == 1
-    assert receipt is not None
-    assert receipt.provider_ok is True
-    assert receipt.ok is False
-    assert receipt.error_category == "response_parse_failed"
-    assert receipt.error_type == "ProposalValidationError"
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    assert diagnostics is not None
+    assert diagnostics.provider_ok is True
+    assert diagnostics.ok is False
+    assert diagnostics.error_category == "response_parse_failed"
+    assert diagnostics.error_type == "ProposalValidationError"
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert trace["ok"] is True
     assert trace["response"] == response
 
 
-def test_caller_supplied_context_manifest_is_rejected_before_provider(
+def test_unknown_context_sidecar_is_rejected_before_provider(
     tmp_path: Path,
 ) -> None:
     client = _CaptureClient()
-    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
     context = {
         **_hypothesis_context(),
         "_scion_prompt_manifest": {
-            "artifact_kind": "stale_manifest",
-            "prompt_hash": "stale-prompt-hash",
+            "artifact_kind": "stale-sidecar",
         },
     }
-    snapshot = build_prompt_turn_snapshot("hypothesis", context)
-
-    with pytest.raises(ValueError, match="provider context differs"):
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+    with pytest.raises(ValueError, match="no exact extractor owner"):
+        build_prompt_turn_snapshot("hypothesis", context)
 
     assert client.calls == []
 
 
-def test_trace_start_failure_attaches_receipt_without_calling_provider(
+def test_trace_start_failure_does_not_block_valid_provider_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -927,21 +884,17 @@ def test_trace_start_failure_attaches_receipt_without_calling_provider(
     context = _hypothesis_context()
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
-    with pytest.raises(OSError) as caught:
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+    hypothesis, diagnostics = creative.generate_direct_hypothesis(context, snapshot)
 
-    assert caught.value is start_error
-    assert client.calls == []
-    receipt = prompt_call_receipt_from_error(caught.value)
-    assert receipt is not None
-    assert receipt.provider_ok is False
-    assert receipt.ok is False
-    assert receipt.error_category == "trace_start_failed"
-    assert receipt.error_type == "OSError"
-    assert receipt.trace_persistence_error is None
-    assert receipt.trace_ref is None
-    assert receipt.prompt_manifest_ref is None
-    assert receipt.raw_response_ref is None
+    assert hypothesis.hypothesis_text == _HYPOTHESIS_RESPONSE["hypothesis_text"]
+    assert len(client.calls) == 1
+    assert diagnostics.provider_ok is True
+    assert diagnostics.ok is True
+    assert diagnostics.error_category is None
+    assert diagnostics.error_type is None
+    assert diagnostics.trace_persistence_error == "trace_start_failed:OSError"
+    assert diagnostics.trace_ref is None
+    assert diagnostics.raw_response_ref is None
 
 
 def test_provider_failure_is_not_masked_when_trace_finish_also_fails(
@@ -961,26 +914,25 @@ def test_provider_failure_is_not_masked_when_trace_finish_also_fails(
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
     with pytest.raises(LLMProviderError) as caught:
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+        creative.generate_direct_hypothesis(context, snapshot)
 
     assert caught.value is provider_error
     assert len(client.calls) == 1
-    receipt = prompt_call_receipt_from_error(caught.value)
-    assert receipt is not None
-    assert receipt.provider_ok is False
-    assert receipt.ok is False
-    assert receipt.error_category == "provider_call_failed"
-    assert receipt.error_type == "LLMProviderError"
-    assert receipt.trace_persistence_error == "trace_finish_failed:PermissionError"
-    assert receipt.trace_ref is not None
-    assert receipt.prompt_manifest_ref == f"{receipt.trace_ref}#/prompt_manifest"
-    assert receipt.raw_response_ref is None
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    diagnostics = provider_call_diagnostics_from_error(caught.value)
+    assert diagnostics is not None
+    assert diagnostics.provider_ok is False
+    assert diagnostics.ok is False
+    assert diagnostics.error_category == "provider_call_failed"
+    assert diagnostics.error_type == "LLMProviderError"
+    assert diagnostics.trace_persistence_error == "trace_finish_failed:PermissionError"
+    assert diagnostics.trace_ref is not None
+    assert diagnostics.raw_response_ref is None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert "response" not in trace
     assert "error" not in trace
 
 
-def test_provider_success_trace_finish_failure_has_no_raw_response_ref(
+def test_provider_success_trace_finish_failure_keeps_valid_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -995,21 +947,17 @@ def test_provider_success_trace_finish_failure_has_no_raw_response_ref(
     context = _hypothesis_context()
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
 
-    with pytest.raises(OSError) as caught:
-        creative.generate_direct_hypothesis_with_receipt(context, snapshot)
+    hypothesis, diagnostics = creative.generate_direct_hypothesis(context, snapshot)
 
-    assert caught.value is finish_error
+    assert hypothesis.hypothesis_text == _HYPOTHESIS_RESPONSE["hypothesis_text"]
     assert len(client.calls) == 1
-    receipt = prompt_call_receipt_from_error(caught.value)
-    assert receipt is not None
-    assert receipt.provider_ok is True
-    assert receipt.ok is False
-    assert receipt.error_category == "trace_finish_failed"
-    assert receipt.error_type == "OSError"
-    assert receipt.trace_persistence_error == "trace_finish_failed:OSError"
-    assert receipt.trace_ref is not None
-    assert receipt.prompt_manifest_ref == f"{receipt.trace_ref}#/prompt_manifest"
-    assert receipt.raw_response_ref is None
-    trace = _trace_from_ref(tmp_path, receipt.trace_ref)
+    assert diagnostics.provider_ok is True
+    assert diagnostics.ok is True
+    assert diagnostics.error_category is None
+    assert diagnostics.error_type is None
+    assert diagnostics.trace_persistence_error == "trace_finish_failed:OSError"
+    assert diagnostics.trace_ref is not None
+    assert diagnostics.raw_response_ref is None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
     assert "response" not in trace
     assert "error" not in trace

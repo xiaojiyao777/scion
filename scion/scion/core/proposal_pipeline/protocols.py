@@ -9,26 +9,26 @@ from scion.core.models import (
     HypothesisRecord,
     PatchProposal,
 )
-from scion.proposal.engine import PromptCallReceipt, PromptTurnSnapshot
+from scion.proposal.engine import ProviderCallDiagnostics, PromptTurnSnapshot
 
 
 class CreativeLayerLike(Protocol):
-    def generate_direct_hypothesis_with_receipt(
+    def generate_direct_hypothesis(
         self,
         context: dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
         call_context: dict[str, Any],
-    ) -> tuple[HypothesisProposal, PromptCallReceipt]:
+    ) -> tuple[HypothesisProposal, ProviderCallDiagnostics]:
         ...
 
-    def generate_direct_code_with_receipt(
+    def generate_direct_code(
         self,
         context: dict[str, Any],
         snapshot: PromptTurnSnapshot,
         *,
         call_context: dict[str, Any],
-    ) -> tuple[PatchProposal, PromptCallReceipt]: ...
+    ) -> tuple[PatchProposal, ProviderCallDiagnostics]: ...
 
 
 class ProblemRuntimeLike(Protocol):

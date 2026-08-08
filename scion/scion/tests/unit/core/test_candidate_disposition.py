@@ -85,9 +85,9 @@ def _outcome(
             "screening",
             "fail",
             Decision.CONTINUE_EXPLORE,
-            CandidateDisposition.REJECT_TO_CODE_PARENT,
-            CandidateHypothesisStatus.REJECTED,
-            CandidateDispositionRule.PROTOCOL_FAIL_REJECT,
+            CandidateDisposition.PROVISIONAL_HEAD,
+            CandidateHypothesisStatus.PROVISIONAL,
+            CandidateDispositionRule.VERIFIED_SCREENING_CONTINUATION,
         ),
         (
             "screening",
@@ -315,14 +315,11 @@ def test_partial_champion_exception_requires_exact_decision_reason(
         )
 
 
-@pytest.mark.parametrize("stage", ("screening", "validation", "frozen"))
-def test_protocol_fail_is_authoritative_over_stage_and_uncertain_statistics(
-    stage: str,
-) -> None:
+def test_verified_screening_fail_continues_from_candidate_despite_statistics() -> None:
     plan = CandidateDispositionMapper.map(
         _outcome(
             Decision.CONTINUE_EXPLORE,
-            stage=stage,
+            stage="screening",
             protocol_gate_outcome="fail",
             statistical_status="uncertain",
             win_rate=0.99,
@@ -332,7 +329,20 @@ def test_protocol_fail_is_authoritative_over_stage_and_uncertain_statistics(
         )
     )
 
-    assert plan.disposition is CandidateDisposition.REJECT_TO_CODE_PARENT
+    assert plan.disposition is CandidateDisposition.PROVISIONAL_HEAD
+    assert plan.rule is CandidateDispositionRule.VERIFIED_SCREENING_CONTINUATION
+
+
+@pytest.mark.parametrize("stage", ("validation", "frozen"))
+def test_protocol_fail_continue_is_invalid_after_screening(stage: str) -> None:
+    with pytest.raises(CandidateDispositionError):
+        CandidateDispositionMapper.map(
+            _outcome(
+                Decision.CONTINUE_EXPLORE,
+                stage=stage,
+                protocol_gate_outcome="fail",
+            )
+        )
 
 
 def test_unused_safe_features_do_not_influence_the_plan() -> None:
@@ -461,11 +471,6 @@ def test_every_other_decision_stage_gate_combination_fails_closed() -> None:
         ("frozen", "continue", Decision.CONTINUE_EXPLORE),
         ("frozen", "expand", Decision.ABANDON),
     }
-    typed_fail_authority = {
-        (stage, "fail", Decision.CONTINUE_EXPLORE)
-        for stage in ("screening", "validation", "frozen")
-    }
-
     for stage, gate, decision in itertools.product(
         ("screening", "validation", "frozen"),
         _GATES,
@@ -473,7 +478,7 @@ def test_every_other_decision_stage_gate_combination_fails_closed() -> None:
     ):
         key = (stage, gate, decision)
         # Every post-Verification ABANDON is the explicit hard-safety rule.
-        if decision is Decision.ABANDON or key in normal or key in typed_fail_authority:
+        if decision is Decision.ABANDON or key in normal:
             continue
         with pytest.raises(CandidateDispositionError):
             CandidateDispositionMapper.map(

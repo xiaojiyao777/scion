@@ -32,17 +32,9 @@ from .artifact_refs import (
     _screening_rate_fields,
     _serialize_verification_checks,
 )
-from .replay_identity import formal_replay_identity_payload, stable_patch_digest
-
 logger = logging.getLogger(__name__)
 
 _LINEAGE_DEGRADED_WARNING = "lineage_registry_write_degraded"
-
-
-def _stable_patch_digest(patch: PatchProposal | None) -> str:
-    if patch is None:
-        return ""
-    return stable_patch_digest(patch.iter_file_changes())
 
 
 def _lineage_error(exc: Exception) -> Dict[str, Any]:
@@ -237,45 +229,12 @@ class LineageRecorderMixin:
             or hypothesis.change_locus
             or ""
         )
-        patch_digest = _stable_patch_digest(patch)
-        replay_identity = formal_replay_identity_payload(
-            problem_spec_hash=getattr(self, "problem_spec_hash", None),
-            split_manifest_hash=getattr(self, "split_manifest_hash", None),
-            seed_ledger_hash=getattr(self, "seed_ledger_hash", None),
-            patch_digest=patch_digest,
-            selected_surface=selected_surface,
-            protocol_version=self.protocol_version,
-            raw_metrics_ref=raw_metrics_public_ref,
-            code_hash=branch.current_code_hash,
-        )
         internal_audit_payload = {
             "schema": "scion.internal_audit_refs.v2",
             "internal_only": True,
-            "problem_spec_hash": replay_identity["problem_spec_hash"],
-            "split_manifest_hash": replay_identity["split_manifest_hash"],
-            "seed_ledger_hash": replay_identity["seed_ledger_hash"],
-            "patch_digest": replay_identity["patch_digest"],
-            "patch_hash": replay_identity["patch_hash"],
-            "selected_surface": replay_identity["selected_surface"],
-            "protocol_version": replay_identity["protocol_version"],
-            "raw_metrics_ref": replay_identity["raw_metrics_ref"],
-            "code_hash": replay_identity["code_hash"],
-            "raw_metrics_public_ref": raw_metrics_public_ref,
-            "raw_metrics_ref_scope": "public_artifact_ref",
-            "protocol_raw_metrics_ref": replay_identity["raw_metrics_ref"],
-            "protocol_raw_metrics_ref_scope": "public_artifact_ref",
-            "raw_metrics_internal_only": True,
-            "case_ids": public_case_ids,
-            "metrics_refs": {
-                "raw_metrics_ref": replay_identity["raw_metrics_ref"],
-                "raw_metrics_ref_scope": "public_artifact_ref",
-                "protocol_raw_metrics_ref": replay_identity["raw_metrics_ref"],
-                "protocol_raw_metrics_ref_scope": "public_artifact_ref",
-                "raw_metrics_internal_only": True,
-            },
+            "selected_surface": selected_surface,
             "verification_checks": verification_checks,
             "runtime_guard": runtime_guard,
-            "replay_identity": replay_identity,
         }
         evidence_metadata = {
             "branch_state": branch.state.value,

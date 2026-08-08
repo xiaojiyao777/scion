@@ -16,11 +16,6 @@ from scion.evidence import (
     attach_final_evidence_package,
     build_final_evidence_refs,
 )
-from scion.evidence.final_evidence_refs import (
-    FINAL_EVIDENCE_CLOSURE_SCHEMA,
-    FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
-    FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
-)
 from scion.problems.cvrp.evidence import CvrpEvidencePackageResult
 
 
@@ -176,22 +171,8 @@ def test_attach_helper_updates_summary_refs_without_changing_step_schema(
         champion=_champion(),
         stopped_reason="max_rounds_exhausted",
     )
-    assert before["formal_readiness"] == {
-        "formal_ready": False,
-        "missing": [],
-        "status": FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
-        "reason_code": FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
-    }
-    assert before["final_evidence_refs"]["schema"] == FINAL_EVIDENCE_CLOSURE_SCHEMA
-    assert before["final_evidence_refs"]["status"] == (
-        FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED
-    )
-    assert before["final_evidence_refs"]["reason_code"] == (
-        FINAL_EVIDENCE_REASON_NORMAL_COMPLETION
-    )
-    assert before["final_evidence_refs"]["required_for_formal_readiness"] is False
-    assert "non-formal final evidence closure" in before["final_evidence_refs"]["reason"]
-    assert not contains_absolute_path(before["final_evidence_refs"])
+    assert "formal_readiness" not in before
+    assert "final_evidence_refs" not in before
     before_step_keys = set(before["steps"][0])
 
     payload = attach_final_evidence_package(recorder, result)
@@ -205,9 +186,7 @@ def test_attach_helper_updates_summary_refs_without_changing_step_schema(
     assert after["final_evidence_refs"]["final_quality"]["artifacts"]["manifest"] == (
         "evidence/evidence_manifest.json"
     )
-    assert after["formal_readiness"]["formal_ready"] is True
-    assert after["formal_readiness"]["missing"] == []
-    assert after["formal_readiness"]["status"] == "formal_ready"
+    assert "formal_readiness" not in after
     assert set(after["steps"][0]) == before_step_keys
     assert "final_evidence_refs" not in after["steps"][0]
 

@@ -35,8 +35,6 @@ from scion.core.telemetry_validation import (
     formal_screening_attempted,
     screened_experiment_effective,
 )
-from scion.evidence.formal_readiness import validate_formal_readiness
-
 from .artifact_refs import _screening_rate_fields
 from .accounting import (
     accounting_reconciliation_fields,
@@ -47,7 +45,6 @@ from .accounting import (
 from .common import _stage_value, reduced_measurement_readiness_payload
 from .failure_summary import (
     _contract_not_run_reason,
-    _default_final_evidence_closure_refs,
     _primary_failure_attribution,
     _secondary_failure_observations,
 )
@@ -355,11 +352,6 @@ class CampaignSummaryMixin:
                 if readiness_payload is not None
                 else {}
             ),
-            "promotion_dossier_ref": getattr(
-                champion,
-                "promotion_dossier_ref",
-                None,
-            ),
             "stopped_reason": effective_stopped_reason,
             "stopped": effective_stopped_reason not in (None, "run_complete"),
             "balance_exhausted": inferred_balance_exhausted,
@@ -566,19 +558,7 @@ class CampaignSummaryMixin:
         refs = dict(self.final_evidence_refs)
         if final_evidence_refs:
             refs.update(dict(final_evidence_refs))
-        if not refs:
-            refs = _default_final_evidence_closure_refs(effective_stopped_reason)
         refs = redact_public_refs(refs, base_dir=self.campaign_dir)
-        readiness = validate_formal_readiness(refs)
-        summary["formal_readiness"] = {
-            "formal_ready": readiness.formal_ready,
-            "missing": list(readiness.missing),
-            "status": readiness.status,
-        }
-        if lineage_integrity.get("status") == "degraded":
-            summary["formal_readiness"]["lineage_integrity_status"] = "degraded"
-        if readiness.reason_code:
-            summary["formal_readiness"]["reason_code"] = readiness.reason_code
         if refs:
             summary["final_evidence_refs"] = refs
         if self.state_provider is not None:
@@ -755,8 +735,6 @@ class CampaignSummaryMixin:
                 "request_id",
                 "idempotency_key",
                 "artifact_ref",
-                "prompt_manifest_ref",
-                "prompt_hash",
                 "transcript_digest",
                 "termination_reason",
                 "status",

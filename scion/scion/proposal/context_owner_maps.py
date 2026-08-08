@@ -48,8 +48,6 @@ HYPOTHESIS_CONTEXT_OWNER_MAP = {
         ("research_rejection_history",),
     ),
     RENDERER_INPUTS_KEY: "renderer_inputs",
-    "_scion_prompt_manifest": "audit",
-    "_scion_trace_context": "audit",
 }
 
 
@@ -60,8 +58,7 @@ CODE_CONTEXT_OWNER_MAP = {
             "problem_summary", "problem_object", "solver_mechanics",
             "champion_version", "research_surface", "operator_interface_spec",
             "import_whitelist",
-            "active_subject_code_constraints", "problem_id", "problem_spec_hash",
-            "split_manifest_hash", "seed_ledger_hash",
+            "active_subject_code_constraints", "problem_id",
         ),
     ),
     **_owners(
@@ -80,8 +77,6 @@ CODE_CONTEXT_OWNER_MAP = {
         ),
     ),
     RENDERER_INPUTS_KEY: "renderer_inputs",
-    "_scion_prompt_manifest": "audit",
-    "_scion_trace_context": "audit",
 }
 
 

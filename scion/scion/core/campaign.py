@@ -373,11 +373,6 @@ class CampaignManager:
             "active_slots": active_slots,
             "champion_version": self._champion.version,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
-            "promotion_dossier_ref": getattr(
-                self._champion,
-                "promotion_dossier_ref",
-                None,
-            ),
             "balance_exhausted": self._balance_exhausted,
             "branches": branch_rows,
             "branch_cards": branch_cards,
@@ -486,11 +481,6 @@ class CampaignManager:
             "branch_weight_revision": getattr(branch, "weight_revision", 0),
             "champion_version": self._champion.version,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
-            "promotion_dossier_ref": getattr(
-                self._champion,
-                "promotion_dossier_ref",
-                None,
-            ),
             "expand": expand,
             "expand_round": expand_round,
             "step_started_at": datetime.now().isoformat(),

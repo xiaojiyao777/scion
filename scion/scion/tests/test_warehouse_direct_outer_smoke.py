@@ -345,25 +345,16 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
     assert all("attempt_id" not in event for event in calls)
     assert all("continuation" not in key for event in calls for key in event)
 
-    candidate_paths = list(
-        (campaign_dir / "artifacts" / "formal_candidates").glob(
-            "**/candidate.patch.json"
-        )
+    # Active research keeps the evaluated source in the branch workspace and
+    # the result in ordinary step/protocol evidence. It does not build a
+    # parallel replay-identity/hash closure for every screening candidate.
+    assert not (campaign_dir / "artifacts" / "formal_candidates").exists()
+    workspace = Path(campaign._branch_workspaces[step.branch_id])
+    assert workspace.is_dir()
+    changed_source = (workspace / "operators" / "change_vehicle_type.py").read_text(
+        encoding="utf-8"
     )
-    assert len(candidate_paths) == 1
-    candidate = json.loads(candidate_paths[0].read_text(encoding="utf-8"))
-    assert all("proposal_attempt" not in key for key in candidate)
-    assert "proposal_runtime_mode" not in candidate
-    index_rows = [
-        json.loads(line)
-        for line in (
-            campaign_dir / "artifacts" / "formal_candidates" / "index.jsonl"
-        ).read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    assert len(index_rows) == 1
-    assert all("proposal_attempt" not in key for key in index_rows[0])
-    assert "proposal_runtime_mode" not in index_rows[0]
+    assert "并尝试安全地降级车型" in changed_source
 
     decision_field_names = {field.name for field in fields(DecisionFeatures)}
     assert all("proposal_attempt" not in name for name in decision_field_names)

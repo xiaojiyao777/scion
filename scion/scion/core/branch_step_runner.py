@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, MutableMapping, Optional
@@ -1060,45 +1058,31 @@ def _screening_verification_reuse_result(
     branch: Branch,
     *,
     action_label: str,
-    require_clean_status: bool = True,
 ) -> VerificationResult:
     current_hash = getattr(branch, "current_code_hash", None)
     last_clean_hash = getattr(branch, "last_clean_code_hash", None)
     code_status = str(getattr(branch, "branch_code_status", "clean") or "clean")
-    hash_available = bool(current_hash) and bool(last_clean_hash)
-    matches_verified_hash = (
-        hash_available
-        and current_hash == last_clean_hash
-        and (code_status == "clean" or not require_clean_status)
-    )
-    reuse_allowed = matches_verified_hash or not (current_hash or last_clean_hash)
-    source_detail = (
-        "screening/reconcile VerificationGate pass for "
-        f"code_hash={last_clean_hash or 'missing'}"
-    )
+    code_hashes_present = bool(current_hash) and bool(last_clean_hash)
+    code_hashes_equal = code_hashes_present and current_hash == last_clean_hash
+    clean_status = code_status == "clean"
+    reuse_allowed = code_hashes_equal and clean_status
     metadata: dict[str, Any] = {
         "verification_reused_from_screening": True,
         "verification_reuse_stage": action_label,
         "verification_reuse_source": "screening_or_reconcile",
-        "original_verification_audit_detail": source_detail,
         "current_code_hash": current_hash,
         "last_clean_code_hash": last_clean_hash,
         "branch_code_status": code_status,
-        "verification_reuse_requires_clean_status": require_clean_status,
-        "verification_reuse_hash_available": hash_available,
-        "current_matches_original_verification": matches_verified_hash,
+        "code_hashes_present": code_hashes_present,
+        "code_hashes_equal": code_hashes_equal,
+        "clean_status": clean_status,
         "strict_checks_rerun": False,
     }
-    audit_hash_payload = json.dumps(metadata, sort_keys=True, default=str)
-    metadata["original_verification_audit_hash"] = hashlib.sha256(
-        audit_hash_payload.encode("utf-8")
-    ).hexdigest()[:16]
     if reuse_allowed:
         detail = (
             f"{action_label} reuses prior screening/reconcile verification; "
-            "V1-V8 were not rerun for this eval step; "
-            f"original_verification_audit_hash="
-            f"{metadata['original_verification_audit_hash']}"
+            "candidate code hashes are present and equal with clean status; "
+            "V1-V8 were not rerun for this eval step"
         )
         return VerificationResult(
             passed=True,
@@ -1116,7 +1100,8 @@ def _screening_verification_reuse_result(
 
     detail = (
         f"{action_label} cannot reuse screening/reconcile verification: "
-        "current code hash/status does not match the last verified clean hash"
+        "current and last-clean code hashes must be present and equal, and "
+        "branch code status must be clean"
     )
     return VerificationResult(
         passed=False,

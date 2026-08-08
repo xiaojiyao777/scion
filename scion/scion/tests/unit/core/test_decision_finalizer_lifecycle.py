@@ -196,7 +196,7 @@ def _screening_protocol(gate_outcome: str) -> ProtocolResult:
     )
 
 
-def test_pending_screening_fail_applies_directly_and_restores_parent() -> None:
+def test_pending_screening_fail_retains_verified_candidate_for_iteration() -> None:
     fixture = _fixture()
     finalizer, controller, branch, hypothesis, record, store = fixture[:6]
     branch.current_code_hash = "candidate"
@@ -226,17 +226,18 @@ def test_pending_screening_fail_applies_directly_and_restores_parent() -> None:
 
     assert result.decision is Decision.CONTINUE_EXPLORE
     assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
-    assert branch.current_code_hash == branch.last_clean_code_hash == "parent"
-    assert branch.branch_code_status == "clean"
+    assert branch.current_code_hash == branch.last_clean_code_hash == "candidate"
+    assert branch.branch_code_status == "provisional"
+    assert branch.direction == "algorithm: Change the selected algorithm surface."
     assert candidate_evaluation(branch) == {
         "status": "completed",
         "hypothesis_id": record.hypothesis_id,
         "kind": "explore",
     }
     assert branch.branch_evidence_summary["candidate_disposition"]["disposition"] == (
-        "reject_to_code_parent"
+        "provisional_head"
     )
-    assert store.statuses == [(record.hypothesis_id, "rejected")]
+    assert store.statuses == [(record.hypothesis_id, "provisional")]
 
 
 def test_pending_screening_pass_keeps_exact_candidate_for_validation() -> None:
@@ -269,6 +270,7 @@ def test_pending_screening_pass_keeps_exact_candidate_for_validation() -> None:
     assert result.decision is Decision.QUEUE_VALIDATE
     assert controller.get_branch(branch.branch_id).state is BranchState.READY_VALIDATE
     assert branch.branch_code_status == "clean"
+    assert branch.direction == "algorithm: Change the selected algorithm surface."
     assert candidate_evaluation(branch)["status"] == "completed"
     assert branch.branch_evidence_summary["candidate_disposition"]["disposition"] == (
         "exact_reuse"
@@ -276,60 +278,7 @@ def test_pending_screening_pass_keeps_exact_candidate_for_validation() -> None:
     assert store.statuses == [(record.hypothesis_id, "advanced")]
 
 
-def test_pending_patch_replay_evidence_precedes_acceptance() -> None:
-    fixture = _fixture()
-    finalizer, _controller, branch, hypothesis, record = fixture[:5]
-    pending_patch = fixture[8][branch.branch_id]
-    finalizer.branch_patches.clear()
-    finalizer.pending_candidate_patch = lambda _branch: pending_patch
-    recorded: list[str] = []
-
-    def record_artifact(**kwargs):
-        assert kwargs["workspace"] == "/tmp/workspace"
-        assert kwargs["patch"] is pending_patch
-        recorded.append("artifact")
-        return "artifacts/candidate.json"
-
-    original_accept = finalizer.accept_candidate
-
-    def accept_after_artifact(branch, code_hash, workspace):
-        assert recorded == ["artifact"]
-        assert original_accept is not None
-        return original_accept(branch, code_hash, workspace)
-
-    finalizer.record_formal_candidate_artifact = record_artifact
-    finalizer.accept_candidate = accept_after_artifact
-    mark_candidate_evaluation_pending(
-        branch,
-        hypothesis_id=record.hypothesis_id,
-        kind="explore",
-    )
-    finalizer.decision_features_for = lambda bid: _screening_features(
-        bid,
-        gate_outcome="pass",
-    )
-    branch.current_code_hash = "candidate"
-
-    finalizer.apply(
-        branch=branch,
-        decision=Decision.QUEUE_VALIDATE,
-        hypothesis=hypothesis,
-        h_record=record,
-        protocol_result=_screening_protocol("pass"),
-        canary_result=CanaryResult(passed=True),
-        contract_result=ContractResult(passed=True, checks=()),
-        verification_result=VerificationResult(passed=True, checks=()),
-        action_label="explore",
-        decision_reason_codes=("SCREENING_RESULT",),
-    )
-
-    assert recorded == ["artifact"]
-    assert branch.branch_evidence_summary["formal_candidate_patch_artifact_ref"] == (
-        "artifacts/candidate.json"
-    )
-
-
-def test_rejected_candidate_lineage_keeps_candidate_hash_and_pending_patch() -> None:
+def test_screening_fail_lineage_and_branch_keep_candidate_hash() -> None:
     fixture = _fixture()
     finalizer, _controller, branch, hypothesis, record = fixture[:5]
     pending_patch = fixture[8][branch.branch_id]
@@ -365,7 +314,7 @@ def test_rejected_candidate_lineage_keeps_candidate_hash_and_pending_patch() -> 
     assert len(lineage_args) == 1
     assert lineage_args[0][0].current_code_hash == "candidate"
     assert lineage_args[0][2] is pending_patch
-    assert branch.current_code_hash == "parent"
+    assert branch.current_code_hash == "candidate"
 
 
 def test_lineage_failure_leaves_pending_candidate_unconsumed() -> None:

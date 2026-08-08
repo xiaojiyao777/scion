@@ -3,8 +3,13 @@ from __future__ import annotations
 from contextlib import nullcontext
 from types import SimpleNamespace
 
+import pytest
+
 from scion.core.branch import BranchController
-from scion.core.branch_step_runner import BranchStepRunner
+from scion.core.branch_step_runner import (
+    BranchStepRunner,
+    _screening_verification_reuse_result,
+)
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
@@ -304,16 +309,16 @@ def test_eval_step_records_screening_verification_reuse_marker() -> None:
     assert check.name == "V0_screening_verification_reuse"
     assert check.metadata["verification_reused_from_screening"] is True
     assert check.metadata["strict_checks_rerun"] is False
-    assert check.metadata["original_verification_audit_hash"]
-    assert (
-        "code_hash=verified-code-hash"
-        in check.metadata["original_verification_audit_detail"]
-    )
+    assert check.metadata["code_hashes_present"] is True
+    assert check.metadata["code_hashes_equal"] is True
+    assert check.metadata["clean_status"] is True
+    assert "original_verification_audit_hash" not in check.metadata
+    assert "original_verification_audit_detail" not in check.metadata
     assert "V1-V8 were not rerun" in check.detail
     assert step.verification_passed is True
     assert step.verification_detail is not None
     assert "V0_screening_verification_reuse" in step.verification_detail
-    assert "original_verification_audit_hash=" in step.verification_detail
+    assert "original_verification_audit_hash" not in step.verification_detail
 
 
 def test_eval_step_blocks_reuse_when_current_hash_drifted(tmp_path) -> None:
@@ -378,6 +383,45 @@ def test_eval_step_blocks_reuse_when_current_hash_drifted(tmp_path) -> None:
     assert durable["outcome"] == "not_evaluated"
     assert durable["reason_code"] == "EVAL_VERIFICATION_REUSE_INVALID"
     assert recorded_steps[0].verification_passed is False
-    assert "current code hash/status does not match" in (
+    assert "code hashes must be present and equal" in (
         recorded_steps[0].verification_detail or ""
     )
+
+
+@pytest.mark.parametrize(
+    ("current_hash", "last_clean_hash", "code_status"),
+    (
+        (None, "verified-code-hash", "clean"),
+        ("verified-code-hash", None, "clean"),
+        (None, None, "clean"),
+        ("verified-code-hash", "verified-code-hash", "provisional"),
+    ),
+)
+def test_verification_reuse_requires_present_equal_hashes_and_clean_status(
+    current_hash: str | None,
+    last_clean_hash: str | None,
+    code_status: str,
+) -> None:
+    branch = _branch(BranchState.FROZEN_TESTING)
+    branch.current_code_hash = current_hash
+    branch.last_clean_code_hash = last_clean_hash
+    branch.branch_code_status = code_status
+
+    result = _screening_verification_reuse_result(
+        branch,
+        action_label="frozen",
+    )
+
+    assert result.passed is False
+    assert result.failure_severity == "heavy"
+    assert result.first_failure == "V0_screening_verification_reuse"
+    metadata = result.checks[0].metadata
+    assert metadata["code_hashes_present"] is bool(
+        current_hash and last_clean_hash
+    )
+    assert metadata["code_hashes_equal"] is bool(
+        current_hash
+        and last_clean_hash
+        and current_hash == last_clean_hash
+    )
+    assert metadata["clean_status"] is (code_status == "clean")

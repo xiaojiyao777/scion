@@ -90,16 +90,18 @@ class TestCampaignSummaryJson:
 
 
 class TestPromoteWeightOptimizationHook:
-    def test_promotion_writes_compact_dossier_with_stage_and_code_refs(self, tmp_path):
+    def test_promotion_keeps_protocol_lineage_without_dossier(self, tmp_path):
         import json
-        from pathlib import Path
 
         cm = _campaign(tmp_path, experiment_protocol=_promote_protocol())
 
         result = _run_to_promote(cm)
 
         assert result.decision == Decision.PROMOTE
+        assert cm._champion.version == 2
+        assert cm._champion.promotion_dossier_ref is None
         promoted_branch = cm._branch_ctrl.get_branch(result.branch_id)
+        assert promoted_branch.state == BranchState.PROMOTED
         evidence = promoted_branch.branch_evidence_summary
         assert evidence["stage"] == evidence["protocol_stage"] == "frozen"
         assert evidence["latest_protocol_evidence"]["stage"] == "frozen"
@@ -109,48 +111,29 @@ class TestPromoteWeightOptimizationHook:
             "validation",
             "frozen",
         }
-        dossier_ref = cm._champion.promotion_dossier_ref
-        assert dossier_ref == "artifacts/promotions/champion_v2_promotion_dossier.json"
-        dossier_path = Path(cm._campaign_dir) / dossier_ref
-        assert dossier_path.exists()
-
-        dossier = json.loads(dossier_path.read_text(encoding="utf-8"))
-        assert dossier["schema_version"] == "scion.promotion_dossier.v1"
-        assert dossier["campaign_id"] == cm._campaign_id
-        assert dossier["champion_version"] == 2
-        assert (
-            dossier["promotion_experiment_id"] == cm._champion.promotion_experiment_id
-        )
-        assert dossier["branch_id"] == result.branch_id
-        assert dossier["hypothesis_id"]
-        assert dossier["base_champion_version"] == 1
-
-        stage_refs = dossier["stage_chain_refs"]
-        assert set(stage_refs) == {"screening", "validation", "frozen"}
-        assert all(stage_refs[stage]["raw_metrics_ref"] for stage in stage_refs)
-        assert stage_refs["screening"]["gate_outcome"] == "pass"
-        assert stage_refs["validation"]["gate_outcome"] == "pass"
-        assert stage_refs["frozen"]["gate_outcome"] == "pass"
-
-        assert dossier["metric_artifact_refs"]["screening"]
-        assert dossier["metric_artifact_refs"]["validation"]
-        assert dossier["metric_artifact_refs"]["frozen"]
-        assert dossier["code_snapshot_hash"] == cm._champion.code_snapshot_hash
-        assert dossier["code_hash"]
-        assert dossier["patch_hash"]
-        assert dossier["champion_snapshot"]["ref"]
-        assert dossier["champion_snapshot"]["hash"] == cm._champion.code_snapshot_hash
-        assert dossier["decision_reason_codes"]
-        assert dossier["runtime_evidence_summary"]["status"] == "sufficient"
 
         persisted = cm._champion_store.get_by_version(2)
         assert persisted is not None
-        assert persisted.promotion_dossier_ref == dossier_ref
+        assert persisted.promotion_dossier_ref is None
+        assert not (tmp_path / "campaign" / "artifacts" / "promotions").exists()
+
+        rows = cm._registry.query_by_branch(result.branch_id)
+        promotion_rows = [
+            row
+            for row in rows
+            if row.get("decision") == "promote"
+            and row.get("event_id") == cm._champion.promotion_experiment_id
+        ]
+        assert len(promotion_rows) == 1
+        assert promotion_rows[0]["stage"] == "frozen"
 
         cm._write_campaign_summary()
-        summary_path = Path(cm._campaign_dir) / "campaign_summary.json"
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        assert summary["promotion_dossier_ref"] == dossier_ref
+        summary = json.loads(
+            (tmp_path / "campaign" / "campaign_summary.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert "promotion_dossier_ref" not in summary
 
     def test_on_promote_runs_weight_optimization(self, tmp_path):
         """promote → weight optimization coordinator is called when enabled + runner present."""

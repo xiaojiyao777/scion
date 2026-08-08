@@ -133,14 +133,14 @@ def _verified_source_step(
     )
 
 
-def test_branch_source_ownership_fails_closed_without_exact_disposition() -> None:
+def test_branch_source_ownership_requires_typed_decision_and_features() -> None:
     _spec, _legacy, _champion, branch = _runtime()
     rejected = _verified_source_step(
         branch,
         features=_decision_features(branch),
     )
 
-    assert _step_can_own_branch_source(rejected) is False
+    assert _step_can_own_branch_source(rejected) is True
     assert _step_can_own_branch_source(replace(rejected, decision=None)) is False
     assert (
         _step_can_own_branch_source(
@@ -148,10 +148,9 @@ def test_branch_source_ownership_fails_closed_without_exact_disposition() -> Non
         )
         is False
     )
-    assert (
-        _step_can_own_branch_source(replace(rejected, decision_reason_codes=()))
-        is False
-    )
+    assert _step_can_own_branch_source(
+        replace(rejected, decision_reason_codes=())
+    ) is False
 
 
 def test_branch_source_ownership_keeps_explicit_retaining_dispositions() -> None:

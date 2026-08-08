@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+import scion.runtime.workspace as workspace_module
 from scion.runtime.workspace import FrozenFileError, WorkspaceMaterializer
 from scion.core.models import ChampionState, PatchFileChange, PatchProposal
 
@@ -69,6 +70,48 @@ class TestCreateBranchWorkspace:
 
 
 class TestCandidateWorkspace:
+    def test_adoption_cleanup_failure_does_not_undo_committed_handoff(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+        monkeypatch,
+    ) -> None:
+        durable = mat.create_branch_workspace("cleanup-failure", str(code_base))
+        candidate = mat.create_candidate_workspace("cleanup-failure", durable)
+        (Path(candidate) / "operators" / "swap.py").write_text("accepted = True\n")
+
+        def fail_cleanup(_path: Path) -> None:
+            raise OSError("cleanup unavailable")
+
+        monkeypatch.setattr(workspace_module.shutil, "rmtree", fail_cleanup)
+
+        adopted = mat.adopt_candidate_workspace(candidate, "cleanup-failure")
+
+        assert adopted == durable
+        assert (Path(adopted) / "operators" / "swap.py").read_text() == (
+            "accepted = True\n"
+        )
+        assert not Path(candidate).exists()
+
+    def test_candidate_adoption_replaces_durable_tree_with_exact_content(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+    ) -> None:
+        durable = mat.create_branch_workspace("accepted-branch", str(code_base))
+        candidate = mat.create_candidate_workspace("accepted-branch", durable)
+        candidate_source = Path(candidate) / "operators" / "swap.py"
+        candidate_source.write_text("accepted = True\n")
+
+        adopted = mat.adopt_candidate_workspace(candidate, "accepted-branch")
+
+        assert adopted == durable
+        assert Path(adopted).is_dir()
+        assert not Path(candidate).exists()
+        assert (Path(adopted) / "operators" / "swap.py").read_text() == (
+            "accepted = True\n"
+        )
+
     def test_candidate_cleanup_preserves_durable_workspace(
         self,
         mat: WorkspaceMaterializer,

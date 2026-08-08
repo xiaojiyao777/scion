@@ -3,11 +3,15 @@
 *适用范围：当前 v0.4 direct-V3 研究工作树*
 *最后更新：2026-08-08*
 
-本手册只描述当前 direct-v3 runtime。架构边界以
-`scion/design/scion-architecture-v3.md` 和
-`scion/design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` 为准；
-当前任务与状态分别见 `scion/TASK.md`、
+本手册只描述当前 direct-v3 runtime。唯一架构边界是
+`scion/design/scion-architecture-v3.md`；
+`scion/design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` 只是
+当前轻量实现说明，不能覆盖 V3。当前任务与状态分别见 `scion/TASK.md`、
 `scion/docs/status/current-state.md`。
+
+当前阶段只验收 Warehouse 与 CVRP solver research。分发、部署、安装、打包、
+构建、root/systemd，以及 Trust/Hash、对象身份、租约、签发/登记和重复闭包，
+都不属于本手册的运行前置或完成条件。
 
 ## 1. 正式实验的定义
 
@@ -40,12 +44,15 @@
 
 Anthropic transport 要求的 `max_tokens` 仅是 provider transport ceiling。它不是 Scion 的语义 token budget，不是 campaign 终止规则，也不授权截断、压缩或省略上下文。provider SDK retry 保持为零；每次 provider 调用只追加一条最小 `proposal_call.v1` 事件，不能由隐藏的 SDK 重放产生。
 
-v0.4 production Scheduler 默认只允许一个 active research branch。这个设置让
-screening fail 后的 `CONTINUE_EXPLORE` 在下一轮复用同一个 branch：第二个 H
-能看到第一次 screening 的 canonical evidence，第二个 C 能从 SourceLedger
-看到该 branch 已验证的当前源码。它只改变调度拓扑，不限制轮数、调用、token、
-文件或持续时间；显式多分支配置仅用于后续 breadth ablation，不能替换正式
-warehouse/CVRP control 的默认 runtime。
+v0.4 production Scheduler 默认最多允许三个 active research branches，并按
+state priority/FIFO 选择 runnable branch。一个 branch 仍表示一个可持续深入的
+自然研究方向，不用 host-authored diversity/mechanism gate 强制分流。Contract
+与 Verification 通过且 screening 完成后，`CONTINUE_EXPLORE`（包括 screening
+fail）在下一轮复用同一个 branch 的 verified provisional head：第二个 H 能看到
+上一轮 canonical screening evidence，第二个 C 能从 SourceLedger 看到该 branch
+已验证的当前源码。只有 Verification 失败才回退到最后一个 clean branch source，
+从未验证成功的 branch 才回到 champion。这个设置不限制轮数、调用、token、
+文件或持续时间。
 
 ## 2. 运行环境
 
@@ -62,8 +69,8 @@ export SCION_MODEL=gpt-5.6-terra
 export SCION_BASE_URL=http://127.0.0.1:8080
 ```
 
-`REPO_ROOT` 可以是当前开发工作树；必须在报告中诚实记录 commit 与工作树是否
-有未提交改动。commit/hash 只帮助定位源码，不签发、授权或验收实验对象，也不
+`REPO_ROOT` 可以是当前开发工作树；必须在报告中诚实记录 Git revision 与工作树是否
+有未提交改动。revision 只帮助定位源码，不签发、授权或验收实验对象，也不
 要求另建 detached worktree、mirror、source acceptance 或 root-owned receipt。
 实验开始后保持该源码不变，并为每次运行使用新的 campaign directory。
 
@@ -171,8 +178,9 @@ open CVRP 不绑定 successor、surface、action 或 target file。
 
 主要证据位于 `$CAMPAIGN_DIR/`，包括 `campaign_summary.json`、
 `run_status.json`、`scion.db`、`llm_traces/`、`metrics/` 和
-`artifacts/formal_candidates/`。它们是诊断与研究验收的输入，但不替代对实际
-Hypothesis、patch、solver 行为和 Protocol 结果的审查。
+`workspaces/`、`champions/`。它们是诊断与研究验收的输入，但不替代对实际
+Hypothesis、当前 branch source、solver 行为和 Protocol 结果的审查。当前 active
+campaign 不为每次 screening 另建 formal-candidate identity/hash 闭包。
 
 ## 8. 旧运行手册说明
 
@@ -223,7 +231,9 @@ find "$CAMPAIGN_DIR/llm_traces" -maxdepth 1 -type f -name '*.json' -print | sort
 
 ### 9.2 Hypothesis 与 Patch Contract
 
-Contract 只判断结构和信任边界：schema、surface/locus、editable/frozen path、source digest、action、import/API/interface，以及 patch 是否绑定获批 H。它不应因为研究风格、机制偏好、遥测描述或“新颖性不足”而否决。
+Contract 只判断结构和控制边界：schema、surface/locus、editable/frozen path、
+当前 source binding、action、import/API/interface，以及 patch 是否绑定获批 H。
+它不应因为研究风格、机制偏好、遥测描述或“新颖性不足”而否决。
 
 快速看每一步：
 
@@ -264,11 +274,11 @@ jq '.steps[] | {
 ```
 
 按 `raw_metrics_ref` 打开 `campaign/metrics/*.json`，核对聚合值与 pair 级证据、
-case/seed 和 candidate/champion 身份。`statistical expand` 是 Protocol 对预注册样本的动作，不是 provider retry。
+case/seed 和实际 candidate/champion source。`statistical expand` 是 Protocol 对预注册样本的动作，不是 provider retry。
 
 ### 9.5 Decision
 
-Decision 只消费 Safe Features、Protocol gate outcome 和硬安全事实，并做确定性映射。核对 Protocol reason codes、Decision reason codes、最终 action 以及 formal candidate artifact；不要允许自由文本、遥测完整性或 scheduler prose 改写科学结论。
+Decision 只消费 Safe Features、Protocol gate outcome 和硬安全事实，并做确定性映射。核对 Protocol reason codes、Decision reason codes 和最终 action；不要允许自由文本、遥测完整性或 scheduler prose 改写科学结论。
 
 ```bash
 jq '.steps[] | {
@@ -276,8 +286,7 @@ jq '.steps[] | {
   protocol_gate: (.protocol_result.gate_outcome // null),
   protocol_codes: (.protocol_result.protocol_reason_codes // []),
   decision, decision_reason_codes,
-  decision_features,
-  formal_candidate_patch_artifact_ref
+  decision_features
 }' "$CAMPAIGN_DIR/campaign_summary.json"
 ```
 
@@ -293,23 +302,14 @@ Scheduler 只负责 branch state、priority/FIFO 和 active slot；若它改变 
   `branch_history_current` provenance；
 - 每个候选仍只有一次 H 和一次 C，不因同分支迭代增加隐式调用。
 
-若在两次 candidate 之间重启 campaign，还必须得到同样的 history、provenance
-与累计 workspace；durable/live screening 记录不能重复。若 branch hash 表明应
-继续使用 verified workspace 但目录已经缺失，运行必须 fail-closed，不能静默
-回退到 champion 后继续研究。
+当前 solver-improvement 验收不投资 campaign reopen。若 live campaign 无法在
+现有 branch state 与 workspace 上继续，保留现场并显式启动 fresh campaign；
+不得为继续运行补建 identity、签发、租约、hash 链或 reopen proof，也不能静默
+回退到 champion 后伪装成同一研究分支。
 
-再检查每个 formal candidate 的 typed-edit 归一化记录：
-
-```bash
-jq '.patch.normalization_events // []' \
-  "$CAMPAIGN_DIR"/artifacts/formal_candidates/*/*/candidate.patch.json
-```
-
-普通 `exact_replace` 物化为完整文件时出现 `typed_edit_normalization` 可以作为
-clean evidence。若出现 `typed_edit_noop_dropped` 或 `patch_set_composition`，
-该运行默认只能算 characterization；只有人工逐项对照原始 C response、source
-digest 与 canonical patch 后，才能另行接受，不能由 runtime 自动放行成 clean
-acceptance。
+继续核对 branch workspace 中的实际源码与 step history 所记录的 H/C、Contract、
+Verification、Protocol 和 Decision 是否一致。阶段复用直接使用该 workspace；
+不得为此补建 identity manifest、digest 链或 cumulative closure。
 
 ## 10. 结束后的 CLI 验收
 
@@ -337,14 +337,14 @@ export PYTHONPATH="$REPO_ROOT"
 
 框架层至少证明：
 
-- clean exact commit 与 campaign 配置一致；
+- 已记录的当前源码状态与 campaign 配置一致；
 - H/C 次数、append-only proposal-call 事件、可用 trace 与 typed outcome 符合 direct-v3；
 - Contract、Verification、Protocol、Decision 没有越权；
-- multi-file patch 如有需要可完整物化、回滚、归档和复现；
+- multi-file patch 如有需要可完整物化、执行，并按 typed Decision 保留或回退；
 - screening continuation 确实在同一 branch 上利用上一轮实验和 verified source，
   而不是创建互不知情的新分支；
-- candidate artifact 的 normalization events 已审计，未把 no-op 丢弃或 patch
-  composition 悄悄当成 clean evidence；
+- ordinary branch source、step lineage 与 Protocol evidence 一致，未把 no-op
+  或 patch composition 悄悄当成有效 solver 证据；
 - campaign artifacts 完整，failure lane 没有混淆。
 
 研究层至少回答：
@@ -357,6 +357,9 @@ export PYTHONPATH="$REPO_ROOT"
 - warehouse 和 open CVRP 是否都表明同一小型 runtime 能进行实际研究。
 
 若只有正常退出、HTTP 200、测试通过或生成了一份 patch，不能关闭 v0.4。
+有效的负结果可以关闭一个预注册实验 rung，但不能关闭当前 `TASK.md`。当前阶段
+还必须取得 Warehouse 连续晋升及独立 replay，并取得 CVRP 的
+screening -> validation -> frozen 晋升及对原始 B0 的独立比较。
 
 ## 12. 诊断运行与正式证据隔离
 
@@ -387,6 +390,9 @@ Warehouse：
 - [ ] campaign 记录实际源码状态与明确的 CLI 配置，运行期间源码未改变；
 - [ ] H/C proposal-call 事件、可用 trace、typed outcome、Contract、Verification、Protocol、Decision 全部可审计；
 - [ ] 研究结果有实际算法与 solver 证据。
+- [ ] 同一不中断 campaign 达到至少 v3，且独立 replay 支持最终 champion
+  优于 v1 和 immediate predecessor；production transfer 按 `TASK.md` 得到晋升
+  或预注册 matched resolution。
 
 CVRP：
 
@@ -396,7 +402,8 @@ CVRP：
 - [ ] 无 successor 目标绑定或历史 campaign 恢复；
 - [ ] 低频监控不干预运行；
 - [ ] open research direction、代码实现、Protocol 和 full-solver 行为可归因；
-- [ ] 证据足以判断有效收益、有信息量的无收益或明确框架失败。
+- [ ] 一个 exact candidate 完整通过 screening、validation 和 frozen，确定性晋升，
+  且独立比较支持其优于原始 B0，不引入 feasibility/fleet regression。
 
 只有两组 control 都完成并经过上述验收后，才更新 `TASK.md` 和
 `current-state.md` 的正式实验结论。
