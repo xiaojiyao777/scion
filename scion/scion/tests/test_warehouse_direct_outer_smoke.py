@@ -9,7 +9,10 @@ import yaml
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
-from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    branch_execution_hold,
+)
 from scion.core.models import ChampionState, DecisionFeatures, ExperimentStage
 from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
@@ -20,7 +23,6 @@ from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManag
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
 from scion.verification.gate import VerificationGate
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 WAREHOUSE_CONFIG_DIR = Path(__file__).resolve().parents[1] / "problems" / "warehouse_delivery"
@@ -184,7 +186,7 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
     result = campaign.run_one_step()
 
     assert "must exactly match one provider-visible research surface" in result.reason
-    assert result.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+    assert result.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
     assert result.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
     assert result.decision is None
     assert llm.call_count == 1
@@ -194,7 +196,7 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
     assert step.failure_stage == "proposal_hypothesis"
     assert step.contract_passed is False
     assert step.verification_passed is False
-    assert step.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+    assert step.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
     assert step.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
     assert step.decision is None
     assert step.protocol_result is None
@@ -202,13 +204,14 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
         step.failure_detail or ""
     )
     branch = campaign._branch_ctrl.get_branch(result.branch_id)
+    assert branch_execution_hold(branch) is None
     assert "CONTRACT" not in branch.failure_codes
     records = campaign._hyp_store.get_by_branch(result.branch_id)
     assert records == []
     outcome_events = [
         event
         for event in campaign._registry.query_by_branch(result.branch_id)
-        if event["execution_outcome"] == "not_evaluated"
+        if event["execution_outcome"] == "research_rejected"
     ]
     assert len(outcome_events) == 1
     assert outcome_events[0]["event_kind"] == "proposal_execution_outcome"

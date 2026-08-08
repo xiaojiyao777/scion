@@ -321,7 +321,7 @@ class TestContractFailure:
         assert result.decision is None
         records = cm._hyp_store.get_by_branch(result.branch_id)
         assert records == []
-        assert result.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+        assert result.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
 
     def test_contract_fail_next_tick_starts_fresh_candidate_same_branch(self, tmp_path):
         """An explicit next tick starts a fresh candidate on the same branch.

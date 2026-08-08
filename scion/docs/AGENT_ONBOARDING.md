@@ -39,7 +39,9 @@ Scion 让模型提出算法假设和代码，但不让模型决定这些改动�
   -> Evidence + Lineage
 ```
 
-H 或 C 的结构化响应无效、provider/infra 失败，或其他 `NOT_EVALUATED` 结果时，当前 campaign invocation 停止。已记录的 Contract 或 Verification `RESEARCH_REJECTED` 则结束该 H/C，不作同一 H/C 的自动重放或修补，不计 formal round；scheduler 随后从 exact clean base 进入新的 H。每个新 provider call 都是独立的 `proposal_call.v1` typed event。
+Provider 已返回终态、但 H/C payload malformed、schema-invalid，或 C 的 typed edit 无法对完整 provider-visible source 正确应用时，该 tainted H/C 记为 `RESEARCH_REJECTED`。它结束当前 H/C，不作同一 H/C 的自动重放、修补或第二次调用，不计 formal round；scheduler 随后从 exact clean base 进入 fresh H。Contract 或 Verification 的 `RESEARCH_REJECTED` 遵循相同规则。
+
+Provider 没有返回终态，或发生 transport、auth、provider timeout、resource、local proposal context、missing typed outcome、interruption 等失败时，当前 campaign invocation 停止。这些结果分别保持 `NOT_EVALUATED`、`BLOCKED_INFRA`、`RESOURCE_EXHAUSTED` 或 `INTERRUPTED`，不能被改写为研究否决来继续调用 provider。每个 fresh H/C provider call 都是独立的 `proposal_call.v1` typed event。
 
 ## 不可变边界
 
@@ -76,7 +78,7 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 - provider call 的普通 append-only event、typed outcome、Contract、Verification、Protocol 与 Decision 应能通过普通引用串起来；trace 若成功写入仅作诊断，trace/journal 写失败不能丢弃有效 H/C。它们不构成 context identity 或 receipt 闭包。
 - lineage 是 append-only 事实；summary、analysis brief 和 inventory 是索引或投影，不是新的事实来源。
 - promotion 必须拥有完整的 declared screening、validation、frozen Protocol evidence；普通 candidate cleanup 或可选报告写入只能记录诊断，不能改写已经完成的科学 Decision。
-- `invalid_response`、`research_rejected`、`blocked_infra`、`interrupted` 与 `evaluated` 是不同结果，不能为了报表整洁而合并。
+- malformed/schema-invalid H/C 与 typed-edit invalid 是 `RESEARCH_REJECTED` 的 proposal-phase typed reason；无 provider 终态、`not_evaluated`、`blocked_infra`、`resource_exhausted`、`interrupted` 与 `evaluated` 仍是不同结果，不能为了报表整洁而合并。
 
 ## 按执行顺序阅读源码
 
@@ -94,7 +96,7 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 - `scion/scion/core/evaluation_orchestrator.py`、`evaluation_pipeline.py`：候选进入 Protocol 与结果回传的边界；
 - `scion/scion/core/decision_finalizer.py`：Decision 后的状态与证据收口。
 
-阅读时逐个追踪 `ExecutionOutcome` 和 `StepResult`。已记录的 `RESEARCH_REJECTED` 不计 formal round，且 scheduler-forward 到新的 H；其他非 `EVALUATED` 结果停止当前 outer-loop invocation。不要从 `--rounds` 猜测 provider 调用次数。
+阅读时逐个追踪 `ExecutionOutcome` 和 `StepResult`。已记录的 proposal malformed/typed-edit invalid、Contract 或 Verification `RESEARCH_REJECTED` 不计 formal round，且 scheduler-forward 到 fresh H；无 provider 终态以及其他 local/infra/resource/interruption 非 `EVALUATED` 结果停止当前 outer-loop invocation。不要从 `--rounds` 猜测 provider 调用次数。
 
 ### 2. Proposal 与 Context
 
@@ -110,7 +112,7 @@ diagnostic telemetry 可以帮助人分析运行，但不能越权成为另一�
 - `scion/scion/proposal/schemas/`：H 与 typed multi-file patch schema；
 - `scion/scion/proposal/llm/`：transport、timeout、错误分类与 SDK policy。
 
-检查某次失败时，先确认完整 source/context、`proposal_call.v1` event、可用 trace 与 typed outcome，再判断是 response invalid、infra failure 还是后续 gate 拒绝。不要仅凭日志里的自然语言归因。
+检查某次失败时，先确认完整 source/context、`proposal_call.v1` event、可用 trace 与 typed outcome。已收到终态但 payload malformed、schema-invalid 或 typed edit 无法应用，属于 scheduler-forward 的 proposal `RESEARCH_REJECTED`；没有 provider 终态或 local/infra/resource failure 则终止 invocation。不要仅凭日志里的自然语言归因。
 
 ### 3. Contract -> Verification -> Protocol -> Decision
 

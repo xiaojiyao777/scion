@@ -159,6 +159,7 @@ They do not block this task and cannot satisfy it.
 | R11 | proven and corrected at `88c1bc2b` | Warehouse continuity R3 promoted one candidate to v2, then stopped at 6/36 when a patchless stale branch was misclassified as a markerless research rejection. | Retire that stale branch as non-research lifecycle work and let typed Contract/Verification rejection schedule forward without a second disposition authority. Preserve all infra and missing-outcome stops. |
 | R12 | resolved launch invalidity | R4 passed the literal `<stdin>` as the proxy key because of an operator-side `jq input_filename` mistake. It stopped on the first H with 401, 0 evaluated stages and 0 experiments. | Seal R4 with no scientific conclusion. R5 uses one exact key extraction plus a silent authenticated `/v1/models` check in a fresh root. |
 | R13 | resolved infrastructure exclusion | R5 authenticated and completed H, but its first C stream ended upstream after 2,022 partial events without a terminal event; the proxy intentionally returned 504. There were 0 evaluated stages and 0 experiments. | Seal R5 with no C/source or scientific conclusion. R6 is a fresh matched campaign with new H/C; do not replay the failed C or change Scion/proxy configuration from one intermittent event. |
+| R14 | proven and corrected on the current branch | R6 produced one complete Warehouse promotion and then fourteen more formal screenings, but stopped at 17/36 when a provider-complete C used an `exact_replace` selector absent from the visible source. Proposal ownership misclassified that tainted-content rejection as terminal `NOT_EVALUATED`. | Keep exact source binding strict, classify malformed/schema-invalid H/C and unapplicable typed edits as `RESEARCH_REJECTED`, release only that H/C, and scheduler-forward to a fresh H on the clean base. Never retry the failed call; local context/binding, missing outcome, provider-without-terminal-response, infra, resource and interruption outcomes still stop. |
 
 ## Modular execution plan
 
@@ -246,7 +247,10 @@ They do not block this task and cannot satisfy it.
   passed 180 tests after the final hot-path subtraction. The stable pre-S1
   checkpoint then passed the complete suite: `1949 passed, 1 skipped` in
   628.19 seconds. S6 remains open because the final solver-evidence state still
-  requires its own post-experiment regression run.
+  requires its own post-experiment regression run. After the R6 proposal-
+  rejection correction, the complete suite passed `1965 passed, 1 skipped` in
+  629.99 seconds; the focused adjacent set passed 92 tests and critical Ruff
+  plus diff checks passed.
 
 ### S4 - Warehouse recovery ladder
 
@@ -267,6 +271,18 @@ They do not block this task and cannot satisfy it.
 - [x] Exclude R5 as an intermittent upstream stream termination: authentication
   and H succeeded, but C had no terminal event, leaving zero evaluated stages
   and zero experiments. Seal its partial stream; R6 is a new matched H/C line.
+- [x] Record R6 as valid partial science and an incomplete framework run. It
+  completed 17/36 formal stages, promoted one candidate through screening,
+  validation and frozen to champion v2, then completed fourteen further
+  screenings across three v2-based branches. It did not reach v3. Its final
+  provider-complete C failed exact source-bound normalization and was wrongly
+  made invocation-terminal.
+- [x] Correct the R6 proposal-failure route without relaxing source binding,
+  Contract, Verification, Protocol, Decision, thresholds or Scheduler. A
+  malformed/schema-invalid terminal H/C or unapplicable typed edit now rejects
+  that H/C and schedules a fresh H from the clean base; it does not retry the
+  old call or install an execution hold. True local/provider/infra/resource/
+  interruption failures remain fail-closed.
 - [ ] Run a fresh uninterrupted Terra synthetic Warehouse campaign with a
   pre-registered 36 formal-stage horizon. Do not split it into fresh roots when
   a candidate is queued for expansion/validation/frozen. This horizon covers
@@ -362,9 +378,10 @@ CVRP acceptance:
 ## Status
 
 **Active: S4 Warehouse continuous-optimization experiment, then S5 CVRP.** S1
-is closed as a scientific negative; S2/S3 are complete. Warehouse R3 restored
-one Protocol-complete synthetic promotion (`v1 -> v2`) but stopped at 6/36 on a
-now-corrected stale-branch lifecycle defect, so continuous optimization and the
-required `v3` champion remain unproven. The post-fix suite passed 1964 tests
-with one skip. S6 final closure remains pending, and CVRP still has no
+is closed as a scientific negative; S2/S3 are complete. Warehouse R6 produced
+one Protocol-complete synthetic promotion (`v1 -> v2`) and continued for
+fourteen formal post-promotion screenings, but stopped at 17/36 on the now-
+corrected proposal-rejection route. Continuous multiple promotion and the
+required `v3` champion remain unproven. The current full suite passed 1965
+tests with one skip. S6 final closure remains pending, and CVRP still has no
 Protocol-complete promotion.

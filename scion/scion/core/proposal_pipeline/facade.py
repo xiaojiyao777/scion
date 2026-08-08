@@ -436,7 +436,7 @@ class ProposalPipeline(ProposalRecordMixin):
         outcome_value = (
             ExecutionOutcome.RESOURCE_EXHAUSTED
             if balance
-            else ExecutionOutcome.NOT_EVALUATED
+            else ExecutionOutcome.RESEARCH_REJECTED
             if invalid
             else ExecutionOutcome.BLOCKED_INFRA
         )

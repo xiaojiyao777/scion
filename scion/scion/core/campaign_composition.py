@@ -439,6 +439,9 @@ def compose_campaign_services(
         proposal_failure_detail_for=owner._proposal_failure_detail_for,
         proposal_execution_outcome_for=owner._proposal_execution_outcome_for,
         proposal_session_ref_for=owner._proposal_session_ref_for,
+        discard_approved_hypothesis_binding=(
+            owner._proposal_pipeline.discard_approved_hypothesis_binding
+        ),
         persist_branch_state=owner._persist_branch_state,
         update_status_progress=owner._update_status_progress,
         step_history=owner._step_history,

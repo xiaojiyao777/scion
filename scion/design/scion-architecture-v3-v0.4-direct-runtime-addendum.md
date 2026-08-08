@@ -60,11 +60,11 @@ For v0.4:
 | §4.2 | `recent_retry_count` and `budget_remaining_ratio` in the example `DecisionFeatures` | They are not Decision inputs. Decision consumes hard-safety facts and the typed Protocol gate outcome. |
 | §5.1 | Contract `novelty check` | Contract checks schema, locus, path, source, interface, import/API and approved-H binding. Novelty/material difference is not a hard gate. |
 | §8.7 | automatic infra retry | Provider SDK retries are zero. Infra failure terminalizes the durable attempt; a later invocation requires an explicit operator action. Statistical expand remains a Protocol action and is not a provider retry. |
-| §10.4, §13 | LLM repair after light Contract/Verification failure | No automatic repair or second call for the same H/C. Every valid Contract/Verification `RESEARCH_REJECTED` is an independent typed event: it ends that H/C, does not count as a formal round, and scheduler-forward schedules a fresh H on the exact clean base. Invalid provider response, infra/resource failure, and interruption remain invocation-terminal. |
+| §10.4, §13 | LLM repair after light Contract/Verification failure | No automatic repair or second call for the same H/C. A terminal provider response that is malformed, fails the H/C schema, or contains a typed edit that cannot be applied to the provider-visible source is tainted proposal input and becomes `RESEARCH_REJECTED`: it ends that H/C, does not count as a formal round, and scheduler-forward schedules a fresh H on the exact clean base. Contract/Verification rejection follows the same attempt-terminal rule. Missing provider terminal response, transport/auth/timeout/resource failure, missing or invalid local proposal context, missing typed outcome, and interruption remain invocation-terminal. |
 | §11.5, §12.2 | candidate fix budgets and campaign budget termination | v0.4 does not impose Scion-semantic prompt/session/tool/file/item/token/retry budgets. An operator-selected formal-round target and scientific subprocess/solver timeouts remain explicit experiment boundaries. A provider-required `max_tokens` parameter is an explicit transport ceiling, not a Scion stopping or research policy. |
 | §11.1, §11.5 | one branch is one iterative direction; `max_active_branches = 3` is configurable | The v0.4 production default admits at most three active branches. State priority and FIFO choose runnable work; each branch deepens its own natural research direction without a host-authored diversity or mechanism gate. |
 | §15.1–15.3 | recent-N context, compression, blacklist | H receives complete safe current context plus one canonical record per visible screening attempt. C receives the approved H and complete `SourceLedger`. There is no compact-to-fit, top-N, blacklist steering, or summary substitution. |
-| §18 | `continue` after proposal/verification failure, possibly returning to Code | A finalized Contract/Verification `RESEARCH_REJECTED` is attempt-terminal but scheduler-forward: no same-H/C repair, no formal-round count, then a new H on the exact clean base. Other non-`EVALUATED` outcomes stop/hold the invocation fail-closed. |
+| §18 | `continue` after proposal/verification failure, possibly returning to Code | A finalized malformed H/C response, typed-edit invalid result, or Contract/Verification `RESEARCH_REJECTED` is attempt-terminal but scheduler-forward: no same-H/C repair, no formal-round count, then a new H on the exact clean base. Provider calls without a terminal response and local/infrastructure outcomes stop/hold the invocation. |
 
 ## Direct v0.4 control flow
 
@@ -103,12 +103,22 @@ The typed boundary is:
 | `RESOURCE_EXHAUSTED` | unavailable | stop/hold | 0 |
 | `INTERRUPTED` | incomplete | stop/hold | 0 |
 
-Scheduler-forward rejection is limited to a structured H Contract, Patch
-Contract, or Verification rejection. Each valid `RESEARCH_REJECTED` is an
-independent append-only typed event with its phase, diagnostic code, clean code
-parent, and cleanup result. It ends the rejected H/C and schedules a fresh H;
-it cannot repair or regenerate the rejected C. Provider parse/schema failure is
-`NOT_EVALUATED`, not permission to call the model again.
+Scheduler-forward rejection includes two proposal cases: a terminal provider
+response whose H/C payload is malformed or schema-invalid, and a terminal C
+response whose typed edit cannot be normalized against the complete
+provider-visible source. It also includes a structured H Contract, Patch
+Contract, or Verification rejection. Each `RESEARCH_REJECTED` records its
+phase and typed diagnostic, ends the rejected H/C, and schedules a fresh H on
+the clean base. It cannot repair, replay, or regenerate the rejected H/C, and
+it never counts as a formal Protocol round.
+
+A provider call with no terminal response is different: transport, auth,
+provider timeout, or upstream termination cannot establish a tainted H/C to
+reject. Resource exhaustion, missing or invalid local proposal context, a
+missing typed execution outcome, and interruption are likewise
+invocation-terminal. They remain `NOT_EVALUATED`, `BLOCKED_INFRA`,
+`RESOURCE_EXHAUSTED`, or `INTERRUPTED` as applicable and never authorize a new
+provider call inside that invocation.
 
 There is no Scion-semantic rejection cap, attempt budget, or
 content-similarity gate. Explicit provider-transport and scientific solver
@@ -186,8 +196,9 @@ either continue their live branch state or start a fresh campaign explicitly.
 
 This setting changes only scheduling topology. It does not cap provider calls,
 hypotheses, files, tokens, formal rounds, or campaign duration. Scheduler-forward
-`RESEARCH_REJECTED` continuation is a new attempt, not retry authorization;
-every other non-`EVALUATED` outcome remains invocation-terminal. The three-slot
+`RESEARCH_REJECTED` continuation is a new attempt, not retry authorization.
+Provider calls without a terminal response and local/infrastructure/resource/
+interruption outcomes remain invocation-terminal. The three-slot
 maximum enables V3 breadth while preserving depth and evidence continuity
 within every branch; it does not force the provider to invent distinct
 mechanisms.

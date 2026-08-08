@@ -325,6 +325,11 @@ def _explore_step_pipeline_for(owner: Any) -> ExploreStepPipeline:
             "_proposal_execution_outcome_for",
             lambda branch_id: None,
         ),
+        discard_approved_hypothesis_binding=getattr(
+            getattr(owner, "_proposal_pipeline", None),
+            "discard_approved_hypothesis_binding",
+            lambda branch_id: None,
+        ),
         get_current_round=lambda: getattr(owner, "_round_num", 0),
         persist_branch_state=getattr(owner, "_persist_branch_state", lambda bid: None),
         step_history=getattr(owner, "_step_history", ()),

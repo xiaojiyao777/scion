@@ -119,6 +119,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     proposal_session_ref_for: Callable[[str], Optional[dict[str, Any]]] = (
         lambda _branch_id: None
     )
+    discard_approved_hypothesis_binding: Callable[[str], None] = (
+        lambda _branch_id: None
+    )
     persist_branch_state: Callable[[str], None] = lambda _branch_id: None
     update_status_progress: Callable[[dict[str, Any] | None], None] = lambda _payload: (
         None
@@ -308,11 +311,17 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     },
                 )
             status = {
+                ExecutionOutcome.RESEARCH_REJECTED: "research_rejected",
                 ExecutionOutcome.NOT_EVALUATED: "not_evaluated",
                 ExecutionOutcome.BLOCKED_INFRA: "blocked_infra",
                 ExecutionOutcome.RESOURCE_EXHAUSTED: "resource_exhausted",
             }.get(proposal_outcome.outcome, "not_evaluated")
             self.hypothesis_store.mark_status(h_record.hypothesis_id, status)
+            if proposal_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED:
+                self.branch_hypotheses.pop(bid, None)
+                self.branch_patches.pop(bid, None)
+                self.branch_current_hypothesis.pop(bid, None)
+                self.discard_approved_hypothesis_binding(bid)
             session_ref = self._proposal_session_ref(bid)
             record_execution_outcome_event(
                 registry=self.registry,

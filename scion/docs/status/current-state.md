@@ -137,6 +137,14 @@ W3 installation stacks.
   old marker is optional diagnostics only. A patchless stale branch retires as
   non-research lifecycle work, while missing outcomes, infrastructure,
   interruption and resource failures still stop rather than being retried.
+- Corrected the proposal-content failure route exposed by Warehouse R6. A
+  terminal provider response that is malformed/schema-invalid, or a typed edit
+  that cannot apply to the complete provider-visible source, remains rejected
+  and never reaches Protocol, but it no longer stops the campaign. That H/C is
+  marked `RESEARCH_REJECTED`, its in-process binding is released, and the
+  scheduler starts a fresh H on the clean base. The failed H/C is never
+  retried; local context/binding, missing outcome, provider-without-terminal-
+  response, infrastructure, resource and interruption outcomes still stop.
 
 The combined hot-path regression set passed 180 tests. After all three
 subtractions were integrated and the tree was frozen, the complete suite passed
@@ -220,6 +228,18 @@ experiments. It is sealed with no scientific conclusion. R6 keeps the same
 science/code inputs in a fresh matched root and starts new H/C calls rather
 than replaying R5 C; one intermittent upstream close does not justify changing
 Scion or proxy configuration.
+
+R6 then ran once in its declared fresh root:
+`/home/clawd/research/scion-experiments/v04-warehouse-v3-continuity-synth-36r-r6-gpt56terra-20260808T173413Z-claw/campaign`.
+It completed 17/36 formal stages: 15 screening, one validation and one frozen.
+Its first candidate passed the complete funnel and became champion v2. After
+promotion, three v2-based branches completed fourteen additional formal
+screenings, all negative; there was no second promotion. All 16 H and 16 C
+provider calls completed. The final C proposed an `exact_replace` selector
+absent from the current source, and the old runtime misclassified that
+candidate-local rejection as invocation-terminal `NOT_EVALUATED`. R6 is valid
+partial science showing one improvement plus post-promotion research
+continuity, not a completed 36-stage run or evidence of repeated optimization.
 
 ### CVRP
 
@@ -375,6 +395,12 @@ After the R3 lifecycle correction, the complete suite passed
 `1964 passed, 1 skipped` in 620.83 seconds; focused adjacent regression passed
 69 tests and critical Ruff/diff checks passed.
 
+After the R6 proposal-rejection correction, the focused proposal, CampaignLoop
+and fail-closed regressions passed 92 tests. The complete suite passed
+`1965 passed, 1 skipped` in 629.99 seconds; critical Ruff and diff checks
+passed. This is the frozen framework checkpoint for the next fresh Warehouse
+run, not solver-evidence acceptance by itself.
+
 ## Known residuals
 
 1. CVRP H input grew about 20.7k -> 47.3k -> 73.7k -> 100.2k tokens across
@@ -396,11 +422,10 @@ After the R3 lifecycle correction, the complete suite passed
 ## Closure status
 
 The prior lightweight-runtime milestone is accepted at `4d637959`; the active
-`TASK.md` is not closed. Warehouse has now reached synthetic champion v2 once,
-but the 36-stage continuity campaign stopped at 6/36 and has not reached v3;
-CVRP has no Protocol-complete promotion. Closure still requires Warehouse
-continuous promotions, retained replay improvement, one CVRP screening ->
-validation -> frozen promotion, and an independent B0 comparison. Deployment,
-packaging,
-builds, root/systemd and
-Trust/Hash work are neither prerequisites nor completion claims.
+`TASK.md` is not closed. Warehouse has reached synthetic champion v2 in both
+R3 and R6. R6 also proved post-promotion research continuity, but stopped at
+17/36 and did not reach v3. CVRP has no Protocol-complete promotion. Closure
+still requires Warehouse continuous promotions, retained replay improvement,
+one CVRP screening -> validation -> frozen promotion, and an independent B0
+comparison. Deployment, packaging, builds, root/systemd and Trust/Hash work
+are neither prerequisites nor completion claims.

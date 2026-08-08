@@ -13,15 +13,14 @@ from scion.core.execution_outcome import (
 )
 from scion.core.scheduler import Scheduler
 
-from .campaign_test_support import *  # noqa: F401,F403
+from .campaign_test_support import *
+
 
 class TestCodeFailureDirect:
-    """A failed code call holds the branch until explicit operator resume."""
+    """Malformed proposal content ends one H/C and schedules a fresh H."""
 
-    def _make_fail_then_succeed_llm(self):
-        """LLM that fails one code call and accepts a later fresh candidate."""
-        from scion.proposal.llm_client import LLMFormatError
-
+    def _make_invalid_patch_then_succeed_llm(self):
+        """Return one source-invalid C, then a valid C after a fresh H."""
         class _LLM:
             def __init__(self):
                 self._code_calls = 0
@@ -33,7 +32,10 @@ class TestCodeFailureDirect:
                     return dict(_VALID_HYPOTHESIS)
                 self._code_calls += 1
                 if self._code_calls == 1:
-                    raise LLMFormatError("simulated code gen failure")
+                    return {
+                        **_VALID_PATCH,
+                        "old_string": "this source text is not present\n",
+                    }
                 return dict(_VALID_PATCH)
 
             def call_with_tool(
@@ -49,39 +51,12 @@ class TestCodeFailureDirect:
 
         return _LLM()
 
-    def _make_always_fail_code_llm(self):
-        """LLM that always fails code gen calls."""
-        from scion.proposal.llm_client import LLMFormatError
-
-        class _LLM:
-            def __init__(self):
-                self.request_kinds = []
-
-            def call(self, prompt, schema, model=None, system_blocks=None):
-                required = set(schema.get("required", []))
-                if "hypothesis_text" in required or "change_locus" in required:
-                    return dict(_VALID_HYPOTHESIS)
-                raise LLMFormatError("simulated code gen failure")
-
-            def call_with_tool(
-                self,
-                prompt,
-                tool,
-                model=None,
-                system_blocks=None,
-                request_kind=None,
-            ):
-                self.request_kinds.append(request_kind)
-                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
-
-        return _LLM()
-
-    def test_code_failure_ends_candidate_and_next_tick_stays_held(
+    def test_source_invalid_code_rejects_h_then_next_tick_starts_fresh_h_c(
         self,
         tmp_path,
     ):
-        """Direct code failure cannot queue another provider attempt."""
-        llm = self._make_fail_then_succeed_llm()
+        """A rejected C is never retried; a new scheduler tick starts at H."""
+        llm = self._make_invalid_patch_then_succeed_llm()
         cm = _campaign(
             tmp_path,
             llm_client=llm,
@@ -95,20 +70,30 @@ class TestCodeFailureDirect:
         r1 = cm.run_one_step()
         assert r1.branch_id is not None
         bid = r1.branch_id
-        assert r1.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+        assert r1.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
+        assert r1.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
         assert r1.decision is None
         durable = cm._registry.query_execution_outcomes(branch_id=bid)
         assert len(durable) == 1
-        assert durable[0]["outcome"] == "not_evaluated"
+        assert durable[0]["outcome"] == "research_rejected"
+        first_records = cm._hyp_store.get_by_branch(bid)
+        assert len(first_records) == 1
+        first_hypothesis_id = first_records[0].hypothesis_id
+        assert first_records[0].status == "research_rejected"
+        assert branch_execution_hold(cm._branch_ctrl.get_branch(bid)) is None
+        assert bid not in cm._branch_patches
+        assert cm._workspace_lifecycle.pending_candidates == {}
 
         r2 = cm.run_one_step()
 
-        assert r2.action == "skip"
-        assert r2.execution_outcome is ExecutionOutcome.NOT_EVALUATED
-        assert r2.execution_outcome_reason_code == "SCHEDULER_CAPACITY_BLOCKED"
-        assert r2.scheduler_reason == "active_branch_limit_reached"
-        assert llm.request_kinds == ["hypothesis", "code"]
-        assert branch_execution_hold(cm._branch_ctrl.get_branch(bid)) is not None
+        assert r2.branch_id == bid
+        assert r2.execution_outcome is ExecutionOutcome.EVALUATED
+        assert llm.request_kinds == ["hypothesis", "code", "hypothesis", "code"]
+        records = cm._hyp_store.get_by_branch(bid)
+        assert len(records) == 2
+        assert records[0].hypothesis_id == first_hypothesis_id
+        assert records[0].status == "research_rejected"
+        assert records[1].hypothesis_id != first_hypothesis_id
         with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
             rows = conn.execute(
                 "SELECT audit_payload_json FROM experiment_events "
@@ -118,36 +103,24 @@ class TestCodeFailureDirect:
         assert [item["phase"] for item in transitions] == [
             "hypothesis",
             "code",
+            "hypothesis",
+            "code",
         ]
         assert [item["status"] for item in transitions] == [
             "generated",
             "failed",
+            "generated",
+            "generated",
         ]
-
-    def test_code_failure_does_not_create_second_code_attempt(self, tmp_path):
-        """A later scheduler tick cannot implicitly continue the failed C call."""
-        llm = self._make_always_fail_code_llm()
-        cm = _campaign(tmp_path, llm_client=llm)
-        cm._scheduler = Scheduler(max_active_branches=1)
-        cm._branch_step_runner.scheduler = cm._scheduler
-
-        r1 = cm.run_one_step()
-        bid = r1.branch_id
-        assert r1.execution_outcome is ExecutionOutcome.NOT_EVALUATED
-
-        r2 = cm.run_one_step()
-
-        code_fail_steps = [
-            s for s in cm._step_history
-            if s.branch_id == bid and s.failure_stage == "proposal_code"
+        code_hypothesis_ids = [
+            item["hypothesis_id"]
+            for item in transitions
+            if item["phase"] == "code"
         ]
-        assert code_fail_steps
-        assert all(
-            step.execution_outcome is ExecutionOutcome.NOT_EVALUATED
-            for step in code_fail_steps
-        )
-        assert r2.execution_outcome_reason_code == "SCHEDULER_CAPACITY_BLOCKED"
-        assert llm.request_kinds == ["hypothesis", "code"]
+        assert code_hypothesis_ids == [
+            first_hypothesis_id,
+            records[1].hypothesis_id,
+        ]
 
     def test_next_tick_does_not_build_code_continuation_context(self, tmp_path):
         """No prior code failure is injected into a hidden continuation."""
@@ -172,7 +145,7 @@ class TestCodeFailureDirect:
             captured_contexts.append(ctx)
             return ctx
 
-        llm = self._make_fail_then_succeed_llm()
+        llm = self._make_invalid_patch_then_succeed_llm()
         cm = _campaign(
             tmp_path,
             llm_client=llm,
@@ -192,11 +165,40 @@ class TestCodeFailureDirect:
         )
 
         cm.run_one_step()
+        assert llm.request_kinds == ["hypothesis", "code", "hypothesis", "code"]
         assert captured_contexts
         assert all(
             "prior_code_failure" not in context
             for context in captured_contexts
         )
+
+    def test_changed_h_binding_remains_not_evaluated_and_holds(self, tmp_path):
+        """Local H/C binding faults stay fail-closed, unlike tainted C rejection."""
+        llm = self._make_invalid_patch_then_succeed_llm()
+        cm = _campaign(tmp_path, llm_client=llm)
+
+        def generate_changed_code(branch, hypothesis):
+            changed = replace(
+                hypothesis,
+                hypothesis_text="different from the Contract-approved H",
+            )
+            return cm._proposal_pipeline.generate_code(branch, changed)
+
+        cm._explore_step_pipeline.generate_code = generate_changed_code
+
+        result = cm.run_one_step()
+
+        assert result.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+        assert (
+            result.execution_outcome_reason_code
+            == "APPROVED_HYPOTHESIS_BINDING_MISSING"
+        )
+        assert llm.request_kinds == ["hypothesis"]
+        branch = cm._branch_ctrl.get_branch(result.branch_id)
+        assert branch_execution_hold(branch) is not None
+        records = cm._hyp_store.get_by_branch(result.branch_id)
+        assert len(records) == 1
+        assert records[0].status == "not_evaluated"
 
     def test_successful_code_reaches_evaluation(self, tmp_path):
         """A successful direct H/C path reaches formal evaluation."""

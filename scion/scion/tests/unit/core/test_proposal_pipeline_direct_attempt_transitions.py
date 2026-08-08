@@ -3,8 +3,14 @@ from __future__ import annotations
 
 import json
 
-from scion.core.execution_outcome import ExecutionOutcome
+import pytest
+
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    branch_execution_hold,
+)
 from scion.core.models import HypothesisProposal
+from scion.proposal.engine import ProposalValidationError
 from scion.proposal.llm_client import LLMFormatError
 
 from .proposal_pipeline_test_support import FakeCreative, _pipeline
@@ -64,11 +70,22 @@ def test_changed_h_is_rejected_before_the_code_provider() -> None:
     assert creative.code_calls == 0
     outcome = pipeline.pop_execution_outcome(branch.branch_id)
     assert outcome is not None
+    assert outcome.outcome is ExecutionOutcome.NOT_EVALUATED
     assert outcome.reason_code == "APPROVED_HYPOTHESIS_BINDING_MISSING"
 
 
-def test_invalid_code_response_is_one_call_event_with_typed_outcome() -> None:
-    creative = FakeCreative(code_error=LLMFormatError("invalid patch payload"))
+@pytest.mark.parametrize(
+    "error",
+    [
+        LLMFormatError("invalid patch payload"),
+        ProposalValidationError("old_string_not_found in operators/bounded.py"),
+    ],
+    ids=("provider-format", "proposal-validation"),
+)
+def test_invalid_code_response_is_research_rejected_after_one_call(
+    error: Exception,
+) -> None:
+    creative = FakeCreative(code_error=error)
     pipeline, branch, _runtime, _failures, _balance = _pipeline(creative=creative)
     hypothesis, _record = pipeline.generate_hypothesis(branch)
     assert hypothesis is not None
@@ -80,8 +97,12 @@ def test_invalid_code_response_is_one_call_event_with_typed_outcome() -> None:
     payload = json.loads(event["audit_payload_json"])
     assert payload["phase"] == "code"
     assert payload["status"] == "failed"
-    assert payload["execution_outcome"]["outcome"] == "not_evaluated"
+    assert payload["execution_outcome"]["outcome"] == "research_rejected"
     assert (
         payload["execution_outcome"]["reason_code"]
         == "PROPOSAL_RESPONSE_INVALID"
     )
+    outcome = pipeline.pop_execution_outcome(branch.branch_id)
+    assert outcome is not None
+    assert outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+    assert branch_execution_hold(branch) is None
