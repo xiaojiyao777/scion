@@ -156,6 +156,7 @@ They do not block this task and cannot satisfy it.
 | R8 | proven | Several CVRP changes were inactive or activated too late; others consumed ALNS opportunity. | Run a small mechanism assay before expensive formal screening. |
 | R9 | proven | CVRP campaigns repeat known failures because accepted cross-campaign conclusions are absent from H context. | Add a short problem-owned research prior, with no target prescription. |
 | R10 | proven | Repeated pair trees make later prompts grow sharply while adding little new information. | Use fresh one-candidate lines now; later allow only reversible lossless factoring. |
+| R11 | proven and corrected at `88c1bc2b` | Warehouse continuity R3 promoted one candidate to v2, then stopped at 6/36 when a patchless stale branch was misclassified as a markerless research rejection. | Retire that stale branch as non-research lifecycle work and let typed Contract/Verification rejection schedule forward without a second disposition authority. Preserve all infra and missing-outcome stops. |
 
 ## Modular execution plan
 
@@ -247,6 +248,17 @@ They do not block this task and cannot satisfy it.
 
 ### S4 - Warehouse recovery ladder
 
+- [x] Classify the first three launch attempts without rewriting their evidence:
+  R1 failed pre-campaign on the synthetic data root; R2 stopped before an H on
+  proxy authentication; R3 was scientifically valid but incomplete at 6/36.
+  R3 generated three H/C pairs, completed 106/106 pairs, and promoted the
+  `move_order.py` candidate from v1 to v2 after screening, validation and
+  frozen. It proves one real promotion, not continuous optimization.
+- [x] Correct the R3 post-promotion lifecycle defect without changing
+  Protocol, Decision, Scheduler priority, thresholds or gates. Commit
+  `88c1bc2b` retires a patchless stale branch as non-research housekeeping and
+  removes `attempt_disposition` as a scheduling authority. The post-fix suite
+  passed `1964 passed, 1 skipped` in 620.83 seconds.
 - [ ] Run a fresh uninterrupted Terra synthetic Warehouse campaign with a
   pre-registered 36 formal-stage horizon. Do not split it into fresh roots when
   a candidate is queued for expansion/validation/frozen. This horizon covers
@@ -342,9 +354,9 @@ CVRP acceptance:
 ## Status
 
 **Active: S4 Warehouse continuous-optimization experiment, then S5 CVRP.** S1
-is closed as a scientific negative; S2/S3 are complete and the stable pre-S1
-suite passed 1949 tests with one skip. S6 final closure remains pending. The
-prior lightweight runtime is closed and merged locally. Solver-improvement
-acceptance is not yet satisfied: Warehouse is v1 in the current fresh controls,
-the prior MergeVehicles candidate failed validation runtime, and CVRP has no
+is closed as a scientific negative; S2/S3 are complete. Warehouse R3 restored
+one Protocol-complete synthetic promotion (`v1 -> v2`) but stopped at 6/36 on a
+now-corrected stale-branch lifecycle defect, so continuous optimization and the
+required `v3` champion remain unproven. The post-fix suite passed 1964 tests
+with one skip. S6 final closure remains pending, and CVRP still has no
 Protocol-complete promotion.

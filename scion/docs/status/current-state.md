@@ -132,6 +132,11 @@ W3 installation stacks.
   turn a persisted scientific promotion into a recovery failure. Validation
   and frozen reuse keep the substantive present/equal code-hash and clean-state
   checks without generating an audit hash over those same facts.
+- Removed `attempt_disposition` as a CampaignLoop scheduling authority. A
+  typed pre-Protocol research rejection now schedules forward directly; the
+  old marker is optional diagnostics only. A patchless stale branch retires as
+  non-research lifecycle work, while missing outcomes, infrastructure,
+  interruption and resource failures still stop rather than being retried.
 
 The combined hot-path regression set passed 180 tests. After all three
 subtractions were integrated and the tree was frozen, the complete suite passed
@@ -177,6 +182,26 @@ failed on 0/15, with candidate median runtime ratio `1.4750`. Frozen was skipped
 by the declared conditional policy. This is a `SCIENTIFIC_NEGATIVE` at
 validation, not a framework/queue failure, and closes the old truncated-candidate
 question without a promotion.
+
+The first authenticated long-horizon synthetic continuity campaign is also
+final:
+`/home/clawd/research/scion-experiments/v04-warehouse-v3-continuity-synth-36r-r3-gpt56terra-20260808T163049Z-claw/campaign`.
+It generated three H/C pairs and completed four screening, one validation and
+one frozen stage with 106/106 valid pairs and no provider, candidate, champion
+or pair failure. The third candidate changed `operators/move_order.py`, won
+18/18 validation pairs and 12/12 frozen pairs, reported median primary
+improvement `+11` in both stages, and became champion v2. This restores one
+real agent-generated Warehouse promotion.
+
+R3 nevertheless stopped at 6/36 after promotion. Scheduler correctly selected
+an older stale branch, but the old runtime treated its absent patch as a
+markerless research rejection and stopped on
+`research_rejection_disposition_missing`. Commit `88c1bc2b` now retires that
+branch as non-research housekeeping and makes typed research rejection
+sufficient to continue without a second disposition authority. It does not
+change Protocol, Decision, Scheduler priority, cases, seeds, thresholds or
+time limits. Therefore R3 proves one promotion, not same-campaign continuity,
+v3, production transfer or independent replay.
 
 ### CVRP
 
@@ -328,6 +353,10 @@ integration set passed 43 tests; critical Ruff `E9/F63/F7/F82` and changed-file
 diff checks passed. These are focused results only. The S6 full-suite run after
 all active edits remains pending.
 
+After the R3 lifecycle correction, the complete suite passed
+`1964 passed, 1 skipped` in 620.83 seconds; focused adjacent regression passed
+69 tests and critical Ruff/diff checks passed.
+
 ## Known residuals
 
 1. CVRP H input grew about 20.7k -> 47.3k -> 73.7k -> 100.2k tokens across
@@ -349,10 +378,11 @@ all active edits remains pending.
 ## Closure status
 
 The prior lightweight-runtime milestone is accepted at `4d637959`; the active
-`TASK.md` is not closed. Warehouse remains at v1 in the fresh controls, its
-promising expanded-screening stage is unfinished, and CVRP has no
-Protocol-complete promotion. Closure now requires Warehouse continuous
-promotions, retained replay improvement, one CVRP screening -> validation ->
-frozen promotion, and an independent B0 comparison. Deployment, packaging,
+`TASK.md` is not closed. Warehouse has now reached synthetic champion v2 once,
+but the 36-stage continuity campaign stopped at 6/36 and has not reached v3;
+CVRP has no Protocol-complete promotion. Closure still requires Warehouse
+continuous promotions, retained replay improvement, one CVRP screening ->
+validation -> frozen promotion, and an independent B0 comparison. Deployment,
+packaging,
 builds, root/systemd and
 Trust/Hash work are neither prerequisites nor completion claims.
