@@ -158,6 +158,7 @@ They do not block this task and cannot satisfy it.
 | R10 | proven | Repeated pair trees make later prompts grow sharply while adding little new information. | Use fresh one-candidate lines now; later allow only reversible lossless factoring. |
 | R11 | proven and corrected at `88c1bc2b` | Warehouse continuity R3 promoted one candidate to v2, then stopped at 6/36 when a patchless stale branch was misclassified as a markerless research rejection. | Retire that stale branch as non-research lifecycle work and let typed Contract/Verification rejection schedule forward without a second disposition authority. Preserve all infra and missing-outcome stops. |
 | R12 | resolved launch invalidity | R4 passed the literal `<stdin>` as the proxy key because of an operator-side `jq input_filename` mistake. It stopped on the first H with 401, 0 evaluated stages and 0 experiments. | Seal R4 with no scientific conclusion. R5 uses one exact key extraction plus a silent authenticated `/v1/models` check in a fresh root. |
+| R13 | resolved infrastructure exclusion | R5 authenticated and completed H, but its first C stream ended upstream after 2,022 partial events without a terminal event; the proxy intentionally returned 504. There were 0 evaluated stages and 0 experiments. | Seal R5 with no C/source or scientific conclusion. R6 is a fresh matched campaign with new H/C; do not replay the failed C or change Scion/proxy configuration from one intermittent event. |
 
 ## Modular execution plan
 
@@ -263,6 +264,9 @@ They do not block this task and cannot satisfy it.
 - [x] Exclude R4 as operator-side launch infrastructure only: one unauthenticated
   H request, zero evaluated stages and zero experiments. Do not reuse its root;
   R5 preserves every scientific input and changes only credential extraction.
+- [x] Exclude R5 as an intermittent upstream stream termination: authentication
+  and H succeeded, but C had no terminal event, leaving zero evaluated stages
+  and zero experiments. Seal its partial stream; R6 is a new matched H/C line.
 - [ ] Run a fresh uninterrupted Terra synthetic Warehouse campaign with a
   pre-registered 36 formal-stage horizon. Do not split it into fresh roots when
   a candidate is queued for expansion/validation/frozen. This horizon covers

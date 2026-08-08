@@ -211,6 +211,16 @@ itself remained authenticated with one active account. R4 is sealed; R5 uses a
 fresh root, the same scientific inputs and executable code, and one exact key
 extraction followed by a silent authenticated `/v1/models` check.
 
+R5 passed those credential/model checks and completed H, but its first C call
+ended upstream without a terminal event after 2,022 partial stream events. The
+proxy deliberately failed fast with HTTP 504; it remained healthy,
+authenticated and active after the stop. No valid C/source can be reconstructed
+from a terminal-less stream, and R5 has zero evaluated stages and zero
+experiments. It is sealed with no scientific conclusion. R6 keeps the same
+science/code inputs in a fresh matched root and starts new H/C calls rather
+than replaying R5 C; one intermittent upstream close does not justify changing
+Scion or proxy configuration.
+
 ### CVRP
 
 Campaign:
