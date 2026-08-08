@@ -118,6 +118,11 @@ test -n "$SCION_API_KEY"
 "$PY" -m scion.cli.main run --help
 ```
 
+本机 `codex-proxy` 可能使用独立 client key；shell 中已有的其它 OpenAI key
+不能代替它。可从 localhost-only `/auth/status.proxy_api_key` 临时读入环境变量，
+但不得打印或写入文档/实验 artifact。启动前应用该 key 只读验证 `/v1/models`
+并确认目标模型可见。
+
 检查问题数据与配置文件后，为每次运行创建新的、独立的 `CAMPAIGN_DIR`。不要
 跨机器或跨运行复用 campaign state。
 
