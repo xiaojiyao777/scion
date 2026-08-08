@@ -167,9 +167,10 @@ They do not block this task and cannot satisfy it.
 - [x] Create `codex/v04-solver-improvement-research`.
 - [x] Independently review v0.3 Warehouse promotions, current Warehouse
   blockers, and historical/current CVRP evidence.
-- [ ] Record exact experiment inputs, campaign root, model
+- [x] Record exact experiment inputs, campaign root, model
   (`gpt-5.6-terra`), local Codex proxy, case/seed manifests, time limits and
-  stop conditions before every new run.
+  stop conditions before every new run. S1 and the first S4 campaign have
+  committed preregistrations; repeat/new-problem runs must do the same.
 
 ### S1 - Finish the truncated Warehouse candidate
 

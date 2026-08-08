@@ -126,8 +126,8 @@ export CAMPAIGN_DIR="$EXPERIMENTS_ROOT/warehouse-control-$(git rev-parse --short
 
 "$PY" -m scion.cli.main run \
   --problem problems/warehouse_delivery/problem.yaml \
-  --protocol problems/warehouse_delivery/protocol_prod.yaml \
-  --split problems/warehouse_delivery/split_manifest_prod.yaml \
+  --protocol problems/warehouse_delivery/protocol.yaml \
+  --split problems/warehouse_delivery/split_manifest.yaml \
   --seeds problems/warehouse_delivery/seed_ledger.yaml \
   --campaign-dir "$CAMPAIGN_DIR" \
   --rounds 2 \
