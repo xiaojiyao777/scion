@@ -331,55 +331,29 @@ def register_report_commands(report_app: typer.Typer) -> None:
 
     @report_app.command("champion-heldout-comparison")
     def report_champion_heldout_comparison(
-        manifest: str = typer.Option(
-            ...,
-            "--manifest",
-            help="Champion held-out comparison manifest JSON path",
-        ),
-        output_dir: str = typer.Option(
-            ...,
-            "--output-dir",
-            help="Directory for copied snapshots, frozen metrics, and JSON results",
-        ),
+        manifest: str = typer.Option(..., "--manifest"),
+        output_dir: str = typer.Option(..., "--output-dir"),
     ) -> None:
         """Run independent frozen comparisons over ordinary champion copies."""
-        from scion.core.champion_heldout_comparison import (
+        from scion.evaluation.champion_holdout import (
             execute_champion_heldout_comparison,
         )
-
         try:
             summary_path = execute_champion_heldout_comparison(
-                manifest,
-                output_dir=output_dir,
+                manifest, output_dir=output_dir
             )
             summary = json.loads(summary_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
-            typer.echo(
-                f"ERROR: failed to execute champion held-out comparison: {exc}",
-                err=True,
-            )
+            typer.echo(f"ERROR: champion held-out comparison failed: {exc}", err=True)
             raise typer.Exit(code=1)
-
-        typer.echo(
-            json.dumps(
-                {
-                    "summary_path": str(summary_path),
-                    "group_count": summary["group_count"],
-                    "completed_group_count": summary["completed_group_count"],
-                    "execution_invalid_group_count": summary[
-                        "execution_invalid_group_count"
-                    ],
-                    "error_group_count": summary["error_group_count"],
-                    "candidate_supported_group_count": summary[
-                        "candidate_supported_group_count"
-                    ],
-                    "all_groups_supported": summary["all_groups_supported"],
-                    "schema_version": summary["schema_version"],
-                },
-                indent=2,
-                sort_keys=True,
-            )
+        keys = (
+            "group_count", "completed_group_count", "execution_invalid_group_count",
+            "error_group_count", "candidate_supported_group_count",
+            "all_groups_supported", "schema_version",
         )
+        brief = {key: summary[key] for key in keys}
+        brief["summary_path"] = str(summary_path)
+        typer.echo(json.dumps(brief, indent=2, sort_keys=True))
 
     @report_app.command("summary")
     def report_summary(
