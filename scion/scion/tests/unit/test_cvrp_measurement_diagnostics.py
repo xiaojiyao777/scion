@@ -30,6 +30,14 @@ def test_cvrp_adapter_renders_current_measurement_and_attribution() -> None:
     assert payload["decision_features_excluded"] is True
     assert payload["measurement_context"]["metric"] == "total_distance"
     assert payload["measurement_context"]["objective"] == "minimize"
+    assert payload["measurement_context"]["screening_mde_at_power_80"] is None
+    assert payload["measurement_context"]["screening_calibration_status"] == (
+        "r3_limited_same_seed_null_zero_passes_power_unestablished"
+    )
+    interpretation = payload["measurement_context"]["interpretation"]
+    assert "zero of 2,000 independent paired-label-swap null samples" in interpretation
+    assert "not a matched MDE or power estimate" in interpretation
+    assert "MDE=2.0" not in interpretation
     assert payload["feasibility"]["required"] is True
     assert "route count" in payload["feasibility"]["observations"]
     assert payload["typed_attribution"]["observations"] == [
@@ -73,6 +81,8 @@ def test_context_manager_projects_complete_current_cvrp_guidance() -> None:
 
     assert problem_owned["schema_version"] == "scion.cvrp_measurement_guidance.v3"
     assert problem_owned["measurement_context"]["metric"] == "total_distance"
+    assert "same-seed A/A" in problem_owned["measurement_context"]["interpretation"]
+    assert problem_owned["measurement_context"]["screening_mde_at_power_80"] is None
     assert problem_owned["feasibility"]["required"] is True
     assert problem_owned["typed_attribution"]["observations"] == [
         "attempted change",

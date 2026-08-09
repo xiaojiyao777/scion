@@ -65,6 +65,13 @@ def test_cvrp_guidance_adds_factual_prior_without_target_steering() -> None:
     assert "broad removal of vns was also negative" in rendered
     assert "historical screening-level evidence around swap*" in rendered
     assert "neutral lead, not a required direction" in rendered
+    assert "elapsed-budget simulated annealing" in rendered
+    assert "6w/1l/5t" in rendered
+    assert "49w/20l/27t" in rendered
+    assert "+2.75" in rendered
+    assert "progress denominator omitted construction" in rendered
+    assert "not a hidden promotion" in rendered
+    assert "not a required mechanism" in rendered
 
     for forbidden in (
         "successor",

@@ -71,6 +71,18 @@ CROSS_CAMPAIGN_RESEARCH_PRIOR = (
         "variant was negative. These observations neither require nor forbid "
         "ejection research, depth-one refinement, or a different direction."
     ),
+    (
+        "Corrected R2's strongest result was elapsed-budget simulated "
+        "annealing: its exact 12-case quality screen was 6W/1L/5T cases, "
+        "49W/20L/27T pairs, and median final total_distance improvement +2.75 "
+        "with CI [0,11]. It did not pass the fixed R2 wins/all-cases rule and "
+        "is not a hidden promotion. The implementation removed nearly all "
+        "late worsening acceptances and increased best updates, but its "
+        "progress denominator omitted construction, initial VNS, and the "
+        "tighter outer deadline, while its temperature update lagged one "
+        "iteration. These are neutral source-grounded leads, not a required "
+        "mechanism or host-mandated fix."
+    ),
 )
 FEASIBILITY_GUIDANCE = (
     "A candidate result is interpretable only when capacity, customer "
