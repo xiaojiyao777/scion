@@ -54,21 +54,9 @@ CROSS_CAMPAIGN_RESEARCH_PRIOR = (
         "observations, not proposal prohibitions."
     ),
     (
-        "The strongest unresolved SWAP* signal was cumulative rather than "
-        "isolated: an earlier expanded validation was 8W/2L/2T with median "
-        "+6.5 but its frozen run was incomplete, while a later H1+SWAP* "
-        "validation was 5W/1L/2T with median +7 and missed its 0.66 win-rate "
-        "threshold at 0.625. Neither result promoted SWAP* as an isolated "
-        "improvement."
-    ),
-    (
-        "The later SWAP* path was directly active, but initial VNS used about "
-        "46 seconds per route pair on tai150a, left zero ALNS iterations, and "
-        "regressed on all four seeds (-22, -210, -90, -21). A proposal that "
-        "revisits this evidence should separate initial from embedded "
-        "activation and protect downstream search allocation. This does not "
-        "require SWAP*, any particular surface, action, or target, or revisiting "
-        "this line at all."
+        "Historical screening-level evidence around SWAP* and initial-VNS "
+        "budget allocation was mixed and cumulative; it did not isolate a "
+        "causal mechanism. This is a neutral lead, not a required direction."
     ),
     (
         "Recent ejection evidence is mixed and implementation-sensitive. An "

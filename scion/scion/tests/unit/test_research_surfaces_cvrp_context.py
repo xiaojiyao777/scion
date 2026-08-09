@@ -276,6 +276,8 @@ def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:
     ]
     assert "No prepared file or mechanism is mandatory" in rendered
     assert "Runtime errors may explain failed outcomes" in rendered
+    assert "Use MDE only when a matched calibration exists" in rendered
+    assert "R2 has no matched MDE" in rendered
     assert context["research_question"]["schema_version"] == (
         "scion.typed_research_question.v2"
     )
@@ -284,6 +286,16 @@ def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:
     )
     for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
         assert rendered.count(line) == 1
+    prior_text = "\n".join(context["research_question"]["research_prior"])
+    for hidden_detail in (
+        "tai150a",
+        "validation",
+        "frozen",
+        "8W/2L/2T",
+        "5W/1L/2T",
+        "-22, -210, -90, -21",
+    ):
+        assert hidden_detail.casefold() not in prior_text.casefold()
     assert "smallest complete causal implementation" in rendered
     assert "policies/baseline_algorithm.py" in context["existing_target_files"]
     assert "policies/baseline_modules/*.py" in context["create_path_patterns"]
@@ -317,9 +329,11 @@ def test_direct_cvrp_code_context_renders_source_and_object_model() -> None:
     system_blocks, user_prompt = _split_code_context(context)
     rendered = "\n".join(block["text"] for block in system_blocks) + user_prompt
 
-    assert "solver_design_prompt_guidance" in context["proposal_renderer_inputs"]
-    assert '"active_subject_code_constraints"' in rendered
-    assert "source ledger" in rendered
+    assert "proposal_renderer_inputs" not in context
+    assert rendered.count('"active_subject_code_constraints"') == 1
+    assert '"solver_design_prompt_guidance"' not in rendered
+    assert '"code_rules"' not in rendered
+    assert '"user_constraints"' not in rendered
     assert "_Solution.routes" in rendered
     assert "_Route" in rendered
     assert "shared by initial and embedded VNS" in rendered
@@ -328,10 +342,18 @@ def test_direct_cvrp_code_context_renders_source_and_object_model() -> None:
         (
             str(context["operator_interface_spec"]),
             str(context["active_subject_code_constraints"]),
-            str(context["proposal_renderer_inputs"]),
             str(context["research_surface"]),
         )
     )
+    assert set(context["active_subject_code_constraints"]) == {
+        "object_model_hints",
+        "api_contracts",
+        "forbidden_patterns",
+    }
+    assert "source ledger" not in instrumentation_guidance
+    assert "stable entrypoint" not in instrumentation_guidance
+    assert "Excess route count is reported as fleet_violation" in rendered
+    assert "route-count-violating outputs" not in rendered
     assert "record_move" not in instrumentation_guidance
     assert "record_phase" not in instrumentation_guidance
     assert "record_iteration" not in instrumentation_guidance

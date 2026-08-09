@@ -654,6 +654,15 @@ def test_cvrp_research_prior_reaches_actual_hypothesis_provider_request(
     )
     for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
         assert provider_bytes.count(line) == 1
+    for hidden_detail in (
+        "tai150a",
+        "expanded validation",
+        "frozen run",
+        "8W/2L/2T",
+        "5W/1L/2T",
+        "-22, -210, -90, -21",
+    ):
+        assert hidden_detail not in provider_bytes
     assert "algorithmically material hypothesis" in provider_bytes
     assert (
         "one evidence-grounded mechanism-level change or refinement"

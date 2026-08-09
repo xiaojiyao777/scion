@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from scion.problems.cvrp.solver_design.manifest import (
-    ACTIVE_SOLVER_DESIGN_PACKAGE,
-    BROAD_SCOPE_TERMS,
     SOLVER_DESIGN_API_MANIFEST_FILES,
     SOLVER_DESIGN_INTEGRATION_FULL_FILES,
     SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES,
@@ -15,9 +13,6 @@ from scion.problems.cvrp.solver_design.manifest import (
 
 class CvrpSolverDesignProvider:
     """Problem-owned guidance for the direct hypothesis-to-code runtime."""
-
-    def solver_design_broad_scope_terms(self) -> Sequence[str]:
-        return BROAD_SCOPE_TERMS
 
     def solver_design_api_manifest_files(self) -> Sequence[str]:
         return SOLVER_DESIGN_API_MANIFEST_FILES
@@ -91,8 +86,10 @@ class CvrpSolverDesignProvider:
             ),
             (
                 "Use paired and case-level total_distance, feasibility, route "
-                "count, confidence interval, and MDE together. Runtime errors "
-                "may explain failed outcomes but do not replace objective evidence."
+                "count, and confidence intervals together. Use MDE only when a "
+                "matched calibration exists; R2 has no matched MDE. Runtime "
+                "errors may explain failed outcomes but do not replace objective "
+                "evidence."
             ),
             (
                 "Do not propose generic Scion core, metadata, contract, gate, "
@@ -116,33 +113,6 @@ class CvrpSolverDesignProvider:
         if selected not in {"", "solver_design", "solver_algorithm"}:
             return None
         return {
-            "surface": "solver_design",
-            "subject_id": "cvrp.solver_design.baseline",
-            "version": "cvrp_solver_design_code_constraints.v2",
-            "source_interface": (
-                {
-                    "id": "stable_entrypoint",
-                    "constraint": (
-                        "Keep policies/baseline_algorithm.py::solve(instance, "
-                        "rng, time_limit_sec, context) as the public algorithm entrypoint."
-                    ),
-                },
-                {
-                    "id": "owner_module",
-                    "constraint": (
-                        "Construction, destroy/repair, local-search, acceptance, "
-                        "scheduler, and state changes belong in their matching "
-                        "policies/baseline_modules owner."
-                    ),
-                },
-                {
-                    "id": "source_ledger",
-                    "constraint": (
-                        "Import only symbols present in the provided source ledger "
-                        "and API manifest or defined by the same patch."
-                    ),
-                },
-            ),
             "object_model_hints": (
                 {
                     "id": "objective_value_mapping",
@@ -193,89 +163,3 @@ class CvrpSolverDesignProvider:
                 "case ids, reference objectives, seeds, or split membership in solver code",
             ),
         }
-
-    def solver_design_code_rules(self, context: Any) -> Sequence[str]:
-        del context
-        return (
-            (
-                f"The research object is {ACTIVE_SOLVER_DESIGN_PACKAGE}; keep "
-                "the stable solve entrypoint and make the selected owner module "
-                "contain the algorithmic intervention."
-            ),
-            (
-                "Use the full current target source and the API/source ledger as "
-                "authority. Multi-file changes are allowed when each file is "
-                "needed for the same executable causal path."
-            ),
-            (
-                "Keep `_Solution` and `_Route` semantics intact unless the "
-                "hypothesis explicitly changes the state model. They are slotted "
-                "objects, not nested customer lists."
-            ),
-            (
-                "Obey the solver-provided time limit through the available "
-                "monotonic remaining-time API."
-            ),
-            (
-                "Do not edit objective semantics, feasibility constraints, "
-                "problem parsing, seeds, formal splits, generic Scion core, "
-                "Protocol, or DecisionFeatures."
-            ),
-        )
-
-    def solver_design_scope_guidance(
-        self,
-        context: Any,
-        *,
-        mode: str,
-        broad_terms: Sequence[str],
-    ) -> Sequence[str]:
-        del context, mode
-        lines = [
-            (
-                "Implement the complete causal path needed by the hypothesis. "
-                "Choose the module boundary from algorithm ownership and keep "
-                "scheduler/entrypoint edits as execution wiring."
-            ),
-            (
-                "Do not substitute framework, metadata, telemetry-only, or "
-                "configuration-only work for an algorithmic intervention."
-            ),
-            (
-                "Use the current source ledger and object-model API. Do not "
-                "invent sibling exports, bridge methods, or detached entrypoints."
-            ),
-        ]
-        if broad_terms:
-            lines.append(
-                "The hypothesis names several algorithm families "
-                f"({', '.join(dict.fromkeys(broad_terms))}); ensure they form "
-                "one coherent executable causal path with attributable evidence."
-            )
-        return tuple(lines)
-
-    def solver_design_user_constraints(self, context: Any) -> Sequence[str]:
-        del context
-        return (
-            (
-                "Keep the top-level file_path on the hypothesis owner. Put only "
-                "necessary same-mechanism integration in additional_changes."
-            ),
-            (
-                "Inside the policies package, use relative imports and exact "
-                "exports visible in the provided source ledger."
-            ),
-            (
-                "`context.nearest_neighbor()` takes no arguments. Internal "
-                "`_Solution` is separate from public `CvrpSolution`."
-            ),
-            (
-                "Do not attach dynamic private attributes to `_Solution` or "
-                "`_Route`; use local state or explicit parameters."
-            ),
-            "`additional_changes` must be a JSON array of change objects.",
-            (
-                "Do not use instance names, case ids, reference objective values, "
-                "seeds, or split membership in solver logic."
-            ),
-        )

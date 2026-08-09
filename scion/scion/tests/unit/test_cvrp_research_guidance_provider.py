@@ -63,12 +63,8 @@ def test_cvrp_guidance_adds_factual_prior_without_target_steering() -> None:
     assert "cross-campaign research prior" in rendered
     assert "neutral or negative on final total_distance" in rendered
     assert "broad removal of vns was also negative" in rendered
-    assert "8w/2l/2t with median +6.5" in rendered
-    assert "5w/1l/2t with median +7" in rendered
-    assert "missed its 0.66 win-rate threshold at 0.625" in rendered
-    assert "zero alns iterations" in rendered
-    assert "regressed on all four seeds (-22, -210, -90, -21)" in rendered
-    assert "does not require swap*" in rendered
+    assert "historical screening-level evidence around swap*" in rendered
+    assert "neutral lead, not a required direction" in rendered
 
     for forbidden in (
         "successor",
@@ -81,6 +77,12 @@ def test_cvrp_guidance_adds_factual_prior_without_target_steering() -> None:
         "target_file",
         "next_required_direction",
         "required evidence",
+        "tai150a",
+        "validation",
+        "frozen",
+        "8w/2l/2t",
+        "5w/1l/2t",
+        "-22, -210, -90, -21",
     ):
         assert forbidden not in rendered
         assert forbidden not in focus_text

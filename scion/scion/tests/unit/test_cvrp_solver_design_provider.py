@@ -30,7 +30,8 @@ def test_cvrp_hypothesis_guidance_is_open_and_algorithm_owned() -> None:
     assert "No prepared file or mechanism is mandatory" in rendered
     assert "CVRP-owned causal path" in rendered
     assert "paired and case-level total_distance" in rendered
-    assert "confidence interval, and MDE" in rendered
+    assert "Use MDE only when a matched calibration exists" in rendered
+    assert "R2 has no matched MDE" in rendered
     assert "generic Scion core" in rendered
     assert "nearest reviewed mechanism" not in rendered
     assert "CMT2/CMT4" not in rendered
@@ -43,8 +44,11 @@ def test_cvrp_code_constraints_expose_real_source_and_object_model() -> None:
     assert constraints is not None
     rendered = repr(constraints)
 
-    assert "policies/baseline_algorithm.py::solve" in rendered
-    assert "source ledger" in rendered
+    assert set(constraints) == {
+        "object_model_hints",
+        "api_contracts",
+        "forbidden_patterns",
+    }
     assert "_Solution.routes" in rendered
     assert "_Route" in rendered
     assert "record_move" not in rendered
@@ -76,21 +80,17 @@ def test_cvrp_target_module_guidance_matches_mechanism_ownership() -> None:
     )
 
 
-def test_cvrp_code_guidance_has_no_scope_caps_or_smoke_repair_path() -> None:
+def test_cvrp_code_guidance_has_one_problem_fact_packet() -> None:
     provider = _provider()
-    rendered = "\n".join(
-        (
-            *provider.solver_design_code_rules({}),
-            *provider.solver_design_scope_guidance(
-                {}, mode="direct_v3", broad_terms=("alns", "vns")
-            ),
-            *provider.solver_design_user_constraints({}),
-        )
-    )
 
-    assert "one coherent executable causal path" in rendered
-    assert "line" not in rendered.lower() or "entrypoint" in rendered.lower()
-    assert "agentic_code_scope_control" not in rendered
-    assert "smoke" not in rendered.lower()
-    assert "retry" not in rendered.lower()
-    assert "top-n" not in rendered.lower()
+    assert not hasattr(provider, "solver_design_code_rules")
+    assert not hasattr(provider, "solver_design_broad_scope_terms")
+    assert not hasattr(provider, "solver_design_scope_guidance")
+    assert not hasattr(provider, "solver_design_user_constraints")
+    constraints = provider.active_subject_code_constraints(surface="solver_design")
+    assert constraints is not None
+    rendered = repr(constraints)
+    assert "solver-provided time limit" in rendered
+    assert "case ids" in rendered
+    assert "source ledger" not in rendered
+    assert "stable entrypoint" not in rendered
