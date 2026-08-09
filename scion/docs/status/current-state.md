@@ -453,6 +453,28 @@ authorizes validation, frozen holdout, promotion, or an improvement claim.
 The detailed evidence and claim boundary are in
 `docs/experiments/v0.4/v0.4-v3-lightweight-research-effectiveness-gpt56terra-20260808.md`.
 
+The next CVRP rung is prospectively frozen at executable commit `51f9bbd7`:
+an eight-stage fresh `gpt-5.6-terra` campaign using the unchanged formal
+ProblemSpec, cases, four screening seeds, thresholds and per-case time rules.
+This matched design isolates the current context, least-recently-served
+scheduling, sparse-no-loss expansion and typed-feedback corrections instead of
+simultaneously changing the evidence population. H receives complete current
+source, the neutral prior, compact mechanism evidence and anonymous
+observational CVRPLIB case dimension/size where derivable; C retains the
+complete safe multi-file modify/create surface. None of those observations
+enters Decision. Current H feedback has no stable anonymous case alias and the
+phase evidence is aggregate rather than case-by-phase; that remains an explicit
+analysis limit, not a new gate or a claim that case context is complete.
+
+The accepted A/A calibration reports screening `MDE@80%=9.9`, recommends eight
+seeds and exceeds the declared practical delta `2`. Consequently a negative
+four-seed result can reject an exact candidate at the fixed Protocol rung but
+cannot exclude sub-MDE improvement. Directionally positive or sparse
+power-limited evidence may justify a separately pre-registered eight-seed
+campaign; seeds will never be added inside the running root. The fixed design,
+launch and claim boundary are in the
+[preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md).
+
 ## Research-path corrections after the controls
 
 - Local existing-file authoring now consistently prefers ordered
@@ -607,7 +629,8 @@ declared held-out pairs. Synthetic Warehouse continuity is
 DestroyRebuild candidate and its separately preregistered 12/12 fresh replay
 returned `FROZEN_PASS`, so Warehouse production transfer is
 `RETAINED_PRODUCTION_IMPROVEMENT` and all Warehouse acceptance is complete.
-CVRP has no Protocol-complete promotion. Closure now requires one CVRP
+CVRP has no Protocol-complete promotion; its matched 8-stage R1 is
+pre-registered but not yet started. Closure now requires one CVRP
 screening -> validation -> frozen promotion, an independent B0 comparison and
 the S6 cross-problem/full-regression record.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are

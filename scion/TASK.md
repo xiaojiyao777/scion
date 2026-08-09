@@ -177,6 +177,7 @@ They do not block this task and cannot satisfy it.
 | R24 | proven and corrected prospectively | Real H prompts accumulated complete per-pair history and repeated telemetry (Warehouse 11.3k -> 83.8k input tokens; CVRP 20.7k -> 100.2k), while Warehouse surface hypothesis guidance was absent. C exposed source hashes, owner/provenance/views and repeated edit rules. | Complete raw lineage remains durable; the provider receives a fixed V3 research view with recent current attempts detailed, older attempts structured, siblings brief, actionable problem evidence, complete current source, phase-correct guidance and a neutral problem-owned prior when prior campaigns contain relevant scientific evidence. Provider-visible self-proof metadata is removed without weakening source-content binding. |
 | R25 | proven; retained replay complete | Warehouse prod-1.2 completed 24/24 formal stages and promoted a subcategory-aware DestroyRebuild candidate from v1 to v2. The independent fixed replay completed 12/12 fresh pairs at 4/0/0 cases, 12/0/0 pairs, `total_cost +15150 [8400,22000]`. | Classify production transfer as `RETAINED_PRODUCTION_IMPROVEMENT`. Warehouse acceptance is complete; do not require production multi-promotion. |
 | R26 | proven organization defect; corrected prospectively at `8909f635`; causal effect on promotion unproven | The launch-time EXPLORE scheduler repeatedly served the oldest branch, yielding 16 H on one cumulative branch and one each on two schedulable siblings. Two independent Merge candidates had sparse no-loss 2/0/4 case evidence but could not reach declared expanded screening. A candidate-local traceback also hid its exception root cause from the next H. | Rotate EXPLORE siblings by persisted least-recently-served time, allow exactly one measurement expansion for a practical sparse no-loss initial signal without weakening the pass threshold, and project one typed Verification root cause. Do not add rollback, novelty, algorithm-quality or negative-result gates. |
+| R27 | proven measurement/claim limit; claim-bounded prospectively, four-seed power unchanged | CVRP screening's declared practical delta is `2`, while the accepted A/A calibration reports `MDE@80%=9.9` and recommends eight seeds. The current four-seed design has greater power for large effects but cannot rule out smaller improvement. Historical CMT case-ID priority is also a population property, not a V3 research obligation. | Keep the first 8-stage Terra rung matched to the existing cases/seeds so context/runtime corrections are identifiable; explicitly limit negative claims below MDE. If evidence is power-limited, redesign a fresh pre-registered campaign. Never add seeds post hoc or turn case priorities into H obligations/gates. |
 
 ## Modular execution plan
 
@@ -390,9 +391,12 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   cases, and provider H history contains actionable compact evidence rather
   than repeated per-pair telemetry or self-proof metadata. The CVRP projection
   retains every formal pair while removing repeated candidate/champion mirrors.
-- [ ] Freeze the current B0 ALNS+VNS champion and declared ProblemSpec,
+- [x] Freeze the current B0 ALNS+VNS champion and declared ProblemSpec,
   Protocol, split and seed inputs before a new campaign. Do not globally
-  disable VNS or weaken the canonical baseline.
+  disable VNS or weaken the canonical baseline. The matched 8-stage R1 inputs,
+  context semantics, measurement claim limits and independent final population
+  are fixed in the
+  [preregistration](docs/experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md).
 - [x] Deliver the complete safe CVRP cross-campaign prior through the actual H
   payload as neutral evidence. Remove the host-authored `materially different`
   instruction or Contract requirement: Contract may enforce schema,
@@ -488,6 +492,10 @@ prospectively without a new promotion gate. The latest complete suite remains
 set passes 138 tests. S5 has removed assay/host
 disposition and result-derived expand cases, delivered the neutral prior to the
 actual H payload, and stopped suppressing same-branch refinement with
-`materially different`. The next CVRP campaign still requires frozen
-B0/Protocol inputs and a fresh open H/C run. S6 final closure remains pending,
-and CVRP still has no Protocol-complete promotion.
+`materially different`. The next CVRP campaign is now frozen at executable
+commit `51f9bbd7` as an 8-stage matched open-H/C rung. Its four-seed screening
+has greater power for large effects but cannot exclude effects below the
+calibrated MDE; a power change, if justified by the fixed result, must be a
+separate fresh preregistration. Launch and Protocol evidence remain pending.
+S6 final closure remains pending, and CVRP still has no Protocol-complete
+promotion.
