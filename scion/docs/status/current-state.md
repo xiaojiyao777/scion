@@ -575,6 +575,32 @@ process is again listening on `127.0.0.1:8080`, reports one authenticated active
 account, and exposes `gpt-5.6-terra`; no proxy build, upgrade or Scion deployment
 work was performed.
 
+Those R3 hot-path changes and its outcome-blind populations are now fixed at
+executable commit `6d5be022b5c5bd33952050b02fec954bd4fad7cf`. The independent
+clean worktree passes `2081 passed, 1 skipped` in 633.04 seconds. The changes
+are deliberately small in authority:
+
+- canonical provider JSON is compact but lossless; the R2 final H rendering
+  would fall by 63,094 chars (28.8%) without selecting or deleting evidence;
+- provider finish/tool/argument facts are trace-only, and next-H history now
+  separates proposal intent from whether a patch existed and which files ran;
+- `expected_effect` remains optional tainted lineage text, avoiding two R2
+  description-only rejections that consumed 45,528 tokens;
+- quality/validation/frozen use a prospective case net-score plus loss-veto,
+  median and CI rule; initial evidence may request exact expansion but cannot
+  promote;
+- quality, validation and frozen are mutually exclusive outcome-blind 12-case
+  blocks with 4->8, 8 and 8 disjoint seeds; one dimension-only time policy is
+  used throughout; a fourth 12x8 block is reserved for final B0 replay and is
+  absent from proposal/search splits.
+
+The R2 C tool itself is not broadened: 8/8 completed C responses parsed and
+entered evaluation, 4/8 changed two files, and all ten formal evaluations
+passed Contract and Verification. There is no evidence that shell or more
+provider tools would improve R3. The next action is the separately
+pre-registered, provider-free same-seed A/A/null diagnostic. No R3 provider
+call starts unless that fixed rule/population check completes acceptably.
+
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
 and the complete claim boundary and mechanism analysis are in its
@@ -736,10 +762,11 @@ returned `FROZEN_PASS`, so Warehouse production transfer is
 `RETAINED_PRODUCTION_IMPROVEMENT` and all Warehouse acceptance is complete.
 CVRP has no Protocol-complete promotion. R1 is sealed at 5/8 and R2 at 10/12;
 both retain valid partial science but neither candidate path reached validation
-or frozen holdout. R2's elapsed-budget SA is the current strongest lead, while
-its fixed tie-sensitive breadth rule and provider-visible context are explicit
-R3 design inputs. Closure now requires one fresh prospectively calibrated R3,
-one CVRP screening -> validation -> frozen promotion, an independent B0
-comparison and the S6 cross-problem/full-regression record.
+or frozen holdout. R2's elapsed-budget SA is the current strongest lead. R3's
+code, context, measurement rule and disjoint populations are fixed and fully
+regressed; provider-free null calibration remains the last launch prerequisite.
+Closure still requires one fresh R3 screening -> validation -> frozen
+promotion, an independent B0 comparison and the S6 cross-problem/full-
+regression record.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.

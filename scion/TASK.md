@@ -189,9 +189,11 @@ They do not block this task and cannot satisfy it.
 | R33 | active experimental-design risk; bounded prospectively | A no-promotion campaign can reflect the candidate ideas, the stage/case/seed measurement design, or an H/C context and tool surface that diverts attention from algorithm research. Adding more host rules cannot distinguish those causes and can itself suppress useful search. | Treat stage populations, estimator semantics, provider-visible context and available edit/research tools as explicit experiment inputs. Preserve only V3 Contract/Verification/Protocol authority and minimum replayable lineage. R2 measures the integrated research path; its postrun must analyze proposal focus, usable evidence, tool/edit friction and measurement reach separately. If causal isolation is still needed, use a later fresh preregistered matched ablation rather than tuning the active root or adding a quality gate. |
 | R34 | proven V3 exposure/context-burden defect; corrected at `41956f36` | The proposed R2 H prior exposed current-split validation case `tai150a`, seed-level deltas and frozen/validation summaries. C also received several overlapping source/interface/rules packets, one route-count statement contradicted the protected-objective semantics, and H was told to use an incompatible MDE. | Remove all validation/frozen detail from H, retain screening-level mechanism facts only, expose every current source file once, correct excess routes to `fleet_violation`, and keep one problem-owned object/API packet plus target-specific guidance. The result removes 94 net lines, adds no gate and passes the complete suite. |
 | R35 | proven valid partial science; terminal root sealed | Corrected R2 completed 10 formal stages and 448/448 valid pairs before the final C stream ended upstream without a terminal event. Two schema-invalid H calls scheduled forward; no Contract/Verification candidate failed and no feasibility or fleet regression occurred. | Classify the root as pre-registered `RUN_INVALID_INFRA` with `VALID_PARTIAL_SCIENCE_10_OF_12`. Never resume or retry it. There was no validation, frozen stage or promotion; retain completed evidence only as neutral input to a fresh R3. |
-| R36 | proven proposal-fidelity/context-attribution defect; minimal correction pending | One C for time-aware operator credit added only three unused constants. Formal objectives were 32/32 identical to its parent, yet later H history could describe the intended mechanism without an executed-patch fact. The trace also omitted provider finish/tool-choice facts needed to distinguish a completed no-op from response truncation. | Record mechanical provider completion facts in durable traces and project concise executed-file/change facts separately from intended H. They are analysis and next-H context only, never Contract/Verification/Decision gates. Do not add semantic patch grading or retry. |
-| R37 | proven prospective measurement-design defect | R2 elapsed-budget SA reached 6W/1L/5T cases, pair 49/20/27 and distance `+2.75 [0,11]`, but fixed `wins/all_cases >= 0.60` treats exact ties as breadth failures and therefore correctly returned unclear. The candidate is not a hidden pass. | Before R3, pre-register and lightly calibrate a tie-aware case-level quality rule with an explicit loss veto, fixed cases/seeds and unchanged feasibility/fleet protection. Apply it prospectively through quality, validation and frozen; never reinterpret R1/R2. |
-| R38 | proven context-framing burden; lossless correction pending | The final R2 H reached 45,373 input tokens. Complete current source was useful, but pretty JSON and repeated structured history consumed avoidable visible bytes and attention. | Use deterministic compact canonical JSON and concise current-step execution facts while preserving complete raw lineage, complete current source and validation/frozen non-exposure. Do not introduce top-k, token cutoffs, opaque summaries or history gates. |
+| R36 | proven proposal-fidelity/context-attribution defect; corrected at `6d5be022` | One C for time-aware operator credit added only three unused constants. Formal objectives were 32/32 identical to its parent, yet later H history could describe the intended mechanism without an executed-patch fact. The trace also omitted provider finish/tool-choice facts needed to distinguish a completed no-op from response truncation. | Mechanical finish/tool/argument observations now remain trace-only, while provider history names `proposal_intent` separately from `patch_present` and executed files. They never enter Contract/Verification/Decision, and no semantic patch grader or retry was added. |
+| R37 | proven prospective measurement-design defect; implemented, calibration pending | R2 elapsed-budget SA reached 6W/1L/5T cases, pair 49/20/27 and distance `+2.75 [0,11]`, but fixed `wins/all_cases >= 0.60` treats exact ties as breadth failures and therefore correctly returned unclear. The candidate is not a hidden pass. | R3 prospectively uses case net score `(W-L)/12 >= 0.25`, loss rate `L/12 <= 0.20`, median practical effect and CI low `>= 0` through quality/validation/frozen. Initial evidence can only request exact expansion. Run the pre-registered A/A/null check before provider launch; never reinterpret R1/R2. |
+| R38 | proven context-framing burden; lossless correction complete at `6d5be022` | R2 H grew from 21,124 to 45,373 input tokens; final visible context was 219,048 chars, with source 42.2% and history 51.5%. C remained stable near 22k tokens and its 11-file source was useful. | Deterministic compact canonical JSON reduces the stored final H rendering by 63,094 chars (28.8%) without dropping a field. Keep complete current source, existing last-three/older-compact history semantics and validation/frozen non-exposure; measure actual R3 tokens before any further context change. |
+| R39 | proven descriptive-schema friction; corrected at `6d5be022` | Two of 11 R2 H calls contained a complete mechanism and every other required field but omitted only `expected_effect`. They consumed 45,528 tokens, 9.0% of all provider input, and produced no solver experiment. | Keep `expected_effect` as optional tainted lineage text with an empty deterministic default. It is not inferred, scored or read by Decision. The mechanism, target weakness, change locus/action and target file remain required. |
+| R40 | active experimental-population risk; outcome-blind R3 assets frozen at `6d5be022` | Earlier formal blocks were X-heavy, validation/frozen used fewer seeds than quality, and a short 12-stage horizon could censor a late candidate before quality -> validation -> frozen drained. | Freeze three mutually exclusive 12-case quality/validation/frozen blocks with exact size/headroom balance, 4->8/8/8 disjoint seeds, dimension-only 30/45/60/90/120-second budgets and a 16-stage horizon. Freeze a fourth disjoint 12x8 final B0 replay before launch and keep it out of proposal/search context. |
 
 ## Modular execution plan
 
@@ -477,11 +479,17 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   in its postrun. The strongest elapsed-budget SA reached 6W/1L/5T cases and
   `+2.75 [0,11]`, but correctly missed the fixed 0.60 all-case win threshold.
   It is a prospective R3 lead, not a retroactive R2 pass.
-- [ ] Complete only the observed R3 hot-path prerequisites: lossless compact
-  canonical H/C framing; mechanical provider completion trace fields; concise
-  intended-H versus executed-patch facts; and a prospectively calibrated,
-  tie-aware case rule with an explicit loss veto. Add no quality, novelty,
-  activation, Trust/Hash, token or runtime gate.
+- [x] Complete the observed R3 hot-path code and design prerequisites at
+  `6d5be022`: lossless compact H/C framing; trace-only provider completion
+  facts; intended-H versus executed-patch facts; optional descriptive
+  `expected_effect`; tie-aware case quality with a loss veto; and four
+  outcome-blind disjoint populations. No quality, novelty, activation,
+  Trust/Hash, token or runtime gate was added. The clean fixed-source suite is
+  `2081 passed, 1 skipped` in 633.04 seconds.
+- [ ] Run the separately pre-registered provider-free same-seed A/A/null
+  calibration on quality, validation and frozen. Its artifacts are diagnostic
+  only and cannot enter Decision. If the frozen null bound fails, revise only
+  in a new source/preregistration; do not launch R3 with a post-hoc rule.
 - [ ] Pre-register R3 in a fresh absent root as an integrated corrected,
   promotion-seeking rung. Freeze context sections, tool/edit surface, case
   populations, ordered seeds, time limits, initial-to-quality routing and the
@@ -560,9 +568,11 @@ terminal-less provider C, so its classification is `RUN_INVALID_INFRA` with
 SWAP* and elapsed-budget SA research, but no candidate reached validation or
 frozen. The strongest SA quality screen was 6W/1L/5T cases and
 `+2.75 [0,11]`; it correctly missed the pre-registered 0.60 all-case win rate
-and is not a hidden pass. R3 prerequisite work is now limited to lossless
-context compaction, mechanical response observability, executed-patch facts and
-a prospectively calibrated tie-aware case rule. The last complete suite remains
-`2047 passed, 1 skipped` in 624.56 seconds until those changes receive focused
-and complete regression. S6 final closure remains pending, and CVRP still has
-no Protocol-complete promotion.
+and is not a hidden pass. R3 hot-path code and outcome-blind population design
+are frozen at `6d5be022`: compact lossless context, trace-only provider facts,
+executed-patch attribution, optional descriptive `expected_effect`, a
+tie-aware loss-veto rule, three disjoint 12-case formal blocks and a fourth
+disjoint final replay block. The clean fixed-source suite is `2081 passed,
+1 skipped` in 633.04 seconds. Provider-free A/A/null calibration and the fresh
+R3 preregistration/launch remain pending. S6 final closure remains pending, and
+CVRP still has no Protocol-complete promotion.
