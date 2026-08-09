@@ -576,10 +576,15 @@ process is again listening on `127.0.0.1:8080`, reports one authenticated active
 account, and exposes `gpt-5.6-terra`; no proxy build, upgrade or Scion deployment
 work was performed.
 
-Those R3 hot-path changes and its outcome-blind populations are now fixed at
-executable commit `6d5be022b5c5bd33952050b02fec954bd4fad7cf`. The independent
-clean worktree passes `2081 passed, 1 skipped` in 633.04 seconds. The changes
-are deliberately small in authority:
+The structural R3 hot-path changes and outcome-blind populations were fixed at
+`6d5be022`. A final launch-readiness review found that a fresh campaign would
+not inherit the R2 database and therefore would miss the strongest R2 SA result
+and its deadline-model residuals. Exact executable commit
+`76f3e9765128dcc6e0e9234ee6fc21cc4570d59f` adds only that neutral aggregate
+problem prior, the limited non-power A/A interpretation, synchronized formal
+documentation and tests. The independent clean worktree passes `2081 passed,
+1 skipped` in 639.39 seconds. The changes remain deliberately small in
+authority:
 
 - canonical provider JSON is compact but lossless; the R2 final H rendering
   would fall by 63,094 chars (28.8%) without selecting or deleting evidence;
@@ -594,6 +599,10 @@ are deliberately small in authority:
   blocks with 4->8, 8 and 8 disjoint seeds; one dimension-only time policy is
   used throughout; a fourth 12x8 block is reserved for final B0 replay and is
   absent from proposal/search splits.
+- fresh H receives R2 elapsed-budget SA aggregate evidence and its incomplete
+  deadline-model facts exactly once, without mechanism selection or holdout
+  exposure; the A/A summary says explicitly that no matched MDE/power estimate
+  exists, and `calibration_ref` remains empty.
 
 The R2 C tool itself is not broadened: 8/8 completed C responses parsed and
 entered evaluation, 4/8 changed two files, and all ten formal evaluations
@@ -608,8 +617,10 @@ or runtime-budget hits; every observed combined rule was false, and every
 the diagnostic's pre-registered acceptance condition. The complete record is
 in
 [`v0.4-cvrp-v3-r3-aa-null-postrun-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-r3-aa-null-postrun-20260809.md).
-Fresh R3 campaign preregistration is the next action; no R3 provider call has
-been launched.
+The fresh 16-stage R3 campaign is now fixed in
+[`v0.4-cvrp-v3-quality-screen-16stage-r3-preregistration-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-quality-screen-16stage-r3-preregistration-20260809.md).
+No R3 provider call has been launched; the next action is the frozen proxy/model
+preflight followed by the one allowed launch.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
@@ -774,9 +785,9 @@ CVRP has no Protocol-complete promotion. R1 is sealed at 5/8 and R2 at 10/12;
 both retain valid partial science but neither candidate path reached validation
 or frozen holdout. R2's elapsed-budget SA is the current strongest lead. R3's
 code, context, measurement rule and disjoint populations are fixed and fully
-regressed, and its provider-free null calibration completed acceptably. Fresh
-R3 campaign preregistration and launch remain pending. Closure still requires
-one fresh R3 screening -> validation -> frozen promotion, an independent B0
-comparison and the S6 cross-problem/full-regression record.
+regressed, its provider-free null calibration completed acceptably, and its
+fresh 16-stage campaign is pre-registered. Launch remains pending. Closure
+still requires one fresh R3 screening -> validation -> frozen promotion, an
+independent B0 comparison and the S6 cross-problem/full-regression record.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.
