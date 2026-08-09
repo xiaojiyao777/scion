@@ -622,9 +622,23 @@ The fresh 16-stage R3 campaign is now fixed in
 The frozen proxy/model preflight passed and the one allowed `gpt-5.6-terra`
 campaign was launched from exact runtime `76f3e976` at
 `/home/clawd/research/scion-experiments/v04-cvrp-v3-quality-screen-16stage-r3-gpt56terra-20260809T194031Z-claw/campaign`.
-It is still active. Its current queued quality expansion must drain unchanged;
-no incomplete W/L/T or promotion claim is used here, and the campaign has not
-been retried, resumed or modified.
+It is still active and has not been retried, resumed or modified. Candidate
+three's completed 96-pair quality expansion was independently reproduced twice:
+34W/11L/51T pairs, 6W/0L/6T cases, net score `0.5`, loss rate `0`, and distance
+median `+1 [0,2.25]`, with 96/96 valid pairs, zero feasibility/fleet failure and
+zero candidate/champion failure. Net, loss and CI-low checks passed, but the
+practical median was below `2`, so the actual
+`SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN -> continue_explore` route was
+correct for an already expanded candidate. A fourth formal screening is now
+active; no incomplete outcome is used here.
+
+That expansion was nevertheless an off-protocol descendant. Its initial
+32-pair result was 3W/0L/5T cases and median `0 [0,1.5]`; CI high was below the
+practical delta, so none of the frozen initial expansion routes applied. The
+old generic uncertainty fallback expanded it anyway. This is a Protocol
+implementation routing deviation, not a candidate or runner failure. The
+prospective route is corrected at `67405777`; R3 is not reinterpreted and the
+extra stage is retained as exploratory evidence.
 
 The active expansion later exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
