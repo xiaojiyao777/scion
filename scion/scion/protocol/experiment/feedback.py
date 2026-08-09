@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import statistics
 from collections import defaultdict
 from typing import Any, Dict, List, Sequence
@@ -11,6 +12,9 @@ from scion.core.models import (
     ScreeningPatternSummary,
 )
 from .types import CaseLevelResult
+
+
+_CVRPLIB_DIMENSION_RE = re.compile(r"(?:^|-)n(?P<dimension>\d+)(?:-|$)", re.I)
 
 
 def _pair_feedback_counts(pairs: Sequence[PairwiseCaseFeedback]) -> dict[str, Any]:
@@ -100,14 +104,27 @@ def _aggregate_pairs_to_case_level(
 
 
 def _extract_case_features(case_path: str) -> dict:
-    """Extract lightweight features from instance path (MVP: path-level only)."""
+    """Extract observational path facts for proposal feedback."""
     stem = os.path.splitext(os.path.basename(case_path))[0]
     size_bucket = "unknown"
     for tag in ("xlarge", "large", "medium", "small"):
         if tag in stem.lower():
             size_bucket = tag
             break
-    return {"path_stem": stem, "size_bucket": size_bucket}
+    features: dict[str, Any] = {"path_stem": stem, "size_bucket": size_bucket}
+    dimension_match = _CVRPLIB_DIMENSION_RE.search(stem)
+    if dimension_match is not None:
+        dimension = int(dimension_match.group("dimension"))
+        features["dimension"] = dimension
+        if dimension <= 100:
+            features["size_bucket"] = "n_le_100"
+        elif dimension <= 149:
+            features["size_bucket"] = "n_101_149"
+        elif dimension <= 250:
+            features["size_bucket"] = "n_150_250"
+        else:
+            features["size_bucket"] = "n_ge_251"
+    return features
 
 
 def _aggregate_case_feedback(

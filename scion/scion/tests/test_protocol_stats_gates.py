@@ -1,6 +1,7 @@
 """Focused tests split from test_protocol.py."""
 
 from .protocol_test_support import *  # noqa: F401,F403
+from scion.protocol.experiment import _extract_case_features
 
 def test_lexicographic_compare_win_by_splits():
     cand = {"subcategory_splits": 2, "total_cost": 1000}
@@ -72,6 +73,50 @@ def test_compute_eval_stats_basic():
     assert stats.ties == 1
     assert stats.win_rate == pytest.approx(0.6)
     assert stats.median_delta == pytest.approx(30.0)
+
+
+@pytest.mark.parametrize(
+    ("case_path", "expected"),
+    (
+        (
+            "cvrplib/A/A-n64-k9.vrp",
+            {"path_stem": "A-n64-k9", "size_bucket": "n_le_100", "dimension": 64},
+        ),
+        (
+            "cvrplib/X/X-n110-k13.vrp",
+            {
+                "path_stem": "X-n110-k13",
+                "size_bucket": "n_101_149",
+                "dimension": 110,
+            },
+        ),
+        (
+            "cvrplib/M/M-n200-k17.vrp",
+            {
+                "path_stem": "M-n200-k17",
+                "size_bucket": "n_150_250",
+                "dimension": 200,
+            },
+        ),
+        (
+            "cvrplib/X/X-n401-k29.vrp",
+            {
+                "path_stem": "X-n401-k29",
+                "size_bucket": "n_ge_251",
+                "dimension": 401,
+            },
+        ),
+        (
+            "production/instance_prod_scr_micro01.json",
+            {"path_stem": "instance_prod_scr_micro01", "size_bucket": "unknown"},
+        ),
+    ),
+)
+def test_case_features_expose_cvrplib_dimension_without_reading_benchmark(
+    case_path,
+    expected,
+):
+    assert _extract_case_features(case_path) == expected
 
 
 def test_stats_select_predeclared_effect_metric_and_retain_all_rows():
