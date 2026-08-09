@@ -91,9 +91,12 @@ Do not spend implementation, review, experiment, or root time on:
   intent/commit/closure self-proof;
 - duplicate hashes, hash chains, or reopen proofs for facts already present in
   ordinary branch/source/evidence state;
-- provider retry, Scion token/file/session budgets, truncation, top-k context,
-  summary substitution, forced mechanisms, forced surfaces/actions/targets,
-  novelty gates, or host-authored algorithm-quality gates;
+- provider retry, Scion token/file/session budgets, token-triggered truncation,
+  top-k evidence selection, opaque summary substitution, forced mechanisms,
+  forced surfaces/actions/targets, novelty gates, or host-authored
+  algorithm-quality gates. A fixed V3 semantic projection may keep recent
+  current-branch research detailed, older evidence structured, and sibling
+  state brief while preserving the complete raw scientific lineage;
 - tuning Protocol thresholds, cases, seeds, or time limits after observing a
   candidate result.
 
@@ -167,6 +170,11 @@ They do not block this task and cannot satisfy it.
 | R17 | proven task-design violation | The proposed CVRP public assay could stop an exact verified candidate for being inactive or starving search before the existing Protocol/Decision route completed. Calling it observational did not remove its disposition authority. | Remove assay admission and host-stop. Diagnostics may explain evidence or inform the next H, but only Verification and the declared Protocol/Decision path may reject or advance a candidate. |
 | R18 | proven and corrected | Expanded evaluation accepted case ids derived from the current branch's wins and losses, so result-dependent evidence could change the same candidate's expanded screening population. | Outcome-derived case selection is removed. Expansion uses only the case population and deterministic selection frozen in the pre-experiment Protocol; fixed problem-owned case priorities remain valid when declared before results. |
 | R19 | proven and corrected | The CVRP cross-campaign prior existed in problem-owned guidance but did not reach the active provider H, while the host prompt asked for a `materially different` mechanism and thereby suppressed valid V3 same-branch refinement. | The complete neutral prior now reaches H, and `materially different` is removed as a prompt or Contract quality requirement. Exact approved-H binding remains; novelty and refinement choice belong to the agent. |
+| R20 | proven production evidence | The fresh prod-1.1 12-stage Warehouse shakedown completed 211/211 formal pairs and produced a final candidate with 5/0/0 validation cases and 14/1/0 pairs, but the primary split CI remained `[0,1]`; Protocol queued expansion and the horizon ended with champion v1. | Classify it only as `VALID_FUNNEL_FOR_24STAGE_PREREGISTRATION`; seal the root and use a fresh 24-stage campaign. It is neither a promotion nor a framework failure. |
+| R21 | proven and corrected | Production validation declared `n_cases=5` and `expand_to=5`, so queued expansion would repeat identical cases and seeds. The execution path also ignored declared `bootstrap_n=10000` and used the statistics default. | An expansion must strictly add cases or conservatively fail for insufficient evidence; validation/frozen use the declared bootstrap count. R1 remains unchanged because it stopped before the duplicate stage. |
+| R22 | proven and corrected prospectively | Hierarchical statistics stopped at the first non-exact higher-priority metric. With identical lexicographic wins and identical positive cost deltas, adding a sparse positive primary improvement could change a pass into uncertainty. The predeclared `measurement.effect_scale.metric` was ignored. | Lexicographic case W/L/T remains direction evidence; every objective is recorded; the predeclared effect metric now supplies practical effect and CI. Only explicitly problem-declared protected objectives may veto regression. R1 is not reinterpreted. |
+| R23 | proven and corrected prospectively | Initial and expanded evenly-spaced selections were computed independently. In CVRP, modify screening 8 -> 12 dropped four initial cases, so expansion changed rather than enlarged evidence. | Expanded populations now contain the complete deterministic initial population plus predeclared new cases with unchanged stage seeds, and fail conservatively when no evidence can be added. |
+| R24 | proven and corrected prospectively | Real H prompts accumulated complete per-pair history and repeated telemetry (Warehouse 11.3k -> 83.8k input tokens; CVRP 20.7k -> 100.2k), while Warehouse surface hypothesis guidance was absent. C exposed source hashes, owner/provenance/views and repeated edit rules. | Complete raw lineage remains durable; the provider receives a fixed V3 research view with recent current attempts detailed, older attempts structured, siblings brief, actionable problem evidence, complete current source, and phase-correct guidance. Provider-visible self-proof metadata is removed without weakening source-content binding. |
 
 ## Modular execution plan
 
@@ -326,10 +334,25 @@ They do not block this task and cannot satisfy it.
   `CONTINUOUS_OPTIMIZATION_CONFIRMED`. See the
   [preregistration](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-preregistration-20260808.md)
   and [postrun](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-postrun-20260809.md).
-- [ ] After synthetic continuity is demonstrated, run the pre-registered
-  production transfer rung. Start with one uninterrupted 12-stage shakedown;
-  use a 24-stage matched matrix only if the shakedown shows a valid funnel or a
-  clearly powered negative question.
+- [x] Run the pre-registered production transfer 12-stage shakedown. It
+  completed 12/12 stages and 211/211 formal pairs with no solver or infra
+  failure. The final exact candidate passed screening and reached 5/0/0-case,
+  14/1/0-pair validation before Protocol queued expansion. Classification:
+  `VALID_FUNNEL_FOR_24STAGE_PREREGISTRATION`; champion remains v1 and the root
+  is sealed. See the
+  [postrun](docs/experiments/v0.4/v0.4-warehouse-v3-production-transfer-prod11-12stage-r1-postrun-20260809.md).
+- [x] Complete the prospective research-design corrections before the longer
+  rung: effect-metric measurement, optional problem-owned protected objectives,
+  strictly nested expansion populations, declared bootstrap execution, the V3
+  provider-history projection, phase-correct Warehouse H/C guidance, and plain
+  source-content context without owner/hash self-proof. Focused review found no
+  P0 issue, and the complete suite passed `2011 passed, 1 skipped`.
+- [ ] Freeze prod-1.2 with the five independently fixed new validation cases,
+  keep the old five as the initial population and all ten as expanded
+  validation, and run one separately preregistered fresh 24-stage campaign.
+  Never resume the 12-stage root. If it promotes, independently replay the
+  exact production champion; otherwise report the predeclared powered negative
+  conclusion and the precise remaining headroom/noise boundary.
 - [ ] Do not enable parameter/weight search until two structural promotions are
   demonstrated. If later tested, keep it as a separate off/on ablation so it
   cannot masquerade as structural research ability.
@@ -350,6 +373,12 @@ Warehouse acceptance:
   population is selected only from the fixed Protocol. Pre-experiment
   problem-owned case configuration may remain; current candidate results may
   never alter it.
+- [x] Verify the shared prospective research-design corrections on CVRP before
+  launch: effect metric is `total_distance`, `fleet_violation` is the only
+  explicitly protected objective, expanded populations contain their initial
+  cases, and provider H history contains actionable compact evidence rather
+  than repeated per-pair telemetry or self-proof metadata. The CVRP projection
+  retains every formal pair while removing repeated candidate/champion mirrors.
 - [ ] Freeze the current B0 ALNS+VNS champion and declared ProblemSpec,
   Protocol, split and seed inputs before a new campaign. Do not globally
   disable VNS or weaken the canonical baseline.
@@ -438,10 +467,14 @@ promotion. R8 then completed 36/36 stages and 534/534 pairs and promoted
 `v1 -> v2 -> v3` in one uninterrupted campaign. The separately preregistered
 held-out replay completed 108/108 valid pairs and retained v2 over v1, v3 over
 v2 and v3 over v1, so synthetic Warehouse continuity is
-`CONTINUOUS_OPTIMIZATION_CONFIRMED`. Production transfer remains open. The
-latest post-heldout full suite completed with `1988 passed, 1 skipped` in 627.26
-seconds. S5 has removed assay/host disposition and result-derived expand cases,
-delivered the neutral prior to the actual H payload, and stopped suppressing
-same-branch refinement with `materially different`. The next CVRP campaign
-still requires frozen B0/Protocol inputs and a fresh open H/C run. S6 final
-closure remains pending, and CVRP still has no Protocol-complete promotion.
+`CONTINUOUS_OPTIMIZATION_CONFIRMED`. The production 12-stage shakedown then
+completed 211/211 formal pairs and produced a valid validation funnel, but no
+promotion; it authorizes a fresh prod-1.2 24-stage rung. The prospective
+measurement/population/context corrections are complete and do not reinterpret
+the run. Production transfer remains open. The latest complete suite passed
+`2011 passed, 1 skipped` in 639.18 seconds. S5 has removed assay/host
+disposition and result-derived expand cases, delivered the neutral prior to the
+actual H payload, and stopped suppressing same-branch refinement with
+`materially different`. The next CVRP campaign still requires frozen
+B0/Protocol inputs and a fresh open H/C run. S6 final closure remains pending,
+and CVRP still has no Protocol-complete promotion.

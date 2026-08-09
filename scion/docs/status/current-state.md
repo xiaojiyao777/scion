@@ -315,6 +315,59 @@ and
 This does not establish production-style Warehouse transfer or CVRP
 improvement.
 
+### Warehouse production transfer
+
+The preregistered prod-1.1 12-stage shakedown completed in its fresh root:
+`/home/clawd/research/scion-experiments/v04-warehouse-v3-production-transfer-prod11-12stage-r1-gpt56terra-20260809T021245Z-claw/campaign`.
+The wrapper exited 0 with `valid / complete`, all 12 requested formal stages
+completed, and 211/211 formal pairs valid. There were 11 screening stages, one
+validation stage, zero frozen stages, zero solver/infra failures, and no
+promotion.
+
+The final exact candidate passed screening at 4/0/2 cases and 9/0/3 pairs. Its
+validation completed all five declared cases and all 15 pairs: case 5/0/0,
+pair 14/1/0, primary `subcategory_splits` deltas `[1,0,0,0,0]`, primary CI
+`[0,1]`, and median `total_cost` improvement `+13200`. Protocol returned
+`VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN`; the requested horizon then ended
+with champion v1. The exact classification is
+`VALID_FUNNEL_FOR_24STAGE_PREREGISTRATION`, not promotion, retained transfer,
+validation failure or framework failure. The root is sealed and must not be
+resumed. The validation candidate was also slower on all 15 pairs, with median
+runtime ratio `1.473`; runtime remained diagnostic under the declared policy.
+
+The run exposed prospective research-design defects without changing its
+recorded result:
+
+- prod-1.1 had `validation.n_cases=5` and `expand_to=5`, so its queued
+  expansion would repeat identical cases and seeds rather than add evidence;
+- the execution path used the statistics default of 1000 bootstrap samples
+  despite the Protocol declaration of 10000;
+- first-nonexact hierarchical statistics were non-monotone: adding a sparse
+  positive higher-priority improvement could hide the already predeclared
+  `total_cost` effect metric and make a better candidate harder to pass;
+- initial and expanded evenly-spaced populations were selected independently;
+  the same defect drops initial CVRP cases during a nominal expansion;
+- real H history grew without a V3 semantic projection, while Warehouse
+  surface-level hypothesis guidance did not reach H and C carried source
+  owner/hash/provenance self-proof metadata.
+
+The no-new-evidence expansion, declared-bootstrap execution and shared
+measurement/population/context defects are corrected prospectively. The
+measurement path now uses the problem's declared effect metric while retaining
+lexicographic direction evidence and every objective row; only an explicitly
+declared protected objective can veto a regression. Expanded populations
+strictly contain their initial cases. Durable raw history remains complete,
+while H receives the fixed V3 research view and C receives plain approved path
+and source content plus phase-correct guidance. These corrections do not
+reinterpret R1.
+The prod-1.2 population design fixes five new candidate-independent validation
+instances and keeps the old five as the initial set, all ten as the expanded
+set, with unchanged seeds and thresholds. The fixed cases have passed
+constructive phase-1 and phase-2 feasibility checks; no candidate, champion,
+objective difference or runtime was used to choose them. See the
+[population design](../experiments/v0.4/v0.4-warehouse-production-prod12-validation-population-design-20260809.md)
+and [R1 postrun](../experiments/v0.4/v0.4-warehouse-v3-production-transfer-prod11-12stage-r1-postrun-20260809.md).
+
 ### CVRP
 
 Campaign:
@@ -476,18 +529,23 @@ and fail-closed regressions passed 92 tests. The complete suite passed
 passed. This is the frozen framework checkpoint for the next fresh Warehouse
 run, not solver-evidence acceptance by itself.
 
-After the held-out terminal evidence and current hot-path work were integrated,
-the latest post-heldout complete suite completed with `1988 passed, 1 skipped`
-in 627.26 seconds. This is the current full-regression terminal count; the
-1949, 1964 and 1965 results above remain historical checkpoints.
+After the production research-design corrections were integrated, the latest
+complete suite passed `2011 passed, 1 skipped` in 639.18 seconds. This is the
+current full-regression terminal count; the 1949, 1964, 1965 and 1988 results
+above remain historical checkpoints.
 
 ## Known residuals
 
 1. CVRP H input grew about 20.7k -> 47.3k -> 73.7k -> 100.2k tokens across
-   four rounds because prior evidence is repeated losslessly.  This was within
-   the Terra context but will become costly in a longer run.  A future fix must
-   be reversible structural normalization, not truncation, top-k, summary
-   substitution, or a token gate.
+   four rounds because prior evidence and telemetry were repeated in full;
+   Warehouse production similarly reached 83.8k by its final H. The correction
+   keeps complete raw lineage but uses the fixed V3 semantic view:
+   recent current attempts detailed, older current evidence structured, and
+   sibling state brief. It is not token-triggered truncation, top-k selection,
+   an opaque summary or a gate. C now sees plain path/content rather than
+   owner, digest, provenance or view metadata. A legacy internal source ledger
+   remains host-only; it is not provider-visible authority, a gate, or a
+   research-path blocker, and no further phase investment is planned for it.
 2. Warehouse lacks direct per-operator invocation counts, and CVRP R4 lacks
    fast/fallback/2-opt-probe counters.  Conclusions therefore keep the narrower
    candidate-level or association-only attribution.
@@ -507,8 +565,10 @@ champion v3 through two exact promotions in one campaign, and retained both
 promotion steps plus the cumulative v3-v1 gain on 108/108 independently
 declared held-out pairs. Synthetic Warehouse continuity is
 `CONTINUOUS_OPTIMIZATION_CONFIRMED`; the production-transfer rung remains.
-CVRP has no Protocol-complete promotion. Closure still requires Warehouse
-production transfer, one CVRP screening -> validation -> frozen promotion, and
-an independent B0 comparison.
+The production 12-stage shakedown is a valid funnel with no promotion and,
+after the completed prospective shared research-design corrections, authorizes
+a fresh prod-1.2 24-stage rung. CVRP has no Protocol-complete promotion. Closure
+still requires Warehouse production transfer, one CVRP screening -> validation
+-> frozen promotion, and an independent B0 comparison.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.
