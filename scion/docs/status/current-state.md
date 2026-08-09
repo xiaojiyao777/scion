@@ -14,10 +14,9 @@ The active branch is `codex/v04-production-cvrp-research`. The prior
 accepted research checkpoint.
 
 The active completion target is retained solver improvement on both Warehouse
-and CVRP/VRP. Warehouse has confirmed retained synthetic continuity and now
-needs the separate production-transfer rung. CVRP must still produce a real
-algorithmic promotion; valid negative observations alone do not close
-`TASK.md`.
+and CVRP/VRP. Warehouse now has both retained synthetic continuity and retained
+production transfer. CVRP must still produce a real algorithmic promotion;
+valid negative observations alone do not close `TASK.md`.
 
 Distribution, deployment, installation, packaging, builds, root/systemd and
 source-acceptance machinery are out of scope. Object identity, signing,
@@ -370,6 +369,43 @@ objective difference or runtime was used to choose them. See the
 [population design](../experiments/v0.4/v0.4-warehouse-production-prod12-validation-population-design-20260809.md)
 and [R1 postrun](../experiments/v0.4/v0.4-warehouse-v3-production-transfer-prod11-12stage-r1-postrun-20260809.md).
 
+The separately preregistered prod-1.2 24-stage campaign then completed in
+`/home/clawd/research/scion-experiments/v04-warehouse-v3-production-transfer-prod12-24stage-r1-gpt56terra-20260809T044055Z-claw/campaign`.
+It is `valid / complete`, exited 0, and completed all 24 requested formal
+stages: 22 screening, one validation and one frozen. There were 23 H/C pairs,
+24 evaluated outcomes, one candidate-local research rejection, 297/299 valid
+formal pairs, two failures belonging to one abandoned candidate, and no
+champion or infrastructure failure.
+
+The first H produced a subcategory-aware best-fit DestroyRebuild refinement.
+Its exact source passed screening at 4/0/2 cases and 9/1/2 pairs, validation at
+5/0/0 and 15/0/0, and frozen at 4/0/0 and 12/0/0. The problem-owned
+`total_cost` effect progressed from `+500 [-50,3300]` to
+`+11500 [4200,18900]` and `+17000 [6500,29600]`, producing champion v2.
+The v2/v1 snapshots differ only in `operators/destroy_rebuild.py`.
+
+The fixed independent replay completed in
+`/home/clawd/research/scion-experiments/v04-warehouse-prod12-independent-heldout-v1-20260809T072000Z-claw/run`.
+Both sides passed canaries; all 12 executions on four campaign-unseen cases
+were fresh and valid; the result was 4/0/0 cases, 12/0/0 pairs and
+`total_cost +15150 [8400,22000]`, with `FROZEN_PASS`. Classification:
+`RETAINED_PRODUCTION_IMPROVEMENT`. Warehouse production transfer and the
+complete Warehouse acceptance block are therefore satisfied. See the campaign
+[postrun](../experiments/v0.4/v0.4-warehouse-v3-production-transfer-prod12-24stage-r1-postrun-20260809.md)
+and independent replay
+[postrun](../experiments/v0.4/v0.4-warehouse-prod12-independent-heldout-v1-postrun-20260809.md).
+
+The 21 screenings after v2 did not establish a second production promotion.
+They did expose three experiment-organization limits: creation-time EXPLORE
+selection starved two schedulable sibling branches; 14 later candidates were
+cumulative and not incrementally isolated; and two independent 2/0/4-case,
+6/0/6-pair Merge signals were denied the declared expanded population. Commit
+`8909f635` prospectively rotates EXPLORE siblings by persisted
+least-recently-served time, grants one expansion (not a pass) to a practical
+sparse no-loss initial signal, and exposes one typed Python Verification root
+cause to the next H. It adds no rollback, novelty or algorithm-quality gate
+and does not reinterpret prod-1.2.
+
 ### CVRP
 
 Campaign:
@@ -555,9 +591,10 @@ above remain historical checkpoints.
    metamorphic gate is pending; a problem may add a probe later only when its
    semantics declare the transformation meaningful.
 4. The prior one-active-branch controls are historical baseline evidence. The
-   current runtime admits at most three active branches; this must remain a
-   lightweight V3 scheduler and must not reintroduce object authority, signed
-   identity, lease, or closure machinery.
+   current runtime admits at most three active branches and now rotates
+   same-tier EXPLORE work by persisted least-recently-served time. This remains
+   a lightweight V3 scheduler and must not reintroduce evidence scoring, object
+   authority, signed identity, lease, or closure machinery.
 
 ## Closure status
 
@@ -566,11 +603,12 @@ The prior lightweight-runtime milestone is accepted at `4d637959`; the active
 champion v3 through two exact promotions in one campaign, and retained both
 promotion steps plus the cumulative v3-v1 gain on 108/108 independently
 declared held-out pairs. Synthetic Warehouse continuity is
-`CONTINUOUS_OPTIMIZATION_CONFIRMED`; the production-transfer rung remains.
-The production 12-stage shakedown is a valid funnel with no promotion and,
-after the completed prospective shared research-design corrections, authorizes
-a fresh prod-1.2 24-stage rung. CVRP has no Protocol-complete promotion. Closure
-still requires Warehouse production transfer, one CVRP screening -> validation
--> frozen promotion, and an independent B0 comparison.
+`CONTINUOUS_OPTIMIZATION_CONFIRMED`. Prod-1.2 then promoted a production-style
+DestroyRebuild candidate and its separately preregistered 12/12 fresh replay
+returned `FROZEN_PASS`, so Warehouse production transfer is
+`RETAINED_PRODUCTION_IMPROVEMENT` and all Warehouse acceptance is complete.
+CVRP has no Protocol-complete promotion. Closure now requires one CVRP
+screening -> validation -> frozen promotion, an independent B0 comparison and
+the S6 cross-problem/full-regression record.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.

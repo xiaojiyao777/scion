@@ -14,11 +14,11 @@ belongs in experiment reports.
 
 ## Objective
 
-The previous stage proved that the lightweight direct-V3 runtime can produce
-valid Warehouse and CVRP research observations. It did **not** prove solver
-improvement: both champions remained at v1. This stage is complete only when
-Scion demonstrates retained algorithmic improvement, not merely valid negative
-research.
+The lightweight direct-V3 runtime now has retained Warehouse solver evidence:
+synthetic continuity reached v3 and production transfer reached and retained
+v2. CVRP still has only valid negative screening observations and champion B0.
+This task is complete only when Scion also demonstrates retained CVRP
+algorithmic improvement, not merely valid negative research.
 
 The required end state is:
 
@@ -175,6 +175,8 @@ They do not block this task and cannot satisfy it.
 | R22 | proven and corrected prospectively | Hierarchical statistics stopped at the first non-exact higher-priority metric. With identical lexicographic wins and identical positive cost deltas, adding a sparse positive primary improvement could change a pass into uncertainty. The predeclared `measurement.effect_scale.metric` was ignored. | Lexicographic case W/L/T remains direction evidence; every objective is recorded; the predeclared effect metric now supplies practical effect and CI. Only explicitly problem-declared protected objectives may veto regression. R1 is not reinterpreted. |
 | R23 | proven and corrected prospectively | Initial and expanded evenly-spaced selections were computed independently. In CVRP, modify screening 8 -> 12 dropped four initial cases, so expansion changed rather than enlarged evidence. | Expanded populations now contain the complete deterministic initial population plus predeclared new cases with unchanged stage seeds, and fail conservatively when no evidence can be added. |
 | R24 | proven and corrected prospectively | Real H prompts accumulated complete per-pair history and repeated telemetry (Warehouse 11.3k -> 83.8k input tokens; CVRP 20.7k -> 100.2k), while Warehouse surface hypothesis guidance was absent. C exposed source hashes, owner/provenance/views and repeated edit rules. | Complete raw lineage remains durable; the provider receives a fixed V3 research view with recent current attempts detailed, older attempts structured, siblings brief, actionable problem evidence, complete current source, phase-correct guidance and a neutral problem-owned prior when prior campaigns contain relevant scientific evidence. Provider-visible self-proof metadata is removed without weakening source-content binding. |
+| R25 | proven; retained replay complete | Warehouse prod-1.2 completed 24/24 formal stages and promoted a subcategory-aware DestroyRebuild candidate from v1 to v2. The independent fixed replay completed 12/12 fresh pairs at 4/0/0 cases, 12/0/0 pairs, `total_cost +15150 [8400,22000]`. | Classify production transfer as `RETAINED_PRODUCTION_IMPROVEMENT`. Warehouse acceptance is complete; do not require production multi-promotion. |
+| R26 | proven organization defect; corrected prospectively at `8909f635`; causal effect on promotion unproven | The launch-time EXPLORE scheduler repeatedly served the oldest branch, yielding 16 H on one cumulative branch and one each on two schedulable siblings. Two independent Merge candidates had sparse no-loss 2/0/4 case evidence but could not reach declared expanded screening. A candidate-local traceback also hid its exception root cause from the next H. | Rotate EXPLORE siblings by persisted least-recently-served time, allow exactly one measurement expansion for a practical sparse no-loss initial signal without weakening the pass threshold, and project one typed Verification root cause. Do not add rollback, novelty, algorithm-quality or negative-result gates. |
 
 ## Modular execution plan
 
@@ -349,19 +351,24 @@ They do not block this task and cannot satisfy it.
   P0 issue, and the complete suite passed `2011 passed, 1 skipped`. The fresh
   Warehouse H also receives the prod-1.1 aggregate scientific prior once,
   without forcing continuation or abandonment of its prior mechanism.
-- [ ] Freeze prod-1.2 with the five independently fixed new validation cases,
+- [x] Freeze prod-1.2 with the five independently fixed new validation cases,
   keep the old five as the initial population and all ten as expanded
   validation, and run one separately preregistered fresh 24-stage campaign.
-  Never resume the 12-stage root. If it promotes, independently replay the
-  exact production champion; otherwise report only failure to demonstrate a
-  promotion under the fixed 24-stage setup and the precise observed
-  headroom/noise boundary. Do not generalize that result to an absence of
-  improving Warehouse algorithms.
-- [ ] Do not enable parameter/weight search until two structural promotions are
-  demonstrated. If later tested, keep it as a separate off/on ablation so it
-  cannot masquerade as structural research ability.
+  It completed 24/24 formal stages and 297/299 valid pairs, promoted a
+  DestroyRebuild refinement v1→v2, and its separately preregistered replay
+  passed all 12/12 fresh held-out pairs at 4/0/0 cases and 12/0/0 pairs.
+  Classification: `RETAINED_PRODUCTION_IMPROVEMENT`. See the campaign
+  [postrun](docs/experiments/v0.4/v0.4-warehouse-v3-production-transfer-prod12-24stage-r1-postrun-20260809.md)
+  and replay
+  [postrun](docs/experiments/v0.4/v0.4-warehouse-prod12-independent-heldout-v1-postrun-20260809.md).
+- [x] Keep parameter/weight search disabled for this task. Warehouse structural
+  continuity was demonstrated without it, and it is not part of the CVRP
+  promotion experiment.
 
 Warehouse acceptance:
+
+**Satisfied.** Synthetic R8 and its replay establish continuous v1→v2→v3
+optimization; prod-1.2 and its replay establish retained production transfer.
 
 - one fresh campaign reaches at least v3 through two exact
   screening->validation->frozen promotions;
@@ -460,8 +467,8 @@ CVRP acceptance:
 
 ## Status
 
-**Active on `codex/v04-production-cvrp-research`: remaining S4 Warehouse
-production transfer and redesigned open S5 CVRP research.** S1
+**Active on `codex/v04-production-cvrp-research`: S5 CVRP open research and
+S6 evidence closure.** S1
 is closed as a scientific negative; S2/S3 are complete. Warehouse R6 produced
 one Protocol-complete synthetic promotion (`v1 -> v2`) and continued for
 fourteen formal post-promotion screenings, but stopped at 17/36 on the now-
@@ -471,12 +478,14 @@ promotion. R8 then completed 36/36 stages and 534/534 pairs and promoted
 `v1 -> v2 -> v3` in one uninterrupted campaign. The separately preregistered
 held-out replay completed 108/108 valid pairs and retained v2 over v1, v3 over
 v2 and v3 over v1, so synthetic Warehouse continuity is
-`CONTINUOUS_OPTIMIZATION_CONFIRMED`. The production 12-stage shakedown then
-completed 211/211 formal pairs and produced a valid validation funnel, but no
-promotion; it authorizes a fresh prod-1.2 24-stage rung. The prospective
-measurement/population/context corrections are complete and do not reinterpret
-the run. Production transfer remains open. The latest complete suite passed
-`2011 passed, 1 skipped` in 639.18 seconds. S5 has removed assay/host
+`CONTINUOUS_OPTIMIZATION_CONFIRMED`. The fresh prod-1.2 campaign then completed
+24/24 stages, promoted v1→v2, and retained that production improvement on all
+12/12 separately preregistered held-out pairs. Warehouse acceptance is fully
+complete. The post-v2 record exposed EXPLORE starvation, cumulative attribution
+and sparse-no-loss expansion defects; commit `8909f635` corrects those
+prospectively without a new promotion gate. The latest complete suite remains
+`2011 passed, 1 skipped` in 639.18 seconds; the new focused research-hot-path
+set passes 138 tests. S5 has removed assay/host
 disposition and result-derived expand cases, delivered the neutral prior to the
 actual H payload, and stopped suppressing same-branch refinement with
 `materially different`. The next CVRP campaign still requires frozen
