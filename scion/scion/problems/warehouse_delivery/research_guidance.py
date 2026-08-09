@@ -22,7 +22,7 @@ from scion.research_guidance import (
 
 WAREHOUSE_PROBLEM_FAMILY = "warehouse_delivery"
 WAREHOUSE_RESEARCH_GUIDANCE_CONTRACT_SCHEMA = (
-    "scion.warehouse_research_guidance_contract.v2"
+    "scion.warehouse_research_guidance_contract.v3"
 )
 WAREHOUSE_LEGACY_RESEARCH_FOCUS_SCHEMA = "scion.warehouse_research_focus.v1"
 
@@ -54,6 +54,27 @@ WAREHOUSE_DEFAULT_AVOID_DIRECTIONS = (
     "preselect an operator family before inspecting the current source",
     "move orders without an explicit path to the lexicographic objective",
     "trade away assignment feasibility for an apparent objective improvement",
+)
+WAREHOUSE_PRODUCTION_RESEARCH_PRIOR = (
+    (
+        "In the preregistered prod-1.1 12-stage campaign, successive verified "
+        "DestroyRebuild refinements on one branch formed a valid research funnel. "
+        "The final candidate completed the five established validation cases at "
+        "5W/0L/0T cases and 14W/1L/0T pairs, with median total_cost improvement "
+        "+13200."
+    ),
+    (
+        "That campaign produced no promotion or frozen evidence. The final "
+        "validation runtime median candidate/champion ratio was 1.473 and is "
+        "diagnostic only. Four earlier DestroyRebuild expanded screenings each "
+        "had seven tied cases, hence case win rate 0.5, and did not pass screening."
+    ),
+    (
+        "These observations require neither continuing nor abandoning "
+        "DestroyRebuild and select no research surface, action, target file, or "
+        "mechanism. Choose the next direction from current source and branch "
+        "evidence."
+    ),
 )
 WAREHOUSE_ADAPTER_OPPORTUNITY_FIELDS = (
     "objective_model",
@@ -166,6 +187,12 @@ def build_warehouse_research_guidance_contract(
                 category="measurement",
                 title="Safe aggregate measurement context",
                 lines=_measurement_guidance_lines(measurement_diagnostics),
+            ),
+            GuidanceBlock(
+                block_id="warehouse_production_research_prior",
+                category="research_prior",
+                title="Production research prior",
+                lines=WAREHOUSE_PRODUCTION_RESEARCH_PRIOR,
             ),
         ),
         measurement_summary=_measurement_summary(measurement_diagnostics),

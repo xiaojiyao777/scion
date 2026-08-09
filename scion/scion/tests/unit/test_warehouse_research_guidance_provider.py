@@ -6,6 +6,7 @@ from pathlib import Path
 from scion.problem.bridge import load_problem_spec_v1_from_yaml
 from scion.problem.loader import load_problem_adapter
 from scion.problems.warehouse_delivery.research_guidance import (
+    WAREHOUSE_PRODUCTION_RESEARCH_PRIOR,
     WarehouseResearchGuidanceProvider,
     build_warehouse_legacy_research_focus,
     build_warehouse_research_guidance_contract,
@@ -63,6 +64,7 @@ def test_warehouse_provider_keeps_both_algorithm_surfaces_open() -> None:
     rendered = render_research_guidance_contract(contract)
 
     assert contract.problem_family == "warehouse_delivery"
+    assert contract.schema_version == "scion.warehouse_research_guidance_contract.v3"
     assert contract.required_mechanisms == ()
     assert contract.evidence_requirements
     assert contract.guidance_blocks
@@ -72,7 +74,18 @@ def test_warehouse_provider_keeps_both_algorithm_surfaces_open() -> None:
     assert "telemetry" not in rendered.text.lower()
     assert "observability" not in rendered.text.lower()
     assert "excluded from DecisionFeatures" in rendered.text
-    _assert_no_forbidden_prompt_controls(rendered.text)
+    for line in WAREHOUSE_PRODUCTION_RESEARCH_PRIOR:
+        assert rendered.text.count(line) == 1
+    assert "5W/0L/0T cases and 14W/1L/0T pairs" in rendered.text
+    assert "median total_cost improvement +13200" in rendered.text
+    assert "candidate/champion ratio was 1.473" in rendered.text
+    assert "seven tied cases, hence case win rate 0.5" in rendered.text
+    assert "require neither continuing nor abandoning DestroyRebuild" in rendered.text
+    assert "select no research surface, action, target file, or mechanism" in rendered.text
+    rendered_without_prior = rendered.text
+    for line in WAREHOUSE_PRODUCTION_RESEARCH_PRIOR:
+        rendered_without_prior = rendered_without_prior.replace(line, "")
+    _assert_no_forbidden_prompt_controls(rendered_without_prior)
 
     launch_payload = launch_research_guidance_payload(
         manifest_path="/tmp/prepared_run_manifest.v1.json",

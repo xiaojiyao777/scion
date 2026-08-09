@@ -27,6 +27,9 @@ from scion.problem.bridge import (
 )
 from scion.problem.loader import load_problem_adapter
 from scion.problems.cvrp.research_guidance import CROSS_CAMPAIGN_RESEARCH_PRIOR
+from scion.problems.warehouse_delivery.research_guidance import (
+    WAREHOUSE_PRODUCTION_RESEARCH_PRIOR,
+)
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.manager import (
     CANONICAL_SCREENING_HISTORY_KEY,
@@ -135,6 +138,11 @@ def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
         assert h_rendered.count(surface.prompt.hypothesis_guidance) == 1
         assert surface.prompt.implementation_guidance not in h_rendered
         assert surface.prompt.anti_patterns not in h_rendered
+    assert h_context["research_question"]["research_prior"] == list(
+        WAREHOUSE_PRODUCTION_RESEARCH_PRIOR
+    )
+    for line in WAREHOUSE_PRODUCTION_RESEARCH_PRIOR:
+        assert h_rendered.count(line) == 1
 
     hypothesis = HypothesisProposal(
         hypothesis_text="Test a vehicle-level structural improvement.",
@@ -165,6 +173,8 @@ def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
     assert c_rendered.count(selected.anti_patterns) == 1
     assert surface_specs["order_level"].prompt.hypothesis_guidance not in c_rendered
     assert surface_specs["order_level"].prompt.implementation_guidance not in c_rendered
+    for line in WAREHOUSE_PRODUCTION_RESEARCH_PRIOR:
+        assert line not in c_rendered
 
 
 @pytest.mark.parametrize("problem_id", ("warehouse_delivery", "cvrp"))
@@ -380,13 +390,15 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         "problem_family",
         "current_question",
     }
-    if problem_id == "cvrp":
-        expected_research_question_fields.add("research_prior")
-        assert research_question["research_prior"] == list(
-            CROSS_CAMPAIGN_RESEARCH_PRIOR
-        )
-        for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
-            assert rendered.count(line) == 1
+    expected_prior = (
+        CROSS_CAMPAIGN_RESEARCH_PRIOR
+        if problem_id == "cvrp"
+        else WAREHOUSE_PRODUCTION_RESEARCH_PRIOR
+    )
+    expected_research_question_fields.add("research_prior")
+    assert research_question["research_prior"] == list(expected_prior)
+    for line in expected_prior:
+        assert rendered.count(line) == 1
     assert set(research_question) == expected_research_question_fields
     assert "report_only" not in rendered
     assert "branch_direction" not in context
