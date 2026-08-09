@@ -165,24 +165,12 @@ def build_run_validity(
         0,
         _coerce_int(committed_research_rejections, default=0),
     )
-    typed_outcomes_available = (
-        execution_outcome_counts is not None or committed_rejections > 0
-    )
+    typed_outcomes_available = execution_outcome_counts is not None
     projected_outcome_counts = (
         dict(execution_outcome_counts)
         if execution_outcome_counts is not None
-        else ({} if committed_rejections else None)
+        else None
     )
-    if projected_outcome_counts is not None and committed_rejections:
-        projected_outcome_counts[ExecutionOutcome.RESEARCH_REJECTED.value] = max(
-            _coerce_int(
-                projected_outcome_counts.get(
-                    ExecutionOutcome.RESEARCH_REJECTED.value
-                ),
-                default=0,
-            ),
-            committed_rejections,
-        )
     outcome_evidence = execution_outcome_evidence_from_counts(
         projected_outcome_counts,
         last_execution_outcome=last_execution_outcome,

@@ -453,27 +453,85 @@ authorizes validation, frozen holdout, promotion, or an improvement claim.
 The detailed evidence and claim boundary are in
 `docs/experiments/v0.4/v0.4-v3-lightweight-research-effectiveness-gpt56terra-20260808.md`.
 
-The next CVRP rung is prospectively frozen at executable commit `51f9bbd7`:
-an eight-stage fresh `gpt-5.6-terra` campaign using the unchanged formal
-ProblemSpec, cases, four screening seeds, thresholds and per-case time rules.
-This matched design isolates the current context, least-recently-served
-scheduling, sparse-no-loss expansion and typed-feedback corrections instead of
-simultaneously changing the evidence population. H receives complete current
-source, the neutral prior, compact mechanism evidence and anonymous
-observational CVRPLIB case dimension/size where derivable; C retains the
-complete safe multi-file modify/create surface. None of those observations
-enters Decision. Current H feedback has no stable anonymous case alias and the
-phase evidence is aggregate rather than case-by-phase; that remains an explicit
-analysis limit, not a new gate or a claim that case context is complete.
+The matched CVRP open-research R1 was launched once from executable commit
+`51f9bbd7` in:
+`/home/clawd/research/scion-experiments/v04-cvrp-v3-open-research-8stage-r1-gpt56terra-20260809T081630Z-claw/campaign`.
+It is terminal and sealed. The wrapper recorded
+`valid_but_incomplete / incomplete_infra_stop` at 5/8 requested formal stages
+after a hypothesis stream closed upstream without a terminal event. The local
+proxy remained authenticated with one active account. The pre-registered root
+classification is `RUN_INVALID_INFRA`; its five completed screening stages are
+retained separately as `VALID_PARTIAL_SCIENCE_5_OF_8`. It must not be resumed
+or retried.
 
-The accepted A/A calibration reports screening `MDE@80%=9.9`, recommends eight
-seeds and exceeds the declared practical delta `2`. Consequently a negative
-four-seed result can reject an exact candidate at the fixed Protocol rung but
-cannot exclude sub-MDE improvement. Directionally positive or sparse
-power-limited evidence may justify a separately pre-registered eight-seed
-campaign; seeds will never be added inside the running root. The fixed design,
-launch and claim boundary are in the
-[preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md).
+R1 completed 176/176 formal pairs with zero candidate/champion failed pair,
+zero feasibility failure and zero protected fleet regression. Three branches
+tested exact 2-opt* evaluation, initial-VNS allocation and ejection repair. The
+scheduler performed least-recently-served exploration; one queued expansion
+reused the exact branch-C source with no H/C; later H calls used current-branch
+source plus sibling evidence. Thus R1 demonstrates real branch iteration and
+algorithm research behavior, but no validation, frozen stage or promotion.
+
+The strongest observation was bounded depth-one ejection repair. Initial
+screening produced 4W/0L/4T gate cases and expansion reproduced direction at
+6W/1L/5T, median distance improvement `+3.75`, CI `[0,11]`. The operator was
+selected 557 times, accepted 311 times and generated 27 best updates; ALNS
+iterations increased by 202 and route-limit events fell by 17. It also
+recorded 186 discarded repair errors, about 9% of ALNS iterations. This is a
+mixed sparse-positive signal that merits a fresh prospective confirmation,
+not a promotion. A cumulative fast-2-opt* plus depth-two fallback was negative
+and does not isolate depth two.
+
+R1 also establishes that the matched measurement is not adequate for the next
+rung. The case estimator maps `2W/0L/2T` seeds to a case tie because wins must
+strictly exceed ties; calibration MDE@80% is `9.9` while the observed depth-one
+median is `3.75` and the practical threshold is `2`. Any estimator, seed or
+population change must therefore be fixed in a new preregistration and cannot
+reinterpret R1. Under a prospective paired-median-sign estimator, the expanded
+result would be 7W/2L/3T, win rate `0.583`, and would still miss the R1 `0.60`
+threshold. Screening advancement remains distinct from validation/frozen
+promotion.
+
+Two prospective research-path defects are also concrete. One complete branch-C
+code response was rejected before Contract because its selector differed from
+source only by the number of blank lines between functions. Terminal status
+also projected one of two typed research rejections out of run validity. The
+corrected R2 prerequisite is limited to deterministic unique blank-line-run
+selector repair, consistent rejection accounting and one concise neutral
+ejection evidence update. None is a deployment, Trust/Hash, mechanism or
+algorithm-quality gate.
+
+The next rung does not claim calibrated power. Its prospective estimator is a
+paired per-case median with a zero equivalence band; an 8-case x 4-seed
+mechanism screen may only request the exact 12-case x 8-seed quality screen.
+The retained MDE `9.9` calibration and later 8-seed MDE `9.6` diagnostic both
+used incompatible pair-level estimators or populations, so R2 measurement
+readiness is explicitly uncalibrated. They establish only that effects near
+the practical delta `2` remain difficult to exclude. Validation stays 12x4,
+frozen stays 12x3, and promotion thresholds remain unchanged.
+
+The integrated pre-R2 implementation passes the complete suite at
+`2047 passed, 1 skipped` in 640.76 seconds. A campaign-level wiring regression
+also proves that the initial screen queues exact expansion on the same
+candidate with no new provider call or workspace, uses all 12 cases and eight
+ordered seeds, and only then enters 12x4 validation. Critical Ruff syntax/error
+rules and `git diff --check` pass; the repository's broad historical Ruff
+baseline remains out of scope.
+
+R2 also treats experiment design as an input rather than an invisible host
+assumption. Its preregistration must inventory the provider-visible H/C
+sections, complete solver/mechanics material and available edit/research tools,
+then preserve input size, tool/edit outcomes and typed rejection causes for
+postrun analysis. Those observations cannot enter Decision or become novelty,
+mechanism, activation, style or algorithm-quality gates. A no-promotion result
+must separately report agent research behavior, measurement reach and
+pre-Protocol framework friction; any causal context/measurement comparison is
+a later fresh matched ablation, never an in-place change to R2.
+
+The fixed R1 design is in its
+[preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
+and the complete claim boundary and mechanism analysis are in its
+[postrun](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-postrun-20260809.md).
 
 ## Research-path corrections after the controls
 
@@ -629,8 +687,10 @@ declared held-out pairs. Synthetic Warehouse continuity is
 DestroyRebuild candidate and its separately preregistered 12/12 fresh replay
 returned `FROZEN_PASS`, so Warehouse production transfer is
 `RETAINED_PRODUCTION_IMPROVEMENT` and all Warehouse acceptance is complete.
-CVRP has no Protocol-complete promotion; its matched 8-stage R1 is
-pre-registered but not yet started. Closure now requires one CVRP
+CVRP has no Protocol-complete promotion. Its matched R1 is sealed at 5/8 with
+valid partial science and one unresolved depth-one signal, but no candidate
+reached validation or frozen holdout. Closure now requires a fresh,
+staged-measurement and explicitly uncalibrated CVRP rung, one CVRP
 screening -> validation -> frozen promotion, an independent B0 comparison and
 the S6 cross-problem/full-regression record.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are

@@ -72,6 +72,8 @@ class TestCodeFailureDirect:
         bid = r1.branch_id
         assert r1.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
         assert r1.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
+        assert r1.attempt_disposition is not None
+        assert r1.attempt_disposition.rejection_phase == "proposal_code"
         assert r1.decision is None
         durable = cm._registry.query_execution_outcomes(branch_id=bid)
         assert len(durable) == 1
@@ -83,6 +85,13 @@ class TestCodeFailureDirect:
         assert branch_execution_hold(cm._branch_ctrl.get_branch(bid)) is None
         assert bid not in cm._branch_patches
         assert cm._workspace_lifecycle.pending_candidates == {}
+        with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
+            rejection = conn.execute(
+                "SELECT audit_payload_json FROM experiment_events "
+                "WHERE event_kind = 'research_rejection'"
+            ).fetchone()
+        assert rejection is not None
+        assert json.loads(rejection[0])["rejection_phase"] == "proposal_code"
 
         r2 = cm.run_one_step()
 

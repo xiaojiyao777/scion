@@ -4,13 +4,15 @@ import os
 import re
 import statistics
 from collections import defaultdict
-from typing import Any, Dict, List, Sequence
+from collections.abc import Sequence
+from typing import Any, Dict, List, Literal
 
 from scion.core.models import (
     CaseAggregateFeedback,
     PairwiseCaseFeedback,
     ScreeningPatternSummary,
 )
+
 from .types import CaseLevelResult
 
 
@@ -56,8 +58,15 @@ def _protected_objective_regressions(
 
 def _aggregate_pairs_to_case_level(
     pairs: List[PairwiseCaseFeedback],
+    *,
+    aggregation: Literal[
+        "seed_vote_majority",
+        "paired_effect_median",
+    ] = "seed_vote_majority",
+    effect_metric: str = "",
+    equivalence_band: float = 0.0,
 ) -> List[CaseLevelResult]:
-    """For each case, aggregate across seeds: majority vote → win/loss/tie, median delta.
+    """Reduce each case's paired seeds using the preregistered method.
 
     T2: This is the core of the case-level statistical unit change.
     """
@@ -67,40 +76,133 @@ def _aggregate_pairs_to_case_level(
 
     result = []
     for case_id, case_pairs in by_case.items():
-        wins = sum(1 for p in case_pairs if p.comparison == "win")
-        losses = sum(1 for p in case_pairs if p.comparison == "loss")
-        ties = len(case_pairs) - wins - losses
-
-        # Majority vote across seeds
-        if wins > losses and wins > ties:
-            majority = "win"
-        elif losses > wins and losses > ties:
-            majority = "loss"
-        else:
-            # True tie in vote count (or ties dominate)
-            majority = "tie"
-
-        med_delta = statistics.median(p.delta for p in case_pairs)
-        metric_deltas: dict[str, float] = {}
-        metric_values: dict[str, list[float]] = defaultdict(list)
-        for p in case_pairs:
-            oc = p.objective_comparison
-            if oc is not None and hasattr(oc, "metrics"):
-                for m in oc.metrics:
-                    metric_values[m.name].append(float(m.signed_delta))
-        metric_deltas = {
-            name: statistics.median(vals)
-            for name, vals in metric_values.items()
-            if vals
-        }
+        comparison, med_delta = _case_direction_and_delta(
+            case_pairs,
+            aggregation=aggregation,
+            effect_metric=effect_metric,
+            equivalence_band=equivalence_band,
+        )
+        metric_deltas = _median_metric_deltas(case_pairs)
+        if (
+            aggregation == "paired_effect_median"
+            and effect_metric
+            and any(_is_typed_candidate_failure(pair) for pair in case_pairs)
+        ):
+            # Keep the same conservative typed loss in the declared effect row
+            # so downstream statistics remain complete and auditable.
+            metric_deltas[effect_metric] = med_delta
         result.append(CaseLevelResult(
             case_id=case_id,
-            comparison=majority,
+            comparison=comparison,
             delta=med_delta,
             metric_deltas=metric_deltas,
         ))
 
     return result
+
+
+def _case_direction_and_delta(
+    case_pairs: Sequence[PairwiseCaseFeedback],
+    *,
+    aggregation: str,
+    effect_metric: str,
+    equivalence_band: float,
+) -> tuple[Literal["win", "loss", "tie"], float]:
+    """Return one auditable direction and delta for a complete case row."""
+
+    if not case_pairs:
+        raise ValueError("case aggregation requires at least one paired result")
+    if aggregation == "seed_vote_majority":
+        wins = sum(1 for pair in case_pairs if pair.comparison == "win")
+        losses = sum(1 for pair in case_pairs if pair.comparison == "loss")
+        ties = len(case_pairs) - wins - losses
+        if wins > losses and wins > ties:
+            direction: Literal["win", "loss", "tie"] = "win"
+        elif losses > wins and losses > ties:
+            direction = "loss"
+        else:
+            direction = "tie"
+        return direction, float(statistics.median(pair.delta for pair in case_pairs))
+
+    if aggregation != "paired_effect_median":
+        raise ValueError(f"unknown case aggregation method: {aggregation!r}")
+
+    metric = str(effect_metric or "").strip()
+    if not metric:
+        raise ValueError("paired_effect_median requires a declared effect_metric")
+
+    # Candidate process/audit failures are already typed as conservative pair
+    # losses by the Protocol runner and have no objective vector.  They must not
+    # turn a measured rejection into an aggregation exception.  Other missing
+    # objective evidence remains invalid rather than being guessed.
+    missing_objective = [
+        pair for pair in case_pairs if pair.objective_comparison is None
+    ]
+    if missing_objective:
+        if all(_is_typed_candidate_failure(pair) for pair in missing_objective):
+            return "loss", -1.0
+        first = missing_objective[0]
+        raise ValueError(
+            "paired_effect_median effect evidence is absent from paired "
+            f"objective evidence: case={first.case_id!r}, seed={first.seed}"
+        )
+
+    effect_deltas = [
+        _declared_effect_delta(pair, effect_metric=metric)
+        for pair in case_pairs
+    ]
+    median_effect = float(statistics.median(effect_deltas))
+    band = float(equivalence_band)
+    if band < 0.0:
+        raise ValueError("case equivalence band must be non-negative")
+    if median_effect > band:
+        direction = "win"
+    elif median_effect < -band:
+        direction = "loss"
+    else:
+        direction = "tie"
+
+    return direction, median_effect
+
+
+def _is_typed_candidate_failure(pair: PairwiseCaseFeedback) -> bool:
+    return (
+        pair.objective_comparison is None
+        and pair.comparison == "loss"
+        and float(pair.delta) == -1.0
+    )
+
+
+def _declared_effect_delta(
+    pair: PairwiseCaseFeedback,
+    *,
+    effect_metric: str,
+) -> float:
+    if effect_metric == "weighted_sum":
+        return float(pair.delta)
+    comparison = pair.objective_comparison
+    for metric in getattr(comparison, "metrics", ()) or ():
+        if str(getattr(metric, "name", "") or "") == effect_metric:
+            return float(metric.signed_delta)
+    raise ValueError(
+        "paired_effect_median effect_metric is absent from paired objective "
+        f"evidence: metric={effect_metric!r}, case={pair.case_id!r}, seed={pair.seed}"
+    )
+
+
+def _median_metric_deltas(
+    case_pairs: Sequence[PairwiseCaseFeedback],
+) -> dict[str, float]:
+    metric_values: dict[str, list[float]] = defaultdict(list)
+    for pair in case_pairs:
+        comparison = pair.objective_comparison
+        for metric in getattr(comparison, "metrics", ()) or ():
+            metric_values[metric.name].append(float(metric.signed_delta))
+    return {
+        name: float(statistics.median(values))
+        for name, values in metric_values.items()
+        if values
+    }
 
 
 def _extract_case_features(case_path: str) -> dict:
@@ -129,6 +231,13 @@ def _extract_case_features(case_path: str) -> dict:
 
 def _aggregate_case_feedback(
     pairs: List[PairwiseCaseFeedback],
+    *,
+    aggregation: Literal[
+        "seed_vote_majority",
+        "paired_effect_median",
+    ] = "seed_vote_majority",
+    effect_metric: str = "",
+    equivalence_band: float = 0.0,
 ) -> List[CaseAggregateFeedback]:
     """Group pair feedback by case_id and compute per-case aggregates."""
     by_case: dict[str, list[PairwiseCaseFeedback]] = defaultdict(list)
@@ -143,16 +252,17 @@ def _aggregate_case_feedback(
         ties = n - wins - losses
         wr = wins / n if n > 0 else 0.0
 
-        # Dominant result
         mx = max(wins, losses, ties)
-        if wins == losses and wins > 0:
-            dominant = "mixed"
-        elif mx == wins:
-            dominant = "win"
-        elif mx == losses:
-            dominant = "loss"
-        else:
-            dominant = "tie"
+        dominant, _ = _case_direction_and_delta(
+            case_pairs,
+            aggregation=aggregation,
+            effect_metric=effect_metric,
+            equivalence_band=equivalence_band,
+        )
+        nonzero_outcomes = sum(count > 0 for count in (wins, losses, ties))
+        seed_pattern: Literal["uniform", "heterogeneous"] = (
+            "heterogeneous" if nonzero_outcomes > 1 else "uniform"
+        )
 
         # Dominant decisive metric (generic)
         decisive_counts: dict[str, int] = defaultdict(int)
@@ -165,15 +275,7 @@ def _aggregate_case_feedback(
             dominant_decisive = "mixed"
 
         # Median deltas per metric (generic)
-        metric_deltas: dict[str, list[float]] = defaultdict(list)
-        for p in case_pairs:
-            oc = p.objective_comparison
-            if oc and hasattr(oc, 'metrics'):
-                for m in oc.metrics:
-                    metric_deltas[m.name].append(m.signed_delta)
-        median_deltas = {
-            name: statistics.median(vals) for name, vals in metric_deltas.items() if vals
-        }
+        median_deltas = _median_metric_deltas(case_pairs)
 
         result.append(CaseAggregateFeedback(
             case_id=case_id,
@@ -186,6 +288,7 @@ def _aggregate_case_feedback(
             decisive_metric=dominant_decisive,
             median_deltas=median_deltas,
             seed_consistency=mx / n if n > 0 else 0.0,
+            seed_pattern=seed_pattern,
             case_features=case_pairs[0].case_features if case_pairs else {},
         ))
     return result
@@ -197,7 +300,13 @@ def _build_pattern_summary(
     """Build code-generated pattern summary from case-level feedback."""
     winning = [c for c in case_feedback if c.dominant_result == "win"]
     losing = [c for c in case_feedback if c.dominant_result == "loss"]
-    mixed = [c for c in case_feedback if c.dominant_result == "mixed"]
+    mixed = [
+        c
+        for c in case_feedback
+        if c.seed_pattern == "heterogeneous"
+        or c.dominant_result == "mixed"
+        or sum(count > 0 for count in (c.wins, c.losses, c.ties)) > 1
+    ]
 
     wins_by_obj: dict[str, int] = defaultdict(int)
     losses_by_obj: dict[str, int] = defaultdict(int)

@@ -90,6 +90,21 @@ def direct_campaign_loop_facts(
         }
     else:
         facts["failure_categories"] = {}
+    rejection_audit = loop.get("research_rejection_audit")
+    if isinstance(rejection_audit, Mapping):
+        facts["research_rejection_audit"] = {
+            "committed": _first_int(
+                rejection_audit.get("committed"),
+                default=0,
+            ),
+            "by_phase": _string_int_mapping(rejection_audit.get("by_phase")),
+            "by_reason": _string_int_mapping(rejection_audit.get("by_reason")),
+            "last": (
+                dict(rejection_audit["last"])
+                if isinstance(rejection_audit.get("last"), Mapping)
+                else None
+            ),
+        }
     last_failure_category = str(loop.get("last_failure_category") or "")
     if last_failure_category:
         facts["last_failure_category"] = last_failure_category
@@ -97,6 +112,15 @@ def direct_campaign_loop_facts(
     if isinstance(terminal_exception, Mapping):
         facts["terminal_exception"] = dict(terminal_exception)
     return facts
+
+
+def _string_int_mapping(value: Any) -> dict[str, int]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        str(key): _first_int(count, default=0)
+        for key, count in value.items()
+    }
 
 
 def proposal_accounting_fields(

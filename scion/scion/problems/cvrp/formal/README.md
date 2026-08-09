@@ -1,7 +1,7 @@
-# CVRP Formal Readiness Assets
+# CVRP Formal Research Assets
 
-These files define the first real-CVRP campaign readiness package for Scion
-v0.4. They are generated from `vrp/results/full_experiment_seed0_final.csv` and
+These files define the current real-CVRP research matrix for Scion v0.4. They
+are derived from `vrp/results/full_experiment_seed0_final.csv` and
 keep benchmark instance paths as data-root-relative opaque strings such as
 `cvrplib/A/A-n32-k5.vrp`.
 
@@ -39,10 +39,24 @@ evidence remains a separate X holdout and is not part of promotion.
 
 Stage seeds are deterministic odd-prime ledgers:
 
-- screening: `11, 29, 43, 59`
+- screening mechanism stage: `11, 29, 43, 59`
+- screening quality expansion: `11, 29, 43, 59, 73, 79, 97, 103`
 - validation: `47, 53, 71, 83`
 - frozen: `61, 67, 89`
 - final evidence: `0, 1, 2`
+
+The R2 screen uses paired per-case median `total_distance` direction with a
+zero equivalence band.  Initial screening evaluates 8 cases x 4 seeds and can
+only request the exact expansion.  Expanded screening evaluates 12 cases x 8
+seeds and is the only screening result that can advance to validation.
+Validation and frozen use all 12 declared cases with four and three seeds,
+respectively.  Fleet regression remains a separate protected-objective veto.
+
+R2 is deliberately marked uncalibrated.  The retained MDE=9.9 artifact used
+the old 8-case x 4-seed pair-level estimator, while a later 8-seed A/A estimate
+of 9.6 also used a different case population, estimator and runtime.  They are
+historical low-power diagnostics, not R2 power claims.  In particular, neither
+shows that an effect near the practical delta of 2 can be excluded.
 
 Runtime budgets are staged by case scale:
 

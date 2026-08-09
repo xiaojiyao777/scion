@@ -1,19 +1,20 @@
-version: 0.4-cvrp-formal-readiness
+version: 0.4-cvrp-v3-quality-screen-r2
+case_aggregation: paired_effect_median
+case_equivalence_band: 0.0
 screening:
   n_cases_modify: 8
-  n_cases_create: 12
+  n_cases_create: 8
   n_seeds: 4
+  expand_n_seeds: 8
   expand_to_modify: 12
-  expand_to_create: 16
-  priority_case_ids:
-  - cvrplib/CMT/CMT2.vrp
-  - cvrplib/CMT/CMT4.vrp
+  expand_to_create: 12
+  require_expanded_for_pass: true
 validation:
-  n_cases: 8
+  n_cases: 12
   n_seeds: 4
   expand_to: 12
 frozen:
-  n_cases: 8
+  n_cases: 12
   n_seeds: 3
 canary:
   cases:

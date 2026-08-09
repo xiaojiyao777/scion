@@ -41,6 +41,9 @@ class ScreeningConfig(BaseModel):
     n_seeds: int = Field(gt=0, default=2)
     """每个 case 使用的 seed 数量。"""
 
+    expand_n_seeds: int | None = Field(default=None, gt=0)
+    """Expanded screening 使用的 seed 数量；未设置时沿用 n_seeds。"""
+
     expose: str = "full"
     """暴露控制级别：full / aggregate_only / pass_fail_aggregate。"""
 
@@ -52,6 +55,21 @@ class ScreeningConfig(BaseModel):
 
     priority_case_ids: tuple[str, ...] = ()
     """Stage-local case ids retained during deterministic screening selection."""
+
+    require_expanded_for_pass: bool = False
+    """Whether an initial pass must be confirmed by one exact expanded screening."""
+
+    @property
+    def effective_expand_n_seeds(self) -> int:
+        """Resolve the expanded seed count without changing legacy YAML semantics."""
+
+        return int(self.expand_n_seeds or self.n_seeds)
+
+    @model_validator(mode="after")
+    def _validate_expanded_seed_count(self) -> ScreeningConfig:
+        if self.effective_expand_n_seeds < self.n_seeds:
+            raise ValueError("expand_n_seeds must be >= n_seeds")
+        return self
 
 
 class ValidationConfig(BaseModel):
@@ -468,6 +486,15 @@ class ProtocolConfig(BaseModel):
 
     protected_objectives: tuple[str, ...] = ()
     """Problem-owned objectives with a typed no-regression Protocol veto."""
+
+    case_aggregation: Literal[
+        "seed_vote_majority",
+        "paired_effect_median",
+    ] = "seed_vote_majority"
+    """Predeclared rule used to turn paired seeds into one case direction."""
+
+    case_equivalence_band: float = Field(default=0.0, ge=0.0)
+    """Absolute effect band reduced to a case tie by paired-effect aggregation."""
 
     pairing_validity: Literal["trajectory_stable", "trajectory_divergent"] = (
         "trajectory_stable"

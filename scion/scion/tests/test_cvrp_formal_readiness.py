@@ -65,18 +65,32 @@ def test_formal_protocol_split_seed_and_budget_assets_load() -> None:
         "controlled/data/synthetic_controlled_canary_5.vrp"
     )
     assert legacy_problem.parameter_search.enabled is False
-    assert protocol.version == "0.4-cvrp-formal-readiness"
+    assert protocol.version == "0.4-cvrp-v3-quality-screen-r2"
     assert split.version == "0.4-cvrp-formal-readiness"
-    assert seeds.version == "0.4-cvrp-formal-readiness"
+    assert seeds.version == "0.4-cvrp-v3-quality-screen-r2"
     assert budgets["schema"] == "scion.cvrp_formal_readiness_budgets.v1"
     assert budgets["data_root_env"] == "SCION_PROBLEM_DATA_ROOT"
     assert budgets["data_root_expected_repo_relative"] == "vrp"
     assert matrix["schema"] == "scion.cvrp_formal_matrix.v1"
-    assert matrix["models"] == ["sonnet", "gpt-mini"]
-    assert matrix["campaign_seeds"] == [11, 29, 47]
-    assert matrix["rounds_per_campaign"] == 100
+    assert matrix["models"] == ["gpt-5.6-terra"]
+    assert "campaign_seeds" not in matrix
+    assert matrix["rounds_per_campaign"] == 12
+    assert matrix["total_campaigns"] == 1
+    assert budgets["models"] == matrix["models"]
+    assert budgets["campaign_rounds"] == matrix["rounds_per_campaign"]
+    assert "campaign_seeds" not in budgets
+    assert protocol.case_aggregation == "paired_effect_median"
+    assert protocol.case_equivalence_band == 0.0
+    assert protocol.screening.n_cases_modify == 8
+    assert protocol.screening.n_cases_create == 8
     assert protocol.screening.n_seeds == 4
+    assert protocol.screening.effective_expand_n_seeds == 8
+    assert protocol.screening.expand_to_modify == 12
+    assert protocol.screening.expand_to_create == 12
+    assert protocol.screening.require_expanded_for_pass is True
+    assert protocol.validation.n_cases == 12
     assert protocol.validation.n_seeds == 4
+    assert protocol.frozen.n_cases == 12
     assert protocol.frozen.n_seeds == 3
     assert protocol.runtime.time_limits.stage_defaults == {
         "canary": 10,
@@ -132,7 +146,7 @@ def test_formal_stage_seeds_are_consistent_across_assets() -> None:
     seeds = SeedLedgerConfig.from_yaml(FORMAL_DIR / "seed_ledger.yaml")
     budgets = _load_json(FORMAL_DIR / "budgets.json")
 
-    for stage in PROTOCOL_STAGES:
+    for stage in ("validation", "frozen"):
         ledger_seeds = getattr(seeds, stage)
         manifest = load_cvrp_case_manifest(FORMAL_DIR / "manifests" / f"{stage}.json")
         stage_protocol = getattr(protocol, stage)
@@ -141,6 +155,33 @@ def test_formal_stage_seeds_are_consistent_across_assets() -> None:
         assert budgets["stages"][stage]["seeds"] == ledger_seeds
         assert manifest.config["seeds"] == ledger_seeds
         assert manifest.metadata["seed_list"] == ledger_seeds
+
+    # The readiness budget and screening manifest describe the initial
+    # mechanism screen.  R2's ordered ledger extends that same fixed prefix
+    # for the exact quality-screen expansion; it does not rewrite the older
+    # manifest into a second authority.
+    screening_manifest = load_cvrp_case_manifest(
+        FORMAL_DIR / "manifests" / "screening.json"
+    )
+    initial_screening_seeds = seeds.screening[: protocol.screening.n_seeds]
+    assert seeds.screening == [11, 29, 43, 59, 73, 79, 97, 103]
+    assert len(seeds.screening) == protocol.screening.effective_expand_n_seeds
+    assert budgets["stages"]["screening"]["seeds"] == initial_screening_seeds
+    assert screening_manifest.config["seeds"] == initial_screening_seeds
+    assert screening_manifest.metadata["seed_list"] == initial_screening_seeds
+    assert budgets["stages"]["screening"]["expanded_seeds"] == seeds.screening
+    assert budgets["stages"]["screening"][
+        "initial_selected_by_protocol_cases"
+    ] == protocol.screening.n_cases_modify
+    assert budgets["stages"]["screening"][
+        "expanded_selected_by_protocol_cases"
+    ] == protocol.screening.expand_to_modify
+    assert budgets["stages"]["validation"][
+        "selected_by_protocol_cases"
+    ] == protocol.validation.n_cases
+    assert budgets["stages"]["frozen"][
+        "selected_by_protocol_cases"
+    ] == protocol.frozen.n_cases
 
     final = load_cvrp_case_manifest(FORMAL_DIR / "manifests" / "final.json")
     assert final.config["seeds"] == budgets["final_evidence"]["seeds"] == [0, 1, 2]
@@ -171,7 +212,7 @@ def test_formal_protocol_cmt4_screening_budget_caveat_is_problem_owned() -> None
     ) == 30
 
 
-def test_formal_screening_selection_retains_cmt2_and_cmt4_priorities() -> None:
+def test_formal_screening_selection_is_structurally_spread_without_priorities() -> None:
     protocol = ProtocolConfig.from_yaml(FORMAL_DIR / "protocol.yaml")
     split = SplitManifest.from_yaml(FORMAL_DIR / "split_manifest.yaml")
 
@@ -184,10 +225,17 @@ def test_formal_screening_selection_retains_cmt2_and_cmt4_priorities() -> None:
     )
 
     assert len(selected) == protocol.screening.n_cases_create
-    assert protocol.screening.priority_case_ids == (
+    assert protocol.screening.priority_case_ids == ()
+    assert selected == [
+        "cvrplib/A/A-n64-k9.vrp",
+        "cvrplib/B/B-n63-k10.vrp",
+        "cvrplib/E/E-n101-k14.vrp",
+        "cvrplib/P/P-n65-k10.vrp",
         "cvrplib/CMT/CMT2.vrp",
         "cvrplib/CMT/CMT4.vrp",
-    )
+        "cvrplib/M/M-n200-k17.vrp",
+        "cvrplib/X/X-n110-k13.vrp",
+    ]
     assert "cvrplib/CMT/CMT2.vrp" in selected
     assert "cvrplib/CMT/CMT4.vrp" in selected
 
@@ -215,7 +263,6 @@ def test_formal_modify_expansion_strictly_contains_initial_population() -> None:
     assert len(initial) == protocol.screening.n_cases_modify == 8
     assert len(expanded) == protocol.screening.expand_to_modify == 12
     assert set(initial) < set(expanded)
-    assert set(protocol.screening.priority_case_ids) <= set(expanded)
 
 
 def test_formal_cases_are_reference_clean_and_screening_has_gap_headroom() -> None:

@@ -396,7 +396,12 @@ def test_proposal_projection_keeps_paired_research_signals_without_side_mirrors(
     ]
     operators = payload["operator_comparison"]
     assert operators["destroy"]["shaw"]["selected"] == [1, 1, 0]
+    assert operators["repair"]["regret3"]["invoked"] == [1, 0, 1]
+    assert operators["repair"]["regret3"]["completed"] == [1, 0, 1]
     assert operators["repair"]["regret3"]["accepted"] == [1, 0, 1]
+    assert operators["destroy_repair_pair"]["shaw__regret3"][
+        "invoked"
+    ] == [1, 0, 1]
     assert operators["destroy_repair_pair"]["shaw__regret3"][
         "best_updates"
     ] == [1, 0, 1]
@@ -405,8 +410,6 @@ def test_proposal_projection_keeps_paired_research_signals_without_side_mirrors(
         '"observed_pairs"',
         '"nonempty"',
         '"empty"',
-        '"invoked"',
-        '"completed"',
     ):
         assert duplicated_field not in rendered
 

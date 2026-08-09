@@ -120,6 +120,10 @@ class LLMClient(PolicyMixin, TransportMixin):
             model=effective_model,
         )
         timeout_sec = policy["timeout_sec"]
+        # Usage belongs to a completed response.  A failed new call must not
+        # inherit the previous call's usage or request-kind attribution.
+        self._last_usage_metadata = None
+        self._last_prompt_cache_key = None
         attempt_started_at = time.monotonic()
         try:
             with _llm_hard_timeout(timeout_sec):

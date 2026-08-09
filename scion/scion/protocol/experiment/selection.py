@@ -323,9 +323,45 @@ def select_cases(
     )
 
 
-def select_seeds(*, seed_ledger: SeedLedger, stage: ExperimentStage) -> List[int]:
-    """Return the fixed seed list for the stage; expands never add seeds."""
-    return seed_ledger.get_seeds(stage)
+def select_seeds(
+    *,
+    config: Any,
+    seed_ledger: SeedLedger,
+    stage: ExperimentStage,
+    expanded: bool = False,
+) -> List[int]:
+    """Select the preregistered seed prefix required by the protocol stage.
+
+    Ledger order is authoritative.  Protocols that explicitly declare
+    ``expand_n_seeds`` opt into staged, strict prefixes.  Legacy protocols keep
+    their historical behavior and consume the complete stage ledger.
+    """
+
+    available = seed_ledger.get_seeds(stage)
+    staged_prefixes = config.screening.expand_n_seeds is not None
+    if not staged_prefixes:
+        return available
+
+    if stage == ExperimentStage.SCREENING:
+        required = (
+            config.screening.effective_expand_n_seeds
+            if expanded
+            else config.screening.n_seeds
+        )
+    elif stage == ExperimentStage.VALIDATION:
+        required = config.validation.n_seeds
+    elif stage == ExperimentStage.FROZEN:
+        required = config.frozen.n_seeds
+    else:  # pragma: no cover - ExperimentStage is currently exhaustive.
+        raise ValueError(f"Unknown stage: {stage}")
+
+    required = int(required)
+    if len(available) < required:
+        raise ValueError(
+            f"seed ledger has insufficient {stage.value} seeds: "
+            f"required={required}, available={len(available)}"
+        )
+    return available[:required]
 
 
 def resolve_case_path(

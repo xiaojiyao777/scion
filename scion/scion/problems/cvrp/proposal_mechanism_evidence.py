@@ -118,11 +118,23 @@ def _project_for_proposal(packet: Mapping[str, Any]) -> dict[str, Any]:
             ),
             "repair": _operator_table(
                 comparison.get("repair_operators"),
-                fields=("selected", "accepted", "best_updates"),
+                fields=(
+                    "selected",
+                    "invoked",
+                    "completed",
+                    "accepted",
+                    "best_updates",
+                ),
             ),
             "destroy_repair_pair": _operator_table(
                 comparison.get("destroy_repair_pairs"),
-                fields=("selected", "accepted", "best_updates"),
+                fields=(
+                    "selected",
+                    "invoked",
+                    "completed",
+                    "accepted",
+                    "best_updates",
+                ),
             ),
         },
         "instance_feasibility": packet.get("instance_feasibility", {}),

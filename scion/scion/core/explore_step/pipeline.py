@@ -316,21 +316,27 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 ExecutionOutcome.BLOCKED_INFRA: "blocked_infra",
                 ExecutionOutcome.RESOURCE_EXHAUSTED: "resource_exhausted",
             }.get(proposal_outcome.outcome, "not_evaluated")
-            self.hypothesis_store.mark_status(h_record.hypothesis_id, status)
-            if proposal_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED:
-                self.branch_hypotheses.pop(bid, None)
-                self.branch_patches.pop(bid, None)
-                self.branch_current_hypothesis.pop(bid, None)
-                self.discard_approved_hypothesis_binding(bid)
             session_ref = self._proposal_session_ref(bid)
-            record_execution_outcome_event(
-                registry=self.registry,
-                campaign_id=self.campaign_id,
-                branch_id=bid,
-                record=proposal_outcome,
-                hypothesis_id=h_record.hypothesis_id,
-                event_kind="proposal_execution_outcome",
-            )
+            rejection_finalization = None
+            if proposal_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED:
+                rejection_finalization = self.finalize_research_rejection(
+                    branch=branch,
+                    hypothesis_record=h_record,
+                    proposal_attempt_ref=session_ref,
+                    rejection_phase="proposal_code",
+                    outcome=proposal_outcome,
+                    checks=(),
+                )
+            else:
+                self.hypothesis_store.mark_status(h_record.hypothesis_id, status)
+                record_execution_outcome_event(
+                    registry=self.registry,
+                    campaign_id=self.campaign_id,
+                    branch_id=bid,
+                    record=proposal_outcome,
+                    hypothesis_id=h_record.hypothesis_id,
+                    event_kind="proposal_execution_outcome",
+                )
             outcome_kwargs = execution_outcome_projection_kwargs(proposal_outcome)
             if install_branch_execution_hold(branch, proposal_outcome):
                 self.persist_branch_state(bid)
@@ -348,6 +354,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail=detailed_failure,
                     hypothesis_id=h_record.hypothesis_id,
                     proposal_session_ref=session_ref,
+                    attempt_disposition=(
+                        rejection_finalization.marker
+                        if rejection_finalization is not None
+                        else None
+                    ),
                     **outcome_kwargs,
                 )
             )
@@ -360,6 +371,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     failure_detail=detailed_failure,
                     failure_category=proposal_outcome.outcome.value,
                     proposal_session_ref=session_ref,
+                    attempt_disposition=(
+                        rejection_finalization.marker
+                        if rejection_finalization is not None
+                        else None
+                    ),
                     **outcome_kwargs,
                 )
             )

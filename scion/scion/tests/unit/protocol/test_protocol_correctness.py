@@ -633,7 +633,12 @@ def test_configured_screening_priority_cases_are_retained_for_create_new(
 
     runner = MagicMock()
     runner.run_solver.return_value = _win_result()
-    ledger = SeedLedgerConfig(version="test", screening=[10], validation=[], frozen=[])
+    ledger = SeedLedgerConfig(
+        version="test",
+        screening=[10, 20],
+        validation=[],
+        frozen=[],
+    )
     proto = _make_proto(runner, config, manifest, ledger, tmp_path)
 
     result = proto.run_experiment(

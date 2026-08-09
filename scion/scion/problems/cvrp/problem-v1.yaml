@@ -58,7 +58,10 @@ measurement:
     unit: raw_delta
     practical_delta_screen: 2.0
     practical_delta_validate: 1.0
-  calibration_ref: formal/calibration/aa_noise_floor.json
+  # The retained artifact used the old 8-case/4-seed pair-level estimator.
+  # R2's 12-case/8-seed paired-median screen is intentionally uncalibrated
+  # until a matched A/A run exists; historical MDEs remain descriptive only.
+  calibration_ref: ""
   calibration_max_age_days: 90
 
 runtime_dependencies:

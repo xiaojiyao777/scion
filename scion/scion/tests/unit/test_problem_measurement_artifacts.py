@@ -34,8 +34,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[4]
             "cvrp",
             "total_distance",
             "raw_delta",
-            96,
-            9.9,
+            0,
+            None,
         ),
         (
             _REPO_ROOT / "scion" / "problems" / "warehouse_delivery" / "problem-v1.yaml",
@@ -53,7 +53,7 @@ def test_checked_in_problem_measurement_artifacts_are_ready(
     expected_metric: str,
     expected_unit: str,
     expected_pairs: int,
-    expected_mde: float,
+    expected_mde: float | None,
 ) -> None:
     spec_v1 = load_problem_spec_v1_from_yaml(problem_path)
     legacy = legacy_problem_spec_from_v1(spec_v1)
@@ -65,15 +65,26 @@ def test_checked_in_problem_measurement_artifacts_are_ready(
     assert spec_v1.id == expected_problem_id
     assert spec_v1.measurement.effect_scale.metric == expected_metric
     assert spec_v1.measurement.effect_scale.unit == expected_unit
-    assert readiness.status == "ready"
-    assert readiness.reason_code == "ok"
+    if expected_problem_id == "cvrp":
+        assert readiness.status == "not_ready"
+        assert readiness.reason_code == "missing_calibration_ref"
+    else:
+        assert readiness.status == "ready"
+        assert readiness.reason_code == "ok"
     assert readiness.n_pairs == expected_pairs
     assert readiness.mde_at_power_80 == expected_mde
-    assert readiness.signal_to_noise_tier == "low_power"
+    assert readiness.signal_to_noise_tier == (
+        "unknown" if expected_mde is None else "low_power"
+    )
     assert readiness.decision_features_excluded is True
     assert "calibration_ref" not in status_payload
     assert "pair_evidence" not in status_payload
-    assert diagnostic_payload["calibration_ref"] == spec_v1.measurement.calibration_ref
+    if spec_v1.measurement.calibration_ref:
+        assert diagnostic_payload["calibration_ref"] == (
+            spec_v1.measurement.calibration_ref
+        )
+    else:
+        assert "calibration_ref" not in diagnostic_payload
 
 
 @pytest.mark.parametrize(
@@ -101,13 +112,14 @@ def test_checked_in_problem_measurement_diagnostics_stay_reduced(
     assert diagnostics["effect_scale"]["metric"] == (
         spec_v1.measurement.effect_scale.metric
     )
-    assert diagnostics["measurement_readiness"]["status"] == "ready"
+    expected_status = "not_ready" if spec_v1.id == "cvrp" else "ready"
+    assert diagnostics["measurement_readiness"]["status"] == expected_status
     assert diagnostics["measurement_readiness"]["decision_features_excluded"] is True
     assert problem_owned["schema_version"]
     assert problem_owned["proposal_visibility_only"] is True
     assert problem_owned["decision_features_excluded"] is True
     _assert_forbidden_raw_measurement_fields_absent(diagnostics)
-    assert "calibration_ref" not in rendered
+    assert '"calibration_ref":' not in rendered
     assert "pair_evidence" not in rendered
     assert "raw_calibration" not in rendered
 

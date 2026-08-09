@@ -276,7 +276,7 @@ class TestT2BranchStorePersistence:
 # ---------------------------------------------------------------------------
 
 class TestT3VerificationRejections:
-    """Direct V3 records verification rejection on the step, not a lifecycle event."""
+    """Direct V3 keeps one typed outcome for each verification rejection."""
 
     def test_heavy_verification_failure_is_a_typed_rejection(self, tmp_path):
         """Heavy verification failure ends the candidate before evaluation."""
@@ -290,6 +290,12 @@ class TestT3VerificationRejections:
         step = cm._step_history[-1]
         assert step.verification_passed is False
         assert step.protocol_result is None
+        outcomes = cm._registry.query_execution_outcomes(
+            branch_id=result.branch_id
+        )
+        assert len(outcomes) == 1
+        assert outcomes[0]["outcome"] == "research_rejected"
+        assert outcomes[0]["reason_code"] == "VERIFICATION_HEAVY_REJECTED"
 
     def test_light_verification_failure_is_a_typed_rejection(self, tmp_path):
         """Light verification failure has the same direct pre-evaluation shape."""
@@ -302,7 +308,7 @@ class TestT3VerificationRejections:
         assert cm._step_history[-1].verification_passed is False
 
     def test_verification_rejection_carries_check_provenance(self, tmp_path):
-        """The failure remains explainable without a second event lifecycle."""
+        """The typed failure remains explainable from its check provenance."""
         cm = _campaign(tmp_path, verification_gate=HeavyFailVerificationGate())
         result = cm.run_one_step()
 

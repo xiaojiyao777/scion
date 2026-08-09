@@ -10,6 +10,7 @@ from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
     ResearchRejectionDisposition,
+    record_execution_outcome_event,
 )
 from scion.core.models import Branch, HypothesisRecord, PatchProposal
 
@@ -48,6 +49,7 @@ class ResearchRejectionFinalizer:
     ) -> ResearchRejectionFinalization:
         if rejection_phase not in {
             "hypothesis_contract",
+            "proposal_code",
             "patch_contract",
             "verification",
         }:
@@ -72,8 +74,10 @@ class ResearchRejectionFinalizer:
             }
         elif rejected_candidate_workspace is not None:
             raise ValueError("only verification rejection owns candidate cleanup")
-        elif rejection_phase == "hypothesis_contract" and patch is not None:
-            raise ValueError("hypothesis Contract rejection cannot own a patch")
+        elif rejection_phase in {"hypothesis_contract", "proposal_code"} and (
+            patch is not None
+        ):
+            raise ValueError(f"{rejection_phase} rejection cannot own a patch")
         elif rejection_phase == "patch_contract" and patch is None:
             raise ValueError("patch Contract rejection requires a patch")
 
@@ -133,6 +137,14 @@ class ResearchRejectionFinalizer:
                     default=str,
                 ),
             }
+        )
+        record_execution_outcome_event(
+            registry=self.registry,
+            campaign_id=self.campaign_id,
+            branch_id=branch.branch_id,
+            record=outcome,
+            hypothesis_id=hypothesis_record.hypothesis_id,
+            event_kind="research_rejection_execution_outcome",
         )
         marker = ResearchRejectionDisposition(
             disposition=AttemptDisposition.ATTEMPT_REJECT_TO_BASE,

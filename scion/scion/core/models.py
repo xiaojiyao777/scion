@@ -229,6 +229,10 @@ class ProtocolResult:
     opportunity_status: str = "unknown"
     opportunity_diagnostics: Tuple[str, ...] = ()
     mechanism_evidence: Dict[str, Any] = field(default_factory=dict)
+    # Appended to preserve the historical positional constructor prefix.
+    case_aggregation_method: str = "seed_vote_majority"
+    case_effect_metric: str = ""
+    case_equivalence_band: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -244,7 +248,7 @@ class PairwiseCaseFeedback:
 
 @dataclass(frozen=True)
 class CaseAggregateFeedback:
-    """Aggregated feedback for one instance across all seeds."""
+    """Formal case direction plus descriptive seed-pattern evidence."""
     case_id: str
     n_pairs: int
     wins: int
@@ -252,9 +256,12 @@ class CaseAggregateFeedback:
     ties: int
     win_rate: float
     dominant_result: Literal["win", "loss", "tie", "mixed"]
-    decisive_metric: str = "tie"  # generic metric name that decided majority of pairs
-    median_deltas: Dict[str, float] = field(default_factory=dict)  # {metric_name: median_delta}
-    seed_consistency: float = 0.0  # max(win,loss,tie) / n_pairs
+    # Declared effect metric for paired aggregation, or the legacy pair-vote metric.
+    decisive_metric: str = "tie"
+    median_deltas: Dict[str, float] = field(default_factory=dict)
+    # Descriptive seed agreement only; it never enters the formal case direction.
+    seed_consistency: float = 0.0
+    seed_pattern: Literal["uniform", "heterogeneous"] = "uniform"
     case_features: Dict[str, Any] = field(default_factory=dict)
     # DEPRECATED aliases for backward compat
     dominant_decisive_objective: str = ""

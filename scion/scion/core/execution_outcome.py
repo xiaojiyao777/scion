@@ -35,6 +35,7 @@ class ResearchRejectionDisposition:
             raise ValueError("unsupported research rejection disposition")
         if self.rejection_phase not in {
             "hypothesis_contract",
+            "proposal_code",
             "patch_contract",
             "verification",
         }:

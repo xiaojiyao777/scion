@@ -934,7 +934,10 @@ def test_new_branch_sees_all_reopened_sibling_screenings_without_lifecycle_leaks
     assert history[0]["latest_round"] == 4
     assert history[0]["summary_level"] == "sibling_brief"
     assert history[0]["relation"] == "sibling"
-    assert [item["round_num"] for item in history[0]["screening_trajectory"]] == [4]
+    assert "screening_trajectory" not in history[0]
+    assert history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
+        "median_delta"
+    ] == 4.0
     assert set(history[0]).isdisjoint(
         {
             "attempt_id", "screening_attempt_id", "source_branch_id",
@@ -1486,7 +1489,7 @@ def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis
     assert history[0]["summary_level"] == "full"
     assert [
         item["round_num"] for item in history[0]["screening_trajectory"]
-    ] == [1, 2]
+    ] == [1]
     assert history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
         "median_delta"
     ] == 0.5

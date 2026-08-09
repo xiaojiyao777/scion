@@ -1042,7 +1042,7 @@ def test_protected_objective_regression_vetoes_confirmatory_gates(gate, reason):
     assert result.reason_codes == (reason,)
 
 
-def test_protected_objective_regression_is_record_only_in_screening():
+def test_protected_objective_regression_vetoes_screening():
     stats = _make_stats(
         win_rate=1.0,
         median_delta=10.0,
@@ -1053,8 +1053,10 @@ def test_protected_objective_regression_is_record_only_in_screening():
 
     result = screening_gate(stats, _cfg)
 
-    assert result.outcome == "pass"
-    assert result.reason_codes == ("SCREENING_PASS",)
+    assert result.outcome == "fail"
+    assert result.reason_codes == (
+        "SCREENING_FAIL_PROTECTED_OBJECTIVE_REGRESSION",
+    )
 
 
 def test_frozen_gate_fail_ci_negative():

@@ -10,7 +10,19 @@ from .source_ledger_test_support import ledgerize_code_context
 
 import scion.proposal.engine.provider_call as provider_call
 import scion.proposal.engine.hypothesis_prompts as hypothesis_prompts
-from scion.core.models import Branch, BranchState, ChampionState
+from scion.core.models import (
+    Branch,
+    BranchState,
+    CaseAggregateFeedback,
+    ChampionState,
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    PairwiseCaseFeedback,
+    ProtocolResult,
+    StepRecord,
+)
 from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
     load_problem_spec_v1_from_yaml,
@@ -30,6 +42,9 @@ from scion.proposal.llm_client import (
     LLMProviderError,
 )
 from scion.proposal.schemas import HYPOTHESIS_TOOL, PATCH_TOOL
+from scion.protocol.experiment.proposal_evidence import (
+    problem_proposal_mechanism_evidence,
+)
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
 
@@ -656,6 +671,180 @@ def test_cvrp_research_prior_reaches_actual_hypothesis_provider_request(
     )
     for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
         assert traced_provider_bytes.count(line) == 1
+
+
+def test_actual_h_provider_gets_latest_cvrp_evidence_once(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec)
+    adapter = CvrpAdapter(spec)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="config",
+        code_snapshot_path=str(_CVRP_ROOT),
+        code_snapshot_hash="source",
+    )
+    branch = Branch(
+        branch_id="cvrp-latest-evidence-request",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="source",
+    )
+    mechanism = problem_proposal_mechanism_evidence(
+        stage="screening",
+        selected_surface="solver_design",
+        runtime_pairs=[
+            {
+                "candidate_runtime": {
+                    "solver_algorithm_alns_iteration_trace": [
+                        {
+                            "iteration": 1,
+                            "repair_operator": "ejection_regret",
+                            "accepted": True,
+                            "best_improved": True,
+                            "acceptance_reason": "new_best",
+                            "elapsed_ms_before": 10,
+                            "elapsed_ms_after": 25,
+                        }
+                    ]
+                },
+                "champion_runtime": {
+                    "solver_algorithm_alns_iteration_trace": [
+                        {
+                            "iteration": 1,
+                            "repair_operator": "regret2",
+                            "accepted": False,
+                            "best_improved": False,
+                            "acceptance_reason": "rejected",
+                            "elapsed_ms_before": 5,
+                            "elapsed_ms_after": 15,
+                        }
+                    ]
+                },
+                "champion_result_source": "fresh",
+            }
+        ],
+        problem_spec=legacy,
+        adapter=adapter,
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Measure one completion-aware ejection repair.",
+        change_locus="solver_design",
+        action="modify",
+        target_file="policies/baseline_modules/destroy_repair.py",
+    )
+    screening = StepRecord(
+        round_num=1,
+        branch_id=branch.branch_id,
+        hypothesis=hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=1,
+                wins=1,
+                losses=0,
+                ties=0,
+                win_rate=1.0,
+                median_delta=3.75,
+                ci_low=0.0,
+                ci_high=11.0,
+                total_pairs=1,
+                valid_pairs=1,
+                pair_wins=1,
+                pair_losses=0,
+                pair_ties=0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL_WIN_RATE",),
+            exposed_summary="latest evidence",
+            raw_metrics_ref="private/latest.json",
+            case_ids=("private-case",),
+            seed_set=(11,),
+            pair_feedback=(
+                PairwiseCaseFeedback(
+                    case_id="private-case",
+                    seed=11,
+                    comparison="win",
+                    delta=3.75,
+                ),
+            ),
+            case_feedback=(
+                CaseAggregateFeedback(
+                    case_id="private-case",
+                    n_pairs=1,
+                    wins=1,
+                    losses=0,
+                    ties=0,
+                    win_rate=1.0,
+                    dominant_result="win",
+                    decisive_metric="total_distance",
+                    median_deltas={"total_distance": 3.75},
+                    seed_consistency=1.0,
+                    case_features={"dimension": 64, "size_bucket": "medium"},
+                ),
+            ),
+            mechanism_evidence=mechanism,
+        ),
+        decision=Decision.CONTINUE_EXPLORE,
+        failure_stage=None,
+        failure_detail=None,
+        hypothesis_id="ejection-screening",
+    )
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[screening],
+    )
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+    response = {
+        **_HYPOTHESIS_RESPONSE,
+        "change_locus": "solver_design",
+        "action": "modify",
+        "target_file": "policies/baseline_modules/destroy_repair.py",
+    }
+    client = _CaptureClient(response=response)
+    CreativeLayer(client, trace_dir=str(tmp_path / "traces")).generate_direct_hypothesis(
+        context,
+        snapshot,
+    )
+
+    _prompt, blocks, request_kind = client.calls[0]
+    assert request_kind == "hypothesis"
+    provider_evidence = json.loads(blocks[2]["text"].split("\n", 1)[1])
+    history = provider_evidence["experiment_history"]
+    assert len(history) == 1
+    assert "screening_trajectory" not in history[0]
+    latest = history[0]["experiment_evidence"]
+    assert latest["case_outcomes"]["case_feedback"] == [
+        {
+            "n_pairs": 1,
+            "wins": 1,
+            "losses": 0,
+            "ties": 0,
+            "win_rate": 1.0,
+                "dominant_result": "win",
+                "seed_pattern": "uniform",
+                "median_deltas": {"total_distance": 3.75},
+            "decisive_metric": "total_distance",
+            "seed_consistency": 1.0,
+            "case_features": {"dimension": 64, "size_bucket": "medium"},
+        }
+    ]
+    assert latest["mechanism_evidence"] == mechanism
+    ejection_prior = next(
+        line
+        for line in CROSS_CAMPAIGN_RESEARCH_PRIOR
+        if "Recent ejection evidence is mixed" in line
+    )
+    provider_bytes = json.dumps(blocks, sort_keys=True)
+    assert "neither require nor forbid ejection research" in ejection_prior
+    assert provider_bytes.count(ejection_prior) == 1
 
 
 def test_direct_v3_context_fails_closed_for_unsupported_non_json_value() -> None:

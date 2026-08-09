@@ -54,6 +54,30 @@ def test_prompt_cache_has_no_raw_or_fix_kind_aliases() -> None:
     assert '"llm_call":' not in source
     assert '"fix":' not in source
 
+
+def test_failed_call_clears_previous_response_usage() -> None:
+    client = LLMClient(model="gpt-5.6-terra")
+    client._last_usage_metadata = {
+        "request_kind": "code",
+        "input_tokens": 123,
+    }
+    client._last_prompt_cache_key = "stale-code-cache-key"
+
+    def fail_call(*_args, **_kwargs):
+        raise LLMProviderError("synthetic hypothesis failure")
+
+    client._tool_call_once = fail_call
+
+    with pytest.raises(LLMProviderError, match="synthetic hypothesis failure"):
+        client.call_with_tool(
+            "hypothesis prompt",
+            HYPOTHESIS_TOOL,
+            request_kind="hypothesis",
+        )
+
+    assert client.get_last_usage_metadata() is None
+    assert client._last_prompt_cache_key is None
+
 class TestMockLLMClient:
     def test_success_returns_hypothesis(self):
         client = MockLLMClient(mode="success")

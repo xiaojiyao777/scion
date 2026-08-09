@@ -116,11 +116,17 @@ class CvrpAdapter:
                 "objective": "minimize",
                 "practical_screen_delta": 2.0,
                 "practical_validate_delta": 1.0,
-                "screening_mde_at_power_80": 9.9,
+                "screening_mde_at_power_80": None,
+                "screening_calibration_status": (
+                    "uncalibrated_for_r2_paired_effect_median"
+                ),
                 "interpretation": (
                     "Interpret paired final total_distance with case-level "
-                    "variation and uncertainty. Intermediate deltas are not "
-                    "substitutes for the final solver result."
+                    "variation and uncertainty. R2's estimator is not yet "
+                    "power-calibrated; older 4-seed MDE=9.9 and 8-seed "
+                    "MDE=9.6 estimates used incompatible pair-level designs "
+                    "and only establish low power near delta=2. Intermediate "
+                    "deltas are not substitutes for the final solver result."
                 ),
             },
             "feasibility": {

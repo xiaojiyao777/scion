@@ -792,6 +792,72 @@ def test_status_reports_balance_stop_consistently(tmp_path: Path) -> None:
     assert on_disk["stopped_reason"] == "api_balance_exhausted"
 
 
+def test_direct_status_keeps_loop_rejection_audit_separate_from_typed_counts(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="camp-direct-rejections",
+        campaign_dir=tmp_path,
+        state_provider=lambda: {
+            "campaign_id": "camp-direct-rejections",
+            "n_experiments": 5,
+            "screened_experiments": 5,
+            # Registry-derived typed outcomes remain the counting authority;
+            # the loop audit is an independent lifecycle cross-check.
+            "execution_outcome_counts": _outcome_counts(
+                evaluated=5,
+                research_rejected=1,
+                blocked_infra=1,
+            ),
+        },
+    )
+
+    status = recorder.write_status(
+        stopped_reason="execution_blocked_infra",
+        loop_status={
+            "schema_version": "scion.campaign_loop.direct_v1",
+            "requested_rounds": 8,
+            "effective_rounds_completed": 5,
+            "scheduled_calls": 8,
+            "formal_screened_candidates": 5,
+            "protocol_evaluated_candidates": 5,
+            "protocol_stage_counts": {
+                "screening": 5,
+                "validation": 0,
+                "frozen": 0,
+            },
+            "failure_categories": {"research_rejected": 2, "infra": 1},
+            "research_rejection_audit": {
+                "committed": 2,
+                "by_phase": {"verification": 1, "proposal_code": 1},
+                "by_reason": {
+                    "VERIFICATION_HEAVY_REJECTED": 1,
+                    "PROPOSAL_RESPONSE_INVALID": 1,
+                },
+                "last": {
+                    "rejection_phase": "proposal_code",
+                    "reason_code": "PROPOSAL_RESPONSE_INVALID",
+                },
+            },
+        },
+    )
+
+    assert status["campaign_loop"]["research_rejection_audit"]["committed"] == 2
+    assert status["execution_outcome_counts"] == _outcome_counts(
+        evaluated=5,
+        research_rejected=1,
+        blocked_infra=1,
+    )
+    assert status["total_outcome_subject_count"] == 7
+    assert status["run_validity"]["execution_outcome_counts"] == _outcome_counts(
+        evaluated=5,
+        research_rejected=1,
+        blocked_infra=1,
+    )
+    assert status["run_validity"]["committed_scheduler_forward_rejections"] == 1
+    assert status["run_validity"]["blocking_non_evaluated_count"] == 1
+
+
 def test_status_reports_api_balance_partial_run_completion_aliases(
     tmp_path: Path,
 ) -> None:

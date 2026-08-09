@@ -851,6 +851,18 @@ class CampaignSummaryMixin:
                     if ref is not None
                 ],
                 "seed_set": list(pr.seed_set),
+                "case_aggregation": {
+                    "method": str(
+                        getattr(pr, "case_aggregation_method", "")
+                        or "seed_vote_majority"
+                    ),
+                    "effect_metric": str(
+                        getattr(pr, "case_effect_metric", "") or ""
+                    ),
+                    "equivalence_band": float(
+                        getattr(pr, "case_equivalence_band", 0.0) or 0.0
+                    ),
+                },
                 "selected_surface": pr.selected_surface,
                 "champion_cache_hits": pr.champion_cache_hits,
                 "champion_cache_misses": pr.champion_cache_misses,
@@ -927,6 +939,7 @@ class CampaignSummaryMixin:
                     {
                         "case_id": cf.case_id,
                         "dominant_result": cf.dominant_result,
+                        "seed_pattern": getattr(cf, "seed_pattern", "uniform"),
                         "decisive": (
                             cf.decisive_metric
                             if hasattr(cf, "decisive_metric")

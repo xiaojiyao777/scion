@@ -1070,6 +1070,16 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
         )
     aggregation = {
         "statistical_unit": "case",
+        "method": str(
+            getattr(protocol, "case_aggregation_method", "")
+            or "seed_vote_majority"
+        ),
+        "effect_metric": str(
+            getattr(protocol, "case_effect_metric", "") or ""
+        ),
+        "equivalence_band": float(
+            getattr(protocol, "case_equivalence_band", 0.0) or 0.0
+        ),
         "win_rate_scope": "case_level_gate",
         "median_delta_scope": "case_medians",
         "ci_scope": "case_medians",

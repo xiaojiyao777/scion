@@ -235,8 +235,18 @@ class ExperimentProtocol:
             expand_round=expand_round,
         )
 
-    def _select_seeds(self, stage: ExperimentStage) -> List[int]:
-        return select_seeds(seed_ledger=self.seed_ledger, stage=stage)
+    def _select_seeds(
+        self,
+        stage: ExperimentStage,
+        *,
+        expanded: bool = False,
+    ) -> List[int]:
+        return select_seeds(
+            config=self.config,
+            seed_ledger=self.seed_ledger,
+            stage=stage,
+            expanded=expanded,
+        )
 
     def resolve_time_limit_sec(
         self,

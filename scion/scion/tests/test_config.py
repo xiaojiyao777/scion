@@ -201,10 +201,10 @@ def test_cvrp_formal_protocol_consumes_problem_measurement_declaration():
     assert config.protected_objectives == ("fleet_violation",)
     assert config.runtime.runtime_model == "budget_exhausting"
     assert config.pairing_validity == "trajectory_divergent"
-    assert config.measurement_readiness.status == "ready"
-    assert config.measurement_readiness.reason_code == "ok"
-    assert config.measurement_readiness.mde_at_power_80 == pytest.approx(9.9)
-    assert config.measurement_readiness.calibration_evidence_level == "summary_only"
+    assert config.measurement_readiness.status == "not_ready"
+    assert config.measurement_readiness.reason_code == "missing_calibration_ref"
+    assert config.measurement_readiness.mde_at_power_80 is None
+    assert config.measurement_readiness.calibration_evidence_level == "none"
     status_payload = config.measurement_readiness.model_dump()
     assert "calibration_ref" not in status_payload
     assert "pair_evidence" not in status_payload

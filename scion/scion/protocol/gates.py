@@ -23,8 +23,20 @@ def screening_gate(
     threshold = config.screening_win_rate_threshold
     practical_delta = config.screening_min_practical_delta
 
+    if stats.protected_objective_regressions:
+        return GateResult(
+            outcome="fail",
+            reason_codes=("SCREENING_FAIL_PROTECTED_OBJECTIVE_REGRESSION",),
+        )
+
     if wr >= threshold and stats.median_delta >= practical_delta:
-        gate = GateResult(outcome="pass", reason_codes=("SCREENING_PASS",))
+        if config.screening.require_expanded_for_pass and not expanded:
+            gate = GateResult(
+                outcome="expand",
+                reason_codes=("SCREENING_EXPAND_REQUIRED_FOR_PASS",),
+            )
+        else:
+            gate = GateResult(outcome="pass", reason_codes=("SCREENING_PASS",))
     elif _initial_screening_sparse_no_loss_signal(
         stats,
         config,

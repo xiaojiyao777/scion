@@ -206,8 +206,12 @@ def _normalize_change(
         eof_final_newline_tolerated = bool(
             change.pop("_host_eof_final_newline_tolerated", False)
         )
+        blank_line_run_count_tolerated = bool(
+            change.pop("_host_blank_line_run_count_tolerated", False)
+        )
     else:
         eof_final_newline_tolerated = False
+        blank_line_run_count_tolerated = False
         _validate_existing_file_full_file_modify(
             file_path=file_path,
             action=action,
@@ -264,6 +268,7 @@ def _normalize_change(
         content_after=content_after,
         change_pointer=change_pointer,
         eof_final_newline_tolerated=eof_final_newline_tolerated,
+        blank_line_run_count_tolerated=blank_line_run_count_tolerated,
     )
     return change, [metadata]
 
@@ -785,6 +790,7 @@ def _normalization_metadata(
     content_after: str,
     change_pointer: str,
     eof_final_newline_tolerated: bool = False,
+    blank_line_run_count_tolerated: bool = False,
 ) -> dict[str, Any]:
     before_digest = source_digest_for_content(before) if before is not None else None
     after_digest = source_digest_for_content(content_after)
@@ -820,6 +826,19 @@ def _normalization_metadata(
                     "Host tolerated a terminal-newline-only selector drift at "
                     "EOF. Future exact_replace old_string values should match "
                     "the displayed source bytes exactly."
+                ),
+            }
+        )
+    elif blank_line_run_count_tolerated:
+        metadata.update(
+            {
+                "selector_repair": "blank_line_run_count_drift_tolerated",
+                "blank_line_run_count_tolerated": True,
+                "selector_repair_guidance": (
+                    "Host matched one unique exact_replace selector after "
+                    "tolerating only internal empty-line run-count drift. "
+                    "Future old_string values should match the displayed "
+                    "source bytes exactly."
                 ),
             }
         )

@@ -42,6 +42,7 @@ from scion.runtime.audit import (
     runtime_audit_failure_from_result,
     runtime_audit_issue_blocks_execution,
 )
+
 from .cache import compute_workspace_digest
 from .failures import (
     _candidate_audit_failure_category,
@@ -84,6 +85,7 @@ from .surface_runtime import (
     _surface_runtime_summary_template,
     _surface_runtime_summary_with_diagnostics,
 )
+from .types import CaseLevelResult
 from .values import _increment_category
 
 if TYPE_CHECKING:
@@ -107,8 +109,8 @@ def run_experiment(
     """Execute paired A/B evaluation for the given stage.
 
     T2: Statistical unit is case (not pair). Each case is evaluated across
-    all seeds, then majority-voted to a case-level win/loss/tie and median delta.
-    T4: expand increases case count; seed set is unchanged.
+    its preregistered seed prefix, then reduced by the configured case rule.
+    T4: expansion uses deterministic case and seed prefixes.
     T5: case count depends on stage + hypothesis_action + expand flag.
     """
     cases = protocol._select_cases(
@@ -126,7 +128,7 @@ def run_experiment(
         all_cases=protocol.split_manager.get_cases(stage),
         selected_cases=cases,
     )
-    seeds = protocol._select_seeds(stage)
+    seeds = protocol._select_seeds(stage, expanded=expand)
     total_pairs = len(cases) * len(seeds)
     attempted_pairs = 0
     valid_pairs = 0
@@ -168,6 +170,16 @@ def run_experiment(
     runtime_gate_visibility: dict[str, Any] = {}
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
     objective_semantics = protocol.objective_semantics
+    case_aggregation_method = protocol.config.case_aggregation
+    case_effect_metric = (
+        "weighted_sum"
+        if (
+            protocol._metric_specs is not None
+            and getattr(protocol._objective_policy, "mode", None) == "weighted_sum"
+        )
+        else (protocol.config.effect_metric or "")
+    )
+    case_level_results: list[CaseLevelResult] = []
     champion_cache = getattr(protocol, "_champion_result_cache", None)
     champion_runtime_policy = protocol.config.runtime.champion_runtime_policy
     champion_cache_enabled = bool(
@@ -265,6 +277,11 @@ def run_experiment(
                     "selected_surface": normalized_selected_surface,
                     "objective_semantics": objective_semantics,
                     "effect_metric": protocol.config.effect_metric or None,
+                    "case_aggregation": {
+                        "method": case_aggregation_method,
+                        "effect_metric": case_effect_metric or None,
+                        "equivalence_band": protocol.config.case_equivalence_band,
+                    },
                     "protected_objectives": list(protocol.config.protected_objectives),
                     "protected_objective_regressions": list(
                         protected_objective_regressions
@@ -282,6 +299,15 @@ def run_experiment(
                         "cases": case_path_resolutions,
                     },
                     "seed_set": seeds,
+                    "case_level_results": [
+                        {
+                            "case_id": row.case_id,
+                            "comparison": row.comparison,
+                            "delta": row.delta,
+                            "metric_deltas": dict(row.metric_deltas or {}),
+                        }
+                        for row in case_level_results
+                    ],
                     "total_pairs": total_pairs,
                     "attempted_pairs": attempted_pairs,
                     "valid_pairs": valid_pairs,
@@ -909,7 +935,12 @@ def run_experiment(
     pair_wins = sum(1 for fb in all_pair_feedback if fb.comparison == "win")
     pair_losses = sum(1 for fb in all_pair_feedback if fb.comparison == "loss")
     pair_ties = len(all_pair_feedback) - pair_wins - pair_losses
-    case_level_results = _aggregate_pairs_to_case_level(all_pair_feedback)
+    case_level_results = _aggregate_pairs_to_case_level(
+        all_pair_feedback,
+        aggregation=case_aggregation_method,
+        effect_metric=case_effect_metric,
+        equivalence_band=protocol.config.case_equivalence_band,
+    )
 
     case_comparisons = [r.comparison for r in case_level_results]
     case_deltas = [r.delta for r in case_level_results]
@@ -1181,7 +1212,14 @@ def run_experiment(
     case_fb: tuple = ()
     pattern: "ScreeningPatternSummary | None" = None
     if stage == ExperimentStage.SCREENING and all_pair_feedback:
-        case_fb = tuple(_aggregate_case_feedback(all_pair_feedback))
+        case_fb = tuple(
+            _aggregate_case_feedback(
+                all_pair_feedback,
+                aggregation=case_aggregation_method,
+                effect_metric=case_effect_metric,
+                equivalence_band=protocol.config.case_equivalence_band,
+            )
+        )
         pattern = _build_pattern_summary(case_fb)
 
     problem_mechanism_evidence = problem_proposal_mechanism_evidence(
@@ -1199,6 +1237,9 @@ def run_experiment(
         exposed_summary=exposed,
         raw_metrics_ref=raw_ref,
         objective_semantics=objective_semantics,
+        case_aggregation_method=case_aggregation_method,
+        case_effect_metric=case_effect_metric,
+        case_equivalence_band=protocol.config.case_equivalence_band,
         case_ids=tuple(cases),
         seed_set=tuple(seeds),
         pair_feedback=(

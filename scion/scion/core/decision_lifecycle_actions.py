@@ -30,6 +30,7 @@ _DURABLE_SCREENING_KEYS = (
 _CURRENT_PROTOCOL_KEYS = frozenset(
     {
         "case_feedback",
+        "case_aggregation",
         "case_ids",
         "candidate_failed_pairs",
         "champion_failed_pairs",
@@ -205,6 +206,18 @@ def _protocol_evidence_projection(
         "case_ids": case_ids,
         "seed_set": list(protocol_result.seed_set),
         "objective_semantics": str(protocol_result.objective_semantics or "unknown"),
+        "case_aggregation": {
+            "method": str(
+                getattr(protocol_result, "case_aggregation_method", "")
+                or "seed_vote_majority"
+            ),
+            "effect_metric": str(
+                getattr(protocol_result, "case_effect_metric", "") or ""
+            ),
+            "equivalence_band": float(
+                getattr(protocol_result, "case_equivalence_band", 0.0) or 0.0
+            ),
+        },
         "selected_surface": protocol_result.selected_surface,
         "n_cases": max(0, int(getattr(stats, "n_cases", 0) or 0)),
         "wins": max(0, int(getattr(stats, "wins", 0) or 0)),
@@ -332,10 +345,12 @@ def _case_payload(item: Any) -> dict[str, Any]:
         "wins": max(0, int(getattr(item, "wins", 0) or 0)),
         "losses": max(0, int(getattr(item, "losses", 0) or 0)),
         "ties": max(0, int(getattr(item, "ties", 0) or 0)),
+        "win_rate": getattr(item, "win_rate", None),
         "dominant_result": str(getattr(item, "dominant_result", "") or ""),
         "decisive_metric": str(getattr(item, "decisive_metric", "") or ""),
         "median_deltas": dict(getattr(item, "median_deltas", {}) or {}),
         "seed_consistency": getattr(item, "seed_consistency", None),
+        "seed_pattern": str(getattr(item, "seed_pattern", "") or "uniform"),
         "case_features": dict(getattr(item, "case_features", {}) or {}),
     }
 

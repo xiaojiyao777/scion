@@ -208,7 +208,11 @@ def _attempt(
                 "round_num": int(record["round_num"]),
                 **_compact(record["experiment_evidence"]),
             }
-            for record in records
+            # The latest stage is represented below by experiment_evidence.
+            # Keeping only earlier stages here preserves the complete attempt
+            # trajectory without presenting the same latest compact facts
+            # twice to the hypothesis provider.
+            for record in records[:-1]
         ],
     }
     if level == "full":
@@ -333,6 +337,7 @@ def _case_feedback(value: Mapping[str, Any]) -> dict[str, Any]:
                     "ties",
                     "win_rate",
                     "dominant_result",
+                    "seed_pattern",
                     "median_deltas",
                     "decisive_metric",
                     "seed_consistency",

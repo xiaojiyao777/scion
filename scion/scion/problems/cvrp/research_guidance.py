@@ -70,6 +70,19 @@ CROSS_CAMPAIGN_RESEARCH_PRIOR = (
         "require SWAP*, any particular surface, action, or target, or revisiting "
         "this line at all."
     ),
+    (
+        "Recent ejection evidence is mixed and implementation-sensitive. An "
+        "older deeper route-preserving chain was 0W/4L/4T cases with median "
+        "-11.5 and only about 74 ALNS iterations versus 1,631 for B0. In the "
+        "open-research R1 partial run, a bounded completion-aware depth-one "
+        "repair reproduced a sparse positive direction after expansion at "
+        "6W/1L/5T cases, median +3.75 with CI [0,11], but recorded 186 "
+        "aggregate repair errors (8.7% of all ALNS iterations) without an "
+        "exposed operator-local denominator and did not advance; a cumulative "
+        "depth-two "
+        "variant was negative. These observations neither require nor forbid "
+        "ejection research, depth-one refinement, or a different direction."
+    ),
 )
 FEASIBILITY_GUIDANCE = (
     "A candidate result is interpretable only when capacity, customer "

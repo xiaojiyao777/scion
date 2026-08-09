@@ -34,6 +34,24 @@ def test_formal_target_with_prior_committed_rejection_is_valid_complete() -> Non
     assert validity["blocking_non_evaluated_count"] == 0
 
 
+def test_loop_audit_cannot_increase_typed_rejection_count() -> None:
+    validity = build_run_validity(
+        requested_rounds=1,
+        effective_rounds_completed=1,
+        n_experiments=1,
+        protocol_metric_results=1,
+        proposal_attempts=3,
+        execution_outcome_counts=_counts(evaluated=1, rejected=1),
+        committed_research_rejections=2,
+        stopped_reason="requested_rounds_completed",
+    )
+
+    assert validity["execution_outcome_counts"]["evaluated"] == 1
+    assert validity["execution_outcome_counts"]["research_rejected"] == 1
+    assert validity["committed_scheduler_forward_rejections"] == 1
+    assert validity["blocking_non_evaluated_count"] == 0
+
+
 def test_formal_target_is_complete_despite_candidate_local_rejection() -> None:
     validity = build_run_validity(
         requested_rounds=12,

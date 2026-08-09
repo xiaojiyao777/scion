@@ -16,9 +16,12 @@ belongs in experiment reports.
 
 The lightweight direct-V3 runtime now has retained Warehouse solver evidence:
 synthetic continuity reached v3 and production transfer reached and retained
-v2. CVRP still has only valid negative screening observations and champion B0.
-This task is complete only when Scion also demonstrates retained CVRP
-algorithmic improvement, not merely valid negative research.
+v2. CVRP champion remains B0. Its first open-research rung produced valid
+partial algorithm evidence, including one reproducible mixed-positive
+depth-one repair signal, but stopped on infrastructure at 5/8 formal stages
+and produced no promotion. This task is complete only when Scion also
+demonstrates retained CVRP algorithmic improvement, not merely valid research
+activity or a promising screening observation.
 
 The required end state is:
 
@@ -178,6 +181,12 @@ They do not block this task and cannot satisfy it.
 | R25 | proven; retained replay complete | Warehouse prod-1.2 completed 24/24 formal stages and promoted a subcategory-aware DestroyRebuild candidate from v1 to v2. The independent fixed replay completed 12/12 fresh pairs at 4/0/0 cases, 12/0/0 pairs, `total_cost +15150 [8400,22000]`. | Classify production transfer as `RETAINED_PRODUCTION_IMPROVEMENT`. Warehouse acceptance is complete; do not require production multi-promotion. |
 | R26 | proven organization defect; corrected prospectively at `8909f635`; causal effect on promotion unproven | The launch-time EXPLORE scheduler repeatedly served the oldest branch, yielding 16 H on one cumulative branch and one each on two schedulable siblings. Two independent Merge candidates had sparse no-loss 2/0/4 case evidence but could not reach declared expanded screening. A candidate-local traceback also hid its exception root cause from the next H. | Rotate EXPLORE siblings by persisted least-recently-served time, allow exactly one measurement expansion for a practical sparse no-loss initial signal without weakening the pass threshold, and project one typed Verification root cause. Do not add rollback, novelty, algorithm-quality or negative-result gates. |
 | R27 | proven measurement/claim limit; claim-bounded prospectively, four-seed power unchanged | CVRP screening's declared practical delta is `2`, while the accepted A/A calibration reports `MDE@80%=9.9` and recommends eight seeds. The current four-seed design has greater power for large effects but cannot rule out smaller improvement. Historical CMT case-ID priority is also a population property, not a V3 research obligation. | Keep the first 8-stage Terra rung matched to the existing cases/seeds so context/runtime corrections are identifiable; explicitly limit negative claims below MDE. If evidence is power-limited, redesign a fresh pre-registered campaign. Never add seeds post hoc or turn case priorities into H obligations/gates. |
+| R28 | proven valid partial science; terminal root sealed | CVRP open-research R1 completed 5/8 formal screenings and 176/176 valid pairs before an upstream stream closed without a terminal event. It exercised three branches, exact expansion, least-recently-served exploration and evidence-informed same-branch refinement; no candidate reached validation/frozen or promotion. | Classify the root as pre-registered `RUN_INVALID_INFRA` with `VALID_PARTIAL_SCIENCE_5_OF_8`. Never resume or retry it. Use its completed evidence only as input to a separately pre-registered fresh rung. |
+| R29 | proven measurement design defect; prospective correction required | The current case estimator calls a case win only when seed wins strictly exceed both losses and ties. It maps sparse `2W/0L/2T` evidence to a case tie. R1's depth-one repair reproduced direction on expansion at 6/1/5 gate cases, median `+3.75 [0,11]`, but four seeds are underpowered relative to MDE `9.9`. A prospective paired-median reanalysis would be 7/2/3, win rate `0.583`, still below the fixed `0.60`; R1 is not a hidden pass. | Pre-register a scientifically interpretable paired case estimator and a claim-bounded staged fresh population before R2. Pair outcomes remain descriptive; initial mechanism evidence may only route to a larger exact quality screen, while promotion still requires the complete unchanged V3 Protocol authority path. Do not reinterpret R1 or tune an active root. |
+| R30 | proven proposal-operation friction; prospective correction required | A complete structured branch-C refinement was rejected before Contract because its exact selector contained one blank line between top-level functions while visible source contained two. This was not an algorithm failure. | Permit only deterministic, globally unique blank-line-run selector normalization for non-`replace_all` edits, record the ordinary repair attribution, and keep every other mismatch fail-closed. Do not add fuzzy code matching, retry or an algorithm-quality gate. |
+| R31 | proven evidence-accounting/context gaps; corrected prospectively | R1 contains five evaluated attempts, two candidate-local research rejections and one infrastructure block, but terminal status projects only one rejection. The neutral H prior also omits the recent deep-ejection negative and R1 depth-one/depth-two contrast. | The research-rejection finalizer now owns one typed outcome row plus cleanup/audit fact; the loop audit remains a cross-check rather than a second counting authority. Candidate-local rejection stays scheduler-forward, and one concise neutral evidence item reaches H without selecting an operator or entering Decision. |
+| R32 | proven calibration-compatibility defect; corrected prospectively | The checked-in CVRP readiness and adapter projected the old 8-case x 4-seed pair-level MDE `9.9` as ready for R2, whose estimator, 12-case population, eight-seed quality screen and scale-aware runtime differ. A later 8-seed pair-level A/A reported MDE `9.6`, but it is also incompatible and does not validate its heuristic 16-seed recommendation. | Mark R2 uncalibrated, keep both MDE values as explicitly incompatible historical low-power diagnostics, and synchronize the declared matrix with actual execution. R2 may test research behavior and large effects but must not claim calibrated power or rule out effects near delta `2`. |
+| R33 | active experimental-design risk; bounded prospectively | A no-promotion campaign can reflect the candidate ideas, the stage/case/seed measurement design, or an H/C context and tool surface that diverts attention from algorithm research. Adding more host rules cannot distinguish those causes and can itself suppress useful search. | Treat stage populations, estimator semantics, provider-visible context and available edit/research tools as explicit experiment inputs. Preserve only V3 Contract/Verification/Protocol authority and minimum replayable lineage. R2 measures the integrated research path; its postrun must analyze proposal focus, usable evidence, tool/edit friction and measurement reach separately. If causal isolation is still needed, use a later fresh preregistered matched ablation rather than tuning the active root or adding a quality gate. |
 
 ## Modular execution plan
 
@@ -402,34 +411,73 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   instruction or Contract requirement: Contract may enforce schema,
   approved-H binding and source boundaries, but it must not demand novelty,
   rank mechanisms or reject an evidence-driven same-branch refinement.
-- [ ] Start a fresh campaign with the open V3 proposal path: one unconstrained,
+- [x] Start a fresh campaign with the open V3 proposal path: one unconstrained,
   source-grounded H chosen by the provider, structural H Contract, one
   approved-H-bound C, structural Patch Contract, isolated materialization and
   executable Verification. Do not force SWAP*, another mechanism, surface,
   action or target. Historical SWAP* evidence is one neutral prior item only.
-- [ ] Send every verified candidate directly into the existing paired
+  R1 launched once and stopped at 5/8 on infrastructure; this checkbox records
+  launch/path behavior, not completion or promotion.
+- [x] Send every verified candidate directly into the existing paired
   screening Protocol and deterministic Decision. There is no assay admission,
   mechanism-support prerequisite or host algorithm-quality stop between
-  Verification and Protocol.
-- [ ] Preserve V3 same-branch research depth. After a completed screening
+  Verification and Protocol. All five R1 formal candidates followed this path.
+- [x] Preserve V3 same-branch research depth. After a completed screening
   observation, a non-promoted verified candidate remains the provisional
   branch source for the next H under V3 §11.2; the next H receives complete
   safe branch evidence and may refine or change direction. Do not impose a
-  one-refinement cap and never retry the same provider call.
-- [ ] When Protocol queues expanded screening, validation, expanded validation
+  one-refinement cap and never retry the same provider call. R1 branch C used
+  its own depth-one source and current/sibling evidence for a later refinement.
+- [x] When Protocol queues expanded screening, validation, expanded validation
   or frozen, drain that stage on the same exact candidate and campaign state
   with no further H/C call. Only predeclared case/seed populations, Protocol
   statistics, Safe Features and deterministic Decision may advance, abandon
-  or promote it.
-- [ ] Keep mechanism activation, elapsed share, ALNS opportunity and any
+  or promote it. R1's one queued screening expansion drained exactly this way;
+  validation/frozen behavior still requires a future passing candidate.
+- [x] Keep mechanism activation, elapsed share, ALNS opportunity and any
   problem-owned assay output observational. They may appear in raw evidence,
   postrun analysis and safe next-H feedback, but may not stop or admit the
   current candidate, alter cases/seeds, enter Decision or create a new
-  framework seam.
+  framework seam. R1 confirms that mechanism evidence informed H without
+  admitting or rejecting a candidate.
+- [x] Seal and analyze R1 without retroactive threshold, seed, case or source
+  changes. Record the exact 5/8 terminal classification, five formal results,
+  research behavior, mechanism evidence, measurement power and proposal-path
+  defects in its postrun report.
+- [x] Before corrected R2, implement only observed hot-path corrections:
+  unique blank-line-run edit application; one typed research-rejection owner;
+  neutral ejection evidence with operator-local denominators; paired-median
+  case direction; exact 4-to-8 seed expansion; estimator provenance; and
+  lossless removal of duplicate latest H evidence. R2 is explicitly
+  uncalibrated. The 2047-test full suite, one skipped test, focused regressions,
+  critical Ruff checks and diff check pass without deployment, Trust/Hash,
+  mechanism or telemetry gates.
+- [ ] Pre-register corrected R2 as a fresh staged-measurement, claim-bounded
+  campaign. Freeze its
+  paired case estimator, equivalence semantics if any, seeds, structural case
+  strata, screening/validation/frozen populations and formal-stage horizon
+  before launch. Keep screening advancement separate from champion promotion.
+- [ ] Freeze and audit the provider research surface as part of that R2
+  preregistration: enumerate each H/C context section, its scientific purpose,
+  the complete current solver source and problem mechanics available to the
+  provider, the edit/research tools it may actually use, and the minimum V3
+  rules it must obey. Record provider input size, tool/edit outcomes and typed
+  rejection causes for analysis only. Do not impose token top-k, novelty,
+  mechanism, activation, style or algorithm-quality gates.
+- [ ] Run corrected R2 in a new absent root through the same open H/C and V3
+  authority path. The provider may refine depth one, pivot, or choose another
+  source-grounded mechanism; R1 evidence is context, not a mandate.
 - [ ] After a Protocol-complete promotion, compare the exact promoted champion
   independently against original B0 on the predeclared final population. Use
   no provider call, dynamic subset, threshold change or favorable family
   selection after observing results.
+- [ ] If R2 does not promote, separate three claims in postrun analysis:
+  research behavior (did H/C form and implement causal algorithm ideas),
+  measurement reach (what effects the fixed staged design could distinguish),
+  and framework friction (what useful proposals were blocked before Protocol).
+  A later matched context/measurement ablation is allowed only in a new absent
+  root with one predeclared changed factor; it must not become another host
+  control layer.
 
 CVRP acceptance:
 
@@ -485,17 +533,12 @@ v2 and v3 over v1, so synthetic Warehouse continuity is
 `CONTINUOUS_OPTIMIZATION_CONFIRMED`. The fresh prod-1.2 campaign then completed
 24/24 stages, promoted v1→v2, and retained that production improvement on all
 12/12 separately preregistered held-out pairs. Warehouse acceptance is fully
-complete. The post-v2 record exposed EXPLORE starvation, cumulative attribution
-and sparse-no-loss expansion defects; commit `8909f635` corrects those
-prospectively without a new promotion gate. The latest complete suite remains
-`2011 passed, 1 skipped` in 639.18 seconds; the new focused research-hot-path
-set passes 138 tests. S5 has removed assay/host
-disposition and result-derived expand cases, delivered the neutral prior to the
-actual H payload, and stopped suppressing same-branch refinement with
-`materially different`. The next CVRP campaign is now frozen at executable
-commit `51f9bbd7` as an 8-stage matched open-H/C rung. Its four-seed screening
-has greater power for large effects but cannot exclude effects below the
-calibrated MDE; a power change, if justified by the fixed result, must be a
-separate fresh preregistration. Launch and Protocol evidence remain pending.
-S6 final closure remains pending, and CVRP still has no Protocol-complete
-promotion.
+complete. CVRP R1 is sealed at 5/8 formal stages with 176/176 valid pairs, one
+reproducible mixed-positive depth-one signal and no promotion. Its measurement,
+proposal-edit, context and rejection-accounting defects are corrected
+prospectively; the final integrated suite is `2047 passed, 1 skipped` in
+640.76 seconds. Corrected R2 uses an 8x4 mechanism screen that may only expand
+to a 12x8 quality screen, followed by 12x4 validation and 12x3 frozen evidence.
+It remains explicitly uncalibrated and will be frozen in a fresh exact-source
+preregistration before launch. S6 final closure remains pending, and CVRP still
+has no Protocol-complete promotion.

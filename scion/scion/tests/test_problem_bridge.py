@@ -115,17 +115,15 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
     assert spec.measurement.effect_scale.metric == "total_distance"
     assert spec.measurement.protected_objectives == ("fleet_violation",)
     assert spec.measurement.effect_scale.practical_delta_screen == 2.0
-    assert spec.measurement.calibration_ref == (
-        "formal/calibration/aa_noise_floor.json"
-    )
+    assert spec.measurement.calibration_ref == ""
     assert legacy.measurement is spec.measurement
     assert spec.runtime_dependencies.required_python_modules == ["numpy"]
     assert legacy.runtime_dependencies.required_python_modules == ["numpy"]
     readiness = measurement_readiness_status(spec, as_of=date(2026, 6, 11))
-    assert readiness.status == "ready"
-    assert readiness.reason_code == "ok"
-    assert readiness.mde_at_power_80 == 9.9
-    assert readiness.signal_to_noise_tier == "low_power"
+    assert readiness.status == "not_ready"
+    assert readiness.reason_code == "missing_calibration_ref"
+    assert readiness.mde_at_power_80 is None
+    assert readiness.signal_to_noise_tier == "unknown"
 
 
 def test_measurement_schema_accepts_reduced_readiness_summary_only() -> None:
