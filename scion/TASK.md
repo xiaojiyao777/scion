@@ -174,7 +174,7 @@ They do not block this task and cannot satisfy it.
 | R21 | proven and corrected | Production validation declared `n_cases=5` and `expand_to=5`, so queued expansion would repeat identical cases and seeds. The execution path also ignored declared `bootstrap_n=10000` and used the statistics default. | An expansion must strictly add cases or conservatively fail for insufficient evidence; validation/frozen use the declared bootstrap count. R1 remains unchanged because it stopped before the duplicate stage. |
 | R22 | proven and corrected prospectively | Hierarchical statistics stopped at the first non-exact higher-priority metric. With identical lexicographic wins and identical positive cost deltas, adding a sparse positive primary improvement could change a pass into uncertainty. The predeclared `measurement.effect_scale.metric` was ignored. | Lexicographic case W/L/T remains direction evidence; every objective is recorded; the predeclared effect metric now supplies practical effect and CI. Only explicitly problem-declared protected objectives may veto regression. R1 is not reinterpreted. |
 | R23 | proven and corrected prospectively | Initial and expanded evenly-spaced selections were computed independently. In CVRP, modify screening 8 -> 12 dropped four initial cases, so expansion changed rather than enlarged evidence. | Expanded populations now contain the complete deterministic initial population plus predeclared new cases with unchanged stage seeds, and fail conservatively when no evidence can be added. |
-| R24 | proven and corrected prospectively | Real H prompts accumulated complete per-pair history and repeated telemetry (Warehouse 11.3k -> 83.8k input tokens; CVRP 20.7k -> 100.2k), while Warehouse surface hypothesis guidance was absent. C exposed source hashes, owner/provenance/views and repeated edit rules. | Complete raw lineage remains durable; the provider receives a fixed V3 research view with recent current attempts detailed, older attempts structured, siblings brief, actionable problem evidence, complete current source, and phase-correct guidance. Provider-visible self-proof metadata is removed without weakening source-content binding. |
+| R24 | proven and corrected prospectively | Real H prompts accumulated complete per-pair history and repeated telemetry (Warehouse 11.3k -> 83.8k input tokens; CVRP 20.7k -> 100.2k), while Warehouse surface hypothesis guidance was absent. C exposed source hashes, owner/provenance/views and repeated edit rules. | Complete raw lineage remains durable; the provider receives a fixed V3 research view with recent current attempts detailed, older attempts structured, siblings brief, actionable problem evidence, complete current source, phase-correct guidance and a neutral problem-owned prior when prior campaigns contain relevant scientific evidence. Provider-visible self-proof metadata is removed without weakening source-content binding. |
 
 ## Modular execution plan
 
@@ -346,13 +346,17 @@ They do not block this task and cannot satisfy it.
   strictly nested expansion populations, declared bootstrap execution, the V3
   provider-history projection, phase-correct Warehouse H/C guidance, and plain
   source-content context without owner/hash self-proof. Focused review found no
-  P0 issue, and the complete suite passed `2011 passed, 1 skipped`.
+  P0 issue, and the complete suite passed `2011 passed, 1 skipped`. The fresh
+  Warehouse H also receives the prod-1.1 aggregate scientific prior once,
+  without forcing continuation or abandonment of its prior mechanism.
 - [ ] Freeze prod-1.2 with the five independently fixed new validation cases,
   keep the old five as the initial population and all ten as expanded
   validation, and run one separately preregistered fresh 24-stage campaign.
   Never resume the 12-stage root. If it promotes, independently replay the
-  exact production champion; otherwise report the predeclared powered negative
-  conclusion and the precise remaining headroom/noise boundary.
+  exact production champion; otherwise report only failure to demonstrate a
+  promotion under the fixed 24-stage setup and the precise observed
+  headroom/noise boundary. Do not generalize that result to an absence of
+  improving Warehouse algorithms.
 - [ ] Do not enable parameter/weight search until two structural promotions are
   demonstrated. If later tested, keep it as a separate off/on ablation so it
   cannot masquerade as structural research ability.

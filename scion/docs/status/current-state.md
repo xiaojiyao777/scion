@@ -358,8 +358,10 @@ lexicographic direction evidence and every objective row; only an explicitly
 declared protected objective can veto a regression. Expanded populations
 strictly contain their initial cases. Durable raw history remains complete,
 while H receives the fixed V3 research view and C receives plain approved path
-and source content plus phase-correct guidance. These corrections do not
-reinterpret R1.
+and source content plus phase-correct guidance. Fresh Warehouse H additionally
+receives one neutral aggregate prod-1.1 scientific prior; it does not import a
+candidate or select a surface, action, target or mechanism. These corrections
+do not reinterpret R1.
 The prod-1.2 population design fixes five new candidate-independent validation
 instances and keeps the old five as the initial set, all ten as the expanded
 set, with unchanged seeds and thresholds. The fixed cases have passed
