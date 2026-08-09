@@ -7,7 +7,7 @@ import pytest
 
 from scion.proposal import prompt_projection as subject
 from scion.proposal.context_owner_maps import proposal_context_snapshot
-
+from scion.proposal.engine import _split_code_context, _split_hypothesis_context
 from scion.tests.unit.source_ledger_test_support import ledgerize_code_context
 
 
@@ -68,6 +68,66 @@ def test_project_prompt_is_a_pure_value_projection(
     assert projection.system_blocks
     assert projection.user_prompt
     assert json.loads(projection.structured_context_json) == expected
+
+
+@pytest.mark.parametrize(
+    ("splitter", "canonical_block_indexes"),
+    [
+        (_split_hypothesis_context, (1, 2)),
+        (_split_code_context, (1,)),
+    ],
+)
+def test_direct_v3_canonical_blocks_are_lossless_compact_and_deterministic(
+    splitter,
+    canonical_block_indexes: tuple[int, ...],
+) -> None:
+    context = {
+        "problem_summary": "Caf\u00e9\nrouting control.",
+        "champion_stats": {"coordinates": (1, 2)},
+        "branch_id": "branch-canonical-json",
+        "experiment_history": [
+            {
+                "labels": {"beta", "alpha"},
+                "payload": b"\x00\xff",
+            }
+        ],
+    }
+
+    first_blocks, first_user_prompt = splitter(context)
+    second_blocks, second_user_prompt = splitter(context)
+
+    assert first_blocks == second_blocks
+    assert first_user_prompt == second_user_prompt
+    decoded_context = {}
+    rendered_bodies = []
+    for index in canonical_block_indexes:
+        body = first_blocks[index]["text"].split("\n", 1)[1]
+        decoded = json.loads(body)
+        assert "\n" not in body
+        assert body == json.dumps(
+            decoded,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
+        )
+        decoded_context.update(decoded)
+        rendered_bodies.append(body)
+
+    assert "\\u00e9" in "".join(rendered_bodies)
+    assert decoded_context["problem_summary"] == "Caf\u00e9\nrouting control."
+    assert decoded_context["champion_stats"]["coordinates"] == {
+        "__scion_tuple__": [1, 2]
+    }
+    assert decoded_context["experiment_history"][0]["labels"] == {
+        "__scion_set__": ["alpha", "beta"]
+    }
+    assert decoded_context["experiment_history"][0]["payload"] == {
+        "__scion_bytes_hex__": "00ff"
+    }
+
+    with pytest.raises(TypeError, match="non-finite float"):
+        splitter({"problem_summary": float("nan")})
 
 
 def test_project_prompt_rejects_phase_mismatch_and_unknown_kind() -> None:

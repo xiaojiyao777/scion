@@ -1,4 +1,4 @@
-version: 0.4-cvrp-v3-quality-screen-r2
+version: 0.4-cvrp-v3-quality-screen-r3
 screening:
 - 11
 - 29
@@ -13,9 +13,18 @@ validation:
 - 53
 - 71
 - 83
+- 107
+- 109
+- 113
+- 127
 frozen:
 - 61
 - 67
 - 89
+- 131
+- 137
+- 139
+- 149
+- 151
 canary:
 - 101

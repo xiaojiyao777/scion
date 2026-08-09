@@ -56,13 +56,27 @@ def test_hypothesis_parser_rejects_descriptive_change_locus_suffix() -> None:
 
 @pytest.mark.parametrize(
     "missing_field",
-    ["hypothesis_text", "change_locus", "action", "target_weakness", "expected_effect"],
+    ["hypothesis_text", "change_locus", "action", "target_weakness"],
 )
 def test_hypothesis_rejects_each_missing_required_field(missing_field: str):
     raw = _minimal_hypothesis()
     del raw[missing_field]
     with pytest.raises(ProposalValidationError):
         _parse_hypothesis(raw)
+
+
+def test_hypothesis_defaults_missing_expected_effect_to_empty_tainted_record():
+    raw = _minimal_hypothesis()
+    del raw["expected_effect"]
+
+    result = _parse_hypothesis(raw)
+
+    expected_effect_schema = HYPOTHESIS_PROPOSAL_SCHEMA["properties"][
+        "expected_effect"
+    ]
+    assert result.expected_effect == ""
+    assert "expected_effect" not in HYPOTHESIS_PROPOSAL_SCHEMA["required"]
+    assert expected_effect_schema["default"] == ""
 
 
 def test_hypothesis_defaults_missing_predicted_direction_to_exploratory():

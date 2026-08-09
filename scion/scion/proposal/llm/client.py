@@ -78,6 +78,7 @@ class LLMClient(PolicyMixin, TransportMixin):
         )
         self._cache_stats = {"calls": 0, "cache_read_tokens": 0, "cache_create_tokens": 0, "uncached_tokens": 0}
         self._last_usage_metadata: dict[str, Any] | None = None
+        self._last_response_diagnostics: dict[str, Any] | None = None
         self._last_prompt_cache_key: str | None = None
         self._anthropic_client: Any = None
         self._openai_client: Any = None
@@ -97,6 +98,18 @@ class LLMClient(PolicyMixin, TransportMixin):
             return None
         return dict(self._last_usage_metadata)
 
+    def get_last_response_diagnostics(self) -> dict[str, Any] | None:
+        """Return mechanical facts from the most recent SDK response."""
+        if self._last_response_diagnostics is None:
+            return None
+        return dict(self._last_response_diagnostics)
+
+    def reset_call_observations(self) -> None:
+        """Start one public provider call without observations from its predecessor."""
+        self._last_usage_metadata = None
+        self._last_response_diagnostics = None
+        self._last_prompt_cache_key = None
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -114,16 +127,13 @@ class LLMClient(PolicyMixin, TransportMixin):
         Supports both Anthropic (Claude) and OpenAI (GPT) models.
         """
         effective_model = model or self.model
+        self.reset_call_observations()
         policy = self.resolve_request_policy(
             request_kind=request_kind,
             tool=tool,
             model=effective_model,
         )
         timeout_sec = policy["timeout_sec"]
-        # Usage belongs to a completed response.  A failed new call must not
-        # inherit the previous call's usage or request-kind attribution.
-        self._last_usage_metadata = None
-        self._last_prompt_cache_key = None
         attempt_started_at = time.monotonic()
         try:
             with _llm_hard_timeout(timeout_sec):

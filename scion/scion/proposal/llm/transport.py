@@ -32,6 +32,47 @@ from .errors import (
 
 logger = logging.getLogger(__name__)
 
+
+def _serialized_argument_diagnostics(arguments: Any) -> tuple[int | None, bool]:
+    """Describe an SDK-parsed argument value using one explicit encoding."""
+    try:
+        encoded = json.dumps(
+            arguments,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    except Exception:  # noqa: BLE001 - observation must not affect provider behavior
+        return None, False
+    return _utf8_size(encoded), True
+
+
+def _utf8_size(value: str) -> int | None:
+    try:
+        return len(value.encode("utf-8"))
+    except UnicodeError:
+        return None
+
+
+def _openai_argument_observations(arguments: Any) -> dict[str, Any]:
+    observations: dict[str, Any] = {
+        "arguments_value_type": type(arguments).__name__
+    }
+    if isinstance(arguments, str):
+        observations["arguments_representation"] = "sdk_argument_string_utf8"
+        arguments_bytes = _utf8_size(arguments)
+    elif isinstance(arguments, bytes):
+        observations["arguments_representation"] = "sdk_argument_bytes"
+        arguments_bytes = len(arguments)
+    elif isinstance(arguments, bytearray):
+        observations["arguments_representation"] = "sdk_argument_bytearray"
+        arguments_bytes = len(arguments)
+    else:
+        arguments_bytes = None
+    if arguments_bytes is not None:
+        observations["selected_arguments_bytes"] = arguments_bytes
+    return observations
+
+
 class TransportMixin:
     def close_provider_clients(self) -> None:
         """Close cached provider SDK clients and release their HTTP transports."""
@@ -104,6 +145,22 @@ class TransportMixin:
 
         response = client.messages.create(**kwargs)
 
+        content = response.content
+        tool_blocks = [
+            block
+            for block in content
+            if hasattr(block, "type") and block.type == "tool_use"
+        ]
+        stop_reason = getattr(response, "stop_reason", None)
+        response_diagnostics: dict[str, Any] = {
+            "provider": "anthropic",
+            "tool_call_count": len(tool_blocks),
+            "tool_call_count_scope": "response.content[type=tool_use]",
+        }
+        if stop_reason is not None:
+            response_diagnostics["stop_reason"] = str(stop_reason)
+        self._last_response_diagnostics = response_diagnostics
+
         usage = getattr(response, "usage", None)
         if usage:
             cache_create = getattr(usage, "cache_creation_input_tokens", 0)
@@ -129,12 +186,27 @@ class TransportMixin:
                     cache_create_tokens=cache_create,
                 )
 
-        stop_reason = getattr(response, "stop_reason", None)
-
-        for block in response.content:
-            if hasattr(block, "type") and block.type == "tool_use":
-                if block.name == tool["name"]:
-                    return block.input
+        for tool_call_index, block in enumerate(tool_blocks):
+            if block.name == tool["name"]:
+                arguments_bytes, arguments_json_valid = (
+                    _serialized_argument_diagnostics(block.input)
+                )
+                response_diagnostics.update(
+                    {
+                        "selected_tool_call_index": tool_call_index,
+                        "selected_tool_call_index_scope": (
+                            "response.content[type=tool_use]"
+                        ),
+                        "selected_tool_name": str(block.name),
+                        "selected_arguments_json_valid": arguments_json_valid,
+                        "arguments_representation": (
+                            "compact_json_utf8_from_sdk_parsed_input"
+                        ),
+                    }
+                )
+                if arguments_bytes is not None:
+                    response_diagnostics["selected_arguments_bytes"] = arguments_bytes
+                return block.input
 
         raise LLMFormatError(
             f"LLM did not call tool '{tool['name']}'. Stop reason: {stop_reason}"
@@ -179,6 +251,14 @@ class TransportMixin:
             )
         )
 
+        choices = response.choices
+        response_diagnostics: dict[str, Any] = {
+            "provider": "openai_compatible",
+            "choice_count": len(choices),
+            "choice_count_scope": "response.choices",
+        }
+        self._last_response_diagnostics = response_diagnostics
+
         usage = response.usage
         if usage:
             cache_read, cache_miss = self._openai_cache_usage(usage)
@@ -202,21 +282,46 @@ class TransportMixin:
                     cache_create_tokens=0,
                 )
 
-        choice = response.choices[0]
+        choice = choices[0]
         tool_calls = getattr(choice.message, "tool_calls", None)
+        response_diagnostics.update(
+            {
+                "tool_call_count": len(tool_calls or ()),
+                "tool_call_count_scope": "response.choices[0].message.tool_calls",
+                "selected_choice_index": 0,
+                "selected_choice_index_scope": "response.choices",
+            }
+        )
+        if choice.finish_reason is not None:
+            response_diagnostics["finish_reason"] = str(choice.finish_reason)
         if not tool_calls:
             raise LLMFormatError(
                 f"LLM did not call tool '{tool_name}'. "
                 f"Finish reason: {choice.finish_reason}"
             )
-
+        selected_tool_call = tool_calls[0]
+        arguments = selected_tool_call.function.arguments
+        response_diagnostics.update(
+            {
+                "selected_tool_call_index": 0,
+                "selected_tool_call_index_scope": (
+                    "response.choices[0].message.tool_calls"
+                ),
+                **_openai_argument_observations(arguments),
+            }
+        )
+        selected_tool_name = getattr(selected_tool_call.function, "name", None)
+        if selected_tool_name is not None:
+            response_diagnostics["selected_tool_name"] = str(selected_tool_name)
         try:
-            result = json.loads(tool_calls[0].function.arguments)
+            result = json.loads(arguments)
         except (TypeError, json.JSONDecodeError) as exc:
+            response_diagnostics["selected_arguments_json_valid"] = False
             raise LLMFormatError(
                 f"LLM tool '{tool_name}' returned invalid JSON arguments. "
                 f"Finish reason: {choice.finish_reason}"
             ) from exc
+        response_diagnostics["selected_arguments_json_valid"] = True
         return result
 
     def _openai_chat_kwargs(

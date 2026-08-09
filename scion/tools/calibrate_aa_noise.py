@@ -66,14 +66,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     seed_ledger = SeedLedgerConfig.from_yaml(args.seeds)
     stage = _stage(args.stage)
-    cases = select_cases(
-        config=protocol,
-        split_manager=SplitManager(split),
+    cases, seeds = _select_calibration_population(
+        protocol=protocol,
+        split=split,
+        seed_ledger=seed_ledger,
         stage=stage,
         hypothesis_action=args.hypothesis_action,
-        expand_round=0,
+        expand_round=args.expand_round,
+        max_seeds=args.max_seeds,
     )
-    seeds = select_seeds(seed_ledger=SeedLedger(seed_ledger), stage=stage)
     if not cases or not seeds:
         raise SystemExit("calibration requires at least one case and one seed")
 
@@ -128,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
         selected_surface=args.selected_surface,
         runtime_policy=runtime_policy,
         safe_data_roots=split.safe_data_roots,
+        combined_case_rule=_combined_case_rule(protocol, stage),
     )
     output = Path(args.output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -139,6 +141,14 @@ def main(argv: list[str] | None = None) -> int:
         "false_pass_rate="
         f"{payload['protocol_power'].get('false_pass_rate_at_current_gate')}"
     )
+    combined_null = payload.get("combined_case_rule_null")
+    if isinstance(combined_null, Mapping):
+        print(
+            "combined_null_pass_rate="
+            f"{combined_null.get('null_pass_rate')} "
+            "wilson_upper_95="
+            f"{combined_null.get('null_pass_rate_wilson_upper_95')}"
+        )
     return 0
 
 
@@ -234,6 +244,52 @@ def _collect_records(
     return records
 
 
+def _select_calibration_population(
+    *,
+    protocol: ProtocolConfig, split: SplitManifest,
+    seed_ledger: SeedLedgerConfig, stage: ExperimentStage,
+    hypothesis_action: str, expand_round: int, max_seeds: int | None,
+) -> tuple[list[str], list[int]]:
+    cases = select_cases(
+        config=protocol, split_manager=SplitManager(split), stage=stage,
+        hypothesis_action=hypothesis_action, expand_round=expand_round,
+    )
+    seeds = select_seeds(
+        config=protocol, seed_ledger=SeedLedger(seed_ledger), stage=stage,
+        expanded=expand_round > 0,
+    )
+    if max_seeds is not None:
+        if max_seeds <= 0:
+            raise ValueError("max_seeds must be positive")
+        seeds = seeds[:max_seeds]
+    return cases, seeds
+
+
+def _combined_case_rule(
+    protocol: ProtocolConfig,
+    stage: ExperimentStage,
+) -> dict[str, float] | None:
+    gate = getattr(protocol.gates, stage.value)
+    values = (
+        gate.min_net_case_score, gate.max_case_loss_rate,
+        gate.bootstrap_ci_low_min,
+    )
+    if None in values:
+        return None
+    practical_delta = (
+        protocol.screening_min_practical_delta
+        if stage == ExperimentStage.SCREENING
+        else protocol.validation_min_practical_delta
+    )
+    return {
+        "case_equivalence_band": float(protocol.case_equivalence_band),
+        "min_net_case_score": float(gate.min_net_case_score),
+        "max_case_loss_rate": float(gate.max_case_loss_rate),
+        "median_delta_min": float(practical_delta),
+        "bootstrap_ci_low_min": float(gate.bootstrap_ci_low_min),
+    }
+
+
 def _run_once(
     runner: Any,
     *,
@@ -303,6 +359,8 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--output", required=True)
     parser.add_argument("--stage", default="screening")
     parser.add_argument("--hypothesis-action", default="modify")
+    parser.add_argument("--expand-round", type=int, default=0)
+    parser.add_argument("--max-seeds", type=int, default=None)
     parser.add_argument("--replicates", type=int, default=3)
     parser.add_argument("--seed-offset", type=int, default=1_000_003)
     parser.add_argument("--time-limit-sec", type=int, default=30)

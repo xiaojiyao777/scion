@@ -298,6 +298,256 @@ def test_initial_sparse_no_loss_signal_gets_one_measurement_expansion():
     assert expanded.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
+def _r3_case_quality_config() -> ProtocolConfig:
+    return ProtocolConfig.model_validate(
+        {
+            "practical_delta_screen": 2.0,
+            "practical_delta_validate": 2.0,
+            "screening": {"require_expanded_for_pass": True},
+            "validation": {"expand_to": 12},
+            "gates": {
+                "screening": {
+                    "bootstrap_ci_low_min": 0.0,
+                    "min_net_case_score": 0.25,
+                    "max_case_loss_rate": 0.2,
+                    "initial_quality_route": {
+                        "min_net_case_score": 0.125,
+                        "max_case_loss_rate": 0.25,
+                    },
+                },
+                "validation": {
+                    "bootstrap_ci_low_min": 0.0,
+                    "min_net_case_score": 0.25,
+                    "max_case_loss_rate": 0.2,
+                },
+                "frozen": {
+                    "bootstrap_ci_low_min": 0.0,
+                    "min_net_case_score": 0.25,
+                    "max_case_loss_rate": 0.2,
+                },
+            },
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    ("wins", "losses", "ties", "expected", "reason"),
+    (
+        (6, 1, 5, "pass", "SCREENING_PASS"),
+        (6, 5, 1, "fail", "SCREENING_FAIL_CASE_QUALITY"),
+        (1, 0, 11, "fail", "SCREENING_FAIL_CASE_QUALITY"),
+    ),
+)
+def test_r3_expanded_quality_uses_net_case_distribution(
+    wins,
+    losses,
+    ties,
+    expected,
+    reason,
+):
+    stats = _make_stats(
+        n_cases=12,
+        wins=wins,
+        losses=losses,
+        ties=ties,
+        win_rate=wins / 12,
+        median_delta=3.0,
+        ci_low=0.0,
+        ci_high=6.0,
+    )
+
+    result = screening_gate(stats, _r3_case_quality_config(), expanded=True)
+
+    assert result.outcome == expected
+    assert result.reason_codes == (reason,)
+
+
+def test_r3_initial_quality_route_expands_but_never_passes():
+    stats = _make_stats(
+        n_cases=8,
+        wins=4,
+        losses=2,
+        ties=2,
+        win_rate=0.5,
+        median_delta=1.0,
+        ci_low=-1.0,
+        ci_high=4.0,
+    )
+
+    result = screening_gate(stats, _r3_case_quality_config())
+
+    assert result.outcome == "expand"
+    assert result.reason_codes == ("SCREENING_EXPAND_INITIAL_QUALITY_ROUTE",)
+
+
+def test_r3_expanded_ci_uncertainty_is_not_mislabeled_as_case_quality_failure():
+    stats = _make_stats(
+        n_cases=12,
+        wins=6,
+        losses=1,
+        ties=5,
+        win_rate=0.5,
+        median_delta=3.0,
+        ci_low=-0.5,
+        ci_high=6.0,
+    )
+
+    result = screening_gate(stats, _r3_case_quality_config(), expanded=True)
+
+    assert result.outcome == "unclear"
+    assert result.reason_codes == (
+        "SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN",
+    )
+
+
+@pytest.mark.parametrize(
+    ("gate", "pass_reason", "fail_reason"),
+    (
+        (validation_gate, "VALIDATION_PASS", "VALIDATION_FAIL_CASE_QUALITY"),
+        (frozen_gate, "FROZEN_PASS", "FROZEN_FAIL_CASE_QUALITY"),
+    ),
+)
+@pytest.mark.parametrize(
+    ("wins", "losses", "ties", "expected"),
+    (
+        (6, 1, 5, "pass"),
+        (6, 5, 1, "fail"),
+        (1, 0, 11, "fail"),
+    ),
+)
+def test_r3_validation_and_frozen_share_case_quality_rule(
+    gate,
+    pass_reason,
+    fail_reason,
+    wins,
+    losses,
+    ties,
+    expected,
+):
+    stats = _make_stats(
+        n_cases=12,
+        wins=wins,
+        losses=losses,
+        ties=ties,
+        win_rate=wins / 12,
+        median_delta=3.0,
+        ci_low=0.0,
+        ci_high=6.0,
+    )
+
+    result = gate(stats, _r3_case_quality_config())
+
+    assert result.outcome == expected
+    assert result.reason_codes == (
+        pass_reason if expected == "pass" else fail_reason,
+    )
+
+
+def test_legacy_gate_configs_keep_wins_over_all_direction():
+    config = ProtocolConfig.model_validate(
+        {
+            "practical_delta_screen": 2.0,
+            "practical_delta_validate": 2.0,
+            "validation": {"expand_to": 12},
+            "gates": {
+                "screening": {"win_rate_min": 0.6},
+                "validation": {"win_rate_min": 0.6},
+            },
+        }
+    )
+    stats = _make_stats(
+        n_cases=12,
+        wins=6,
+        losses=1,
+        ties=5,
+        win_rate=0.5,
+        median_delta=3.0,
+        ci_low=0.0,
+        ci_high=6.0,
+    )
+
+    assert config.gates.screening.min_net_case_score is None
+    assert config.gates.validation.min_net_case_score is None
+    assert screening_gate(stats, config, expanded=True).outcome == "unclear"
+    validation = validation_gate(stats, config)
+    frozen = frozen_gate(stats, config)
+    assert validation.reason_codes == ("VALIDATION_FAIL_WIN_RATE",)
+    assert frozen.reason_codes == ("FROZEN_FAIL_UNCLEAR",)
+
+
+@pytest.mark.parametrize(
+    "partial_rule",
+    (
+        {"min_net_case_score": 0.25},
+        {"max_case_loss_rate": 0.2},
+    ),
+)
+def test_case_quality_rule_must_be_configured_atomically(partial_rule):
+    with pytest.raises(
+        ValueError,
+        match="min_net_case_score and max_case_loss_rate must be configured together",
+    ):
+        ProtocolConfig.model_validate(
+            {"gates": {"screening": partial_rule}}
+        )
+
+
+@pytest.mark.parametrize(
+    ("gate", "expected_reason"),
+    (
+        (screening_gate, "SCREENING_FAIL_WIN_RATE"),
+        (validation_gate, "VALIDATION_FAIL_BELOW_PRACTICAL_EFFECT"),
+        (frozen_gate, "FROZEN_FAIL_CI_NEGATIVE"),
+    ),
+)
+def test_r3_deterministic_effect_failure_precedes_case_quality(gate, expected_reason):
+    stats = _make_stats(
+        n_cases=12,
+        wins=6,
+        losses=5,
+        ties=1,
+        win_rate=0.5,
+        median_delta=-2.0,
+        ci_low=-4.0,
+        ci_high=-1.0,
+    )
+
+    if gate is screening_gate:
+        result = gate(stats, _r3_case_quality_config(), expanded=True)
+    else:
+        result = gate(stats, _r3_case_quality_config())
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == (expected_reason,)
+
+
+def test_legacy_empty_stats_keep_pre_case_quality_outcomes():
+    stats = _make_stats(
+        n_cases=0,
+        wins=0,
+        losses=0,
+        ties=0,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=0.0,
+    )
+    config = ProtocolConfig.model_validate(
+        {
+            "practical_delta_screen": 2.0,
+            "practical_delta_validate": 2.0,
+        }
+    )
+
+    assert screening_gate(stats, config).reason_codes == (
+        "SCREENING_FAIL_WIN_RATE",
+    )
+    assert validation_gate(stats, config).reason_codes == (
+        "VALIDATION_FAIL_BELOW_PRACTICAL_EFFECT",
+    )
+    assert frozen_gate(stats, config).reason_codes == ("FROZEN_FAIL_UNCLEAR",)
+
+
 def test_sparse_signal_with_a_loss_or_candidate_failure_does_not_expand():
     config = ProtocolConfig.model_validate({"practical_delta_screen": 100.0})
     with_loss = _make_stats(

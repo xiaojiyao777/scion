@@ -1,5 +1,5 @@
 {
-  "campaign_rounds": 12,
+  "campaign_rounds": 16,
   "data_root_env": "SCION_PROBLEM_DATA_ROOT",
   "data_root_expected_repo_relative": "vrp",
   "final_evidence": {
@@ -8,11 +8,17 @@
     "manifest": "manifests/final.json",
     "requires_explicit_registry_paths": true,
     "seeds": [
-      0,
-      1,
-      2
+      157,
+      163,
+      167,
+      173,
+      179,
+      181,
+      191,
+      193
     ],
-    "time_limit_sec": 60
+    "time_limit_policy": "dimension_only",
+    "visibility": "post_campaign_manual_only"
   },
   "models": [
     "gpt-5.6-terra"
@@ -20,26 +26,32 @@
   "output_root_template": "~/research/scion-experiments/v04-cvrp-formal-{date}",
   "problem_id": "cvrp",
   "readiness_notes": [
-    "Manifests keep CSV case paths data-root-relative, e.g. cvrplib/A/A-n64-k9.vrp.",
+    "Manifests keep CSV case paths data-root-relative, e.g. cvrplib/P/P-n65-k10.vrp.",
     "Set SCION_PROBLEM_DATA_ROOT to the repo-local vrp directory before running formal campaigns.",
-    "Do not use BKS/gap for promotion; BKS/gap remains final evidence only.",
-    "Formal stage seeds are deterministic odd-prime ledgers: screening initial 11/29/43/59 and exact quality expansion 11/29/43/59/73/79/97/103, validation 47/53/71/83, frozen 61/67/89.",
-    "R2 uses paired case-median direction and is not power-calibrated; older pair-level MDE estimates are incompatible historical diagnostics.",
-    "Screening cases are selected from seed-0 final ALNS/VNS rows with route_gap=0 and enough BKS gap headroom for measurable movement."
+    "Do not use BKS/gap for promotion; BKS/gap remains population provenance and final evidence only.",
+    "Formal stage seeds are disjoint deterministic ledgers: screening initial 11/29/43/59 and exact expansion 11/29/43/59/73/79/97/103; validation 47/53/71/83/107/109/113/127; frozen 61/67/89/131/137/139/149/151.",
+    "R3 uses fixed outcome-blind 12-case quality, validation, and frozen blocks. The first eight ordered quality cases are the initial screening population.",
+    "The final 12-case, 8-seed replay is disjoint from every formal split and remains post-campaign manual evidence hidden from proposal/search context.",
+    "All stage and final replay solver budgets use the same instance-dimension bands; CMT3/CMT4 aliases recover dimensions absent from their filenames."
   ],
   "schema": "scion.cvrp_formal_readiness_budgets.v1",
   "source_csv": "vrp/results/full_experiment_seed0_final.csv",
   "stages": {
     "final": {
-      "cases": 24,
+      "cases": 12,
       "manifest": "manifests/final.json",
       "seeds": [
-        0,
-        1,
-        2
+        157,
+        163,
+        167,
+        173,
+        179,
+        181,
+        191,
+        193
       ],
-      "selected_by_protocol_cases": 24,
-      "time_limit_sec": 60
+      "time_limit_policy": "dimension_only",
+      "visibility": "post_campaign_manual_only"
     },
     "frozen": {
       "cases": 12,
@@ -47,20 +59,18 @@
       "seeds": [
         61,
         67,
-        89
+        89,
+        131,
+        137,
+        139,
+        149,
+        151
       ],
       "selected_by_protocol_cases": 12,
-      "time_limit_sec": 60
+      "time_limit_policy": "dimension_only"
     },
     "screening": {
-      "cases": 16,
-      "manifest": "manifests/screening.json",
-      "seeds": [
-        11,
-        29,
-        43,
-        59
-      ],
+      "cases": 12,
       "expanded_seeds": [
         11,
         29,
@@ -71,9 +81,16 @@
         97,
         103
       ],
-      "initial_selected_by_protocol_cases": 8,
       "expanded_selected_by_protocol_cases": 12,
-      "time_limit_sec": 30
+      "initial_selected_by_protocol_cases": 8,
+      "manifest": "manifests/screening.json",
+      "seeds": [
+        11,
+        29,
+        43,
+        59
+      ],
+      "time_limit_policy": "dimension_only"
     },
     "validation": {
       "cases": 12,
@@ -82,10 +99,49 @@
         47,
         53,
         71,
-        83
+        83,
+        107,
+        109,
+        113,
+        127
       ],
       "selected_by_protocol_cases": 12,
-      "time_limit_sec": 30
+      "time_limit_policy": "dimension_only"
+    }
+  },
+  "time_limit_policy": {
+    "basis": "instance_dimension",
+    "bands": [
+      {
+        "max_dimension": 100,
+        "min_dimension": 1,
+        "time_limit_sec": 30
+      },
+      {
+        "max_dimension": 200,
+        "min_dimension": 101,
+        "time_limit_sec": 45
+      },
+      {
+        "max_dimension": 350,
+        "min_dimension": 201,
+        "time_limit_sec": 60
+      },
+      {
+        "max_dimension": 700,
+        "min_dimension": 351,
+        "time_limit_sec": 90
+      },
+      {
+        "max_dimension": 1001,
+        "min_dimension": 701,
+        "time_limit_sec": 120
+      }
+    ],
+    "canary_time_limit_sec": 10,
+    "filename_dimension_aliases": {
+      "CMT3.vrp": 101,
+      "CMT4.vrp": 151
     }
   }
 }

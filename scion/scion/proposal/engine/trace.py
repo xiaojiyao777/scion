@@ -63,6 +63,7 @@ class _TraceWriter:
         response: Dict[str, Any] | None = None,
         error: str | None = None,
         llm_usage: Dict[str, Any] | None = None,
+        provider_response_diagnostics: Mapping[str, Any] | None = None,
     ) -> None:
         if not path:
             return
@@ -78,6 +79,10 @@ class _TraceWriter:
             payload["error"] = error
         if llm_usage is not None:
             payload["llm_usage"] = llm_usage
+        if provider_response_diagnostics is not None:
+            payload["provider_response_diagnostics"] = dict(
+                provider_response_diagnostics
+            )
         _write_json(path, payload)
 
 

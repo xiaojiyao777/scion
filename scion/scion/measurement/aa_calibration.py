@@ -128,6 +128,141 @@ def estimate_protocol_power(
     }
 
 
+def estimate_combined_case_rule_null(
+    records: Sequence[AAPairRecord | Mapping[str, Any]],
+    *,
+    case_equivalence_band: float,
+    rule: Mapping[str, float | int],
+    n_permutations: int = 400,
+    ci_bootstrap_samples: int = 400,
+    seed: int = 1729,
+) -> dict[str, Any]:
+    """Estimate a problem-owned case rule's null pass rate by label swaps.
+
+    Paired effects are sign-flipped, then reduced to one median per case.
+    """
+
+    if n_permutations <= 0 or ci_bootstrap_samples <= 0:
+        raise ValueError("null and CI sample counts must be positive")
+    if case_equivalence_band < 0:
+        raise ValueError("case_equivalence_band must be non-negative")
+
+    by_case: dict[str, list[float]] = defaultdict(list)
+    for record in records:
+        is_record = isinstance(record, AAPairRecord)
+        case_id = record.case_id if is_record else str(record["case"])
+        delta = record.delta if is_record else float(record["delta"])
+        by_case[str(case_id)].append(float(delta))
+
+    rule_fields = (
+        "min_net_case_score",
+        "max_case_loss_rate",
+        "median_delta_min",
+        "bootstrap_ci_low_min",
+    )
+    canonical_rule = {key: float(rule[key]) for key in rule_fields}
+    observed_effects = [statistics.median(v) for _, v in sorted(by_case.items())]
+    observed = _combined_case_rule_stats(
+        observed_effects, case_equivalence_band, canonical_rule,
+        ci_bootstrap_samples, random.Random(seed ^ 0x5C10),
+    )
+
+    rng = random.Random(seed)
+    null_passes = 0
+    for _ in range(n_permutations):
+        null_effects = [
+            statistics.median(
+                delta if rng.getrandbits(1) else -delta for delta in deltas)
+            for _, deltas in sorted(by_case.items())
+        ]
+        null_stats = _combined_case_rule_stats(
+            null_effects, case_equivalence_band, canonical_rule,
+            ci_bootstrap_samples, rng,
+        )
+        null_passes += int(null_stats["passes_rule"])
+
+    return {
+        "schema": "scion.combined_case_rule_null.v1",
+        "null_method": "independent_paired_label_swap",
+        "case_aggregation": "paired_effect_median",
+        "case_equivalence_band": float(case_equivalence_band),
+        "rng_seed": int(seed),
+        "null_samples": int(n_permutations),
+        "ci_bootstrap_samples": int(ci_bootstrap_samples),
+        "rule": canonical_rule,
+        "observed": observed,
+        "null_pass_count": null_passes,
+        "null_pass_rate": round(null_passes / n_permutations, 6),
+        "null_pass_rate_wilson_upper_95": round(
+            _wilson_upper_95(null_passes, n_permutations), 6
+        ),
+        "decision_features_excluded": True,
+    }
+
+
+def _combined_case_rule_stats(
+    effects: Sequence[float],
+    case_equivalence_band: float,
+    rule: Mapping[str, float | int],
+    ci_bootstrap_samples: int,
+    rng: random.Random,
+) -> dict[str, Any]:
+    n_cases = len(effects)
+    wins = sum(effect > case_equivalence_band for effect in effects)
+    losses = sum(effect < -case_equivalence_band for effect in effects)
+    ties = n_cases - wins - losses
+    median_delta = float(statistics.median(effects)) if effects else 0.0
+    ci_low = _bootstrap_median_ci_low(effects, ci_bootstrap_samples, rng)
+    decisive = wins + losses
+    net_score = (wins - losses) / n_cases if n_cases else 0.0
+    loss_rate = losses / n_cases if n_cases else 0.0
+    passes = (
+        net_score >= float(rule["min_net_case_score"])
+        and loss_rate <= float(rule["max_case_loss_rate"])
+        and median_delta >= float(rule["median_delta_min"])
+        and ci_low >= float(rule["bootstrap_ci_low_min"])
+    )
+    return {
+        "n_cases": n_cases,
+        "wins": wins,
+        "losses": losses,
+        "ties": ties,
+        "decisive_cases": decisive,
+        "net_case_score": round(net_score, 8),
+        "case_loss_rate": round(loss_rate, 8),
+        "median_delta": median_delta,
+        "bootstrap_ci_low": ci_low,
+        "passes_rule": passes,
+    }
+
+
+def _bootstrap_median_ci_low(
+    effects: Sequence[float], n_boot: int, rng: random.Random
+) -> float:
+    if not effects:
+        return 0.0
+    medians = sorted(
+        statistics.median(rng.choices(effects, k=len(effects)))
+        for _ in range(n_boot)
+    )
+    return float(medians[int(0.025 * n_boot)])
+
+
+def _wilson_upper_95(successes: int, trials: int) -> float:
+    """Return the one-sided 95% Wilson upper bound for a binomial rate."""
+
+    if trials <= 0:
+        return 0.0
+    z = 1.6448536269514722
+    rate = successes / trials
+    z2 = z * z
+    center = rate + z2 / (2 * trials)
+    margin = z * math.sqrt(
+        rate * (1.0 - rate) / trials + z2 / (4 * trials * trials)
+    )
+    return min(1.0, (center + margin) / (1.0 + z2 / trials))
+
+
 def build_aa_noise_floor_payload(
     *,
     records: Sequence[AAPairRecord],
@@ -148,6 +283,7 @@ def build_aa_noise_floor_payload(
     selected_surface: str | None = None,
     runtime_policy: Mapping[str, Any] | None = None,
     safe_data_roots: Sequence[str] = (),
+    combined_case_rule: Mapping[str, float | int] | None = None,
 ) -> dict[str, Any]:
     """Return a JSON-safe A/A calibration artifact."""
 
@@ -161,7 +297,7 @@ def build_aa_noise_floor_payload(
     selected_seeds_payload = [int(seed) for seed in selected_seeds]
     runtime_policy_payload = dict(runtime_policy or {})
     safe_data_roots_payload = [str(root) for root in safe_data_roots]
-    return {
+    payload = {
         "schema": "scion.aa_noise_floor.v1",
         "problem_id": problem_id,
         "stage": stage,
@@ -196,6 +332,14 @@ def build_aa_noise_floor_payload(
         "decision_features_excluded": True,
         "policy": "problem_owned_measurement_diagnostic",
     }
+    if combined_case_rule is not None:
+        payload["combined_case_rule_null"] = estimate_combined_case_rule_null(
+            records,
+            case_equivalence_band=float(combined_case_rule["case_equivalence_band"]),
+            rule=combined_case_rule,
+            n_permutations=n_boot, ci_bootstrap_samples=n_boot,
+        )
+    return payload
 
 
 def runtime_policy_summary(

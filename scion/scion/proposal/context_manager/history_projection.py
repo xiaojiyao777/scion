@@ -202,7 +202,8 @@ def _attempt(
         "relation": str(latest["relation"]),
         "summary_level": level,
         "latest_round": int(latest["round_num"]),
-        "hypothesis": _hypothesis(hypothesis),
+        "proposal_intent": _proposal_intent(hypothesis),
+        **_patch_execution(latest.get("candidate_composition")),
         "screening_trajectory": [
             {
                 "round_num": int(record["round_num"]),
@@ -225,7 +226,7 @@ def _attempt(
     return _without_empty(payload)
 
 
-def _hypothesis(value: Any) -> dict[str, Any]:
+def _proposal_intent(value: Any) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         return {}
     return _without_empty(
@@ -243,6 +244,28 @@ def _hypothesis(value: Any) -> dict[str, Any]:
             )
         }
     )
+
+
+def _patch_execution(value: Any) -> dict[str, Any]:
+    """Project only recorded current-step patch facts, never mechanism meaning."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    change_scope = value.get("current_step_change_scope")
+    if change_scope == "eval_only_reuse":
+        return {"patch_present": False}
+    if change_scope != "incremental_patch":
+        return {}
+    execution: dict[str, Any] = {"patch_present": True}
+    current_step = value.get("current_step")
+    target_files = (
+        current_step.get("target_files")
+        if isinstance(current_step, Mapping)
+        else None
+    )
+    if isinstance(target_files, (list, tuple)):
+        execution["executed_patch_files"] = _plain(target_files)
+    return execution
 
 
 def _composition(value: Any) -> dict[str, Any]:

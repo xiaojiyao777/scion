@@ -56,8 +56,11 @@ class HypothesisProposalInput(BaseModel):
         description="The concrete weakness addressed by the hypothesis.",
     )
     expected_effect: str = Field(
-        min_length=1,
-        description="The measurable solver-quality effect expected.",
+        default="",
+        description=(
+            "Optional tainted description of the measurable solver-quality "
+            "effect expected; retained for lineage and never used by Decision."
+        ),
     )
     target_file: str | None = Field(
         default=None,
@@ -77,7 +80,6 @@ class HypothesisProposalInput(BaseModel):
         "hypothesis_text",
         "change_locus",
         "target_weakness",
-        "expected_effect",
     )
     @classmethod
     def must_not_be_empty(cls, value: str) -> str:
@@ -108,7 +110,7 @@ Return exactly one JSON object with:
 - action
 - predicted_direction
 - target_weakness
-- expected_effect
+- expected_effect when it adds a distinct measurable prediction
 - target_file naming the file bound to the subsequent code proposal
 - suggested_weight only when relevant
 

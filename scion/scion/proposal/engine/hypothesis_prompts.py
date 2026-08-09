@@ -101,7 +101,7 @@ def _direct_v3_canonical_json(value: Mapping[str, Any]) -> str:
     return json.dumps(
         normalized,
         ensure_ascii=True,
-        indent=2,
+        separators=(",", ":"),
         sort_keys=True,
         allow_nan=False,
     )

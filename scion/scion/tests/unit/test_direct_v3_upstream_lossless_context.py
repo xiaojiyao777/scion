@@ -1360,15 +1360,26 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     ]
     blocks, user_prompt = _split_hypothesis_context(context)
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
+    rendered_mechanism = json.loads(blocks[2]["text"].split("\n", 1)[1])[
+        "experiment_history"
+    ][0]["experiment_evidence"]["mechanism_evidence"]
     assert '"paired_comparison"' in rendered
     assert '"comparison_columns"' in rendered
-    assert '"evidence_scope": "screening_search_allocation"' in rendered
-    assert '"hypothesis_attribution": "unbound"' in rendered
-    assert '"interpretation_constraint": "association_only"' in rendered
-    assert '"gate_influence": false' in rendered
+    assert rendered_mechanism == packet
+    assert rendered_mechanism["evidence"]["evidence_scope"] == (
+        "screening_search_allocation"
+    )
+    assert rendered_mechanism["evidence"]["hypothesis_attribution"] == "unbound"
+    assert rendered_mechanism["evidence"]["interpretation_constraint"] == (
+        "association_only"
+    )
+    assert rendered_mechanism["evidence"]["gate_influence"] is False
     assert "activation_evidence_status" not in rendered
     assert "objective_effect_status" not in rendered
-    assert '"solver_algorithm_alns_iteration_trace": [' not in rendered
+    assert "solver_algorithm_alns_iteration_trace" not in json.dumps(
+        rendered_mechanism,
+        sort_keys=True,
+    )
 
 
 def test_unmarked_mechanism_mapping_keeps_existing_screening_projection_behavior() -> None:

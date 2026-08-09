@@ -1,15 +1,28 @@
 from __future__ import annotations
 
-from scion.config.problem import ProtocolConfig
+from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.models import ExperimentStage
 from scion.measurement.aa_calibration import (
     AAPairRecord,
     build_aa_noise_floor_payload,
+    estimate_combined_case_rule_null,
     estimate_protocol_power,
     resolve_calibration_time_limit_sec,
     runtime_policy_summary,
     summarize_aa_records,
 )
+from tools.calibrate_aa_noise import (
+    _combined_case_rule,
+    _parse_args,
+    _select_calibration_population,
+)
+
+_COMBINED_RULE = {
+    "min_net_case_score": 0.25,
+    "max_case_loss_rate": 0.2,
+    "median_delta_min": 2.0,
+    "bootstrap_ci_low_min": 0.0,
+}
 
 
 def test_aa_calibration_summarizes_per_case_noise() -> None:
@@ -162,6 +175,155 @@ def test_aa_calibration_payload_is_problem_owned_diagnostic() -> None:
     ]
     assert payload["policy"] == "problem_owned_measurement_diagnostic"
     assert payload["protocol_power"]["recommended_min_effect"] is not None
+    assert "combined_case_rule_null" not in payload
+
+
+def test_combined_case_rule_all_tie_null_never_passes() -> None:
+    pair_evidence = [
+        {"case": f"case-{index}", "delta": 0.0}
+        for index in range(12)
+    ]
+
+    result = estimate_combined_case_rule_null(
+        pair_evidence,
+        case_equivalence_band=0.0,
+        rule=_COMBINED_RULE,
+        n_permutations=40,
+        ci_bootstrap_samples=40,
+        seed=17,
+    )
+
+    assert result["schema"] == "scion.combined_case_rule_null.v1"
+    assert result["null_method"] == "independent_paired_label_swap"
+    assert result["observed"]["ties"] == 12
+    assert result["observed"]["passes_rule"] is False
+    assert result["null_pass_count"] == 0
+    assert result["null_pass_rate"] == 0.0
+    assert 0.0 < result["null_pass_rate_wilson_upper_95"] < 0.1
+    assert result["decision_features_excluded"] is True
+
+
+def test_combined_case_rule_polarized_observation_fails() -> None:
+    records = [
+        AAPairRecord(
+            f"case-{index}",
+            1,
+            0,
+            "win" if index < 6 else "loss",
+            3.0 if index < 6 else -3.0,
+            3.0 if index < 6 else -3.0,
+        )
+        for index in range(12)
+    ]
+
+    result = estimate_combined_case_rule_null(
+        records,
+        case_equivalence_band=0.0,
+        rule=_COMBINED_RULE,
+        n_permutations=30,
+        ci_bootstrap_samples=30,
+        seed=23,
+    )
+
+    assert result["observed"]["decisive_cases"] == 12
+    assert result["observed"]["net_case_score"] == 0.0
+    assert result["observed"]["case_loss_rate"] == 0.5
+    assert result["observed"]["passes_rule"] is False
+
+
+def test_combined_case_rule_fixed_seed_is_deterministic() -> None:
+    records = [
+        AAPairRecord(
+            f"case-{case}",
+            seed,
+            0,
+            "win" if delta > 0 else "loss",
+            delta,
+            delta,
+        )
+        for case, deltas in enumerate(((4.0, 2.0), (3.0, -1.0), (-2.0, -4.0)))
+        for seed, delta in enumerate(deltas, start=1)
+    ]
+    kwargs = {
+        "case_equivalence_band": 0.0,
+        "rule": _COMBINED_RULE,
+        "n_permutations": 60,
+        "ci_bootstrap_samples": 40,
+        "seed": 101,
+    }
+
+    first = estimate_combined_case_rule_null(records, **kwargs)
+    second = estimate_combined_case_rule_null(records, **kwargs)
+
+    assert first == second
+
+
+def test_aa_tool_selects_expanded_population_and_seed_prefix() -> None:
+    protocol = ProtocolConfig.model_validate(
+        {
+            "practical_delta_screen": 2.0,
+            "case_equivalence_band": 0.0,
+            "screening": {
+                "n_cases_modify": 2,
+                "expand_to_modify": 4,
+                "n_seeds": 2,
+                "expand_n_seeds": 4,
+            },
+            "gates": {
+                "screening": {
+                    "min_net_case_score": 0.25,
+                    "max_case_loss_rate": 0.2,
+                    "bootstrap_ci_low_min": 0.0,
+                }
+            },
+        }
+    )
+    split = SplitManifest(
+        version="test",
+        screening=["a", "b", "c", "d"],
+    )
+    ledger = SeedLedgerConfig(
+        version="test",
+        screening=[11, 29, 43, 59],
+    )
+
+    cases, seeds = _select_calibration_population(
+        protocol=protocol,
+        split=split,
+        seed_ledger=ledger,
+        stage=ExperimentStage.SCREENING,
+        hypothesis_action="modify",
+        expand_round=1,
+        max_seeds=3,
+    )
+
+    assert cases == ["a", "b", "c", "d"]
+    assert seeds == [11, 29, 43]
+    assert _combined_case_rule(protocol, ExperimentStage.SCREENING) == {
+        "case_equivalence_band": 0.0,
+        "min_net_case_score": 0.25,
+        "max_case_loss_rate": 0.2,
+        "median_delta_min": 2.0,
+        "bootstrap_ci_low_min": 0.0,
+    }
+
+
+def test_aa_tool_parser_exposes_expansion_and_seed_cap() -> None:
+    args = _parse_args(
+        [
+            "--problem-v1", "problem.yaml",
+            "--protocol", "protocol.yaml",
+            "--split", "split.yaml",
+            "--seeds", "seeds.yaml",
+            "--champion-workspace", "workspace",
+            "--output", "aa.json",
+            "--expand-round", "1",
+            "--max-seeds", "3",
+        ]
+    )
+
+    assert args.expand_round == 1
+    assert args.max_seeds == 3
 
 
 def test_aa_calibration_payload_marks_runtime_budget_hits() -> None:

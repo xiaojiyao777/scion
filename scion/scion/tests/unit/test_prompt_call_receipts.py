@@ -109,10 +109,16 @@ class _CaptureClient:
         *,
         error: Exception | None = None,
         response: dict | None = None,
+        response_diagnostics: dict | None = None,
         expected_tool: str = "generate_hypothesis",
     ) -> None:
         self.error = error
         self.response = dict(response or _HYPOTHESIS_RESPONSE)
+        self.response_diagnostics = (
+            dict(response_diagnostics)
+            if response_diagnostics is not None
+            else None
+        )
         self.expected_tool = expected_tool
         self.calls: list[tuple[str, list[dict], str]] = []
         self.tools: list[dict] = []
@@ -134,6 +140,11 @@ class _CaptureClient:
             raise self.error
         assert tool["name"] == self.expected_tool
         return dict(self.response)
+
+    def get_last_response_diagnostics(self):
+        if self.response_diagnostics is None:
+            return None
+        return dict(self.response_diagnostics)
 
 
 class _DirectOpenAIClient(LLMClient):
@@ -1038,6 +1049,113 @@ def test_consecutive_calls_attach_current_diagnostics_without_shared_stale_state
     assert trace["ok"] is False
     assert trace["branch_id"] == second_context["branch_id"]
     assert trace["error"] == "synthetic provider interruption"
+
+
+def test_provider_response_mechanical_diagnostics_reach_trace_and_call_result(
+    tmp_path: Path,
+) -> None:
+    response_diagnostics = {
+        "provider": "openai_compatible",
+        "finish_reason": "length",
+        "choice_count": 1,
+        "choice_count_scope": "response.choices",
+        "tool_call_count": 2,
+        "tool_call_count_scope": "response.choices[0].message.tool_calls",
+        "selected_choice_index": 0,
+        "selected_choice_index_scope": "response.choices",
+        "selected_tool_call_index": 0,
+        "selected_tool_call_index_scope": (
+            "response.choices[0].message.tool_calls"
+        ),
+        "selected_tool_name": "generate_hypothesis",
+        "selected_arguments_bytes": 321,
+        "selected_arguments_json_valid": True,
+        "arguments_representation": "sdk_argument_string_utf8",
+        "arguments_value_type": "str",
+    }
+    client = _CaptureClient(response_diagnostics=response_diagnostics)
+    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
+    context = _hypothesis_context()
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+
+    hypothesis, diagnostics = creative.generate_direct_hypothesis(
+        context,
+        snapshot,
+    )
+
+    assert hypothesis.hypothesis_text == _HYPOTHESIS_RESPONSE["hypothesis_text"]
+    assert diagnostics.provider_response_diagnostics == response_diagnostics
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
+    assert trace["provider_response_diagnostics"] == response_diagnostics
+
+
+def test_provider_caller_resets_observations_before_policy_resolution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _DirectOpenAIClient()
+    client._last_usage_metadata = {"input_tokens": 123}
+    client._last_response_diagnostics = {"finish_reason": "stale"}
+    client._last_prompt_cache_key = "stale-cache-key"
+
+    def fail_policy(**_kwargs):
+        raise ValueError("synthetic provider policy failure")
+
+    monkeypatch.setattr(client, "resolve_request_policy", fail_policy)
+    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
+    context = _hypothesis_context()
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+
+    with pytest.raises(ValueError, match="synthetic provider policy failure"):
+        creative.generate_direct_hypothesis(context, snapshot)
+
+    assert client.get_last_usage_metadata() is None
+    assert client.get_last_response_diagnostics() is None
+    assert client._last_prompt_cache_key is None
+    assert client.calls_seen == []
+
+
+def test_provider_format_failure_keeps_mechanical_response_trace(
+    tmp_path: Path,
+) -> None:
+    response_diagnostics = {
+        "provider": "openai_compatible",
+        "finish_reason": "length",
+        "choice_count": 1,
+        "choice_count_scope": "response.choices",
+        "tool_call_count": 1,
+        "tool_call_count_scope": "response.choices[0].message.tool_calls",
+        "selected_choice_index": 0,
+        "selected_choice_index_scope": "response.choices",
+        "selected_tool_call_index": 0,
+        "selected_tool_call_index_scope": (
+            "response.choices[0].message.tool_calls"
+        ),
+        "selected_tool_name": "generate_hypothesis",
+        "selected_arguments_bytes": 17,
+        "selected_arguments_json_valid": False,
+        "arguments_representation": "sdk_argument_string_utf8",
+        "arguments_value_type": "str",
+    }
+    client = _CaptureClient(
+        error=LLMFormatError("synthetic invalid JSON"),
+        response_diagnostics=response_diagnostics,
+    )
+    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
+    context = _hypothesis_context()
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+
+    with pytest.raises(LLMFormatError) as caught:
+        creative.generate_direct_hypothesis(context, snapshot)
+
+    diagnostics = provider_call_diagnostics_from_error(caught.value)
+    assert diagnostics is not None
+    assert diagnostics.provider_response_diagnostics == response_diagnostics
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
+    assert trace["ok"] is False
+    assert trace["provider_response_diagnostics"] == response_diagnostics
 
 
 def test_keyboard_interrupt_is_diagnosed_without_a_second_provider_call(

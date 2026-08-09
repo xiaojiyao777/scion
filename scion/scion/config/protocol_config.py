@@ -375,7 +375,39 @@ class SmokePrescreenConfig(BaseModel):
     notes: str = ""
 
 
-class ScreeningGate(BaseModel):
+class CaseQualityThresholds(BaseModel):
+    """Optional case-distribution requirements owned by a problem protocol.
+
+    ``min_net_case_score`` opts a gate into net case direction, measured as
+    ``(wins - losses) / n_cases``.  Leaving all fields unset preserves the
+    legacy ``wins / n_cases`` rule exactly.
+    """
+
+    min_net_case_score: float | None = Field(default=None, ge=-1.0, le=1.0)
+    max_case_loss_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+
+    @model_validator(mode="after")
+    def _validate_atomic_case_quality_rule(self) -> "CaseQualityThresholds":
+        configured = (
+            self.min_net_case_score is not None,
+            self.max_case_loss_rate is not None,
+        )
+        if any(configured) and not all(configured):
+            raise ValueError(
+                "min_net_case_score and max_case_loss_rate must be configured together"
+            )
+        return self
+
+
+class InitialQualityRoute(CaseQualityThresholds):
+    """Evidence sufficient to route initial screening to exact expansion."""
+
+    min_net_case_score: float = Field(ge=-1.0, le=1.0)
+    max_case_loss_rate: float = Field(ge=0.0, le=1.0)
+    require_ci_high_at_practical_delta: bool = True
+
+
+class ScreeningGate(CaseQualityThresholds):
     """Screening 门控阈值。"""
 
     win_rate_min: float = Field(ge=0.0, le=1.0, default=0.667)
@@ -384,7 +416,14 @@ class ScreeningGate(BaseModel):
     median_delta_min: str | float = "practical_delta_screen"
     """最小中位 delta（可引用 problem.yaml 中的配置键名）。"""
 
-class ValidationGate(BaseModel):
+    bootstrap_ci_low_min: float | None = None
+    """Optional CI lower bound; unset preserves legacy screening behavior."""
+
+    initial_quality_route: InitialQualityRoute | None = None
+    """Optional initial-screen evidence that requests one exact expansion."""
+
+
+class ValidationGate(CaseQualityThresholds):
     """Validation 门控阈值。"""
 
     win_rate_min: float = Field(ge=0.0, le=1.0, default=0.667)
@@ -400,7 +439,7 @@ class ValidationGate(BaseModel):
     """Bootstrap 重采样次数。"""
 
 
-class FrozenGate(BaseModel):
+class FrozenGate(CaseQualityThresholds):
     """Frozen holdout 门控阈值。"""
 
     bootstrap_ci_low_min: float = 0.0

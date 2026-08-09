@@ -1,19 +1,59 @@
 {
   "cases": [
     {
-      "bks": 13590.0,
-      "bks_routes": 10,
-      "case_id": "X-n139-k10",
-      "dimension": 139,
-      "source_path": "cvrplib/X/X-n139-k10.vrp",
-      "subset": "X"
+      "bks": 593.0,
+      "bks_routes": 4,
+      "case_id": "P-n76-k4",
+      "dimension": 76,
+      "source_path": "cvrplib/P/P-n76-k4.vrp",
+      "subset": "P"
     },
     {
-      "bks": 20557.0,
-      "bks_routes": 10,
-      "case_id": "X-n167-k10",
-      "dimension": 167,
-      "source_path": "cvrplib/X/X-n167-k10.vrp",
+      "bks": 1354.0,
+      "bks_routes": 9,
+      "case_id": "A-n60-k9",
+      "dimension": 60,
+      "source_path": "cvrplib/A/A-n60-k9.vrp",
+      "subset": "A"
+    },
+    {
+      "bks": 1598.0,
+      "bks_routes": 9,
+      "case_id": "B-n57-k9",
+      "dimension": 57,
+      "source_path": "cvrplib/B/B-n57-k9.vrp",
+      "subset": "B"
+    },
+    {
+      "bks": 815.0,
+      "bks_routes": 8,
+      "case_id": "E-n101-k8",
+      "dimension": 101,
+      "source_path": "cvrplib/E/E-n101-k8.vrp",
+      "subset": "E"
+    },
+    {
+      "bks": 1028.42,
+      "bks_routes": 12,
+      "case_id": "CMT4",
+      "dimension": 151,
+      "source_path": "cvrplib/CMT/CMT4.vrp",
+      "subset": "CMT"
+    },
+    {
+      "bks": 3055.23,
+      "bks_routes": 15,
+      "case_id": "Tai150a",
+      "dimension": 151,
+      "source_path": "cvrplib/tai/tai150a.vrp",
+      "subset": "tai"
+    },
+    {
+      "bks": 25569.0,
+      "bks_routes": 23,
+      "case_id": "X-n181-k23",
+      "dimension": 181,
+      "source_path": "cvrplib/X/X-n181-k23.vrp",
       "subset": "X"
     },
     {
@@ -25,51 +65,19 @@
       "subset": "X"
     },
     {
-      "bks": 38684.0,
-      "bks_routes": 28,
-      "case_id": "X-n251-k28",
-      "dimension": 251,
-      "source_path": "cvrplib/X/X-n251-k28.vrp",
+      "bks": 31102.0,
+      "bks_routes": 15,
+      "case_id": "X-n331-k15",
+      "dimension": 331,
+      "source_path": "cvrplib/X/X-n331-k15.vrp",
       "subset": "X"
     },
     {
-      "bks": 33503.0,
-      "bks_routes": 17,
-      "case_id": "X-n280-k17",
-      "dimension": 280,
-      "source_path": "cvrplib/X/X-n280-k17.vrp",
-      "subset": "X"
-    },
-    {
-      "bks": 27532.0,
-      "bks_routes": 20,
-      "case_id": "X-n327-k20",
-      "dimension": 327,
-      "source_path": "cvrplib/X/X-n327-k20.vrp",
-      "subset": "X"
-    },
-    {
-      "bks": 66154.0,
+      "bks": 51505.0,
       "bks_routes": 29,
-      "case_id": "X-n401-k29",
-      "dimension": 401,
-      "source_path": "cvrplib/X/X-n401-k29.vrp",
-      "subset": "X"
-    },
-    {
-      "bks": 69226.0,
-      "bks_routes": 39,
-      "case_id": "X-n502-k39",
-      "dimension": 502,
-      "source_path": "cvrplib/X/X-n502-k39.vrp",
-      "subset": "X"
-    },
-    {
-      "bks": 50673.0,
-      "bks_routes": 30,
-      "case_id": "X-n573-k30",
-      "dimension": 573,
-      "source_path": "cvrplib/X/X-n573-k30.vrp",
+      "case_id": "X-n359-k29",
+      "dimension": 359,
+      "source_path": "cvrplib/X/X-n359-k29.vrp",
       "subset": "X"
     },
     {
@@ -81,19 +89,11 @@
       "subset": "X"
     },
     {
-      "bks": 88965.0,
-      "bks_routes": 95,
-      "case_id": "X-n856-k95",
-      "dimension": 856,
-      "source_path": "cvrplib/X/X-n856-k95.vrp",
-      "subset": "X"
-    },
-    {
-      "bks": 72355.0,
-      "bks_routes": 43,
-      "case_id": "X-n1001-k43",
-      "dimension": 1001,
-      "source_path": "cvrplib/X/X-n1001-k43.vrp",
+      "bks": 73311.0,
+      "bks_routes": 40,
+      "case_id": "X-n801-k40",
+      "dimension": 801,
+      "source_path": "cvrplib/X/X-n801-k40.vrp",
       "subset": "X"
     }
   ],
@@ -104,48 +104,58 @@
     "seeds": [
       61,
       67,
-      89
+      89,
+      131,
+      137,
+      139,
+      149,
+      151
     ],
     "source_label": "vrp_results_full_experiment_seed0_final",
     "subsets": [
+      "P",
+      "A",
+      "B",
+      "E",
+      "CMT",
+      "tai",
       "X"
     ]
   },
   "metadata": {
     "baseline_gap_pct_summary": {
-      "max": 8.673543513003052,
-      "median": 5.7476150861494855,
-      "min": 3.2054430416317565,
-      "n_ge_2_5_pct": 12,
+      "max": 8.898789834852447,
+      "median": 4.72510087847299,
+      "min": 2.002503128911139,
+      "n_ge_2_pct": 12,
       "n_le_1_pct": 0
     },
-    "n_eligible_cases": 140,
-    "n_eligible_rows": 140,
     "n_input_rows": 220,
-    "n_rejected_rows": 80,
     "n_selected_cases": 12,
-    "rejection_counts_by_reason": {
-      "benchmark": 72,
-      "bks": 0,
-      "bks_routes": 0,
-      "feasible": 0,
-      "missing_path": 0,
-      "route_gap": 80,
-      "status": 0
-    },
     "seed_list": [
       61,
       67,
-      89
+      89,
+      131,
+      137,
+      139,
+      149,
+      151
     ],
-    "selection_policy": "explicit benchmark-feasible route-clean X holdout rows distinct from screening and validation; medium-to-large X cases mostly within 3% to 9% seed-0 gap",
+    "selection_policy": "outcome-blind R3 frozen holdout disjoint from quality, validation, and final replay with matched family, size, and seed-0 headroom strata",
     "source_label": "vrp_results_full_experiment_seed0_final",
     "source_path": "vrp/results/full_experiment_seed0_final.csv",
     "stage": "frozen",
     "subset_filters": [
+      "P",
+      "A",
+      "B",
+      "E",
+      "CMT",
+      "tai",
       "X"
     ],
-    "time_limit_sec": 60
+    "time_limit_policy": "protocol.runtime.time_limits.dimension_only"
   },
   "problem_id": "cvrp",
   "schema": "scion.cvrp_case_manifest.v1"

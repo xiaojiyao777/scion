@@ -1,12 +1,12 @@
 {
   "cases": [
     {
-      "bks": 1401.0,
-      "bks_routes": 9,
-      "case_id": "A-n64-k9",
-      "dimension": 64,
-      "source_path": "cvrplib/A/A-n64-k9.vrp",
-      "subset": "A"
+      "bks": 792.0,
+      "bks_routes": 10,
+      "case_id": "P-n65-k10",
+      "dimension": 65,
+      "source_path": "cvrplib/P/P-n65-k10.vrp",
+      "subset": "P"
     },
     {
       "bks": 1763.0,
@@ -17,84 +17,12 @@
       "subset": "A"
     },
     {
-      "bks": 1496.0,
-      "bks_routes": 10,
-      "case_id": "B-n63-k10",
-      "dimension": 63,
-      "source_path": "cvrplib/B/B-n63-k10.vrp",
-      "subset": "B"
-    },
-    {
-      "bks": 1032.0,
-      "bks_routes": 10,
-      "case_id": "B-n67-k10",
-      "dimension": 67,
-      "source_path": "cvrplib/B/B-n67-k10.vrp",
-      "subset": "B"
-    },
-    {
       "bks": 1067.0,
       "bks_routes": 14,
       "case_id": "E-n101-k14",
       "dimension": 101,
       "source_path": "cvrplib/E/E-n101-k14.vrp",
       "subset": "E"
-    },
-    {
-      "bks": 815.0,
-      "bks_routes": 8,
-      "case_id": "E-n101-k8",
-      "dimension": 101,
-      "source_path": "cvrplib/E/E-n101-k8.vrp",
-      "subset": "E"
-    },
-    {
-      "bks": 792.0,
-      "bks_routes": 10,
-      "case_id": "P-n65-k10",
-      "dimension": 65,
-      "source_path": "cvrplib/P/P-n65-k10.vrp",
-      "subset": "P"
-    },
-    {
-      "bks": 593.0,
-      "bks_routes": 4,
-      "case_id": "P-n76-k4",
-      "dimension": 76,
-      "source_path": "cvrplib/P/P-n76-k4.vrp",
-      "subset": "P"
-    },
-    {
-      "bks": 681.0,
-      "bks_routes": 4,
-      "case_id": "P-n101-k4",
-      "dimension": 101,
-      "source_path": "cvrplib/P/P-n101-k4.vrp",
-      "subset": "P"
-    },
-    {
-      "bks": 835.262,
-      "bks_routes": 10,
-      "case_id": "CMT2",
-      "dimension": 76,
-      "source_path": "cvrplib/CMT/CMT2.vrp",
-      "subset": "CMT"
-    },
-    {
-      "bks": 826.137,
-      "bks_routes": 8,
-      "case_id": "CMT3",
-      "dimension": 101,
-      "source_path": "cvrplib/CMT/CMT3.vrp",
-      "subset": "CMT"
-    },
-    {
-      "bks": 1028.42,
-      "bks_routes": 12,
-      "case_id": "CMT4",
-      "dimension": 151,
-      "source_path": "cvrplib/CMT/CMT4.vrp",
-      "subset": "CMT"
     },
     {
       "bks": 1015.0,
@@ -105,27 +33,67 @@
       "subset": "M"
     },
     {
-      "bks": 1275.0,
-      "bks_routes": 17,
-      "case_id": "M-n200-k17",
-      "dimension": 200,
-      "source_path": "cvrplib/M/M-n200-k17.vrp",
-      "subset": "M"
+      "bks": 13332.0,
+      "bks_routes": 6,
+      "case_id": "X-n120-k6",
+      "dimension": 120,
+      "source_path": "cvrplib/X/X-n120-k6.vrp",
+      "subset": "X"
     },
     {
-      "bks": 2358.66,
-      "bks_routes": 15,
-      "case_id": "Tai150c",
-      "dimension": 151,
-      "source_path": "cvrplib/tai/tai150c.vrp",
+      "bks": 19230.0,
+      "bks_routes": 17,
+      "case_id": "X-n233-k16",
+      "dimension": 233,
+      "source_path": "cvrplib/X/X-n233-k16.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 36391.0,
+      "bks_routes": 37,
+      "case_id": "X-n439-k37",
+      "dimension": 439,
+      "source_path": "cvrplib/X/X-n439-k37.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 69226.0,
+      "bks_routes": 39,
+      "case_id": "X-n502-k39",
+      "dimension": 502,
+      "source_path": "cvrplib/X/X-n502-k39.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 1365.42,
+      "bks_routes": 9,
+      "case_id": "Tai75d",
+      "dimension": 76,
+      "source_path": "cvrplib/tai/tai75d.vrp",
       "subset": "tai"
     },
     {
-      "bks": 14971.0,
-      "bks_routes": 13,
-      "case_id": "X-n110-k13",
-      "dimension": 110,
-      "source_path": "cvrplib/X/X-n110-k13.vrp",
+      "bks": 826.137,
+      "bks_routes": 8,
+      "case_id": "CMT3",
+      "dimension": 101,
+      "source_path": "cvrplib/CMT/CMT3.vrp",
+      "subset": "CMT"
+    },
+    {
+      "bks": 33503.0,
+      "bks_routes": 17,
+      "case_id": "X-n280-k17",
+      "dimension": 280,
+      "source_path": "cvrplib/X/X-n280-k17.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 43373.0,
+      "bks_routes": 35,
+      "case_id": "X-n716-k35",
+      "dimension": 716,
+      "source_path": "cvrplib/X/X-n716-k35.vrp",
       "subset": "X"
     }
   ],
@@ -141,59 +109,55 @@
     ],
     "source_label": "vrp_results_full_experiment_seed0_final",
     "subsets": [
-      "A",
-      "B",
-      "E",
       "P",
-      "CMT",
+      "A",
+      "E",
       "M",
+      "X",
       "tai",
-      "X"
+      "CMT"
     ]
   },
   "metadata": {
     "baseline_gap_pct_summary": {
-      "max": 7.586206896551724,
-      "median": 3.5942094672855633,
-      "min": 2.6241799437675724,
-      "n_ge_2_5_pct": 16,
+      "max": 8.291794764647943,
+      "median": 5.0298045817364,
+      "min": 2.162100384661415,
+      "n_ge_2_pct": 12,
       "n_le_1_pct": 0
     },
-    "n_eligible_cases": 140,
-    "n_eligible_rows": 140,
+    "expanded_seed_list": [
+      11,
+      29,
+      43,
+      59,
+      73,
+      79,
+      97,
+      103
+    ],
     "n_input_rows": 220,
-    "n_rejected_rows": 80,
-    "n_selected_cases": 16,
-    "rejection_counts_by_reason": {
-      "benchmark": 72,
-      "bks": 0,
-      "bks_routes": 0,
-      "feasible": 0,
-      "missing_path": 0,
-      "route_gap": 80,
-      "status": 0
-    },
+    "n_selected_cases": 12,
     "seed_list": [
       11,
       29,
       43,
       59
     ],
-    "selection_policy": "explicit benchmark-feasible route-clean rows; prioritize seed-0 baseline gap between 2.5% and 10%, with A/B/E/P coverage plus CMT/M/tai and one small X case",
+    "selection_policy": "outcome-blind R3 quality block: six cross-family cases plus six X cases, ordered so the declared priority prefix is the initial 8-case screen",
     "source_label": "vrp_results_full_experiment_seed0_final",
     "source_path": "vrp/results/full_experiment_seed0_final.csv",
     "stage": "screening",
     "subset_filters": [
-      "A",
-      "B",
-      "E",
       "P",
-      "CMT",
+      "A",
+      "E",
       "M",
+      "X",
       "tai",
-      "X"
+      "CMT"
     ],
-    "time_limit_sec": 30
+    "time_limit_policy": "protocol.runtime.time_limits.dimension_only"
   },
   "problem_id": "cvrp",
   "schema": "scion.cvrp_case_manifest.v1"

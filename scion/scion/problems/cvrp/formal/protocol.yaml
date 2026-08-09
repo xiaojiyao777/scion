@@ -1,4 +1,4 @@
-version: 0.4-cvrp-v3-quality-screen-r2
+version: 0.4-cvrp-v3-quality-screen-r3
 case_aggregation: paired_effect_median
 case_equivalence_band: 0.0
 screening:
@@ -8,14 +8,23 @@ screening:
   expand_n_seeds: 8
   expand_to_modify: 12
   expand_to_create: 12
+  priority_case_ids:
+  - cvrplib/P/P-n65-k10.vrp
+  - cvrplib/A/A-n80-k10.vrp
+  - cvrplib/E/E-n101-k14.vrp
+  - cvrplib/M/M-n151-k12.vrp
+  - cvrplib/X/X-n120-k6.vrp
+  - cvrplib/X/X-n233-k16.vrp
+  - cvrplib/X/X-n439-k37.vrp
+  - cvrplib/X/X-n502-k39.vrp
   require_expanded_for_pass: true
 validation:
   n_cases: 12
-  n_seeds: 4
+  n_seeds: 8
   expand_to: 12
 frozen:
   n_cases: 12
-  n_seeds: 3
+  n_seeds: 8
 canary:
   cases:
   - controlled/data/synthetic_controlled_canary_5.vrp
@@ -30,55 +39,66 @@ runtime:
       canary: 10
       screening: 30
       validation: 30
-      frozen: 60
+      frozen: 30
     rules:
     - stages:
       - screening
+      - validation
+      - frozen
+      min_dimension: 101
+      max_dimension: 200
+      time_limit_sec: 45
+    - stages:
+      - screening
+      - validation
+      - frozen
+      min_dimension: 201
+      max_dimension: 350
+      time_limit_sec: 60
+    - stages:
+      - screening
+      - validation
+      - frozen
+      min_dimension: 351
+      max_dimension: 700
+      time_limit_sec: 90
+    - stages:
+      - screening
+      - validation
+      - frozen
+      min_dimension: 701
+      max_dimension: 1001
+      time_limit_sec: 120
+    # CMT names omit n<N>; these aliases recover only their ledger dimensions.
+    - stages:
+      - screening
+      - validation
+      - frozen
       case_globs:
+      - cvrplib/CMT/CMT3.vrp
+      - CMT3.vrp
       - cvrplib/CMT/CMT4.vrp
       - CMT4.vrp
       time_limit_sec: 45
-    - stages:
-      - screening
-      min_dimension: 150
-      max_dimension: 250
-      time_limit_sec: 45
-    - stages:
-      - screening
-      min_dimension: 251
-      time_limit_sec: 60
-    - stages:
-      - validation
-      min_dimension: 101
-      max_dimension: 149
-      time_limit_sec: 45
-    - stages:
-      - validation
-      min_dimension: 150
-      max_dimension: 250
-      time_limit_sec: 60
-    - stages:
-      - validation
-      min_dimension: 251
-      time_limit_sec: 90
-    - stages:
-      - frozen
-      min_dimension: 251
-      max_dimension: 500
-      time_limit_sec: 90
-    - stages:
-      - frozen
-      min_dimension: 501
-      time_limit_sec: 120
 gates:
   screening:
     win_rate_min: 0.6
     median_delta_min: practical_delta_screen
+    bootstrap_ci_low_min: 0.0
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2
+    initial_quality_route:
+      min_net_case_score: 0.125
+      max_case_loss_rate: 0.25
   validation:
     win_rate_min: 0.66
     median_delta_min: practical_delta_validate
     bootstrap_ci_low_min: 0.0
     bootstrap_n: 1000
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2
   frozen:
     bootstrap_ci_low_min: 0.0
     canary_required: true
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2

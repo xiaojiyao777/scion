@@ -61,6 +61,7 @@ def test_failed_call_clears_previous_response_usage() -> None:
         "request_kind": "code",
         "input_tokens": 123,
     }
+    client._last_response_diagnostics = {"finish_reason": "stale"}
     client._last_prompt_cache_key = "stale-code-cache-key"
 
     def fail_call(*_args, **_kwargs):
@@ -76,7 +77,33 @@ def test_failed_call_clears_previous_response_usage() -> None:
         )
 
     assert client.get_last_usage_metadata() is None
+    assert client.get_last_response_diagnostics() is None
     assert client._last_prompt_cache_key is None
+
+
+def test_policy_failure_clears_previous_response_observations() -> None:
+    client = LLMClient(model="gpt-5.6-sol")
+    client._last_usage_metadata = {"input_tokens": 123}
+    client._last_response_diagnostics = {"finish_reason": "stale"}
+    client._last_prompt_cache_key = "stale-cache-key"
+
+    with (
+        patch.object(
+            client,
+            "resolve_request_policy",
+            side_effect=ValueError("synthetic policy failure"),
+        ),
+        pytest.raises(ValueError, match="synthetic policy failure"),
+    ):
+        client.call_with_tool(
+            "prompt",
+            {"name": "unit_tool", "input_schema": {"required": []}},
+        )
+
+    assert client.get_last_usage_metadata() is None
+    assert client.get_last_response_diagnostics() is None
+    assert client._last_prompt_cache_key is None
+
 
 class TestMockLLMClient:
     def test_success_returns_hypothesis(self):
@@ -782,6 +809,11 @@ def test_openai_default_output_policy_is_provider_managed_without_cap() -> None:
 def test_anthropic_transport_keeps_provider_native_required_max_tokens() -> None:
     client = LLMClient(model="claude-test")
     tool = {"name": "generate_patch", "input_schema": {"required": []}}
+    ignored_block = SimpleNamespace(
+        type="tool_use",
+        name="ignored_tool",
+        input={"ignored": True},
+    )
     block = SimpleNamespace(
         type="tool_use",
         name="generate_patch",
@@ -789,7 +821,7 @@ def test_anthropic_transport_keeps_provider_native_required_max_tokens() -> None
     )
     response = SimpleNamespace(
         stop_reason="tool_use",
-        content=[block],
+        content=[ignored_block, block],
         usage=None,
     )
     fake_anthropic_client = MagicMock()
@@ -809,6 +841,23 @@ def test_anthropic_transport_keeps_provider_native_required_max_tokens() -> None
         )
 
     assert result == {"file_path": "x.py"}
+    arguments = json.dumps(
+        {"file_path": "x.py"},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    assert client.get_last_response_diagnostics() == {
+        "provider": "anthropic",
+        "stop_reason": "tool_use",
+        "tool_call_count": 2,
+        "tool_call_count_scope": "response.content[type=tool_use]",
+        "selected_tool_call_index": 1,
+        "selected_tool_call_index_scope": "response.content[type=tool_use]",
+        "selected_tool_name": "generate_patch",
+        "selected_arguments_bytes": len(arguments.encode("utf-8")),
+        "selected_arguments_json_valid": True,
+        "arguments_representation": "compact_json_utf8_from_sdk_parsed_input",
+    }
     request = fake_anthropic_client.messages.create.call_args.kwargs
     assert request["max_tokens"] == 16384
     policy = client.resolve_request_policy(model="claude-test", request_kind="code")
@@ -821,16 +870,32 @@ def test_anthropic_transport_keeps_provider_native_required_max_tokens() -> None
 def test_openai_length_finish_with_tool_payload_is_a_real_response() -> None:
     client = LLMClient(model="gpt-5.6-sol")
     tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    arguments = json.dumps({"file_path": "x.py"})
     tool_call = SimpleNamespace(
-        function=SimpleNamespace(arguments=json.dumps({"file_path": "x.py"}))
+        function=SimpleNamespace(
+            name="generate_patch",
+            arguments=arguments,
+        )
+    )
+    ignored_tool_call = SimpleNamespace(
+        function=SimpleNamespace(
+            name="ignored_tool",
+            arguments=json.dumps({"file_path": "ignored.py"}),
+        )
     )
     response = SimpleNamespace(
         usage=None,
         choices=[
             SimpleNamespace(
                 finish_reason="length",
-                message=SimpleNamespace(tool_calls=[tool_call]),
-            )
+                message=SimpleNamespace(
+                    tool_calls=[tool_call, ignored_tool_call]
+                ),
+            ),
+            SimpleNamespace(
+                finish_reason="tool_calls",
+                message=SimpleNamespace(tool_calls=[ignored_tool_call]),
+            ),
         ],
     )
     fake_openai_client = MagicMock()
@@ -841,13 +906,35 @@ def test_openai_length_finish_with_tool_payload_is_a_real_response() -> None:
 
     assert result == {"file_path": "x.py"}
     assert fake_openai_client.chat.completions.create.call_count == 1
+    assert client.get_last_response_diagnostics() == {
+        "provider": "openai_compatible",
+        "finish_reason": "length",
+        "choice_count": 2,
+        "choice_count_scope": "response.choices",
+        "tool_call_count": 2,
+        "tool_call_count_scope": "response.choices[0].message.tool_calls",
+        "selected_choice_index": 0,
+        "selected_choice_index_scope": "response.choices",
+        "selected_tool_call_index": 0,
+        "selected_tool_call_index_scope": (
+            "response.choices[0].message.tool_calls"
+        ),
+        "selected_tool_name": "generate_patch",
+        "selected_arguments_bytes": len(arguments.encode("utf-8")),
+        "selected_arguments_json_valid": True,
+        "arguments_representation": "sdk_argument_string_utf8",
+        "arguments_value_type": "str",
+    }
 
 
 def test_openai_length_finish_invalid_tool_payload_is_format_failure() -> None:
     client = LLMClient(model="gpt-5.6-sol")
     tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
     tool_call = SimpleNamespace(
-        function=SimpleNamespace(arguments='{"file_path":')
+        function=SimpleNamespace(
+            name="generate_patch",
+            arguments='{"file_path":',
+        )
     )
     response = SimpleNamespace(
         usage=None,
@@ -867,6 +954,85 @@ def test_openai_length_finish_invalid_tool_payload_is_format_failure() -> None:
 
     assert "invalid JSON arguments" in str(caught.value)
     assert fake_openai_client.chat.completions.create.call_count == 1
+    assert client.get_last_response_diagnostics() == {
+        "provider": "openai_compatible",
+        "finish_reason": "length",
+        "choice_count": 1,
+        "choice_count_scope": "response.choices",
+        "tool_call_count": 1,
+        "tool_call_count_scope": "response.choices[0].message.tool_calls",
+        "selected_choice_index": 0,
+        "selected_choice_index_scope": "response.choices",
+        "selected_tool_call_index": 0,
+        "selected_tool_call_index_scope": (
+            "response.choices[0].message.tool_calls"
+        ),
+        "selected_tool_name": "generate_patch",
+        "selected_arguments_bytes": len(b'{"file_path":'),
+        "selected_arguments_json_valid": False,
+        "arguments_representation": "sdk_argument_string_utf8",
+        "arguments_value_type": "str",
+    }
+
+
+@pytest.mark.parametrize(
+    ("arguments", "expected_type", "expected_representation", "expected_bytes"),
+    (
+        (
+            b'{"file_path":"x.py"}',
+            "bytes",
+            "sdk_argument_bytes",
+            len(b'{"file_path":"x.py"}'),
+        ),
+        ({"file_path": "x.py"}, "dict", None, None),
+    ),
+)
+def test_openai_argument_observations_keep_actual_sdk_value_type(
+    arguments,
+    expected_type: str,
+    expected_representation: str | None,
+    expected_bytes: int | None,
+) -> None:
+    client = LLMClient(model="gpt-5.6-sol")
+    tool = {"name": "generate_patch", "input_schema": {"required": ["file_path"]}}
+    tool_call = SimpleNamespace(
+        function=SimpleNamespace(name="generate_patch", arguments=arguments)
+    )
+    response = SimpleNamespace(
+        usage=None,
+        choices=[
+            SimpleNamespace(
+                finish_reason="tool_calls",
+                message=SimpleNamespace(tool_calls=[tool_call]),
+            )
+        ],
+    )
+    fake_openai_client = MagicMock()
+    fake_openai_client.chat.completions.create.return_value = response
+
+    with patch.object(client, "_get_openai_client", return_value=fake_openai_client):
+        if isinstance(arguments, dict):
+            with pytest.raises(LLMFormatError, match="invalid JSON arguments"):
+                client.call_with_tool("prompt", tool, request_kind="code")
+        else:
+            assert client.call_with_tool(
+                "prompt", tool, request_kind="code"
+            ) == {"file_path": "x.py"}
+
+    diagnostics = client.get_last_response_diagnostics()
+    assert diagnostics is not None
+    assert diagnostics["arguments_value_type"] == expected_type
+    assert diagnostics["selected_arguments_json_valid"] is not isinstance(
+        arguments, dict
+    )
+    if expected_representation is None:
+        assert "arguments_representation" not in diagnostics
+    else:
+        assert diagnostics["arguments_representation"] == expected_representation
+    if expected_bytes is None:
+        assert "selected_arguments_bytes" not in diagnostics
+    else:
+        assert diagnostics["selected_arguments_bytes"] == expected_bytes
 
 
 def test_openai_tool_call_records_codex_proxy_usage_metadata() -> None:
