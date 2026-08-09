@@ -21,52 +21,49 @@ Files:
 BKS, gap, and BKS route counts are final-report fields only. Promotion remains
 lexicographic on `fleet_violation` and `total_distance`.
 
-## 2026-06 Formal Split Redesign
+## 2026-08 R3 Formal Split
 
-Screening was rebuilt from the seed-0 final ALNS/VNS ledger so it has measurable
-headroom. The 16 screening cases are all `benchmark_feasible=True`, reference
-clean, `route_gap=0`, and in the 2.5% to 10% seed-0 BKS-gap band. A/B/E/P
-provide the cheap base coverage; CMT/M/tai add medium structure; one small X
-case (`X-n110-k13`) adds a cheap X-family signal without moving the harder X
-holdout into screening.
-
-Validation keeps a distinct 12-case mix: near-threshold A/B/P/tai rows, harder
-tai and F rows, plus small-to-medium X rows. This keeps validation meaningful
-without duplicating screening. Frozen is now a 12-case X-only holdout in the
-roughly 3% to 9% seed-0 gap band, replacing the previous near-solved `X-n106`
-and >10% `X-n237`/`X-n513` rows with route-clean medium/large X cases. Final
-evidence remains a separate X holdout and is not part of promotion.
+Quality screening, validation and frozen each contain 12 outcome-blind cases
+with family, dimension and seed-0 headroom coverage. The three blocks are
+mutually exclusive. A fourth disjoint 12-case block is reserved for a manual
+post-campaign comparison against original B0 and is not available to proposal
+or campaign search context. The JSON manifests and YAML split are the exact
+case authorities; this overview does not override them.
 
 Stage seeds are deterministic odd-prime ledgers:
 
 - screening mechanism stage: `11, 29, 43, 59`
 - screening quality expansion: `11, 29, 43, 59, 73, 79, 97, 103`
-- validation: `47, 53, 71, 83`
-- frozen: `61, 67, 89`
-- final evidence: `0, 1, 2`
+- validation: `47, 53, 71, 83, 107, 109, 113, 127`
+- frozen: `61, 67, 89, 131, 137, 139, 149, 151`
+- final evidence: `157, 163, 167, 173, 179, 181, 191, 193`
 
-The R2 screen uses paired per-case median `total_distance` direction with a
-zero equivalence band.  Initial screening evaluates 8 cases x 4 seeds and can
-only request the exact expansion.  Expanded screening evaluates 12 cases x 8
-seeds and is the only screening result that can advance to validation.
-Validation and frozen use all 12 declared cases with four and three seeds,
-respectively.  Fleet regression remains a separate protected-objective veto.
+R3 uses the median paired `total_distance` effect within each case and a zero
+equivalence band. Initial screening evaluates the first 8 quality cases x 4
+seeds and can only request the exact expansion. Expanded quality screening
+evaluates 12 cases x 8 seeds and is the only screening result that can advance.
+Quality, validation and frozen require case net score `(W-L)/12 >= 0.25`, case
+loss rate `L/12 <= 0.20`, the declared practical median effect and CI low
+`>= 0`. Fleet regression remains a separate protected-objective veto.
 
-R2 is deliberately marked uncalibrated.  The retained MDE=9.9 artifact used
-the old 8-case x 4-seed pair-level estimator, while a later 8-seed A/A estimate
-of 9.6 also used a different case population, estimator and runtime.  They are
-historical low-power diagnostics, not R2 power claims.  In particular, neither
-shows that an effect near the practical delta of 2 can be excluded.
+Historical MDE values 9.9 and 9.6 used incompatible pair-level estimators and
+remain low-power diagnostics. R3 ran three provider-free same-seed A/A
+diagnostics; each observed rule was false and each fixed 12-case/two-seed stage
+population had 0/2,000 label-swap null passes. This is not a matched MDE or
+power estimate and does not show that an effect near the practical delta of 2
+can be excluded.
 
 Runtime budgets are staged by case scale:
 
 - canary/smoke: `10s`
-- screening: `30s`
-- validation: `30s`
-- frozen: `60s`
-- final evidence: `60s`
+- dimensions through 100: `30s`
+- dimensions 101-200: `45s`
+- dimensions 201-350: `60s`
+- dimensions 351-700: `90s`
+- dimensions 701-1001: `120s`
 
 The formal protocol declares these budgets in `protocol.yaml` so campaign
 execution uses them instead of the CLI fallback time limit. The CLI
 `--time-limit-sec` remains a fallback for stages that do not declare an
-override.
+override. `CMT3` and `CMT4` have fixed 45-second aliases because their names do
+not encode dimension; `CMT2` uses the 30-second default.

@@ -118,15 +118,20 @@ class CvrpAdapter:
                 "practical_validate_delta": 1.0,
                 "screening_mde_at_power_80": None,
                 "screening_calibration_status": (
-                    "uncalibrated_for_r2_paired_effect_median"
+                    "r3_limited_same_seed_null_zero_passes_power_unestablished"
                 ),
                 "interpretation": (
                     "Interpret paired final total_distance with case-level "
-                    "variation and uncertainty. R2's estimator is not yet "
-                    "power-calibrated; older 4-seed MDE=9.9 and 8-seed "
-                    "MDE=9.6 estimates used incompatible pair-level designs "
-                    "and only establish low power near delta=2. Intermediate "
-                    "deltas are not substitutes for the final solver result."
+                    "variation and uncertainty. R3's three provider-free "
+                    "same-seed A/A diagnostics each had an observed combined "
+                    "rule that did not pass and zero of 2,000 independent "
+                    "paired-label-swap null samples pass on its fixed 12-case, "
+                    "two-seed stage population (Wilson upper 95%=0.001351). "
+                    "This is only a limited false-pass/repeatability "
+                    "diagnostic; it is not a matched MDE or power estimate. "
+                    "Older MDE=9.9 and MDE=9.6 estimates used incompatible "
+                    "pair-level designs. Intermediate deltas are not "
+                    "substitutes for the final solver result."
                 ),
             },
             "feasibility": {

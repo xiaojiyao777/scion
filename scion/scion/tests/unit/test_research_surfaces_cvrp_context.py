@@ -282,7 +282,8 @@ def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:
     assert "No prepared file or mechanism is mandatory" in rendered
     assert "Runtime errors may explain failed outcomes" in rendered
     assert "Use MDE only when a matched calibration exists" in rendered
-    assert "R2 has no matched MDE" in rendered
+    assert "R3 has no matched MDE or power estimate" in rendered
+    assert "same-seed A/A result checks only obvious false-pass" in rendered
     assert context["research_question"]["schema_version"] == (
         "scion.typed_research_question.v2"
     )

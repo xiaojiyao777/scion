@@ -87,9 +87,10 @@ class CvrpSolverDesignProvider:
             (
                 "Use paired and case-level total_distance, feasibility, route "
                 "count, and confidence intervals together. Use MDE only when a "
-                "matched calibration exists; R2 has no matched MDE. Runtime "
-                "errors may explain failed outcomes but do not replace objective "
-                "evidence."
+                "matched calibration exists; R3 has no matched MDE or power "
+                "estimate. Its same-seed A/A result checks only obvious "
+                "false-pass behavior. Runtime errors may explain failed "
+                "outcomes but do not replace objective evidence."
             ),
             (
                 "Do not propose generic Scion core, metadata, contract, gate, "
