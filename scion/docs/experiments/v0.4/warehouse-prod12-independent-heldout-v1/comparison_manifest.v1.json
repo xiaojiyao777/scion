@@ -1,0 +1,15 @@
+{
+  "schema_version": "scion.champion_heldout_comparison_manifest.v1",
+  "problem_yaml": "/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion/problems/warehouse_delivery/problem-v1.yaml",
+  "protocol": "/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion/problems/warehouse_delivery/protocol_prod.yaml",
+  "split_manifest": "/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion/docs/experiments/v0.4/warehouse-prod12-independent-heldout-v1/heldout_split.yaml",
+  "seed_ledger": "/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion/problems/warehouse_delivery/seed_ledger.yaml",
+  "time_limit_sec": 30,
+  "groups": [
+    {
+      "comparison_id": "promotion-v2-v1",
+      "candidate_workspace": "/home/clawd/research/scion-experiments/v04-warehouse-v3-production-transfer-prod12-24stage-r1-gpt56terra-20260809T044055Z-claw/campaign/champions/champion_v2",
+      "champion_workspace": "/home/clawd/research/scion-experiments/v04-warehouse-v3-production-transfer-prod12-24stage-r1-gpt56terra-20260809T044055Z-claw/campaign/champions/champion_v1"
+    }
+  ]
+}
