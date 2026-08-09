@@ -486,10 +486,15 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   outcome-blind disjoint populations. No quality, novelty, activation,
   Trust/Hash, token or runtime gate was added. The clean fixed-source suite is
   `2081 passed, 1 skipped` in 633.04 seconds.
-- [ ] Run the separately pre-registered provider-free same-seed A/A/null
-  calibration on quality, validation and frozen. Its artifacts are diagnostic
-  only and cannot enter Decision. If the frozen null bound fails, revise only
-  in a new source/preregistration; do not launch R3 with a post-hoc rule.
+- [x] Run the separately pre-registered provider-free same-seed A/A/null
+  calibration on quality, validation and frozen. All three stages completed
+  24/24 pairs with zero pair errors or runtime-budget hits; every observed
+  combined rule was false, and every 2,000-swap null had 0 passes with a
+  one-sided 95% Wilson upper bound of `0.001351`. All artifacts state
+  `decision_features_excluded=true`, so the calibration is acceptable under
+  its preregistration. The
+  [postrun](docs/experiments/v0.4/v0.4-cvrp-v3-r3-aa-null-postrun-20260809.md)
+  remains diagnostic only and cannot enter Decision or establish power.
 - [ ] Pre-register R3 in a fresh absent root as an integrated corrected,
   promotion-seeking rung. Freeze context sections, tool/edit surface, case
   populations, ordered seeds, time limits, initial-to-quality routing and the
@@ -573,6 +578,7 @@ are frozen at `6d5be022`: compact lossless context, trace-only provider facts,
 executed-patch attribution, optional descriptive `expected_effect`, a
 tie-aware loss-veto rule, three disjoint 12-case formal blocks and a fourth
 disjoint final replay block. The clean fixed-source suite is `2081 passed,
-1 skipped` in 633.04 seconds. Provider-free A/A/null calibration and the fresh
-R3 preregistration/launch remain pending. S6 final closure remains pending, and
-CVRP still has no Protocol-complete promotion.
+1 skipped` in 633.04 seconds. The provider-free A/A/null calibration completed
+acceptably under its fixed preregistration. Fresh R3 campaign preregistration
+and launch remain pending. S6 final closure remains pending, and CVRP still has
+no Protocol-complete promotion.

@@ -568,8 +568,9 @@ The full postrun and claim boundary are in
 [`v0.4-cvrp-v3-quality-screen-12stage-r2-postrun-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-quality-screen-12stage-r2-postrun-20260809.md).
 R3 is the next fresh promotion-seeking rung. Its prerequisites are limited to
 lossless compact context framing, mechanical provider completion facts,
-intended-H versus executed-patch context, and a prospectively calibrated
-tie-aware case rule with a loss veto. They are not new proposal-quality gates,
+intended-H versus executed-patch context, and a prospectively specified and
+null-checked tie-aware case rule with a loss veto. They are not new
+proposal-quality gates,
 and R1/R2 are not reinterpreted. The existing local Codex-proxy development
 process is again listening on `127.0.0.1:8080`, reports one authenticated active
 account, and exposes `gpt-5.6-terra`; no proxy build, upgrade or Scion deployment
@@ -597,9 +598,18 @@ are deliberately small in authority:
 The R2 C tool itself is not broadened: 8/8 completed C responses parsed and
 entered evaluation, 4/8 changed two files, and all ten formal evaluations
 passed Contract and Verification. There is no evidence that shell or more
-provider tools would improve R3. The next action is the separately
-pre-registered, provider-free same-seed A/A/null diagnostic. No R3 provider
-call starts unless that fixed rule/population check completes acceptably.
+provider tools would improve R3. The separately pre-registered provider-free
+same-seed A/A/null diagnostic is now complete in
+`/home/clawd/research/scion-experiments/v04-cvrp-v3-r3-aa-null-20260809T183131Z-claw`.
+Quality, validation and frozen each completed 24/24 pairs with zero pair errors
+or runtime-budget hits; every observed combined rule was false, and every
+2,000-swap null had 0 passes with a one-sided 95% Wilson upper bound of
+`0.001351`. All three artifacts exclude DecisionFeatures. This satisfies only
+the diagnostic's pre-registered acceptance condition. The complete record is
+in
+[`v0.4-cvrp-v3-r3-aa-null-postrun-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-r3-aa-null-postrun-20260809.md).
+Fresh R3 campaign preregistration is the next action; no R3 provider call has
+been launched.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
@@ -764,9 +774,9 @@ CVRP has no Protocol-complete promotion. R1 is sealed at 5/8 and R2 at 10/12;
 both retain valid partial science but neither candidate path reached validation
 or frozen holdout. R2's elapsed-budget SA is the current strongest lead. R3's
 code, context, measurement rule and disjoint populations are fixed and fully
-regressed; provider-free null calibration remains the last launch prerequisite.
-Closure still requires one fresh R3 screening -> validation -> frozen
-promotion, an independent B0 comparison and the S6 cross-problem/full-
-regression record.
+regressed, and its provider-free null calibration completed acceptably. Fresh
+R3 campaign preregistration and launch remain pending. Closure still requires
+one fresh R3 screening -> validation -> frozen promotion, an independent B0
+comparison and the S6 cross-problem/full-regression record.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.
