@@ -619,8 +619,25 @@ in
 [`v0.4-cvrp-v3-r3-aa-null-postrun-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-r3-aa-null-postrun-20260809.md).
 The fresh 16-stage R3 campaign is now fixed in
 [`v0.4-cvrp-v3-quality-screen-16stage-r3-preregistration-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-quality-screen-16stage-r3-preregistration-20260809.md).
-No R3 provider call has been launched; the next action is the frozen proxy/model
-preflight followed by the one allowed launch.
+The frozen proxy/model preflight passed and the one allowed `gpt-5.6-terra`
+campaign was launched from exact runtime `76f3e976` at
+`/home/clawd/research/scion-experiments/v04-cvrp-v3-quality-screen-16stage-r3-gpt56terra-20260809T194031Z-claw/campaign`.
+It is still active. Its current queued quality expansion must drain unchanged;
+no incomplete W/L/T or promotion claim is used here, and the campaign has not
+been retried, resumed or modified.
+
+The active expansion later exposed an operator-side validity problem: pytest
+ran concurrently on the same two-vCPU/one-physical-core host while the
+deadline-driven solver was evaluating several pairs. All CPU-heavy repository
+validation was stopped immediately. Because every overlap boundary cannot be
+reconstructed exactly, the root is conservatively
+`OPERATOR_LOAD_CONTAMINATED_FOR_STRICT_PROMOTION_CLAIM`; no selected pair is
+silently deleted or retried. The outcome-blind
+[recovery preregistration](../experiments/v0.4/v0.4-cvrp-v3-r3-operator-load-recovery-preregistration-20260809.md)
+was written before the quality expansion became terminal. R3 remains useful
+for research behavior and candidate discovery, but only an exact candidate
+promoted by its existing Protocol is eligible for the fixed provider-free
+clean quality -> validation -> frozen -> final replay.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
@@ -786,8 +803,16 @@ both retain valid partial science but neither candidate path reached validation
 or frozen holdout. R2's elapsed-budget SA is the current strongest lead. R3's
 code, context, measurement rule and disjoint populations are fixed and fully
 regressed, its provider-free null calibration completed acceptably, and its
-fresh 16-stage campaign is pre-registered. Launch remains pending. Closure
-still requires one fresh R3 screening -> validation -> frozen promotion, an
-independent B0 comparison and the S6 cross-problem/full-regression record.
+fresh 16-stage campaign is active from exact runtime `76f3e976`. Closure still
+requires a clean screening -> validation -> frozen promotion, an independent
+B0 comparison and the S6 cross-problem/full-regression record. The active root
+alone cannot supply that clean claim because of its recorded operator-load
+contamination; a Protocol-promoted exact source must pass the pre-registered
+provider-free recovery replay.
+If R3 does not promote, the next step is a provider-free, frozen-cohort
+case-by-seed and budget diagnosis before any fresh campaign; H-context or
+C-expression A/B is conditional on observed friction rather than mandatory
+framework work. Those diagnostics remain excluded from Decision and cannot
+reinterpret R3.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.
