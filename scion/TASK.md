@@ -187,6 +187,7 @@ They do not block this task and cannot satisfy it.
 | R31 | proven evidence-accounting/context gaps; corrected prospectively | R1 contains five evaluated attempts, two candidate-local research rejections and one infrastructure block, but terminal status projects only one rejection. The neutral H prior also omits the recent deep-ejection negative and R1 depth-one/depth-two contrast. | The research-rejection finalizer now owns one typed outcome row plus cleanup/audit fact; the loop audit remains a cross-check rather than a second counting authority. Candidate-local rejection stays scheduler-forward, and one concise neutral evidence item reaches H without selecting an operator or entering Decision. |
 | R32 | proven calibration-compatibility defect; corrected prospectively | The checked-in CVRP readiness and adapter projected the old 8-case x 4-seed pair-level MDE `9.9` as ready for R2, whose estimator, 12-case population, eight-seed quality screen and scale-aware runtime differ. A later 8-seed pair-level A/A reported MDE `9.6`, but it is also incompatible and does not validate its heuristic 16-seed recommendation. | Mark R2 uncalibrated, keep both MDE values as explicitly incompatible historical low-power diagnostics, and synchronize the declared matrix with actual execution. R2 may test research behavior and large effects but must not claim calibrated power or rule out effects near delta `2`. |
 | R33 | active experimental-design risk; bounded prospectively | A no-promotion campaign can reflect the candidate ideas, the stage/case/seed measurement design, or an H/C context and tool surface that diverts attention from algorithm research. Adding more host rules cannot distinguish those causes and can itself suppress useful search. | Treat stage populations, estimator semantics, provider-visible context and available edit/research tools as explicit experiment inputs. Preserve only V3 Contract/Verification/Protocol authority and minimum replayable lineage. R2 measures the integrated research path; its postrun must analyze proposal focus, usable evidence, tool/edit friction and measurement reach separately. If causal isolation is still needed, use a later fresh preregistered matched ablation rather than tuning the active root or adding a quality gate. |
+| R34 | proven V3 exposure/context-burden defect; corrected at `41956f36` | The proposed R2 H prior exposed current-split validation case `tai150a`, seed-level deltas and frozen/validation summaries. C also received several overlapping source/interface/rules packets, one route-count statement contradicted the protected-objective semantics, and H was told to use an incompatible MDE. | Remove all validation/frozen detail from H, retain screening-level mechanism facts only, expose every current source file once, correct excess routes to `fleet_violation`, and keep one problem-owned object/API packet plus target-specific guidance. The result removes 94 net lines, adds no gate and passes the complete suite. |
 
 ## Modular execution plan
 
@@ -452,12 +453,12 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   uncalibrated. The 2047-test full suite, one skipped test, focused regressions,
   critical Ruff checks and diff check pass without deployment, Trust/Hash,
   mechanism or telemetry gates.
-- [ ] Pre-register corrected R2 as a fresh staged-measurement, claim-bounded
+- [x] Pre-register corrected R2 as a fresh staged-measurement, claim-bounded
   campaign. Freeze its
   paired case estimator, equivalence semantics if any, seeds, structural case
   strata, screening/validation/frozen populations and formal-stage horizon
   before launch. Keep screening advancement separate from champion promotion.
-- [ ] Freeze and audit the provider research surface as part of that R2
+- [x] Freeze and audit the provider research surface as part of that R2
   preregistration: enumerate each H/C context section, its scientific purpose,
   the complete current solver source and problem mechanics available to the
   provider, the edit/research tools it may actually use, and the minimum V3
@@ -537,8 +538,11 @@ complete. CVRP R1 is sealed at 5/8 formal stages with 176/176 valid pairs, one
 reproducible mixed-positive depth-one signal and no promotion. Its measurement,
 proposal-edit, context and rejection-accounting defects are corrected
 prospectively; the final integrated suite is `2047 passed, 1 skipped` in
-640.76 seconds. Corrected R2 uses an 8x4 mechanism screen that may only expand
-to a 12x8 quality screen, followed by 12x4 validation and 12x3 frozen evidence.
-It remains explicitly uncalibrated and will be frozen in a fresh exact-source
-preregistration before launch. S6 final closure remains pending, and CVRP still
-has no Protocol-complete promotion.
+624.56 seconds. A final V3 exposure audit then removed current validation/
+frozen details from H, collapsed repeated C guidance into one problem-owned
+object/API packet, corrected route-count semantics and removed incompatible MDE
+instructions at executable commit `41956f36`. Corrected R2 uses an 8x4
+mechanism screen that may only expand to a 12x8 quality screen, followed by
+12x4 validation and 12x3 frozen evidence. It remains explicitly uncalibrated
+and is frozen in a fresh exact-source preregistration; launch is pending. S6
+final closure remains pending, and CVRP still has no Protocol-complete promotion.

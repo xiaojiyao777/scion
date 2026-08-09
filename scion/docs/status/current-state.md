@@ -511,7 +511,7 @@ the practical delta `2` remain difficult to exclude. Validation stays 12x4,
 frozen stays 12x3, and promotion thresholds remain unchanged.
 
 The integrated pre-R2 implementation passes the complete suite at
-`2047 passed, 1 skipped` in 640.76 seconds. A campaign-level wiring regression
+`2047 passed, 1 skipped` in 624.56 seconds. A campaign-level wiring regression
 also proves that the initial screen queues exact expansion on the same
 candidate with no new provider call or workspace, uses all 12 cases and eight
 ordered seeds, and only then enters 12x4 validation. Critical Ruff syntax/error
@@ -527,6 +527,22 @@ mechanism, activation, style or algorithm-quality gates. A no-promotion result
 must separately report agent research behavior, measurement reach and
 pre-Protocol framework friction; any causal context/measurement comparison is
 a later fresh matched ablation, never an in-place change to R2.
+
+A final independent V3 exposure audit found that the prospective H prior still
+contained current validation case `tai150a`, seed-level deltas and
+validation/frozen summaries. It also found duplicated C rules, contradictory
+route-count wording and an instruction to use an incompatible MDE. Executable
+commit `41956f36` removes those validation/frozen details, retains only neutral
+screening-level mechanism evidence, exposes each current source file once,
+corrects excess routes to the separate `fleet_violation` objective and reduces
+C to one object/API fact packet plus target-specific guidance. This is a net
+context reduction, not a new gate. The complete suite and 46 actual H/C render
+regressions pass after the change.
+
+Corrected R2 is frozen in
+[`v0.4-cvrp-v3-quality-screen-12stage-r2-preregistration-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-quality-screen-12stage-r2-preregistration-20260809.md)
+at executable commit `41956f36` and an absent fresh root. It remains explicitly
+uncalibrated; launch and postrun evidence are pending.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
