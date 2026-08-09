@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-08*
+*Last updated: 2026-08-09*
 
 Read `TASK.md` first. `design/scion-architecture-v3.md` is the sole architecture
 authority. `design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` only
@@ -12,10 +12,10 @@ The active branch is `codex/v04-solver-improvement-research`, based on the
 accepted lightweight runtime baseline `4d637959`.
 
 The active completion target is retained solver improvement on both Warehouse
-and CVRP/VRP. Warehouse has recovered continuous same-campaign optimization
-and now needs independent held-out retention plus production transfer. CVRP
-must still produce a real algorithmic promotion; valid negative observations
-alone do not close `TASK.md`.
+and CVRP/VRP. Warehouse has confirmed retained synthetic continuity and now
+needs the separate production-transfer rung. CVRP must still produce a real
+algorithmic promotion; valid negative observations alone do not close
+`TASK.md`.
 
 Distribution, deployment, installation, packaging, builds, root/systemd and
 source-acceptance machinery are out of scope. Object identity, signing,
@@ -273,14 +273,30 @@ promoted v2 to v3: validation was 18/18 pair wins with median `+4.5`, CI
 After reaching v3, R8 completed sixteen more formal screenings.
 
 R8 therefore proves same-campaign continuous Warehouse research through
-`v1 -> v2 -> v3`. The claim remains
-`PROMOTION_CONTINUITY_OBSERVED_REPLAY_PENDING`, not retained improvement. A
-separate no-LLM preregistration fixes three comparisons (v2-v1, v3-v2 and
-v3-v1) on 12 R8-unseen frozen cases and seeds 11/73/509, for 108 formal pairs.
-The terminal audit and exact claim boundary are recorded in
-`docs/experiments/v0.4/v0.4-warehouse-v3-continuity-synthetic-36stage-r8-postrun-20260808.md`;
-the fixed held-out design is in
-`docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-preregistration-20260808.md`.
+`v1 -> v2 -> v3`. Its separately preregistered no-LLM replay then completed all
+three comparisons on 12 R8-unseen frozen cases and seeds 11/73/509. Every
+comparison had 36/36 valid pairs, both candidate and champion canaries passed,
+and there were zero candidate/champion failures and zero cached champion
+runtimes.
+
+- v2-v1: case 11/1/0, pair 32/4/0, median `subcategory_splits` improvement `+8`, CI
+  `[4, 23.5]`;
+- v3-v2: case 12/0/0, pair 35/1/0, median `+39`, CI `[15, 48]`;
+- v3-v1: case 12/0/0, pair 36/0/0, median `+48.5`, CI `[40, 65]`.
+
+These primary deltas do not establish `total_cost` improvement. Runtime remains
+diagnostic only.
+
+All three returned `FROZEN_PASS_HIERARCHICAL` and meet the preregistered
+`RETAINED_IMPROVEMENT` rule. Warehouse synthetic continuity is therefore
+`CONTINUOUS_OPTIMIZATION_CONFIRMED`. The campaign audit, fixed design and
+held-out result are recorded respectively in
+`docs/experiments/v0.4/v0.4-warehouse-v3-continuity-synthetic-36stage-r8-postrun-20260808.md`,
+`docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-preregistration-20260808.md`
+and
+`docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-postrun-20260809.md`.
+This does not establish production-style Warehouse transfer or CVRP
+improvement.
 
 ### CVRP
 
@@ -430,8 +446,8 @@ For the active S2/S3 implementation, the focused V3 integration set passed 270
 tests. After removing the active lineage identity mirror, the
 evidence/proposal/composition set passed 58 tests and the campaign/preflight
 integration set passed 43 tests; critical Ruff `E9/F63/F7/F82` and changed-file
-diff checks passed. These are focused results only. The S6 full-suite run after
-all active edits remains pending.
+diff checks passed. These were focused results at that checkpoint; they do not
+replace the later complete-suite result.
 
 After the R3 lifecycle correction, the complete suite passed
 `1964 passed, 1 skipped` in 620.83 seconds; focused adjacent regression passed
@@ -442,6 +458,11 @@ and fail-closed regressions passed 92 tests. The complete suite passed
 `1965 passed, 1 skipped` in 629.99 seconds; critical Ruff and diff checks
 passed. This is the frozen framework checkpoint for the next fresh Warehouse
 run, not solver-evidence acceptance by itself.
+
+After the held-out terminal evidence and current hot-path work were integrated,
+the latest post-heldout complete suite completed with `1988 passed, 1 skipped`
+in 627.26 seconds. This is the current full-regression terminal count; the
+1949, 1964 and 1965 results above remain historical checkpoints.
 
 ## Known residuals
 
@@ -464,11 +485,13 @@ run, not solver-evidence acceptance by itself.
 ## Closure status
 
 The prior lightweight-runtime milestone is accepted at `4d637959`; the active
-`TASK.md` is not closed. Warehouse R8 completed 36/36 stages and reached
-synthetic champion v3 through two exact promotions in one campaign. Continuous
-promotion is now established; the pre-registered 108-pair held-out replay and
-the production-transfer rung remain. CVRP has no Protocol-complete promotion.
-Closure still requires Warehouse retained replay evidence, one CVRP screening
--> validation -> frozen promotion, and an independent B0 comparison.
+`TASK.md` is not closed. Warehouse R8 completed 36/36 stages, reached synthetic
+champion v3 through two exact promotions in one campaign, and retained both
+promotion steps plus the cumulative v3-v1 gain on 108/108 independently
+declared held-out pairs. Synthetic Warehouse continuity is
+`CONTINUOUS_OPTIMIZATION_CONFIRMED`; the production-transfer rung remains.
+CVRP has no Protocol-complete promotion. Closure still requires Warehouse
+production transfer, one CVRP screening -> validation -> frozen promotion, and
+an independent B0 comparison.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.

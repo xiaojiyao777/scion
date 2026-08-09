@@ -4,7 +4,7 @@
 
 *Accepted runtime baseline: `4d637959`*
 
-*Last updated: 2026-08-08*
+*Last updated: 2026-08-09*
 
 This is the active task source. `design/scion-architecture-v3.md` is the
 sole architecture authority. The direct-runtime addendum may explain an
@@ -161,7 +161,7 @@ They do not block this task and cannot satisfy it.
 | R13 | resolved infrastructure exclusion | R5 authenticated and completed H, but its first C stream ended upstream after 2,022 partial events without a terminal event; the proxy intentionally returned 504. There were 0 evaluated stages and 0 experiments. | Seal R5 with no C/source or scientific conclusion. R6 is a fresh matched campaign with new H/C; do not replay the failed C or change Scion/proxy configuration from one intermittent event. |
 | R14 | proven and corrected on the current branch | R6 produced one complete Warehouse promotion and then fourteen more formal screenings, but stopped at 17/36 when a provider-complete C used an `exact_replace` selector absent from the visible source. Proposal ownership misclassified that tainted-content rejection as terminal `NOT_EVALUATED`. | Keep exact source binding strict, classify malformed/schema-invalid H/C and unapplicable typed edits as `RESEARCH_REJECTED`, release only that H/C, and scheduler-forward to a fresh H on the clean base. Never retry the failed call; local context/binding, missing outcome, provider-without-terminal-response, infra, resource and interruption outcomes still stop. |
 | R15 | resolved infrastructure exclusion | R7 completed three screening and one validation stage with 62/62 valid pairs, then its third C ended upstream without a terminal event. The runtime correctly stopped `BLOCKED_INFRA`; proxy authentication/account state remained healthy. | Seal R7 as 4/36 valid partial science with two candidate negatives and no promotion. Do not replay its failed C. One fresh matched R8 may sample new H/C without changing framework, proxy configuration or scientific inputs. |
-| R16 | proven; retained replay pending | R8 completed all 36 formal stages and 534/534 pairs, continued through two candidate-local research rejections, and promoted exact candidates `89f3edbb...` and `3f204b01...` from v1 to v2 to v3 in one campaign. | Continuous agent research and the in-campaign v3 endpoint are observed. Run the separately pre-registered held-out v2-v1, v3-v2 and v3-v1 comparisons before claiming retained improvement. |
+| R16 | proven; retained replay complete | R8 completed all 36 formal stages and 534/534 pairs, continued through two candidate-local research rejections, and promoted exact candidates `89f3edbb...` and `3f204b01...` from v1 to v2 to v3 in one campaign. Its separately preregistered held-out replay completed 108/108 valid pairs with all three comparisons positive. | Warehouse synthetic continuity is `CONTINUOUS_OPTIMIZATION_CONFIRMED`; production transfer remains a separate S4 question. |
 
 ## Modular execution plan
 
@@ -248,11 +248,14 @@ They do not block this task and cannot satisfy it.
   promotion, summary, Warehouse/CVRP smoke and fixed-replay regression set then
   passed 180 tests after the final hot-path subtraction. The stable pre-S1
   checkpoint then passed the complete suite: `1949 passed, 1 skipped` in
-  628.19 seconds. S6 remains open because the final solver-evidence state still
-  requires its own post-experiment regression run. After the R6 proposal-
-  rejection correction, the complete suite passed `1965 passed, 1 skipped` in
-  629.99 seconds; the focused adjacent set passed 92 tests and critical Ruff
-  plus diff checks passed.
+  628.19 seconds. At that checkpoint, S6 remained open because the final
+  solver-evidence state still required its own post-experiment regression run.
+  After the R6 proposal-rejection correction, the complete suite passed
+  `1965 passed, 1 skipped` in 629.99 seconds; the focused adjacent set passed 92
+  tests and critical Ruff plus diff checks passed. The latest post-heldout
+  complete suite then completed with `1988 passed, 1 skipped` in 627.26 seconds.
+  This is the current full-regression terminal count; the earlier counts remain
+  their historical checkpoints.
 
 ### S4 - Warehouse recovery ladder
 
@@ -303,10 +306,16 @@ They do not block this task and cannot satisfy it.
   promotion funnel, branch depth and exact failure class. R8 was the second and
   final matched repeat and reached v3, so no further matched Warehouse root is
   authorized before the independent replay.
-- [ ] Independently replay every promoted champion against its immediate parent
-  and replay the final champion against v1 on declared held-out evidence. The
-  R8 comparison is frozen in
-  `docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-preregistration-20260808.md`.
+- [x] Independently replay every promoted champion against its immediate parent
+  and replay the final champion against v1 on declared held-out evidence. All
+  three comparisons completed 36/36 valid pairs with both canary sides passing
+  and zero candidate/champion failures or cached champion runtimes. Results:
+  v2-v1 case 11/1/0, pair 32/4/0, median `+8`, CI `[4, 23.5]`; v3-v2 case
+  12/0/0, pair 35/1/0, median `+39`, CI `[15, 48]`; v3-v1 case 12/0/0, pair
+  36/0/0, median `+48.5`, CI `[40, 65]`. Classification:
+  `CONTINUOUS_OPTIMIZATION_CONFIRMED`. See the
+  [preregistration](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-preregistration-20260808.md)
+  and [postrun](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-postrun-20260809.md).
 - [ ] After synthetic continuity is demonstrated, run the pre-registered
   production transfer rung. Start with one uninterrupted 12-stage shakedown;
   use a 24-stage matched matrix only if the shakedown shows a valid funnel or a
@@ -393,15 +402,17 @@ CVRP acceptance:
 
 ## Status
 
-**Active: S4 Warehouse held-out replay, then S5 CVRP.** S1
+**Active: remaining S4 Warehouse production transfer and S5 CVRP.** S1
 is closed as a scientific negative; S2/S3 are complete. Warehouse R6 produced
 one Protocol-complete synthetic promotion (`v1 -> v2`) and continued for
 fourteen formal post-promotion screenings, but stopped at 17/36 on the now-
 corrected proposal-rejection route. R7 added four valid formal stages and two
 candidate negatives before an intermittent terminal-less provider C; it had no
 promotion. R8 then completed 36/36 stages and 534/534 pairs and promoted
-`v1 -> v2 -> v3` in one uninterrupted campaign. This establishes the
-in-campaign continuous-optimization endpoint; retained improvement remains
-pending on the pre-registered 108-pair held-out comparison. The current full
-suite passed 1965 tests with one skip. S6 final closure remains pending, and
-CVRP still has no Protocol-complete promotion.
+`v1 -> v2 -> v3` in one uninterrupted campaign. The separately preregistered
+held-out replay completed 108/108 valid pairs and retained v2 over v1, v3 over
+v2 and v3 over v1, so synthetic Warehouse continuity is
+`CONTINUOUS_OPTIMIZATION_CONFIRMED`. Production transfer remains open. The
+latest post-heldout full suite completed with `1988 passed, 1 skipped` in 627.26
+seconds. S6 final closure remains pending, and CVRP still has no
+Protocol-complete promotion.
