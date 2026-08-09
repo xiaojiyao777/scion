@@ -231,6 +231,54 @@ def test_screening_gate_fail():
     assert result.outcome == "fail"
 
 
+def test_initial_sparse_no_loss_signal_gets_one_measurement_expansion():
+    stats = _make_stats(
+        n_cases=6,
+        wins=2,
+        losses=0,
+        ties=4,
+        win_rate=2 / 6,
+        median_delta=650.0,
+        ci_low=0.0,
+        ci_high=2200.0,
+    )
+    config = ProtocolConfig.model_validate({"practical_delta_screen": 100.0})
+
+    initial = screening_gate(stats, config)
+    expanded = screening_gate(stats, config, expanded=True)
+
+    assert initial.outcome == "expand"
+    assert initial.reason_codes == ("SCREENING_EXPAND_SPARSE_NO_LOSS",)
+    assert expanded.outcome == "fail"
+    assert expanded.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+
+
+def test_sparse_signal_with_a_loss_or_candidate_failure_does_not_expand():
+    config = ProtocolConfig.model_validate({"practical_delta_screen": 100.0})
+    with_loss = _make_stats(
+        n_cases=6,
+        wins=2,
+        losses=1,
+        ties=3,
+        win_rate=2 / 6,
+        median_delta=650.0,
+        ci_high=2200.0,
+    )
+    with_failure = _make_stats(
+        n_cases=6,
+        wins=2,
+        losses=0,
+        ties=4,
+        win_rate=2 / 6,
+        median_delta=650.0,
+        ci_high=2200.0,
+        candidate_failed_pairs=1,
+    )
+
+    assert screening_gate(with_loss, config).outcome == "fail"
+    assert screening_gate(with_failure, config).outcome == "fail"
+
+
 def test_screening_runtime_tie_does_not_replace_objective_improvement():
     stats = _make_stats(
         wins=0,

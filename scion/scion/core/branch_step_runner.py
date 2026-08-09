@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, MutableMapping, Optional
+from datetime import datetime
+from typing import Any
 
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.candidate_evaluation import (
@@ -12,6 +14,7 @@ from scion.core.candidate_evaluation import (
     candidate_evaluation_pending,
     mark_candidate_evaluation_pending,
 )
+from scion.core.evaluation_orchestrator import EvaluationExecutionResult
 from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
@@ -25,15 +28,11 @@ from scion.core.models import (
     ChampionState,
     CheckResult,
     ContractResult,
-    Decision,
     HypothesisProposal,
     HypothesisRecord,
     PatchProposal,
     StepRecord,
     VerificationResult,
-)
-from scion.core.evaluation_orchestrator import (
-    EvaluationExecutionResult,
 )
 from scion.core.scheduler import (
     Scheduler,
@@ -65,9 +64,9 @@ class BranchStepRunner:
     verification_gate: Any
     drain_weight_opt_events: Callable[[], None]
     should_stop: Callable[[], bool]
-    get_last_stop_reason: Callable[[], Optional[str]]
+    get_last_stop_reason: Callable[[], str | None]
     persist_branch_state: Callable[[str], None]
-    setup_workspace: Callable[..., Optional[str]]
+    setup_workspace: Callable[..., str | None]
     apply_patch: Callable[..., Any]
     evaluate: Callable[
         [Branch, str, HypothesisProposal],
@@ -75,13 +74,13 @@ class BranchStepRunner:
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
     record_step: Callable[[StepRecord], None]
-    decision_reason_codes_for: Callable[[str, Any], Optional[tuple[str, ...]]]
+    decision_reason_codes_for: Callable[[str, Any], tuple[str, ...] | None]
     run_explore_step: Callable[[Branch], StepResult]
     run_eval_step_callback: Callable[[Branch], StepResult]
     run_reconcile_step_callback: Callable[[Branch], StepResult]
     increment_round: Callable[[], int]
     hypothesis_store: Any
-    record_scheduler_result: Optional[Callable[[StepResult], None]] = None
+    record_scheduler_result: Callable[[StepResult], None] | None = None
     decision_provenance_for: Callable[[str], dict[str, Any]] = lambda _branch_id: {}
     registry: Any = None
     campaign_id: str = ""
@@ -154,6 +153,14 @@ class BranchStepRunner:
 
         branch = sched.branch
         assert branch is not None
+
+        # EXPLORE branches share one research tier.  Persist the service time
+        # before H/C so malformed provider output and other research rejection
+        # paths still return this branch to the back of the deterministic queue.
+        if branch.state == BranchState.EXPLORE:
+            # Persisted Branch timestamps are intentionally naive today.
+            branch.updated_at = datetime.now()  # noqa: DTZ005
+            self.persist_branch_state(branch.branch_id)
 
         if branch.state in (BranchState.READY_VALIDATE, BranchState.READY_FROZEN):
             try:
@@ -991,9 +998,9 @@ class BranchStepRunner:
         branch: Branch,
         record: ExecutionOutcomeRecord,
         *,
-        hypothesis_id: Optional[str],
+        hypothesis_id: str | None,
         event_kind: str,
-    ) -> Optional[str]:
+    ) -> str | None:
         event_id = record_execution_outcome_event(
             registry=self.registry,
             campaign_id=self.campaign_id,
@@ -1299,7 +1306,10 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
             "pre_finalizer_selected_branch_id",
             scheduled_branch_id,
         )
-    audit_metadata.setdefault("scheduler_semantics", "state_priority_fifo")
+    audit_metadata.setdefault(
+        "scheduler_semantics",
+        "state_priority_fifo_explore_least_recently_served",
+    )
     result.scheduler_audit_metadata = audit_metadata
     return result
 
@@ -1307,7 +1317,7 @@ def _with_scheduler_metadata(result: StepResult, sched: Any) -> StepResult:
 def _finalize_scheduler_result(
     result: StepResult,
     sched: Any,
-    record_scheduler_result: Optional[Callable[[StepResult], None]] = None,
+    record_scheduler_result: Callable[[StepResult], None] | None = None,
 ) -> StepResult:
     result = _with_scheduler_metadata(result, sched)
     if record_scheduler_result is not None:

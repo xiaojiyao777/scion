@@ -87,7 +87,7 @@ def test_free_slot_admission_does_not_read_research_evidence() -> None:
     assert action.branch is None
 
 
-def test_full_portfolio_runs_explore_fifo() -> None:
+def test_full_portfolio_runs_least_recently_served_explore_branch() -> None:
     branches = [
         _branch(BranchState.EXPLORE, "newer", 2),
         _branch(BranchState.EXPLORE, "older", 1),
@@ -95,7 +95,20 @@ def test_full_portfolio_runs_explore_fifo() -> None:
     action = Scheduler(max_active_branches=2).select_next(branches)
     assert action.action == "run_existing"
     assert action.branch is branches[1]
-    assert action.reason == "state_priority_explore_fifo"
+    assert action.reason == "state_priority_explore_least_recently_served"
+
+
+def test_explore_service_time_moves_branch_behind_older_waiting_sibling() -> None:
+    branches = [
+        _branch(BranchState.EXPLORE, "created-first", 0),
+        _branch(BranchState.EXPLORE, "created-second", 1),
+        _branch(BranchState.EXPLORE, "created-third", 2),
+    ]
+    branches[0].updated_at += timedelta(seconds=10)
+
+    action = Scheduler(max_active_branches=3).select_next(branches)
+
+    assert action.branch is branches[1]
 
 
 def test_blocked_infra_and_execution_hold_are_not_schedulable_but_hold_slots() -> None:

@@ -18,7 +18,12 @@ from .decision_test_support import _engine, _features
             "SCREENING_INCONCLUSIVE_HIGH_WIN_NEGATIVE_EFFECT",
             Decision.CONTINUE_EXPLORE,
         ),
-        ("screening", "expand", "SCREENING_EXPAND", Decision.EXPAND_SCREENING),
+        (
+            "screening",
+            "expand",
+            "SCREENING_EXPAND_SPARSE_NO_LOSS",
+            Decision.EXPAND_SCREENING,
+        ),
         ("screening", "continue", "SCREENING_FAIL_WIN_RATE", Decision.CONTINUE_EXPLORE),
         ("validation", "pass", "VALIDATION_PASS", Decision.QUEUE_FROZEN),
         ("validation", "fail", "VALIDATION_FAIL_WIN_RATE", Decision.ABANDON),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -33,6 +34,12 @@ _FAILURE_KINDS = {
     "V8_nondeterminism": "state",
     "V9_perf_guard": "runtime",
 }
+_PYTHON_FRAME_RE = re.compile(
+    r'^\s*File "(?P<path>[^"]+)", line (?P<line>\d+), in (?P<function>.+?)\s*$'
+)
+_PYTHON_EXCEPTION_RE = re.compile(
+    r"^(?P<type>[A-Za-z_][A-Za-z0-9_.]*(?:Error|Exception)):\s*(?P<message>.*)$"
+)
 
 
 def proposal_screening_history(
@@ -103,6 +110,15 @@ def verification_failure_projection(check: Mapping[str, Any]) -> dict[str, str]:
 
     code = str(check.get("name") or "").strip()
     detail = str(check.get("detail") or "").strip()
+    traceback = _python_traceback_projection(detail)
+    if traceback:
+        return _without_empty(
+            {
+                "check_code": code,
+                "failure_kind": _FAILURE_KINDS.get(code, "verification"),
+                **traceback,
+            }
+        )
     segments = [
         segment.strip()
         for line in detail.splitlines()
@@ -124,6 +140,52 @@ def verification_failure_projection(check: Mapping[str, Any]) -> dict[str, str]:
             "summary": preferred,
         }
     )
+
+
+def _python_traceback_projection(detail: str) -> dict[str, str]:
+    """Keep one actionable Python root cause without exposing workspace paths."""
+
+    lines = [line.rstrip() for line in detail.splitlines()]
+    exception: re.Match[str] | None = None
+    for line in reversed(lines):
+        match = _PYTHON_EXCEPTION_RE.match(line.strip())
+        if match:
+            exception = match
+            break
+    if exception is None:
+        return {}
+
+    frames: list[re.Match[str]] = []
+    for line in lines:
+        match = _PYTHON_FRAME_RE.match(line)
+        if match:
+            frames.append(match)
+    last_frame = frames[-1] if frames else None
+    exception_type = exception.group("type")
+    message = exception.group("message").strip()
+    projection = {
+        "summary": f"{exception_type}: {message}".rstrip(": "),
+        "exception_type": exception_type,
+        "message": message,
+    }
+    if last_frame is not None:
+        projection.update(
+            {
+                "location_file": _relative_source_path(last_frame.group("path")),
+                "location_line": last_frame.group("line"),
+                "location_function": last_frame.group("function").strip(),
+            }
+        )
+    return _without_empty(projection)
+
+
+def _relative_source_path(raw_path: str) -> str:
+    normalized = raw_path.replace("\\", "/")
+    parts = [part for part in normalized.split("/") if part]
+    for marker in ("operators", "policies"):
+        if marker in parts:
+            return "/".join(parts[parts.index(marker) :])
+    return parts[-1] if parts else ""
 
 
 def _attempt(

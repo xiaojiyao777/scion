@@ -25,6 +25,15 @@ def screening_gate(
 
     if wr >= threshold and stats.median_delta >= practical_delta:
         gate = GateResult(outcome="pass", reason_codes=("SCREENING_PASS",))
+    elif _initial_screening_sparse_no_loss_signal(
+        stats,
+        config,
+        expanded=expanded,
+    ):
+        gate = GateResult(
+            outcome="expand",
+            reason_codes=("SCREENING_EXPAND_SPARSE_NO_LOSS",),
+        )
     elif wr < 0.5 or stats.ci_high < 0:
         gate = GateResult(outcome="fail", reason_codes=("SCREENING_FAIL_WIN_RATE",))
     else:
@@ -38,6 +47,24 @@ def screening_gate(
             reason_codes=("SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN",),
         )
     return gate
+
+
+def _initial_screening_sparse_no_loss_signal(
+    stats: EvalStats,
+    config: ProtocolConfig,
+    *,
+    expanded: bool,
+) -> bool:
+    """Measure one sparse practical signal more fully without advancing it."""
+
+    return (
+        not expanded
+        and stats.wins > 0
+        and stats.losses == 0
+        and stats.candidate_failed_pairs == 0
+        and stats.median_delta >= config.screening_min_practical_delta
+        and stats.ci_high >= config.screening_min_practical_delta
+    )
 
 
 def validation_gate(

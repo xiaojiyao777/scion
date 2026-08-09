@@ -9,8 +9,8 @@ from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import (
     Branch,
     BranchState,
-    ChampionState,
     CaseAggregateFeedback,
+    ChampionState,
     Decision,
     EvalStats,
     ExperimentStage,
@@ -31,16 +31,16 @@ from scion.problems.warehouse_delivery.research_guidance import (
     WAREHOUSE_PRODUCTION_RESEARCH_PRIOR,
 )
 from scion.proposal.context_manager import ContextManager
+from scion.proposal.context_manager.history_projection import (
+    proposal_screening_history,
+    verification_failure_projection,
+)
 from scion.proposal.context_manager.manager import (
     CANONICAL_SCREENING_HISTORY_KEY,
     _screening_projection,
     canonical_screening_history,
     canonical_screening_record,
     persist_canonical_screening_record,
-)
-from scion.proposal.context_manager.history_projection import (
-    proposal_screening_history,
-    verification_failure_projection,
 )
 from scion.proposal.context_owner_maps import proposal_context_snapshot
 from scion.proposal.engine import (
@@ -662,6 +662,35 @@ def test_verification_failure_projection_selects_one_typed_pytest_event() -> Non
     }
 
 
+def test_verification_failure_projection_keeps_traceback_root_cause_only() -> None:
+    projected = verification_failure_projection(
+        {
+            "name": "V5_solution_consistency",
+            "detail": (
+                "[ENV] Traceback (most recent call last):\n"
+                '  File "/private/candidate/solver.py", line 12, in solve\n'
+                "    run()\n"
+                '  File "/private/candidate/operators/split_vehicle.py", '
+                "line 154, in _recipient_sets\n"
+                "    int(resized_cost)\n"
+                "OverflowError: cannot convert float infinity to integer"
+            ),
+        }
+    )
+
+    assert projected == {
+        "check_code": "V5_solution_consistency",
+        "failure_kind": "state",
+        "summary": "OverflowError: cannot convert float infinity to integer",
+        "exception_type": "OverflowError",
+        "message": "cannot convert float infinity to integer",
+        "location_file": "operators/split_vehicle.py",
+        "location_line": "154",
+        "location_function": "_recipient_sets",
+    }
+    assert "/private/candidate" not in str(projected)
+
+
 def test_canonical_screening_history_deduplicates_durable_and_live_record() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     hypothesis = HypothesisProposal(
@@ -1163,8 +1192,10 @@ def test_canonical_screening_record_uses_host_owned_candidate_parent_scope(
         ({}, "pair feedback conflicts with Protocol stats"),
         (
             {"total_pairs": 1, "pair_wins": 1},
-            "pair feedback cardinality conflicts with "
-            "valid/candidate-failure pair counts",
+            (
+                "pair feedback cardinality conflicts with "
+                "valid/candidate-failure pair counts"
+            ),
         ),
     ),
 )
