@@ -1,6 +1,6 @@
 # Scion v0.4 Solver-Improvement Research Task
 
-*Working branch: `codex/v04-solver-improvement-research`*
+*Working branch: `codex/v04-production-cvrp-research`*
 
 *Accepted runtime baseline: `4d637959`*
 
@@ -133,14 +133,16 @@ They do not block this task and cannot satisfy it.
   selection, route-pair overlap, double bridge, generic VNS allocation, and
   several pool/recombination variants. A new campaign currently sees little of
   this cross-campaign scientific history and can repeat an old weak direction.
-- The strongest unresolved line is bounded SWAP*: historical screening and
-  validation were positive, and frozen observations were descriptively
-  positive, but frozen evidence was incomplete because champion runs timed
-  out. The cumulative implementation also starved ALNS on Tai cases, so it is
-  not promotable as-is.
+- Bounded embedded-only SWAP* is one unresolved historical observation:
+  screening and validation were positive and frozen observations were
+  descriptively positive, but frozen evidence was incomplete, the candidate
+  was cumulative rather than mechanism-isolated, and it starved ALNS on Tai
+  cases. This evidence is neutral research context; it does not select the
+  first H, prescribe an implementation or become a fallback ladder.
 - The current B0 solver spends most search time in embedded VNS. Pure ALNS and
-  globally disabling embedded VNS are both known regressions. The useful
-  question is mechanism-level allocation, not a global VNS switch.
+  globally disabling embedded VNS are both known regressions. These facts rule
+  out a simplistic global switch but do not let the host choose the next
+  mechanism.
 
 ## Root-cause register
 
@@ -153,8 +155,8 @@ They do not block this task and cannot satisfy it.
 | R5 | proven context gap | Warehouse H context omits solver mechanics such as pool size, iteration/stagnation limits, weights and operator-pool wiring. | Add transparent problem-owned mechanics, not a gate. |
 | R6 | observed attribution limit | Create-new Warehouse operators alter both mechanism and pool allocation; direct invocation/adoption is not visible. | Use minimal problem-owned counters only for analysis; never Decision. |
 | R7 | proven | CVRP candidates often combine an algorithm idea with broad rewrites or large runtime cost. | Test one mechanism and preserve unrelated source before formal scale-up. |
-| R8 | proven | Several CVRP changes were inactive or activated too late; others consumed ALNS opportunity. | Run a small mechanism assay before expensive formal screening. |
-| R9 | proven | CVRP campaigns repeat known failures because accepted cross-campaign conclusions are absent from H context. | Add a short problem-owned research prior, with no target prescription. |
+| R8 | proven | Several CVRP changes were inactive or activated too late; others consumed ALNS opportunity. | Retain activation and allocation telemetry only as analysis and next-H feedback; do not create another candidate gate. |
+| R9 | proven and corrected with R19 | CVRP campaigns repeat known failures because accepted cross-campaign conclusions were absent from the actual H context. A problem-owned prior was added, but component-level presence did not establish provider-visible delivery. | The short neutral prior now reaches the active H path without selecting a target, surface, action or Decision. |
 | R10 | proven | Repeated pair trees make later prompts grow sharply while adding little new information. | Use fresh one-candidate lines now; later allow only reversible lossless factoring. |
 | R11 | proven and corrected at `88c1bc2b` | Warehouse continuity R3 promoted one candidate to v2, then stopped at 6/36 when a patchless stale branch was misclassified as a markerless research rejection. | Retire that stale branch as non-research lifecycle work and let typed Contract/Verification rejection schedule forward without a second disposition authority. Preserve all infra and missing-outcome stops. |
 | R12 | resolved launch invalidity | R4 passed the literal `<stdin>` as the proxy key because of an operator-side `jq input_filename` mistake. It stopped on the first H with 401, 0 evaluated stages and 0 experiments. | Seal R4 with no scientific conclusion. R5 uses one exact key extraction plus a silent authenticated `/v1/models` check in a fresh root. |
@@ -162,6 +164,9 @@ They do not block this task and cannot satisfy it.
 | R14 | proven and corrected on the current branch | R6 produced one complete Warehouse promotion and then fourteen more formal screenings, but stopped at 17/36 when a provider-complete C used an `exact_replace` selector absent from the visible source. Proposal ownership misclassified that tainted-content rejection as terminal `NOT_EVALUATED`. | Keep exact source binding strict, classify malformed/schema-invalid H/C and unapplicable typed edits as `RESEARCH_REJECTED`, release only that H/C, and scheduler-forward to a fresh H on the clean base. Never retry the failed call; local context/binding, missing outcome, provider-without-terminal-response, infra, resource and interruption outcomes still stop. |
 | R15 | resolved infrastructure exclusion | R7 completed three screening and one validation stage with 62/62 valid pairs, then its third C ended upstream without a terminal event. The runtime correctly stopped `BLOCKED_INFRA`; proxy authentication/account state remained healthy. | Seal R7 as 4/36 valid partial science with two candidate negatives and no promotion. Do not replay its failed C. One fresh matched R8 may sample new H/C without changing framework, proxy configuration or scientific inputs. |
 | R16 | proven; retained replay complete | R8 completed all 36 formal stages and 534/534 pairs, continued through two candidate-local research rejections, and promoted exact candidates `89f3edbb...` and `3f204b01...` from v1 to v2 to v3 in one campaign. Its separately preregistered held-out replay completed 108/108 valid pairs with all three comparisons positive. | Warehouse synthetic continuity is `CONTINUOUS_OPTIMIZATION_CONFIRMED`; production transfer remains a separate S4 question. |
+| R17 | proven task-design violation | The proposed CVRP public assay could stop an exact verified candidate for being inactive or starving search before the existing Protocol/Decision route completed. Calling it observational did not remove its disposition authority. | Remove assay admission and host-stop. Diagnostics may explain evidence or inform the next H, but only Verification and the declared Protocol/Decision path may reject or advance a candidate. |
+| R18 | proven and corrected | Expanded evaluation accepted case ids derived from the current branch's wins and losses, so result-dependent evidence could change the same candidate's expanded screening population. | Outcome-derived case selection is removed. Expansion uses only the case population and deterministic selection frozen in the pre-experiment Protocol; fixed problem-owned case priorities remain valid when declared before results. |
+| R19 | proven and corrected | The CVRP cross-campaign prior existed in problem-owned guidance but did not reach the active provider H, while the host prompt asked for a `materially different` mechanism and thereby suppressed valid V3 same-branch refinement. | The complete neutral prior now reaches H, and `materially different` is removed as a prompt or Contract quality requirement. Exact approved-H binding remains; novelty and refinement choice belong to the agent. |
 
 ## Modular execution plan
 
@@ -203,8 +208,10 @@ They do not block this task and cannot satisfy it.
 - [x] Add concise Warehouse solver mechanics and safe aggregate objective
   headroom/noise facts to proposal-only problem context.
 - [x] Add a concise CVRP cross-campaign research prior and explicit request for
-  the smallest causal implementation that preserves unrelated code. The prior
-  informs but does not select surface, action, target or Decision.
+  the smallest causal implementation that preserves unrelated code. A later
+  end-to-end audit found that the prior did not reach the active provider H;
+  S5 owns that delivery correction. The prior must not select surface, action,
+  target or Decision.
 - [x] Add no framework mechanism counter or gate in this stage. If a later
   measured attribution question justifies a minimal counter, keep it
   problem-owned, observational and absent from Contract, Safe Features and
@@ -234,8 +241,11 @@ They do not block this task and cannot satisfy it.
 
 - [x] Test the disposition truth table, branch source reuse, clean fallback
   after Verification failure, exact stage reuse and three-branch scheduling.
-- [x] Test that Warehouse mechanics/headroom and CVRP prior are visible to H
-  but absent from DecisionFeatures.
+- [x] Test the intended Warehouse mechanics/headroom and CVRP guidance
+  projection at its component boundary and keep it absent from
+  DecisionFeatures. A later active-provider-context audit found the CVRP prior
+  missing from the actual H payload; this is R19, not accepted end-to-end
+  delivery.
 - [x] Test that no removed host algorithm-shape check blocks a valid
   executable candidate.
 - [x] Run focused Contract, proposal, workspace, Verification, Protocol,
@@ -334,40 +344,55 @@ Warehouse acceptance:
 - production transfer is either positively promoted or negatively resolved by
   the pre-registered matched experiment.
 
-### S5 - CVRP single-mechanism research ladder
+### S5 - CVRP open research and promotion ladder
 
+- [x] Remove the outcome-derived expand-case path so every initial and expanded
+  population is selected only from the fixed Protocol. Pre-experiment
+  problem-owned case configuration may remain; current candidate results may
+  never alter it.
 - [ ] Freeze the current B0 ALNS+VNS champion and declared ProblemSpec,
-  Protocol, split and seed inputs. Do not
-  globally disable VNS or weaken the canonical baseline.
-- [ ] Give the agent the accepted research prior, then use a fresh
-  one-candidate line. The leading evidence-backed direction is an isolated,
-  bounded, embedded-only SWAP* that is excluded from initial VNS and has a
-  strict time/attempt allowance; the provider remains free to choose another
-  source-grounded direction.
-- [ ] Run the existing first formal screening once on the exact candidate, then
-  pause before validation/frozen for a problem-owned public development assay
-  on non-formal development cases. Inspect feasibility, direct mechanism
-  effect, elapsed share and ALNS opportunity. This is an observation used to
-  interpret or stop the candidate, not a Contract, Verification, Protocol or
-  promotion gate, and it requires no new framework seam.
-- [ ] If the implementation is inactive, incorrect or starves search, stop that
-  exact candidate. Permit at most one new-H/new-C implementation refinement of
-  the same mechanism; never retry the same provider call.
-- [ ] Run existing formal screening only for a mechanism-supported candidate.
-  Queue validation/expanded validation and complete frozen using exact source
-  reuse and no further provider call.
-- [ ] If SWAP* is negative, test the next pre-registered line: deterministic
-  route-cap-aware regret repair with existing-route insertion and at most one
-  bounded ejection. Do not combine the two mechanisms before each is isolated.
-- [ ] Only after a direct mechanism win may a separate allocation experiment
-  bound its cadence/time share while retaining all canonical VNS components.
+  Protocol, split and seed inputs before a new campaign. Do not globally
+  disable VNS or weaken the canonical baseline.
+- [x] Deliver the complete safe CVRP cross-campaign prior through the actual H
+  payload as neutral evidence. Remove the host-authored `materially different`
+  instruction or Contract requirement: Contract may enforce schema,
+  approved-H binding and source boundaries, but it must not demand novelty,
+  rank mechanisms or reject an evidence-driven same-branch refinement.
+- [ ] Start a fresh campaign with the open V3 proposal path: one unconstrained,
+  source-grounded H chosen by the provider, structural H Contract, one
+  approved-H-bound C, structural Patch Contract, isolated materialization and
+  executable Verification. Do not force SWAP*, another mechanism, surface,
+  action or target. Historical SWAP* evidence is one neutral prior item only.
+- [ ] Send every verified candidate directly into the existing paired
+  screening Protocol and deterministic Decision. There is no assay admission,
+  mechanism-support prerequisite or host algorithm-quality stop between
+  Verification and Protocol.
+- [ ] Preserve V3 same-branch research depth. After a completed screening
+  observation, a non-promoted verified candidate remains the provisional
+  branch source for the next H under V3 §11.2; the next H receives complete
+  safe branch evidence and may refine or change direction. Do not impose a
+  one-refinement cap and never retry the same provider call.
+- [ ] When Protocol queues expanded screening, validation, expanded validation
+  or frozen, drain that stage on the same exact candidate and campaign state
+  with no further H/C call. Only predeclared case/seed populations, Protocol
+  statistics, Safe Features and deterministic Decision may advance, abandon
+  or promote it.
+- [ ] Keep mechanism activation, elapsed share, ALNS opportunity and any
+  problem-owned assay output observational. They may appear in raw evidence,
+  postrun analysis and safe next-H feedback, but may not stop or admit the
+  current candidate, alter cases/seeds, enter Decision or create a new
+  framework seam.
+- [ ] After a Protocol-complete promotion, compare the exact promoted champion
+  independently against original B0 on the predeclared final population. Use
+  no provider call, dynamic subset, threshold change or favorable family
+  selection after observing results.
 
 CVRP acceptance:
 
 - one exact candidate completes all declared pairs with no feasibility, fleet,
   candidate-runtime or champion-runtime failure;
 - existing Protocol passes screening, validation and frozen without threshold,
-  manifest or budget changes made after results;
+  manifest, case-selection or budget changes made after results;
 - deterministic Decision promotes to champion v2 or later;
 - independent final comparison against original B0 confirms retained distance
   improvement and states the exact case-family scope.
@@ -402,7 +427,8 @@ CVRP acceptance:
 
 ## Status
 
-**Active: remaining S4 Warehouse production transfer and S5 CVRP.** S1
+**Active on `codex/v04-production-cvrp-research`: remaining S4 Warehouse
+production transfer and redesigned open S5 CVRP research.** S1
 is closed as a scientific negative; S2/S3 are complete. Warehouse R6 produced
 one Protocol-complete synthetic promotion (`v1 -> v2`) and continued for
 fourteen formal post-promotion screenings, but stopped at 17/36 on the now-
@@ -414,5 +440,8 @@ held-out replay completed 108/108 valid pairs and retained v2 over v1, v3 over
 v2 and v3 over v1, so synthetic Warehouse continuity is
 `CONTINUOUS_OPTIMIZATION_CONFIRMED`. Production transfer remains open. The
 latest post-heldout full suite completed with `1988 passed, 1 skipped` in 627.26
-seconds. S6 final closure remains pending, and CVRP still has no
-Protocol-complete promotion.
+seconds. S5 has removed assay/host disposition and result-derived expand cases,
+delivered the neutral prior to the actual H payload, and stopped suppressing
+same-branch refinement with `materially different`. The next CVRP campaign
+still requires frozen B0/Protocol inputs and a fresh open H/C run. S6 final
+closure remains pending, and CVRP still has no Protocol-complete promotion.

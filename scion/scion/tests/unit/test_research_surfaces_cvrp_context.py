@@ -18,6 +18,7 @@ from scion.core.models import (
 )
 from scion.problem.bridge import legacy_problem_spec_from_v1, load_problem_spec_v1_from_yaml
 from scion.problems.cvrp.adapter import CvrpAdapter
+from scion.problems.cvrp.research_guidance import CROSS_CAMPAIGN_RESEARCH_PRIOR
 from scion.problems.cvrp.solver_design.manifest import SOLVER_DESIGN_API_MANIFEST_FILES
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.code_context import _step_can_own_branch_source
@@ -276,8 +277,14 @@ def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:
     assert "No prepared file or mechanism is mandatory" in rendered
     assert "Runtime errors may explain failed outcomes" in rendered
     assert context["research_question"]["schema_version"] == (
-        "scion.typed_research_question.v1"
+        "scion.typed_research_question.v2"
     )
+    assert context["research_question"]["research_prior"] == list(
+        CROSS_CAMPAIGN_RESEARCH_PRIOR
+    )
+    for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
+        assert rendered.count(line) == 1
+    assert "smallest complete causal implementation" in rendered
     assert "policies/baseline_algorithm.py" in context["existing_target_files"]
     assert "policies/baseline_modules/*.py" in context["create_path_patterns"]
     assert context["available_actions"] == ["create_new", "modify"]
@@ -315,6 +322,8 @@ def test_direct_cvrp_code_context_renders_source_and_object_model() -> None:
     assert "source ledger" in rendered
     assert "_Solution.routes" in rendered
     assert "_Route" in rendered
+    assert "shared by initial and embedded VNS" in rendered
+    assert "target phase only" in rendered
     instrumentation_guidance = "\n".join(
         (
             str(context["operator_interface_spec"]),

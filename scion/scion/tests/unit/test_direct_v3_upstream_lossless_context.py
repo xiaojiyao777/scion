@@ -26,6 +26,7 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problem.loader import load_problem_adapter
+from scion.problems.cvrp.research_guidance import CROSS_CAMPAIGN_RESEARCH_PRIOR
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.manager import (
     CANONICAL_SCREENING_HISTORY_KEY,
@@ -307,11 +308,23 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert forbidden_raw not in rendered
     assert "problem_opportunity_summary" not in context
     assert "raw_pair_rows" not in rendered
-    assert set(context["research_question"]) == {
+    research_question = context["research_question"]
+    assert research_question["schema_version"] == (
+        "scion.typed_research_question.v2"
+    )
+    expected_research_question_fields = {
         "schema_version",
         "problem_family",
         "current_question",
     }
+    if problem_id == "cvrp":
+        expected_research_question_fields.add("research_prior")
+        assert research_question["research_prior"] == list(
+            CROSS_CAMPAIGN_RESEARCH_PRIOR
+        )
+        for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
+            assert rendered.count(line) == 1
+    assert set(research_question) == expected_research_question_fields
     assert "report_only" not in rendered
     assert "branch_direction" not in context
     assert branch.direction not in rendered

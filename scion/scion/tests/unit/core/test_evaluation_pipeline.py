@@ -23,7 +23,6 @@ def _request(
     *,
     state: BranchState = BranchState.EXPLORE,
     selected_surface: str | None = None,
-    priority_case_ids: tuple[str, ...] = (),
     force_fresh_champion: bool = False,
 ) -> EvaluationRequest:
     return EvaluationRequest(
@@ -33,7 +32,6 @@ def _request(
         champion_workspace="/tmp/champion",
         hypothesis_action="modify",
         selected_surface=selected_surface,
-        priority_case_ids=priority_case_ids,
         force_fresh_champion=force_fresh_champion,
     )
 
@@ -132,19 +130,7 @@ def test_screening_result_generates_numeric_decision_features() -> None:
     assert "expected_telemetry" not in protocol.experiment_calls[0]
     assert "mechanism_changes" not in protocol.experiment_calls[0]
     assert "protected_objectives" not in protocol.experiment_calls[0]
-
-
-def test_priority_cases_forward_as_protocol_measurement_input() -> None:
-    protocol = RecordingProtocol(_protocol_result())
-    outcome = EvaluationPipeline(experiment_protocol=protocol).evaluate(
-        _request(priority_case_ids=("CMT2.vrp", "CMT4.vrp"))
-    )
-
-    assert outcome.canary_result.passed is True
-    assert protocol.experiment_calls[0]["priority_case_ids"] == (
-        "CMT2.vrp",
-        "CMT4.vrp",
-    )
+    assert "priority_case_ids" not in protocol.experiment_calls[0]
 
 
 def test_verification_failure_skips_protocol() -> None:

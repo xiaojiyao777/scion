@@ -7,7 +7,7 @@ import uuid as _uuid_mod
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Dict, List, Sequence
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from scion.core.models import (
     EvalStats,
@@ -74,7 +74,10 @@ from .runtime_observation import (
     _record_runtime_sample,
     _runtime_fields,
 )
-from .selection import configured_priority_case_ids, resolve_priority_case_ids
+from .selection import (
+    configured_priority_case_ids,
+    resolved_configured_priority_case_ids,
+)
 from .surface_runtime import (
     _record_surface_runtime_sample,
     _surface_runtime_summary_template,
@@ -99,7 +102,6 @@ def run_experiment(
     expand: bool = False,
     expand_round: int = 1,
     selected_surface: str | None = None,
-    priority_case_ids: Sequence[str] = (),
 ) -> ProtocolResult:
     """Execute paired A/B evaluation for the given stage.
 
@@ -108,31 +110,20 @@ def run_experiment(
     T4: expand increases case count; seed set is unchanged.
     T5: case count depends on stage + hypothesis_action + expand flag.
     """
-    requested_priority_case_ids = tuple(
-        str(case_id).strip()
-        for case_id in (priority_case_ids or ())
-        if str(case_id).strip()
-    )
     cases = protocol._select_cases(
         stage,
         hypothesis_action,
         expand_round if expand else 0,
-        priority_case_ids=requested_priority_case_ids,
     )
     configured_priority_cases = configured_priority_case_ids(
         config=protocol.config,
         stage=stage,
     )
-    effective_priority_case_ids = tuple(
-        case
-        for case in resolve_priority_case_ids(
-            all_cases=protocol.split_manager.get_cases(stage),
-            priority_case_ids=(
-                *configured_priority_cases,
-                *requested_priority_case_ids,
-            ),
-        )
-        if case in cases
+    effective_priority_case_ids = resolved_configured_priority_case_ids(
+        config=protocol.config,
+        stage=stage,
+        all_cases=protocol.split_manager.get_cases(stage),
+        selected_cases=cases,
     )
     seeds = protocol._select_seeds(stage)
     total_pairs = len(cases) * len(seeds)
@@ -271,7 +262,6 @@ def run_experiment(
                     "stage": stage.value,
                     "selected_surface": normalized_selected_surface,
                     "objective_semantics": objective_semantics,
-                    "requested_priority_case_ids": list(requested_priority_case_ids),
                     "configured_priority_case_ids": list(configured_priority_cases),
                     "effective_priority_case_ids": list(effective_priority_case_ids),
                     "case_ids": cases,

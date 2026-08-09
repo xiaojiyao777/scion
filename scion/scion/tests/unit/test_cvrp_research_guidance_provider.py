@@ -46,7 +46,7 @@ def test_cvrp_direct_guidance_is_open_and_source_grounded() -> None:
     assert "accepted route-state transitions" in rendered
     assert "final total_distance" in rendered
     assert "feasibility" in rendered
-    assert "smallest causal implementation" in rendered
+    assert "smallest complete causal implementation" in rendered
     assert "Preserve unrelated code" in rendered
 
 

@@ -88,10 +88,10 @@ def _split_direct_v3_hypothesis_context(
         "Read the static context and canonical hypothesis evidence exactly once. "
         "Treat every supplied field as authoritative context for this call. "
         "Identify the active algorithmic bottleneck, inspect the champion design, "
-        "and propose one materially different mechanism grounded in the available "
-        "evidence. Preserve declared higher-priority objectives and keep the "
-        "proposal within the visible research surfaces, actions, and editable "
-        "files. Return the hypothesis through the required tool schema."
+        "and propose one evidence-grounded mechanism-level change or refinement. "
+        "Preserve declared higher-priority objectives and keep the proposal within "
+        "the visible research surfaces, actions, and editable files. Return the "
+        "hypothesis through the required tool schema."
     )
     return system_blocks, user_prompt
 

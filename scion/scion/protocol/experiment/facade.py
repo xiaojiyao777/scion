@@ -226,7 +226,6 @@ class ExperimentProtocol:
         stage: ExperimentStage,
         hypothesis_action: str,
         expand_round: int,
-        priority_case_ids: Sequence[str] = (),
     ) -> List[str]:
         return select_cases(
             config=self.config,
@@ -234,7 +233,6 @@ class ExperimentProtocol:
             stage=stage,
             hypothesis_action=hypothesis_action,
             expand_round=expand_round,
-            priority_case_ids=priority_case_ids,
         )
 
     def _select_seeds(self, stage: ExperimentStage) -> List[int]:
@@ -320,7 +318,6 @@ class ExperimentProtocol:
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
-        priority_case_ids: Sequence[str] = (),
     ) -> ProtocolResult:
         from .stages import run_experiment
 
@@ -333,7 +330,6 @@ class ExperimentProtocol:
             expand=expand,
             expand_round=expand_round,
             selected_surface=selected_surface,
-            priority_case_ids=priority_case_ids,
         )
 
 

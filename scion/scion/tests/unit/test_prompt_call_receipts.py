@@ -10,6 +10,14 @@ from .source_ledger_test_support import ledgerize_code_context
 
 import scion.proposal.engine.provider_call as provider_call
 import scion.proposal.engine.hypothesis_prompts as hypothesis_prompts
+from scion.core.models import Branch, BranchState, ChampionState
+from scion.problem.bridge import (
+    legacy_problem_spec_from_v1,
+    load_problem_spec_v1_from_yaml,
+)
+from scion.problems.cvrp.adapter import CvrpAdapter
+from scion.problems.cvrp.research_guidance import CROSS_CAMPAIGN_RESEARCH_PRIOR
+from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import (
     CreativeLayer,
     ProposalValidationError,
@@ -22,6 +30,7 @@ from scion.proposal.llm_client import (
     LLMProviderError,
 )
 from scion.proposal.schemas import HYPOTHESIS_TOOL, PATCH_TOOL
+from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
 
 _HYPOTHESIS_RESPONSE = {
@@ -485,7 +494,7 @@ def test_direct_context_preserves_complete_authoritative_inputs(
             "measurement_context": sentinels["measurement"],
         },
         "research_question": {
-            "schema_version": "scion.typed_research_question.v1",
+            "schema_version": "scion.typed_research_question.v2",
             "problem_family": "synthetic",
             "current_question": sentinels["research_question"],
         },
@@ -574,6 +583,78 @@ def test_direct_context_preserves_complete_authoritative_inputs(
     )
     assert distinct_provider_bytes.count(sentinels["champion_code"]) == 1
     assert distinct_provider_bytes.count(distinct_branch_code) == 1
+
+
+def test_cvrp_research_prior_reaches_actual_hypothesis_provider_request(
+    tmp_path: Path,
+) -> None:
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    legacy = legacy_problem_spec_from_v1(spec)
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        solver_config_hash="config",
+        code_snapshot_path=str(_CVRP_ROOT),
+        code_snapshot_hash="source",
+    )
+    branch = Branch(
+        branch_id="cvrp-research-prior-request",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+        base_champion_hash="source",
+    )
+    context = ContextManager(adapter=CvrpAdapter(spec)).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+    )
+    snapshot = build_prompt_turn_snapshot("hypothesis", context)
+    response = {
+        **_HYPOTHESIS_RESPONSE,
+        "change_locus": "solver_design",
+        "action": "modify",
+        "target_file": "policies/baseline_modules/local_search.py",
+    }
+    client = _CaptureClient(response=response)
+    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
+
+    _, diagnostics = creative.generate_direct_hypothesis(context, snapshot)
+
+    assert len(client.calls) == 1
+    provider_prompt, provider_system_blocks, request_kind = client.calls[0]
+    provider_bytes = json.dumps(
+        {
+            "system_blocks": provider_system_blocks,
+            "user_prompt": provider_prompt,
+        },
+        sort_keys=True,
+    )
+    assert request_kind == "hypothesis"
+    assert context["research_question"]["schema_version"] == (
+        "scion.typed_research_question.v2"
+    )
+    assert context["research_question"]["research_prior"] == list(
+        CROSS_CAMPAIGN_RESEARCH_PRIOR
+    )
+    for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
+        assert provider_bytes.count(line) == 1
+    assert "algorithmically material hypothesis" in provider_bytes
+    assert (
+        "one evidence-grounded mechanism-level change or refinement"
+        in provider_prompt
+    )
+    assert "materially different mechanism" not in provider_bytes
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
+    traced_provider_bytes = json.dumps(
+        {
+            "system_blocks": trace["system_blocks"],
+            "user_prompt": trace["user_prompt"],
+        },
+        sort_keys=True,
+    )
+    for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
+        assert traced_provider_bytes.count(line) == 1
 
 
 def test_direct_v3_context_fails_closed_for_unsupported_non_json_value() -> None:

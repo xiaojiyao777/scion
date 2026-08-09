@@ -37,7 +37,6 @@ class EvaluationRequest:
     expand: bool = False
     expand_round: int = 0
     selected_surface: str | None = None
-    priority_case_ids: tuple[str, ...] = ()
     patch: Optional[PatchProposal] = None
     screening_expand_count: int = 0
     validation_expand_count: int = 0
@@ -75,7 +74,6 @@ class ExperimentProtocolLike(Protocol):
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
-        priority_case_ids: tuple[str, ...] = (),
     ) -> ProtocolResult:
         ...
 
@@ -140,7 +138,6 @@ class EvaluationPipeline:
                         expand=request.expand,
                         expand_round=request.expand_round,
                         selected_surface=request.selected_surface,
-                        priority_case_ids=request.priority_case_ids,
                         force_fresh_champion=request.force_fresh_champion,
                     )
                     protocol_result = _sanitize_protocol_exposure(protocol_result)
@@ -259,11 +256,6 @@ def _run_protocol_experiment(
     **kwargs: object,
 ) -> ProtocolResult:
     selected_surface = kwargs.pop("selected_surface", None)
-    priority_case_ids = tuple(
-        str(case_id).strip()
-        for case_id in (kwargs.pop("priority_case_ids", None) or ())
-        if str(case_id).strip()
-    )
     force_fresh_champion = bool(kwargs.pop("force_fresh_champion", False))
     if _should_forward_selected_surface(
         protocol,
@@ -271,12 +263,6 @@ def _run_protocol_experiment(
         selected_surface,
     ):
         kwargs["selected_surface"] = selected_surface
-    if priority_case_ids and _method_accepts_keyword(
-        protocol,
-        "run_experiment",
-        "priority_case_ids",
-    ):
-        kwargs["priority_case_ids"] = priority_case_ids
     if force_fresh_champion:
         return _run_with_fresh_champion_policy(protocol, kwargs)
     return protocol.run_experiment(**kwargs)

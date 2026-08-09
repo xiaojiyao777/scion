@@ -79,6 +79,20 @@ def test_project_prompt_rejects_phase_mismatch_and_unknown_kind() -> None:
         subject.project_prompt("repair", snapshot)
 
 
+def test_hypothesis_prompt_requests_material_evidence_grounded_refinement() -> None:
+    snapshot = proposal_context_snapshot("hypothesis", _hypothesis_context())
+
+    projection = subject.project_prompt("hypothesis", snapshot)
+    system_text = "\n".join(block["text"] for block in projection.system_blocks)
+
+    assert "algorithmically material hypothesis" in system_text
+    assert (
+        "one evidence-grounded mechanism-level change or refinement"
+        in projection.user_prompt
+    )
+    assert "materially different mechanism" not in projection.user_prompt
+
+
 def test_prompt_projection_has_no_authority_or_capability_dependency() -> None:
     source = inspect.getsource(subject)
 

@@ -389,8 +389,8 @@ def typed_research_question_payload(
     *,
     problem_spec: Any = None,
     adapter: Any = None,
-) -> dict[str, str]:
-    """Return only the current typed problem-owned research question."""
+) -> dict[str, Any]:
+    """Return the current typed question and any problem-owned research prior."""
 
     provider = _resolve_provider(
         problem_spec=problem_spec,
@@ -417,11 +417,20 @@ def typed_research_question_payload(
             "research guidance provider returned an untyped contract"
         )
     validate_research_guidance_contract(contract)
-    return {
-        "schema_version": "scion.typed_research_question.v1",
+    payload: dict[str, Any] = {
+        "schema_version": "scion.typed_research_question.v2",
         "problem_family": contract.problem_family,
         "current_question": contract.current_question,
     }
+    research_prior = [
+        line
+        for block in contract.guidance_blocks
+        if block.category == "research_prior"
+        for line in block.lines
+    ]
+    if research_prior:
+        payload["research_prior"] = research_prior
+    return payload
 
 
 def _resolve_provider(

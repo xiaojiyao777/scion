@@ -39,7 +39,7 @@ SOLVER_DESIGN_SOURCE_GUIDANCE = (
     "complete visible source map and operator interface supplied with the "
     "proposal context to understand visible symbols and editable files. Keep "
     "generic Scion core, Protocol, DecisionFeatures, and `solver.py` unchanged. "
-    "Prefer the smallest causal implementation that can test the hypothesis. "
+    "Prefer the smallest complete causal implementation that can test the hypothesis. "
     "Preserve unrelated code, imports, scheduling, telemetry, and terminal "
     "return behavior; use multiple owner files only when the same mechanism "
     "genuinely requires them."

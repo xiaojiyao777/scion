@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
@@ -137,7 +136,6 @@ class EvaluationOrchestrator:
         protocol = self.experiment_protocol_provider()
 
         expand, expand_round = self._prepare_expand(branch, protocol)
-        priority_case_ids = _branch_followup_priority_cases(branch) if expand else ()
         effective_screening_expand_count = branch.screening_expand_count
         effective_validation_expand_count = branch.validation_expand_count
         if expand and branch.state == BranchState.EXPLORE_EXPAND:
@@ -153,7 +151,6 @@ class EvaluationOrchestrator:
             expand=expand,
             expand_round=expand_round,
             selected_surface=hypothesis.change_locus,
-            priority_case_ids=priority_case_ids,
             patch=self.branch_patches.get(bid),
             screening_expand_count=effective_screening_expand_count,
             validation_expand_count=effective_validation_expand_count,
@@ -358,41 +355,6 @@ def _champion_evidence_acquisition_blocked(
         and "INCOMPLETE_EVIDENCE" in reason_codes
         and "CHAMPION_RUNTIME_FAILURE" in reason_codes
     )
-
-
-def _branch_followup_priority_cases(branch: Branch) -> tuple[str, ...]:
-    summary = getattr(branch, "branch_evidence_summary", {}) or {}
-    if not isinstance(summary, Mapping):
-        return ()
-    case_ids: list[str] = []
-    for key in (
-        "case_level_negative_cases",
-        "case_level_losses",
-        "case_level_positive_cases",
-        "case_level_winners",
-    ):
-        case_ids.extend(_case_ids_from_evidence(summary.get(key)))
-    return tuple(dict.fromkeys(case_id for case_id in case_ids if case_id))
-
-
-def _case_ids_from_evidence(value: object) -> tuple[str, ...]:
-    if value is None:
-        return ()
-    if isinstance(value, str):
-        stripped = value.strip()
-        return (stripped,) if stripped else ()
-    if isinstance(value, Mapping):
-        for key in ("case_id", "case", "id", "instance", "path"):
-            raw = value.get(key)
-            if isinstance(raw, str) and raw.strip():
-                return (raw.strip(),)
-        return ()
-    if isinstance(value, (list, tuple, set)):
-        case_ids: list[str] = []
-        for item in value:
-            case_ids.extend(_case_ids_from_evidence(item))
-        return tuple(case_ids)
-    return ()
 
 
 def _execution_outcome_for_exception(

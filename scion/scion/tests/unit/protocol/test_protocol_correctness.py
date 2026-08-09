@@ -446,9 +446,14 @@ def test_screening_expand_respects_action_specific_limits(
     assert n_create > minimal_config.screening.n_cases_create  # 8 > 5
 
 
-def test_priority_cases_are_retained_by_unique_basename(
-    minimal_config
-):
+def test_configured_priority_cases_are_retained_by_unique_basename(minimal_config):
+    config = minimal_config.model_copy(
+        update={
+            "screening": minimal_config.screening.model_copy(
+                update={"priority_case_ids": ("CMT2.vrp",)}
+            )
+        }
+    )
     manifest = SplitManifest(
         version="test",
         screening=[
@@ -467,12 +472,11 @@ def test_priority_cases_are_retained_by_unique_basename(
     )
 
     selected = select_cases(
-        config=minimal_config,
+        config=config,
         split_manager=SplitManager(manifest),
         stage=ExperimentStage.SCREENING,
         hypothesis_action="modify",
         expand_round=0,
-        priority_case_ids=("CMT2.vrp",),
     )
 
     assert len(selected) == minimal_config.screening.n_cases_modify
@@ -537,16 +541,14 @@ def test_configured_screening_priority_cases_are_retained_for_create_new(
         "/cand",
         "/champ",
         "create_new",
-        priority_case_ids=("P-n101-k4.vrp",),
     )
     metrics = json.loads(Path(result.raw_metrics_ref).read_text(encoding="utf-8"))
 
     assert metrics["configured_priority_case_ids"] == ["CMT2.vrp", "CMT4.vrp"]
-    assert metrics["requested_priority_case_ids"] == ["P-n101-k4.vrp"]
+    assert "requested_priority_case_ids" not in metrics
     assert metrics["effective_priority_case_ids"] == [
         "cvrplib/CMT/CMT2.vrp",
         "cvrplib/CMT/CMT4.vrp",
-        "cvrplib/P/P-n101-k4.vrp",
     ]
 
 

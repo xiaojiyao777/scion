@@ -67,7 +67,7 @@ def render_solver_mechanics() -> str:
         "not active research context.\n"
         "- The adapter/solver remains the authority for parsing, feasibility, "
         "objective recomputation, runtime limits, seeds, and protocol evaluation."
-        "\n- Proposal authoring should use the smallest causal implementation "
+        "\n- Proposal authoring should use the smallest complete causal implementation "
         "that can test the hypothesis, preserve unrelated code and terminal "
         "return behavior, and change multiple owner files only when the same "
         "mechanism requires them."

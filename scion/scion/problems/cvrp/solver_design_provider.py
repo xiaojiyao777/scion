@@ -52,8 +52,11 @@ class CvrpSolverDesignProvider:
                 "exit before committing a partial repair when time expires."
             ),
             "policies/baseline_modules/local_search.py": (
-                "Integrate local-search moves through `_default_vns_operators()` "
-                "or the existing `_vns` call path."
+                "The `_default_vns_operators()` registry is shared by initial and "
+                "embedded VNS. Add a mechanism there only when it is intended for "
+                "both phases. For a phase-specific approved hypothesis, keep the "
+                "mechanism in its local-search owner and use the smallest complete "
+                "scheduler wiring that activates it in the target phase only."
             ),
             "policies/baseline_modules/acceptance.py": (
                 "Keep acceptance and adaptive-weight logic in this module. "

@@ -8,8 +8,10 @@ describes the current lightweight implementation and cannot override V3.
 
 ## Current objective
 
-The active branch is `codex/v04-solver-improvement-research`, based on the
-accepted lightweight runtime baseline `4d637959`.
+The active branch is `codex/v04-production-cvrp-research`. The prior
+`codex/v04-solver-improvement-research` stage was committed through
+`30726a52` and fast-forwarded into `v0.4-dev`; this branch continues from that
+accepted research checkpoint.
 
 The active completion target is retained solver improvement on both Warehouse
 and CVRP/VRP. Warehouse has confirmed retained synthetic continuity and now
@@ -146,8 +148,23 @@ W3 installation stacks.
   scheduler starts a fresh H on the clean base. The failed H/C is never
   retried; local context/binding, missing outcome, provider-without-terminal-
   response, infrastructure, resource and interruption outcomes still stop.
+- Removed the runtime path that derived expanded-evaluation case ids from the
+  current branch's wins and losses. Initial and expanded populations now come
+  only from the problem Protocol's pre-experiment configuration and
+  deterministic selection; fixed problem-owned priorities such as the CVRP
+  CMT cases remain valid when declared there before results.
+- Routed the existing neutral CVRP cross-campaign research prior through the
+  actual provider-visible H payload. The H prompt now asks for one
+  evidence-grounded mechanism-level change or refinement instead of forcing a
+  materially different mechanism, and CVRP guidance explains that the default
+  VNS registry is shared by initial and embedded phases. These changes add no
+  host mechanism choice, assay gate, owner, manifest, identity or Decision
+  input.
 
-The combined hot-path regression set passed 180 tests. After all three
+The latest focused integration regression for the Protocol-case and CVRP-H
+changes passed `112` tests; the broader core/protocol regression for the case
+subtraction passed `440` tests. The combined hot-path regression set passed 180
+tests. After all three
 subtractions were integrated and the tree was frozen, the complete suite passed
 `1949 passed, 1 skipped` in 628.19 seconds. This validates the pre-experiment
 runtime checkpoint; it does not satisfy the Warehouse or CVRP solver-evidence

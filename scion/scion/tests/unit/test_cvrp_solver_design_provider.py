@@ -63,9 +63,14 @@ def test_cvrp_target_module_guidance_matches_mechanism_ownership() -> None:
     assert "remaining_time" in destroy_repair_guidance
     assert "recursive searches" in destroy_repair_guidance
     assert "partial repair" in destroy_repair_guidance
-    assert "_default_vns_operators" in provider.solver_design_target_api_guidance(
+    local_search_guidance = provider.solver_design_target_api_guidance(
         "policies/baseline_modules/local_search.py"
     )
+    assert "_default_vns_operators" in local_search_guidance
+    assert "shared by initial and embedded VNS" in local_search_guidance
+    assert "both phases" in local_search_guidance
+    assert "smallest complete scheduler wiring" in local_search_guidance
+    assert "target phase only" in local_search_guidance
     assert "Scheduler owns" in provider.solver_design_target_api_guidance(
         "policies/baseline_modules/scheduler.py"
     )

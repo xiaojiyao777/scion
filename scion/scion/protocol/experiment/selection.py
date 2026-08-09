@@ -114,17 +114,16 @@ def _select_evenly_spaced_cases(all_cases: Sequence[str], n: int) -> List[str]:
     return [cases[i] for i in sorted(selected[:n])]
 
 
-def _select_cases_with_priorities(
+def _select_cases_with_configured_priorities(
     all_cases: Sequence[str],
     n: int,
-    priority_case_ids: Sequence[str] = (),
+    configured_case_ids: Sequence[str] = (),
 ) -> List[str]:
-    """Select cases while retaining requested follow-up cases when possible.
+    """Select cases while retaining configured priority cases when possible.
 
-    Priority case ids come from branch evidence. They may be stored as bare
-    case names while the manifest stores split-relative paths, so matching uses
-    exact id first and then a unique basename match. Ambiguous basenames are
-    ignored rather than guessed.
+    Configured ids may be bare case names while the manifest stores
+    split-relative paths, so matching uses exact id first and then a unique
+    basename match. Ambiguous basenames are ignored rather than guessed.
     """
     cases = list(all_cases)
     total = len(cases)
@@ -134,7 +133,7 @@ def _select_cases_with_priorities(
         return cases
 
     selected: set[str] = set()
-    for case in _resolve_priority_cases(cases, priority_case_ids):
+    for case in _resolve_configured_priority_cases(cases, configured_case_ids):
         if len(selected) >= n:
             break
         selected.add(case)
@@ -154,9 +153,9 @@ def _select_cases_with_priorities(
     return [case for case in cases if case in selected]
 
 
-def _resolve_priority_cases(
+def _resolve_configured_priority_cases(
     all_cases: Sequence[str],
-    priority_case_ids: Sequence[str],
+    configured_case_ids: Sequence[str],
 ) -> List[str]:
     cases = [str(case) for case in all_cases]
     exact = {case: case for case in cases}
@@ -166,7 +165,7 @@ def _resolve_priority_cases(
 
     selected: list[str] = []
     seen: set[str] = set()
-    for raw_case_id in priority_case_ids or ():
+    for raw_case_id in configured_case_ids or ():
         case_id = str(raw_case_id or "").strip()
         if not case_id:
             continue
@@ -201,14 +200,24 @@ def configured_priority_case_ids(
     )
 
 
-def resolve_priority_case_ids(
+def resolved_configured_priority_case_ids(
     *,
+    config: Any,
+    stage: ExperimentStage,
     all_cases: Sequence[str],
-    priority_case_ids: Sequence[str] = (),
+    selected_cases: Sequence[str],
 ) -> tuple[str, ...]:
-    """Resolve requested priority ids against stage cases using protocol matching."""
+    """Resolve only problem-configured priority ids included in a selection."""
 
-    return tuple(_resolve_priority_cases(all_cases, priority_case_ids))
+    selected = set(selected_cases)
+    return tuple(
+        case
+        for case in _resolve_configured_priority_cases(
+            all_cases,
+            configured_priority_case_ids(config=config, stage=stage),
+        )
+        if case in selected
+    )
 
 
 def select_cases(
@@ -218,13 +227,12 @@ def select_cases(
     stage: ExperimentStage,
     hypothesis_action: str,
     expand_round: int,
-    priority_case_ids: Sequence[str] = (),
 ) -> List[str]:
     """Select deterministic protocol cases for a stage/action pair."""
     all_cases = split_manager.get_cases(stage)
-    effective_priority_case_ids = (
-        *configured_priority_case_ids(config=config, stage=stage),
-        *tuple(priority_case_ids or ()),
+    configured_priorities = configured_priority_case_ids(
+        config=config,
+        stage=stage,
     )
 
     if stage == ExperimentStage.SCREENING:
@@ -251,7 +259,11 @@ def select_cases(
     else:
         return all_cases
 
-    return _select_cases_with_priorities(all_cases, n, effective_priority_case_ids)
+    return _select_cases_with_configured_priorities(
+        all_cases,
+        n,
+        configured_priorities,
+    )
 
 
 def select_seeds(*, seed_ledger: SeedLedger, stage: ExperimentStage) -> List[int]:
