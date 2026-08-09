@@ -525,6 +525,12 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   interaction effects plus family/size directions. This is diagnosis only and
   cannot rejudge R3 or enter Decision. With fewer than four eligible candidates
   report feasibility only rather than a general causal claim.
+- [x] Freeze the minimal provider-free
+  [measurement-attribution design](docs/experiments/v0.4/v0.4-measurement-attribution-design-20260809.md).
+  It reuses fixed-candidate replay, the problem Protocol and raw pair evidence;
+  decomposes cumulative case/seed cells into four atomic blocks; and makes
+  missing cohort, telemetry, fourth-seed or clean-CPU evidence explicitly
+  `UNIDENTIFIABLE`. It adds no runner, gate or Decision input.
 - [ ] On that same frozen cohort, measure `0.5x / 1x / 2x` dimension budgets
   with fixed cases and seeds. Separate mechanism activation from ALNS/VNS
   opportunity, throughput and accepted/best-update opportunity. Do not treat
