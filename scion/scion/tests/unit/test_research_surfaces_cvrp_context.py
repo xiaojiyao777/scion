@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import replace
 
@@ -255,9 +256,13 @@ def test_direct_cvrp_declared_sources_have_one_full_source_owner() -> None:
     assert all(entry["content"] for entry in entries)
     assert all(entry["digest"] for entry in entries)
     system_blocks, user_prompt = _split_code_context(context)
-    rendered = "\n".join(block["text"] for block in system_blocks) + user_prompt
-    for path in active_paths:
-        assert rendered.count(f'"path": "{path}"') == 1
+    del user_prompt
+    provider_context = json.loads(system_blocks[1]["text"].split("\n", 1)[1])
+    rendered_paths = [
+        source["path"]
+        for source in provider_context["editable_source_context"]["sources"]
+    ]
+    assert Counter(rendered_paths) == Counter({path: 1 for path in active_paths})
 
 
 def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:

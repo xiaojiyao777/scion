@@ -250,6 +250,6 @@ def test_formal_screening_expansion_reuses_exact_candidate_then_enters_validatio
         ExperimentStage.VALIDATION,
     ]
     assert protocol.calls[2]["cases"] == tuple(split.validation)
-    assert protocol.calls[2]["seeds"] == tuple(seeds.validation[:4])
+    assert protocol.calls[2]["seeds"] == tuple(seeds.validation)
     assert len(protocol.calls[2]["cases"]) == 12
     assert protocol.calls[2]["candidate_source"] == protocol.calls[0]["candidate_source"]

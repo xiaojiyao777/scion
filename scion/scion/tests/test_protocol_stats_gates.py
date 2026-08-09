@@ -310,7 +310,7 @@ def _r3_case_quality_config() -> ProtocolConfig:
                     "bootstrap_ci_low_min": 0.0,
                     "min_net_case_score": 0.25,
                     "max_case_loss_rate": 0.2,
-                    "initial_quality_route": {
+                    "initial_quality_expansion": {
                         "min_net_case_score": 0.125,
                         "max_case_loss_rate": 0.25,
                     },
@@ -362,7 +362,7 @@ def test_r3_expanded_quality_uses_net_case_distribution(
     assert result.reason_codes == (reason,)
 
 
-def test_r3_initial_quality_route_expands_but_never_passes():
+def test_r3_initial_quality_signal_expands_but_never_passes():
     stats = _make_stats(
         n_cases=8,
         wins=4,
@@ -377,7 +377,7 @@ def test_r3_initial_quality_route_expands_but_never_passes():
     result = screening_gate(stats, _r3_case_quality_config())
 
     assert result.outcome == "expand"
-    assert result.reason_codes == ("SCREENING_EXPAND_INITIAL_QUALITY_ROUTE",)
+    assert result.reason_codes == ("SCREENING_EXPAND_INITIAL_QUALITY",)
 
 
 def test_r3_expanded_ci_uncertainty_is_not_mislabeled_as_case_quality_failure():

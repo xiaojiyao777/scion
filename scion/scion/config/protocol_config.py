@@ -399,7 +399,7 @@ class CaseQualityThresholds(BaseModel):
         return self
 
 
-class InitialQualityRoute(CaseQualityThresholds):
+class InitialQualityExpansion(CaseQualityThresholds):
     """Evidence sufficient to route initial screening to exact expansion."""
 
     min_net_case_score: float = Field(ge=-1.0, le=1.0)
@@ -419,7 +419,7 @@ class ScreeningGate(CaseQualityThresholds):
     bootstrap_ci_low_min: float | None = None
     """Optional CI lower bound; unset preserves legacy screening behavior."""
 
-    initial_quality_route: InitialQualityRoute | None = None
+    initial_quality_expansion: InitialQualityExpansion | None = None
     """Optional initial-screen evidence that requests one exact expansion."""
 
 

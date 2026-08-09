@@ -87,7 +87,7 @@ gates:
     bootstrap_ci_low_min: 0.0
     min_net_case_score: 0.25
     max_case_loss_rate: 0.2
-    initial_quality_route:
+    initial_quality_expansion:
       min_net_case_score: 0.125
       max_case_loss_rate: 0.25
   validation:

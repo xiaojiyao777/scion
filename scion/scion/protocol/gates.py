@@ -48,14 +48,14 @@ def screening_gate(
             )
         else:
             gate = GateResult(outcome="pass", reason_codes=("SCREENING_PASS",))
-    elif _initial_quality_route_pass(
+    elif _initial_quality_expansion_pass(
         stats,
         config,
         expanded=expanded,
     ):
         gate = GateResult(
             outcome="expand",
-            reason_codes=("SCREENING_EXPAND_INITIAL_QUALITY_ROUTE",),
+            reason_codes=("SCREENING_EXPAND_INITIAL_QUALITY",),
         )
     elif _initial_screening_sparse_no_loss_signal(
         stats,
@@ -118,21 +118,21 @@ def _case_quality_pass(
     )
 
 
-def _initial_quality_route_pass(
+def _initial_quality_expansion_pass(
     stats: EvalStats,
     config: ProtocolConfig,
     *,
     expanded: bool,
 ) -> bool:
-    """Route promising initial evidence to expansion without advancing it."""
+    """Expand promising initial evidence without advancing it."""
 
-    route = config.gates.screening.initial_quality_route
-    if expanded or route is None or stats.candidate_failed_pairs:
+    threshold = config.gates.screening.initial_quality_expansion
+    if expanded or threshold is None or stats.candidate_failed_pairs:
         return False
-    if not _case_quality_pass(stats, route, legacy_win_rate_min=1.0):
+    if not _case_quality_pass(stats, threshold, legacy_win_rate_min=1.0):
         return False
     return (
-        not route.require_ci_high_at_practical_delta
+        not threshold.require_ci_high_at_practical_delta
         or stats.ci_high >= config.screening_min_practical_delta
     )
 
