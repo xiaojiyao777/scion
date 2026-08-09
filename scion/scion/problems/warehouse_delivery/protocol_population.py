@@ -363,6 +363,49 @@ def reconcile_warehouse_protocol_population(
             }
         )
 
+    expansion_pairs = (
+        (
+            "screening.modify",
+            protocol.screening.n_cases_modify,
+            protocol.screening.expand_to_modify,
+        ),
+        (
+            "screening.create",
+            protocol.screening.n_cases_create,
+            protocol.screening.expand_to_create,
+        ),
+        (
+            "validation",
+            protocol.validation.n_cases,
+            protocol.validation.expand_to,
+        ),
+    )
+    for name, initial, expanded in expansion_pairs:
+        if expanded < initial:
+            errors.append(
+                f"{name} expansion cannot shrink population: "
+                f"initial={initial} expanded={expanded}"
+            )
+        elif expanded == initial:
+            errors.append(
+                f"{name} expansion must add cases: "
+                f"initial={initial} expanded={expanded}"
+            )
+
+    for spec in _request_specs(protocol):
+        stage = spec.stage.value
+        available = len(set(populations[stage]))
+        if spec.requested > available:
+            errors.append(
+                f"{spec.request_id} requests {spec.requested} cases but "
+                f"manifest has {available} distinct {stage} cases"
+            )
+
+    # Preserve the problem-owned diagnostic instead of letting the generic
+    # selector's fail-fast replace it with a less specific configuration error.
+    if errors:
+        raise WarehouseProtocolPopulationError("; ".join(errors))
+
     request_rows: list[dict[str, Any]] = []
     for spec in _request_specs(protocol):
         stage = spec.stage.value
@@ -379,11 +422,6 @@ def reconcile_warehouse_protocol_population(
         )
         resolved = len(selected)
         resolved_distinct = len(set(selected))
-        if spec.requested > available:
-            errors.append(
-                f"{spec.request_id} requests {spec.requested} cases but "
-                f"manifest has {available} distinct {stage} cases"
-            )
         if resolved != spec.requested or resolved_distinct != spec.requested:
             errors.append(
                 f"{spec.request_id} resolved {resolved} entries/"
@@ -410,30 +448,6 @@ def reconcile_warehouse_protocol_population(
                 ),
             }
         )
-
-    expansion_pairs = (
-        (
-            "screening.modify",
-            protocol.screening.n_cases_modify,
-            protocol.screening.expand_to_modify,
-        ),
-        (
-            "screening.create",
-            protocol.screening.n_cases_create,
-            protocol.screening.expand_to_create,
-        ),
-        (
-            "validation",
-            protocol.validation.n_cases,
-            protocol.validation.expand_to,
-        ),
-    )
-    for name, initial, expanded in expansion_pairs:
-        if expanded < initial:
-            errors.append(
-                f"{name} expansion cannot shrink population: "
-                f"initial={initial} expanded={expanded}"
-            )
 
     if errors:
         raise WarehouseProtocolPopulationError("; ".join(errors))
