@@ -267,7 +267,7 @@ def _supports(formal: Mapping[str, Any]) -> bool:
     n_cases, n_pairs = len(cases), len(cases) * len(seeds)
     return bool(
         formal["gate_outcome"] == "pass"
-        and "FROZEN_PASS_HIERARCHICAL" in formal["reason_codes"]
+        and "FROZEN_PASS" in formal["reason_codes"]
         and n_pairs > 0
         and stats.get("n_cases") == n_cases
         and _total(stats, ("wins", "losses", "ties")) == n_cases

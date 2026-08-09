@@ -97,7 +97,7 @@ class _FakeProtocol:
             stage,
             stats,
             "pass",
-            ("FROZEN_PASS_HIERARCHICAL",),
+            ("FROZEN_PASS",),
             "pass",
             str(raw),
             "declared_objectives_lexicographic",
