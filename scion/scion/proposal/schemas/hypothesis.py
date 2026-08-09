@@ -62,8 +62,10 @@ class HypothesisProposalInput(BaseModel):
     target_file: str | None = Field(
         default=None,
         description=(
-            "Required for every action. For create_new, this names the new "
-            "file bound to the subsequent code proposal."
+            "Required for every action. This is the primary mechanism-owner "
+            "anchor, not a limit on the complete patch; the code proposal may "
+            "add necessary same-surface support files. For create_new, it names "
+            "the new primary file."
         ),
     )
     suggested_weight: float | None = Field(

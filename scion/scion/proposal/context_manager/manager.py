@@ -58,6 +58,10 @@ from .code_context import (
     branch_current_file_sources,
     branch_touched_files,
 )
+from .history_projection import (
+    proposal_screening_history,
+    verification_failure_projection,
+)
 from .io import (
     _expand_surface_targets_for_champion,
     _expand_surface_targets_for_root,
@@ -190,10 +194,12 @@ class ContextManager:
             existing_target_files=existing_target_files,
         )
         history_steps = step_history or []
-        experiment_history = campaign_canonical_screening_history(
-            branch,
-            campaign_branches,
-            _filter_hypothesis_prompt_steps(history_steps),
+        experiment_history = proposal_screening_history(
+            campaign_canonical_screening_history(
+                branch,
+                campaign_branches,
+                _filter_hypothesis_prompt_steps(history_steps),
+            )
         )
         rejection_history = campaign_research_rejection_history(
             branch,
@@ -222,6 +228,7 @@ class ContextManager:
             "research_surfaces": _hypothesis_surface_projections(
                 visible_surfaces,
                 problem_spec,
+                include_problem_prompt=provider is None,
             ),
             "available_actions": sorted(available_actions),
             "existing_target_files": existing_target_files,
@@ -332,7 +339,10 @@ class ContextManager:
                 adapter=self._adapter,
                 surface_name=hypothesis.change_locus,
             ),
-            "research_surface": _surface_projection(surface),
+            "research_surface": _surface_projection(
+                surface,
+                prompt_phase=("code" if provider is None else None),
+            ),
             "import_whitelist": list(problem_spec.search_space.import_whitelist),
             "editable_patterns": list(problem_spec.search_space.editable),
             "frozen_patterns": list(problem_spec.search_space.frozen),
@@ -477,7 +487,11 @@ def _build_objective_policy_guidance(adapter_spec: Any | None) -> dict[str, Any]
     }
 
 
-def _surface_projection(surface: Any | None) -> dict[str, Any]:
+def _surface_projection(
+    surface: Any | None,
+    *,
+    prompt_phase: str | None = None,
+) -> dict[str, Any]:
     if surface is None:
         return {}
     projection: dict[str, Any] = {
@@ -496,8 +510,26 @@ def _surface_projection(surface: Any | None) -> dict[str, Any]:
         primitive = _primitive(value)
         if primitive not in (None, "", [], {}):
             projection[name] = primitive
-    # Prompt/novelty metadata belonged to legacy semantic gates. Direct V3 gets
-    # problem-owned guidance from the explicit provider packet instead.
+    prompt = getattr(surface, "prompt", None)
+    if prompt is not None and prompt_phase == "hypothesis":
+        guidance = str(
+            getattr(prompt, "hypothesis_guidance", "") or ""
+        ).strip()
+        if guidance:
+            projection["hypothesis_guidance"] = guidance
+    elif prompt is not None and prompt_phase == "code":
+        implementation = str(
+            getattr(prompt, "implementation_guidance", "") or ""
+        ).strip()
+        anti_patterns = str(
+            getattr(prompt, "anti_patterns", "") or ""
+        ).strip()
+        if implementation:
+            projection["implementation_guidance"] = implementation
+        if anti_patterns:
+            projection["anti_patterns"] = anti_patterns
+    # Novelty metadata belonged to legacy semantic gates. Problem prompt text
+    # is phase-projected only when no explicit problem prompt provider exists.
     return {
         key: value
         for key, value in projection.items()
@@ -508,8 +540,16 @@ def _surface_projection(surface: Any | None) -> dict[str, Any]:
 def _hypothesis_surface_projections(
     surfaces: list[Any],
     problem_spec: ProblemSpec,
+    *,
+    include_problem_prompt: bool = False,
 ) -> list[dict[str, Any]]:
-    projections = [_surface_projection(surface) for surface in surfaces]
+    projections = [
+        _surface_projection(
+            surface,
+            prompt_phase=("hypothesis" if include_problem_prompt else None),
+        )
+        for surface in surfaces
+    ]
     if projections:
         return projections
     return [
@@ -521,8 +561,6 @@ def _hypothesis_surface_projections(
 def _champion_projection(champion: ChampionState) -> dict[str, Any]:
     return {
         "version": champion.version,
-        "code_snapshot_hash": champion.code_snapshot_hash,
-        "solver_config_hash": champion.solver_config_hash,
         "operators": [
             {
                 "name": name,
@@ -776,19 +814,27 @@ def campaign_research_rejection_history(
             or not _rejection_state_matches_phase(step, phase)
         ):
             continue
+        relation = (
+            "current"
+            if source_branch_id == current_branch.branch_id
+            else "sibling"
+        )
         record = {
             "round_num": int(step.round_num),
             "source_branch_id": source_branch_id,
-            "relation": (
-                "current"
-                if source_branch_id == current_branch.branch_id
-                else "sibling"
-            ),
+            "relation": relation,
             "phase": phase,
             "reason_code": str(step.execution_outcome_reason_code or "").strip(),
             "failed_check_codes": list(_failed_rejection_check_codes(step, phase)),
             **_rejection_target_projection(step, phase),
         }
+        first_failure = _first_rejection_failure(
+            step,
+            phase=phase,
+            relation=relation,
+        )
+        if first_failure:
+            record["first_failure"] = first_failure
         records.append(_drop_empty(record))
 
     records.sort(
@@ -832,6 +878,29 @@ def _failed_rejection_check_codes(
         if code and code not in codes:
             codes.append(code)
     return tuple(codes)
+
+
+def _first_rejection_failure(
+    step: StepRecord,
+    *,
+    phase: str,
+    relation: str,
+) -> dict[str, Any]:
+    """Expose one current-branch Verification reason, never provider prose."""
+
+    if phase != "verification" or relation != "current":
+        return {}
+    provenance = step.execution_outcome_provenance
+    if not isinstance(provenance, Mapping):
+        return {}
+    checks = provenance.get("verification_checks", ())
+    if not isinstance(checks, (list, tuple)):
+        return {}
+    for check in checks:
+        if not isinstance(check, Mapping) or check.get("passed") is not False:
+            continue
+        return verification_failure_projection(check)
+    return {}
 
 
 def _rejection_target_projection(

@@ -31,8 +31,13 @@ from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.manager import (
     CANONICAL_SCREENING_HISTORY_KEY,
     _screening_projection,
+    canonical_screening_history,
     canonical_screening_record,
     persist_canonical_screening_record,
+)
+from scion.proposal.context_manager.history_projection import (
+    proposal_screening_history,
+    verification_failure_projection,
 )
 from scion.proposal.context_owner_maps import proposal_context_snapshot
 from scion.proposal.engine import (
@@ -106,6 +111,60 @@ def test_warehouse_hypothesis_context_exposes_all_declared_safe_surfaces_and_sou
     ] == {"subcategory_splits": 0}
     assert diagnostics["aggregate_noise_context"]["mde_at_power_80"] == 577.5
     assert diagnostics["aggregate_noise_context"]["n_pairs"] > 0
+
+
+def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
+    spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
+    surface_specs = {surface.name: surface for surface in spec.research_surfaces or []}
+
+    h_context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+    )
+    h_blocks, h_user = _split_hypothesis_context(
+        proposal_context_snapshot("hypothesis", h_context).inputs.provider_context(
+            include_renderer_inputs=True
+        )
+    )
+    h_rendered = "\n".join(block["text"] for block in h_blocks) + h_user
+    assert all("hypothesis_guidance" in item for item in h_context["research_surfaces"])
+    assert all("implementation_guidance" not in item for item in h_context["research_surfaces"])
+    assert all("anti_patterns" not in item for item in h_context["research_surfaces"])
+    for surface in surface_specs.values():
+        assert h_rendered.count(surface.prompt.hypothesis_guidance) == 1
+        assert surface.prompt.implementation_guidance not in h_rendered
+        assert surface.prompt.anti_patterns not in h_rendered
+
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Test a vehicle-level structural improvement.",
+        change_locus="vehicle_level",
+        action="modify",
+        target_file="operators/change_vehicle_type.py",
+    )
+    c_context = ContextManager(adapter=adapter).build_code_context(
+        branch,
+        hypothesis,
+        champion,
+        legacy,
+    )
+    c_blocks, c_user = _split_code_context(
+        proposal_context_snapshot("code", c_context).inputs.provider_context(
+            include_renderer_inputs=True
+        )
+    )
+    c_rendered = "\n".join(block["text"] for block in c_blocks) + c_user
+    selected = surface_specs["vehicle_level"].prompt
+    assert c_context["research_surface"]["implementation_guidance"] == (
+        selected.implementation_guidance
+    )
+    assert c_context["research_surface"]["anti_patterns"] == selected.anti_patterns
+    assert "hypothesis_guidance" not in c_context["research_surface"]
+    assert "Active Surface Prompt Guidance" not in c_context["operator_interface_spec"]
+    assert c_rendered.count(selected.implementation_guidance) == 1
+    assert c_rendered.count(selected.anti_patterns) == 1
+    assert surface_specs["order_level"].prompt.hypothesis_guidance not in c_rendered
+    assert surface_specs["order_level"].prompt.implementation_guidance not in c_rendered
 
 
 @pytest.mark.parametrize("problem_id", ("warehouse_delivery", "cvrp"))
@@ -265,7 +324,10 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
 
     assert len(context["experiment_history"]) == 1
     evidence = context["experiment_history"][0]
-    assert evidence["attempt_id"] == "attempt-screening-1"
+    assert evidence["summary_level"] == "full"
+    assert evidence["latest_round"] == 1
+    assert "attempt_id" not in evidence
+    assert "screening_attempt_id" not in evidence
     assert set(evidence["experiment_evidence"]) == {
         "stage",
         "protocol_outcome",
@@ -280,7 +342,6 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         "evaluation_candidate": "reused_verified_branch_state",
         "current_step_change_scope": "eval_only_reuse",
         "incremental_effect_isolated": False,
-        "current_step": {"hypothesis_id": "attempt-screening-1"},
     }
     protocol_outcome = evidence["experiment_evidence"]["protocol_outcome"]
     assert protocol_outcome == {
@@ -300,7 +361,7 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert "pair_level" not in aggregation
     assert "pair_median_delta" not in aggregation
     assert objective_tail in rendered
-    assert "case-visible" in rendered
+    assert "case-visible" not in rendered
     assert runtime_error_tail in rendered
     assert safe_diagnostic in rendered
     assert hidden_phase_telemetry not in rendered
@@ -308,6 +369,8 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert forbidden_raw not in rendered
     assert "problem_opportunity_summary" not in context
     assert "raw_pair_rows" not in rendered
+    assert "champion-code" not in rendered
+    assert "champion-config" not in rendered
     research_question = context["research_question"]
     assert research_question["schema_version"] == (
         "scion.typed_research_question.v2"
@@ -382,6 +445,7 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
         check_code: str,
         rejected_patch: PatchProposal | None,
         source_branch_id: str = branch.branch_id,
+        check_detail: str = "FORBIDDEN_CHECK_DETAIL",
     ) -> StepRecord:
         checks_key = (
             "contract_checks" if phase.endswith("contract") else "verification_checks"
@@ -407,7 +471,7 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
                         "name": check_code,
                         "passed": False,
                         "severity": "heavy",
-                        "detail": "FORBIDDEN_CHECK_DETAIL",
+                        "detail": check_detail,
                         "metadata": {
                             "validation_case_details": "FORBIDDEN_VALIDATION_RAW"
                         },
@@ -443,8 +507,16 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
             rejected_patch=patch,
             source_branch_id=sibling.branch_id,
         ),
-        StepRecord(
+        rejected_step(
             round_num=4,
+            phase="verification",
+            reason_code="VERIFICATION_REJECTED",
+            check_code="V1_syntax",
+            rejected_patch=patch,
+            check_detail="syntax_error: expected an indented block",
+        ),
+        StepRecord(
+            round_num=5,
             branch_id=branch.branch_id,
             hypothesis=hypothesis,
             patch=None,
@@ -507,6 +579,7 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
         "hypothesis_contract",
         "patch_contract",
         "verification",
+        "verification",
     ]
     assert rejection_history[0] == {
         "round_num": 1,
@@ -525,6 +598,13 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
     assert rejection_history[2]["failed_check_codes"] == ["V6_feasibility"]
     assert rejection_history[2]["source_branch_id"] == sibling.branch_id
     assert rejection_history[2]["relation"] == "sibling"
+    assert "first_failure" not in rejection_history[2]
+    assert rejection_history[3]["relation"] == "current"
+    assert rejection_history[3]["first_failure"] == {
+        "check_code": "V1_syntax",
+        "failure_kind": "syntax",
+        "summary": "syntax_error: expected an indented block",
+    }
 
     snapshot = proposal_context_snapshot("hypothesis", context)
     blocks, user_prompt = _split_hypothesis_context(
@@ -548,6 +628,26 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
         "FORBIDDEN_FROZEN_CASE",
     ):
         assert forbidden not in rendered
+    assert rendered.count("syntax_error: expected an indented block") == 1
+
+
+def test_verification_failure_projection_selects_one_typed_pytest_event() -> None:
+    projected = verification_failure_projection(
+        {
+            "name": "V3_unit_tests",
+            "detail": (
+                "pytest exit=1: ================= failures ================= | "
+                "FAILED tests/test_solver.py::test_capacity - assert 2 == 1 | "
+                "captured stdout: MANY REPEATED LOG LINES"
+            ),
+        }
+    )
+
+    assert projected == {
+        "check_code": "V3_unit_tests",
+        "failure_kind": "unit_test",
+        "summary": "FAILED tests/test_solver.py::test_capacity - assert 2 == 1",
+    }
 
 
 def test_canonical_screening_history_deduplicates_durable_and_live_record() -> None:
@@ -597,7 +697,10 @@ def test_canonical_screening_history_deduplicates_durable_and_live_record() -> N
     )
 
     assert len(context["experiment_history"]) == 1
-    assert context["experiment_history"][0]["attempt_id"] == "same-hypothesis"
+    projected = context["experiment_history"][0]
+    assert projected["summary_level"] == "full"
+    assert "attempt_id" not in projected
+    assert "screening_attempt_id" not in projected
     assert persist_canonical_screening_record(branch, screening) is False
 
 
@@ -786,16 +889,17 @@ def test_new_branch_sees_all_reopened_sibling_screenings_without_lifecycle_leaks
     )
 
     history = context["experiment_history"]
-    assert len(history) == 4
-    assert [record["round_num"] for record in history] == [1, 2, 3, 4]
-    assert {record["source_branch_id"] for record in history} == {
-        old_branch.branch_id
-    }
-    assert {record["relation"] for record in history} == {"sibling"}
-    for record in history:
-        assert set(record).isdisjoint(
-            {"branch_state", "state", "direction", "failure_detail"}
-        )
+    assert len(history) == 1
+    assert history[0]["latest_round"] == 4
+    assert history[0]["summary_level"] == "sibling_brief"
+    assert history[0]["relation"] == "sibling"
+    assert [item["round_num"] for item in history[0]["screening_trajectory"]] == [4]
+    assert set(history[0]).isdisjoint(
+        {
+            "attempt_id", "screening_attempt_id", "source_branch_id",
+            "branch_state", "state", "direction", "failure_detail",
+        }
+    )
     durable = old_branch.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY]
     assert all("source_branch_id" not in record for record in durable)
     assert all("relation" not in record for record in durable)
@@ -868,6 +972,12 @@ def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> 
     legacy_record["screening_attempt_id"] = "legacy-schema-dependent-id"
     branch.branch_evidence_summary = {CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]}
 
+    upgraded_durable = canonical_screening_history(branch, [screening])[0]
+    assert upgraded_durable["attempt_id"] == "legacy-attempt"
+    assert upgraded_durable["screening_attempt_id"] != "legacy-schema-dependent-id"
+    assert "candidate_composition" in upgraded_durable
+    assert "protocol_outcome" in upgraded_durable["experiment_evidence"]
+
     context = ContextManager(adapter=adapter).build_hypothesis_context(
         branch=branch,
         champion=champion,
@@ -877,8 +987,8 @@ def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> 
 
     assert len(context["experiment_history"]) == 1
     upgraded = context["experiment_history"][0]
-    assert upgraded["attempt_id"] == "legacy-attempt"
-    assert upgraded["screening_attempt_id"] != "legacy-schema-dependent-id"
+    assert "attempt_id" not in upgraded
+    assert "screening_attempt_id" not in upgraded
     assert "candidate_composition" in upgraded
     assert "protocol_outcome" in upgraded["experiment_evidence"]
     assert upgraded["experiment_evidence"]["decision_outcome"] == {
@@ -1186,10 +1296,26 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     )
     evidence = context["experiment_history"][0]["experiment_evidence"]
     assert evidence["mechanism_evidence"] == packet
+    proposal_evidence = packet["evidence"]
+    assert proposal_evidence["comparison_columns"] == [
+        "candidate",
+        "champion",
+        "candidate_minus_champion",
+    ]
+    assert proposal_evidence["paired_comparison"]["alns"]["iterations"] == [
+        1,
+        1,
+        0,
+    ]
+    assert proposal_evidence["paired_comparison"]["alns"]["repair_error"] == [
+        1,
+        0,
+        1,
+    ]
     blocks, user_prompt = _split_hypothesis_context(context)
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
-    assert '"iterations": 1' in rendered
-    assert '"repair_error": 1' in rendered
+    assert '"paired_comparison"' in rendered
+    assert '"comparison_columns"' in rendered
     assert '"evidence_scope": "screening_search_allocation"' in rendered
     assert '"hypothesis_attribution": "unbound"' in rendered
     assert '"interpretation_constraint": "association_only"' in rendered
@@ -1312,9 +1438,98 @@ def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis
         step_history=[],
     )
     history = context["experiment_history"]
-    assert len(history) == 2
-    assert {record["attempt_id"] for record in history} == {"same-hypothesis"}
-    assert len({record["screening_attempt_id"] for record in history}) == 2
+    assert len(history) == 1
+    assert history[0]["latest_round"] == 2
+    assert history[0]["summary_level"] == "full"
+    assert [
+        item["round_num"] for item in history[0]["screening_trajectory"]
+    ] == [1, 2]
+    assert history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
+        "median_delta"
+    ] == 0.5
+    assert "attempt_id" not in history[0]
+    assert "screening_attempt_id" not in history[0]
+    assert len(canonical_screening_history(branch, [])) == 2
+
+
+def test_provider_history_keeps_three_recent_current_attempts_full() -> None:
+    records = [
+        {
+            "attempt_id": f"attempt-{round_num}",
+            "screening_attempt_id": f"screening-{round_num}",
+            "round_num": round_num,
+            "source_branch_id": "current-branch",
+            "relation": "current",
+            "hypothesis": {
+                "hypothesis_text": f"Mechanism {round_num}",
+                "change_locus": "solver_design",
+                "action": "modify",
+                "target_file": "policies/baseline_modules/local_search.py",
+            },
+            "candidate_composition": {
+                "attribution_scope": "current_step_candidate",
+                "incremental_effect_isolated": True,
+                "current_step": {"hypothesis_id": f"attempt-{round_num}"},
+            },
+            "experiment_evidence": {
+                "stage": "screening",
+                "protocol_outcome": {"gate_outcome": "fail"},
+                "objective_outcome": {
+                    "aggregate": {"median_delta": float(round_num)},
+                },
+                "case_outcomes": {"case_feedback": []},
+                "runtime_errors": {},
+                "mechanism_evidence": {"signal": f"detail-{round_num}"},
+                "decision_outcome": {"decision": "continue_explore"},
+            },
+        }
+        for round_num in range(1, 5)
+    ]
+
+    projected = proposal_screening_history(records)
+
+    assert [item["summary_level"] for item in projected] == [
+        "compact", "full", "full", "full",
+    ]
+    assert [item["latest_round"] for item in projected] == [1, 2, 3, 4]
+    assert "mechanism_evidence" not in projected[0]["experiment_evidence"]
+    assert projected[-1]["experiment_evidence"]["mechanism_evidence"] == {
+        "signal": "detail-4"
+    }
+    rendered = json.dumps(projected, sort_keys=True)
+    assert "attempt_id" not in rendered
+    assert "screening_attempt_id" not in rendered
+    assert "source_branch_id" not in rendered
+
+
+@pytest.mark.parametrize("stage", ("validation", "frozen"))
+def test_provider_history_rejects_non_screening_durable_evidence(stage: str) -> None:
+    record = {
+        "attempt_id": "attempt-1",
+        "round_num": 1,
+        "source_branch_id": "current-branch",
+        "relation": "current",
+        "experiment_evidence": {"stage": stage},
+    }
+
+    with pytest.raises(ValueError, match="screening evidence only"):
+        proposal_screening_history([record])
+
+
+def test_provider_history_rejects_relation_changes_within_one_attempt() -> None:
+    records = [
+        {
+            "attempt_id": "attempt-1",
+            "round_num": round_num,
+            "source_branch_id": "branch-1",
+            "relation": relation,
+            "experiment_evidence": {"stage": "screening"},
+        }
+        for round_num, relation in ((1, "current"), (2, "sibling"))
+    ]
+
+    with pytest.raises(ValueError, match="relation changed"):
+        proposal_screening_history(records)
 
 
 def test_canonical_screening_history_fails_closed_on_malformed_durable_owner() -> None:
@@ -1552,7 +1767,7 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     assert target["content"]
     assert target["digest"]
     assert context["approved_hypothesis"]["target_file"] == target_file
-    assert "current visible source" in user_prompt
+    assert "follow the tool schema's edit protocol" in user_prompt
     assert "source owner, provenance, and digest" not in user_prompt
     assert "setattr, delattr, dynamic-name getattr" not in user_prompt
     assert "globals, locals, or vars" not in user_prompt
@@ -1571,7 +1786,16 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     assert "target_intent" not in rendered
     canonical = json.loads(blocks[1]["text"].split("\n", 1)[1])
     assert canonical["approved_hypothesis"]["target_file"] == target_file
-    assert canonical["proposal_source_ledger"]["approved_target"] == target_file
+    assert "proposal_source_ledger" not in canonical
+    provider_sources = canonical["editable_source_context"]
+    assert provider_sources["approved_target"] == target_file
+    assert set(provider_sources) == {
+        "approved_target", "sources", "target_api_guidance",
+    }
+    assert provider_sources["sources"]
+    assert all(set(item) == {"path", "content"} for item in provider_sources["sources"])
+    for hidden in ("digest", "owner", "provenance", "visibility", "views"):
+        assert f'"{hidden}"' not in blocks[1]["text"]
 
 
 def test_direct_v3_cvrp_create_ledger_proves_target_and_support_sources() -> None:

@@ -106,12 +106,8 @@ def test_search_allocation_aggregates_runtime_lifecycle_and_paired_math() -> Non
             polish_distance=100,
         )
     ]
-    provider = CvrpProposalMechanismEvidenceProvider()
-
-    payload = provider.summarize_proposal_mechanism_evidence(
-        stage="screening",
-        selected_surface="solver_design",
-        runtime_pairs=[
+    payload = search_allocation.build_search_allocation_evidence(
+        [
             {
                 "candidate_runtime": _runtime(
                     elapsed=100,
@@ -135,7 +131,7 @@ def test_search_allocation_aggregates_runtime_lifecycle_and_paired_math() -> Non
                 ),
                 "champion_result_source": "cached",
             }
-        ],
+        ]
     )
 
     assert payload["schema_version"] == "scion.cvrp.search_allocation_evidence.v1"
@@ -207,11 +203,8 @@ def test_search_allocation_aggregates_runtime_lifecycle_and_paired_math() -> Non
 
 
 def test_search_allocation_missing_and_malformed_are_unavailable_not_zero() -> None:
-    provider = CvrpProposalMechanismEvidenceProvider()
-    payload = provider.summarize_proposal_mechanism_evidence(
-        stage="screening",
-        selected_surface="solver_design",
-        runtime_pairs=[
+    payload = search_allocation.build_search_allocation_evidence(
+        [
             {
                 "candidate_runtime": {
                     "solver_algorithm_elapsed_ms": "100",
@@ -226,7 +219,7 @@ def test_search_allocation_missing_and_malformed_are_unavailable_not_zero() -> N
                     },
                 }
             }
-        ],
+        ]
     )
 
     assert payload["candidate"]["solver_algorithm_elapsed_ms"] is None
@@ -302,11 +295,7 @@ def test_r11c_acceptance_fixture_and_instance_feasibility(monkeypatch) -> None:
             }
         )
 
-    payload = CvrpProposalMechanismEvidenceProvider().summarize_proposal_mechanism_evidence(
-        stage="screening",
-        selected_surface="solver_design",
-        runtime_pairs=runtime_pairs,
-    )
+    payload = search_allocation.build_search_allocation_evidence(runtime_pairs)
 
     assert payload["candidate"]["alns"]["iterations"] == 2300
     assert payload["champion"]["alns"]["iterations"] == 1589
@@ -332,6 +321,175 @@ def test_r11c_acceptance_fixture_and_instance_feasibility(monkeypatch) -> None:
     assert "/private/" not in rendered
     assert "secret-case" not in rendered
     assert '"seed"' not in rendered
+
+
+def test_proposal_projection_keeps_paired_research_signals_without_side_mirrors() -> None:
+    runtime_pairs = [
+        {
+            "candidate_runtime": _runtime(
+                elapsed=100,
+                phase_runtime={"alns_core": 30, "vns_embedded": 60},
+                trace=[
+                    _event(
+                        "regret3",
+                        accepted=True,
+                        best=True,
+                        reason="new_best",
+                        repair_distance=120,
+                        polish_distance=100,
+                    )
+                ],
+                attempted={"vns_embedded": 12},
+                accepted={"vns_embedded": 8},
+            ),
+            "champion_runtime": _runtime(
+                elapsed=80,
+                phase_runtime={"alns_core": 30, "vns_embedded": 40},
+                trace=[
+                    _event(
+                        "greedy",
+                        accepted=False,
+                        best=False,
+                        reason="route_limit",
+                        repair_distance=100,
+                        polish_distance=95,
+                    )
+                ],
+                attempted={"vns_embedded": 10},
+                accepted={"vns_embedded": 6},
+            ),
+        }
+    ]
+
+    payload = CvrpProposalMechanismEvidenceProvider().summarize_proposal_mechanism_evidence(
+        stage="screening",
+        selected_surface="solver_design",
+        runtime_pairs=runtime_pairs,
+    )
+
+    assert payload["schema_version"] == (
+        "scion.cvrp.proposal_mechanism_evidence.v1"
+    )
+    assert payload["comparison_columns"] == [
+        "candidate",
+        "champion",
+        "candidate_minus_champion",
+    ]
+    assert payload["coverage_columns"] == ["candidate", "champion", "paired"]
+    assert "candidate" not in payload
+    assert "champion" not in payload
+    assert "comparison" not in payload
+    assert payload["gate_influence"] is False
+    paired = payload["paired_comparison"]
+    assert paired["solver_algorithm_elapsed_ms"] == [100, 80, 20]
+    assert paired["phase_runtime_share"] == {
+        "alns_core": [0.3, 0.375, -0.075],
+        "vns_embedded": [0.6, 0.5, 0.1],
+    }
+    assert paired["alns"]["accepted"] == [1, 0, 1]
+    assert paired["alns"]["best_updates"] == [1, 0, 1]
+    assert paired["post_repair_polish"]["delta_sum"] == [20.0, 5.0, 15.0]
+    assert paired["move_phases"]["vns_embedded"]["attempted"] == [
+        12,
+        10,
+        2,
+    ]
+    operators = payload["operator_comparison"]
+    assert operators["destroy"]["shaw"]["selected"] == [1, 1, 0]
+    assert operators["repair"]["regret3"]["accepted"] == [1, 0, 1]
+    assert operators["destroy_repair_pair"]["shaw__regret3"][
+        "best_updates"
+    ] == [1, 0, 1]
+    rendered = json.dumps(payload, sort_keys=True)
+    for duplicated_field in (
+        '"observed_pairs"',
+        '"nonempty"',
+        '"empty"',
+        '"invoked"',
+        '"completed"',
+    ):
+        assert duplicated_field not in rendered
+
+
+def test_proposal_projection_is_fixed_semantic_and_substantially_smaller() -> None:
+    destroys = [f"destroy_{index:02d}" for index in range(6)]
+    repairs = [f"repair_{index:02d}" for index in range(8)]
+    candidate_trace = [
+        _event(
+            repair,
+            destroy=destroy,
+            accepted=(repair_index % 2 == 0),
+            best=(destroy_index == repair_index % len(destroys)),
+            reason=("new_best" if repair_index % 2 == 0 else "rejected"),
+            before=10 * (repair_index + 1),
+            after=10 * (repair_index + 2),
+            repair_distance=100,
+            polish_distance=99,
+            iteration=destroy_index * len(repairs) + repair_index + 1,
+        )
+        for destroy_index, destroy in enumerate(destroys)
+        for repair_index, repair in enumerate(repairs)
+    ]
+    champion_trace = [
+        _event(
+            repair,
+            destroy=destroy,
+            accepted=False,
+            best=False,
+            before=10 * (repair_index + 1),
+            after=10 * (repair_index + 2),
+            repair_distance=100,
+            polish_distance=100,
+            iteration=destroy_index * len(repairs) + repair_index + 1,
+        )
+        for destroy_index, destroy in enumerate(destroys)
+        for repair_index, repair in enumerate(repairs)
+    ]
+    runtime_pairs = [
+        {
+            "candidate_runtime": _runtime(
+                elapsed=1_000,
+                phase_runtime={"alns_core": 700, "vns_embedded": 200},
+                trace=candidate_trace,
+                attempted={"alns": len(candidate_trace)},
+                accepted={"alns": len(candidate_trace) // 2},
+                improvements={"alns": 6},
+                delta_sum={"alns": 48.0},
+                best_delta={"alns": 9.0},
+            ),
+            "champion_runtime": _runtime(
+                elapsed=900,
+                phase_runtime={"alns_core": 650, "vns_embedded": 150},
+                trace=champion_trace,
+                attempted={"alns": len(champion_trace)},
+                accepted={"alns": 0},
+                improvements={"alns": 0},
+                delta_sum={"alns": 0.0},
+                best_delta={"alns": 0.0},
+            ),
+        }
+    ]
+    raw = search_allocation.build_search_allocation_evidence(runtime_pairs)
+    projected = CvrpProposalMechanismEvidenceProvider().summarize_proposal_mechanism_evidence(
+        stage="screening",
+        selected_surface="solver_design",
+        runtime_pairs=runtime_pairs,
+    )
+
+    raw_bytes = len(json.dumps(raw, sort_keys=True, separators=(",", ":")))
+    projected_bytes = len(
+        json.dumps(projected, sort_keys=True, separators=(",", ":"))
+    )
+    assert projected_bytes < raw_bytes * 0.45
+    assert set(projected["operator_comparison"]["destroy"]) == set(destroys)
+    assert set(projected["operator_comparison"]["repair"]) == set(repairs)
+    assert len(projected["operator_comparison"]["destroy_repair_pair"]) == (
+        len(destroys) * len(repairs)
+    )
+    assert projected["paired_comparison"]["alns"]["iterations"] == [48, 48, 0]
+    assert projected["paired_comparison"]["move_phases"]["alns"][
+        "improvement_count"
+    ] == [6, 0, 6]
 
 
 def test_instance_feasibility_prefers_allowed_routes_and_hides_failures(
@@ -822,10 +980,8 @@ def test_path_only_inputs_produce_static_evidence_without_runtime_pollution(
         lambda path: instances[str(path)],
     )
 
-    payload = CvrpProposalMechanismEvidenceProvider().summarize_proposal_mechanism_evidence(
-        stage="screening",
-        selected_surface="solver_design",
-        runtime_pairs=[{"case_path": path} for path in instances],
+    payload = search_allocation.build_search_allocation_evidence(
+        [{"case_path": path} for path in instances]
     )
 
     assert payload["coverage"]["provider_inputs"] == 2

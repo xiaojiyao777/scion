@@ -245,7 +245,9 @@ def test_cvrp_protocol_solver_design_metrics_preserve_required_runtime_fields(
     assert pair_runtime["solver_algorithm_move_attempts"] == 1
     assert "candidate_construct" in pair_runtime["solver_algorithm_phase_runtime_ms"]
     evidence = result.mechanism_evidence["evidence"]
-    assert evidence["schema_version"] == "scion.cvrp.search_allocation_evidence.v1"
+    assert evidence["schema_version"] == (
+        "scion.cvrp.proposal_mechanism_evidence.v1"
+    )
     assert evidence["instance_feasibility"]["coverage"] == {
         "requested_cases": 2,
         "observed_cases": 0,

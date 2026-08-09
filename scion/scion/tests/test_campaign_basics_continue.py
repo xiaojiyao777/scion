@@ -441,10 +441,11 @@ class TestContinueExplore:
         second_c_context = json.loads(
             code_calls[1]["system_blocks"][1]["text"].split("\n", 1)[1]
         )
-        source_ledger = second_c_context["proposal_source_ledger"]
+        assert "proposal_source_ledger" not in second_c_context
+        source_ledger = second_c_context["editable_source_context"]
         prior_source = next(
             entry
-            for entry in source_ledger["entries"]
+            for entry in source_ledger["sources"]
             if entry["path"] == "operators/local_search.py"
         )
         assert "candidate = solution" in prior_source["content"]
@@ -553,7 +554,7 @@ class TestContinueExplore:
         )
         prior_source = next(
             entry
-            for entry in c_context["proposal_source_ledger"]["entries"]
+            for entry in c_context["editable_source_context"]["sources"]
             if entry["path"] == "operators/local_search.py"
         )
         assert "candidate = solution" in prior_source["content"]

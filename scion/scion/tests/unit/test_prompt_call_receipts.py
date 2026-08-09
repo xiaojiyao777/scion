@@ -82,7 +82,8 @@ def test_patch_tool_consistently_supports_ordered_same_file_exact_replace() -> N
     ):
         assert expected in PATCH_TOOL["description"]
         assert expected in schema_guidance
-        assert expected in code_guidance
+        assert expected not in code_guidance
+    assert "follow the tool schema's edit protocol" in code_guidance
 
 
 class _CaptureClient:

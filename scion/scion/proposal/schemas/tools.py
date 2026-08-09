@@ -24,8 +24,9 @@ HYPOTHESIS_TOOL: Dict[str, Any] = {
 PATCH_TOOL: Dict[str, Any] = {
     "name": "generate_patch",
     "description": (
-        "Generate a typed edit set implementing an approved hypothesis.\n\n"
-        "Usage:\n"
+        "Generate one complete typed edit set implementing the approved "
+        "hypothesis. Keep the primary edit on its approved target and put every "
+        "necessary same-mechanism support edit in additional_changes.\n\n"
         "- For localized existing-file edits, prefer exact_replace so source "
         "outside the named selector is preserved.\n"
         "- Reserve full_file for creates, broad rewrites, or an edit with no "
@@ -38,23 +39,7 @@ PATCH_TOOL: Dict[str, Any] = {
         "with create, delete, or full_file; use one full_file change instead.\n"
         "- For exact_replace provide non-empty old_string, new_string, and "
         "replace_all. To delete text use new_string: \"\"; "
-        "never omit new_string or set it to null.\n"
-        "- Do not emit unified diffs; the host derives audit diffs from before/after content.\n"
-        "- Study the champion research-surface files for style, data model usage, and import patterns.\n"
-        "- Follow the problem-specific research-surface interface EXACTLY.\n\n"
-        "Code quality requirements:\n"
-        "- Preserve every feasibility and consistency invariant described in the interface spec.\n"
-        "- For operator surfaces, use the provided `rng` argument for ALL randomness.\n"
-        "- NEVER use `list(set(...))` or iterate over set/dict in order-dependent ways — "
-        "use `sorted()` for determinism.\n"
-        "- Choose algorithmic scope from the hypothesis, visible source, problem "
-        "semantics, and measured evidence; Scion does not impose a search-size cap.\n"
-        "- Return a valid solution/artifact according to the problem adapter contract when implementing an operator surface.\n\n"
-        "Common rejection causes:\n"
-        "- Feasibility or solution consistency violation.\n"
-        "- Non-determinism: iterating over sets without sorting.\n"
-        "- Import violation: using modules not in the whitelist.\n"
-        "- Interface mismatch: wrong method signature, missing module-level policy function, or missing deep copy."
+        "never omit new_string or set it to null. Do not emit unified diffs."
     ),
     "input_schema": PATCH_PROPOSAL_SCHEMA,
 }

@@ -74,7 +74,14 @@ def _build_operator_interface_spec(
         and surface_name
         and hasattr(adapter, "render_research_surface_interface")
     ):
-        return adapter.render_research_surface_interface(surface_name)
+        rendered = str(adapter.render_research_surface_interface(surface_name))
+        # Some adapters historically appended all proposal-phase prompt text to
+        # the interface.  Direct V3 projects hypothesis and implementation
+        # guidance separately, so the code call keeps only the interface here.
+        return rendered.split(
+            "\n\n### Active Surface Prompt Guidance:",
+            1,
+        )[0]
     surface = (
         _find_research_surface(_get_research_surfaces(spec), surface_name)
         if surface_name
