@@ -166,11 +166,12 @@ class EvalStats:
     median_delta: float
     ci_low: float
     ci_high: float
-    # v0.3 F3: priority-aware statistical decision summary.
-    # Backward-compatible callers may leave these unset and rely on ci_low/ci_high.
+    # The selected statistical metric is the problem-owned measurement effect
+    # metric. All objective rows remain available in metric_stats for analysis.
     statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
     statistical_metric: Optional[str] = None
     metric_stats: Tuple[MetricEvalStats, ...] = ()
+    protected_objective_regressions: Tuple[str, ...] = ()
     runtime_ratio_median: Optional[float] = None
     runtime_delta_median_ms: Optional[float] = None
     runtime_regression_rate: Optional[float] = None

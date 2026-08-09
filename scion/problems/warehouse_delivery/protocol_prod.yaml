@@ -16,9 +16,8 @@
 # 不变项：
 #   - frozen gate 保持 bootstrap CI，不降低，晋升标准不松动
 #   - n_seeds 保持 2/3（已够用）
-#   - validation initial/expanded both use the five distinct preregistered
-#     cases; no independent expansion is claimed until a new manifest version
-#     adds cases.
+#   - validation initial uses the five established prod-1.1 cases; expansion
+#     adds five independently generated prod-1.2 cases without changing seeds.
 #
 # Measurement note:
 #   - median_delta_min resolves through the problem-owned measurement declaration
@@ -29,7 +28,7 @@
 # 使用方式：
 #   在 run_prod_campaign.py 里改 protocol_config_path 指向本文件。
 
-version: "3.2-prod"
+version: "3.3-prod"
 
 screening:
   n_cases_modify: 6
@@ -41,7 +40,7 @@ screening:
 validation:
   n_cases: 5
   n_seeds: 3
-  expand_to: 5            # no independent expansion in prod-1.1
+  expand_to: 10           # complete independent prod-1.2 validation population
 
 frozen:
   n_cases: 4

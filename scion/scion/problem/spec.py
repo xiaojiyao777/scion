@@ -463,6 +463,7 @@ class MeasurementSpec(_Strict):
     effect_scale: MeasurementEffectScaleSpec = Field(
         default_factory=MeasurementEffectScaleSpec
     )
+    protected_objectives: tuple[str, ...] = ()
     calibration_ref: str = ""
     calibration_max_age_days: int = Field(default=90, ge=0)
     readiness_summary: MeasurementReadinessSummarySpec | None = None
@@ -535,6 +536,17 @@ class ProblemSpecV1(_Strict):
             raise ValueError(
                 "measurement.effect_scale.metric must reference a declared "
                 f"objective metric: got '{measurement_metric}'"
+            )
+        protected_objectives = tuple(self.measurement.protected_objectives)
+        if len(protected_objectives) != len(set(protected_objectives)):
+            raise ValueError("measurement.protected_objectives must be unique")
+        unknown_protected = [
+            name for name in protected_objectives if name not in set(names)
+        ]
+        if unknown_protected:
+            raise ValueError(
+                "measurement.protected_objectives must reference declared "
+                f"objective metrics: got {unknown_protected}"
             )
 
         if self.research_surfaces is not None:

@@ -153,6 +153,53 @@ def _select_cases_with_configured_priorities(
     return [case for case in cases if case in selected]
 
 
+def _select_nested_expansion_cases(
+    all_cases: Sequence[str],
+    *,
+    initial_n: int,
+    expanded_n: int,
+    configured_case_ids: Sequence[str] = (),
+) -> List[str]:
+    """Expand a fixed initial population only by adding deterministic cases."""
+
+    cases = list(all_cases)
+    initial = _select_cases_with_configured_priorities(
+        cases,
+        initial_n,
+        configured_case_ids,
+    )
+    if expanded_n <= len(initial):
+        raise ValueError(
+            "expanded case population must be larger than the initial population"
+        )
+    if expanded_n > len(cases):
+        raise ValueError(
+            "expanded case population exceeds the declared split population"
+        )
+    if expanded_n >= len(cases):
+        return cases
+
+    selected = set(initial)
+    resolved_priorities = _resolve_configured_priority_cases(
+        cases,
+        configured_case_ids,
+    )
+    for case in resolved_priorities:
+        if len(selected) >= expanded_n:
+            break
+        selected.add(case)
+
+    remaining = [case for case in cases if case not in selected]
+    needed = expanded_n - len(selected)
+    selected.update(_select_evenly_spaced_cases(remaining, needed))
+    expanded = [case for case in cases if case in selected]
+    if not set(initial) < set(expanded):
+        raise ValueError(
+            "expanded case population must strictly contain the initial population"
+        )
+    return expanded
+
+
 def _resolve_configured_priority_cases(
     all_cases: Sequence[str],
     configured_case_ids: Sequence[str],
@@ -236,6 +283,11 @@ def select_cases(
     )
 
     if stage == ExperimentStage.SCREENING:
+        initial_n = (
+            config.screening.n_cases_create
+            if hypothesis_action == "create_new"
+            else config.screening.n_cases_modify
+        )
         if expand_round > 0:
             n = (
                 config.screening.expand_to_create
@@ -243,22 +295,27 @@ def select_cases(
                 else config.screening.expand_to_modify
             )
         else:
-            n = (
-                config.screening.n_cases_create
-                if hypothesis_action == "create_new"
-                else config.screening.n_cases_modify
-            )
+            n = initial_n
     elif stage == ExperimentStage.VALIDATION:
+        initial_n = config.validation.n_cases
         n = (
             config.validation.expand_to
             if expand_round > 0
             else config.validation.n_cases
         )
     elif stage == ExperimentStage.FROZEN:
+        initial_n = config.frozen.n_cases
         n = config.frozen.n_cases
     else:
         return all_cases
 
+    if expand_round > 0:
+        return _select_nested_expansion_cases(
+            all_cases,
+            initial_n=initial_n,
+            expanded_n=n,
+            configured_case_ids=configured_priorities,
+        )
     return _select_cases_with_configured_priorities(
         all_cases,
         n,

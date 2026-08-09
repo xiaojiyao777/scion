@@ -56,6 +56,7 @@ from .feedback import (
     _build_pattern_summary,
     _extract_case_features,
     _pair_feedback_counts,
+    _protected_objective_regressions,
 )
 from .phase_telemetry import (
     _finalize_phase_telemetry_summary,
@@ -158,6 +159,7 @@ def run_experiment(
     champion_cached_runtime_pairs = 0
     problem_runtime_pairs: list[dict[str, Any]] = []
     runtime_evidence_status = "sufficient"
+    protected_objective_regressions: tuple[str, ...] = ()
     runtime_model = getattr(
         protocol.config.runtime,
         "runtime_model",
@@ -262,6 +264,11 @@ def run_experiment(
                     "stage": stage.value,
                     "selected_surface": normalized_selected_surface,
                     "objective_semantics": objective_semantics,
+                    "effect_metric": protocol.config.effect_metric or None,
+                    "protected_objectives": list(protocol.config.protected_objectives),
+                    "protected_objective_regressions": list(
+                        protected_objective_regressions
+                    ),
                     "configured_priority_case_ids": list(configured_priority_cases),
                     "effective_priority_case_ids": list(effective_priority_case_ids),
                     "case_ids": cases,
@@ -920,14 +927,15 @@ def run_experiment(
         )
         gate = GateResult(outcome="fail", reason_codes=("NO_VALID_RUNS",))
     else:
-        # T2: stats computed on case-level comparisons/deltas.
-        # F3: when metric_specs are present, gate CI is computed
-        # hierarchically by objective priority instead of one raw scalar.
+        # T2: stats are computed on case-level comparisons/deltas. When typed
+        # metrics are present, the problem-owned effect metric supplies the
+        # practical-effect estimate while all objective rows stay observable.
         if (
             protocol._metric_specs is not None
             and getattr(protocol._objective_policy, "mode", None) == "weighted_sum"
         ):
             metric_order = ["weighted_sum"]
+            effect_metric = "weighted_sum"
         else:
             metric_order = (
                 [
@@ -937,6 +945,7 @@ def run_experiment(
                 if protocol._metric_specs is not None
                 else None
             )
+            effect_metric = protocol.config.effect_metric or None
         bootstrap_n = (
             protocol.config.gates.validation.bootstrap_n
             if stage in (ExperimentStage.VALIDATION, ExperimentStage.FROZEN)
@@ -948,7 +957,13 @@ def run_experiment(
             n_boot=bootstrap_n,
             metric_deltas=[r.metric_deltas or {} for r in case_level_results],
             metric_order=metric_order,
+            effect_metric=effect_metric,
         )
+
+    protected_objective_regressions = _protected_objective_regressions(
+        all_pair_feedback,
+        protocol.config.protected_objectives,
+    )
 
     runtime_stats = _build_runtime_stats(runtime_ratios, runtime_deltas_ms)
     runtime_evidence_status = _runtime_evidence_status(
@@ -973,6 +988,7 @@ def run_experiment(
         pair_wins=pair_wins,
         pair_losses=pair_losses,
         pair_ties=pair_ties,
+        protected_objective_regressions=protected_objective_regressions,
     )
     if case_comparisons:
         if stage == ExperimentStage.SCREENING:

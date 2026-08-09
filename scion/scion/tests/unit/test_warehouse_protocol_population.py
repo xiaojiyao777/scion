@@ -19,8 +19,8 @@ SCION_DIR = Path(__file__).resolve().parents[3]
 WAREHOUSE_CONFIG_DIR = SCION_DIR / "problems" / "warehouse_delivery"
 PROTOCOL = WAREHOUSE_CONFIG_DIR / "protocol_prod.yaml"
 MANIFEST = WAREHOUSE_CONFIG_DIR / "split_manifest_prod.yaml"
-EXPECTED_PROTOCOL_VERSION = "3.2-prod"
-EXPECTED_MANIFEST_VERSION = "prod-1.1"
+EXPECTED_PROTOCOL_VERSION = "3.3-prod"
+EXPECTED_MANIFEST_VERSION = "prod-1.2"
 
 
 def _request_map(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -100,9 +100,25 @@ def test_prod_population_reconcile_records_content_bound_selections() -> None:
     assert requests["screening.create.expanded"]["available"] == 16
     assert requests["screening.create.expanded"]["resolved"] == 16
     assert requests["validation.initial"]["requested"] == 5
-    assert requests["validation.expanded"]["requested"] == 5
-    assert requests["validation.initial"]["available"] == 5
-    assert requests["validation.expanded"]["resolved"] == 5
+    assert requests["validation.expanded"]["requested"] == 10
+    assert requests["validation.initial"]["available"] == 10
+    assert requests["validation.expanded"]["resolved"] == 10
+    initial_validation = {
+        Path(case["lexical_path"]).name
+        for case in requests["validation.initial"]["selected_case_identities"]
+    }
+    expanded_validation = {
+        Path(case["lexical_path"]).name
+        for case in requests["validation.expanded"]["selected_case_identities"]
+    }
+    assert initial_validation == {
+        "instance_prod_val_l01.json",
+        "instance_prod_val_l02.json",
+        "instance_prod_val_l04.json",
+        "instance_prod_val_lx01.json",
+        "instance_prod_val_lx02.json",
+    }
+    assert initial_validation < expanded_validation
     assert [
         Path(case["lexical_path"]).name
         for case in requests["frozen.initial"]["selected_case_identities"]

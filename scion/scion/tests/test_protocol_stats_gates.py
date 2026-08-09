@@ -74,8 +74,8 @@ def test_compute_eval_stats_basic():
     assert stats.median_delta == pytest.approx(30.0)
 
 
-def test_hierarchical_stats_primary_metric_wins_despite_cost_outliers():
-    """Primary metric CI drives gate stats when metric details are available."""
+def test_stats_select_predeclared_effect_metric_and_retain_all_rows():
+    """The declared effect metric drives effect stats without hiding other rows."""
     comparisons = ["win"] * 6
     scalar_deltas = [-10000.0, -8000.0, -500.0, 200.0, 1000.0, 1200.0]
     metric_rows = [
@@ -91,15 +91,20 @@ def test_hierarchical_stats_primary_metric_wins_despite_cost_outliers():
         scalar_deltas,
         metric_deltas=metric_rows,
         metric_order=["subcategory_splits", "total_cost"],
+        effect_metric="subcategory_splits",
     )
 
     assert stats.statistical_status == "positive"
     assert stats.statistical_metric == "subcategory_splits"
     assert stats.ci_low > 0
     assert stats.median_delta == pytest.approx(1.0)
+    assert [row.metric_name for row in stats.metric_stats] == [
+        "subcategory_splits",
+        "total_cost",
+    ]
 
 
-def test_hierarchical_stats_falls_through_exact_primary_tie_to_cost():
+def test_stats_select_effect_metric_without_first_uncertain_fallthrough():
     comparisons = ["win"] * 4
     metric_rows = [
         {"subcategory_splits": 0.0, "total_cost": 10.0},
@@ -112,11 +117,68 @@ def test_hierarchical_stats_falls_through_exact_primary_tie_to_cost():
         [10.0, 15.0, 8.0, 12.0],
         metric_deltas=metric_rows,
         metric_order=["subcategory_splits", "total_cost"],
+        effect_metric="total_cost",
     )
 
     assert stats.statistical_status == "positive"
     assert stats.statistical_metric == "total_cost"
     assert stats.ci_low > 0
+
+
+def test_effect_metric_decision_is_monotonic_to_unrelated_primary_gain():
+    cost_deltas = [15300.0, 13300.0, 14700.0, 10900.0, 7700.0]
+    tied_primary = [
+        {"subcategory_splits": 0.0, "total_cost": delta}
+        for delta in cost_deltas
+    ]
+    one_primary_gain = [dict(row) for row in tied_primary]
+    one_primary_gain[0]["subcategory_splits"] = 1.0
+
+    def measured(rows):
+        return compute_eval_stats(
+            ["win"] * len(rows),
+            cost_deltas,
+            metric_deltas=rows,
+            metric_order=["subcategory_splits", "total_cost"],
+            effect_metric="total_cost",
+        )
+
+    tied = measured(tied_primary)
+    gained = measured(one_primary_gain)
+
+    assert tied.statistical_metric == gained.statistical_metric == "total_cost"
+    assert tied.median_delta == gained.median_delta
+    assert (tied.ci_low, tied.ci_high) == (gained.ci_low, gained.ci_high)
+    assert validation_gate(tied, _cfg) == validation_gate(gained, _cfg)
+
+
+def test_stats_reject_missing_declared_effect_metric():
+    with pytest.raises(ValueError, match="effect_metric is absent"):
+        compute_eval_stats(
+            ["win"],
+            [1.0],
+            metric_deltas=[{"total_cost": 1.0}],
+            metric_order=["total_cost"],
+            effect_metric="missing_metric",
+        )
+
+
+def test_effect_metric_positive_status_accepts_zero_ci_lower_bound():
+    stats = compute_eval_stats(
+        ["win", "win", "win"],
+        [0.0, 10.0, 20.0],
+        metric_deltas=[
+            {"total_cost": 0.0},
+            {"total_cost": 10.0},
+            {"total_cost": 20.0},
+        ],
+        metric_order=["total_cost"],
+        effect_metric="total_cost",
+    )
+
+    assert stats.median_delta == pytest.approx(10.0)
+    assert stats.ci_low == 0.0
+    assert stats.statistical_status == "positive"
 
 
 def test_bootstrap_ci_all_positive():
@@ -637,7 +699,7 @@ def test_validation_gate_pass():
     assert result.outcome == "pass"
 
 
-def test_validation_gate_uses_hierarchical_status():
+def test_validation_gate_uses_selected_effect_statistics():
     stats = _make_stats(
         win_rate=1.0,
         ci_low=1.0,
@@ -647,7 +709,7 @@ def test_validation_gate_uses_hierarchical_status():
     )
     result = validation_gate(stats, _cfg)
     assert result.outcome == "pass"
-    assert result.reason_codes == ("VALIDATION_PASS_HIERARCHICAL",)
+    assert result.reason_codes == ("VALIDATION_PASS",)
 
 
 def test_validation_runtime_tie_does_not_replace_objective_improvement():
@@ -666,7 +728,7 @@ def test_validation_runtime_tie_does_not_replace_objective_improvement():
     )
     result = validation_gate(stats, _cfg)
     assert result.outcome == "fail"
-    assert result.reason_codes == ("VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",)
+    assert result.reason_codes == ("VALIDATION_FAIL_BELOW_PRACTICAL_EFFECT",)
 
 
 def test_validation_gate_fail_ci_negative():
@@ -709,7 +771,7 @@ def test_validation_gate_does_not_queue_no_op_expansion():
     )
 
 
-def test_validation_gate_expands_reachable_no_loss_hierarchical_uncertainty():
+def test_validation_gate_expands_reachable_no_loss_effect_uncertainty():
     config = ProtocolConfig.model_validate(
         {
             "validation": {"n_cases": 8, "n_seeds": 4, "expand_to": 12},
@@ -735,9 +797,7 @@ def test_validation_gate_expands_reachable_no_loss_hierarchical_uncertainty():
     result = validation_gate(stats, config)
 
     assert result.outcome == "expand"
-    assert result.reason_codes == (
-        "VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN",
-    )
+    assert result.reason_codes == ("VALIDATION_EXPAND",)
 
 
 def test_expanded_validation_does_not_repeat_no_loss_reachability_exception():
@@ -795,7 +855,7 @@ def test_validation_gate_does_not_expand_when_win_threshold_is_unreachable():
     assert result.reason_codes == ("VALIDATION_FAIL_WIN_RATE",)
 
 
-def test_validation_gate_hierarchical_tie_has_no_gain_and_negative_stays_negative():
+def test_validation_gate_tie_and_negative_effects_stay_negative():
     tie_stats = _make_stats(
         n_cases=8,
         wins=0,
@@ -825,11 +885,9 @@ def test_validation_gate_hierarchical_tie_has_no_gain_and_negative_stays_negativ
     negative_result = validation_gate(negative_stats, _cfg)
 
     assert tie_result.outcome == "fail"
-    assert tie_result.reason_codes == ("VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",)
+    assert tie_result.reason_codes == ("VALIDATION_FAIL_BELOW_PRACTICAL_EFFECT",)
     assert negative_result.outcome == "fail"
-    assert negative_result.reason_codes == (
-        "VALIDATION_FAIL_HIERARCHICAL_NEGATIVE",
-    )
+    assert negative_result.reason_codes == ("VALIDATION_FAIL_BELOW_PRACTICAL_EFFECT",)
 
 
 def test_frozen_gate_pass():
@@ -854,10 +912,10 @@ def test_frozen_runtime_tie_does_not_replace_objective_improvement():
     )
     result = frozen_gate(stats, _cfg)
     assert result.outcome == "fail"
-    assert result.reason_codes == ("FROZEN_FAIL_NO_HIERARCHICAL_GAIN",)
+    assert result.reason_codes == ("FROZEN_FAIL_UNCLEAR",)
 
 
-def test_frozen_gate_rejects_hierarchical_uncertain_even_if_legacy_ci_nonnegative():
+def test_frozen_gate_uses_selected_effect_statistics_not_shadow_status():
     stats = _make_stats(
         ci_low=0.005,
         ci_high=0.02,
@@ -865,8 +923,45 @@ def test_frozen_gate_rejects_hierarchical_uncertain_even_if_legacy_ci_nonnegativ
         statistical_metric="subcategory_splits",
     )
     result = frozen_gate(stats, _cfg)
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("FROZEN_PASS",)
+
+
+@pytest.mark.parametrize(
+    ("gate", "reason"),
+    [
+        (validation_gate, "VALIDATION_FAIL_PROTECTED_OBJECTIVE_REGRESSION"),
+        (frozen_gate, "FROZEN_FAIL_PROTECTED_OBJECTIVE_REGRESSION"),
+    ],
+)
+def test_protected_objective_regression_vetoes_confirmatory_gates(gate, reason):
+    stats = _make_stats(
+        win_rate=1.0,
+        median_delta=10.0,
+        ci_low=5.0,
+        ci_high=15.0,
+        protected_objective_regressions=("fleet_violation",),
+    )
+
+    result = gate(stats, _cfg)
+
     assert result.outcome == "fail"
-    assert result.reason_codes == ("FROZEN_FAIL_HIERARCHICAL_UNCERTAIN",)
+    assert result.reason_codes == (reason,)
+
+
+def test_protected_objective_regression_is_record_only_in_screening():
+    stats = _make_stats(
+        win_rate=1.0,
+        median_delta=10.0,
+        ci_low=5.0,
+        ci_high=15.0,
+        protected_objective_regressions=("fleet_violation",),
+    )
+
+    result = screening_gate(stats, _cfg)
+
+    assert result.outcome == "pass"
+    assert result.reason_codes == ("SCREENING_PASS",)
 
 
 def test_frozen_gate_fail_ci_negative():

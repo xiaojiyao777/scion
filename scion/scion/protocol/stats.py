@@ -13,12 +13,15 @@ def compute_eval_stats(
     *,
     metric_deltas: Sequence[Mapping[str, float]] | None = None,
     metric_order: Sequence[str] | None = None,
+    effect_metric: str | None = None,
 ) -> EvalStats:
     """Compute EvalStats from per-case comparisons and deltas.
 
-    When ``metric_deltas`` and ``metric_order`` are provided, ``ci_low`` /
-    ``ci_high`` become the priority-aware hierarchical CI used by promotion
-    gates. Legacy callers without metric details keep the old scalar-delta CI.
+    All declared metric rows are retained for analysis. When ``effect_metric``
+    is provided, ``median_delta`` and its CI are selected from that predeclared
+    problem-owned metric. Lexicographic direction remains represented by the
+    case comparisons; a higher-priority nonzero row cannot shadow the declared
+    practical-effect metric.
     """
     n = len(comparisons)
     wins = comparisons.count("win")
@@ -43,8 +46,6 @@ def compute_eval_stats(
 
     if metric_deltas is not None and metric_order:
         metric_stats_list: list[MetricEvalStats] = []
-        selected: MetricEvalStats | None = None
-        selected_status: Literal["positive", "negative", "uncertain", "tie"] = "tie"
 
         for metric_name in metric_order:
             vals = [
@@ -65,32 +66,26 @@ def compute_eval_stats(
             )
             metric_stats_list.append(row)
 
-            if lo > 0:
-                selected = row
-                selected_status = "positive"
-                break
-            if hi < 0:
-                selected = row
-                selected_status = "negative"
-                break
-            if lo == 0 and hi == 0 and med == 0:
-                # Exact tie on this priority level; continue to the next metric.
-                continue
-            selected = row
-            selected_status = "uncertain"
-            break
-
         metric_stats = tuple(metric_stats_list)
-        if selected is None:
-            statistical_status = "tie"
-            statistical_metric = metric_stats[-1].metric_name if metric_stats else None
-            ci_low, ci_high = 0.0, 0.0
-            median_delta = 0.0
-        else:
-            statistical_status = selected_status
+        normalized_effect_metric = str(effect_metric or "").strip()
+        if normalized_effect_metric:
+            selected = next(
+                (
+                    row
+                    for row in metric_stats
+                    if row.metric_name == normalized_effect_metric
+                ),
+                None,
+            )
+            if selected is None:
+                raise ValueError(
+                    "effect_metric is absent from computed metric statistics: "
+                    f"{normalized_effect_metric!r}"
+                )
             statistical_metric = selected.metric_name
             ci_low, ci_high = selected.ci_low, selected.ci_high
             median_delta = selected.median_delta
+            statistical_status = _statistical_status(selected)
 
     return EvalStats(
         n_cases=n,
@@ -105,6 +100,18 @@ def compute_eval_stats(
         statistical_metric=statistical_metric,
         metric_stats=metric_stats,
     )
+
+
+def _statistical_status(
+    stats: MetricEvalStats,
+) -> Literal["positive", "negative", "uncertain", "tie"]:
+    if stats.median_delta > 0 and stats.ci_low >= 0:
+        return "positive"
+    if stats.median_delta < 0 and stats.ci_high <= 0:
+        return "negative"
+    if stats.median_delta == 0 and stats.ci_low == 0 and stats.ci_high == 0:
+        return "tie"
+    return "uncertain"
 
 
 def _median(values: Sequence[float]) -> float:

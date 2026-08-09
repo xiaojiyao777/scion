@@ -113,6 +113,7 @@ def test_cvrp_bridge_maps_route_native_categories_and_objectives() -> None:
     assert spec.measurement.runtime_model == "budget_exhausting"
     assert spec.measurement.pairing_validity == "trajectory_divergent"
     assert spec.measurement.effect_scale.metric == "total_distance"
+    assert spec.measurement.protected_objectives == ("fleet_violation",)
     assert spec.measurement.effect_scale.practical_delta_screen == 2.0
     assert spec.measurement.calibration_ref == (
         "formal/calibration/aa_noise_floor.json"
@@ -154,6 +155,7 @@ def test_warehouse_problem_spec_declares_legacy_family_taxonomy() -> None:
     assert spec.family_taxonomy is not None
     assert spec.measurement.runtime_model == "comparative"
     assert spec.measurement.effect_scale.metric == "total_cost"
+    assert spec.measurement.protected_objectives == ()
     assert "subcategory_consolidation" in spec.family_taxonomy.families
     assert "order_swap" in spec.family_taxonomy.families
     assert "cost_reduction" in spec.family_taxonomy.families

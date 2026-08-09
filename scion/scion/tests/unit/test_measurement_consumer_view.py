@@ -24,6 +24,7 @@ class _Measurement:
     runtime_model = "comparative"
     pairing_validity = "trajectory_stable"
     effect_scale = _EffectScale()
+    protected_objectives = ("total_cost",)
     calibration_ref = ""
     calibration_max_age_days = 90
     readiness_summary = None
@@ -95,6 +96,7 @@ def test_measurement_consumer_view_reduces_problem_declaration(tmp_path) -> None
     assert view.runtime_model == "comparative"
     assert view.pairing_validity == "trajectory_stable"
     assert view.effect_metric == "total_cost"
+    assert view.protected_objectives == ("total_cost",)
     assert view.effect_unit == "raw_delta"
     assert view.practical_delta_screen == 2.0
     assert view.practical_delta_validate == 1.0
@@ -178,6 +180,7 @@ def test_mapping_consumer_view_uses_overridden_calibration_ref(tmp_path) -> None
                 "practical_delta_screen": 2.0,
                 "practical_delta_validate": 1.0,
             },
+            "protected_objectives": ["total_cost"],
             "calibration_ref": "missing/aa_noise_floor.json",
             "calibration_max_age_days": 90,
         },
@@ -195,6 +198,7 @@ def test_mapping_consumer_view_uses_overridden_calibration_ref(tmp_path) -> None
     assert view.readiness_status == "ready"
     assert view.readiness_reason_code == "ok"
     assert view.mde_at_power_80 == 4.0
+    assert view.protected_objectives == ("total_cost",)
     assert view.evidence_depth == "full_replay"
 
 

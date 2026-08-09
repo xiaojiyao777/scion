@@ -192,6 +192,32 @@ def test_formal_screening_selection_retains_cmt2_and_cmt4_priorities() -> None:
     assert "cvrplib/CMT/CMT4.vrp" in selected
 
 
+def test_formal_modify_expansion_strictly_contains_initial_population() -> None:
+    protocol = ProtocolConfig.from_yaml(FORMAL_DIR / "protocol.yaml")
+    split = SplitManifest.from_yaml(FORMAL_DIR / "split_manifest.yaml")
+    manager = SplitManager(split)
+
+    initial = select_cases(
+        config=protocol,
+        split_manager=manager,
+        stage=ExperimentStage.SCREENING,
+        hypothesis_action="modify",
+        expand_round=0,
+    )
+    expanded = select_cases(
+        config=protocol,
+        split_manager=manager,
+        stage=ExperimentStage.SCREENING,
+        hypothesis_action="modify",
+        expand_round=1,
+    )
+
+    assert len(initial) == protocol.screening.n_cases_modify == 8
+    assert len(expanded) == protocol.screening.expand_to_modify == 12
+    assert set(initial) < set(expanded)
+    assert set(protocol.screening.priority_case_ids) <= set(expanded)
+
+
 def test_formal_cases_are_reference_clean_and_screening_has_gap_headroom() -> None:
     rows_by_path = _load_final_ledger_rows_by_path()
     reference_bad = _load_reference_bad_instances()

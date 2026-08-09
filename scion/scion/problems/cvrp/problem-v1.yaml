@@ -51,6 +51,8 @@ parameter_search:
 measurement:
   runtime_model: budget_exhausting
   pairing_validity: trajectory_divergent
+  protected_objectives:
+    - fleet_violation
   effect_scale:
     metric: total_distance
     unit: raw_delta
@@ -132,7 +134,9 @@ research_surfaces:
         routes attribute, or a mapping {'routes': [[customer_id, ...], ...]}.
         Routes are implicit-depot customer sequences. The adapter recomputes
         objective and rejects malformed, infeasible, duplicate/missing-customer,
-        capacity-violating, or route-count-violating outputs.
+        or capacity-violating outputs. Exceeding the declared route limit is
+        measured as the lexicographic fleet_violation objective, not treated as
+        structural infeasibility.
     bounds:
       allowed_components:
         - construction

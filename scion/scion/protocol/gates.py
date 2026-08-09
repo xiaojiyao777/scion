@@ -51,62 +51,29 @@ def validation_gate(
     threshold = config.validation_win_rate_threshold
     practical_delta = config.validation_min_practical_delta
     ci_low_min = config.gates.validation.bootstrap_ci_low_min
+    if stats.protected_objective_regressions:
+        return GateResult(
+            outcome="fail",
+            reason_codes=("VALIDATION_FAIL_PROTECTED_OBJECTIVE_REGRESSION",),
+        )
     case_effect_pass = (
         wr >= threshold
         and stats.median_delta >= practical_delta
         and stats.ci_low >= ci_low_min
     )
 
-    if stats.statistical_status is not None:
-        if stats.statistical_status == "positive":
-            if case_effect_pass:
-                gate = GateResult(
-                    outcome="pass",
-                    reason_codes=("VALIDATION_PASS_HIERARCHICAL",),
-                )
-            else:
-                gate = GateResult(
-                    outcome="expand",
-                    reason_codes=("VALIDATION_EXPAND_PRACTICAL_EFFECT",),
-                )
-        elif stats.statistical_status == "negative":
-            gate = GateResult(
-                outcome="fail",
-                reason_codes=("VALIDATION_FAIL_HIERARCHICAL_NEGATIVE",),
-            )
-        elif stats.statistical_status == "uncertain":
-            if stats.ci_high < practical_delta:
-                gate = GateResult(
-                    outcome="fail",
-                    reason_codes=("VALIDATION_FAIL_BELOW_PRACTICAL_EFFECT",),
-                )
-            elif wr >= threshold or _initial_validation_expand_is_reachable(
-                stats,
-                config,
-                expanded=expanded,
-            ):
-                gate = GateResult(
-                    outcome="expand",
-                    reason_codes=("VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN",),
-                )
-            else:
-                gate = GateResult(
-                    outcome="fail",
-                    reason_codes=("VALIDATION_FAIL_WIN_RATE",),
-                )
-        else:
-            gate = GateResult(
-                outcome="fail",
-                reason_codes=("VALIDATION_FAIL_NO_HIERARCHICAL_GAIN",),
-            )
-    elif case_effect_pass:
+    if case_effect_pass:
         gate = GateResult(outcome="pass", reason_codes=("VALIDATION_PASS",))
     elif stats.ci_high < practical_delta:
         gate = GateResult(
             outcome="fail",
             reason_codes=("VALIDATION_FAIL_BELOW_PRACTICAL_EFFECT",),
         )
-    elif wr >= threshold:
+    elif wr >= threshold or _initial_validation_expand_is_reachable(
+        stats,
+        config,
+        expanded=expanded,
+    ):
         gate = GateResult(outcome="expand", reason_codes=("VALIDATION_EXPAND",))
     else:
         gate = GateResult(outcome="fail", reason_codes=("VALIDATION_FAIL_WIN_RATE",))
@@ -142,20 +109,16 @@ def _initial_validation_expand_is_reachable(
 
 def frozen_gate(stats: EvalStats, config: ProtocolConfig) -> GateResult:
     """Promote only case-level effects satisfying the declared holdout rule."""
+    if stats.protected_objective_regressions:
+        return GateResult(
+            outcome="fail",
+            reason_codes=("FROZEN_FAIL_PROTECTED_OBJECTIVE_REGRESSION",),
+        )
     case_effect_pass = (
         stats.win_rate >= config.validation_win_rate_threshold
         and stats.median_delta >= config.validation_min_practical_delta
         and stats.ci_low >= config.gates.frozen.bootstrap_ci_low_min
     )
-
-    if stats.statistical_status is not None:
-        if stats.statistical_status == "positive" and case_effect_pass:
-            return GateResult(outcome="pass", reason_codes=("FROZEN_PASS_HIERARCHICAL",))
-        if stats.statistical_status == "negative":
-            return GateResult(outcome="fail", reason_codes=("FROZEN_FAIL_HIERARCHICAL_NEGATIVE",))
-        if stats.statistical_status == "tie":
-            return GateResult(outcome="fail", reason_codes=("FROZEN_FAIL_NO_HIERARCHICAL_GAIN",))
-        return GateResult(outcome="fail", reason_codes=("FROZEN_FAIL_HIERARCHICAL_UNCERTAIN",))
 
     if case_effect_pass:
         return GateResult(outcome="pass", reason_codes=("FROZEN_PASS",))

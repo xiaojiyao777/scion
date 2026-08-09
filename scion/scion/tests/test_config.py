@@ -102,10 +102,12 @@ def test_protocol_config_resolves_problem_measurement_practical_delta():
                 "EffectScale",
                 (),
                 {
+                    "metric": "tour_cost",
                     "practical_delta_screen": 2.5,
                     "practical_delta_validate": 1.25,
                 },
-            )()
+            )(),
+            "protected_objectives": ("tour_cost",),
         },
     )()
     problem_spec = type("ProblemSpec", (), {"measurement": measurement})()
@@ -115,6 +117,8 @@ def test_protocol_config_resolves_problem_measurement_practical_delta():
     assert config.min_practical_delta == 2.5
     assert config.screening_min_practical_delta == 2.5
     assert config.validation_min_practical_delta == 1.25
+    assert config.effect_metric == "tour_cost"
+    assert config.protected_objectives == ("tour_cost",)
     assert config.runtime.runtime_model == "budget_exhausting"
     assert config.pairing_validity == "trajectory_divergent"
     assert config.measurement_governance == "on"
@@ -134,10 +138,12 @@ def test_protocol_config_record_only_measurement_keeps_status_not_behavior():
                 "EffectScale",
                 (),
                 {
+                    "metric": "tour_cost",
                     "practical_delta_screen": 2.5,
                     "practical_delta_validate": 1.25,
                 },
             )(),
+            "protected_objectives": ("tour_cost",),
         },
     )()
     problem_spec = type("ProblemSpec", (), {"measurement": measurement})()
@@ -160,6 +166,8 @@ def test_protocol_config_record_only_measurement_keeps_status_not_behavior():
     assert on_config.measurement_governance == "on"
     assert on_config.screening_min_practical_delta == 2.5
     assert on_config.validation_min_practical_delta == 1.25
+    assert on_config.effect_metric == "tour_cost"
+    assert on_config.protected_objectives == ("tour_cost",)
     assert on_config.runtime.runtime_model == "budget_exhausting"
     assert on_config.pairing_validity == "trajectory_divergent"
     assert config.measurement_governance == "record_only"
@@ -167,6 +175,8 @@ def test_protocol_config_record_only_measurement_keeps_status_not_behavior():
     assert config.measurement_readiness.reason_code == "missing_calibration_ref"
     assert config.screening_min_practical_delta == 0.4
     assert config.validation_min_practical_delta == 0.8
+    assert config.effect_metric == ""
+    assert config.protected_objectives == ()
     assert config.runtime.runtime_model == "comparative"
     assert config.pairing_validity == "trajectory_stable"
 
@@ -187,6 +197,8 @@ def test_cvrp_formal_protocol_consumes_problem_measurement_declaration():
     assert config.measurement_governance == "on"
     assert config.screening_min_practical_delta == pytest.approx(2.0)
     assert config.validation_min_practical_delta == pytest.approx(1.0)
+    assert config.effect_metric == "total_distance"
+    assert config.protected_objectives == ("fleet_violation",)
     assert config.runtime.runtime_model == "budget_exhausting"
     assert config.pairing_validity == "trajectory_divergent"
     assert config.measurement_readiness.status == "ready"
@@ -215,6 +227,8 @@ def test_warehouse_prod_protocol_consumes_problem_measurement_declaration():
     assert config.measurement_governance == "on"
     assert config.screening_min_practical_delta == pytest.approx(0.001)
     assert config.validation_min_practical_delta == pytest.approx(0.001)
+    assert config.effect_metric == "total_cost"
+    assert config.protected_objectives == ()
     assert config.runtime.runtime_model == "comparative"
     assert config.pairing_validity == "trajectory_divergent"
     assert config.measurement_readiness.status == "ready"

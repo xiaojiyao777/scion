@@ -463,6 +463,12 @@ class ProtocolConfig(BaseModel):
     practical_delta_validate: float = Field(default=0.001, ge=0.0)
     """Resolved validation practical delta in the protocol's current delta units."""
 
+    effect_metric: str = ""
+    """Problem-owned objective used for practical-effect and CI statistics."""
+
+    protected_objectives: tuple[str, ...] = ()
+    """Problem-owned objectives with a typed no-regression Protocol veto."""
+
     pairing_validity: Literal["trajectory_stable", "trajectory_divergent"] = (
         "trajectory_stable"
     )
@@ -560,6 +566,8 @@ class ProtocolConfig(BaseModel):
             return type(self).model_validate(data)
 
         updates: dict[str, float] = {}
+        data["effect_metric"] = measurement_view.effect_metric
+        data["protected_objectives"] = measurement_view.protected_objectives
         if measurement_view.practical_delta_screen is not None:
             updates["practical_delta_screen"] = _nonnegative_float(
                 "practical_delta_screen",

@@ -144,6 +144,22 @@ class TestProblemSpecV1:
         with pytest.raises(ValueError, match="measurement.effect_scale.metric"):
             ProblemSpecV1(**data)
 
+    def test_protected_objective_must_reference_declared_objective(self) -> None:
+        data = _minimal_spec_data()
+        data["measurement"] = {"protected_objectives": ["missing_cost"]}
+
+        with pytest.raises(ValueError, match="protected_objectives"):
+            ProblemSpecV1(**data)
+
+    def test_protected_objectives_must_be_unique(self) -> None:
+        data = _minimal_spec_data()
+        data["measurement"] = {
+            "protected_objectives": ["tour_cost", "tour_cost"]
+        }
+
+        with pytest.raises(ValueError, match="protected_objectives must be unique"):
+            ProblemSpecV1(**data)
+
     def test_operator_execute_signature_validated(self) -> None:
         data = _minimal_spec_data()
         data["operator_interface"]["execute_signature"] = (

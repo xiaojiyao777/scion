@@ -27,6 +27,29 @@ def _pair_feedback_counts(pairs: Sequence[PairwiseCaseFeedback]) -> dict[str, An
     }
 
 
+def _protected_objective_regressions(
+    pairs: Sequence[PairwiseCaseFeedback],
+    protected_objectives: Sequence[str],
+) -> tuple[str, ...]:
+    """Return declared protected metrics worsened on any complete A/B pair."""
+
+    protected = {
+        str(name).strip()
+        for name in protected_objectives
+        if str(name).strip()
+    }
+    regressions: set[str] = set()
+    if not protected:
+        return ()
+    for pair in pairs:
+        comparison = pair.objective_comparison
+        for metric in getattr(comparison, "metrics", ()) or ():
+            name = str(getattr(metric, "name", "") or "").strip()
+            if name in protected and getattr(metric, "relation", None) == "champion":
+                regressions.add(name)
+    return tuple(sorted(regressions))
+
+
 def _aggregate_pairs_to_case_level(
     pairs: List[PairwiseCaseFeedback],
 ) -> List[CaseLevelResult]:
@@ -220,4 +243,5 @@ __all__ = [
     "_build_pattern_summary",
     "_extract_case_features",
     "_pair_feedback_counts",
+    "_protected_objective_regressions",
 ]

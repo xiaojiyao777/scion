@@ -39,6 +39,7 @@ class MeasurementConsumerView:
     pairing_validity: PairingValidity = "trajectory_stable"
     effect_metric: str = ""
     effect_unit: str = ""
+    protected_objectives: tuple[str, ...] = ()
     practical_delta_screen: float | None = None
     practical_delta_validate: float | None = None
     mde_at_power_80: float | None = None
@@ -65,6 +66,7 @@ class MeasurementConsumerView:
             "pairing_validity": self.pairing_validity,
             "effect_metric": self.effect_metric,
             "effect_unit": self.effect_unit,
+            "protected_objectives": list(self.protected_objectives),
             "practical_delta_screen": self.practical_delta_screen,
             "practical_delta_validate": self.practical_delta_validate,
             "mde_at_power_80": self.mde_at_power_80,
@@ -135,6 +137,11 @@ def measurement_consumer_view(
         ),
         effect_metric=_text(getattr(effect_scale, "metric", "")),
         effect_unit=_text(getattr(effect_scale, "unit", "")),
+        protected_objectives=tuple(
+            _text(name)
+            for name in getattr(measurement, "protected_objectives", ()) or ()
+            if _text(name)
+        ),
         practical_delta_screen=_optional_nonnegative_float(
             "measurement.effect_scale.practical_delta_screen",
             getattr(effect_scale, "practical_delta_screen", None),
@@ -251,6 +258,7 @@ def _measurement_namespace(
             practical_delta_screen=effect_scale.get("practical_delta_screen"),
             practical_delta_validate=effect_scale.get("practical_delta_validate"),
         ),
+        protected_objectives=tuple(value.get("protected_objectives") or ()),
         calibration_ref=(
             calibration_ref_override
             if calibration_ref_override is not None

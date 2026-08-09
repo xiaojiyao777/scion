@@ -247,7 +247,11 @@ def build_run_validity(
         status = "pending"
         valid = None
     elif typed_outcomes_available and evaluated_count > 0:
-        if completed_requested and blocking_non_evaluated_count == 0:
+        # ``effective_rounds_completed`` counts the formal Protocol stages that
+        # the invocation requested.  Candidate-local proposal/verification
+        # rejections remain useful attempt evidence, but they do not make a
+        # campaign resumable after that formal horizon has been completed.
+        if completed_requested:
             reason = RUN_VALIDITY_VALID
         else:
             reason = (

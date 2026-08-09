@@ -32,6 +32,7 @@ from scion.protocol.experiment import (
     _select_evenly_spaced_cases,
 )
 from scion.protocol.experiment.selection import select_cases
+from scion.protocol.experiment.feedback import _protected_objective_regressions
 from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
     load_problem_spec_v1_from_yaml,
@@ -260,6 +261,46 @@ def test_case_level_majority_vote_aggregation():
     assert by_case["c3"].comparison == "tie"
 
 
+def test_protected_regression_is_derived_from_pair_metric_relations():
+    from scion.problem.objectives import MetricComparison, ObjectiveComparison
+
+    comparison = ObjectiveComparison(
+        outcome="win",
+        decisive_metric="total_distance",
+        scalar_delta=20.0,
+        metrics=(
+            MetricComparison(
+                name="fleet_violation",
+                candidate_value=1,
+                champion_value=0,
+                signed_delta=-1.0,
+                relation="champion",
+            ),
+            MetricComparison(
+                name="total_distance",
+                candidate_value=980.0,
+                champion_value=1000.0,
+                signed_delta=20.0,
+                relation="candidate",
+                decisive=True,
+            ),
+        ),
+    )
+    pair = PairwiseCaseFeedback(
+        case_id="c1",
+        seed=10,
+        comparison="win",
+        delta=20.0,
+        objective_comparison=comparison,
+    )
+
+    assert _protected_objective_regressions(
+        [pair],
+        ("fleet_violation",),
+    ) == ("fleet_violation",)
+    assert _protected_objective_regressions([pair], ()) == ()
+
+
 def test_case_selection_uses_manifest_spread_not_prefix():
     cases = [f"c{i}" for i in range(10)]
     assert _select_evenly_spaced_cases(cases, 4) == ["c0", "c3", "c6", "c9"]
@@ -403,17 +444,25 @@ def test_expand_increases_cases_not_seeds(
     assert len(expand_instances) > len(no_expand_instances), (
         "expand must increase case count"
     )
+    assert no_expand_instances < expand_instances, (
+        "expanded population must strictly contain the initial population"
+    )
     assert expand_seeds == no_expand_seeds, (
         f"expand must NOT change seed set: {expand_seeds} != {no_expand_seeds}"
     )
 
 
-def test_experiment_uses_declared_bootstrap_count(
+@pytest.mark.parametrize(
+    "stage",
+    [ExperimentStage.VALIDATION, ExperimentStage.FROZEN],
+)
+def test_confirmatory_experiment_uses_declared_bootstrap_count(
     minimal_config,
     minimal_manifest,
     minimal_ledger,
     tmp_path,
     monkeypatch,
+    stage,
 ):
     import scion.protocol.experiment.stages as stages_module
 
@@ -432,13 +481,31 @@ def test_experiment_uses_declared_bootstrap_count(
     monkeypatch.setattr(stages_module, "compute_eval_stats", recording_compute)
 
     proto.run_experiment(
-        ExperimentStage.VALIDATION,
+        stage,
         "/cand",
         "/champ",
         "modify",
     )
 
     assert observed == [37]
+
+
+def test_expand_rejects_a_population_without_new_cases(
+    minimal_config,
+    minimal_manifest,
+):
+    configured = minimal_config.model_copy(deep=True)
+    configured.validation.expand_to = configured.validation.n_cases
+    manager = SplitManager(minimal_manifest)
+
+    with pytest.raises(ValueError, match="must be larger"):
+        select_cases(
+            config=configured,
+            split_manager=manager,
+            stage=ExperimentStage.VALIDATION,
+            hypothesis_action="modify",
+            expand_round=1,
+        )
 
 
 def test_screening_expand_respects_action_specific_limits(
