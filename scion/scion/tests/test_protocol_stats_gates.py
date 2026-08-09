@@ -681,6 +681,34 @@ def test_validation_gate_expand():
     assert result.outcome == "expand"
 
 
+def test_validation_gate_does_not_queue_no_op_expansion():
+    config = ProtocolConfig.model_validate(
+        {
+            "validation": {"n_cases": 5, "n_seeds": 3, "expand_to": 5},
+            "gates": {"validation": {"win_rate_min": 0.55}},
+        }
+    )
+    stats = _make_stats(
+        n_cases=5,
+        wins=5,
+        losses=0,
+        ties=0,
+        win_rate=1.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=1.0,
+        statistical_status="uncertain",
+        statistical_metric="primary_metric",
+    )
+
+    result = validation_gate(stats, config)
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == (
+        "VALIDATION_EXPAND_EXHAUSTED_INSUFFICIENT_EVIDENCE",
+    )
+
+
 def test_validation_gate_expands_reachable_no_loss_hierarchical_uncertainty():
     config = ProtocolConfig.model_validate(
         {

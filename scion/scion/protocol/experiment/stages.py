@@ -937,9 +937,15 @@ def run_experiment(
                 if protocol._metric_specs is not None
                 else None
             )
+        bootstrap_n = (
+            protocol.config.gates.validation.bootstrap_n
+            if stage in (ExperimentStage.VALIDATION, ExperimentStage.FROZEN)
+            else 1000
+        )
         stats = compute_eval_stats(
             case_comparisons,
             case_deltas,
+            n_boot=bootstrap_n,
             metric_deltas=[r.metric_deltas or {} for r in case_level_results],
             metric_order=metric_order,
         )

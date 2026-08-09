@@ -110,7 +110,9 @@ def validation_gate(
         gate = GateResult(outcome="expand", reason_codes=("VALIDATION_EXPAND",))
     else:
         gate = GateResult(outcome="fail", reason_codes=("VALIDATION_FAIL_WIN_RATE",))
-    if expanded and gate.outcome == "expand":
+    if gate.outcome == "expand" and (
+        expanded or config.validation.expand_to <= stats.n_cases
+    ):
         return GateResult(
             outcome="fail",
             reason_codes=("VALIDATION_EXPAND_EXHAUSTED_INSUFFICIENT_EVIDENCE",),

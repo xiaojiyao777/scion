@@ -408,6 +408,39 @@ def test_expand_increases_cases_not_seeds(
     )
 
 
+def test_experiment_uses_declared_bootstrap_count(
+    minimal_config,
+    minimal_manifest,
+    minimal_ledger,
+    tmp_path,
+    monkeypatch,
+):
+    import scion.protocol.experiment.stages as stages_module
+
+    configured = minimal_config.model_copy(deep=True)
+    configured.gates.validation.bootstrap_n = 37
+    runner = MagicMock()
+    runner.run_solver.return_value = _win_result()
+    proto = _make_proto(runner, configured, minimal_manifest, minimal_ledger, tmp_path)
+    observed: list[int] = []
+    real_compute = stages_module.compute_eval_stats
+
+    def recording_compute(*args, **kwargs):
+        observed.append(kwargs["n_boot"])
+        return real_compute(*args, **kwargs)
+
+    monkeypatch.setattr(stages_module, "compute_eval_stats", recording_compute)
+
+    proto.run_experiment(
+        ExperimentStage.VALIDATION,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert observed == [37]
+
+
 def test_screening_expand_respects_action_specific_limits(
     minimal_config, minimal_manifest, minimal_ledger, tmp_path
 ):
