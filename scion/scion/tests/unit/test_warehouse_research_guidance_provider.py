@@ -77,7 +77,8 @@ def test_warehouse_provider_keeps_both_algorithm_surfaces_open() -> None:
     for line in WAREHOUSE_PRODUCTION_RESEARCH_PRIOR:
         assert rendered.text.count(line) == 1
     assert "5W/0L/0T cases and 14W/1L/0T pairs" in rendered.text
-    assert "median total_cost improvement +13200" in rendered.text
+    assert "paired-run median total_cost improvement +13200" in rendered.text
+    assert "case-level median +13300" in rendered.text
     assert "candidate/champion ratio was 1.473" in rendered.text
     assert "seven tied cases, hence case win rate 0.5" in rendered.text
     assert "require neither continuing nor abandoning DestroyRebuild" in rendered.text

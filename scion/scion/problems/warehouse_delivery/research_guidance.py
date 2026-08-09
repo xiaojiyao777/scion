@@ -60,8 +60,8 @@ WAREHOUSE_PRODUCTION_RESEARCH_PRIOR = (
         "In the preregistered prod-1.1 12-stage campaign, successive verified "
         "DestroyRebuild refinements on one branch formed a valid research funnel. "
         "The final candidate completed the five established validation cases at "
-        "5W/0L/0T cases and 14W/1L/0T pairs, with median total_cost improvement "
-        "+13200."
+        "5W/0L/0T cases and 14W/1L/0T pairs, with paired-run median total_cost "
+        "improvement +13200 (case-level median +13300)."
     ),
     (
         "That campaign produced no promotion or frozen evidence. The final "
