@@ -541,8 +541,39 @@ regressions pass after the change.
 
 Corrected R2 is frozen in
 [`v0.4-cvrp-v3-quality-screen-12stage-r2-preregistration-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-quality-screen-12stage-r2-preregistration-20260809.md)
-at executable commit `41956f36` and an absent fresh root. It remains explicitly
-uncalibrated; launch and postrun evidence are pending.
+at executable commit `41956f36` and was launched once in the declared fresh
+root. It is now terminal and sealed. The wrapper stopped
+`incomplete_infra_stop / valid_but_incomplete` after the final C stream ended
+upstream without a terminal event. The pre-registered classification is
+`RUN_INVALID_INFRA`; the completed record is retained separately as
+`VALID_PARTIAL_SCIENCE_10_OF_12`. The root must not be resumed and the failed C
+must not be retried.
+
+R2 completed 10 formal screening stages and 448/448 valid pairs with zero
+candidate/champion failure, feasibility failure or protected fleet regression.
+It exercised three branches, two exact 12x8 quality expansions, two
+candidate-local schema rejections that correctly scheduled forward, and no
+Contract/Verification rejection. Champion remains original B0/v1; no candidate
+reached validation, frozen holdout or promotion.
+
+The strongest result is elapsed-budget simulated-annealing cooling. Its exact
+quality screen returned 6W/1L/5T cases, 49/20/27 pairs and median distance
+`+2.75 [0,11]`. This is broadly non-inferior and mechanism-consistent, but it is
+not a hidden pass: the fixed rule used wins/all cases and 6/12 is below 0.60.
+SWAP* reached 6W/5L/1T and `+1 [-7.5,9.75]`; a transactional route-cap ejection
+was a valid mixed negative. One time-aware-credit C added only unused constants,
+so its result is proposal-fidelity evidence rather than an algorithm negative.
+
+The full postrun and claim boundary are in
+[`v0.4-cvrp-v3-quality-screen-12stage-r2-postrun-20260809.md`](../experiments/v0.4/v0.4-cvrp-v3-quality-screen-12stage-r2-postrun-20260809.md).
+R3 is the next fresh promotion-seeking rung. Its prerequisites are limited to
+lossless compact context framing, mechanical provider completion facts,
+intended-H versus executed-patch context, and a prospectively calibrated
+tie-aware case rule with a loss veto. They are not new proposal-quality gates,
+and R1/R2 are not reinterpreted. The existing local Codex-proxy development
+process is again listening on `127.0.0.1:8080`, reports one authenticated active
+account, and exposes `gpt-5.6-terra`; no proxy build, upgrade or Scion deployment
+work was performed.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
@@ -703,11 +734,12 @@ declared held-out pairs. Synthetic Warehouse continuity is
 DestroyRebuild candidate and its separately preregistered 12/12 fresh replay
 returned `FROZEN_PASS`, so Warehouse production transfer is
 `RETAINED_PRODUCTION_IMPROVEMENT` and all Warehouse acceptance is complete.
-CVRP has no Protocol-complete promotion. Its matched R1 is sealed at 5/8 with
-valid partial science and one unresolved depth-one signal, but no candidate
-reached validation or frozen holdout. Closure now requires a fresh,
-staged-measurement and explicitly uncalibrated CVRP rung, one CVRP
-screening -> validation -> frozen promotion, an independent B0 comparison and
-the S6 cross-problem/full-regression record.
+CVRP has no Protocol-complete promotion. R1 is sealed at 5/8 and R2 at 10/12;
+both retain valid partial science but neither candidate path reached validation
+or frozen holdout. R2's elapsed-budget SA is the current strongest lead, while
+its fixed tie-sensitive breadth rule and provider-visible context are explicit
+R3 design inputs. Closure now requires one fresh prospectively calibrated R3,
+one CVRP screening -> validation -> frozen promotion, an independent B0
+comparison and the S6 cross-problem/full-regression record.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.

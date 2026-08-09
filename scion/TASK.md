@@ -188,6 +188,10 @@ They do not block this task and cannot satisfy it.
 | R32 | proven calibration-compatibility defect; corrected prospectively | The checked-in CVRP readiness and adapter projected the old 8-case x 4-seed pair-level MDE `9.9` as ready for R2, whose estimator, 12-case population, eight-seed quality screen and scale-aware runtime differ. A later 8-seed pair-level A/A reported MDE `9.6`, but it is also incompatible and does not validate its heuristic 16-seed recommendation. | Mark R2 uncalibrated, keep both MDE values as explicitly incompatible historical low-power diagnostics, and synchronize the declared matrix with actual execution. R2 may test research behavior and large effects but must not claim calibrated power or rule out effects near delta `2`. |
 | R33 | active experimental-design risk; bounded prospectively | A no-promotion campaign can reflect the candidate ideas, the stage/case/seed measurement design, or an H/C context and tool surface that diverts attention from algorithm research. Adding more host rules cannot distinguish those causes and can itself suppress useful search. | Treat stage populations, estimator semantics, provider-visible context and available edit/research tools as explicit experiment inputs. Preserve only V3 Contract/Verification/Protocol authority and minimum replayable lineage. R2 measures the integrated research path; its postrun must analyze proposal focus, usable evidence, tool/edit friction and measurement reach separately. If causal isolation is still needed, use a later fresh preregistered matched ablation rather than tuning the active root or adding a quality gate. |
 | R34 | proven V3 exposure/context-burden defect; corrected at `41956f36` | The proposed R2 H prior exposed current-split validation case `tai150a`, seed-level deltas and frozen/validation summaries. C also received several overlapping source/interface/rules packets, one route-count statement contradicted the protected-objective semantics, and H was told to use an incompatible MDE. | Remove all validation/frozen detail from H, retain screening-level mechanism facts only, expose every current source file once, correct excess routes to `fleet_violation`, and keep one problem-owned object/API packet plus target-specific guidance. The result removes 94 net lines, adds no gate and passes the complete suite. |
+| R35 | proven valid partial science; terminal root sealed | Corrected R2 completed 10 formal stages and 448/448 valid pairs before the final C stream ended upstream without a terminal event. Two schema-invalid H calls scheduled forward; no Contract/Verification candidate failed and no feasibility or fleet regression occurred. | Classify the root as pre-registered `RUN_INVALID_INFRA` with `VALID_PARTIAL_SCIENCE_10_OF_12`. Never resume or retry it. There was no validation, frozen stage or promotion; retain completed evidence only as neutral input to a fresh R3. |
+| R36 | proven proposal-fidelity/context-attribution defect; minimal correction pending | One C for time-aware operator credit added only three unused constants. Formal objectives were 32/32 identical to its parent, yet later H history could describe the intended mechanism without an executed-patch fact. The trace also omitted provider finish/tool-choice facts needed to distinguish a completed no-op from response truncation. | Record mechanical provider completion facts in durable traces and project concise executed-file/change facts separately from intended H. They are analysis and next-H context only, never Contract/Verification/Decision gates. Do not add semantic patch grading or retry. |
+| R37 | proven prospective measurement-design defect | R2 elapsed-budget SA reached 6W/1L/5T cases, pair 49/20/27 and distance `+2.75 [0,11]`, but fixed `wins/all_cases >= 0.60` treats exact ties as breadth failures and therefore correctly returned unclear. The candidate is not a hidden pass. | Before R3, pre-register and lightly calibrate a tie-aware case-level quality rule with an explicit loss veto, fixed cases/seeds and unchanged feasibility/fleet protection. Apply it prospectively through quality, validation and frozen; never reinterpret R1/R2. |
+| R38 | proven context-framing burden; lossless correction pending | The final R2 H reached 45,373 input tokens. Complete current source was useful, but pretty JSON and repeated structured history consumed avoidable visible bytes and attention. | Use deterministic compact canonical JSON and concise current-step execution facts while preserving complete raw lineage, complete current source and validation/frozen non-exposure. Do not introduce top-k, token cutoffs, opaque summaries or history gates. |
 
 ## Modular execution plan
 
@@ -465,20 +469,34 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   rules it must obey. Record provider input size, tool/edit outcomes and typed
   rejection causes for analysis only. Do not impose token top-k, novelty,
   mechanism, activation, style or algorithm-quality gates.
-- [ ] Run corrected R2 in a new absent root through the same open H/C and V3
-  authority path. The provider may refine depth one, pivot, or choose another
-  source-grounded mechanism; R1 evidence is context, not a mandate.
+- [x] Run corrected R2 once in a new absent root through the same open H/C and
+  V3 authority path. It completed 10 formal stages and 448/448 valid pairs,
+  then stopped on a terminal-less provider C at 10/12. The sealed root is
+  `RUN_INVALID_INFRA / VALID_PARTIAL_SCIENCE_10_OF_12`; champion remains B0/v1.
+- [x] Separate R2 research behavior, measurement reach and framework friction
+  in its postrun. The strongest elapsed-budget SA reached 6W/1L/5T cases and
+  `+2.75 [0,11]`, but correctly missed the fixed 0.60 all-case win threshold.
+  It is a prospective R3 lead, not a retroactive R2 pass.
+- [ ] Complete only the observed R3 hot-path prerequisites: lossless compact
+  canonical H/C framing; mechanical provider completion trace fields; concise
+  intended-H versus executed-patch facts; and a prospectively calibrated,
+  tie-aware case rule with an explicit loss veto. Add no quality, novelty,
+  activation, Trust/Hash, token or runtime gate.
+- [ ] Pre-register R3 in a fresh absent root as an integrated corrected,
+  promotion-seeking rung. Freeze context sections, tool/edit surface, case
+  populations, ordered seeds, time limits, initial-to-quality routing and the
+  quality/validation/frozen rule before launch. R3 may establish the integrated
+  configuration, not causal credit for each correction.
+- [ ] Launch R3 once with `gpt-5.6-terra` only after the local Codex proxy is
+  healthy. Preserve and seal every terminal root; never retry a failed call.
 - [ ] After a Protocol-complete promotion, compare the exact promoted champion
   independently against original B0 on the predeclared final population. Use
   no provider call, dynamic subset, threshold change or favorable family
   selection after observing results.
-- [ ] If R2 does not promote, separate three claims in postrun analysis:
-  research behavior (did H/C form and implement causal algorithm ideas),
-  measurement reach (what effects the fixed staged design could distinguish),
-  and framework friction (what useful proposals were blocked before Protocol).
-  A later matched context/measurement ablation is allowed only in a new absent
-  root with one predeclared changed factor; it must not become another host
-  control layer.
+- [ ] If R3 still does not promote, again separate research behavior,
+  measurement reach and framework friction. A matched single-factor ablation
+  is allowed only in a new pre-registered root when causal isolation is itself
+  the scientific question; it must not become another host control layer.
 
 CVRP acceptance:
 
@@ -535,14 +553,16 @@ v2 and v3 over v1, so synthetic Warehouse continuity is
 24/24 stages, promoted v1→v2, and retained that production improvement on all
 12/12 separately preregistered held-out pairs. Warehouse acceptance is fully
 complete. CVRP R1 is sealed at 5/8 formal stages with 176/176 valid pairs, one
-reproducible mixed-positive depth-one signal and no promotion. Its measurement,
-proposal-edit, context and rejection-accounting defects are corrected
-prospectively; the final integrated suite is `2047 passed, 1 skipped` in
-624.56 seconds. A final V3 exposure audit then removed current validation/
-frozen details from H, collapsed repeated C guidance into one problem-owned
-object/API packet, corrected route-count semantics and removed incompatible MDE
-instructions at executable commit `41956f36`. Corrected R2 uses an 8x4
-mechanism screen that may only expand to a 12x8 quality screen, followed by
-12x4 validation and 12x3 frozen evidence. It remains explicitly uncalibrated
-and is frozen in a fresh exact-source preregistration; launch is pending. S6
-final closure remains pending, and CVRP still has no Protocol-complete promotion.
+reproducible mixed-positive depth-one signal and no promotion. Corrected R2 is
+also sealed: it completed 10 formal stages and 448/448 valid pairs before a
+terminal-less provider C, so its classification is `RUN_INVALID_INFRA` with
+`VALID_PARTIAL_SCIENCE_10_OF_12`. It exercised real ejection, asymmetric 2-opt,
+SWAP* and elapsed-budget SA research, but no candidate reached validation or
+frozen. The strongest SA quality screen was 6W/1L/5T cases and
+`+2.75 [0,11]`; it correctly missed the pre-registered 0.60 all-case win rate
+and is not a hidden pass. R3 prerequisite work is now limited to lossless
+context compaction, mechanical response observability, executed-patch facts and
+a prospectively calibrated tie-aware case rule. The last complete suite remains
+`2047 passed, 1 skipped` in 624.56 seconds until those changes receive focused
+and complete regression. S6 final closure remains pending, and CVRP still has
+no Protocol-complete promotion.
