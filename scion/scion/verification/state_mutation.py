@@ -12,18 +12,19 @@ import json
 import os
 import sys
 import time
-from typing import TYPE_CHECKING, Literal, Optional
+from collections.abc import Mapping
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
-from scion.runtime.runner import Runner, run_solver_with_surface
 from scion.runtime.audit import (
     format_runtime_audit_failure,
     runtime_audit_failure_from_raw,
     runtime_audit_issue_blocks_execution,
 )
-from scion.verification.feasibility import _registry_path, resolve_problem_path
+from scion.runtime.runner import Runner, run_solver_with_surface
 from scion.verification.candidate_canary import CandidateCanaryExecution
+from scion.verification.feasibility import _registry_path, resolve_problem_path
 from scion.verification.requirements import requires_adapter_for_runtime
 
 if TYPE_CHECKING:
@@ -98,6 +99,7 @@ def check_state_mutation(
             "solver runtime audit failed: " + format_runtime_audit_failure(audit_failure),
             t0,
             diagnosis="CANDIDATE",
+            metadata=_runtime_failure_metadata(audit_failure),
         )
 
     if adapter is None and requires_adapter_for_runtime(
@@ -257,8 +259,12 @@ def _legacy_result_diagnosis(
 
 
 def _cr(
-    passed: bool, detail: str, t0: int,
+    passed: bool,
+    detail: str,
+    t0: int,
+    *,
     diagnosis: Literal["ENV", "CANDIDATE", "UNKNOWN"] | None = None,
+    metadata: Mapping[str, Any] | None = None,
 ) -> CheckResult:
     elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
     name = "V5_solution_consistency"
@@ -270,4 +276,31 @@ def _cr(
         severity="heavy",
         detail=detail,
         elapsed_ms=elapsed,
+        metadata=dict(metadata or {}),
     )
+
+
+def _runtime_failure_metadata(
+    issue: Mapping[str, Any] | None,
+) -> dict[str, str]:
+    if not isinstance(issue, Mapping):
+        return {}
+    events = issue.get("runtime_events")
+    if not isinstance(events, (list, tuple)):
+        return {}
+    event = next(
+        (
+            item
+            for item in events
+            if isinstance(item, Mapping)
+            and any(item.get(key) for key in ("failing_symbol", "callsite"))
+        ),
+        None,
+    )
+    if event is None:
+        return {}
+    return {
+        key: value
+        for key in ("failing_symbol", "callsite")
+        if (value := str(event.get(key) or "").strip())
+    }

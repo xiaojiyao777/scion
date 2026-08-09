@@ -14,7 +14,6 @@ from typing import Any, Mapping, Optional, Sequence
 
 from scion.config.problem import ProblemSpec
 from scion.contract.patch_paths import matches_config_pattern
-from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import (
     Branch,
     ChampionState,
@@ -24,6 +23,9 @@ from scion.core.models import (
     patch_file_changes,
 )
 from scion.core.paths import normalize_relative_patch_path
+from scion.core.research_rejection_feedback import (
+    sanitize_research_rejection_feedback,
+)
 from scion.core.screening_visibility import runtime_evidence_policy_for_protocol
 from scion.measurement.consumer_view import measurement_consumer_view
 from scion.problem.providers import (
@@ -47,6 +49,12 @@ from scion.proposal.context.surfaces import (
     surface_action_allowed,
     surface_target_files,
 )
+from scion.proposal.prompt_manifest import stable_digest
+from scion.proposal.solver_design_guidance import (
+    RENDERER_INPUTS_KEY,
+    SOLVER_DESIGN_GUIDANCE_KEY,
+    materialize_solver_design_prompt_guidance,
+)
 
 from .code_context import (
     DURABLE_BRANCH_CREATED_FILES_KEY,
@@ -58,10 +66,7 @@ from .code_context import (
     branch_current_file_sources,
     branch_touched_files,
 )
-from .history_projection import (
-    proposal_screening_history,
-    verification_failure_projection,
-)
+from .history_projection import proposal_screening_history
 from .io import (
     _expand_surface_targets_for_champion,
     _expand_surface_targets_for_root,
@@ -70,12 +75,6 @@ from .io import (
     _list_champion_surface_files,
     _read_branch_code_projection,
 )
-from scion.proposal.solver_design_guidance import (
-    RENDERER_INPUTS_KEY,
-    SOLVER_DESIGN_GUIDANCE_KEY,
-    materialize_solver_design_prompt_guidance,
-)
-from scion.proposal.prompt_manifest import stable_digest
 
 _MEASUREMENT_VISIBLE_FIELDS_KEY = "proposal_visible_fields"
 _MEASUREMENT_VISIBLE_ENVELOPE_FIELDS = (
@@ -101,10 +100,6 @@ _MEASUREMENT_PRIVATE_FIELDS = frozenset(
         "llm_text",
     }
 )
-_RESEARCH_REJECTION_PHASES = frozenset(
-    {"hypothesis_contract", "patch_contract", "verification"}
-)
-
 CANONICAL_SCREENING_HISTORY_KEY = "canonical_screening_history"
 
 def _filter_hypothesis_prompt_steps(
@@ -140,6 +135,7 @@ class ContextManager:
         step_history: Optional[list[StepRecord]] = None,
         campaign_branches: Optional[Sequence[Branch]] = None,
         branch_workspace: Optional[str] = None,
+        last_research_rejection: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Return the V3 round-one research context.
 
@@ -201,10 +197,8 @@ class ContextManager:
                 _filter_hypothesis_prompt_steps(history_steps),
             )
         )
-        rejection_history = campaign_research_rejection_history(
-            branch,
-            campaign_branches,
-            history_steps,
+        rejection_feedback = sanitize_research_rejection_feedback(
+            last_research_rejection
         )
         provider = (
             resolve_solver_design_prompt_provider(
@@ -239,8 +233,8 @@ class ContextManager:
         }
         if branch_source:
             context["branch_current_code"] = branch_source
-        if rejection_history:
-            context["research_rejection_history"] = rejection_history
+        if rejection_feedback:
+            context["last_research_rejection"] = rejection_feedback
 
         measurement = _problem_measurement_diagnostics(
             problem_spec,
@@ -783,156 +777,6 @@ def campaign_canonical_screening_history(
     ]
 
 
-def campaign_research_rejection_history(
-    current_branch: Branch,
-    campaign_branches: Optional[Sequence[Branch]],
-    steps: Sequence[StepRecord],
-) -> list[dict[str, Any]]:
-    """Project minimal pre-Protocol rejection facts for a fresh H call.
-
-    Only typed Hypothesis Contract, Patch Contract, and Verification outcomes
-    are eligible. Provider prose, check details/metadata, Protocol results, and
-    evaluation-stage data never enter this projection.
-    """
-
-    known_branch_ids = {
-        str(getattr(branch, "branch_id", "") or "").strip()
-        for branch in campaign_branches or (current_branch,)
-    }
-    known_branch_ids.discard("")
-    known_branch_ids.add(current_branch.branch_id)
-
-    records: list[dict[str, Any]] = []
-    for step in steps:
-        phase = str(step.failure_stage or "").strip()
-        source_branch_id = str(step.branch_id or "").strip()
-        if (
-            phase not in _RESEARCH_REJECTION_PHASES
-            or source_branch_id not in known_branch_ids
-            or step.protocol_result is not None
-            or step.execution_outcome is not ExecutionOutcome.RESEARCH_REJECTED
-            or not _rejection_state_matches_phase(step, phase)
-        ):
-            continue
-        relation = (
-            "current"
-            if source_branch_id == current_branch.branch_id
-            else "sibling"
-        )
-        record = {
-            "round_num": int(step.round_num),
-            "source_branch_id": source_branch_id,
-            "relation": relation,
-            "phase": phase,
-            "reason_code": str(step.execution_outcome_reason_code or "").strip(),
-            "failed_check_codes": list(_failed_rejection_check_codes(step, phase)),
-            **_rejection_target_projection(step, phase),
-        }
-        first_failure = _first_rejection_failure(
-            step,
-            phase=phase,
-            relation=relation,
-        )
-        if first_failure:
-            record["first_failure"] = first_failure
-        records.append(_drop_empty(record))
-
-    records.sort(
-        key=lambda record: (
-            int(record["round_num"]),
-            str(record["source_branch_id"]),
-            str(record["phase"]),
-        )
-    )
-    return records
-
-
-def _rejection_state_matches_phase(step: StepRecord, phase: str) -> bool:
-    if phase == "hypothesis_contract":
-        return not step.contract_passed and step.patch is None
-    if phase == "patch_contract":
-        return not step.contract_passed and step.patch is not None
-    return (
-        phase == "verification"
-        and step.contract_passed
-        and not step.verification_passed
-    )
-
-
-def _failed_rejection_check_codes(
-    step: StepRecord,
-    phase: str,
-) -> tuple[str, ...]:
-    provenance = step.execution_outcome_provenance
-    if not isinstance(provenance, Mapping):
-        return ()
-    key = "contract_checks" if phase.endswith("contract") else "verification_checks"
-    checks = provenance.get(key, ())
-    if not isinstance(checks, (list, tuple)):
-        return ()
-    codes: list[str] = []
-    for check in checks:
-        if not isinstance(check, Mapping) or check.get("passed") is not False:
-            continue
-        code = str(check.get("name") or "").strip()
-        if code and code not in codes:
-            codes.append(code)
-    return tuple(codes)
-
-
-def _first_rejection_failure(
-    step: StepRecord,
-    *,
-    phase: str,
-    relation: str,
-) -> dict[str, Any]:
-    """Expose one current-branch Verification reason, never provider prose."""
-
-    if phase != "verification" or relation != "current":
-        return {}
-    provenance = step.execution_outcome_provenance
-    if not isinstance(provenance, Mapping):
-        return {}
-    checks = provenance.get("verification_checks", ())
-    if not isinstance(checks, (list, tuple)):
-        return {}
-    for check in checks:
-        if not isinstance(check, Mapping) or check.get("passed") is not False:
-            continue
-        return verification_failure_projection(check)
-    return {}
-
-
-def _rejection_target_projection(
-    step: StepRecord,
-    phase: str,
-) -> dict[str, Any]:
-    hypothesis = step.hypothesis
-    projection: dict[str, Any] = {
-        "research_surface": str(hypothesis.change_locus or "").strip(),
-    }
-    if phase == "hypothesis_contract" or step.patch is None:
-        projection.update(
-            {
-                "action": str(hypothesis.action or "").strip(),
-                "target_file": str(hypothesis.target_file or "").strip(),
-            }
-        )
-        return _drop_empty(projection)
-
-    targets = []
-    for change in patch_file_changes(step.patch):
-        target_file = str(change.file_path or "").strip()
-        action = str(change.action or "").strip()
-        if target_file or action:
-            targets.append(
-                _drop_empty({"action": action, "target_file": target_file})
-            )
-    if targets:
-        projection["patch_targets"] = targets
-    return _drop_empty(projection)
-
-
 def persist_canonical_screening_record(
     branch: Branch,
     step: StepRecord,
@@ -1234,7 +1078,6 @@ def _drop_empty(value: Any) -> Any:
 __all__ = [
     "CANONICAL_SCREENING_HISTORY_KEY",
     "ContextManager",
-    "campaign_research_rejection_history",
     "canonical_screening_history",
     "canonical_screening_record",
     "persist_canonical_screening_record",

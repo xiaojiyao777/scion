@@ -429,7 +429,46 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         assert forbidden not in lowered
 
 
-def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
+def test_fresh_h_receives_only_compact_durable_rejection_fact() -> None:
+    _spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[],
+        last_research_rejection={
+            "failure_stage": "verification",
+            "failure_detail": "V5_solution_consistency",
+            "failing_symbol": "_SimulatedAnnealing.cool",
+            "callsite": "policies/baseline_modules/scheduler.py:229",
+            "branch_id": "FORBIDDEN_BRANCH_ID",
+            "raw_traceback": "FORBIDDEN_RAW_TRACEBACK",
+            "provider_prose": "FORBIDDEN_PROVIDER_PROSE",
+        },
+    )
+    assert context["last_research_rejection"] == {
+        "failure_stage": "verification",
+        "failure_detail": "V5_solution_consistency",
+        "failing_symbol": "_SimulatedAnnealing.cool",
+        "callsite": "policies/baseline_modules/scheduler.py:229",
+    }
+    assert "research_rejection_history" not in context
+
+    snapshot = proposal_context_snapshot("hypothesis", context)
+    blocks, user_prompt = _split_hypothesis_context(
+        snapshot.inputs.provider_context(include_renderer_inputs=True)
+    )
+    rendered = "\n".join(block["text"] for block in blocks) + user_prompt
+    for forbidden in (
+        "FORBIDDEN_BRANCH_ID",
+        "FORBIDDEN_RAW_TRACEBACK",
+        "FORBIDDEN_PROVIDER_PROSE",
+    ):
+        assert forbidden not in rendered
+    assert rendered.count("_SimulatedAnnealing.cool") == 1
+
+
+def test_legacy_rejection_steps_cannot_bypass_compact_durable_projection() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
     sibling = Branch(
         branch_id="prior-rejected-sibling",
@@ -566,14 +605,12 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
                     case_ids=(f"FORBIDDEN_{stage.value.upper()}_CASE",),
                 ),
                 decision=None,
-                # Even malformed/mislabeled lifecycle input cannot cross the
-                # explicit pre-Protocol projection boundary.
                 failure_stage="verification",
                 failure_detail=f"FORBIDDEN_{stage.value.upper()}_DETAIL",
             )
             for round_num, stage in (
-                (5, ExperimentStage.VALIDATION),
-                (6, ExperimentStage.FROZEN),
+                (6, ExperimentStage.VALIDATION),
+                (7, ExperimentStage.FROZEN),
             )
         ],
     ]
@@ -584,40 +621,21 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
         problem_spec=legacy,
         step_history=steps,
         campaign_branches=[branch, sibling],
+        last_research_rejection={
+            "failure_stage": "verification",
+            "failure_detail": "V5_solution_consistency",
+            "failing_symbol": "_SimulatedAnnealing.cool",
+            "callsite": "policies/baseline_modules/scheduler.py:229",
+        },
     )
-    rejection_history = context["research_rejection_history"]
 
-    assert [record["phase"] for record in rejection_history] == [
-        "hypothesis_contract",
-        "patch_contract",
-        "verification",
-        "verification",
-    ]
-    assert rejection_history[0] == {
-        "round_num": 1,
-        "source_branch_id": branch.branch_id,
-        "relation": "current",
-        "phase": "hypothesis_contract",
-        "reason_code": "HYPOTHESIS_CONTRACT_REJECTED",
-        "failed_check_codes": ["H3_target_matches_locus"],
-        "research_surface": "order_level",
-        "action": "modify",
-        "target_file": "operators/change_vehicle_type.py",
+    assert context["last_research_rejection"] == {
+        "failure_stage": "verification",
+        "failure_detail": "V5_solution_consistency",
+        "failing_symbol": "_SimulatedAnnealing.cool",
+        "callsite": "policies/baseline_modules/scheduler.py:229",
     }
-    assert rejection_history[1]["patch_targets"] == [
-        {"action": "modify", "target_file": "operators/change_vehicle_type.py"}
-    ]
-    assert rejection_history[2]["failed_check_codes"] == ["V6_feasibility"]
-    assert rejection_history[2]["source_branch_id"] == sibling.branch_id
-    assert rejection_history[2]["relation"] == "sibling"
-    assert "first_failure" not in rejection_history[2]
-    assert rejection_history[3]["relation"] == "current"
-    assert rejection_history[3]["first_failure"] == {
-        "check_code": "V1_syntax",
-        "failure_kind": "syntax",
-        "summary": "syntax_error: expected an indented block",
-    }
-
+    assert "research_rejection_history" not in context
     snapshot = proposal_context_snapshot("hypothesis", context)
     blocks, user_prompt = _split_hypothesis_context(
         snapshot.inputs.provider_context(include_renderer_inputs=True)
@@ -638,9 +656,10 @@ def test_fresh_h_receives_only_structured_preprotocol_rejection_facts() -> None:
         "FORBIDDEN_FROZEN_CODE",
         "FORBIDDEN_FROZEN_SUMMARY",
         "FORBIDDEN_FROZEN_CASE",
+        "syntax_error: expected an indented block",
     ):
         assert forbidden not in rendered
-    assert rendered.count("syntax_error: expected an indented block") == 1
+    assert rendered.count("_SimulatedAnnealing.cool") == 1
 
 
 def test_verification_failure_projection_selects_one_typed_pytest_event() -> None:

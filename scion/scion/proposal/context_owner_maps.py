@@ -45,7 +45,7 @@ HYPOTHESIS_CONTEXT_OWNER_MAP = {
     ),
     **_owners(
         "evidence.safe_pre_protocol",
-        ("research_rejection_history",),
+        ("last_research_rejection",),
     ),
     RENDERER_INPUTS_KEY: "renderer_inputs",
 }

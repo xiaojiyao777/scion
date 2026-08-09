@@ -68,6 +68,17 @@ def screening_gate(
         )
     elif stats.ci_high < 0:
         gate = GateResult(outcome="fail", reason_codes=("SCREENING_FAIL_WIN_RATE",))
+    elif _initial_quality_expansion_ci_requirement_failed(
+        stats,
+        config,
+        expanded=expanded,
+    ):
+        gate = GateResult(
+            outcome="fail",
+            reason_codes=(
+                "SCREENING_FAIL_INITIAL_QUALITY_CI_BELOW_PRACTICAL_DELTA",
+            ),
+        )
     elif _uses_case_quality(gate_config) and not case_quality_pass:
         gate = GateResult(
             outcome="fail",
@@ -134,6 +145,25 @@ def _initial_quality_expansion_pass(
     return (
         not threshold.require_ci_high_at_practical_delta
         or stats.ci_high >= config.screening_min_practical_delta
+    )
+
+
+def _initial_quality_expansion_ci_requirement_failed(
+    stats: EvalStats,
+    config: ProtocolConfig,
+    *,
+    expanded: bool,
+) -> bool:
+    """Fail closed instead of bypassing a problem-owned initial CI requirement."""
+
+    threshold = config.gates.screening.initial_quality_expansion
+    return (
+        not expanded
+        and threshold is not None
+        and threshold.require_ci_high_at_practical_delta
+        and stats.candidate_failed_pairs == 0
+        and _case_quality_pass(stats, threshold, legacy_win_rate_min=1.0)
+        and stats.ci_high < config.screening_min_practical_delta
     )
 
 

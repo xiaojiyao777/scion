@@ -1,13 +1,16 @@
 """Active solver-design algorithm loading and telemetry context."""
 from __future__ import annotations
 
-from pathlib import Path
 import random
 import time
+from pathlib import Path
 from typing import Any, Mapping
 
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
+from scion.problems.cvrp.solver_runtime.failure_diagnostics import (
+    exception_failure_diagnostic,
+)
 from scion.problems.cvrp.solver_runtime.policy_modules import _load_policy_module
 from scion.problems.cvrp.solver_runtime.solution_ops import (
     _coerce_solution,
@@ -112,7 +115,15 @@ def _load_algorithm_file(
     except Exception as exc:
         audit["solver_algorithm_errors"] += 1
         audit["solver_algorithm_stop_reason"] = "exception"
-        _record_solver_algorithm_event(audit, "error", f"solve failed: {exc}")
+        _record_solver_algorithm_event(
+            audit,
+            "error",
+            f"solve failed: {exc}",
+            metadata=exception_failure_diagnostic(
+                exc,
+                workspace_root=workspace,
+            ),
+        )
         _finalize_solver_algorithm_timing(audit, call_start_ns)
         return None, audit
 
@@ -767,17 +778,22 @@ def _record_solver_algorithm_event(
     audit: dict[str, Any],
     status: str,
     detail: str,
+    *,
+    metadata: Mapping[str, str] | None = None,
 ) -> None:
     events = audit.setdefault("solver_algorithm_events", [])
-    events.append(
-        {
-            "policy": str(
-                audit.get("solver_algorithm_path") or _BASELINE_ALGORITHM_RELATIVE_PATH
-            ),
-            "status": status,
-            "detail": detail,
-        }
-    )
+    event = {
+        "policy": str(
+            audit.get("solver_algorithm_path") or _BASELINE_ALGORITHM_RELATIVE_PATH
+        ),
+        "status": status,
+        "detail": detail,
+    }
+    for key in ("failing_symbol", "callsite"):
+        value = str((metadata or {}).get(key) or "").strip()
+        if value:
+            event[key] = value
+    events.append(event)
 
 
 def _finalize_solver_algorithm_timing(

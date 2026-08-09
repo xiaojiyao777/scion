@@ -1,18 +1,21 @@
 from __future__ import annotations
 
-from scion.problems.cvrp.policies.baseline_modules import scheduler as baseline_scheduler
+from scion.problems.cvrp.policies.baseline_modules import (
+    scheduler as baseline_scheduler,
+)
 from scion.problems.cvrp.policies.baseline_modules.state import _Route, _Solution
 from scion.problems.cvrp.solver_runtime.algorithm_runtime import (
     SolverAlgorithmContext,
     _record_solver_algorithm_event,
+    load_baseline_algorithm,
     solver_algorithm_defaults,
     typed_events_from_legacy_record_move,
 )
-from scion.tests.cvrp_solver_runtime_support import *
 from scion.runtime.audit import (
     format_runtime_audit_failure,
     runtime_audit_failure_from_runtime,
 )
+from scion.tests.cvrp_solver_runtime_support import *
 
 
 def _actionability_summary() -> dict[str, object]:
@@ -234,6 +237,49 @@ def test_solver_design_baseline_algorithm_exception_fails_selected_surface(
     assert issue["error_category"] == "solver_algorithm_runtime_error"
     assert issue["solver_algorithm_errors"] == 1
     assert "baseline body failed" in format_runtime_audit_failure(issue)
+
+
+def test_solver_design_missing_method_records_compact_failure_diagnostic(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path
+    (workspace / "policies").mkdir()
+    (workspace / "policies" / "baseline_algorithm.py").write_text(
+        "\n".join(
+            [
+                "class _SimulatedAnnealing:",
+                "    def run(self):",
+                "        self.cool()",
+                "",
+                "def solve(instance, rng, time_limit_sec, context):",
+                "    return _SimulatedAnnealing().run()",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    instance = _line_instance(3)
+    solution, runtime = load_baseline_algorithm(
+        workspace_root=workspace,
+        instance=instance,
+        instance_path="fixture.json",
+        seed=14,
+        rng=random.Random(14),
+        time_limit_sec=2.0,
+        start_time=time.perf_counter(),
+        adapter=CvrpAdapter(_Spec()),
+    )
+
+    assert solution is None
+    assert runtime["solver_algorithm_path"] == "policies/baseline_algorithm.py"
+    assert runtime["solver_algorithm_loaded"] is True
+    assert runtime["solver_algorithm_active"] is False
+    assert runtime["solver_algorithm_errors"] == 1
+    assert runtime["solver_algorithm_stop_reason"] == "exception"
+    event = runtime["solver_algorithm_events"][0]
+    assert event["failing_symbol"] == "_SimulatedAnnealing.cool"
+    assert event["callsite"] == "policies/baseline_algorithm.py:3"
+    assert str(workspace) not in json.dumps(event)
 
 
 def test_solver_design_runtime_audit_rejects_inactive_surface_without_error_counter() -> None:

@@ -92,6 +92,12 @@ def test_formal_protocol_split_seed_and_budget_assets_load() -> None:
     assert protocol.screening.expand_to_modify == 12
     assert protocol.screening.expand_to_create == 12
     assert protocol.screening.require_expanded_for_pass is True
+    assert protocol.gates.screening.initial_quality_expansion is not None
+    assert (
+        protocol.gates.screening.initial_quality_expansion
+        .require_ci_high_at_practical_delta
+        is True
+    )
     assert protocol.validation.n_cases == 12
     assert protocol.validation.n_seeds == 8
     assert protocol.frozen.n_cases == 12

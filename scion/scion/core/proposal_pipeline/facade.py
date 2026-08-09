@@ -23,9 +23,9 @@ from scion.core.models import (
 from scion.proposal.context_owner_maps import proposal_context_snapshot
 from scion.proposal.context_snapshot import ProposalContextSnapshot
 from scion.proposal.engine import (
-    ProviderCallDiagnostics,
     PromptTurnSnapshot,
     ProposalValidationError,
+    ProviderCallDiagnostics,
     build_prompt_turn_snapshot,
     provider_call_diagnostics_from_error,
 )
@@ -338,12 +338,23 @@ class ProposalPipeline(ProposalRecordMixin):
                 else None
             ),
             branch_workspace=self.branch_workspaces.get(branch.branch_id),
+            last_research_rejection=self._latest_research_rejection_feedback(),
         )
         context_snapshot = proposal_context_snapshot("hypothesis", context)
         return context_snapshot, build_prompt_turn_snapshot(
             "hypothesis",
             context_snapshot,
         )
+
+    def _latest_research_rejection_feedback(self) -> Mapping[str, str] | None:
+        reader = getattr(
+            self.lineage_registry,
+            "get_latest_research_rejection_feedback",
+            None,
+        )
+        if not callable(reader) or not self.campaign_id:
+            return None
+        return reader(campaign_id=self.campaign_id)
 
     def _generate_hypothesis_call(
         self,

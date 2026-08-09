@@ -1,7 +1,10 @@
 """Focused tests split from test_protocol.py."""
 
 from .protocol_test_support import *  # noqa: F401,F403
+from scion.core.models import PairwiseCaseFeedback
+from scion.problem.objectives import MetricComparison, ObjectiveComparison
 from scion.protocol.experiment import _extract_case_features
+from scion.protocol.experiment.feedback import _aggregate_pairs_to_case_level
 
 def test_lexicographic_compare_win_by_splits():
     cand = {"subcategory_splits": 2, "total_cost": 1000}
@@ -245,6 +248,82 @@ def test_bootstrap_ci_empty():
     assert bootstrap_ci([]) == (0.0, 0.0)
 
 
+def test_r3_pair_aggregation_bootstrap_and_initial_ci_gate_are_wired_together():
+    pair_effects = (
+        (1.0, 1.0, 11.0, -13.0),
+        (0.0, -2.0, 26.0, 4.0),
+        (-7.0, 15.0, 4.0, 16.0),
+        (0.0, 0.0, 12.0, 0.0),
+        (262.0, 0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, 0.0),
+        (0.0, 0.0, 0.0, -2.0),
+        (0.0, 0.0, 0.0, 0.0),
+    )
+    pairs = []
+    for case_index, effects in enumerate(pair_effects):
+        for seed, effect in zip((11, 29, 43, 59), effects, strict=True):
+            comparison = "win" if effect > 0 else ("loss" if effect < 0 else "tie")
+            pairs.append(
+                PairwiseCaseFeedback(
+                    case_id=f"case-{case_index}",
+                    seed=seed,
+                    comparison=comparison,
+                    delta=effect,
+                    objective_comparison=ObjectiveComparison(
+                        outcome=comparison,
+                        decisive_metric="total_distance" if effect else None,
+                        scalar_delta=effect,
+                        metrics=(
+                            MetricComparison(
+                                name="total_distance",
+                                candidate_value=1000.0 - effect,
+                                champion_value=1000.0,
+                                signed_delta=effect,
+                                relation=(
+                                    "candidate"
+                                    if effect > 0
+                                    else ("champion" if effect < 0 else "tie")
+                                ),
+                                decisive=effect != 0,
+                            ),
+                        ),
+                    ),
+                )
+            )
+
+    cases = _aggregate_pairs_to_case_level(
+        pairs,
+        aggregation="paired_effect_median",
+        effect_metric="total_distance",
+    )
+    stats = compute_eval_stats(
+        [case.comparison for case in cases],
+        [case.delta for case in cases],
+        metric_deltas=[case.metric_deltas or {} for case in cases],
+        metric_order=["total_distance"],
+        effect_metric="total_distance",
+    )
+
+    assert [case.delta for case in cases] == [
+        1.0,
+        2.0,
+        9.5,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+    assert (stats.wins, stats.losses, stats.ties) == (3, 0, 5)
+    assert (stats.ci_low, stats.ci_high) == (0.0, 1.5)
+    assert screening_gate(stats, _r3_case_quality_config()) == GateResult(
+        outcome="fail",
+        reason_codes=(
+            "SCREENING_FAIL_INITIAL_QUALITY_CI_BELOW_PRACTICAL_DELTA",
+        ),
+    )
+
+
 def test_screening_gate_pass():
     stats = _make_stats(win_rate=0.7, median_delta=0.01)
     result = screening_gate(stats, _cfg)
@@ -298,7 +377,18 @@ def test_initial_sparse_no_loss_signal_gets_one_measurement_expansion():
     assert expanded.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
 
 
-def _r3_case_quality_config() -> ProtocolConfig:
+def _r3_case_quality_config(
+    *,
+    require_ci_high_at_practical_delta: bool | None = True,
+) -> ProtocolConfig:
+    initial_quality_expansion = {
+        "min_net_case_score": 0.125,
+        "max_case_loss_rate": 0.25,
+    }
+    if require_ci_high_at_practical_delta is not None:
+        initial_quality_expansion["require_ci_high_at_practical_delta"] = (
+            require_ci_high_at_practical_delta
+        )
     return ProtocolConfig.model_validate(
         {
             "practical_delta_screen": 2.0,
@@ -310,10 +400,7 @@ def _r3_case_quality_config() -> ProtocolConfig:
                     "bootstrap_ci_low_min": 0.0,
                     "min_net_case_score": 0.25,
                     "max_case_loss_rate": 0.2,
-                    "initial_quality_expansion": {
-                        "min_net_case_score": 0.125,
-                        "max_case_loss_rate": 0.25,
-                    },
+                    "initial_quality_expansion": initial_quality_expansion,
                 },
                 "validation": {
                     "bootstrap_ci_low_min": 0.0,
@@ -378,6 +465,142 @@ def test_r3_initial_quality_signal_expands_but_never_passes():
 
     assert result.outcome == "expand"
     assert result.reason_codes == ("SCREENING_EXPAND_INITIAL_QUALITY",)
+
+
+@pytest.mark.parametrize(
+    ("ci_high", "expected_outcome", "expected_reason"),
+    (
+        (
+            1.5,
+            "fail",
+            "SCREENING_FAIL_INITIAL_QUALITY_CI_BELOW_PRACTICAL_DELTA",
+        ),
+        (2.0, "expand", "SCREENING_EXPAND_INITIAL_QUALITY"),
+    ),
+)
+def test_r3_initial_quality_expansion_requires_practical_ci_high(
+    ci_high,
+    expected_outcome,
+    expected_reason,
+):
+    stats = _make_stats(
+        n_cases=8,
+        wins=3,
+        losses=0,
+        ties=5,
+        win_rate=3 / 8,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=ci_high,
+    )
+
+    result = screening_gate(stats, _r3_case_quality_config())
+
+    assert result.outcome == expected_outcome
+    assert result.reason_codes == (expected_reason,)
+
+
+def test_r3_initial_quality_ci_requirement_defaults_to_enabled_when_omitted():
+    config = _r3_case_quality_config(require_ci_high_at_practical_delta=None)
+    threshold = config.gates.screening.initial_quality_expansion
+    assert threshold is not None
+    assert threshold.require_ci_high_at_practical_delta is True
+
+    result = screening_gate(
+        _make_stats(
+            n_cases=8,
+            wins=3,
+            losses=0,
+            ties=5,
+            win_rate=3 / 8,
+            median_delta=0.0,
+            ci_low=0.0,
+            ci_high=1.5,
+        ),
+        config,
+    )
+
+    assert result.reason_codes == (
+        "SCREENING_FAIL_INITIAL_QUALITY_CI_BELOW_PRACTICAL_DELTA",
+    )
+
+
+def test_r3_disabled_initial_ci_requirement_preserves_configured_expansion():
+    stats = _make_stats(
+        n_cases=8,
+        wins=3,
+        losses=0,
+        ties=5,
+        win_rate=3 / 8,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=1.5,
+    )
+
+    result = screening_gate(
+        stats,
+        _r3_case_quality_config(require_ci_high_at_practical_delta=False),
+    )
+
+    assert result.outcome == "expand"
+    assert result.reason_codes == ("SCREENING_EXPAND_INITIAL_QUALITY",)
+
+
+def test_r3_initial_ci_policy_does_not_reclassify_expanded_screening():
+    stats = _make_stats(
+        n_cases=8,
+        wins=3,
+        losses=0,
+        ties=5,
+        win_rate=3 / 8,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=1.5,
+    )
+
+    result = screening_gate(stats, _r3_case_quality_config(), expanded=True)
+
+    assert result.outcome == "unclear"
+    assert result.reason_codes == (
+        "SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN",
+    )
+
+
+def test_r3_initial_ci_policy_does_not_reclassify_candidate_runtime_failure():
+    stats = _make_stats(
+        n_cases=8,
+        wins=3,
+        losses=0,
+        ties=5,
+        win_rate=3 / 8,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=1.5,
+        candidate_failed_pairs=1,
+    )
+
+    result = screening_gate(stats, _r3_case_quality_config())
+
+    assert result.outcome == "expand"
+    assert result.reason_codes == ("SCREENING_EXPAND_CASE_LEVEL_UNCERTAIN",)
+
+
+def test_r3_initial_ci_policy_requires_initial_case_quality_first():
+    stats = _make_stats(
+        n_cases=8,
+        wins=0,
+        losses=0,
+        ties=8,
+        win_rate=0.0,
+        median_delta=0.0,
+        ci_low=0.0,
+        ci_high=1.5,
+    )
+
+    result = screening_gate(stats, _r3_case_quality_config())
+
+    assert result.outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_CASE_QUALITY",)
 
 
 def test_r3_expanded_ci_uncertainty_is_not_mislabeled_as_case_quality_failure():

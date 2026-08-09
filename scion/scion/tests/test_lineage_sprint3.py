@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from scion.core.decision_finalizer import _sync_terminal_branch_evidence
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
     Branch,
@@ -22,10 +23,12 @@ from scion.core.models import (
     PatchProposal,
     ProtocolResult,
 )
-from scion.core.decision_finalizer import _sync_terminal_branch_evidence
+from scion.core.research_rejection_feedback import (
+    sanitize_research_rejection_feedback,
+)
 from scion.lineage.branch_store import BranchStore, HypothesisStore
-from scion.lineage.research_champion_store import ChampionStore
 from scion.lineage.registry import LineageRegistry
+from scion.lineage.research_champion_store import ChampionStore
 
 # ---------------------------------------------------------------------------
 # LineageRegistry
@@ -257,6 +260,113 @@ class TestLineageRegistry:
         r2 = LineageRegistry(db_path)
         rows = r2.query_by_branch("b1")
         assert len(rows) == 1
+
+    def test_latest_research_rejection_feedback_survives_restart(self, tmp_path):
+        db_path = str(tmp_path / "scion.db")
+        writer = LineageRegistry(db_path)
+        writer.record_execution_outcome(
+            campaign_id="campaign-1",
+            branch_id="rejected-sibling",
+            hypothesis_id="private-hypothesis",
+            record=ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                reason_code="VERIFICATION_HEAVY_REJECTED",
+                detail="FORBIDDEN_PROVIDER_OR_TRACEBACK_PROSE",
+                provenance={
+                    "owner": "verification_gate",
+                    "stage": "verification",
+                    "verification_checks": [
+                        {
+                            "name": "V5_solution_consistency",
+                            "passed": False,
+                            "detail": "FORBIDDEN_RAW_TRACEBACK",
+                            "metadata": {
+                                "failing_symbol": "_SimulatedAnnealing.cool",
+                                "callsite": (
+                                    "policies/baseline_modules/scheduler.py:229"
+                                ),
+                                "absolute_path": "/private/candidate/scheduler.py",
+                            },
+                        }
+                    ],
+                },
+            ),
+            event_kind="research_rejection_execution_outcome",
+            stage="verification",
+        )
+
+        reopened = LineageRegistry(db_path)
+
+        assert reopened.get_latest_research_rejection_feedback(
+            campaign_id="campaign-1"
+        ) == {
+            "failure_stage": "verification",
+            "failure_detail": "V5_solution_consistency",
+            "failing_symbol": "_SimulatedAnnealing.cool",
+            "callsite": "policies/baseline_modules/scheduler.py:229",
+        }
+        assert (
+            reopened.get_latest_research_rejection_feedback(
+                campaign_id="another-campaign"
+            )
+            is None
+        )
+
+    def test_latest_malformed_rejection_does_not_fall_back_to_older_valid(
+        self,
+        tmp_path,
+    ):
+        db_path = str(tmp_path / "scion.db")
+        writer = LineageRegistry(db_path)
+        for branch_id, check_name in (
+            ("older-valid", "V5_solution_consistency"),
+            ("latest-malformed", "V" * 129),
+        ):
+            writer.record_execution_outcome(
+                campaign_id="campaign-1",
+                branch_id=branch_id,
+                record=ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                    reason_code="VERIFICATION_HEAVY_REJECTED",
+                    detail="provider prose is never projected",
+                    provenance={
+                        "stage": "verification",
+                        "verification_checks": [
+                            {"name": check_name, "passed": False}
+                        ],
+                    },
+                ),
+                event_kind="research_rejection_execution_outcome",
+                stage="verification",
+            )
+
+        reopened = LineageRegistry(db_path)
+
+        assert (
+            reopened.get_latest_research_rejection_feedback(
+                campaign_id="campaign-1"
+            )
+            is None
+        )
+
+
+def test_research_rejection_feedback_applies_conservative_length_bounds():
+    base = {
+        "failure_stage": "verification",
+        "failure_detail": "V5_solution_consistency",
+        "failing_symbol": "_SimulatedAnnealing.cool",
+        "callsite": "policies/baseline_algorithm.py:3",
+    }
+
+    assert sanitize_research_rejection_feedback(
+        {**base, "failure_detail": "V" * 129}
+    ) is None
+    assert sanitize_research_rejection_feedback(
+        {**base, "failing_symbol": "Symbol" * 30}
+    ) == {**base, "failing_symbol": ""}
+    assert sanitize_research_rejection_feedback(
+        {**base, "callsite": f"policies/{'x' * 260}.py:3"}
+    ) == {**base, "callsite": ""}
 
 
 # ---------------------------------------------------------------------------

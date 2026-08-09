@@ -7,13 +7,66 @@ import pytest
 
 from scion.core.execution_outcome import (
     ExecutionOutcome,
+    ExecutionOutcomeRecord,
     branch_execution_hold,
 )
 from scion.core.models import HypothesisProposal
+from scion.lineage.registry import LineageRegistry
 from scion.proposal.engine import ProposalValidationError
 from scion.proposal.llm_client import LLMFormatError
 
 from .proposal_pipeline_test_support import FakeCreative, _pipeline
+
+
+def test_fresh_sibling_h_reads_latest_durable_rejection_after_restart(
+    tmp_path,
+) -> None:
+    db_path = str(tmp_path / "scion.db")
+    writer = LineageRegistry(db_path)
+    writer.record_execution_outcome(
+        campaign_id="camp-1",
+        branch_id="rejected-sibling",
+        hypothesis_id="private-hypothesis",
+        record=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code="VERIFICATION_HEAVY_REJECTED",
+            detail="FORBIDDEN_PROVIDER_PROSE",
+            provenance={
+                "stage": "verification",
+                "verification_checks": [
+                    {
+                        "name": "V5_solution_consistency",
+                        "passed": False,
+                        "detail": "FORBIDDEN_RAW_TRACEBACK",
+                        "metadata": {
+                            "failing_symbol": "_SimulatedAnnealing.cool",
+                            "callsite": (
+                                "policies/baseline_modules/scheduler.py:229"
+                            ),
+                        },
+                    }
+                ],
+            },
+        ),
+        event_kind="research_rejection_execution_outcome",
+        stage="verification",
+    )
+    reopened = LineageRegistry(db_path)
+    pipeline, fresh_branch, runtime, _failures, _balance = _pipeline(
+        lineage_registry=reopened
+    )
+
+    hypothesis, record = pipeline.generate_hypothesis(fresh_branch)
+
+    assert hypothesis is not None
+    assert record is not None
+    assert fresh_branch.branch_id != "rejected-sibling"
+    assert runtime.hypothesis_kwargs["last_research_rejection"] == {
+        "failure_stage": "verification",
+        "failure_detail": "V5_solution_consistency",
+        "failing_symbol": "_SimulatedAnnealing.cool",
+        "callsite": "policies/baseline_modules/scheduler.py:229",
+    }
 
 
 def test_normal_h_c_path_calls_provider_once_and_appends_one_event_each() -> None:

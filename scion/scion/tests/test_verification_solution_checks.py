@@ -2,6 +2,7 @@
 
 from .verification_test_support import *  # noqa: F401,F403
 
+
 class TestFeasibilityCheck:
     def test_skipped_when_no_canary(self):
         spec = _make_spec(canary="")
@@ -195,8 +196,14 @@ class TestSolutionConsistencyCheck:
             "operator_events": [
                 {
                     "operator": "bad_op",
+                    "status": "loaded",
+                },
+                {
+                    "operator": "bad_op",
                     "status": "error",
                     "detail": "'CvrpInstance' object has no attribute 'vehicle_capacity'",
+                    "failing_symbol": "CvrpInstance.vehicle_capacity",
+                    "callsite": "operators/bad_op.py:17",
                 }
             ],
         }
@@ -208,6 +215,10 @@ class TestSolutionConsistencyCheck:
         assert r.name == "V5_solution_consistency"
         assert "solver runtime audit failed" in r.detail
         assert "operator_errors=1" in r.detail
+        assert r.metadata == {
+            "failing_symbol": "CvrpInstance.vehicle_capacity",
+            "callsite": "operators/bad_op.py:17",
+        }
 
     def test_surface_runtime_contract_all_required_fields_present_passes(self, tmp_path):
         canary = str(tmp_path / "small.json")

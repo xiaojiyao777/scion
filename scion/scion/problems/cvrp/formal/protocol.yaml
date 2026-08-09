@@ -90,6 +90,7 @@ gates:
     initial_quality_expansion:
       min_net_case_score: 0.125
       max_case_loss_rate: 0.25
+      require_ci_high_at_practical_delta: true
   validation:
     win_rate_min: 0.66
     median_delta_min: practical_delta_validate

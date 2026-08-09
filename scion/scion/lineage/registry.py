@@ -19,6 +19,9 @@ from scion.core.models import (
     DecisionOutcome,
     WeightOptimizationResult,
 )
+from scion.core.research_rejection_feedback import (
+    compact_research_rejection_from_event,
+)
 
 
 def _with_screening_case_level_gate_aliases(event: Dict[str, Any]) -> Dict[str, Any]:
@@ -535,6 +538,33 @@ class LineageRegistry:
                 (branch_id,),
             )
             return [dict(row) for row in cursor.fetchall()]
+
+    def get_latest_research_rejection_feedback(
+        self,
+        *,
+        campaign_id: str,
+    ) -> Optional[Dict[str, str]]:
+        """Return the latest compact pre-Protocol rejection for the campaign."""
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute(
+                """
+                SELECT rowid, * FROM experiment_events
+                WHERE campaign_id = ?
+                  AND event_kind = 'research_rejection_execution_outcome'
+                  AND execution_outcome = ?
+                  AND stage IN (
+                      'hypothesis_contract', 'patch_contract', 'verification'
+                  )
+                ORDER BY timestamp DESC, rowid DESC
+                LIMIT 1
+                """,
+                (campaign_id, ExecutionOutcome.RESEARCH_REJECTED.value),
+            ).fetchone()
+        if row is None:
+            return None
+        return compact_research_rejection_from_event(dict(row))
 
     @staticmethod
     def _execution_outcome_from_row(row: Mapping[str, Any]) -> Dict[str, Any]:
