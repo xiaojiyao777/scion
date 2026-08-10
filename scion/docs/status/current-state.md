@@ -779,20 +779,25 @@ silently deleted or retried. The outcome-blind
 was written before the quality expansion became terminal. R3 remains useful
 for research behavior and candidate discovery, but only an exact candidate
 promoted by its existing Protocol is eligible for the fixed provider-free
-clean quality -> validation -> frozen -> final replay.
+clean quality -> validation -> frozen -> final replay. Recovery resolves B and
+its immediate A from the ordinary `champion_vN/champion_v(N-1)` promotion
+snapshots and final A from `champion_v1`; it does not restore a formal recorder
+or reconstruct an already promoted source from provider traces.
 
 An independent outcome-blind experiment-design audit also found a prospective
 measurement gap that does not reinterpret Warehouse acceptance or incomplete
 R3. The generic formal loop runs champion before candidate, enables champion
 result caching by default and reruns the cumulative matrix on expansion. Raw
 pairs retain deltas and runtime/cache facts but not both absolute objective
-vectors, subject order, feasibility and subject time intervals. Consequently
+vectors, subject order or feasibility. Consequently
 objective headroom, order/load effects and case-versus-seed attribution are
 partly `UNIDENTIFIABLE`. After R3 is terminal, the smallest correction precedes
-the expensive provider-free CVRP factor/budget replay as well as another
-promotion campaign: fresh cache-off subjects, deterministic AB/BA
-counterbalancing, immutable atomic case×seed blocks and the corresponding
-minimal raw fields in the existing runner. The completed A/A/null result does
+clean promotion recovery, the expensive provider-free CVRP factor/budget replay
+and another promotion campaign: fresh cache-off subjects, deterministic AB/BA
+counterbalancing and minimal block/case/seed/order/objective/feasibility/timing/
+failure fields in the existing Protocol. Recovery executes each complete fixed
+stage once; the factor diagnosis alone uses immutable Q case×seed blocks. The
+completed A/A/null result does
 not establish power for the 12x8 case-median design at delta `2`; a fresh
 campaign must freeze a matched sensitivity/MDE boundary or narrow its negative
 claim. Exact non-futility routes, seed-first versus case-first and Warehouse
@@ -983,7 +988,11 @@ requires a clean screening -> validation -> frozen promotion, an independent
 B0 comparison and the S6 cross-problem/full-regression record. The active root
 alone cannot supply that clean claim because of its recorded operator-load
 contamination; a Protocol-promoted exact source must pass the pre-registered
-provider-free recovery replay.
+provider-free recovery replay. If R3 promotes, only the default-off
+paired-order/raw seam and focused fake-runner tests may precede that recovery;
+R44, V8, rejection diagnostics, provider projection and C-expression work all
+wait until its CPU-exclusive quality -> validation -> frozen -> B0 sequence is
+complete. If R3 does not promote, no recovery candidate is selected.
 An outcome-blind ordinary-lineage audit through the current seven terminal C
 traces found six unique Verification-passed candidates reconstructable without
 the deleted formal artifact recorder. Per-branch serial exact composition from
