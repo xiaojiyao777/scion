@@ -114,6 +114,105 @@
       }
     ]
   },
+  "offline_analysis_arms": {
+    "historical_by_comparison": {
+      "synthetic-v2-v1": [
+        "v3_scr_m01",
+        "v3_scr_m03",
+        "v3_scr_m05",
+        "v3_scr_m06",
+        "v3_scr_l02",
+        "v3_scr_l04",
+        "v4_scr_s02",
+        "v4_scr_s03",
+        "v4_scr_ml02",
+        "v4_scr_ml04"
+      ],
+      "synthetic-v3-v2": [
+        "v3_scr_m01",
+        "v3_scr_m04",
+        "v3_scr_l01",
+        "v4_scr_s01",
+        "v4_scr_ml01",
+        "v4_scr_ml04"
+      ],
+      "production-v2-v1": [
+        "prod_scr_micro01",
+        "prod_scr_micro04",
+        "prod_scr_s03",
+        "prod_scr_ms02",
+        "prod_scr_m03",
+        "prod_scr_ml02"
+      ]
+    },
+    "even_n8_by_universe": {
+      "synthetic": [
+        "v3_scr_m01",
+        "v3_scr_m03",
+        "v3_scr_m06",
+        "v3_scr_l02",
+        "v3_scr_l04",
+        "v4_scr_s02",
+        "v4_scr_ml02",
+        "v4_scr_ml04"
+      ],
+      "production": [
+        "prod_scr_micro01",
+        "prod_scr_micro03",
+        "prod_scr_s01",
+        "prod_scr_s03",
+        "prod_scr_ms02",
+        "prod_scr_m01",
+        "prod_scr_m04",
+        "prod_scr_ml02"
+      ]
+    },
+    "stratified_n8_by_universe": {
+      "synthetic": [
+        "v3_scr_m05",
+        "v3_scr_m06",
+        "v3_scr_l02",
+        "v3_scr_l04",
+        "v4_scr_s01",
+        "v4_scr_s03",
+        "v4_scr_ml01",
+        "v4_scr_ml04"
+      ],
+      "production": [
+        "prod_scr_micro01",
+        "prod_scr_micro02",
+        "prod_scr_s01",
+        "prod_scr_s03",
+        "prod_scr_ms01",
+        "prod_scr_ms02",
+        "prod_scr_m01",
+        "prod_scr_ml02"
+      ]
+    },
+    "seed_prefixes": {
+      "first_two": [
+        42,
+        137
+      ],
+      "all_four": [
+        42,
+        137,
+        271,
+        811
+      ]
+    },
+    "estimators": [
+      {
+        "method": "seed_vote_majority"
+      },
+      {
+        "method": "paired_effect_median",
+        "effect_metric": "total_cost",
+        "equivalence_band": 0
+      }
+    ],
+    "expected_arm_rows": 36
+  },
   "frozen_result": {
     "synthetic_status": "IDENTIFIABLE",
     "synthetic_selected_case_ids_manifest_order": [

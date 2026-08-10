@@ -71,18 +71,28 @@
   "analysis_output_requirements": {
     "required_flags": {
       "decision_features_excluded": true,
-      "formal_rejudgement_prohibited": true
+      "formal_rejudgement_prohibited": true,
+      "builtin_support_flags_authoritative": false
     },
     "allowed_inputs": [
-      "completed raw pair deltas from both declared runs",
+      "completed champion_heldout_comparison_summary.v1.json from both declared runs",
+      "raw_metrics_ref files named by those completed summaries",
       "selector_spec.v1.json",
-      "selector_case_features.v1.json"
+      "selector_case_features.v1.json",
+      "bundle_manifest.v1.json"
     ],
     "forbidden_inputs": [
       "candidate values for selector construction",
       "candidate deltas for selector construction",
       "provider output",
       "framework Decision mutation"
-    ]
+    ],
+    "derived_report": {
+      "schema_version": "scion.warehouse_measurement_reanalysis.v1",
+      "path": "/home/clawd/research/scion-experiments/v04-warehouse-provider-free-measurement-reanalysis-v1-20260810-claw/analysis/measurement-reanalysis.v1.json",
+      "expected_arm_rows": 36,
+      "bootstrap_resamples": 10000,
+      "bootstrap_seed": 42
+    }
   }
 }
