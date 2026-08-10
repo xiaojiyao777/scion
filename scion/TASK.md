@@ -59,8 +59,9 @@ evidence prerequisite exists:
 3. **Ordinary-lineage diagnosis:** the terminal outcome-blind reconstruction
    froze six chronological exact candidates and all three 53-file branch heads
    matched byte-for-byte. The 37-block case/seed, matched-MDE and budget run is
-   preregistered with its input bundle prepared and its sole output root still
-   absent, but is not launched; an unprovable source/base/order fact remains
+   preregistered and launched once at `2026-08-10T07:51:42Z` from its prepared
+   input bundle into the sole CPU-exclusive output root. It is in flight on the
+   initial `MDE` block; an unprovable source/base/order fact remains
    `UNIDENTIFIABLE`, never a reason to restore a formal recorder.
 4. **Minimal V3 cleanup:** land only
    the reviewed problem-Protocol routing correction, bounded rejection
@@ -652,9 +653,11 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   authority.
 - [ ] Run the preregistered provider-free
   [R45 diagnosis](docs/experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-preregistration-20260810.md)
-  once from its prepared input bundle into its still-absent, CPU-exclusive sole
-  output root. Fail closed unless `N=6`, 37 blocks and 1,056 unique rows are
-  exact. Run the independent full `12x8` B0 A/A first, then all `Q00`, all
+  once from its prepared input bundle into its CPU-exclusive sole output root.
+  The run launched at `2026-08-10T07:51:42Z` and remains in flight on the
+  initial `MDE` block; leave this item open until terminal completion. Fail
+  closed unless `N=6`, 37 blocks and 1,056 unique rows are exact. Run the
+  independent full `12x8` B0 A/A first, then all `Q00`, all
   `Q01`, all `Q10`, all `Q11`, all `.5x`, and all `2x`, with candidate ordinals
   ascending within each block. Cohort factor/budget contrasts are descriptive;
   interaction and whole-budget-arm machine drift remain `UNIDENTIFIABLE`, and

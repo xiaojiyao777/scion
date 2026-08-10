@@ -805,11 +805,12 @@ focused/adjacent tests plus independent review passed; the default Protocol,
 raw schema and Decision path remain unchanged. The now-frozen
 [R45 diagnosis](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-preregistration-20260810.md)
 uses 37 immutable blocks over six exact candidates, including an independent
-B0 A/A matched-MDE block and fixed `0.5x/1x/2x` budgets. It is not launched.
-Its clean `c32f5b8a` runtime, experiment-owned driver/test and manifest are
-prepared only as an input bundle under `campaign_out`; the sole launch/output
-root under `scion-experiments` remains absent. Execution fails closed unless
-`N=6`, 37 blocks and 1,056 unique pair rows are exact.
+B0 A/A matched-MDE block and fixed `0.5x/1x/2x` budgets. Its clean `c32f5b8a`
+runtime, experiment-owned driver/test and manifest remain input-only under
+`campaign_out`. The run launched once at `2026-08-10T07:51:42Z` into its sole
+output root under `scion-experiments` and is in flight on the initial `MDE`
+block. Execution fails closed unless `N=6`, 37 blocks and 1,056 unique pair
+rows are exact.
 The completed earlier A/A/null result still does not establish power for the
 12x8 case-median design at delta `2`; exact non-futility routes and a fresh
 promotion campaign remain contingent on the complete provider-free diagnosis,
@@ -1015,16 +1016,17 @@ independent review passed. Earlier r1/r2 materializer differences came from
 that offline analyzer omitting `additional_changes`, not from Scion runtime
 drift. The cohort remains experiment evidence, not a restored candidate index,
 identity or replay authority.
-The immediate next step is the preregistered, still-unlaunched 37-block R45
-case/seed, matched-MDE and budget diagnosis. Its prepared bundle is input only;
-the run must create the still-absent sole output root once under CPU
-exclusivity. It freezes every composed workspace's complete ordinary-Python
-snapshot and compares the global set before and after every block. Status
-exposes block counts and last label only; no intermediate effect may be read,
-used to retry or combined with R3's incomplete validation. The complete
-one-off driver/test source is experiment-owned and is not committed into
-Scion. H-context A/B is not triggered by the seven audited H calls. C-expression
-A/B is already triggered and may proceed after the higher-priority factor work.
+The preregistered 37-block R45 case/seed, matched-MDE and budget diagnosis
+launched once at `2026-08-10T07:51:42Z` and is in flight on its initial `MDE`
+block. Its prepared bundle remains input only; the run created its sole output
+root under CPU exclusivity. It freezes every composed workspace's complete
+ordinary-Python snapshot and compares the global set before and after every
+block. Status exposes block counts and last label only; no intermediate effect
+may be read, used to retry or combined with R3's incomplete validation. The
+complete one-off driver/test source is experiment-owned and is not committed
+into Scion. H-context A/B is not triggered by the seven audited H calls.
+C-expression A/B is already triggered and may proceed after the higher-priority
+factor work.
 These diagnostics remain excluded from Decision and cannot reinterpret R3.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.
