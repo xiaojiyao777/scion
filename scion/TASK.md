@@ -63,9 +63,9 @@ evidence prerequisite exists:
    process disappearance during its first block. R2 completed 96/96 valid MDE
    pairs but its one-off driver rejected the legitimate auxiliary `routes`
    field before accepting the block. R2 is sealed with zero accepted blocks;
-   R3 is preregistered with only that false exact-set check removed and is not
-   started. An unprovable source/base/order fact remains `UNIDENTIFIABLE`, never
-   a reason to restore a formal recorder.
+   R3 launched once at `2026-08-10 15:21:30 UTC` with only that false exact-set
+   check removed and is `IN_FLIGHT`. An unprovable source/base/order fact
+   remains `UNIDENTIFIABLE`, never a reason to restore a formal recorder.
 4. **Minimal V3 cleanup:** land only
    the reviewed problem-Protocol routing correction, bounded rejection
    diagnostic, minimal failure-only nondeterminism record and Warehouse canary
@@ -671,14 +671,18 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `RUN_INVALID_EXPERIMENT_DRIVER / ZERO_ACCEPTED_BLOCKS /
   NO_ADMISSIBLE_ANALYSIS`; do not read its scientific outcome, resume it or
   reuse a pair.
-- [ ] After explicit confirmation, run the separately
+- [ ] Run the separately
   [preregistered R3 replacement](docs/experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r3-driver-replacement-preregistration-20260810.md)
-  once from fresh MDE 0/96. Its only driver change treats declared metrics as a
+  once from fresh MDE 0/96. Explicitly confirmed R3 launched at
+  `2026-08-10 15:21:30 UTC` and is `IN_FLIGHT`; its first startup observation
+  was 1/96 attempted and valid pairs, zero failures, zero of 37 accepted blocks
+  and `last_block=null`. Its only driver change treats declared metrics as a
   required finite numeric subset of the objective mapping; exact declared
   deltas and all substantive execution/completeness checks remain. The same
   `N=6`, 37 blocks, 1,056 rows, budgets, AB/BA order and analysis are frozen.
-  Copy or combine no R1/R2 pair, change no Scion core gate, and automatically
-  launch no R4.
+  Until terminal, inspect only process health and structural counts. Copy or
+  combine no R1/R2 pair, change no Scion core gate, and automatically launch no
+  R4.
 - [x] Before the provider-free CVRP factor/budget replay or any new promotion
   campaign, make formal comparison
   evidence analysis-complete without a new runner: disable champion caching,

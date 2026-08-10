@@ -824,10 +824,13 @@ read. R2 is sealed
 `RUN_INVALID_EXPERIMENT_DRIVER / ZERO_ACCEPTED_BLOCKS /
 NO_ADMISSIBLE_ANALYSIS` and is not an algorithm negative.
 The [R3 replacement](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r3-driver-replacement-preregistration-20260810.md)
-is preregistered but not started. Its fresh one-off driver requires the
-declared metrics as a finite numeric subset, preserves exact declared deltas
-and every real execution/completeness check, and changes no Scion core gate.
-It starts at MDE 0/96 and reuses no R1/R2 pair.
+launched once after explicit confirmation at `2026-08-10 15:21:30 UTC` and is
+`IN_FLIGHT`. Its fresh one-off driver requires the declared metrics as a finite
+numeric subset, preserves exact declared deltas and every real
+execution/completeness check, and changes no Scion core gate. Startup structure
+was 1/96 attempted and valid MDE pairs, zero failures, zero of 37 accepted
+blocks and `last_block=null`; it reuses no R1/R2 pair. Until terminal, only
+process health and structural counts are inspected.
 The completed earlier A/A/null result still does not establish power for the
 12x8 case-median design at delta `2`; exact non-futility routes and a fresh
 promotion campaign remain contingent on the complete provider-free diagnosis,
@@ -1040,10 +1043,10 @@ pairs are not copied or combined. R2 launched once through an ordinary-user
 tmux seam, completed 96/96 valid MDE pairs, then its one-off driver rejected
 the auxiliary `routes` field before accepting the block. R2 is sealed with zero
 accepted blocks and no admissible analysis; no scientific outcome was read.
-R3 is separately preregistered, not started, and removes only that false
-exact-objective-key gate in a fresh experiment bundle. It retains the same
-science, starts at MDE 0/96, reuses no earlier pair and requires explicit launch
-confirmation. The complete one-off driver/test source remains
+R3 was separately preregistered and launched once after explicit confirmation;
+it removes only that false exact-objective-key gate in a fresh experiment
+bundle. It retains the same science, started at MDE 0/96 and reuses no earlier
+pair. The complete one-off driver/test source remains
 experiment-owned and is not committed into Scion. H-context A/B is not
 triggered by the seven audited H calls. C-expression A/B is already triggered
 and may proceed after the higher-priority factor work.
