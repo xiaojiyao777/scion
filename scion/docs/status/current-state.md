@@ -705,11 +705,19 @@ count. An independent result-blind source audit found the reachable scheduler
 path deterministic, capacity-safe, rollback-safe and faithful to H, with no
 candidate-introduced correctness blocker. The added partial-route sort can
 change runtime/search quality and remains an empirical hypothesis rather than
-a framework guarantee. Formal screening nine is active; no incomplete W/L/T or
-deltas are read or used here.
+a framework guarantee. Formal screening nine's initial block then completed
+32/32 valid pairs at 13W/8L/11T and 4W/1L/3T cases. Manifest-order case effects
+were `[8.5,6.5,6.5,28,0,0,0,-5]`, with median `+3.25 [0,8.5]`, zero fleet
+regression and zero candidate/champion failure. All four non-X cases won; the
+four X cases were 0W/1L/3T. Net score, loss rate, practical median and CI-low
+all passed, and the exact required route was
+`SCREENING_EXPAND_REQUIRED_FOR_PASS -> expand_screening`, because initial
+evidence cannot pass before the frozen expansion. Two independent raw
+recomputations matched. The exact 12x8 expansion is active; no incomplete
+expansion W/L/T or deltas are read or used here.
 
 The chronological result-blind H/C audit now covers all seven provider pairs
-through that active screening. Every H was schema-valid, saw the same complete
+through that H/C pair. Every H was schema-valid, saw the same complete
 11-file source union exactly once across champion/current sections, named the
 correct owner and symbol, and proposed a solver mechanism rather than framework
 or measurement work. H context grew from about 93k to 136k characters as exact
