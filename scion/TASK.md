@@ -696,6 +696,15 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   core ceiling. Exact fixtures, counterbalanced order, blind rubrics and the
   conservative adoption rule are frozen in the
   [C-expression A/B preregistration](docs/experiments/v0.4/v0.4-cvrp-c-expression-ab-preregistration-20260810.md).
+- [ ] After the frozen C-expression A/B, replace the internal
+  `proposal_source_ledger` with one ordinary `editable_source_context` value:
+  approved target, unique canonical path/content pairs and target API guidance.
+  Preserve branch-current-over-champion precedence, no fallback for touched
+  helpers, create-target `content=None`, exact selector application and
+  Contract ownership. Delete entry digests, owner/provenance/visibility/reason,
+  view sets and validation that re-hashes the same context content. This is a
+  source-binding simplification, not a new authority or provider tool, and
+  should net-delete at least 150 production lines.
 - [ ] Do not add provider shell, execution, network, read/search or edit loops
   on present evidence. Reconsider a matched source-navigation A/B only if two
   independent terminal C calls fail on the same source/API/callsite fact, the
