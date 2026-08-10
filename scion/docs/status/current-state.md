@@ -719,8 +719,22 @@ four X cases were 0W/1L/3T. Net score, loss rate, practical median and CI-low
 all passed, and the exact required route was
 `SCREENING_EXPAND_REQUIRED_FOR_PASS -> expand_screening`, because initial
 evidence cannot pass before the frozen expansion. Two independent raw
-recomputations matched. The exact 12x8 expansion is active; no incomplete
-expansion W/L/T or deltas are read or used here.
+recomputations matched.
+
+The same exact source's 12x8 expansion then completed 96/96 valid unique pairs
+with zero candidate/champion/total failure, zero fleet regression and no
+protected-objective regression. Pair evidence was 37W/16L/43T and case evidence
+7W/0L/5T; manifest-order case medians were
+`[7.5,25.5,3,14,5,0,0,0,4,4.5,0,0]`, with overall `+3.5 [0,6.25]`, net score
+`0.583` and loss rate `0`. Two independent raw recomputations matched the raw
+comparison on all 96 pairs. All five declared quality components passed; the
+exact actual and expected route was `SCREENING_PASS -> queue_validate`. This is
+R3's first exact candidate to advance beyond quality screening. Its validation
+canary completed and same-source formal validation is active; no incomplete
+validation outcome is read. Because the active chain remains operator-load
+contaminated under R43, even an eventual Protocol promotion requires the
+pre-registered clean provider-free recovery before a strict retained-
+improvement claim.
 
 The chronological result-blind H/C audit now covers all seven provider pairs
 through that H/C pair. Every H was schema-valid, saw the same complete
