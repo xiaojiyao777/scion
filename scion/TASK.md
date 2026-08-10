@@ -379,8 +379,9 @@ not incidental framework plumbing. Before every fresh provider campaign:
   `1965 passed, 1 skipped` in 629.99 seconds; the focused adjacent set passed 92
   tests and critical Ruff plus diff checks passed. The latest post-heldout
   complete suite then completed with `1988 passed, 1 skipped` in 627.26 seconds.
-  This is the current full-regression terminal count; the earlier counts remain
-  their historical checkpoints.
+  This is a historical post-heldout checkpoint; the later exact clean-source
+  `2081 passed, 1 skipped` result recorded under S5 is the latest completed
+  full-suite checkpoint before the currently active experiment work.
 
 ### S4 - Warehouse recovery ladder
 
@@ -615,6 +616,9 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `>=1`, CI low `>=0`, with zero fleet/feasibility/subject-runtime failure.
   First add only the default-off R45 paired-order/raw seam and focused
   fake-runner tests; the provider-free experiment driver is capped at 220 lines.
+  The exact factory, stage-call, durable-promotion-order and 96/96 completeness
+  conditions are frozen in the recovery preregistration; do not substitute the
+  heldout helper's single timeout or infer promotion from snapshot directories.
   Use no provider call, formal-candidate recorder, dynamic subset, threshold
   change or favorable family selection after observing results.
 - [ ] At R3 terminal, seal the root and classify the formal outcome separately

@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-09*
+*Last updated: 2026-08-10*
 
 Read `TASK.md` first. `design/scion-architecture-v3.md` is the sole architecture
 authority. `design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` only
@@ -923,10 +923,12 @@ and fail-closed regressions passed 92 tests. The complete suite passed
 passed. This is the frozen framework checkpoint for the next fresh Warehouse
 run, not solver-evidence acceptance by itself.
 
-After the production research-design corrections were integrated, the latest
-complete suite passed `2011 passed, 1 skipped` in 639.18 seconds. This is the
-current full-regression terminal count; the 1949, 1964, 1965 and 1988 results
-above remain historical checkpoints.
+After the production research-design corrections were integrated, a historical
+complete-suite checkpoint passed `2011 passed, 1 skipped` in 639.18 seconds.
+The later exact clean-source `2081 passed, 1 skipped` result recorded above is
+the latest completed full-suite checkpoint before the currently active
+experiment work; the 1949, 1964, 1965, 1988 and 2011 results remain historical
+checkpoints.
 
 ## Known residuals
 
