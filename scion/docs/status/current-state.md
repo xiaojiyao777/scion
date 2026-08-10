@@ -733,6 +733,21 @@ expression A/B trigger, but do not prove that the typed schema caused them.
 That post-terminal A/B remains a proposal-surface diagnosis, never a candidate
 gate or solver-outcome comparison; H remains unchanged.
 
+A separate result-blind provider-surface audit reaches the same priority. The
+seven H calls do not justify more H tools or history compression: all received
+the complete source, named the correct owner/symbol and stayed focused on
+solver mechanisms. C is the observed fidelity bottleneck despite seeing the
+same complete 11-file union. The next intervention is therefore the already
+frozen exact-edit versus strict-diff expression A/B, not a shell or tool loop.
+Before any later provider campaign, the visible projection will make a net
+reduction: campaign/branch/version IDs, schema/taint and repeated
+`Decision-excluded` notices, negative frozen patterns and duplicated API/edit
+rules move to trace or Contract, while objective/invariants, mechanics, legal
+positive surfaces, complete current source, screening-level algorithm evidence
+and the latest actionable rejection remain. Potential absolute-objective,
+headroom or case-structure additions wait for the provider-free measurement
+diagnosis and remain proposal context only.
+
 The active expansion later exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
 deadline-driven solver was evaluating several pairs. All CPU-heavy repository
@@ -753,12 +768,16 @@ result caching by default and reruns the cumulative matrix on expansion. Raw
 pairs retain deltas and runtime/cache facts but not both absolute objective
 vectors, subject order, feasibility and subject time intervals. Consequently
 objective headroom, order/load effects and case-versus-seed attribution are
-partly `UNIDENTIFIABLE`. Before another promotion campaign, the smallest
-correction is fresh cache-off subjects, deterministic AB/BA counterbalancing,
-immutable atomic case×seed blocks and the corresponding minimal raw fields in
-the existing runner. Exact non-futility routes, seed-first versus case-first,
-matched power and Warehouse size budgets remain contingent on the already
-frozen provider-free diagnoses; they are not new gates or post-hoc R3 changes.
+partly `UNIDENTIFIABLE`. After R3 is terminal, the smallest correction precedes
+the expensive provider-free CVRP factor/budget replay as well as another
+promotion campaign: fresh cache-off subjects, deterministic AB/BA
+counterbalancing, immutable atomic case×seed blocks and the corresponding
+minimal raw fields in the existing runner. The completed A/A/null result does
+not establish power for the 12x8 case-median design at delta `2`; a fresh
+campaign must freeze a matched sensitivity/MDE boundary or narrow its negative
+claim. Exact non-futility routes, seed-first versus case-first and Warehouse
+size budgets remain contingent on the already frozen provider-free diagnoses;
+they are not new gates or post-hoc R3 changes.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
