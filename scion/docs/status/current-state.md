@@ -797,18 +797,23 @@ result caching by default and reruns the cumulative matrix on expansion. Raw
 pairs retain deltas and runtime/cache facts but not both absolute objective
 vectors, subject order or feasibility. Consequently
 objective headroom, order/load effects and case-versus-seed attribution are
-partly `UNIDENTIFIABLE`. The smallest correction now precedes the expensive
-provider-free CVRP factor/budget replay and another promotion campaign: fresh
-cache-off subjects, deterministic AB/BA
-counterbalancing and minimal block/case/seed/order/objective/feasibility/timing/
-failure fields in the existing Protocol. The factor diagnosis uses immutable Q
-case×seed blocks. The
-completed A/A/null result does
-not establish power for the 12x8 case-median design at delta `2`; a fresh
-campaign must freeze a matched sensitivity/MDE boundary or narrow its negative
-claim. Exact non-futility routes, seed-first versus case-first and Warehouse
-size budgets remain contingent on the already frozen provider-free diagnoses;
-they are not new gates or post-hoc R3 changes.
+partly `UNIDENTIFIABLE`. The minimal correction landed default-off at
+`c32f5b8a`: fresh cache-off subjects, deterministic AB/BA counterbalancing and
+bounded block/case/seed/order/objective/feasibility/timing/failure raw facts in
+the existing Protocol. The four production files grew by net 100 lines and 46
+focused/adjacent tests plus independent review passed; the default Protocol,
+raw schema and Decision path remain unchanged. The now-frozen
+[R45 diagnosis](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-preregistration-20260810.md)
+uses 37 immutable blocks over six exact candidates, including an independent
+B0 A/A matched-MDE block and fixed `0.5x/1x/2x` budgets. It is not launched.
+Its clean `c32f5b8a` runtime, experiment-owned driver/test and manifest are
+prepared only as an input bundle under `campaign_out`; the sole launch/output
+root under `scion-experiments` remains absent. Execution fails closed unless
+`N=6`, 37 blocks and 1,056 unique pair rows are exact.
+The completed earlier A/A/null result still does not establish power for the
+12x8 case-median design at delta `2`; exact non-futility routes and a fresh
+promotion campaign remain contingent on the complete provider-free diagnosis,
+not on a new gate or a post-hoc R3 change.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
@@ -1001,26 +1006,25 @@ negative. With no Protocol promotion, R3 supplies no clean-recovery candidate
 and the promotion-recovery replay is not launched. Closure still requires a
 fresh clean screening -> validation -> frozen promotion, an independent B0
 comparison and the S6 cross-problem/full-regression record.
-An outcome-blind ordinary-lineage audit through the current seven terminal C
-traces found six unique Verification-passed candidates reconstructable without
-the deleted formal artifact recorder. Per-branch serial exact composition from
-the declared champion snapshot reproduced all three durable workspaces
-byte-for-byte; repeated expansion rows were deduplicated by hypothesis and the
-one C without a Verification-passed experiment was skipped. This establishes
-cohort feasibility only. It did not expose or classify the then-active Protocol
-outcome; the cohort can now be frozen only after repeating that terminal
-reconstructability check.
-The immediate next step is the default-off R45 fresh-subject, counterbalanced
-AB/BA and minimal raw-evidence seam with focused fake-runner tests. Then freeze
-the chronological ordinary-lineage cohort and, only for exact source/base
-members, run the provider-free case-by-seed and budget diagnosis before any
-fresh campaign. The R3 runtime has no formal-candidate artifact index and must
-not regain one: the experiment
-side may use ordinary branch/step lineage, terminal H/C traces and source
-snapshots once, omitting any candidate it cannot reconstruct exactly. H-context
-A/B is not triggered by the seven audited H calls. C-expression A/B is already
-triggered and may proceed after the higher-priority R45/factor work. These
-diagnostics remain excluded
-from Decision and cannot reinterpret R3.
+The terminal outcome-blind ordinary-lineage reconstruction is now frozen. Full
+primary plus ordered `additional_changes` replay produced six chronological
+unique Verification-passed candidates with their exact immediate bases. All
+three reconstructed branch heads matched their durable workspaces byte-for-byte
+across 53 ordinary Python files, one research rejection was omitted, and an
+independent review passed. Earlier r1/r2 materializer differences came from
+that offline analyzer omitting `additional_changes`, not from Scion runtime
+drift. The cohort remains experiment evidence, not a restored candidate index,
+identity or replay authority.
+The immediate next step is the preregistered, still-unlaunched 37-block R45
+case/seed, matched-MDE and budget diagnosis. Its prepared bundle is input only;
+the run must create the still-absent sole output root once under CPU
+exclusivity. It freezes every composed workspace's complete ordinary-Python
+snapshot and compares the global set before and after every block. Status
+exposes block counts and last label only; no intermediate effect may be read,
+used to retry or combined with R3's incomplete validation. The complete
+one-off driver/test source is experiment-owned and is not committed into
+Scion. H-context A/B is not triggered by the seven audited H calls. C-expression
+A/B is already triggered and may proceed after the higher-priority factor work.
+These diagnostics remain excluded from Decision and cannot reinterpret R3.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.
