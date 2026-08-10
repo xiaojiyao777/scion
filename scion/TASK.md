@@ -661,7 +661,9 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   and provider context, verify approved-H value equality and run unchanged
   `validate_patch(..., approved_hypothesis=H)`. Promote a strict diff normalizer
   only if that arm is adopted; its complete schema/parser wiring has a 220-line
-  core ceiling.
+  core ceiling. Exact fixtures, counterbalanced order, blind rubrics and the
+  conservative adoption rule are frozen in the
+  [C-expression A/B preregistration](docs/experiments/v0.4/v0.4-cvrp-c-expression-ab-preregistration-20260810.md).
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:
