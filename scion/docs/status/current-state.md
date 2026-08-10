@@ -685,8 +685,28 @@ formula audit nevertheless found that for reversals longer than two customers
 the boundary term uses the rolling `customers[j-1]` rather than the fixed
 `customers[i]`. This makes implementation fidelity partial and can accept an
 actual distance increase, but it is analysis rather than a host candidate gate;
-the fixed Protocol remains authoritative. Formal screening eight is active and
-no incomplete W/L/T is used here.
+the fixed Protocol remains authoritative. Formal screening eight subsequently
+completed 32/32 valid pairs with 0W/32L/0T pairs and 0W/8L/0T cases. In the
+pre-registered manifest order its case effects were
+`[-45,-55.5,-19.5,-50.5,-1171,-261,-481,-343]`, with median `-158.25` and
+bootstrap interval `[-412,-45]`; candidate/champion solver failures, fleet
+regressions and required-runtime-field failures were all zero. Two independent
+raw recomputations matched. The exact actual and expected route was
+`SCREENING_FAIL_WIN_RATE -> continue_explore`. Runtime evidence is consistent
+with the audited loop defect, but does not isolate it causally; the supported
+classification is a failed exact source with partial H/C implementation
+fidelity, not a provider, schema, binding, runner or V3-control failure.
+
+The following H/C pair is also source-grounded and provider-complete. It changes
+only `_route_removal`: shuffled routes are removed whole while they fit the
+requested destroy size, and the first overshooting route contributes one
+injected-RNG seed plus its nearest route-local customers to reach the exact
+count. An independent result-blind source audit found the reachable scheduler
+path deterministic, capacity-safe, rollback-safe and faithful to H, with no
+candidate-introduced correctness blocker. The added partial-route sort can
+change runtime/search quality and remains an empirical hypothesis rather than
+a framework guarantee. Formal screening nine is active; no incomplete W/L/T or
+deltas are read or used here.
 
 The active expansion later exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
