@@ -924,7 +924,13 @@ input bundle at
 [`warehouse-measurement-reanalysis-v1`](../experiments/v0.4/warehouse-measurement-reanalysis-v1/bundle_manifest.v1.json):
 all 17 synthetic and 16 production screening cases, four ordered seeds, exact
 step-local champions and historical/even/static-stratified selector arms. Its
-output roots remain unlaunched until the host is CPU-exclusive after R3.
+output roots remain unlaunched until the host is CPU-exclusive after R3. One
+small accounting correction remains before execution: current canary skips a
+champion solver or blocking-audit failure without retaining that fact and can
+return `champion_status=not_applicable`. Seven attempt/failure/completeness
+fields plus a heldout execution-completeness check will distinguish incomplete
+comparison evidence from the existing candidate safety veto without changing
+canary pass/veto, Protocol or Decision semantics.
 CVRP has no Protocol-complete promotion. R1 is sealed at 5/8 and R2 at 10/12;
 both retain valid partial science but neither candidate path reached validation
 or frozen holdout. R2's elapsed-budget SA is the current strongest lead. R3's

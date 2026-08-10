@@ -630,7 +630,12 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   future regression population with equal modify/create case counts. Exact
   champions, full case universes, four seeds and selector arms are frozen in
   the [Warehouse reanalysis preregistration](docs/experiments/v0.4/v0.4-warehouse-measurement-reanalysis-preregistration-20260809.md);
-  execution waits for CPU-exclusive time after R3.
+  execution waits for CPU-exclusive time after R3. Before launch, add only
+  canary execution accounting for candidate/champion attempts, solver failures,
+  blocking-audit failures and all-attempts-completed; the heldout consumer must
+  distinguish an existing candidate safety veto from incomplete comparison
+  evidence. This changes no canary pass/veto, Protocol or Decision rule and
+  adds no ledger or gate.
 - [ ] Use that Warehouse reanalysis, not edit action, to freeze any later
   research population. A future Warehouse epoch must use equal case counts for
   modify/create, paired effects, size-aware budgets and seed-only atomic
