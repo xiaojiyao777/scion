@@ -85,7 +85,7 @@ from .surface_runtime import (
     _surface_runtime_summary_template,
     _surface_runtime_summary_with_diagnostics,
 )
-from .types import CaseLevelResult
+from .types import CaseLevelResult, PairedExecutionSpec
 from .values import _increment_category
 
 if TYPE_CHECKING:
@@ -105,6 +105,8 @@ def run_experiment(
     expand: bool = False,
     expand_round: int = 1,
     selected_surface: str | None = None,
+    *,
+    paired_execution: PairedExecutionSpec | None = None,
 ) -> ProtocolResult:
     """Execute paired A/B evaluation for the given stage.
 
@@ -129,6 +131,8 @@ def run_experiment(
         selected_cases=cases,
     )
     seeds = protocol._select_seeds(stage, expanded=expand)
+    if paired_execution is not None:
+        _validate_paired_execution(paired_execution, cases, seeds)
     total_pairs = len(cases) * len(seeds)
     attempted_pairs = 0
     valid_pairs = 0
@@ -183,6 +187,8 @@ def run_experiment(
     champion_cache = getattr(protocol, "_champion_result_cache", None)
     champion_runtime_policy = protocol.config.runtime.champion_runtime_policy
     champion_cache_enabled = bool(
+        paired_execution is None
+        and
         getattr(protocol, "_champion_result_cache_enabled", False)
         and champion_cache is not None
         and champion_runtime_policy != "fresh_always"
@@ -362,16 +368,19 @@ def run_experiment(
                 f,
             )
 
-    _write_metrics_snapshot(complete=False)
-    protocol._emit_progress(
-        stage=stage.value,
-        case=None,
-        seed=None,
-        attempted_pairs=attempted_pairs,
-        completed_pairs=valid_pairs,
-        total_pairs=total_pairs,
-        raw_metrics_ref=raw_ref,
-    )
+    def _progress(case=None, seed=None, **payload) -> None:
+        protocol._emit_progress(
+            stage=stage.value, case=case, seed=seed,
+            attempted_pairs=attempted_pairs, completed_pairs=valid_pairs,
+            total_pairs=total_pairs, raw_metrics_ref=raw_ref,
+            **payload,
+        )
+
+    def _snapshot_progress(case: str | None, seed: int | None) -> None:
+        _write_metrics_snapshot(complete=False)
+        _progress(case, seed)
+
+    _snapshot_progress(None, None)
 
     for case in cases:
         case_features = _extract_case_features(case)
@@ -385,18 +394,52 @@ def run_experiment(
                 case_path=case,
             )
             pair_budget_fields = {"time_limit_sec": pair_time_limit_sec}
-            protocol._emit_progress(
-                stage=stage.value,
-                case=case,
-                seed=seed,
-                time_limit_sec=pair_time_limit_sec,
-                attempted_pairs=attempted_pairs,
-                completed_pairs=valid_pairs,
-                total_pairs=total_pairs,
-                raw_metrics_ref=raw_ref,
-            )
+            _progress(case, seed, time_limit_sec=pair_time_limit_sec)
             champion_cache_key: dict[str, Any] | None = None
             champion_result_source = "fresh"
+            cand_r: RunResult | None = None
+            paired_raw: dict[str, Any] | None = None
+            if paired_execution is not None:
+                case_ordinal = paired_execution.case_ordinals[case]
+                seed_ordinal = paired_execution.seed_ordinals[seed]
+                parity = (paired_execution.candidate_ordinal
+                          + paired_execution.block_ordinal
+                          + case_ordinal + seed_ordinal) % 2
+                order = ("A", "B") if parity == 0 else ("B", "A")
+                results: dict[str, RunResult] = {}
+                actual: list[str] = []
+
+                def run_side(side: str, workspace: str, case_path: str,
+                             _actual=actual, _results=results, _seed=seed, _limit=pair_time_limit_sec,
+                             _case=case, _case_ordinal=case_ordinal, _seed_ordinal=seed_ordinal,
+                             _order=order) -> RunResult:
+                    _actual.append(side)
+                    try:
+                        result = protocol.runner.run_solver(
+                            workdir=workspace, instance_path=case_path, seed=_seed,
+                            time_limit_sec=_limit,
+                            registry_path=os.path.join(workspace, "registry.yaml"),
+                            selected_surface=normalized_selected_surface,
+                        )
+                    except BaseException as error:
+                        try:
+                            partial = _paired_raw(paired_execution, _case_ordinal,
+                                                  _seed_ordinal, _order, _actual, _results,
+                                                  _limit)
+                            raw_pairs.append({"case": _case, "seed": _seed,
+                                              "comparison": "invalid", "delta": None,
+                                              "paired_execution": partial,
+                                              "failure": {"side": side, "exception_type":
+                                                          type(error).__name__[:128]}})
+                            _write_metrics_snapshot(complete=False)
+                        except BaseException:
+                            pass
+                        raise
+                    _results[side] = result
+                    return result
+
+                if order[0] == "B":
+                    cand_r = run_side("B", candidate_ws, candidate_case_path)
             if champion_cache_enabled:
                 champion_cache_key = champion_cache.build_key(
                     champion_workspace=champion_ws,
@@ -420,22 +463,30 @@ def run_experiment(
             else:
                 if champion_cache_enabled:
                     champion_cache_misses += 1
-                champ_r = protocol.runner.run_solver(
-                    workdir=champion_ws,
-                    instance_path=champion_case_path,
-                    seed=seed,
-                    time_limit_sec=pair_time_limit_sec,
-                    registry_path=os.path.join(champion_ws, "registry.yaml"),
-                    selected_surface=normalized_selected_surface,
+                champ_r = (
+                    run_side("A", champion_ws, champion_case_path)
+                    if paired_execution is not None
+                    else protocol.runner.run_solver(
+                        workdir=champion_ws,
+                        instance_path=champion_case_path,
+                        seed=seed,
+                        time_limit_sec=pair_time_limit_sec,
+                        registry_path=os.path.join(champion_ws, "registry.yaml"),
+                        selected_surface=normalized_selected_surface,
+                    )
                 )
-            cand_r = protocol.runner.run_solver(
-                workdir=candidate_ws,
-                instance_path=candidate_case_path,
-                seed=seed,
-                time_limit_sec=pair_time_limit_sec,
-                registry_path=os.path.join(candidate_ws, "registry.yaml"),
-                selected_surface=normalized_selected_surface,
-            )
+            if cand_r is None:
+                if paired_execution is not None:
+                    cand_r = run_side("B", candidate_ws, candidate_case_path)
+                else:
+                    cand_r = protocol.runner.run_solver(
+                        workdir=candidate_ws,
+                        instance_path=candidate_case_path,
+                        seed=seed,
+                        time_limit_sec=pair_time_limit_sec,
+                        registry_path=os.path.join(candidate_ws, "registry.yaml"),
+                        selected_surface=normalized_selected_surface,
+                    )
             champion_cache_digest = (
                 str(champion_cache_key.get("digest"))
                 if champion_cache_key is not None
@@ -451,6 +502,40 @@ def run_experiment(
                 ),
                 "runtime_ratio_high_confidence": champion_result_source != "cached",
             }
+            if paired_execution is not None:
+                audits = {}
+                for label, result in results.items():
+                    issue = (runtime_audit_failure_from_result(
+                        result, problem_spec=protocol._problem_spec,
+                        selected_surface=normalized_selected_surface,
+                    ) if result.success and result.output is not None else None)
+                    audits[label] = issue if runtime_audit_issue_blocks_execution(issue) else None
+                a_failure = _paired_failure(champ_r, audits["A"])
+                b_failure = _paired_failure(cand_r, audits["B"])
+                paired_raw = _paired_raw(
+                    paired_execution, case_ordinal, seed_ordinal, order, actual, results,
+                    pair_time_limit_sec, {"A": a_failure, "B": b_failure},
+                )
+                if a_failure or b_failure:
+                    failed_pairs += 1
+                    champion_failed_pairs += int(bool(a_failure))
+                    candidate_failed_pairs += int(bool(b_failure))
+                    side = "both" if a_failure and b_failure else (
+                        "champion" if a_failure else "candidate"
+                    )
+                    failure_record = {
+                        "case": case, "seed": seed, "side": side,
+                        "comparison": "invalid", "error_category": a_failure or b_failure,
+                    }
+                    raw_failures.append(failure_record)
+                    raw_pairs.append({
+                        "case": case, "seed": seed, "comparison": "invalid",
+                        "delta": None, "decisive_metric": "paired_execution_failure",
+                        "metric_deltas": {}, "paired_execution": paired_raw,
+                        "failure": failure_record,
+                    })
+                    _snapshot_progress(case, seed)
+                    continue
             if champion_result_source == "cached":
                 champion_cached_runtime_pairs += 1
             else:
@@ -499,7 +584,7 @@ def run_experiment(
                 candidate_first_runtime_failure = runtime_observation["first_failure"]
 
             champ_audit_failure = None
-            if champ_r.success and champ_r.output is not None:
+            if paired_execution is None and champ_r.success and champ_r.output is not None:
                 champ_audit_issue = runtime_audit_failure_from_result(champ_r)
                 champ_audit_failure = (
                     champ_audit_issue
@@ -575,16 +660,7 @@ def run_experiment(
                     champ_r.error_category or "unknown",
                     champ_r.elapsed_ms,
                 )
-                _write_metrics_snapshot(complete=False)
-                protocol._emit_progress(
-                    stage=stage.value,
-                    case=case,
-                    seed=seed,
-                    attempted_pairs=attempted_pairs,
-                    completed_pairs=valid_pairs,
-                    total_pairs=total_pairs,
-                    raw_metrics_ref=raw_ref,
-                )
+                _snapshot_progress(case, seed)
                 continue
 
             if not cand_r.success:
@@ -652,16 +728,7 @@ def run_experiment(
                     cand_r.error_category or "unknown",
                     cand_r.elapsed_ms,
                 )
-                _write_metrics_snapshot(complete=False)
-                protocol._emit_progress(
-                    stage=stage.value,
-                    case=case,
-                    seed=seed,
-                    attempted_pairs=attempted_pairs,
-                    completed_pairs=valid_pairs,
-                    total_pairs=total_pairs,
-                    raw_metrics_ref=raw_ref,
-                )
+                _snapshot_progress(case, seed)
                 continue
 
             if cand_r.output is None or champ_r.output is None:
@@ -712,28 +779,22 @@ def run_experiment(
                         "failure": failure_record,
                     }
                 )
-                _write_metrics_snapshot(complete=False)
-                protocol._emit_progress(
-                    stage=stage.value,
-                    case=case,
-                    seed=seed,
-                    attempted_pairs=attempted_pairs,
-                    completed_pairs=valid_pairs,
-                    total_pairs=total_pairs,
-                    raw_metrics_ref=raw_ref,
-                )
+                _snapshot_progress(case, seed)
                 continue
 
-            cand_audit_issue = runtime_audit_failure_from_result(
-                cand_r,
-                problem_spec=protocol._problem_spec,
-                selected_surface=normalized_selected_surface,
-            )
-            cand_audit_failure = (
-                cand_audit_issue
-                if runtime_audit_issue_blocks_execution(cand_audit_issue)
-                else None
-            )
+            if paired_execution is None:
+                cand_audit_issue = runtime_audit_failure_from_result(
+                    cand_r,
+                    problem_spec=protocol._problem_spec,
+                    selected_surface=normalized_selected_surface,
+                )
+                cand_audit_failure = (
+                    cand_audit_issue
+                    if runtime_audit_issue_blocks_execution(cand_audit_issue)
+                    else None
+                )
+            else:
+                cand_audit_failure = None
             if cand_audit_failure is not None:
                 audit_category = _candidate_audit_failure_category(cand_audit_failure)
                 if audit_category not in (runtime_observation.get("categories") or {}):
@@ -792,16 +853,7 @@ def run_experiment(
                     seed,
                     format_runtime_audit_failure(cand_audit_failure),
                 )
-                _write_metrics_snapshot(complete=False)
-                protocol._emit_progress(
-                    stage=stage.value,
-                    case=case,
-                    seed=seed,
-                    attempted_pairs=attempted_pairs,
-                    completed_pairs=valid_pairs,
-                    total_pairs=total_pairs,
-                    raw_metrics_ref=raw_ref,
-                )
+                _snapshot_progress(case, seed)
                 continue
 
             if champ_audit_failure is not None:
@@ -842,16 +894,7 @@ def run_experiment(
                     seed,
                     format_runtime_audit_failure(champ_audit_failure),
                 )
-                _write_metrics_snapshot(complete=False)
-                protocol._emit_progress(
-                    stage=stage.value,
-                    case=case,
-                    seed=seed,
-                    attempted_pairs=attempted_pairs,
-                    completed_pairs=valid_pairs,
-                    total_pairs=total_pairs,
-                    raw_metrics_ref=raw_ref,
-                )
+                _snapshot_progress(case, seed)
                 continue
 
             cmp, breakdown = protocol._compare_objectives(
@@ -878,6 +921,7 @@ def run_experiment(
                     **pair_budget_fields,
                     **runtime_fields,
                     **pair_cache_fields,
+                    **({"paired_execution": paired_raw} if paired_raw else {}),
                 }
             )
             problem_runtime_pairs.append(
@@ -919,16 +963,7 @@ def run_experiment(
                 _cand_vals,
                 _chmp_vals,
             )
-            _write_metrics_snapshot(complete=False)
-            protocol._emit_progress(
-                stage=stage.value,
-                case=case,
-                seed=seed,
-                attempted_pairs=attempted_pairs,
-                completed_pairs=valid_pairs,
-                total_pairs=total_pairs,
-                raw_metrics_ref=raw_ref,
-            )
+            _snapshot_progress(case, seed)
 
     # T2: Aggregate pairs → case-level results
     all_pair_feedback = [fb for fbs in pairs_by_case.values() for fb in fbs]
@@ -1307,6 +1342,51 @@ def _append_elapsed_sample(samples: list[float], value: Any) -> bool:
         samples.append(elapsed)
         return True
     return False
+
+
+def _validate_paired_execution(spec: PairedExecutionSpec,
+                               cases: list[str], seeds: list[int]) -> None:
+    fixed = [("candidate_ordinal", spec.candidate_ordinal), ("block_ordinal", spec.block_ordinal)]
+    case_values = ((f"case_ordinals[{key!r}]", spec.case_ordinals.get(key)) for key in cases)
+    seed_values = ((f"seed_ordinals[{key!r}]", spec.seed_ordinals.get(key)) for key in seeds)
+    for name, value in (*fixed, *case_values, *seed_values):
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"{name} must be a non-negative integer")
+    for name, values in (("case", [spec.case_ordinals[key] for key in cases]),
+                         ("seed", [spec.seed_ordinals[key] for key in seeds])):
+        if len(values) != len(set(values)):
+            raise ValueError(f"selected {name} ordinals must be unique")
+
+
+def _paired_failure(result: RunResult, audit: Mapping[str, Any] | None) -> str | None:
+    if not result.success:
+        return result.error_category or "process_failure"
+    if result.output is None:
+        return "missing_output"
+    if audit:
+        return str(audit.get("error_category") or "runtime_audit_failure")
+    return None if result.output.feasible else "infeasible"
+
+
+def _paired_raw(spec, case_ordinal, seed_ordinal, order, actual, results,
+                time_limit_sec, failures=None) -> dict[str, Any]:
+    failures = failures or {}
+    def side(label):
+        result = results.get(label)
+        if result is None:
+            return None
+        output = result.output
+        failure = failures.get(label) or result.error_category
+        return {"objective": dict(result.output.objective) if result.output else None,
+                "success": bool(result.success),
+                "feasible": bool(output.feasible) if output else None,
+                "elapsed_ms": result.elapsed_ms, "time_limit_sec": time_limit_sec,
+                "exit_code": result.exit_code,
+                "failure": str(failure)[:128] if failure else None}
+    return {"block_ordinal": spec.block_ordinal, "case_ordinal": case_ordinal,
+            "seed_ordinal": seed_ordinal,
+            "scheduled_order": "".join(order), "actual_order": "".join(actual),
+            "A": side("A"), "B": side("B")}
 
 
 def _runtime_evidence_status(

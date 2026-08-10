@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 
 
 @dataclass
@@ -11,4 +13,17 @@ class CaseLevelResult:
     delta: float      # preregistered case-level effect
     metric_deltas: dict[str, float] | None = None
 
-__all__ = ["CaseLevelResult"]
+
+@dataclass(frozen=True)
+class PairedExecutionSpec:
+    candidate_ordinal: int
+    block_id: str
+    block_ordinal: int
+    case_ordinals: Mapping[str, int]
+    seed_ordinals: Mapping[int, int]
+
+    def __post_init__(self) -> None:
+        for name in ("case_ordinals", "seed_ordinals"):
+            object.__setattr__(self, name, MappingProxyType(dict(getattr(self, name))))
+
+__all__ = ["CaseLevelResult", "PairedExecutionSpec"]

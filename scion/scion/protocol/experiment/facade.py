@@ -25,6 +25,7 @@ from .selection import (
 
 if TYPE_CHECKING:
     from scion.problem.spec import ObjectiveMetricSpec, ObjectivePolicySpec
+    from .types import PairedExecutionSpec
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +329,8 @@ class ExperimentProtocol:
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
+        *,
+        paired_execution: "PairedExecutionSpec | None" = None,
     ) -> ProtocolResult:
         from .stages import run_experiment
 
@@ -340,6 +343,7 @@ class ExperimentProtocol:
             expand=expand,
             expand_round=expand_round,
             selected_surface=selected_surface,
+            paired_execution=paired_execution,
         )
 
 

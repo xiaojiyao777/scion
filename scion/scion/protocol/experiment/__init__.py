@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .facade import ExperimentProtocol
 from .selection import SeedLedger, SplitManager, _select_evenly_spaced_cases
-from .types import CaseLevelResult
+from .types import CaseLevelResult, PairedExecutionSpec
 from .feedback import (
     _aggregate_case_feedback,
     _aggregate_pairs_to_case_level,
@@ -58,6 +58,7 @@ from .values import (
 __all__ = [
     "CaseLevelResult",
     "ExperimentProtocol",
+    "PairedExecutionSpec",
     "SeedLedger",
     "SplitManager",
 ]
