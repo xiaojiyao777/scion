@@ -1,320 +1,178 @@
-# Scion v0.4 direct-v3 运行后分析交接
-
-*最后更新：2026-07-13*
-
-本交接用于 warehouse 或 clean/open CVRP 正式运行结束后的只读分析。分析者必须沿
-direct-v3 的所有权边界逐层还原证据，并分别回答两个问题：框架是否正确执行，模型
-是否完成了有效研究。进程退出、completion 成功、生成 patch 或 postrun readiness
-通过，都不能单独证明研究有效。
-
-架构边界以以下文档为准：
-
-- `scion/design/scion-architecture-v3.md`；
-- `scion/design/scion-architecture-v3-v0.4-direct-runtime-addendum.md`；
-- `scion/docs/operations/experiment-runbook.zh.md`。
-
-## 1. 交给分析者的输入与约束
-
-提供：
-
-- `RUN_ROOT`：`/home/clawd/research/scion-experiments/` 下的本次运行目录；
-- `CAMPAIGN_DIR`：通常为 `$RUN_ROOT/campaign`；
-- 本次实验要回答的研究问题，以及 warehouse 或 CVRP 身份；
-- exact runtime commit 和预先声明的 rounds、model、protocol、split、seeds、
-  solver time limit。
+# Scion direct-V3 运行后分析交接
 
-分析者只能读取产物，不修改源码或 campaign 状态，不启动新的 invocation，也不调用
-外部模型。每个结论必须附带可复核定位：文件路径和 JSON field、数据库 event id、
-branch/hypothesis id、trace ref、formal candidate ref 或 raw metrics ref。
+*最后更新：2026-08-10*
 
-`postrun_acceptance/analysis_brief/` 与 `postrun_acceptance/inventory/` 是 report-only
-索引，不是质量结论，也不是 Decision 输入。若它们与 raw artifact 不一致，以 durable
-event、正式候选和 Protocol 原始指标为准，并把不一致记为框架问题。
-
-## 2. 先确定本次运行是否产生当前运行证据
-
-先读：
-
-```text
-$RUN_ROOT/prepared_run_manifest.v1.json
-$RUN_ROOT/command.txt
-$RUN_ROOT/launch.env
-$RUN_ROOT/run_status.json
-$RUN_ROOT/exit.txt
-$RUN_ROOT/run.log
-$RUN_ROOT/pre_campaign_completion_preflight.v1.json
-$RUN_ROOT/campaign_execution_marker.v1.json
-```
-
-确认 prepared commit、实际 runtime commit、completion、启动状态和结束状态属于同一
-次运行。若只完成准备，或在 campaign 执行前因 completion、commit、环境、数据等原因
-退出，应归类为 pre-campaign infra failure；此时停止算法质量判断，旧 campaign 副本
-或 prepared handoff 不能当作当前运行研究证据。
-
-若 launcher 已生成 postrun bundle，继续读取：
-
-```text
-$RUN_ROOT/postrun_acceptance/rebuild/rebuild_manifest.v1.json
-$RUN_ROOT/postrun_acceptance/readiness/*.postrun_acceptance_readiness.v1.json
-$RUN_ROOT/postrun_acceptance/analysis_brief/*.postrun_analysis_brief.v1.json
-$RUN_ROOT/postrun_acceptance/inventory/*.postrun_artifact_inventory.v1.json
-$RUN_ROOT/postrun_acceptance/summaries/*.summary.json
-$RUN_ROOT/postrun_acceptance/failures/*.failures.json
-$RUN_ROOT/postrun_acceptance/manifests/*.proposal_trajectory_manifest.v1.json
-```
-
-若 bundle 缺失或不完整，应由操作员在交付分析前重建并检查。以下命令只更新
-report-only bundle 和操作员报告，不改变 campaign、Decision 或 promotion state；受托
-分析者本身仍保持只读：
-
-```bash
-cd /home/clawd/research/or-autoresearch-agent
-
-python scion/tools/rebuild_postrun_acceptance.py "$RUN_ROOT" \
-  --strict --format json \
-  > "$RUN_ROOT/operator-postrun-rebuild.v1.json"
-
-python scion/tools/check_postrun_acceptance.py "$RUN_ROOT" \
-  --require-current-run-ready --format json \
-  > "$RUN_ROOT/operator-postrun-readiness.v1.json"
-```
-
-## 3. 原始证据地图
-
-完整分析至少检查存在的以下产物：
-
-```text
-$CAMPAIGN_DIR/campaign_summary.json
-$CAMPAIGN_DIR/run_status.json
-$CAMPAIGN_DIR/status.json
-$CAMPAIGN_DIR/scion.db
-$CAMPAIGN_DIR/llm_traces/*.json
-$CAMPAIGN_DIR/metrics/*.json
-$CAMPAIGN_DIR/artifacts/formal_candidates/index.jsonl
-$CAMPAIGN_DIR/artifacts/formal_candidates/**/candidate.patch.json
-```
-
-若 summary 引用了 archive、workspace、champion、promotion dossier 或其他 artifact，按
-引用继续打开，而不是猜测候选身份或代码内容。不要用 provider 自由文本替代 Contract、
-Verification、Protocol 或 Decision 的 typed evidence。
+本文说明如何对已结束的 Warehouse 或 CVRP 运行做轻量、只读分析，从正常研究循环留下
+的证据分别判断框架是否按 V3 边界正确执行，以及 agent 是否完成有质量、可归因的算法
+研究。进程正常退出、生成代码或某一步通过，都不能单独证明研究有效。
 
-当前 CLI 的只读入口为：
+## 1. 唯一架构 authority
 
-```bash
-cd /home/clawd/research/or-autoresearch-agent/scion
-export CAMPAIGN_DIR="$RUN_ROOT/campaign"
+唯一架构 authority 是 `scion/design/scion-architecture-v3.md`。
 
-python -m scion.cli.main inspect campaign --campaign-dir "$CAMPAIGN_DIR"
-python -m scion.cli.main report summary --campaign-dir "$CAMPAIGN_DIR" --markdown
-python -m scion.cli.main report failures --campaign-dir "$CAMPAIGN_DIR"
-```
+分析只使用 V3 定义的职责与信息流：LLM 提出 H/C，Contract 检查结构边界，
+Verification 检查候选仍在正确求解问题，Protocol 产生比较证据，Safe Feature
+Extractor 把允许的数值和枚举交给 Decision。LLM 自由文本不能进入 Decision。
 
-已知标识后再深入：
+分析文档、状态文档和运行说明可以帮助定位事实，但不能改写上述边界，也不能替代
+原始运行证据。
 
-```bash
-python -m scion.cli.main inspect branch '<branch-id>' \
-  --campaign-dir "$CAMPAIGN_DIR"
-python -m scion.cli.main inspect hypothesis '<hypothesis-id>' \
-  --campaign-dir "$CAMPAIGN_DIR"
-```
+## 2. 范围与只读约束
 
-## 4. 强制分析顺序
+交给分析者 `RUN_ROOT` 与其中的 `campaign/`、exact runtime commit、问题与模型、阶段
+配置、case/seed roster、solver time limit，以及预先要回答的研究问题。
 
-### 4.1 H/C durable attempt 与 provider receipt
+分析者只读现有产物，不修改 campaign 状态，不启动或恢复 invocation，不调用外部模型，
+不补跑候选。缺失证据必须如实收窄结论，不能用新的框架产物填补。
 
-先从 append-only event 还原每个 attempt，不从最终 reason code 倒推：
+当前 direct runtime 不写 `artifacts/formal_candidates/` recorder。分析不得把该目录或
+formal candidate index 当作前提，也不得为了分析而恢复它。
 
-```bash
-sqlite3 "$CAMPAIGN_DIR/scion.db" <<'SQL'
-.headers on
-.mode column
-SELECT timestamp, event_id, branch_id, hypothesis_id, stage, audit_payload_json
-FROM experiment_events
-WHERE event_kind = 'proposal_attempt_transition'
-ORDER BY timestamp, rowid;
-SQL
-```
+## 3. 普通运行证据
 
-对每个 `attempt_id` 核对：
+按需读取以下既有证据，不要求额外生成交接包：
 
-- hypothesis phase 是否只有一条合法生命周期；
-- 只有获批 H 才有与其绑定的 code phase；
-- `status`、`transition_reason`、`failure_lane` 与实际终态一致；
-- `prompt_call.trace_ref`、`prompt_manifest_ref`、`raw_response_ref` 指向存在的
-  `llm_traces/` 产物；
-- request kind、context digest、prompt hash、provider receipt 与 durable transition
-  一致；
-- H 是否看到完整且安全的问题对象与源码上下文，C 是否看到获批 H、目标文件及其依赖；
-- 原始响应失效或 infra failure 是否保持原分类，没有被伪装成算法结论。
+- `campaign/scion.db` 中的 proposal、branch 和 experiment events；
+- `campaign/llm_traces/` 中 H/C 调用的上下文、响应和终态；
+- `campaign/workspaces/` 的分支源码与 `campaign/champions/` 的 champion snapshot；
+- summary 或 events 中的 Contract 与 Verification 结果；
+- `campaign/metrics/` 中 Protocol 产生的原始 case/seed/pair 记录；
+- Protocol 聚合、Safe Features 与已记录的 Decision。
 
-分析 H 的研究质量时，检查它是否提出具体、可证伪、与当前源码相符的机制和预期证据；
-分析 C 时，检查多文件 patch 是否完整实现获批 H，而非注释、无关重排或只迎合结构要求。
+路径和字段可能随问题 adapter 不同。沿数据库事件中的普通引用定位即可；不要要求每种
+运行都有同名汇总文件。结论引用最短且足够的证据位置，例如 event id、branch、trace、
+workspace 文件或 raw metric 文件。
 
-### 4.2 Contract
+## 4. 分析顺序
 
-从 `campaign_summary.json.steps[]` 的 hypothesis、`contract_passed`、
-`contract_diagnostics`、`contract_not_run_reason`、`failure_stage` 与
-`failure_detail` 判断 Contract 是否只执行结构和信任边界检查：schema、surface/locus、
-editable/frozen path、source digest、action、import/API/interface，以及 patch 与获批 H 的
-绑定。
+### 4.1 先界定运行与污染
 
-需要回答：
+先确认所读 campaign 属于目标 runtime，并记录启动、终止和完成状态。区分：
 
-- 拒绝是否来自真实结构错误或越界；
-- 是否把机制偏好、自由文本写法、非必要遥测或研究结果提前当成硬条件；
-- Contract 通过的 patch 是否与 receipt 和归档代码完全一致。
+- 正常完成；
+- provider、进程、磁盘、时间预算或数据等 infra failure；
+- 与正式 solver 同时争用 CPU、内存或 I/O 的 operator contamination；
+- 候选代码自身的 crash、timeout 或不可行结果。
 
-### 4.3 Verification
+存在污染时仍可分析 H/C 研究行为和发现候选，但必须把性能结论降为探索性。严格晋升
+结论只能来自预先声明且未受污染的 Protocol 运行。只有启动前证据时，不评价算法质量。
 
-读取每一步的 `verification_passed`、`verification_detail`、`canary_result`、
-`primary_failure` 和 `secondary_observations`，再打开相关 workspace/archive 引用。
+### 4.2 审核 H 的 source grounding
 
-Verification 应检查候选代码能否正确运行，包括语法、接口、状态泄漏、feasibility、
-objective consistency、nondeterminism、crash、timeout 与 solver output。缺失非必要诊断
-不能覆盖正确的 solver 结果。分析者必须判断失败来自候选实现，还是 framework harness、
-problem adapter、数据或环境。
+从 proposal/experiment events 和对应终态 H trace 检查 agent 实际看到的问题说明、源码
+与前序事实；H 是否指向真实文件、符号和执行路径；机制是否具体、可证伪并说明预期
+影响；以及 H 是否混淆算法、infra 与框架问题。
 
-### 4.4 Protocol
+H 的质量是研究问题，不是 Decision 输入。上下文不足应记录为 context composition 问题，
+不能事后把一个合理 H 判成结构违规。
 
-只有进入 Protocol 的候选才能产生比较性科学结论。读取
-`campaign_summary.json.steps[].protocol_result`，并逐个打开其中的
-`raw_metrics_ref`：
+### 4.3 审核 C 的实现 fidelity
 
-- 核对 stage、case ids、seed set、candidate/champion identity；
-- 核对 attempted、valid、failed pairs 及失败归属；
-- 核对每个 metric 的方向、median delta、CI 和 win/loss/tie；
-- 核对 runtime ratio/delta、solver time limit 与 timeout 事实；
-- 核对 summary 聚合值能由 `metrics/*.json` 的 pair-level 证据解释；
-- statistical expand 只能扩展预注册样本，不能变成另一次模型调用。
+从获批 H、终态 C trace 和可用源码检查 C 是否实现所称机制、修改是否进入 solver 的
+实际执行路径、多文件依赖与状态更新是否完整，以及是否只是脚手架、注释、重排或部分
+实现。
 
-不要从 provider prose、diagnostic telemetry 或 postrun 汇总重新发明 Protocol 结论。
+把 C 分为 faithful、partial 或 scaffolding-only，并给出源码依据。该判断解释研究行为，
+不替代 Contract、Verification 或 Protocol。
 
-### 4.5 Decision
+### 4.4 Contract 与 Verification
 
-读取每一步的 `decision_features`、Protocol `gate_outcome`、
-`protocol_reason_codes`、`decision`、`decision_reason_codes`、
-`decision_engine_reason_codes` 与 `formal_candidate_patch_artifact_ref`。
+Contract 只回答结构边界是否满足，例如可编辑 surface、patch action、接口与 import。
+不要把算法风格、机制偏好、预期收益或诊断丰富度追加成新的硬条件。
 
-确认：
+Verification 只回答候选是否仍在解同一个问题：语法与接口、feasibility、objective
+一致性、状态泄漏、确定性、crash 和 timeout。失败必须归因到 candidate、framework、
+problem/data 或 infra；不完整诊断本身不应覆盖正确的 solver 结果。
 
-- Decision 只消费 Safe Features、Protocol outcome 和硬安全事实；
-- typed features 与 raw Protocol evidence 一致；
-- 相同输入可得到相同 action；
-- provider 自由文本、诊断完整性和 scheduler prose 没有改变科学结论；
-- formal candidate index、`candidate.patch.json`、summary 与 Decision 指向同一代码身份。
+### 4.5 候选源码可重建性
 
-### 4.6 Solver 与完整研究结果
+只有同时满足以下条件，才可把指标归因到某个具体 C：
 
-最后回到实际算法行为，而不是停在 gate 状态：
+1. ordinary branch/experiment lineage 给出明确的基线与步骤顺序；
+2. 对应终态 C trace 保留 exact patch 或完整的文件修改；
+3. 这些修改能够按顺序 exact compose 到该基线；
+4. 可用 workspace 或 champion snapshot 与重建结果相符。
 
-- 从 formal candidate 还原完整 patch，确认关键执行路径实际调用了新机制；
-- 用 raw metrics 的 candidate/champion 输出证明行为变化可归因于该 patch；
-- 检查 feasibility、objective、质量、runtime 和失败案例，而非只看总分；
-- 对 warehouse 判断是否回答了真实 warehouse 研究问题；
-- 对 clean/open CVRP 判断模型是否自主选择并实现了有意义的 VRP 算法方向；
-- 把可复现收益、有信息量的无收益、候选实现失败、框架失败和 infra failure 分开。
+若任一条件不能由现有证据证明，将该候选标为 `UNIDENTIFIABLE`。此时仍可报告 H/C
+行为、Verification 事实和未归因的 Protocol 观测，但不得声称某个代码机制导致了结果。
 
-## 5. 两层 verdict
+分析可以在临时只读副本中做确定性的文本组合；不得写回 campaign，也不得新增长期
+recorder。若少于研究设计所需的可重建候选数，直接报告 attribution unidentifiable，
+而不是扩大声明。
 
-### 5.1 框架正确
+### 4.6 Protocol、Safe Features 与 Decision
 
-至少需要证明：
+对每个可分析阶段读取 raw metrics，并核对最小科学事实：
 
-- prepared、runtime commit、completion 和 current-run identity 一致；
-- H/C durable transitions、receipts 和 trace 一一对应；
-- H 通过后才发生 C，失败 lane 没有混淆；
-- Contract、Verification、Protocol、Decision 各守所有权边界；
-- formal candidate、metrics、summary、数据库和 postrun inventory 可相互对账；
-- 多文件 patch 能完整物化、归档、回滚和复核。
+- case、seed、candidate/champion 两侧是否都实际完成；
+- feasibility、absolute objective、elapsed time 和 bounded failure；
+- AB/BA 执行顺序、solver limit 与样本扩展是否符合预先设计；
+- win/loss/tie、effect estimate 与不确定性是否能由 raw pairs 解释。
 
-### 5.2 研究有效
+每个阶段先写清 estimand：比较谁、在哪个 case/seed population、以什么指标和统计量。
+screening、validation、frozen/heldout 若使用不同 population，各自只支持自己的声明；
+不能把跨阶段、不同样本的效果拼成连续提升轨迹。
 
-至少需要证明：
+Safe Features 只能来自 Contract、Verification 与 Protocol 的 typed 事实。分析检查记录的
+Decision 是否只消费这些输入，以及相同输入是否确定地产生已记录 action。
 
-- H 基于真实源码提出具体机制，而不是泛化建议；
-- C 实现了该机制且修改进入实际 solver 路径；
-- Protocol 有足够的 case/seed/pair-level 质量与 runtime 证据；
-- 结果能归类为可复现收益或有信息量的无收益；
-- 结论不是由隐藏目标、过重边界条件、框架错误或基础设施状态制造。
+运行后分析永不重判 Decision：不根据 hindsight 改写 action，不从 provider prose 生成
+新 action，也不把分析者自己的阈值冒充原 Decision。发现输入、实现或边界错误时，报告
+framework defect；原 Decision 仍作为历史事实保留。
 
-框架正确但研究无效时，必须明确写成两项不同结论。框架错误时，不得把候选算法判为
-无效；只产生 pre-campaign evidence 时，不得评价模型研究能力。
+### 4.7 回到算法研究
 
-## 6. 必答问题
+在源码可重建且 Protocol 证据适用时，说明 agent 选择了什么算法机制、为什么与当前
+solver 有关、实现 fidelity 与行为变化如何；综合 feasibility、objective、质量、
+runtime 和失败分布，判断证据支持可复现收益、有信息量的无收益还是仅候选发现，并将
+结论限制在实际覆盖的 Warehouse 或 CVRP population。
 
-1. 本次是否产生了可归属于当前运行的 formal Protocol evidence？
-2. 每个 H/C attempt 的 durable transition、receipt、trace 和输出是否一致？
-3. H 是否看到了足够的问题与源码上下文，并提出可证伪的算法机制？
-4. C 是否完整实现获批 H，并进入实际 solver 执行路径？
-5. Contract 是否只拦截结构/信任边界问题？
-6. Verification 失败若有，归因于候选、框架、problem layer、数据还是 infra？
-7. Protocol 的 pair-level 数据能否支持其聚合与 gate outcome？
-8. Decision 是否只由 typed safe evidence 确定性产生？
-9. formal candidate、归档代码、metrics 和 summary 的身份是否闭合？
-10. warehouse 或 CVRP 的完整结果是收益、有信息量的无收益、实现失败、框架失败，
-    还是 infra failure？
-11. 框架正确性 verdict 与研究有效性 verdict 分别是什么？
-12. 下一步应修框架、改问题上下文/接口、保留研究发现，还是从新 clean commit 发起
-    新 invocation？
+不得用 gate 数量、调用成功率或 patch 数量代替算法研究质量。
 
-## 7. 交付格式
+## 5. 两个独立 verdict
+
+### Framework correctness
+
+判断 H/C 信息流、Contract、Verification、Protocol、Safe Features 与 Decision 是否各守
+V3 职责，ordinary events 和原始指标是否足以支持已记录事实，并单列 infra/contamination。
+
+### Research effectiveness
+
+判断 H 是否有源码根据、C 是否忠实进入 solver 路径、实验 estimand 是否明确、指标是否
+支持限定范围内的算法结论。源码不可重建或样本不支持时，写 `UNIDENTIFIABLE`，不要把
+它误写成算法无效。
+
+允许的组合包括“框架正确、研究无效”“框架错误、研究效果不可识别”以及“两者均通过”。
+框架失败不能自动证明算法失败，算法无收益也不能自动证明框架失败。
+
+## 6. 交付模板
 
 ```markdown
-# <run name> Postrun Analysis
+# <run> Read-only Analysis
 
-## Verdict
-- Current-run evidence:
-- Framework correctness:
-- Research effectiveness:
-- Algorithm outcome:
-- Next action:
+## Scope
+- Runtime / problem / model:
+- Stage estimands and claim boundaries:
+- Infra or contamination:
 
-## Evidence Identity
-- Run root / campaign dir:
-- Prepared commit / runtime commit:
-- Problem / model / protocol / split / seeds / solver time limit:
-- Lifecycle and postrun readiness:
+## Framework correctness
+- H/C flow and context:
+- Contract / Verification:
+- Protocol / Safe Features / recorded Decision:
+- Verdict:
 
-## H/C Durable Attempts
-| Attempt | Branch | Phase | Transition/events | Receipt/trace | Output | Judgment |
-|---|---|---|---|---|---|---|
+## Research effectiveness
+- H source grounding:
+- C implementation fidelity:
+- Candidate reconstruction: RECONSTRUCTED | UNIDENTIFIABLE
+- Raw quality / feasibility / runtime evidence:
+- Verdict and claim boundary:
 
-## Contract
-- Evidence:
-- Correct intercepts:
-- Suspected overreach or missed boundary:
-
-## Verification
-- Evidence:
-- Candidate failures:
-- Framework/problem/infra failures:
-
-## Protocol
-- Candidate and champion identity:
-- Stage/cases/seeds/pairs:
-- Quality and runtime evidence:
-- Raw metrics reconciliation:
-
-## Decision
-- Safe Features:
-- Protocol outcome and reason codes:
-- Decision and reason codes:
-- Determinism/boundary judgment:
-
-## Solver And Full Outcome
-- Mechanism actually executed:
-- Behavior attributable to patch:
-- Feasibility/objective/quality/runtime:
-- Useful finding or failure class:
-
-## Required Answers
-1. ...
-
-## Evidence-Backed Next Action
+## Evidence-backed next action
 - Preserve:
-- Repair:
-- New clean invocation prerequisite:
+- Repair or simplify:
+- Next clean experiment, if needed:
 ```
 
-主会话只接受带上述证据定位的结论。若结果改变 v0.4 项目状态，再更新对应实验文档、
-`scion/TASK.md` 与 `scion/docs/status/current-state.md`；不要把推测写成已验证结论。
+若结论改变项目状态，再更新 `scion/TASK.md` 与 `scion/docs/status/current-state.md`。
+推测、缺失证据和未来实验必须与已观察事实明确分开。

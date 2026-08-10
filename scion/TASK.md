@@ -42,6 +42,35 @@ If a finite experimental rung is negative, record the conclusion and redesign
 the next rung. Do not relabel a scientifically valid negative result as task
 completion.
 
+## Current execution order
+
+Work is split into bounded modules; a later module starts only when its stated
+evidence prerequisite exists:
+
+1. **R3 drain and result-blind audit:** let the exact active Terra root finish;
+   independently recompute every terminal formal stage and finish chronological
+   H/C/source-fidelity review. No source change, tests or competing solver work
+   runs while its deadline-driven Protocol is active.
+2. **Minimal V3 cleanup:** after terminal, land only the already reviewed
+   problem-Protocol routing correction, bounded rejection diagnostic, minimal
+   failure-only nondeterminism record and Warehouse canary completeness facts.
+   Each is a separate small commit; no new gate, ledger or orchestration layer.
+3. **Research-expression cleanup:** run the frozen C-expression A/B, then reduce
+   provider projection and replace the internal source ledger with ordinary
+   editable source context by net deletion. H context and tools stay unchanged
+   unless their separate evidence trigger is met.
+4. **Outcome branch:** if R3 produces a Protocol-promoted exact source, run only
+   the preregistered clean provider-free recovery and final B0 comparison. If it
+   does not, first prove an exact ordinary-lineage cohort and run the minimal
+   case/seed/order/budget diagnosis; an unprovable cohort stops with
+   `UNIDENTIFIABLE`, not more framework machinery.
+5. **Fresh CVRP rung only if justified:** freeze one experimental change at a
+   time, run `gpt-5.6-terra`, drain queued stages, and require the unchanged V3
+   promotion path plus independent B0 retention. Warehouse measurement
+   reanalysis is useful non-blocking backlog, not a CVRP prerequisite.
+6. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+   regression record and publish the cross-problem claim boundaries.
+
 ## V3 non-negotiable boundary
 
 The active path remains:
@@ -226,7 +255,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R30 | proven proposal-operation friction; prospective correction required | A complete structured branch-C refinement was rejected before Contract because its exact selector contained one blank line between top-level functions while visible source contained two. This was not an algorithm failure. | Permit only deterministic, globally unique blank-line-run selector normalization for non-`replace_all` edits, record the ordinary repair attribution, and keep every other mismatch fail-closed. Do not add fuzzy code matching, retry or an algorithm-quality gate. |
 | R31 | proven evidence-accounting/context gaps; corrected prospectively | R1 contains five evaluated attempts, two candidate-local research rejections and one infrastructure block, but terminal status projects only one rejection. The neutral H prior also omits the recent deep-ejection negative and R1 depth-one/depth-two contrast. | The research-rejection finalizer now owns one typed outcome row plus cleanup/audit fact; the loop audit remains a cross-check rather than a second counting authority. Candidate-local rejection stays scheduler-forward, and one concise neutral evidence item reaches H without selecting an operator or entering Decision. |
 | R32 | proven calibration-compatibility defect; corrected prospectively | The checked-in CVRP readiness and adapter projected the old 8-case x 4-seed pair-level MDE `9.9` as ready for R2, whose estimator, 12-case population, eight-seed quality screen and scale-aware runtime differ. A later 8-seed pair-level A/A reported MDE `9.6`, but it is also incompatible and does not validate its heuristic 16-seed recommendation. | Mark R2 uncalibrated, keep both MDE values as explicitly incompatible historical low-power diagnostics, and synchronize the declared matrix with actual execution. R2 may test research behavior and large effects but must not claim calibrated power or rule out effects near delta `2`. |
-| R33 | active experimental-design risk; bounded prospectively | A no-promotion campaign can reflect the candidate ideas, the stage/case/seed measurement design, or an H/C context and tool surface that diverts attention from algorithm research. Adding more host rules cannot distinguish those causes and can itself suppress useful search. | Treat stage populations, estimator semantics, provider-visible context and available edit/research tools as explicit experiment inputs. Preserve only V3 Contract/Verification/Protocol authority and minimum replayable lineage. R2 measures the integrated research path; its postrun must analyze proposal focus, usable evidence, tool/edit friction and measurement reach separately. If causal isolation is still needed, use a later fresh preregistered matched ablation rather than tuning the active root or adding a quality gate. |
+| R33 | active experimental-design risk; bounded prospectively | A no-promotion campaign can reflect the candidate ideas, the stage/case/seed measurement design, or an H/C context and tool surface that diverts attention from algorithm research. Adding more host rules cannot distinguish those causes and can itself suppress useful search. Effects measured on different stage populations also cannot be presented as one candidate trajectory without a shared estimand. | Treat each stage population, estimator, provider-visible context and available edit/research tool as an explicit experiment input. Declare the question and estimand for H, C, Verification, screening, validation, frozen and provider-free analysis separately; cross-stage effects on disjoint cases remain separate robustness evidence. Preserve only V3 Contract/Verification/Protocol authority and minimum ordinary scientific lineage. Analyze proposal focus, usable evidence, edit fidelity and measurement reach separately. If causal isolation is still needed, use a later fresh preregistered matched ablation rather than tuning an active root or adding a quality gate. |
 | R34 | proven V3 exposure/context-burden defect; corrected at `41956f36` | The proposed R2 H prior exposed current-split validation case `tai150a`, seed-level deltas and frozen/validation summaries. C also received several overlapping source/interface/rules packets, one route-count statement contradicted the protected-objective semantics, and H was told to use an incompatible MDE. | Remove all validation/frozen detail from H, retain screening-level mechanism facts only, expose every current source file once, correct excess routes to `fleet_violation`, and keep one problem-owned object/API packet plus target-specific guidance. The result removes 94 net lines, adds no gate and passes the complete suite. |
 | R35 | proven valid partial science; terminal root sealed | Corrected R2 completed 10 formal stages and 448/448 valid pairs before the final C stream ended upstream without a terminal event. Two schema-invalid H calls scheduled forward; no Contract/Verification candidate failed and no feasibility or fleet regression occurred. | Classify the root as pre-registered `RUN_INVALID_INFRA` with `VALID_PARTIAL_SCIENCE_10_OF_12`. Never resume or retry it. There was no validation, frozen stage or promotion; retain completed evidence only as neutral input to a fresh R3. |
 | R36 | proven proposal-fidelity gap; observability corrected, expression cause open | R2 time-aware operator credit had a complete source-grounded H but C added only three unused constants. R3 later proposed the same multi-site causal mechanism from another complete H, while its schema-valid, provider-complete C added only an unused `segment_outcomes` list. The fresh prior did not say the R2 mechanism remained unimplemented, so intent could again be mistaken for executed algorithm evidence. | Keep mechanical finish/tool/argument facts trace-only and keep `proposal_intent` distinct from actual changed-symbol use sites. Add one neutral implementation-status fact after R3 terminal, without forcing that mechanism. The two independent scaffolding-only traces trigger one frozen-input C expression A/B scored on implementation fidelity, not solver W/L/T; they add no patch grader, retry or gate. |
@@ -238,7 +267,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R42 | proven experimental-attribution limit; prospective diagnosis only | CVRP quality expansion changes case count and seed count together (`8x4 -> 12x8`), so a stage flip cannot identify the seed, case or interaction cause. Quality, validation and frozen are exactly 3 non-X `<=100` / 3 non-X `101-200` / 1 X `101-200` / 5 X `>200`; final replay is 4/1/1/6. No non-X-large or X-small support exists, so only the shared-mid cell supports a family direction, within-family size directions are partial and the full interaction is unidentifiable. Warehouse uses action-dependent case counts, two-seed majority in production and one 30-second budget across very different sizes. | Do not change or reinterpret active R3. At terminal, separate its formal outcome from a provider-free atomic case-by-seed and budget diagnosis on the chronological frozen cohort. If a fresh CVRP campaign is needed, use a predeclared four-cell connecting quality population with equal non-X `<=100`, non-X `101-200`, X `101-200` and X `>200` counts; infer only fixed stratum directions and common-mid family support. A causal within-family size claim requires shared benchmark families across sizes. Reanalyse accepted Warehouse evidence with frozen strata. Every diagnosis remains excluded from Decision and each new campaign changes one experimental axis at a time. |
 | R43 | proven operator-side experiment contamination; recovery preregistered before expansion terminal | Pytest ran concurrently with the active deadline-driven R3 quality expansion on a two-vCPU/one-physical-core host. Exact overlap cannot be reconstructed for every invocation, so excluding only selected pairs would be false precision. | Stop all concurrent CPU-heavy validation, do not retry or alter R3, and conservatively mark its formal chain `OPERATOR_LOAD_CONTAMINATED_FOR_STRICT_PROMOTION_CLAIM`. R3 may continue for research behavior and candidate discovery. Only an exact Protocol-promoted candidate is eligible for the already fixed provider-free clean quality -> validation -> frozen -> final replay in the [recovery preregistration](docs/experiments/v0.4/v0.4-cvrp-v3-r3-operator-load-recovery-preregistration-20260809.md); otherwise proceed to R42 diagnosis and a fresh campaign. No new Scion gate is added. |
 | R44 | proven recurring active-fixed-source Protocol routing deviation; correction narrowed prospectively | Candidate three's initial 32-pair result was 3W/0L/5T cases, median `0 [0,1.5]`; candidate five later completed 32/32 at 6W/1L/25T pairs and 2W/0L/6T cases, effects `[1,0,0,0,0,0,1,0]`, median `0 [0,1]`, with no failure or fleet regression. In both, CI high was below practical delta `2`, so none of the three pre-registered expansion routes applied, but exact runtime `76f3e976` used the old generic uncertainty fallback. Candidate three's extra 96-pair stage ended at 34W/11L/51T pairs and 6W/0L/6T cases, `+1 [0,2.25]`. Candidate five's scaffolding-only extra stage completed 3W/13L/80T pairs and 0W/1L/11T cases, median `0 [0,0]`, and correctly failed case quality once already expanded. | Do not reinterpret, retry, stop or delete either extra R3 stage; retain them as exploratory evidence under R43. The first prospective patch blocked the generic expansion but overclassified ineligible evidence as a hard fail. The narrowed route returns `unclear / SCREENING_INITIAL_QUALITY_CI_INSUFFICIENT_FOR_EXPANSION -> continue_explore`, without expansion, promotion or a new candidate veto. Formal #7 can characterize only the executed unused scaffold, not the unimplemented time-aware-credit mechanism. |
-| R45 | proven measurement replay and order-attribution gap; prospective only | Formal pairs run in fixed champion-then-candidate order, champion result caching is enabled by default, cumulative expansion reruns old cells, and raw pairs retain deltas/cache/runtime but not both absolute objective vectors, execution order, feasibility or subject time intervals. This does not reinterpret accepted Warehouse results or active R3 deltas, but makes objective headroom, order/load effects and atomic case-versus-seed attribution partly `UNIDENTIFIABLE`. | Do not alter active R3. Before the provider-free CVRP factor/budget replay or any new promotion campaign, run both subjects fresh, deterministically counterbalance AB/BA by case/seed ordinal, and execute only newly declared case×seed blocks while aggregating immutable earlier blocks. Extend the existing raw record with the minimum source/block/order/timing/absolute-objective/feasibility/opportunity fields; reuse the current runner and add no gate. Freeze exact routing thresholds only after the chronological-cohort diagnosis. |
+| R45 | proven measurement replay and order-attribution gap; prospective only | Formal pairs run in fixed champion-then-candidate order, champion result caching is enabled by default, cumulative expansion reruns old cells, and raw pairs retain deltas/cache/runtime but not both absolute objective vectors, execution order or feasibility. This does not reinterpret accepted Warehouse results or active R3 deltas, but makes objective headroom, order/load effects and atomic case-versus-seed attribution partly `UNIDENTIFIABLE`. | Do not alter active R3. Before the provider-free CVRP factor/budget replay or any new promotion campaign, run both subjects fresh, deterministically counterbalance AB/BA by case/seed ordinal, and execute only newly declared case×seed blocks while aggregating immutable earlier blocks. The minimum record is block/case/seed, scheduled/actual order, both objectives, feasible/success, elapsed/time-limit and one bounded failure fact. State the diagnostic boundary once in its manifest; reuse the current runner and add no ledger or gate. Freeze exact routing thresholds only after the chronological-cohort diagnosis. |
 | R46 | proven scoped R3 signal; broad advancement correctly withheld | Candidate four's initial elapsed-deadline SA refinement expanded from 4W/0L/4T cases. Its exact 12x8 quality result completed 96/96 pairs at 32W/12L/52T and 5W/0L/7T cases, with median `0 [0,3.25]`, no fleet/execution failure and `continue_explore`. Non-X cases were 5W/0L/1T with subgroup median `+3.25`; all six X cases tied. Every case above dimension 200 was X, so family and size effects are confounded. | Retain `SCOPED_SIGNAL_ONLY / UNIDENTIFIABLE_FAMILY_VS_SIZE` as exploratory science under R43. The fixed broad Protocol correctly withheld validation because median `0 < 2`; do not tune it or reinterpret the candidate as a pass. Let subsequent H use the screening evidence, and use the provider-free family/size/budget diagnosis before deciding whether a separately preregistered scoped campaign is justified. |
 
 ## Modular execution plan
@@ -255,6 +284,11 @@ not incidental framework plumbing. Before every fresh provider campaign:
   (`gpt-5.6-terra`), local Codex proxy, case/seed manifests, time limits and
   stop conditions before every new run. S1 and the first S4 campaign have
   committed preregistrations; repeat/new-problem runs must do the same.
+- [x] Replace the legacy postrun bundle/receipt/formal-index handoff with one
+  thin read-only V3 analysis guide over ordinary DB events, H/C traces,
+  source/workspaces, Verification, raw metrics, Protocol, Safe Features and the
+  recorded Decision. Missing exact candidate composition is
+  `UNIDENTIFIABLE`; analysis never restores a recorder or rejudges Decision.
 
 ### S1 - Finish the truncated Warehouse candidate
 
@@ -581,7 +615,19 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   unimplemented and untested. This audit cannot reject, rank, retry or alter a
   candidate and cannot force the next mechanism.
 - [ ] If R3 does not promote, freeze the first `min(8, N)` chronologically
-  Verification-passed candidates and run a provider-free CVRP factor replay:
+  Verification-passed candidates recoverable from ordinary branch/step lineage,
+  terminal H/C traces and branch/champion source snapshots; run a provider-free
+  CVRP factor replay only after exact candidate and immediate-base source are
+  reconstructed outcome-blind. Do not restore the deleted active formal-candidate
+  recorder or create candidate identity/replay authority. An experiment-owned
+  materializer may compose a temporary cohort from the already recorded patch
+  proposals and source ancestry; omit any candidate whose exact source/base is
+  not reconstructable and report the reason. With fewer than four exact members,
+  general factor attribution is `UNIDENTIFIABLE`. The outcome-blind feasibility
+  audit through the current seven terminal C traces already reconstructed six
+  unique passed candidates by serial exact edit composition and matched all
+  three durable branch workspaces byte-for-byte; repeat it at terminal before
+  freezing the cohort. For an eligible cohort:
   start only after the analysis-complete raw/order prerequisite below passes;
   execute only the non-overlapping `Q00/Q01/Q10/Q11` blocks whose aggregates
   reconstruct the same `8x4`, `8x8`, `12x4` and `12x8` cells, with unchanged
@@ -590,9 +636,11 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   directions at candidate-level cohort granularity; the interaction remains
   `UNIDENTIFIABLE`. This is diagnosis only and cannot rejudge R3 or enter
   Decision. With fewer than four eligible candidates report feasibility and
-  individual directions only rather than a general causal claim. Reuse
-  fixed-candidate replay through one experiment-owned analysis command capped
-  at 220 lines and change zero production campaign modules. Its
+  individual directions only rather than a general causal claim. Reuse the
+  existing Protocol/runner through one experiment-owned analysis command capped
+  at 220 lines and change zero production campaign modules. Historical
+  `fixed_candidate_replay` remains a compatibility reader only when its old
+  artifact actually exists. The analysis command's
   `protocol_factory` must explicitly set
   `champion_result_cache_enabled=False`; a replay that cannot establish the
   declared fresh/order/raw facts does not launch rather than knowingly creating
@@ -604,24 +652,28 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   scheduled/actual order. Let
   A be the immediate base and B the candidate; use AB when
   `(candidate_ordinal + block_ordinal + case_ordinal + seed_ordinal) mod 2 == 0`
-  and BA otherwise. Record each side's full objective mapping, feasibility,
-  success/error/exit facts,
-  start/end monotonic interval, wall-start, elapsed, time limit and stop/timeout
-  reason, then label immutable `Q00/Q01/Q10/Q11` case×seed blocks. Execute each
+  and BA otherwise. Record only block/case/seed ordinals, scheduled/actual order,
+  each side's full objective mapping, feasible/success, elapsed/time limit and
+  one bounded failure or exit fact, then label immutable `Q00/Q01/Q10/Q11`
+  case×seed blocks. Put the provider-free/Decision-excluded boundary once in the
+  experiment manifest rather than every row. Execute each
   block once in `Q00 -> Q01 -> (Q10 union Q11)` order; aggregate statistics
   combine all immutable completed blocks. Reuse the existing runner and
-  expansion state: the generic raw/order patch has a 100-line
-  production-growth ceiling and the later atomic-expansion wiring a further
-  150-line ceiling. Exceeding 250 added production lines means a new
-  orchestration seam was introduced and requires redesign before commit.
+  expansion state: the generic raw/order patch has a 100-line production-growth
+  ceiling. Do not prebuild atomic production-campaign expansion; it is considered
+  only after the diagnosis proves another promotion campaign is warranted, with
+  a separate 150-line ceiling. Exceeding either ceiling means a new orchestration
+  seam was introduced and requires redesign before commit.
 - [x] Freeze the minimal provider-free attribution diagnosis in the
   [measurement-attribution design](docs/experiments/v0.4/v0.4-measurement-attribution-design-20260809.md).
-  It reuses fixed-candidate replay, the problem Protocol and raw pair evidence;
-  decomposes cumulative case/seed cells into four atomic blocks; and makes
-  missing cohort, telemetry, fourth-seed or clean-CPU evidence explicitly
-  `UNIDENTIFIABLE`. It adds no runner, gate or Decision input. Its corrected
-  future connecting roster, Tai budget aliases and campaign claim remain
-  prospective until a separate post-diagnosis preregistration freezes them.
+  It reconstructs only exact candidates from ordinary lineage, then reuses the
+  problem Protocol, runner and raw pair evidence; decomposes cumulative
+  case/seed cells into four atomic blocks; and makes missing source/base,
+  telemetry, fourth-seed or clean-CPU evidence explicitly `UNIDENTIFIABLE`. It
+  restores no formal recorder and adds no runner, gate or Decision input. Its
+  corrected future connecting roster, Tai budget aliases and campaign claim
+  remain prospective until a separate post-diagnosis preregistration freezes
+  them.
 - [ ] Before a fresh CVRP promotion campaign, calibrate measurement sensitivity
   against that exact roster, case-median estimator, seed design, budgets and
   practical delta. The existing A/A/null result constrains only a limited
@@ -637,9 +689,10 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   final paired objective response. Freeze half-up integer bands
   `15/23/30/45/60`, `30/45/60/90/120` and `60/90/120/180/240` seconds and
   rotate the three arm orders deterministically over candidate/case/seed. If
-  the legacy replay cannot implement that rotation, execute one frozen order
-  and mark whole-arm machine drift `UNIDENTIFIABLE`.
-- [ ] Reanalyse the already accepted Warehouse cohorts provider-free: compare
+  the experiment-owned replay cannot implement that rotation, execute one
+  frozen order and mark whole-arm machine drift `UNIDENTIFIABLE`.
+- [ ] As a non-blocking measurement backlog, reanalyse the already accepted
+  Warehouse cohorts provider-free: compare
   the current selector with one predeclared size/headroom/structure-stratified
   selector, nested two- versus four-seed evidence and paired-median versus the
   current seed-vote estimator. Do not rerun a Warehouse provider campaign or
@@ -658,15 +711,15 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   modify/create, paired effects, size-aware budgets and seed-only atomic
   expansion; selector, estimator, seed count and budgets remain undecided until
   the frozen provider-free result exists.
-- [ ] Run an H research-core context A/B only if R3 shows repeated context or
-  schema friction. The compact arm may remove duplicated audit/rule wrappers
-  but must retain complete current source, objective, mechanics, legal surfaces
-  and algorithm evidence. Choose by matched evaluated-candidate yield and
-  source-anchor fidelity, never by solver W/L/T or a token gate. Trigger only
-  after at least two independent H calls misidentify source ownership/symbols,
-  optimize measurement/meta plumbing, repeat history instead of proposing a
-  mechanism, or resolve duplicated packets inconsistently; token count alone
-  is not friction.
+- [x] Do not run an H research-core context A/B on current evidence. All seven
+  audited R3 H calls were schema-valid, received the complete unique source
+  union, named the correct owner/symbol and stayed algorithm-focused, so the
+  trigger is not met. A later matched A/B remains conditional on at least two
+  independent H calls showing the same missing/truncated research fact or
+  duplicated-wrapper misunderstanding. It must retain objective, invariants,
+  mechanics, legal positive surfaces, complete current source and algorithm
+  evidence, and may be chosen only by proposal/source-grounding measures, never
+  solver W/L/T, token count or a gate.
 - [ ] Before another provider campaign, reduce the provider projection to the
   V3 research core without changing scientific content: keep one objective and
   invariant packet, solver mechanics, the legal positive edit surface,
@@ -677,12 +730,10 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `+0` production-line ceiling and should be a net deletion. Do not further
   compress H history merely because it is long: the seven audited R3 H calls
   all named the correct source owner/symbol and remained algorithm-focused.
-- [ ] After R3 is terminal, run a C expression A/B only when either one
-  deterministic typed-edit application/multi-file-anchor failure occurs, or at
-  least two independent schema-valid, structurally closed C traces omit the
-  causal use/update sites required by otherwise complete, source-grounded
-  multi-site H proposals. R2 and R3 now meet the second diagnostic trigger;
-  this does not itself prove schema causality. Compare the current one-shot
+- [ ] After R3 is terminal, run the already triggered C expression A/B. One
+  deterministic multi-site closure failure plus independent R2/R3
+  scaffolding-only omissions meet its predeclared diagnostic trigger; this does
+  not itself prove schema causality. Compare the current one-shot
   exact/full-file schema with one one-shot source-bound unified diff on frozen
   approved-H/source inputs. Normalize both into the same `PatchProposal` before
   the unchanged Contract; retain exact H binding and deterministic apply, with

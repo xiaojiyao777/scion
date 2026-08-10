@@ -125,6 +125,12 @@ W3 installation stacks.
   compatibility reader for the old full-file replacement artifacts. It does
   not write current campaign evidence, call H/C, decide promotion or confer
   authority.
+- The postrun analysis handoff is now a thin read-only V3 guide over ordinary
+  DB events, H/C traces, source/workspaces, Verification, raw metrics, Protocol,
+  Safe Features and the recorded Decision. Prepared/readiness bundles,
+  receipts, digest/identity reconciliation and a formal-candidate index are no
+  longer analysis prerequisites; missing exact source composition is reported
+  as `UNIDENTIFIABLE` rather than repaired with new framework machinery.
 - Reduced provider context to one frozen validated value plus ordinary
   context/prompt equality. No prompt/context identity or receipt layer sits on
   H/C; trace and call-journal persistence are best-effort diagnostics, while
@@ -914,7 +920,10 @@ above remain historical checkpoints.
    an opaque summary or a gate. C now sees plain path/content rather than
    owner, digest, provenance or view metadata. A legacy internal source ledger
    remains host-only; it is not provider-visible authority, a gate, or a
-   research-path blocker, and no further phase investment is planned for it.
+   research-path blocker. After the frozen C-expression A/B, it is queued for a
+   source-binding simplification to ordinary path/content/API context with at
+   least 150 net production lines deleted; no replacement identity, digest or
+   ledger layer is allowed.
 2. Warehouse lacks direct per-operator invocation counts, and CVRP R4 lacks
    fast/fallback/2-opt-probe counters.  Conclusions therefore keep the narrower
    candidate-level or association-only attribution.
@@ -961,10 +970,22 @@ B0 comparison and the S6 cross-problem/full-regression record. The active root
 alone cannot supply that clean claim because of its recorded operator-load
 contamination; a Protocol-promoted exact source must pass the pre-registered
 provider-free recovery replay.
-If R3 does not promote, the next step is a provider-free, frozen-cohort
-case-by-seed and budget diagnosis before any fresh campaign; H-context or
-C-expression A/B is conditional on observed friction rather than mandatory
-framework work. Those diagnostics remain excluded from Decision and cannot
-reinterpret R3.
+An outcome-blind ordinary-lineage audit through the current seven terminal C
+traces found six unique Verification-passed candidates reconstructable without
+the deleted formal artifact recorder. Per-branch serial exact composition from
+the declared champion snapshot reproduced all three durable workspaces
+byte-for-byte; repeated expansion rows were deduplicated by hypothesis and the
+one C without a Verification-passed experiment was skipped. This establishes
+cohort feasibility only. It does not expose or classify any active Protocol
+outcome, and the cohort remains unfrozen until R3 terminal.
+If R3 does not promote, the next step is an outcome-blind reconstructability
+audit followed, only for exact source/base members, by a provider-free
+case-by-seed and budget diagnosis before any fresh campaign. The active runtime
+has no formal-candidate artifact index and must not regain one: the experiment
+side may use ordinary branch/step lineage, terminal H/C traces and source
+snapshots once, omitting any candidate it cannot reconstruct exactly. H-context
+A/B is not triggered by the seven audited H calls. C-expression A/B is already
+triggered and waits only for R3 terminal. These diagnostics remain excluded
+from Decision and cannot reinterpret R3.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.
