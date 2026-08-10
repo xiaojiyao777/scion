@@ -661,11 +661,14 @@ optimization; prod-1.2 and its replay establish retained production transfer.
 - [ ] Run the
   [R2 replacement](docs/experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r2-replacement-preregistration-20260810.md)
   once as ordinary `clawd` through the input bundle's `launch-r2.sh`. Its fresh
-  output and control roots remain absent. R2 starts at `MDE` 0/96 and changes
-  only the explicit-tmux/process-observation seam; the same `N=6`, 37 blocks,
-  1,056 unique rows, budgets, AB/BA order and analysis remain fail-closed. It
-  copies or combines no R1 pair. If interrupted, seal R2 and do not
-  automatically launch R3.
+  output and control roots remain absent. A prelaunch invocation exceeded the
+  AF_UNIX path limit before tmux, driver, output or any pair existed and did not
+  consume the launch; the fail-if-present socket is now fixed at
+  `/tmp/scion-r45-r2.tmux.sock`. R2 remains not started, begins at `MDE` 0/96
+  and changes only the explicit-tmux/process-observation seam; the same `N=6`,
+  37 blocks, 1,056 unique rows, budgets, AB/BA order and analysis remain
+  fail-closed. It copies or combines no R1 pair. If interrupted, seal R2 and do
+  not automatically launch R3.
 - [x] Before the provider-free CVRP factor/budget replay or any new promotion
   campaign, make formal comparison
   evidence analysis-complete without a new runner: disable champion caching,

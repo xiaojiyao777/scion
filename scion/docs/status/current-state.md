@@ -816,6 +816,10 @@ The [R2 replacement](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagn
 is preregistered but not started. Its fresh output/control roots remain absent,
 and it changes only the ordinary-user launch/process-observation seam while
 keeping the same `N=6`, 37 blocks and 1,056-row fail-closed design.
+A prelaunch launcher invocation hit the AF_UNIX path limit before tmux, driver,
+output or any pair existed, so it did not consume the R2 launch. The launcher
+now uses the fail-if-present short socket `/tmp/scion-r45-r2.tmux.sock`; R2
+remains not started.
 The completed earlier A/A/null result still does not establish power for the
 12x8 case-median design at delta `2`; exact non-futility routes and a fresh
 promotion campaign remain contingent on the complete provider-free diagnosis,
@@ -1024,7 +1028,7 @@ identity or replay authority.
 The preregistered 37-block R45 diagnosis R1 is now sealed after unexplained
 process disappearance with zero accepted blocks and no admissible analysis.
 Its output root is unchanged, it is not resumed, and its partial first-block
-pairs are not copied or combined. R2 is the only registered replacement: a
+pairs are not copied or combined. R2 is the only registered replacement: an
 ordinary `clawd` launch through the input bundle's `launch-r2.sh`, with an
 explicit tmux socket and bounded log/PID/exit observations. Those controls are
 not a gate, Decision input or self-proof. R2 starts from fresh compose and MDE
