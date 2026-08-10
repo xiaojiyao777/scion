@@ -1,0 +1,152 @@
+{
+  "schema_version": "scion.warehouse_static_stratified_selector.v1",
+  "status": "frozen_before_solver_execution",
+  "case_feature_table": "selector_case_features.v1.json",
+  "scientific_role": "Diagnostic cohort construction only; never a Protocol or Decision input.",
+  "input_boundary": {
+    "case_json_only": true,
+    "problem_semantics_source": "/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion@76f3e9765128dcc6e0e9234ee6fc21cc4570d59f",
+    "candidate_values_used": false,
+    "candidate_deltas_used": false,
+    "solver_outputs_used": false,
+    "provider_outputs_used": false
+  },
+  "input_semantics": {
+    "pallet_types": ["FULL_PLT", "TAILGATE", "WOOD_CASE", "整板"],
+    "box_types": ["FULL_CTN", "LOOSE_CTN"],
+    "order_pallets": "sum(quantity for pallet_types) + ceil(sum(quantity for box_types) / 8)",
+    "region_map": {
+      "Dongguan": "Dongguan",
+      "Shenzhen": "Shenzhen",
+      "东莞": "Dongguan",
+      "深圳": "Shenzhen"
+    },
+    "unmapped_city_region": "identity",
+    "pickup_cap_by_region": {
+      "Dongguan": 2,
+      "Shenzhen": 3,
+      "default": 3
+    },
+    "maximum_vehicle_capacity": "max(vehicle_types[*].capacity) from the case JSON",
+    "locked_group_rule": "locked_vehicle_id is a group exactly when it is not null; the empty string is a valid locked group id"
+  },
+  "static_consolidation_headroom": {
+    "symbol": "H",
+    "hard_compatibility_cell": ["vehicle_subcategory", "vehicle_category", "region"],
+    "pallet_lower_bound": "ceil(sum(order_pallets) / maximum_vehicle_capacity)",
+    "pickup_lower_bound": "ceil(count(distinct pickup_name) / pickup_cap(region))",
+    "amount_lower_bound": "max({1} union {ceil(cell_amount[key] / amount_limits[key]) for key in cell_amount intersect amount_limits})",
+    "cell_vehicle_lower_bound": "LB_sg = max(1, pallet_lower_bound, pickup_lower_bound, amount_lower_bound)",
+    "cell_atomic_unit_count": "A_sg = count(unlocked orders) + count(distinct non-null locked_vehicle_id)",
+    "case_formula": "H(case) = sum over hard compatibility cells of max(0, A_sg - LB_sg)",
+    "interpretation": "Static opportunity to consolidate independently movable input atoms above a conservative minimum-vehicle bound; not an objective estimate and not candidate effect."
+  },
+  "structure_diversity": {
+    "coarse_vehicle_cell": ["vehicle_category", "region"],
+    "coarse_vehicle_lower_bound": "LB_g uses the same max(1, pallet, pickup, amount) formula without vehicle_subcategory",
+    "features": [
+      {
+        "name": "capacity_pressure",
+        "symbol": "CP",
+        "formula": "total_order_pallets / (maximum_vehicle_capacity * sum(LB_g))"
+      },
+      {
+        "name": "locked_share",
+        "symbol": "LS",
+        "formula": "count(orders with non-null locked_vehicle_id) / order_count"
+      },
+      {
+        "name": "hazard_share",
+        "symbol": "HS",
+        "formula": "count(orders with hazard_flag=true) / order_count"
+      },
+      {
+        "name": "subcategory_count",
+        "symbol": "Q",
+        "formula": "count(distinct vehicle_subcategory)"
+      }
+    ],
+    "pair_score": "Within one size cell, sum over CP,LS,HS,Q of abs(feature(a)-feature(b))/(cell_max-cell_min); a zero-range feature contributes zero.",
+    "numeric_rule": "Compare integer ratios exactly; do not round a feature or pair score before selection."
+  },
+  "selection_algorithm": [
+    "For each predeclared size cell, form LOW from all cases with minimum H and HIGH from all cases with maximum H.",
+    "Among all distinct ordered pairs (low, high) in LOW x HIGH, choose the pair with maximum structure-diversity score.",
+    "Break equal pair scores by lexicographically smallest (low manifest_index, high manifest_index).",
+    "If minimum H equals maximum H, LOW and HIGH are the same full cell and the selected pair must still contain two distinct cases.",
+    "Return the union of the four selected pairs in original manifest order. If any required input field is absent or invalid, return UNIDENTIFIABLE and choose no replacement case."
+  ],
+  "size_cells": {
+    "synthetic": [
+      {
+        "name": "small",
+        "case_ids": ["v4_scr_s01", "v4_scr_s02", "v4_scr_s03"]
+      },
+      {
+        "name": "medium",
+        "case_ids": ["v3_scr_m01", "v3_scr_m02", "v3_scr_m03", "v3_scr_m04", "v3_scr_m05", "v3_scr_m06"]
+      },
+      {
+        "name": "medium-large",
+        "case_ids": ["v4_scr_ml01", "v4_scr_ml02", "v4_scr_ml03", "v4_scr_ml04"]
+      },
+      {
+        "name": "large",
+        "case_ids": ["v3_scr_l01", "v3_scr_l02", "v3_scr_l03", "v3_scr_l04"]
+      }
+    ],
+    "production": [
+      {
+        "name": "micro",
+        "case_ids": ["prod_scr_micro01", "prod_scr_micro02", "prod_scr_micro03", "prod_scr_micro04"]
+      },
+      {
+        "name": "small",
+        "case_ids": ["prod_scr_s01", "prod_scr_s02", "prod_scr_s03", "prod_scr_s04"]
+      },
+      {
+        "name": "medium-small",
+        "case_ids": ["prod_scr_ms01", "prod_scr_ms02", "prod_scr_ms03"]
+      },
+      {
+        "name": "medium+medium-large",
+        "case_ids": ["prod_scr_m01", "prod_scr_m03", "prod_scr_m04", "prod_scr_ml01", "prod_scr_ml02"]
+      }
+    ]
+  },
+  "frozen_result": {
+    "synthetic_status": "IDENTIFIABLE",
+    "synthetic_selected_case_ids_manifest_order": [
+      "v3_scr_m05",
+      "v3_scr_m06",
+      "v3_scr_l02",
+      "v3_scr_l04",
+      "v4_scr_s01",
+      "v4_scr_s03",
+      "v4_scr_ml01",
+      "v4_scr_ml04"
+    ],
+    "production_status": "IDENTIFIABLE",
+    "production_selected_case_ids_manifest_order": [
+      "prod_scr_micro01",
+      "prod_scr_micro02",
+      "prod_scr_s01",
+      "prod_scr_s03",
+      "prod_scr_ms01",
+      "prod_scr_ms02",
+      "prod_scr_m01",
+      "prod_scr_ml02"
+    ],
+    "all_size_cell_headroom_extrema_unique": false,
+    "headroom_extrema_ties": [
+      {
+        "universe": "synthetic",
+        "size_cell": "medium",
+        "extreme": "low",
+        "headroom": 40,
+        "tied_case_ids": ["v3_scr_m04", "v3_scr_m05"],
+        "selected_case_id_after_structure_diversity": "v3_scr_m05"
+      }
+    ]
+  }
+}

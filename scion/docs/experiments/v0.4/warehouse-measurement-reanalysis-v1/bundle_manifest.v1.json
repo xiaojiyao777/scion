@@ -1,0 +1,88 @@
+{
+  "schema_version": "scion.warehouse_measurement_reanalysis_bundle.v1",
+  "status": "inputs_frozen_provider_free_not_executed",
+  "purpose": "Provider-free measurement-design diagnosis over exact accepted Warehouse champion snapshots; never a promotion rejudgement.",
+  "runtime_source": {
+    "path": "/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion",
+    "commit": "76f3e9765128dcc6e0e9234ee6fc21cc4570d59f",
+    "python": "/home/clawd/miniconda3/envs/claw/bin/python",
+    "problem_yaml": "/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion/problems/warehouse_delivery/problem-v1.yaml",
+    "cli_module": "scion.cli.main",
+    "report_command": "champion-heldout-comparison"
+  },
+  "tracked_input_root": "/home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/warehouse-measurement-reanalysis-v1",
+  "selector": {
+    "spec": "selector_spec.v1.json",
+    "case_feature_table": "selector_case_features.v1.json",
+    "candidate_values_used": false,
+    "candidate_deltas_used": false,
+    "fixed_before_solver_execution": true
+  },
+  "claim_boundary": {
+    "evaluation_only": true,
+    "provider_free": true,
+    "decision_features_excluded": true,
+    "formal_rejudgement_prohibited": true,
+    "future_population_selection_from_candidate_effect_prohibited": true,
+    "framework_gate_and_support_fields_are_schema_mechanics_only": true
+  },
+  "execution_contract": {
+    "time_limit_sec_per_solver_execution": 30,
+    "ordered_frozen_seeds": [42, 137, 271, 811],
+    "canary_seeds": [999],
+    "serial_execution": true,
+    "cpu_exclusive_host_required": true,
+    "framework_champion_result_cache_disabled": true,
+    "output_roots_must_be_absent_before_launch": true,
+    "formal_pair_count": 200,
+    "formal_subject_execution_count": 400,
+    "canary_solver_execution_count": 32,
+    "total_solver_execution_count": 432,
+    "provider_calls": 0
+  },
+  "runs": [
+    {
+      "run_id": "synthetic-step-local",
+      "comparison_manifest": "/home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/warehouse-measurement-reanalysis-v1/synthetic/comparison_manifest.v1.json",
+      "output_root": "/home/clawd/research/scion-experiments/v04-warehouse-provider-free-measurement-reanalysis-v1-20260810-claw/synthetic/run",
+      "output_root_must_be_absent": true,
+      "comparison_count": 2,
+      "case_count_per_comparison": 17,
+      "seed_count": 4,
+      "formal_pair_count": 136,
+      "formal_subject_execution_count": 272,
+      "canary_case_count": 3,
+      "canary_solver_execution_count": 24
+    },
+    {
+      "run_id": "production-step-local",
+      "comparison_manifest": "/home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/warehouse-measurement-reanalysis-v1/production/comparison_manifest.v1.json",
+      "output_root": "/home/clawd/research/scion-experiments/v04-warehouse-provider-free-measurement-reanalysis-v1-20260810-claw/production/run",
+      "output_root_must_be_absent": true,
+      "comparison_count": 1,
+      "case_count_per_comparison": 16,
+      "seed_count": 4,
+      "formal_pair_count": 64,
+      "formal_subject_execution_count": 128,
+      "canary_case_count": 2,
+      "canary_solver_execution_count": 8
+    }
+  ],
+  "analysis_output_requirements": {
+    "required_flags": {
+      "decision_features_excluded": true,
+      "formal_rejudgement_prohibited": true
+    },
+    "allowed_inputs": [
+      "completed raw pair deltas from both declared runs",
+      "selector_spec.v1.json",
+      "selector_case_features.v1.json"
+    ],
+    "forbidden_inputs": [
+      "candidate values for selector construction",
+      "candidate deltas for selector construction",
+      "provider output",
+      "framework Decision mutation"
+    ]
+  }
+}
