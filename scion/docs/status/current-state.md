@@ -629,8 +629,7 @@ median `+1 [0,2.25]`, with 96/96 valid pairs, zero feasibility/fleet failure and
 zero candidate/champion failure. Net, loss and CI-low checks passed, but the
 practical median was below `2`, so the actual
 `SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN -> continue_explore` route was
-correct for an already expanded candidate. A fourth formal screening is now
-active; no incomplete outcome is used here.
+correct for an already expanded candidate.
 
 That expansion was nevertheless an off-protocol descendant. Its initial
 32-pair result was 3W/0L/5T cases and median `0 [0,1.5]`; CI high was below the
@@ -642,6 +641,25 @@ but overclassified that evidence as a hard fail. The narrowed current-branch
 route is `unclear -> continue_explore`: it neither expands nor promotes, while
 also avoiding a new candidate veto. R3 is not reinterpreted and the extra stage
 is retained as exploratory evidence.
+
+Candidate four then provided a stronger but scoped signal. Its initial
+elapsed-deadline SA refinement completed 32/32 pairs at 10W/5L/17T and
+4W/0L/4T cases, with case effects `[9.5,2,4.5,6,0,0,0,0]` and median
+`+1 [0,6]`; the frozen initial-quality route correctly requested exact
+expansion. The 12x8 expansion completed 96/96 at 32W/12L/52T pairs and
+5W/0L/7T cases, median `0 [0,3.25]`, zero fleet regression and zero execution
+failure. Net, loss and CI-low passed, but broad practical median failed, so the
+actual route was again `unclear -> continue_explore` with no validation or
+frozen event. Two independent raw recomputations matched exactly.
+
+The completed expansion is nevertheless useful algorithm evidence: the six
+non-X cases were 5W/0L/1T with subgroup median `+3.25`, while all six X cases
+tied. Every case above dimension 200 was X, so family and size cannot be
+separated. The honest label is therefore
+`SCOPED_SIGNAL_ONLY / UNIDENTIFIABLE_FAMILY_VS_SIZE`, not promotion or broad
+null. The next H/C completed normally with no schema, binding, Contract or
+Verification friction and formal screening six is active; no incomplete W/L/T
+is used here.
 
 The active expansion later exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
