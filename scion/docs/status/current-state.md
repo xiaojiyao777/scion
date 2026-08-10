@@ -657,9 +657,21 @@ non-X cases were 5W/0L/1T with subgroup median `+3.25`, while all six X cases
 tied. Every case above dimension 200 was X, so family and size cannot be
 separated. The honest label is therefore
 `SCOPED_SIGNAL_ONLY / UNIDENTIFIABLE_FAMILY_VS_SIZE`, not promotion or broad
-null. The next H/C completed normally with no schema, binding, Contract or
-Verification friction and formal screening six is active; no incomplete W/L/T
-is used here.
+null.
+
+The next H/C completed normally with no schema, binding, Contract or
+Verification failure, but its time-normalized operator-credit implementation
+was only an unused `segment_outcomes` scaffold. This repeats an R2
+implementation-fidelity gap and is not evidence against the intended algorithm
+mechanism. Its initial formal screening then completed 32/32 pairs at
+6W/1L/25T and 2W/0L/6T cases, effects `[1,0,0,0,0,0,1,0]`, median
+`0 [0,1]`, with zero execution or fleet failure. Two independent raw
+recomputations matched. None of the three pre-registered expansion predicates
+held because both median and CI high were below practical delta `2`, but exact
+runtime `76f3e976` again reached the old generic
+`SCREENING_EXPAND_CASE_LEVEL_UNCERTAIN` fallback. Formal screening seven is
+therefore an additional off-protocol exploratory expansion and is active; no
+incomplete W/L/T is used here.
 
 The active expansion later exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
