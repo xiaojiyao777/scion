@@ -8,7 +8,7 @@ describes the current lightweight implementation and cannot override V3.
 
 ## Current objective
 
-The active branch is `codex/v04-production-cvrp-research`. The prior
+The active branch is `v0.4-dev`. The prior
 `codex/v04-solver-improvement-research` stage was committed through
 `30726a52` and fast-forwarded into `v0.4-dev`; this branch continues from that
 accepted research checkpoint.
@@ -637,8 +637,11 @@ That expansion was nevertheless an off-protocol descendant. Its initial
 practical delta, so none of the frozen initial expansion routes applied. The
 old generic uncertainty fallback expanded it anyway. This is a Protocol
 implementation routing deviation, not a candidate or runner failure. The
-prospective route is corrected at `67405777`; R3 is not reinterpreted and the
-extra stage is retained as exploratory evidence.
+first prospective patch at `67405777` correctly blocked the generic expansion
+but overclassified that evidence as a hard fail. The narrowed current-branch
+route is `unclear -> continue_explore`: it neither expands nor promotes, while
+also avoiding a new candidate veto. R3 is not reinterpreted and the extra stage
+is retained as exploratory evidence.
 
 The active expansion later exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -652,6 +655,20 @@ was written before the quality expansion became terminal. R3 remains useful
 for research behavior and candidate discovery, but only an exact candidate
 promoted by its existing Protocol is eligible for the fixed provider-free
 clean quality -> validation -> frozen -> final replay.
+
+An independent outcome-blind experiment-design audit also found a prospective
+measurement gap that does not reinterpret Warehouse acceptance or incomplete
+R3. The generic formal loop runs champion before candidate, enables champion
+result caching by default and reruns the cumulative matrix on expansion. Raw
+pairs retain deltas and runtime/cache facts but not both absolute objective
+vectors, subject order, feasibility and subject time intervals. Consequently
+objective headroom, order/load effects and case-versus-seed attribution are
+partly `UNIDENTIFIABLE`. Before another promotion campaign, the smallest
+correction is fresh cache-off subjects, deterministic AB/BA counterbalancing,
+immutable atomic case×seed blocks and the corresponding minimal raw fields in
+the existing runner. Exact non-futility routes, seed-first versus case-first,
+matched power and Warehouse size budgets remain contingent on the already
+frozen provider-free diagnoses; they are not new gates or post-hoc R3 changes.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
@@ -812,6 +829,12 @@ declared held-out pairs. Synthetic Warehouse continuity is
 DestroyRebuild candidate and its separately preregistered 12/12 fresh replay
 returned `FROZEN_PASS`, so Warehouse production transfer is
 `RETAINED_PRODUCTION_IMPROVEMENT` and all Warehouse acceptance is complete.
+The provider-free Warehouse measurement reanalysis now has a frozen tracked
+input bundle at
+[`warehouse-measurement-reanalysis-v1`](../experiments/v0.4/warehouse-measurement-reanalysis-v1/bundle_manifest.v1.json):
+all 17 synthetic and 16 production screening cases, four ordered seeds, exact
+step-local champions and historical/even/static-stratified selector arms. Its
+output roots remain unlaunched until the host is CPU-exclusive after R3.
 CVRP has no Protocol-complete promotion. R1 is sealed at 5/8 and R2 at 10/12;
 both retain valid partial science but neither candidate path reached validation
 or frozen holdout. R2's elapsed-budget SA is the current strongest lead. R3's
