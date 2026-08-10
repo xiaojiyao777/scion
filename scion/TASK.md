@@ -581,13 +581,21 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   directions at candidate-level cohort granularity; the interaction remains
   `UNIDENTIFIABLE`. This is diagnosis only and cannot rejudge R3 or enter
   Decision. With fewer than four eligible candidates report feasibility and
-  individual directions only rather than a general causal claim.
+  individual directions only rather than a general causal claim. Reuse
+  fixed-candidate replay through one experiment-owned analysis command capped
+  at 220 lines and change zero production campaign modules; fixed execution
+  order and missing absolute objectives remain explicitly `UNIDENTIFIABLE` in
+  this first diagnosis.
 - [ ] Before any new promotion campaign, make formal comparison evidence
   analysis-complete without a new runner: disable champion caching, alternate
   fresh AB/BA order deterministically, persist each side's absolute objective,
   feasibility and start/end interval, and label immutable `Q00/Q01/Q10/Q11`
   case×seed blocks. Execute each block once in `Q00 -> Q01 -> (Q10 union Q11)`
-  order; aggregate statistics combine all immutable completed blocks.
+  order; aggregate statistics combine all immutable completed blocks. Reuse
+  the existing runner and expansion state: the generic raw/order patch has a
+  100-line production-growth ceiling and the later atomic-expansion wiring a
+  further 150-line ceiling. Exceeding 250 added production lines means a new
+  orchestration seam was introduced and requires redesign before commit.
 - [x] Freeze the minimal provider-free attribution diagnosis in the
   [measurement-attribution design](docs/experiments/v0.4/v0.4-measurement-attribution-design-20260809.md).
   It reuses fixed-candidate replay, the problem Protocol and raw pair evidence;
