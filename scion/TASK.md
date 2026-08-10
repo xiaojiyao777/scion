@@ -4,7 +4,7 @@
 
 *Accepted runtime baseline: `4d637959`*
 
-*Last updated: 2026-08-09*
+*Last updated: 2026-08-10*
 
 This is the active task source. `design/scion-architecture-v3.md` is the
 sole architecture authority. The direct-runtime addendum may explain an
@@ -583,18 +583,26 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   Decision. With fewer than four eligible candidates report feasibility and
   individual directions only rather than a general causal claim. Reuse
   fixed-candidate replay through one experiment-owned analysis command capped
-  at 220 lines and change zero production campaign modules; fixed execution
-  order and missing absolute objectives remain explicitly `UNIDENTIFIABLE` in
-  this first diagnosis.
+  at 220 lines and change zero production campaign modules. Its
+  `protocol_factory` must explicitly set
+  `champion_result_cache_enabled=False`; otherwise record the actual cache
+  policy and mark warm-state attribution `UNIDENTIFIABLE`. Fixed
+  champion-then-candidate order, missing absolute objectives and missing subject
+  intervals remain explicitly `UNIDENTIFIABLE` in this first diagnosis.
 - [ ] Before any new promotion campaign, make formal comparison evidence
   analysis-complete without a new runner: disable champion caching, alternate
-  fresh AB/BA order deterministically, persist each side's absolute objective,
-  feasibility and start/end interval, and label immutable `Q00/Q01/Q10/Q11`
-  case×seed blocks. Execute each block once in `Q00 -> Q01 -> (Q10 union Q11)`
-  order; aggregate statistics combine all immutable completed blocks. Reuse
-  the existing runner and expansion state: the generic raw/order patch has a
-  100-line production-growth ceiling and the later atomic-expansion wiring a
-  further 150-line ceiling. Exceeding 250 added production lines means a new
+  fresh AB/BA order deterministically, and persist scheduled/actual order. Let
+  A be the immediate base and B the candidate; use AB when
+  `(candidate_ordinal + block_ordinal + case_ordinal + seed_ordinal) mod 2 == 0`
+  and BA otherwise. Record each side's full objective mapping, feasibility,
+  success/error/exit facts,
+  start/end monotonic interval, wall-start, elapsed, time limit and stop/timeout
+  reason, then label immutable `Q00/Q01/Q10/Q11` case×seed blocks. Execute each
+  block once in `Q00 -> Q01 -> (Q10 union Q11)` order; aggregate statistics
+  combine all immutable completed blocks. Reuse the existing runner and
+  expansion state: the generic raw/order patch has a 100-line
+  production-growth ceiling and the later atomic-expansion wiring a further
+  150-line ceiling. Exceeding 250 added production lines means a new
   orchestration seam was introduced and requires redesign before commit.
 - [x] Freeze the minimal provider-free attribution diagnosis in the
   [measurement-attribution design](docs/experiments/v0.4/v0.4-measurement-attribution-design-20260809.md).
@@ -609,7 +617,11 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   opportunity, throughput and accepted/best-update opportunity. Do not treat
   budget saturation or telemetry completeness as a candidate gate; absent
   activation telemetry makes only that attribution `UNIDENTIFIABLE`, not the
-  final paired objective response.
+  final paired objective response. Freeze half-up integer bands
+  `15/23/30/45/60`, `30/45/60/90/120` and `60/90/120/180/240` seconds and
+  rotate the three arm orders deterministically over candidate/case/seed. If
+  the legacy replay cannot implement that rotation, execute one frozen order
+  and mark whole-arm machine drift `UNIDENTIFIABLE`.
 - [ ] Reanalyse the already accepted Warehouse cohorts provider-free: compare
   the current selector with one predeclared size/headroom/structure-stratified
   selector, nested two- versus four-seed evidence and paired-median versus the
@@ -664,8 +676,12 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   validation/frozen stage. Report
   consistent predeclared family-local evidence as `SCOPED_SIGNAL_ONLY` rather
   than broad advancement or null; complete family-by-size interaction remains
-  `UNIDENTIFIABLE`. Use only V3 Contract, executable Verification, fixed
-  problem Protocol, Safe Features and deterministic Decision as authority.
+  `UNIDENTIFIABLE`. The supported estimands are only non-X low-to-mid, X
+  mid-to-large and non-X-versus-X at common mid size. Existing later splits are
+  X/large-heavy robustness holdouts, so do not describe the whole campaign as
+  population-balanced or infer a causal absolute-headroom effect. Use only V3
+  Contract, executable Verification, fixed problem Protocol, Safe Features and
+  deterministic Decision as authority.
 
 CVRP acceptance:
 
@@ -703,6 +719,10 @@ CVRP acceptance:
 - No provider call is retried. A new implementation correction is a new H/C
   candidate with its own evidence.
 - Do not change framework source while an experiment is running.
+- Factor, budget, recovery and Warehouse replays run serially in a
+  CPU-exclusive window. If competing solver/test work overlaps an atomic block,
+  mark the whole affected block contaminated; never prune individual pairs by
+  observed outcome or reconstructed timing guess.
 - Poll long runs observationally at low frequency. Polling must not launch,
   retry or mutate a campaign.
 - Preserve terminal roots, user documents, unrelated worktree changes and the

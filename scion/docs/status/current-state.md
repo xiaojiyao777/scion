@@ -708,6 +708,23 @@ change runtime/search quality and remains an empirical hypothesis rather than
 a framework guarantee. Formal screening nine is active; no incomplete W/L/T or
 deltas are read or used here.
 
+The chronological result-blind H/C audit now covers all seven provider pairs
+through that active screening. Every H was schema-valid, saw the same complete
+11-file source union exactly once across champion/current sections, named the
+correct owner and symbol, and proposed a solver mechanism rather than framework
+or measurement work. H context grew from about 93k to 136k characters as exact
+branch source and history accumulated, but even the largest context remained
+source-grounded; size alone therefore does not trigger an H-context A/B. All C
+calls were likewise provider-complete and schema-valid, with three `faithful`,
+three `partial` and one `scaffolding_only` observational fidelity labels. The
+partial cases separate a missed exact-replace use site, an elapsed-budget
+denominator mismatch and the directed-delta endpoint error; the scaffold is the
+zero-use `segment_outcomes` declaration. A deterministic multi-site closure
+failure plus the independent R2/R3 scaffolding omissions satisfy the frozen C
+expression A/B trigger, but do not prove that the typed schema caused them.
+That post-terminal A/B remains a proposal-surface diagnosis, never a candidate
+gate or solver-outcome comparison; H remains unchanged.
+
 The active expansion later exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
 deadline-driven solver was evaluating several pairs. All CPU-heavy repository
