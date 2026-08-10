@@ -669,9 +669,24 @@ mechanism. Its initial formal screening then completed 32/32 pairs at
 recomputations matched. None of the three pre-registered expansion predicates
 held because both median and CI high were below practical delta `2`, but exact
 runtime `76f3e976` again reached the old generic
-`SCREENING_EXPAND_CASE_LEVEL_UNCERTAIN` fallback. Formal screening seven is
-therefore an additional off-protocol exploratory expansion and is active; no
-incomplete W/L/T is used here.
+`SCREENING_EXPAND_CASE_LEVEL_UNCERTAIN` fallback. Formal screening seven then
+completed its off-protocol exploratory expansion at 3W/13L/80T pairs and
+0W/1L/11T cases, median `0 [0,0]`, with zero execution or fleet failure. The
+expanded gate correctly returned `SCREENING_FAIL_CASE_QUALITY ->
+continue_explore`; two independent raw recomputations matched. Because the
+exact source added only the unused scaffold, this result characterizes that
+source snapshot, not the unimplemented time-aware-credit mechanism.
+
+The next H was again source-grounded: it proposed replacing full route
+recalculation inside two intra-route 2-opt paths with a running directed
+reversal delta. C was provider-complete, source-bound and structurally closed,
+and the candidate passed Contract and Verification. A separate result-blind
+formula audit nevertheless found that for reversals longer than two customers
+the boundary term uses the rolling `customers[j-1]` rather than the fixed
+`customers[i]`. This makes implementation fidelity partial and can accept an
+actual distance increase, but it is analysis rather than a host candidate gate;
+the fixed Protocol remains authoritative. Formal screening eight is active and
+no incomplete W/L/T is used here.
 
 The active expansion later exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
