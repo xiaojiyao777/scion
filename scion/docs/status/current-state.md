@@ -813,13 +813,14 @@ No W/L/T, effect, gate or objective was read. R1 is sealed
 `RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`; its cause
 is `PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE` and no partial pair is reused.
 The [R2 replacement](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r2-replacement-preregistration-20260810.md)
-is preregistered but not started. Its fresh output/control roots remain absent,
-and it changes only the ordinary-user launch/process-observation seam while
-keeping the same `N=6`, 37 blocks and 1,056-row fail-closed design.
-A prelaunch launcher invocation hit the AF_UNIX path limit before tmux, driver,
-output or any pair existed, so it did not consume the R2 launch. The launcher
-now uses the fail-if-present short socket `/tmp/scion-r45-r2.tmux.sock`; R2
-remains not started.
+launched once at `2026-08-10 09:50:29 UTC` and is `IN_FLIGHT`. The corrected
+fail-if-present short socket `/tmp/scion-r45-r2.tmux.sock` removed the prelaunch
+AF_UNIX path defect without changing the scientific design. Startup structure
+was 2/96 attempted and valid `MDE` rows, zero candidate/champion/total failures,
+zero of 37 accepted blocks, `last_block=null` and exit pending. Until terminal,
+only structural counts and process health are inspected; W/L/T, effect, gate
+and objective remain unread. The same `N=6`, 37-block and 1,056-row design
+remains fail-closed.
 The completed earlier A/A/null result still does not establish power for the
 12x8 case-median design at delta `2`; exact non-futility routes and a fresh
 promotion campaign remain contingent on the complete provider-free diagnosis,
@@ -1031,9 +1032,10 @@ Its output root is unchanged, it is not resumed, and its partial first-block
 pairs are not copied or combined. R2 is the only registered replacement: an
 ordinary `clawd` launch through the input bundle's `launch-r2.sh`, with an
 explicit tmux socket and bounded log/PID/exit observations. Those controls are
-not a gate, Decision input or self-proof. R2 starts from fresh compose and MDE
-0/96; its output and control roots are both still absent. If interrupted, it is
-sealed without automatic R3. The complete one-off driver/test source remains
+not a gate, Decision input or self-proof. R2 launched once at
+`2026-08-10 09:50:29 UTC` from fresh compose and is `IN_FLIGHT` on its first
+`MDE` block. If interrupted, it is sealed without automatic R3. The complete
+one-off driver/test source remains
 experiment-owned and is not committed into Scion. H-context A/B is not
 triggered by the seven audited H calls. C-expression A/B is already triggered
 and may proceed after the higher-priority factor work.

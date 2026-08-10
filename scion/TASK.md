@@ -60,10 +60,10 @@ evidence prerequisite exists:
    froze six chronological exact candidates and all three 53-file branch heads
    matched byte-for-byte. Diagnosis R1 is sealed
    `RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS` after
-   process disappearance during its first block. R2 is preregistered with fresh
-   absent output/control roots and is not started; an unprovable
-   source/base/order fact remains `UNIDENTIFIABLE`, never a reason to restore a
-   formal recorder.
+   process disappearance during its first block. R2 launched once at
+   `2026-08-10 09:50:29 UTC` and is `IN_FLIGHT` on its first fresh `MDE` block;
+   an unprovable source/base/order fact remains `UNIDENTIFIABLE`, never a reason
+   to restore a formal recorder.
 4. **Minimal V3 cleanup:** land only
    the reviewed problem-Protocol routing correction, bounded rejection
    diagnostic, minimal failure-only nondeterminism record and Warehouse canary
@@ -660,15 +660,15 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   W/L/T, effect, gate or objective, resumed, completed or reused.
 - [ ] Run the
   [R2 replacement](docs/experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r2-replacement-preregistration-20260810.md)
-  once as ordinary `clawd` through the input bundle's `launch-r2.sh`. Its fresh
-  output and control roots remain absent. A prelaunch invocation exceeded the
-  AF_UNIX path limit before tmux, driver, output or any pair existed and did not
-  consume the launch; the fail-if-present socket is now fixed at
-  `/tmp/scion-r45-r2.tmux.sock`. R2 remains not started, begins at `MDE` 0/96
-  and changes only the explicit-tmux/process-observation seam; the same `N=6`,
-  37 blocks, 1,056 unique rows, budgets, AB/BA order and analysis remain
-  fail-closed. It copies or combines no R1 pair. If interrupted, seal R2 and do
-  not automatically launch R3.
+  once as ordinary `clawd` through the input bundle's `launch-r2.sh`. The
+  prelaunch AF_UNIX path correction consumed no launch; R2 then launched at
+  `2026-08-10 09:50:29 UTC` and is `IN_FLIGHT`. Startup structure was 2/96
+  attempted and valid `MDE` rows, zero candidate/champion/total failures, zero
+  of 37 accepted blocks and `last_block=null`. Until terminal, inspect only
+  structural counts and process health, never W/L/T, effect, gate or objective.
+  The same `N=6`, 37 blocks, 1,056 unique rows, budgets, AB/BA order and analysis
+  remain fail-closed; no R1 pair is copied or combined. If interrupted, seal R2
+  and do not automatically launch R3.
 - [x] Before the provider-free CVRP factor/budget replay or any new promotion
   campaign, make formal comparison
   evidence analysis-complete without a new runner: disable champion caching,
