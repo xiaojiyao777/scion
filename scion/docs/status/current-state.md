@@ -813,14 +813,21 @@ No W/L/T, effect, gate or objective was read. R1 is sealed
 `RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`; its cause
 is `PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE` and no partial pair is reused.
 The [R2 replacement](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r2-replacement-preregistration-20260810.md)
-launched once at `2026-08-10 09:50:29 UTC` and is `IN_FLIGHT`. The corrected
-fail-if-present short socket `/tmp/scion-r45-r2.tmux.sock` removed the prelaunch
-AF_UNIX path defect without changing the scientific design. Startup structure
-was 2/96 attempted and valid `MDE` rows, zero candidate/champion/total failures,
-zero of 37 accepted blocks, `last_block=null` and exit pending. Until terminal,
-only structural counts and process health are inspected; W/L/T, effect, gate
-and objective remain unread. The same `N=6`, 37-block and 1,056-row design
-remains fail-closed.
+terminated at `2026-08-10 12:15:10 UTC` with exit `2`. Its first MDE raw was
+complete at 96/96 attempted and valid pairs with zero subject failures, but the
+one-off driver rejected the legitimate auxiliary `routes` field before atomic
+acceptance. All 192 A/B objective mappings contained the two declared finite
+numeric metrics plus only `routes`; every other structural predicate passed.
+Status therefore remained zero of 37 accepted blocks with `last_block=null`,
+and no analysis exists. No W/L/T, effect, gate, ranking or objective value was
+read. R2 is sealed
+`RUN_INVALID_EXPERIMENT_DRIVER / ZERO_ACCEPTED_BLOCKS /
+NO_ADMISSIBLE_ANALYSIS` and is not an algorithm negative.
+The [R3 replacement](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r3-driver-replacement-preregistration-20260810.md)
+is preregistered but not started. Its fresh one-off driver requires the
+declared metrics as a finite numeric subset, preserves exact declared deltas
+and every real execution/completeness check, and changes no Scion core gate.
+It starts at MDE 0/96 and reuses no R1/R2 pair.
 The completed earlier A/A/null result still does not establish power for the
 12x8 case-median design at delta `2`; exact non-futility routes and a fresh
 promotion campaign remain contingent on the complete provider-free diagnosis,
@@ -1029,13 +1036,14 @@ identity or replay authority.
 The preregistered 37-block R45 diagnosis R1 is now sealed after unexplained
 process disappearance with zero accepted blocks and no admissible analysis.
 Its output root is unchanged, it is not resumed, and its partial first-block
-pairs are not copied or combined. R2 is the only registered replacement: an
-ordinary `clawd` launch through the input bundle's `launch-r2.sh`, with an
-explicit tmux socket and bounded log/PID/exit observations. Those controls are
-not a gate, Decision input or self-proof. R2 launched once at
-`2026-08-10 09:50:29 UTC` from fresh compose and is `IN_FLIGHT` on its first
-`MDE` block. If interrupted, it is sealed without automatic R3. The complete
-one-off driver/test source remains
+pairs are not copied or combined. R2 launched once through an ordinary-user
+tmux seam, completed 96/96 valid MDE pairs, then its one-off driver rejected
+the auxiliary `routes` field before accepting the block. R2 is sealed with zero
+accepted blocks and no admissible analysis; no scientific outcome was read.
+R3 is separately preregistered, not started, and removes only that false
+exact-objective-key gate in a fresh experiment bundle. It retains the same
+science, starts at MDE 0/96, reuses no earlier pair and requires explicit launch
+confirmation. The complete one-off driver/test source remains
 experiment-owned and is not committed into Scion. H-context A/B is not
 triggered by the seven audited H calls. C-expression A/B is already triggered
 and may proceed after the higher-priority factor work.

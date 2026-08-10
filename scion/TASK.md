@@ -60,10 +60,12 @@ evidence prerequisite exists:
    froze six chronological exact candidates and all three 53-file branch heads
    matched byte-for-byte. Diagnosis R1 is sealed
    `RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS` after
-   process disappearance during its first block. R2 launched once at
-   `2026-08-10 09:50:29 UTC` and is `IN_FLIGHT` on its first fresh `MDE` block;
-   an unprovable source/base/order fact remains `UNIDENTIFIABLE`, never a reason
-   to restore a formal recorder.
+   process disappearance during its first block. R2 completed 96/96 valid MDE
+   pairs but its one-off driver rejected the legitimate auxiliary `routes`
+   field before accepting the block. R2 is sealed with zero accepted blocks;
+   R3 is preregistered with only that false exact-set check removed and is not
+   started. An unprovable source/base/order fact remains `UNIDENTIFIABLE`, never
+   a reason to restore a formal recorder.
 4. **Minimal V3 cleanup:** land only
    the reviewed problem-Protocol routing correction, bounded rejection
    diagnostic, minimal failure-only nondeterminism record and Warehouse canary
@@ -281,6 +283,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R46 | proven scoped R3 signal; broad advancement correctly withheld | Candidate four's initial elapsed-deadline SA refinement expanded from 4W/0L/4T cases. Its exact 12x8 quality result completed 96/96 pairs at 32W/12L/52T and 5W/0L/7T cases, with median `0 [0,3.25]`, no fleet/execution failure and `continue_explore`. Non-X cases were 5W/0L/1T with subgroup median `+3.25`; all six X cases tied. Every case above dimension 200 was X, so family and size effects are confounded. | Retain `SCOPED_SIGNAL_ONLY / UNIDENTIFIABLE_FAMILY_VS_SIZE` as exploratory science under R43. The fixed broad Protocol correctly withheld validation because median `0 < 2`; do not tune it or reinterpret the candidate as a pass. Let subsequent H use the screening evidence, and use the provider-free family/size/budget diagnosis before deciding whether a separately preregistered scoped campaign is justified. |
 | R47 | proven exact-candidate quality advance; validation infrastructure-interrupted | The source-grounded whole-route/partial-route removal candidate expanded on the same exact source to 96/96 valid quality pairs: 37W/16L/43T pairs, 7W/0L/5T cases, case medians `[7.5,25.5,3,14,5,0,0,0,4,4.5,0,0]`, overall `+3.5 [0,6.25]`, net score `0.583`, zero case losses, failures, fleet or protected-objective regressions. Two independent raw recomputations matched. All five predeclared quality components passed, and actual and expected routing were both `SCREENING_PASS -> queue_validate`. The host then rebooted with validation at 52 attempted and 51 completed/valid pairs; durable Protocol counts remained 10 screening, zero validation and zero frozen, champion v1. | Seal R3 as `RUN_INVALID_INFRA / VALID_PARTIAL_SCIENCE`. Retain the terminal quality result, but do not read or adjudicate the partial validation, resume/retry the root or call the reboot an algorithm negative. No Protocol promotion means no clean-recovery candidate; proceed to R45 and the ordinary-lineage factor/budget diagnosis. |
 | R48 | proven R45 diagnosis R1 infrastructure invalidity; zero accepted science | The R1 process disappeared during its first `MDE` block. Terminal structure is `complete=false`, zero of 37 accepted blocks, `last=null`, one partial 46/96 raw file with zero recorded subject failures, no analysis artifact, and no remaining driver or solver process. No W/L/T, effect, gate or objective was read. The disappearance cause is `PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE`. | Seal R1 `RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`; do not resume, modify or reuse any partial pair. R2 changes only the ordinary-user launch/process-observation seam, starts fresh at MDE 0/96, and is separately preregistered. If R2 is interrupted, seal it and do not launch an automatic R3. |
+| R49 | proven experiment-driver overgate; R2 sealed with zero accepted blocks | R2's first MDE raw completed 96/96 attempted and valid pairs with zero candidate/champion/total failures, then the one-off driver exited `2` before atomic acceptance because all 192 valid A/B objective mappings contained the CVRP diagnostic field `routes` in addition to the two declared metrics. Every other structural predicate passed; no analysis exists and no W/L/T, effect, gate, ranking or objective value was read. | Seal R2 `RUN_INVALID_EXPERIMENT_DRIVER / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`. In a fresh R3 bundle, require the declared metrics as a finite numeric subset, retain exact declared deltas and every real execution/completeness check, and remove only the false exact-key-set gate. Do not reuse R2 pairs or change Scion core. R3 requires separate preregistration and explicit launch confirmation. |
 
 ## Modular execution plan
 
@@ -658,17 +661,24 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   produced no analysis after the process disappeared during the first `MDE`
   block. The partial 46/96 raw rows are inadmissible and are not read for
   W/L/T, effect, gate or objective, resumed, completed or reused.
-- [ ] Run the
+- [x] Run the
   [R2 replacement](docs/experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r2-replacement-preregistration-20260810.md)
-  once as ordinary `clawd` through the input bundle's `launch-r2.sh`. The
-  prelaunch AF_UNIX path correction consumed no launch; R2 then launched at
-  `2026-08-10 09:50:29 UTC` and is `IN_FLIGHT`. Startup structure was 2/96
-  attempted and valid `MDE` rows, zero candidate/champion/total failures, zero
-  of 37 accepted blocks and `last_block=null`. Until terminal, inspect only
-  structural counts and process health, never W/L/T, effect, gate or objective.
-  The same `N=6`, 37 blocks, 1,056 unique rows, budgets, AB/BA order and analysis
-  remain fail-closed; no R1 pair is copied or combined. If interrupted, seal R2
-  and do not automatically launch R3.
+  once as ordinary `clawd` through the input bundle's `launch-r2.sh`. It
+  completed 96/96 attempted and valid MDE pairs with zero subject failures, but
+  the one-off driver rejected legitimate auxiliary `routes` telemetry before
+  accepting the block. Exit was `2`, status stayed zero of 37 accepted blocks
+  with `last_block=null`, and no analysis exists. Seal R2
+  `RUN_INVALID_EXPERIMENT_DRIVER / ZERO_ACCEPTED_BLOCKS /
+  NO_ADMISSIBLE_ANALYSIS`; do not read its scientific outcome, resume it or
+  reuse a pair.
+- [ ] After explicit confirmation, run the separately
+  [preregistered R3 replacement](docs/experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r3-driver-replacement-preregistration-20260810.md)
+  once from fresh MDE 0/96. Its only driver change treats declared metrics as a
+  required finite numeric subset of the objective mapping; exact declared
+  deltas and all substantive execution/completeness checks remain. The same
+  `N=6`, 37 blocks, 1,056 rows, budgets, AB/BA order and analysis are frozen.
+  Copy or combine no R1/R2 pair, change no Scion core gate, and automatically
+  launch no R4.
 - [x] Before the provider-free CVRP factor/budget replay or any new promotion
   campaign, make formal comparison
   evidence analysis-complete without a new runner: disable champion caching,
