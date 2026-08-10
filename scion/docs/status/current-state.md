@@ -803,14 +803,19 @@ bounded block/case/seed/order/objective/feasibility/timing/failure raw facts in
 the existing Protocol. The four production files grew by net 100 lines and 46
 focused/adjacent tests plus independent review passed; the default Protocol,
 raw schema and Decision path remain unchanged. The now-frozen
-[R45 diagnosis](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-preregistration-20260810.md)
-uses 37 immutable blocks over six exact candidates, including an independent
-B0 A/A matched-MDE block and fixed `0.5x/1x/2x` budgets. Its clean `c32f5b8a`
-runtime, experiment-owned driver/test and manifest remain input-only under
-`campaign_out`. The run launched once at `2026-08-10T07:51:42Z` into its sole
-output root under `scion-experiments` and is in flight on the initial `MDE`
-block. Execution fails closed unless `N=6`, 37 blocks and 1,056 unique pair
-rows are exact.
+[R45 diagnosis R1](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-preregistration-20260810.md)
+used the frozen 37-block design over six exact candidates, including an
+independent B0 A/A matched-MDE block and fixed `0.5x/1x/2x` budgets. Its process
+disappeared during the first block. Terminal structure is `complete=false`,
+zero of 37 accepted blocks, `last=null`, one incomplete 46/96 raw file with
+zero recorded subject failures, no analysis, and no remaining driver or solver.
+No W/L/T, effect, gate or objective was read. R1 is sealed
+`RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`; its cause
+is `PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE` and no partial pair is reused.
+The [R2 replacement](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r2-replacement-preregistration-20260810.md)
+is preregistered but not started. Its fresh output/control roots remain absent,
+and it changes only the ordinary-user launch/process-observation seam while
+keeping the same `N=6`, 37 blocks and 1,056-row fail-closed design.
 The completed earlier A/A/null result still does not establish power for the
 12x8 case-median design at delta `2`; exact non-futility routes and a fresh
 promotion campaign remain contingent on the complete provider-free diagnosis,
@@ -1016,17 +1021,18 @@ independent review passed. Earlier r1/r2 materializer differences came from
 that offline analyzer omitting `additional_changes`, not from Scion runtime
 drift. The cohort remains experiment evidence, not a restored candidate index,
 identity or replay authority.
-The preregistered 37-block R45 case/seed, matched-MDE and budget diagnosis
-launched once at `2026-08-10T07:51:42Z` and is in flight on its initial `MDE`
-block. Its prepared bundle remains input only; the run created its sole output
-root under CPU exclusivity. It freezes every composed workspace's complete
-ordinary-Python snapshot and compares the global set before and after every
-block. Status exposes block counts and last label only; no intermediate effect
-may be read, used to retry or combined with R3's incomplete validation. The
-complete one-off driver/test source is experiment-owned and is not committed
-into Scion. H-context A/B is not triggered by the seven audited H calls.
-C-expression A/B is already triggered and may proceed after the higher-priority
-factor work.
+The preregistered 37-block R45 diagnosis R1 is now sealed after unexplained
+process disappearance with zero accepted blocks and no admissible analysis.
+Its output root is unchanged, it is not resumed, and its partial first-block
+pairs are not copied or combined. R2 is the only registered replacement: a
+ordinary `clawd` launch through the input bundle's `launch-r2.sh`, with an
+explicit tmux socket and bounded log/PID/exit observations. Those controls are
+not a gate, Decision input or self-proof. R2 starts from fresh compose and MDE
+0/96; its output and control roots are both still absent. If interrupted, it is
+sealed without automatic R3. The complete one-off driver/test source remains
+experiment-owned and is not committed into Scion. H-context A/B is not
+triggered by the seven audited H calls. C-expression A/B is already triggered
+and may proceed after the higher-priority factor work.
 These diagnostics remain excluded from Decision and cannot reinterpret R3.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.

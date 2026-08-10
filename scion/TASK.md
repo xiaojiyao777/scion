@@ -58,11 +58,12 @@ evidence prerequisite exists:
    ledger, gate or campaign expansion framework.
 3. **Ordinary-lineage diagnosis:** the terminal outcome-blind reconstruction
    froze six chronological exact candidates and all three 53-file branch heads
-   matched byte-for-byte. The 37-block case/seed, matched-MDE and budget run is
-   preregistered and launched once at `2026-08-10T07:51:42Z` from its prepared
-   input bundle into the sole CPU-exclusive output root. It is in flight on the
-   initial `MDE` block; an unprovable source/base/order fact remains
-   `UNIDENTIFIABLE`, never a reason to restore a formal recorder.
+   matched byte-for-byte. Diagnosis R1 is sealed
+   `RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS` after
+   process disappearance during its first block. R2 is preregistered with fresh
+   absent output/control roots and is not started; an unprovable
+   source/base/order fact remains `UNIDENTIFIABLE`, never a reason to restore a
+   formal recorder.
 4. **Minimal V3 cleanup:** land only
    the reviewed problem-Protocol routing correction, bounded rejection
    diagnostic, minimal failure-only nondeterminism record and Warehouse canary
@@ -279,6 +280,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R45 | proven measurement replay and order-attribution gap; minimal seam complete at `c32f5b8a` | Formal pairs ran in fixed champion-then-candidate order, champion result caching was enabled by default, cumulative expansion reran old cells, and raw pairs retained deltas/cache/runtime but not both absolute objective vectors, execution order or feasibility. This does not reinterpret accepted Warehouse results or R3's completed evidence, but makes objective headroom, order/load effects and atomic case-versus-seed attribution partly `UNIDENTIFIABLE`. | The default-off diagnosis path now runs both subjects fresh, deterministically counterbalances AB/BA and records only the bounded raw comparison facts. The four production files grew by net 100 lines and 46 focused/adjacent tests plus independent review passed. Default Protocol and Decision behavior remain unchanged; the experiment side owns atomic blocks and adds no runner, ledger or gate. |
 | R46 | proven scoped R3 signal; broad advancement correctly withheld | Candidate four's initial elapsed-deadline SA refinement expanded from 4W/0L/4T cases. Its exact 12x8 quality result completed 96/96 pairs at 32W/12L/52T and 5W/0L/7T cases, with median `0 [0,3.25]`, no fleet/execution failure and `continue_explore`. Non-X cases were 5W/0L/1T with subgroup median `+3.25`; all six X cases tied. Every case above dimension 200 was X, so family and size effects are confounded. | Retain `SCOPED_SIGNAL_ONLY / UNIDENTIFIABLE_FAMILY_VS_SIZE` as exploratory science under R43. The fixed broad Protocol correctly withheld validation because median `0 < 2`; do not tune it or reinterpret the candidate as a pass. Let subsequent H use the screening evidence, and use the provider-free family/size/budget diagnosis before deciding whether a separately preregistered scoped campaign is justified. |
 | R47 | proven exact-candidate quality advance; validation infrastructure-interrupted | The source-grounded whole-route/partial-route removal candidate expanded on the same exact source to 96/96 valid quality pairs: 37W/16L/43T pairs, 7W/0L/5T cases, case medians `[7.5,25.5,3,14,5,0,0,0,4,4.5,0,0]`, overall `+3.5 [0,6.25]`, net score `0.583`, zero case losses, failures, fleet or protected-objective regressions. Two independent raw recomputations matched. All five predeclared quality components passed, and actual and expected routing were both `SCREENING_PASS -> queue_validate`. The host then rebooted with validation at 52 attempted and 51 completed/valid pairs; durable Protocol counts remained 10 screening, zero validation and zero frozen, champion v1. | Seal R3 as `RUN_INVALID_INFRA / VALID_PARTIAL_SCIENCE`. Retain the terminal quality result, but do not read or adjudicate the partial validation, resume/retry the root or call the reboot an algorithm negative. No Protocol promotion means no clean-recovery candidate; proceed to R45 and the ordinary-lineage factor/budget diagnosis. |
+| R48 | proven R45 diagnosis R1 infrastructure invalidity; zero accepted science | The R1 process disappeared during its first `MDE` block. Terminal structure is `complete=false`, zero of 37 accepted blocks, `last=null`, one partial 46/96 raw file with zero recorded subject failures, no analysis artifact, and no remaining driver or solver process. No W/L/T, effect, gate or objective was read. The disappearance cause is `PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE`. | Seal R1 `RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`; do not resume, modify or reuse any partial pair. R2 changes only the ordinary-user launch/process-observation seam, starts fresh at MDE 0/96, and is separately preregistered. If R2 is interrupted, seal it and do not launch an automatic R3. |
 
 ## Modular execution plan
 
@@ -651,17 +653,19 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `additional_changes`, not from Scion runtime drift. The cohort lives only in
   the experiment evidence root and restores no recorder, identity or replay
   authority.
-- [ ] Run the preregistered provider-free
-  [R45 diagnosis](docs/experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-preregistration-20260810.md)
-  once from its prepared input bundle into its CPU-exclusive sole output root.
-  The run launched at `2026-08-10T07:51:42Z` and remains in flight on the
-  initial `MDE` block; leave this item open until terminal completion. Fail
-  closed unless `N=6`, 37 blocks and 1,056 unique rows are exact. Run the
-  independent full `12x8` B0 A/A first, then all `Q00`, all
-  `Q01`, all `Q10`, all `Q11`, all `.5x`, and all `2x`, with candidate ordinals
-  ascending within each block. Cohort factor/budget contrasts are descriptive;
-  interaction and whole-budget-arm machine drift remain `UNIDENTIFIABLE`, and
-  no intermediate effect may be read or used to retry.
+- [x] Launch provider-free R45 diagnosis R1 once, then seal it at its structural
+  terminal boundary. It ended `complete=false`, accepted zero of 37 blocks and
+  produced no analysis after the process disappeared during the first `MDE`
+  block. The partial 46/96 raw rows are inadmissible and are not read for
+  W/L/T, effect, gate or objective, resumed, completed or reused.
+- [ ] Run the
+  [R2 replacement](docs/experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r2-replacement-preregistration-20260810.md)
+  once as ordinary `clawd` through the input bundle's `launch-r2.sh`. Its fresh
+  output and control roots remain absent. R2 starts at `MDE` 0/96 and changes
+  only the explicit-tmux/process-observation seam; the same `N=6`, 37 blocks,
+  1,056 unique rows, budgets, AB/BA order and analysis remain fail-closed. It
+  copies or combines no R1 pair. If interrupted, seal R2 and do not
+  automatically launch R3.
 - [x] Before the provider-free CVRP factor/budget replay or any new promotion
   campaign, make formal comparison
   evidence analysis-complete without a new runner: disable champion caching,
