@@ -767,22 +767,42 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `+0` production-line ceiling and should be a net deletion. Do not further
   compress H history merely because it is long: the seven audited R3 H calls
   all named the correct source owner/symbol and remained algorithm-focused.
+- [x] Prepare, but do not launch, the frozen C-expression A/B input bundle at
+  `campaign_out/v04-cvrp-c-expression-ab-20260811-input`. Status is
+  `LAUNCH_READY_NOT_STARTED`; independent frozen-input, transport, parser,
+  blind-packet and launcher review passed, and the sole output and control
+  roots remain absent. It references exactly the four historical H/C
+  traces and their embedded ordinary 11-file source, freezes both complete
+  terminal tool definitions and four outcome-blind checklists, and adds zero
+  production lines. Its clear experiment-owned modules are 203-line runner,
+  123-line strict diff parser and 139-line frozen-input loader under the
+  corrected 220-per-module/480-combined ceiling (465 lines total). Frozen-input
+  and `bash -n` checks plus 15 focused fake/parser tests pass. The existing real CVRP direct
+  outer smoke also passes `1 passed in 32.55s`; because it uses MockLLM and a
+  no-op with real 12-case/one-seed/one-second screening, it establishes only
+  local short-chain stability, not provider or algorithm evidence.
 - [ ] After R3 is terminal, run the already triggered C expression A/B. One
   deterministic multi-site closure failure plus independent R2/R3
   scaffolding-only omissions meet its predeclared diagnostic trigger; this does
-  not itself prove schema causality. Compare the current one-shot
-  exact/full-file schema with one one-shot source-bound unified diff on frozen
-  approved-H/source inputs. Normalize both into the same `PatchProposal` before
-  the unchanged Contract; retain exact H binding and deterministic apply, with
-  no fuzzy repair, retry, shell or model tool loop. Score parse/apply success
-  and blinded H-obligation/source-anchor coverage only, never solver W/L/T.
+  not itself prove schema causality. Compare the complete current one-shot
+  exact/full-file terminal tool definition with one complete one-shot
+  source-bound unified-diff definition on frozen approved-H/source inputs.
+  Normalize both into the same `PatchProposal` before the unchanged Contract;
+  retain exact H binding and deterministic apply, with no fuzzy repair, retry,
+  shell or model tool loop. Score parse/apply success and blinded
+  H-obligation/source-anchor coverage only, never solver W/L/T.
   The diagnostic uses four solver/Protocol-outcome-blind frozen fixtures and
   adds zero lines to the production campaign path. Both arms reuse the exact H
   and provider context, verify approved-H value equality and run unchanged
-  `validate_patch(..., approved_hypothesis=H)`. Promote a strict diff normalizer
-  only if that arm is adopted; its complete schema/parser wiring has a 220-line
-  core ceiling. Exact fixtures, counterbalanced order, blind rubrics and the
-  conservative adoption rule are frozen in the
+  `validate_patch(..., approved_hypothesis=H)`. A terminal parse/apply rejection
+  is fixed to both rubric scores zero without a blind packet; a Contract
+  rejection retains its normalized-patch packet and two blind reviews. Both are
+  measured treatment-negative cells and do not stop later cells; only a
+  missing/misbound provider cell or invalid frozen binding stops.
+  Promote a strict diff normalizer only if that arm is adopted; any later
+  production normalizer retains a 220-line core ceiling. Exact fixtures,
+  counterbalanced order, blind rubrics and the conservative adoption rule are
+  frozen in the
   [C-expression A/B preregistration](docs/experiments/v0.4/v0.4-cvrp-c-expression-ab-preregistration-20260810.md).
 - [ ] After the frozen C-expression A/B, replace the internal
   `proposal_source_ledger` with one ordinary `editable_source_context` value:
