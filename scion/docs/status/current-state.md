@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-10*
+*Last updated: 2026-08-11*
 
 Read `TASK.md` first. `design/scion-architecture-v3.md` is the sole architecture
 authority. `design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` only
@@ -824,17 +824,25 @@ read. R2 is sealed
 `RUN_INVALID_EXPERIMENT_DRIVER / ZERO_ACCEPTED_BLOCKS /
 NO_ADMISSIBLE_ANALYSIS` and is not an algorithm negative.
 The [R3 replacement](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r3-driver-replacement-preregistration-20260810.md)
-launched once after explicit confirmation at `2026-08-10 15:21:30 UTC` and is
-`IN_FLIGHT`. Its fresh one-off driver requires the declared metrics as a finite
-numeric subset, preserves exact declared deltas and every real
-execution/completeness check, and changes no Scion core gate. Startup structure
-was 1/96 attempted and valid MDE pairs, zero failures, zero of 37 accepted
-blocks and `last_block=null`; it reuses no R1/R2 pair. Until terminal, only
-process health and structural counts are inspected.
-The completed earlier A/A/null result still does not establish power for the
-12x8 case-median design at delta `2`; exact non-futility routes and a fresh
-promotion campaign remain contingent on the complete provider-free diagnosis,
-not on a new gate or a post-hoc R3 change.
+launched once after explicit confirmation at `2026-08-10 15:21:30 UTC` and
+completed with ordinary-user launcher exit `0`. Terminal status is
+`complete=true`, 37/37 accepted atomic blocks and 1,056 unique fresh AB/BA pair
+rows, with `last_block={label: 2x, ordinal: 5}`. The terminal analysis is
+complete, and no R1 or R2 pair was copied, combined or reused.
+
+The independent B0 A/A block gives `MDE@80%=2.0` only for the frozen `12x8`,
+`1x`, case-median homogeneous-additive estimand. Across the six exact complete
+`12x8` immediate-base comparisons, candidate median signs are 0 positive, 5
+zero and 1 negative. Added-case and joint contrasts improve no candidate
+median; seed and budget responses are mixed. Candidate five is a clear exact
+algorithm negative, while the elapsed-budget-SA-related sources retain only
+descriptive scoped/`2x` opportunity. Case-by-seed interaction and
+whole-budget-arm machine drift remain `UNIDENTIFIABLE`. The
+[postrun](../experiments/v0.4/v0.4-cvrp-r3-ordinary-lineage-r45-diagnosis-r3-postrun-20260811.md)
+therefore seals R50
+`VALID_COMPLETE_PROVIDER_FREE_DIAGNOSIS / DESCRIPTIVE_COHORT_ONLY /
+NO_BROAD_IMMEDIATE_BASE_ADVANCE`. It selects, recovers and promotes no candidate
+and changes no Scion core gate, Protocol, Safe Feature or Decision.
 
 The fixed R1 design is in its
 [preregistration](../experiments/v0.4/v0.4-cvrp-v3-open-research-8stage-r1-preregistration-20260809.md),
@@ -1043,13 +1051,15 @@ pairs are not copied or combined. R2 launched once through an ordinary-user
 tmux seam, completed 96/96 valid MDE pairs, then its one-off driver rejected
 the auxiliary `routes` field before accepting the block. R2 is sealed with zero
 accepted blocks and no admissible analysis; no scientific outcome was read.
-R3 was separately preregistered and launched once after explicit confirmation;
-it removes only that false exact-objective-key gate in a fresh experiment
-bundle. It retains the same science, started at MDE 0/96 and reuses no earlier
-pair. The complete one-off driver/test source remains
+R3 was separately preregistered, launched once after explicit confirmation and
+completed exit `0` with all 37 blocks, 1,056 unique pairs and terminal analysis.
+Its exact-roster MDE is `2.0`; the six full immediate-base medians are five zero
+and one negative. R50 is complete provider-free descriptive diagnosis, not a
+promotion or recovery result. The complete one-off driver/test source remains
 experiment-owned and is not committed into Scion. H-context A/B is not
-triggered by the seven audited H calls. C-expression A/B is already triggered
-and may proceed after the higher-priority factor work.
-These diagnostics remain excluded from Decision and cannot reinterpret R3.
+triggered by the seven audited H calls. The already-triggered C-expression A/B
+is still open; this status does not design or preregister a later experiment.
+All diagnosis results remain excluded from Decision and cannot reinterpret the
+interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
 neither prerequisites nor completion claims.
