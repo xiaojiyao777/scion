@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
-
 from scion.core.models import (
     Decision,
     EvalStats,
@@ -124,6 +123,23 @@ def test_canonical_screening_projection_accepts_protocol_accounting(
         step.protocol_result.stats.valid_pairs
         + step.protocol_result.stats.candidate_failed_pairs
     )
+
+
+def test_canonical_screening_projection_accepts_paired_candidate_failure_without_feedback() -> (
+    None
+):
+    step = _screening_step(
+        valid_pairs=3,
+        candidate_failed_pairs=1,
+        failed_pairs=1,
+        comparisons=("tie", "tie", "tie"),
+    )
+
+    record = canonical_screening_record(step)
+
+    feedback = record["experiment_evidence"]["case_outcomes"]["pair_feedback"]
+    assert len(feedback) == step.protocol_result.stats.valid_pairs
+    assert [item["comparison"] for item in feedback] == ["tie", "tie", "tie"]
 
 
 def test_canonical_screening_projection_rejects_feedback_accounting_mismatch() -> None:
