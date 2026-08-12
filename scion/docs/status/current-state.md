@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-11*
+*Last updated: 2026-08-12*
 
 Read `TASK.md` first. `design/scion-architecture-v3.md` is the sole architecture
 authority. `design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` only
@@ -761,42 +761,44 @@ expression A/B trigger, but do not prove that the typed schema caused them.
 That post-terminal A/B remains a proposal-surface diagnosis, never a candidate
 gate or solver-outcome comparison; H remains unchanged.
 
-The experiment-owned input bundle remains `LAUNCH_READY_NOT_STARTED` at
-`campaign_out/v04-cvrp-c-expression-ab-20260811-input`. It freezes the four
+The experiment-owned input bundle at
+`campaign_out/v04-cvrp-c-expression-ab-20260811-input` froze the four
 historical H/C traces, each trace's ordinary 11-file source, both complete
 terminal tool definitions and per-fixture outcome-blind checklists. The
 203-line runner, 123-line strict diff parser and 139-line input loader add zero
 production lines. Fifteen focused fake/parser tests, frozen-input validation
-and `bash -n` pass. At 2026-08-12 08:41:11Z an acquisition attempt failed before
-the driver: output, status, cells, driver log and exit were absent, with zero
-scientific/model-generation calls, zero solver calls and zero cells. The cause is
-`PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE`; this was not a scientific run or
-consumed launch. Its control-only observation is archived unchanged at
+and `bash -n` pass. One control-only acquisition attempt failed before the
+driver, made zero scientific/model-generation or solver calls and is archived
+unchanged at
 `campaign_out/v04-cvrp-c-expression-ab-20260811-control-pre-driver-acquisition-failure-20260812T084111Z`,
-and the live output and control roots are absent. The launcher now uses ordinary
-`clawd`, explicit tmux socket `/tmp/scion-c-ab.tmux.sock`, and child-acquired
-marker/PID/log/exit observations without changing scientific design. Two
-independent reviews pass, so the first scientific launch may proceed under the
-user's existing explicit authorization. The existing real
+outside the scientific run. The corrected ordinary-user launcher then acquired
+the driver and the authorized run completed exit `0`: 8/8 provider cells were
+terminal, with no provider failure, retry or solver call. All four exact cells
+normalized, applied and passed Contract. All four strict-diff cells failed
+strict application because context or removal did not match the frozen source;
+each therefore received its preregistered fixed `0/0` score and no blind
+packet. Two independent blind reviewers agreed on exact-arm fixture scores
+`2/2`, `1/1`, `1/1`, `1/1`, totaling H=`5` and source-anchor=`5` versus diff
+`0/0`. The generated hunks had positional/context mismatches while the frozen
+no-offset/no-fuzzy parser behaved as designed. All four adoption conditions
+fail. R51 is therefore `VALID_COMPLETE_C_EXPRESSION_DIAGNOSTIC / STRICT_DIFF_NOT_ADOPTED / EXACT_RETAINED`,
+without production change, retry or gate.
+The complete boundary is recorded in the
+[C-expression postrun](../experiments/v0.4/v0.4-cvrp-c-expression-ab-postrun-20260812.md).
+The existing real
 CVRP direct-v3 outer smoke also passes `1 passed in 32.55s`, but its MockLLM
 multi-file no-op and real 12-case/one-seed/one-second screening establish only
-local short-chain stability, not provider or algorithm evidence. No
-C-expression scientific provider/solver call has occurred. Terminal parse/apply
-rejection receives deterministic zero/zero rubric scores and no blind packet;
-Contract rejection keeps its normalized-patch packet and two blind reviews.
-Both continue as measured cells; missing/misbound provider response or invalid
-input binding stops without retry or resume. Independent frozen-input,
-transport, parser, treatment and blind-packet review passed; two independent
-reviews of the corrected acquisition seam also pass and execution remains open.
+local short-chain stability, not provider or algorithm evidence.
 
 A separate result-blind provider-surface audit reaches the same priority. The
 seven H calls do not justify more H tools or history compression: all received
 the complete source, named the correct owner/symbol and stayed focused on
 solver mechanisms. C is the observed fidelity bottleneck despite seeing the
-same complete 11-file union. The next intervention is therefore the already
-frozen exact-edit versus strict-diff expression A/B, not a shell or tool loop.
-Before any later provider campaign, the visible projection will make a net
-reduction: campaign/branch/version IDs, schema/taint and repeated
+same complete 11-file union, but the completed strict-diff treatment failed
+exact source application in all four fixtures. R51 closes that direction
+instead of adding a shell, tool loop or repair gate. Before any later provider
+campaign, the visible projection will make a net reduction:
+campaign/branch/version IDs, schema/taint and repeated
 `Decision-excluded` notices, negative frozen patterns and duplicated API/edit
 rules move to trace or Contract, while objective/invariants, mechanics, legal
 positive surfaces, complete current source, screening-level algorithm evidence
@@ -1085,8 +1087,9 @@ Its exact-roster MDE is `2.0`; the six full immediate-base medians are five zero
 and one negative. R50 is complete provider-free descriptive diagnosis, not a
 promotion or recovery result. The complete one-off driver/test source remains
 experiment-owned and is not committed into Scion. H-context A/B is not
-triggered by the seven audited H calls. The already-triggered C-expression A/B
-is still open; this status does not design or preregister a later experiment.
+triggered by the seven audited H calls. The C-expression A/B is terminal under
+R51: retain exact and close strict diff. This status does not design or
+preregister a later experiment.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are

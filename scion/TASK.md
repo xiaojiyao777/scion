@@ -4,7 +4,7 @@
 
 *Accepted runtime baseline: `4d637959`*
 
-*Last updated: 2026-08-11*
+*Last updated: 2026-08-12*
 
 This is the active task source. `design/scion-architecture-v3.md` is the
 sole architecture authority. The direct-runtime addendum may explain an
@@ -74,11 +74,12 @@ evidence prerequisite exists:
    diagnostic, minimal failure-only nondeterminism record and Warehouse canary
    completeness facts. Each is a separate small commit; no new gate, ledger or
    orchestration layer.
-5. **Research-expression cleanup:** freeze the original C A/B fixtures, run the
-   frozen C-expression A/B, then reduce provider projection and replace the
-   internal source ledger with ordinary editable source context by net deletion.
-   H context and tools stay unchanged unless their separate evidence trigger is
-   met.
+5. **Research-expression cleanup:** the frozen C-expression A/B is terminal.
+   All four strict-diff cells failed exact source application while all four
+   exact cells passed Contract, so retain exact and close strict diff. Next
+   reduce provider projection and replace the internal source ledger with
+   ordinary editable source context by net deletion. H context and tools stay
+   unchanged unless their separate evidence trigger is met.
 6. **Fresh CVRP rung only if justified:** freeze one experimental change at a
    time, run `gpt-5.6-terra`, drain queued stages, and require the unchanged V3
    promotion path plus independent B0 retention. Warehouse measurement
@@ -288,6 +289,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R48 | proven R45 diagnosis R1 infrastructure invalidity; zero accepted science | The R1 process disappeared during its first `MDE` block. Terminal structure is `complete=false`, zero of 37 accepted blocks, `last=null`, one partial 46/96 raw file with zero recorded subject failures, no analysis artifact, and no remaining driver or solver process. No W/L/T, effect, gate or objective was read. The disappearance cause is `PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE`. | Seal R1 `RUN_INVALID_INFRA / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`; do not resume, modify or reuse any partial pair. R2 changes only the ordinary-user launch/process-observation seam, starts fresh at MDE 0/96, and is separately preregistered. If R2 is interrupted, seal it and do not launch an automatic R3. |
 | R49 | proven experiment-driver overgate; R2 sealed with zero accepted blocks | R2's first MDE raw completed 96/96 attempted and valid pairs with zero candidate/champion/total failures, then the one-off driver exited `2` before atomic acceptance because all 192 valid A/B objective mappings contained the CVRP diagnostic field `routes` in addition to the two declared metrics. Every other structural predicate passed; no analysis exists and no W/L/T, effect, gate, ranking or objective value was read. | Seal R2 `RUN_INVALID_EXPERIMENT_DRIVER / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`. In a fresh R3 bundle, require the declared metrics as a finite numeric subset, retain exact declared deltas and every real execution/completeness check, and remove only the false exact-key-set gate. Do not reuse R2 pairs or change Scion core. R3 requires separate preregistration and explicit launch confirmation. |
 | R50 | proven complete provider-free diagnosis; no broad immediate-base advance | R3 completed with exit `0`, 37/37 atomic blocks and 1,056/1,056 unique fresh AB/BA pairs. Independent B0 A/A gives `MDE@80%=2.0` only for the frozen `12x8`, `1x`, homogeneous-additive estimand. Full `12x8` candidate median signs are 0 positive / 5 zero / 1 negative. Candidate five is uniformly harmful; candidate four did not implement its claimed time-aware-credit mechanism; the elapsed-budget-SA-related sources retain only descriptive scoped/`2x` opportunity. Added-case and joint contrasts never improve a candidate median. Interaction and whole-budget-arm machine drift remain `UNIDENTIFIABLE`. | Seal R3 `VALID_COMPLETE_PROVIDER_FREE_DIAGNOSIS / DESCRIPTIVE_COHORT_ONLY / NO_BROAD_IMMEDIATE_BASE_ADVANCE`. The exact-roster sensitivity and budget diagnoses are complete, but they do not promote, recover, rank or reinterpret an R3 candidate. Treat implementation fidelity, cross-case generalization and search opportunity as CVRP research questions; add no deployment, Trust/Hash, identity, ledger, recorder or candidate gate. |
+| R51 | proven strict-diff expression negative; exact retained | The frozen matched C-expression A/B completed exit `0` with 8/8 terminal provider cells, no provider failure and no solver call. All four exact cells normalized, applied and passed Contract; all four diff cells had hunk-position/context mismatches and correctly failed the frozen no-offset/no-fuzzy application with fixed `0/0` scores. Two blind reviewers agreed on exact scores (`2/2`, `1/1`, `1/1`, `1/1`), totaling H=`5` and source-anchor=`5` versus diff `0/0`. | Classify `VALID_COMPLETE_C_EXPRESSION_DIAGNOSTIC / STRICT_DIFF_NOT_ADOPTED / EXACT_RETAINED`: all four adoption conditions fail. Do not retry, relax the parser, add a patch grader/gate or change production. This diagnoses only proposal expression, not solver quality; continue net-deletion context/source simplification before a short real CVRP research block. |
 
 ## Modular execution plan
 
@@ -767,29 +769,18 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `+0` production-line ceiling and should be a net deletion. Do not further
   compress H history merely because it is long: the seven audited R3 H calls
   all named the correct source owner/symbol and remained algorithm-focused.
-- [x] Prepare, but do not launch, the frozen C-expression A/B input bundle at
-  `campaign_out/v04-cvrp-c-expression-ab-20260811-input`. Status is
-  `LAUNCH_READY_NOT_STARTED`. The 2026-08-12 08:41:11Z attempt failed before
-  driver acquisition: output, status, cells, driver log and exit were absent,
-  with zero scientific/model-generation calls, zero solver calls and zero cells; the cause is
-  `PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE`. Its control-only observation is
-  archived at
-  `campaign_out/v04-cvrp-c-expression-ab-20260811-control-pre-driver-acquisition-failure-20260812T084111Z`.
-  This was not a scientific run or consumed launch. The corrected ordinary-user
-  launcher uses explicit tmux socket `/tmp/scion-c-ab.tmux.sock` and records a
-  child-acquired marker, PID, log and exit without changing scientific design;
-  two independent reviews pass. The live output and control roots remain
-  absent. The bundle references exactly the four historical H/C
-  traces and their embedded ordinary 11-file source, freezes both complete
-  terminal tool definitions and four outcome-blind checklists, and adds zero
-  production lines. Its clear experiment-owned modules are 203-line runner,
-  123-line strict diff parser and 139-line frozen-input loader under the
-  corrected 220-per-module/480-combined ceiling (465 lines total). Frozen-input
-  and `bash -n` checks plus 15 focused fake/parser tests pass. The existing real CVRP direct
-  outer smoke also passes `1 passed in 32.55s`; because it uses MockLLM and a
-  no-op with real 12-case/one-seed/one-second screening, it establishes only
-  local short-chain stability, not provider or algorithm evidence.
-- [ ] After R3 is terminal, run the already triggered C expression A/B. One
+- [x] Prepare and independently review the frozen C-expression A/B input bundle
+  at `campaign_out/v04-cvrp-c-expression-ab-20260811-input`. It references
+  exactly four historical H/C traces and their embedded ordinary 11-file
+  source, freezes both terminal tool definitions and four outcome-blind
+  checklists, and adds zero production lines. Its experiment-owned modules are
+  203-line runner, 123-line strict diff parser and 139-line frozen-input loader
+  (465 lines total). Frozen-input and `bash -n` checks plus 15 focused tests
+  pass. One archived pre-driver acquisition failure made zero scientific/model-
+  generation or solver calls and is not part of the later scientific run. The
+  real CVRP direct outer smoke also passes `1 passed in 32.55s`; its MockLLM no-op establishes only
+  local short-chain stability.
+- [x] Run and close the triggered C expression A/B. One
   deterministic multi-site closure failure plus independent R2/R3
   scaffolding-only omissions meet its predeclared diagnostic trigger; this does
   not itself prove schema causality. Compare the complete current one-shot
@@ -807,14 +798,16 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   rejection retains its normalized-patch packet and two blind reviews. Both are
   measured treatment-negative cells and do not stop later cells; only a
   missing/misbound provider cell or invalid frozen binding stops.
-  Promote a strict diff normalizer only if that arm is adopted; any later
-  production normalizer retains a 220-line core ceiling. Exact fixtures,
-  counterbalanced order, blind rubrics and the conservative adoption rule are
-  frozen in the
+  The run exited `0` with 8/8 terminal provider cells and no solver call. All
+  four exact cells applied and passed Contract; all four diff cells failed
+  strict application with context/removal mismatch and fixed `0/0` scores. Two
+  blind reviewers agreed on exact scores totaling H=`5` and source-anchor=`5`.
+  All four adoption conditions fail: retain exact, close strict diff and add no
+  production normalizer, retry or gate. Exact fixtures, counterbalanced order,
+  blind rubrics and the conservative rule are recorded in the
   [C-expression A/B preregistration](docs/experiments/v0.4/v0.4-cvrp-c-expression-ab-preregistration-20260810.md).
-  This execution checkbox remains open; the corrected acquisition seam has now
-  passed independent review, so the first scientific launch may proceed under
-  the user's existing explicit authorization.
+  The terminal interpretation is in the
+  [postrun](docs/experiments/v0.4/v0.4-cvrp-c-expression-ab-postrun-20260812.md).
 - [ ] After the frozen C-expression A/B, replace the internal
   `proposal_source_ledger` with one ordinary `editable_source_context` value:
   approved target, unique canonical path/content pairs and target API guidance.
