@@ -891,6 +891,28 @@ No provider call or Protocol/formal experiment was rerun; only provider-free
 unit/smoke verification ran. No next H/C is preregistered, launched or
 authorized by this correction.
 
+R56 is now frozen in its
+[corrected-runtime minute one-step preregistration](../experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-preregistration-20260812.md)
+as `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. Its clean
+`acdc80ba` archive starts again from B0/v1 and keeps the seed-11
+P65/E101/X120/X233 roster, `8/12/12/15`-second limits, cache-off
+`AB/BA/AB/BA`, Terra H/C maxima `1/1`, retry zero, one canary and at most one
+formal SCREENING call. Expanded screening, validation, frozen and promotion
+are unreachable. The same twice-observed roster is retained only for a
+controlled first post-R55 short lifecycle observation; it cannot provide
+independent replication, generalization, stability or long-campaign readiness.
+
+R55 persistence and test mechanics remain host-side preregistration/runtime
+rationale and are absent from the provider-visible research context. The
+R56-specific provider additions are only the neutral algorithm question and
+R53–R54 algorithm evidence alongside the ordinary complete problem-owned
+context; R54 mechanism quality remains unidentifiable because its failed P row
+has no admissible delta. Provider-free static checks
+and subsecond V3/V4 microtests may run during preparation, but proxy, canary and
+formal Protocol calls remain blocked. R53/R54 authorization and generic assent
+do not authorize this exact `acdc80ba` source send; fresh explicit authorization
+is still required. No R56 provider or formal solver result exists yet.
+
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
 deadline-driven solver was evaluating several pairs. All CPU-heavy repository
@@ -1186,7 +1208,10 @@ feedback-cardinality persistence defect and makes CVRP V3/V4 execute real
 subsecond problem-owned consistency tests; an exact provider-free R54 patch
 replay fails all three newly covered recovery paths. This is corrective test
 evidence only: it reruns no provider or Protocol/formal experiment, adds no
-candidate gate, and authorizes no next H/C.
+candidate gate, and by itself authorizes no next H/C. R56 is separately
+preregistered from clean `acdc80ba` as one more short fresh-B0 observation, but
+remains `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION` with
+no provider or formal Protocol result.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are

@@ -115,7 +115,18 @@ evidence prerequisite exists:
    formal screen. No provider call or Protocol/formal experiment was rerun;
    only provider-free unit/smoke verification ran. No next H/C is launched or
    authorized by this correction.
-9. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+9. **R56 corrected-runtime minute step prepared, not started:** the
+   [preregistration](docs/experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-preregistration-20260812.md)
+   freezes clean `acdc80ba` fresh B0/v1, one Terra H and conditional C, retry
+   zero, the same seed-11 four-case `8/12/12/15`-second cache-off
+   `AB/BA/AB/BA` screen, and no expansion, validation, frozen or promotion.
+   R55 remains host-side runtime rationale; the provider-visible question and
+   prior contain only R53–R54 algorithm evidence. Provider-free static and
+   subsecond V3/V4 preparation checks are permitted, but proxy and formal
+   Protocol calls remain blocked. Status is `PREPARED_NOT_STARTED /
+   AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; generic assent does not authorize
+   this exact new source send.
+10. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -884,6 +895,15 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON /
   FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`; do not
   resume, retry or promote it.
+- [ ] After fresh explicit authorization, run the
+  [R56 corrected-runtime minute one-step](docs/experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-preregistration-20260812.md)
+  exactly once. It is currently `PREPARED_NOT_STARTED /
+  AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. Before that authorization, only
+  provider-free static and subsecond V3/V4 preparation checks may run; do not
+  call the proxy, canary or formal Protocol. Keep the exact fresh-B0 source,
+  R53–R54-only provider prior, H/C limits `1/1`, seed-11 roster and one-step
+  claim boundary frozen. A clean result is one post-correction observation,
+  not long-campaign readiness or solver promotion.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:
