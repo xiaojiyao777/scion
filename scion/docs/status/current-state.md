@@ -943,7 +943,33 @@ passed. The combined regression passed 183 tests, while independent review
 passed focused 38 plus adjacent 92 tests. No provider, canary, formal Protocol
 or Decision call ran. Therefore this is expression-fidelity and regression
 evidence only, not a repair or retry of R56, a new R56 result, or solver-quality
-evidence. No successor H/C experiment is preregistered, authorized or launched.
+evidence.
+
+R58 is now frozen in its
+[expression-corrected seed-29 minute one-step preregistration](../experiments/v0.4/v0.4-cvrp-r58-minute-expression-corrected-one-step-preregistration-20260812.md)
+as `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. Its clean
+`42535efc` archive starts from B0/v1 and permits at most one Terra H and
+conditional C with retry zero. If Contract, non-skipped Verification and the
+veto-only canary permit, the sole formal call uses seed `29` on the same
+P65/E101/X120/X233 cases with `8/12/12/15`-second limits, fresh cache-off
+subjects and `AB/BA/AB/BA` order. Expanded screening, validation, frozen and
+promotion are unreachable; maximum declared formal solver time is 94
+subject-seconds.
+
+Seed `29` differs from the immediate R53–R56 minute-series seed `11`, but it is
+not globally unseen, independent or held out: R3 already used it on these exact
+four cases. Only the R58 subject executions are fresh. A complete result is
+therefore one new-H/C exploratory screen on an already exposed case/seed
+coordinate, not exact-candidate replication, seed robustness, case
+generalization, validation, retained improvement or long-campaign readiness.
+R57's `exact_line_replace` is an optional C tool fact and is absent from the H
+algorithm prior; it adds no required-use gate, repair loop or algorithm claim.
+
+The current generic assent authorizes preparation only. It does not authorize
+the exact `42535efc` source-derived send, R53–R56 prior, R58 question, Terra H/C
+envelope or launch. Before fresh exact authorization, the proxy, provider,
+canary, formal Protocol and solver screen remain blocked, and the future output
+and control roots remain absent. No R58 scientific result exists.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1247,10 +1273,12 @@ Independent source audit found a fourth latent residual call. The wrapper
 exited `0`; V4, canary, formal Protocol and Decision were not reached, so there
 is zero solver-quality evidence and B0/v1 remains champion. R56 is sealed
 `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED /
-ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. R57 is not a
-preregistered experiment; its evidence label records only the provider-free
-expression correction at `f537fed5`. No successor H/C is preregistered,
-authorized or launched.
+ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. R57 is not an algorithm
+experiment; its evidence label records only the provider-free expression
+correction at `f537fed5`. R58 is separately preregistered from clean `42535efc`
+as one seed-29 minute observation with fresh subject executions, but remains
+`PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; no provider,
+canary, formal Protocol or solver result exists.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
