@@ -877,6 +877,20 @@ scientific Decision was already stored. Candidate failure, Decision, and the
 framework persistence exception are kept as separate facts. The root is not
 resumed or retried; this closeout preregisters no next experiment.
 
+R55 closes the two narrow prospective defects without reopening R54. Commit
+`3221416c` allows canonical screening-context feedback cardinality to range
+from the exact valid-pair count through valid plus candidate-failed pairs while
+preserving exact observed W/L/T accounting. Commit `9aedfb64` makes CVRP V3/V4
+execute subsecond problem-owned operator-recovery and public-entrypoint tests
+instead of skipping. The recovery fixtures assert feasible-incumbent/runtime
+consistency without naming simulated annealing or `cool()`, so they do not
+freeze a solver mechanism or add a quality or novelty gate. A provider-free
+materialization of the exact R54 patch fails all three repair-error, infeasible
+and route-limit fixtures; B0 passes the ordinary focused/adjacent 25-test set.
+No provider call or Protocol/formal experiment was rerun; only provider-free
+unit/smoke verification ran. No next H/C is preregistered, launched or
+authorized by this correction.
+
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
 deadline-driven solver was evaluating several pairs. All CPU-heavy repository
@@ -1167,7 +1181,12 @@ left three calls to a removed `cool()` method; formal evidence contains three
 valid ties and one candidate runtime-audit failure. Decision abandoned the
 candidate, and a separate post-Decision context-persistence `ValueError`
 caused wrapper exit `1`. B0/v1 remains champion and no R54 objective from the
-failed P row is used as delta/W/L/T evidence.
+failed P row is used as delta/W/L/T evidence. R55 prospectively fixes the
+feedback-cardinality persistence defect and makes CVRP V3/V4 execute real
+subsecond problem-owned consistency tests; an exact provider-free R54 patch
+replay fails all three newly covered recovery paths. This is corrective test
+evidence only: it reruns no provider or Protocol/formal experiment, adds no
+candidate gate, and authorizes no next H/C.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
