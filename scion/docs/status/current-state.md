@@ -928,8 +928,22 @@ is a source-proven latent defect. V4 and all later Verification checks, canary,
 formal Protocol and Decision were not reached. There are no raw metrics,
 admissible pairs, W/L/T or solver-quality conclusions. B0/v1 remains champion.
 The root is not repaired or retried. This is evidence for minimal provider-free
-C expression/tool redesign; no R57 or successor H/C is preregistered,
+C expression/tool redesign; no successor H/C experiment is preregistered,
 authorized or launched.
+
+R57 records that provider-free expression correction, not a successor
+algorithm experiment. Commit `f537fed5` adds optional source-bound
+`exact_line_replace`, which matches an exact complete logical line across
+outer indentation levels and replays each replacement under the indentation of
+its matched source line. It adds no provider source-search/tool loop, retry,
+quality gate or Decision input. A counterfactual re-expression of the frozen
+R56 C response matched all five `annealing.cool()` callsites through the
+production parse -> Contract -> materialize path; non-skipped V3 and V4 then
+passed. The combined regression passed 183 tests, while independent review
+passed focused 38 plus adjacent 92 tests. No provider, canary, formal Protocol
+or Decision call ran. Therefore this is expression-fidelity and regression
+evidence only, not a repair or retry of R56, a new R56 result, or solver-quality
+evidence. No successor H/C experiment is preregistered, authorized or launched.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1233,8 +1247,10 @@ Independent source audit found a fourth latent residual call. The wrapper
 exited `0`; V4, canary, formal Protocol and Decision were not reached, so there
 is zero solver-quality evidence and B0/v1 remains champion. R56 is sealed
 `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED /
-ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. No R57 is preregistered
-or authorized.
+ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. R57 is not a
+preregistered experiment; its evidence label records only the provider-free
+expression correction at `f537fed5`. No successor H/C is preregistered,
+authorized or launched.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
