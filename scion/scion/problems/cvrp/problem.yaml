@@ -9,8 +9,8 @@ data_dir: data
 oracle_path: ""
 solver_path: solver.py
 canary_case_path: controlled/data/synthetic_controlled_canary_5.vrp
-unit_test_path: ""
-regression_test_path: ""
+unit_test_path: tests/test_operators.py
+regression_test_path: tests/test_solver.py
 
 operator_categories:
   - solver_design

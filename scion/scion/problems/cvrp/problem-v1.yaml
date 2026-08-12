@@ -87,6 +87,8 @@ runtime_failure_guidance:
       scheduler.py only for lifecycle/solver-time-limit wiring.
 
 canary_case_path: "data/tiny_canary.json"
+unit_test_path: "tests/test_operators.py"
+regression_test_path: "tests/test_solver.py"
 
 operator_interface:
   base_class_import: "scion.problems.cvrp.policies.baseline_algorithm:solve"
