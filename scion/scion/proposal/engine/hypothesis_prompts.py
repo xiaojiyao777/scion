@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Mapping
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, Dict, Mapping
+from typing import Any
 
 from .prompt_common import _CACHE_5M
-
 
 _DIRECT_V3_STATIC_CONTEXT_KEYS = frozenset(
     {
@@ -26,35 +26,33 @@ _DIRECT_V3_STATIC_CONTEXT_KEYS = frozenset(
         "champion_stats",
     }
 )
-
-
-def _split_hypothesis_context(
-    context: Dict[str, Any],
-) -> tuple[list[dict], str]:
-    """Compatibility name for the sole direct-V3 hypothesis projection."""
-
-    return _split_direct_v3_hypothesis_context(context)
+_HOST_CONTROL_KEYS = frozenset(
+    {
+        "branch_id",
+        "champion_version",
+        "schema_version",
+        "taint",
+        "proposal_visibility_only",
+        "decision_features_excluded",
+        "llm_trace_excluded",
+        "gate_influence",
+    }
+)
 
 
 def _split_direct_v3_hypothesis_context(
     context: Mapping[str, Any],
 ) -> tuple[list[dict], str]:
-    """Render every supplied context field exactly once without size controls."""
-
     static_context = {
-        key: context[key]
+        key: _hypothesis_research_value(context[key], path=f"$.{key}")
         for key in _DIRECT_V3_STATIC_CONTEXT_KEYS
         if key in context
     }
     evidence_context = {
-        key: value
+        key: _hypothesis_research_value(value, path=f"$.{key}")
         for key, value in context.items()
-        if key not in _DIRECT_V3_STATIC_CONTEXT_KEYS
+        if key not in _DIRECT_V3_STATIC_CONTEXT_KEYS and key not in _HOST_CONTROL_KEYS
     }
-    if set(static_context).intersection(evidence_context):
-        raise ValueError("direct-v3 prompt context ownership overlap")
-    if set(static_context).union(evidence_context) != set(context):
-        raise ValueError("direct-v3 prompt context ownership gap")
 
     system_blocks = [
         {
@@ -85,15 +83,28 @@ def _split_direct_v3_hypothesis_context(
     ]
     user_prompt = (
         "## Analysis And Output Instructions\n"
-        "Read the static context and canonical hypothesis evidence exactly once. "
-        "Treat every supplied field as authoritative context for this call. "
-        "Identify the active algorithmic bottleneck, inspect the champion design, "
-        "and propose one evidence-grounded mechanism-level change or refinement. "
-        "Preserve declared higher-priority objectives and keep the proposal within "
-        "the visible research surfaces, actions, and editable files. Return the "
-        "hypothesis through the required tool schema."
+        "Identify the bottleneck; propose one evidence-grounded mechanism-level change or refinement. "
+        "Preserve objectives; use only visible research surfaces, "
+        "actions, and files. Return the hypothesis through the required tool schema."
     )
     return system_blocks, user_prompt
+
+
+def _hypothesis_research_value(value: Any, *, path: str) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            key: _hypothesis_research_value(child, path=f"{path}.{key}")
+            for key, child in value.items()
+            if key not in _HOST_CONTROL_KEYS
+            and not (key == "version" and path == "$.champion_stats")
+            and not (key == "problem_family" and path == "$.research_question")
+        }
+    if isinstance(value, (list, tuple)):
+        return type(value)(
+            _hypothesis_research_value(child, path=f"{path}[{index}]")
+            for index, child in enumerate(value)
+        )
+    return value
 
 
 def _direct_v3_canonical_json(value: Mapping[str, Any]) -> str:
@@ -236,6 +247,9 @@ def _direct_v3_json_value(
         )
     finally:
         active_ids.remove(tracked_id)
+
+
+_split_hypothesis_context = _split_direct_v3_hypothesis_context
 
 
 __all__ = [

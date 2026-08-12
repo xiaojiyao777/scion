@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import replace
-import hashlib
 import json
-from pathlib import Path
 import threading
+from dataclasses import replace
+from pathlib import Path
 from typing import Iterable
 
 import pytest
@@ -253,6 +252,40 @@ def test_v3_idempotent_record_restores_missing_proposal_diff_and_rejects_drift(
         harness.record(patch, hypothesis_id="h-idempotent")
 
 
+def test_v3_idempotent_record_reads_only_retired_source_attribution(
+    tmp_path: Path,
+) -> None:
+    harness = _FormalV3Harness(tmp_path, base_files={"solver.py": "VALUE = 0\n"})
+    patch = PatchProposal("solver.py", "modify", "VALUE = 1\n")
+    harness.record(patch, hypothesis_id="h-legacy-source")
+    metadata_path = next(
+        harness.campaign_dir.glob(
+            "artifacts/formal_candidates/*/*/candidate.patch.json"
+        )
+    )
+    legacy = json.loads(metadata_path.read_text(encoding="utf-8"))
+    for section_name in ("patch", "replay_materialization"):
+        for file_entry in legacy[section_name]["files"]:
+            file_entry["source_attribution"] = {"legacy": True}
+    metadata_path.write_text(
+        json.dumps(legacy, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    harness.record(patch, hypothesis_id="h-legacy-source")
+
+    legacy["patch"]["files"][0]["unexpected_field"] = True
+    metadata_path.write_text(
+        json.dumps(legacy, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ValueError,
+        match="existing formal candidate metadata conflicts with record",
+    ):
+        harness.record(patch, hypothesis_id="h-legacy-source")
+
+
 def test_v3_repeat_screening_with_new_metrics_ref_gets_distinct_artifact(
     tmp_path: Path,
 ) -> None:
@@ -311,7 +344,6 @@ def test_v3_create_delete_then_revert_to_champion_has_empty_closure(
     assert (r1_replay / "created.py").is_file()
     assert not (r1_replay / "existing.py").exists()
 
-    created_source_sha = hashlib.sha256(b"VALUE = 'created'\n").hexdigest()
     r2 = harness.record(
         PatchProposal(
             file_path="created.py",
@@ -322,15 +354,6 @@ def test_v3_create_delete_then_revert_to_champion_has_empty_closure(
                     "file_path": "existing.py",
                     "action": "create",
                     "code_content": "VALUE = 'base'\n",
-                },
-            ),
-            repair_attribution=(
-                {
-                    "repair_kind": "typed_edit_normalization",
-                    "file_path": "created.py",
-                    "source_owner": "branch_helper",
-                    "source_provenance": "branch_workspace",
-                    "source_record_digest": created_source_sha,
                 },
             ),
         ),
@@ -405,7 +428,7 @@ def test_v3_activation_file_is_separate_from_proposal_and_inherited_scope(
     }
     registry = closure_files["registry.yaml"]
     assert registry["candidate_attribution"]["scope"] == "runtime_activation"
-    assert registry["source_attribution"]["origin"] == "runtime_activation"
+    assert "source_attribution" not in registry
     replay = harness.materialize(artifact, output_name="activation-replay")
     assert (replay / "registry.yaml").read_bytes() == (
         harness.workspace / "registry.yaml"

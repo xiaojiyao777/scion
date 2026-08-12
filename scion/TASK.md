@@ -76,10 +76,12 @@ evidence prerequisite exists:
    orchestration layer.
 5. **Research-expression cleanup:** the frozen C-expression A/B is terminal.
    All four strict-diff cells failed exact source application while all four
-   exact cells passed Contract, so retain exact and close strict diff. Next
-   reduce provider projection and replace the internal source ledger with
-   ordinary editable source context by net deletion. H context and tools stay
-   unchanged unless their separate evidence trigger is met.
+   exact cells passed Contract, so retain exact and close strict diff. The
+   follow-on research-hot-path subtraction is also complete: provider views are
+   reduced to the V3 research core and the internal source ledger is replaced
+   by ordinary editable source context with 278 net production lines deleted.
+   H scientific content and tools remain unchanged; only host/control wrappers
+   leave the provider view.
 6. **Fresh CVRP rung only if justified:** freeze one experimental change at a
    time, run `gpt-5.6-terra`, drain queued stages, and require the unchanged V3
    promotion path plus independent B0 retention. Warehouse measurement
@@ -290,6 +292,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R49 | proven experiment-driver overgate; R2 sealed with zero accepted blocks | R2's first MDE raw completed 96/96 attempted and valid pairs with zero candidate/champion/total failures, then the one-off driver exited `2` before atomic acceptance because all 192 valid A/B objective mappings contained the CVRP diagnostic field `routes` in addition to the two declared metrics. Every other structural predicate passed; no analysis exists and no W/L/T, effect, gate, ranking or objective value was read. | Seal R2 `RUN_INVALID_EXPERIMENT_DRIVER / ZERO_ACCEPTED_BLOCKS / NO_ADMISSIBLE_ANALYSIS`. In a fresh R3 bundle, require the declared metrics as a finite numeric subset, retain exact declared deltas and every real execution/completeness check, and remove only the false exact-key-set gate. Do not reuse R2 pairs or change Scion core. R3 requires separate preregistration and explicit launch confirmation. |
 | R50 | proven complete provider-free diagnosis; no broad immediate-base advance | R3 completed with exit `0`, 37/37 atomic blocks and 1,056/1,056 unique fresh AB/BA pairs. Independent B0 A/A gives `MDE@80%=2.0` only for the frozen `12x8`, `1x`, homogeneous-additive estimand. Full `12x8` candidate median signs are 0 positive / 5 zero / 1 negative. Candidate five is uniformly harmful; candidate four did not implement its claimed time-aware-credit mechanism; the elapsed-budget-SA-related sources retain only descriptive scoped/`2x` opportunity. Added-case and joint contrasts never improve a candidate median. Interaction and whole-budget-arm machine drift remain `UNIDENTIFIABLE`. | Seal R3 `VALID_COMPLETE_PROVIDER_FREE_DIAGNOSIS / DESCRIPTIVE_COHORT_ONLY / NO_BROAD_IMMEDIATE_BASE_ADVANCE`. The exact-roster sensitivity and budget diagnoses are complete, but they do not promote, recover, rank or reinterpret an R3 candidate. Treat implementation fidelity, cross-case generalization and search opportunity as CVRP research questions; add no deployment, Trust/Hash, identity, ledger, recorder or candidate gate. |
 | R51 | proven strict-diff expression negative; exact retained | The frozen matched C-expression A/B completed exit `0` with 8/8 terminal provider cells, no provider failure and no solver call. All four exact cells normalized, applied and passed Contract; all four diff cells had hunk-position/context mismatches and correctly failed the frozen no-offset/no-fuzzy application with fixed `0/0` scores. Two blind reviewers agreed on exact scores (`2/2`, `1/1`, `1/1`, `1/1`), totaling H=`5` and source-anchor=`5` versus diff `0/0`. | Classify `VALID_COMPLETE_C_EXPRESSION_DIAGNOSTIC / STRICT_DIFF_NOT_ADOPTED / EXACT_RETAINED`: all four adoption conditions fail. Do not retry, relax the parser, add a patch grader/gate or change production. This diagnoses only proposal expression, not solver quality; continue net-deletion context/source simplification before a short real CVRP research block. |
+| R52 | proven research-hot-path subtraction; independently reviewed | Nine production files changed by `+273/-551`, net `-278`: the source ledger and its owner/provenance/view/self-proof machinery are gone. One ordinary `editable_source_context` now supplies approved target, unique canonical path/content values and consolidated target API guidance; H sees the research core and C sees exactly approved H plus that source context, while the complete raw context remains in trace. | Close source-context and provider-projection cleanup. Keep branch-current history/workspace source precedence over champion, touched-missing no-fallback semantics, `None` versus empty content and exact selector content binding. Add no replacement ledger, Trust/Hash authority, gate or provider tool loop. Main focused tests passed 169 and the independent expanded set passed 207; CVRP direct outer passed once in 32.70s. Warehouse outer traversed the full V3 chain but failed only at an unrelated dirty V8 `typed_telemetry_summary` assertion, so it is not claimed as passing. |
 
 ## Modular execution plan
 
@@ -759,16 +762,16 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   mechanics, legal positive surfaces, complete current source and algorithm
   evidence, and may be chosen only by proposal/source-grounding measures, never
   solver W/L/T, token count or a gate.
-- [ ] Before another provider campaign, reduce the provider projection to the
-  V3 research core without changing scientific content: keep one objective and
-  invariant packet, solver mechanics, the legal positive edit surface,
-  complete current source once, screening-level algorithm evidence and the
-  latest actionable rejection. Move branch/champion/version identifiers,
-  schema/taint labels, repeated `Decision-excluded` notices, negative frozen
-  patterns and duplicated API/edit rules to host trace or Contract. This has a
-  `+0` production-line ceiling and should be a net deletion. Do not further
-  compress H history merely because it is long: the seven audited R3 H calls
-  all named the correct source owner/symbol and remained algorithm-focused.
+- [x] Reduce the provider projection to the V3 research core without changing
+  scientific content. H retains objective/invariants, solver mechanics, legal
+  positive surfaces, complete current source, screening-level evidence and the
+  latest actionable rejection while recursively excluding host/control
+  metadata. C receives exactly the approved hypothesis plus the ordinary
+  editable source context, whose target guidance consolidates the positive
+  Warehouse/CVRP API, object-model and edit-surface facts. The complete raw
+  structured context remains durable in trace; Contract owns negative path,
+  import and edit rules. This is part of the R52 net deletion and adds no gate
+  or provider tool loop. H history was not compressed merely for length.
 - [x] Prepare and independently review the frozen C-expression A/B input bundle
   at `campaign_out/v04-cvrp-c-expression-ab-20260811-input`. It references
   exactly four historical H/C traces and their embedded ordinary 11-file
@@ -808,15 +811,16 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   [C-expression A/B preregistration](docs/experiments/v0.4/v0.4-cvrp-c-expression-ab-preregistration-20260810.md).
   The terminal interpretation is in the
   [postrun](docs/experiments/v0.4/v0.4-cvrp-c-expression-ab-postrun-20260812.md).
-- [ ] After the frozen C-expression A/B, replace the internal
-  `proposal_source_ledger` with one ordinary `editable_source_context` value:
-  approved target, unique canonical path/content pairs and target API guidance.
-  Preserve branch-current-over-champion precedence, no fallback for touched
-  helpers, create-target `content=None`, exact selector application and
-  Contract ownership. Delete entry digests, owner/provenance/visibility/reason,
-  view sets and validation that re-hashes the same context content. This is a
-  source-binding simplification, not a new authority or provider tool, and
-  should net-delete at least 150 production lines.
+- [x] Replace `proposal_source_ledger` with one ordinary
+  `editable_source_context`: approved target, unique canonical path/content
+  pairs and target API guidance. Branch-current history/workspace source wins
+  over the champion; a touched-missing helper never falls back; `content=None` denotes
+  an absent create target while an empty string remains an existing empty file;
+  create/modify behavior and exact selector application remain strict. Entry
+  digests, owner/provenance/visibility/reason, view sets and self-rehashing
+  validation are deleted. The selector digest remains only as runtime content
+  binding. Across the complete R52 provider/source subtraction, nine production
+  files changed by `+273/-551`, net `-278`, with no replacement authority.
 - [ ] Do not add provider shell, execution, network, read/search or edit loops
   on present evidence. Reconsider a matched source-navigation A/B only if two
   independent terminal C calls fail on the same source/API/callsite fact, the
@@ -934,5 +938,8 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   Its terminal classification is `RUN_INVALID_INFRA / VALID_PARTIAL_SCIENCE`:
   completed quality evidence is retained, partial validation is unadjudicated,
   durable stage counts are 10/0/0 for screening/validation/frozen, and champion
-  remains B0/v1. No recovery candidate exists. S6 final closure remains pending,
-  and CVRP still has no Protocol-complete promotion.
+  remains B0/v1. No recovery candidate exists. R51 retains exact and closes
+  strict diff; R52 closes the provider/source subtraction by 278 net deleted
+  production lines after 169 main and 207 independent tests. It adds no gate,
+  Trust/Hash authority, ledger or provider tool loop. S6 final closure remains
+  pending, and CVRP still has no Protocol-complete promotion.

@@ -59,8 +59,8 @@ from scion.proposal.solver_design_guidance import (
 from .code_context import (
     DURABLE_BRANCH_CREATED_FILES_KEY,
     DURABLE_BRANCH_TOUCHED_FILES_KEY,
-    SOURCE_LEDGER_KEY,
-    _build_code_source_ledger,
+    EDITABLE_SOURCE_CONTEXT_KEY,
+    _build_editable_source_context,
     _read_champion_research_code,
     branch_created_files,
     branch_current_file_sources,
@@ -101,6 +101,7 @@ _MEASUREMENT_PRIVATE_FIELDS = frozenset(
     }
 )
 CANONICAL_SCREENING_HISTORY_KEY = "canonical_screening_history"
+
 
 def _filter_hypothesis_prompt_steps(
     step_history: list[StepRecord],
@@ -283,17 +284,8 @@ class ContextManager:
             branch,
             step_history or [],
         )
-        workspace_visible = bool(branch_workspace and os.path.isdir(branch_workspace))
-        created = (
-            branch_created_files(branch, step_history or [])
-            if workspace_visible or branch_file_sources
-            else ()
-        )
-        touched = (
-            branch_touched_files(branch, step_history or [])
-            if workspace_visible or branch_file_sources
-            else ()
-        )
+        created = branch_created_files(branch, step_history or [])
+        touched = branch_touched_files(branch, step_history or [])
         provider = (
             resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,
@@ -305,10 +297,9 @@ class ContextManager:
             )
             else None
         )
-        source_ledger = _build_code_source_ledger(
+        editable_source_context = _build_editable_source_context(
             champion=champion,
             research_surfaces=research_surfaces,
-            change_locus=hypothesis.change_locus,
             source_root=source_root,
             target_file=hypothesis.target_file,
             target_action=hypothesis.action,
@@ -317,6 +308,12 @@ class ContextManager:
             branch_touched_files=touched,
             branch_current_file_sources=branch_file_sources,
         )
+        operator_interface_spec = _build_operator_interface_spec(
+            problem_spec,
+            adapter=self._adapter,
+            surface_name=hypothesis.change_locus,
+        )
+        research_surface = _surface_projection(surface, prompt_phase="code")
         context: dict[str, Any] = {
             "problem_summary": _build_problem_summary(
                 problem_spec,
@@ -327,16 +324,9 @@ class ContextManager:
             "branch_id": branch.branch_id,
             "champion_version": champion.version,
             "approved_hypothesis": _hypothesis_projection(hypothesis),
-            SOURCE_LEDGER_KEY: source_ledger,
-            "operator_interface_spec": _build_operator_interface_spec(
-                problem_spec,
-                adapter=self._adapter,
-                surface_name=hypothesis.change_locus,
-            ),
-            "research_surface": _surface_projection(
-                surface,
-                prompt_phase=("code" if provider is None else None),
-            ),
+            EDITABLE_SOURCE_CONTEXT_KEY: editable_source_context,
+            "operator_interface_spec": operator_interface_spec,
+            "research_surface": research_surface,
             "import_whitelist": list(problem_spec.search_space.import_whitelist),
             "editable_patterns": list(problem_spec.search_space.editable),
             "frozen_patterns": list(problem_spec.search_space.frozen),
@@ -357,6 +347,30 @@ class ContextManager:
         )
         if any(guidance.values()):
             context[RENDERER_INPUTS_KEY] = {SOLVER_DESIGN_GUIDANCE_KEY: guidance}
+        positive_code_constraints: list[str] = []
+        for name in ("object_model_hints", "api_contracts"):
+            for item in code_constraints.get(name, ()):
+                value = item.get("constraint") if isinstance(item, Mapping) else item
+                if text := str(value or "").strip():
+                    positive_code_constraints.append(text)
+        positive_operator_interface = "\n".join(
+            line
+            for line in operator_interface_spec.splitlines()
+            if "import whitelist" not in line.casefold()
+        ).strip()
+        guidance_parts = [
+            editable_source_context["target_api_guidance"],
+            positive_operator_interface,
+            research_surface.get("implementation_guidance", ""),
+            *positive_code_constraints,
+            *guidance.get("code_rules", ()),
+            *guidance.get("user_constraints", ()),
+        ]
+        editable_source_context["target_api_guidance"] = "\n\n".join(
+            dict.fromkeys(
+                text for part in guidance_parts if (text := str(part or "").strip())
+            )
+        )
         return context
 
 
@@ -506,18 +520,14 @@ def _surface_projection(
             projection[name] = primitive
     prompt = getattr(surface, "prompt", None)
     if prompt is not None and prompt_phase == "hypothesis":
-        guidance = str(
-            getattr(prompt, "hypothesis_guidance", "") or ""
-        ).strip()
+        guidance = str(getattr(prompt, "hypothesis_guidance", "") or "").strip()
         if guidance:
             projection["hypothesis_guidance"] = guidance
     elif prompt is not None and prompt_phase == "code":
         implementation = str(
             getattr(prompt, "implementation_guidance", "") or ""
         ).strip()
-        anti_patterns = str(
-            getattr(prompt, "anti_patterns", "") or ""
-        ).strip()
+        anti_patterns = str(getattr(prompt, "anti_patterns", "") or "").strip()
         if implementation:
             projection["implementation_guidance"] = implementation
         if anti_patterns:
@@ -915,12 +925,9 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
     aggregation = {
         "statistical_unit": "case",
         "method": str(
-            getattr(protocol, "case_aggregation_method", "")
-            or "seed_vote_majority"
+            getattr(protocol, "case_aggregation_method", "") or "seed_vote_majority"
         ),
-        "effect_metric": str(
-            getattr(protocol, "case_effect_metric", "") or ""
-        ),
+        "effect_metric": str(getattr(protocol, "case_effect_metric", "") or ""),
         "equivalence_band": float(
             getattr(protocol, "case_equivalence_band", 0.0) or 0.0
         ),
@@ -966,8 +973,8 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
         mechanism_evidence = _primitive(protocol.mechanism_evidence)
     projected = _drop_empty(payload)
     if getattr(protocol, "runtime_model", None):
-        projected["runtime_evidence_policy"] = (
-            runtime_evidence_policy_for_protocol(protocol)
+        projected["runtime_evidence_policy"] = runtime_evidence_policy_for_protocol(
+            protocol
         )
     if mechanism_evidence is not None:
         # The verified generic envelope is already the visibility boundary.

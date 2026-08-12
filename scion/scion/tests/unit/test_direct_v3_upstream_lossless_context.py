@@ -77,7 +77,9 @@ def _runtime(problem_id: str):
     return spec, legacy, adapter, champion, branch
 
 
-def test_warehouse_hypothesis_context_exposes_all_declared_safe_surfaces_and_source() -> None:
+def test_warehouse_hypothesis_context_exposes_all_declared_safe_surfaces_and_source() -> (
+    None
+):
     spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
 
     context = ContextManager(adapter=adapter).build_hypothesis_context(
@@ -109,9 +111,9 @@ def test_warehouse_hypothesis_context_exposes_all_declared_safe_surfaces_and_sou
     diagnostics = context["problem_measurement_diagnostics"][
         "problem_owned_diagnostics"
     ]
-    assert diagnostics["aggregate_objective_headroom"][
-        "theoretical_lower_bounds"
-    ] == {"subcategory_splits": 0}
+    assert diagnostics["aggregate_objective_headroom"]["theoretical_lower_bounds"] == {
+        "subcategory_splits": 0
+    }
     assert diagnostics["aggregate_noise_context"]["mde_at_power_80"] == 577.5
     assert diagnostics["aggregate_noise_context"]["n_pairs"] > 0
 
@@ -132,7 +134,9 @@ def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
     )
     h_rendered = "\n".join(block["text"] for block in h_blocks) + h_user
     assert all("hypothesis_guidance" in item for item in h_context["research_surfaces"])
-    assert all("implementation_guidance" not in item for item in h_context["research_surfaces"])
+    assert all(
+        "implementation_guidance" not in item for item in h_context["research_surfaces"]
+    )
     assert all("anti_patterns" not in item for item in h_context["research_surfaces"])
     for surface in surface_specs.values():
         assert h_rendered.count(surface.prompt.hypothesis_guidance) == 1
@@ -170,7 +174,15 @@ def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
     assert "hypothesis_guidance" not in c_context["research_surface"]
     assert "Active Surface Prompt Guidance" not in c_context["operator_interface_spec"]
     assert c_rendered.count(selected.implementation_guidance) == 1
-    assert c_rendered.count(selected.anti_patterns) == 1
+    assert selected.anti_patterns not in c_rendered
+    assert c_rendered.count("solution.assignment") >= 1
+    assert c_rendered.count("locked_vehicle_id") >= 1
+    assert "import whitelist" not in c_rendered.casefold()
+    provider_context = json.loads(c_blocks[1]["text"].split("\n", 1)[1])
+    assert set(provider_context) == {
+        "approved_hypothesis",
+        "editable_source_context",
+    }
     assert surface_specs["order_level"].prompt.hypothesis_guidance not in c_rendered
     assert surface_specs["order_level"].prompt.implementation_guidance not in c_rendered
     for line in WAREHOUSE_PRODUCTION_RESEARCH_PRIOR:
@@ -382,9 +394,7 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert "champion-code" not in rendered
     assert "champion-config" not in rendered
     research_question = context["research_question"]
-    assert research_question["schema_version"] == (
-        "scion.typed_research_question.v2"
-    )
+    assert research_question["schema_version"] == ("scion.typed_research_question.v2")
     expected_research_question_fields = {
         "schema_version",
         "problem_family",
@@ -822,8 +832,9 @@ def test_budget_exhausting_runtime_policy_reaches_canonical_h_history() -> None:
     assert policy["decision_features_excluded"] is True
 
 
-def test_new_branch_sees_all_reopened_sibling_screenings_without_lifecycle_leaks(
-) -> None:
+def test_new_branch_sees_all_reopened_sibling_screenings_without_lifecycle_leaks() -> (
+    None
+):
     _spec, legacy, adapter, champion, old_branch = _runtime("cvrp")
     old_branch.branch_id = "terminal-screening-owner"
     old_branch.state = BranchState.ABANDONED
@@ -954,13 +965,21 @@ def test_new_branch_sees_all_reopened_sibling_screenings_without_lifecycle_leaks
     assert history[0]["summary_level"] == "sibling_brief"
     assert history[0]["relation"] == "sibling"
     assert "screening_trajectory" not in history[0]
-    assert history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
-        "median_delta"
-    ] == 4.0
+    assert (
+        history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
+            "median_delta"
+        ]
+        == 4.0
+    )
     assert set(history[0]).isdisjoint(
         {
-            "attempt_id", "screening_attempt_id", "source_branch_id",
-            "branch_state", "state", "direction", "failure_detail",
+            "attempt_id",
+            "screening_attempt_id",
+            "source_branch_id",
+            "branch_state",
+            "state",
+            "direction",
+            "failure_detail",
         }
     )
     durable = old_branch.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY]
@@ -1316,6 +1335,8 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
         problem_spec=legacy,
         adapter=adapter,
     )
+    packet["taint"] = "proposal_only"
+    packet["llm_trace_excluded"] = True
     hypothesis = HypothesisProposal(
         hypothesis_text="Test measured repair behavior.",
         change_locus="solver_design",
@@ -1384,7 +1405,38 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     ][0]["experiment_evidence"]["mechanism_evidence"]
     assert '"paired_comparison"' in rendered
     assert '"comparison_columns"' in rendered
-    assert rendered_mechanism == packet
+    host_control_keys = {
+        "schema_version",
+        "taint",
+        "proposal_visibility_only",
+        "decision_features_excluded",
+        "llm_trace_excluded",
+        "gate_influence",
+    }
+
+    def research_projection(value):
+        if isinstance(value, dict):
+            return {
+                key: research_projection(child)
+                for key, child in value.items()
+                if key not in host_control_keys
+            }
+        if isinstance(value, list):
+            return [research_projection(child) for child in value]
+        return value
+
+    assert packet["schema_version"]
+    assert packet["taint"] == "proposal_only"
+    assert packet["proposal_visibility_only"] is True
+    assert packet["decision_features_excluded"] is True
+    assert packet["llm_trace_excluded"] is True
+    assert packet["gate_influence"] is False
+    assert packet["evidence"]["schema_version"]
+    assert packet["evidence"]["gate_influence"] is False
+    assert rendered_mechanism == research_projection(packet)
+    assert rendered_mechanism["evidence"] == research_projection(packet["evidence"])
+    assert host_control_keys.isdisjoint(rendered_mechanism)
+    assert host_control_keys.isdisjoint(rendered_mechanism["evidence"])
     assert rendered_mechanism["evidence"]["evidence_scope"] == (
         "screening_search_allocation"
     )
@@ -1392,7 +1444,6 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     assert rendered_mechanism["evidence"]["interpretation_constraint"] == (
         "association_only"
     )
-    assert rendered_mechanism["evidence"]["gate_influence"] is False
     assert "activation_evidence_status" not in rendered
     assert "objective_effect_status" not in rendered
     assert "solver_algorithm_alns_iteration_trace" not in json.dumps(
@@ -1401,7 +1452,9 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     )
 
 
-def test_unmarked_mechanism_mapping_keeps_existing_screening_projection_behavior() -> None:
+def test_unmarked_mechanism_mapping_keeps_existing_screening_projection_behavior() -> (
+    None
+):
     protocol = ProtocolResult(
         stage=ExperimentStage.SCREENING,
         stats=EvalStats(
@@ -1517,12 +1570,13 @@ def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis
     assert len(history) == 1
     assert history[0]["latest_round"] == 2
     assert history[0]["summary_level"] == "full"
-    assert [
-        item["round_num"] for item in history[0]["screening_trajectory"]
-    ] == [1]
-    assert history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
-        "median_delta"
-    ] == 0.5
+    assert [item["round_num"] for item in history[0]["screening_trajectory"]] == [1]
+    assert (
+        history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
+            "median_delta"
+        ]
+        == 0.5
+    )
     assert "attempt_id" not in history[0]
     assert "screening_attempt_id" not in history[0]
     assert len(canonical_screening_history(branch, [])) == 2
@@ -1565,7 +1619,10 @@ def test_provider_history_keeps_three_recent_current_attempts_full() -> None:
     projected = proposal_screening_history(records)
 
     assert [item["summary_level"] for item in projected] == [
-        "compact", "full", "full", "full",
+        "compact",
+        "full",
+        "full",
+        "full",
     ]
     assert [item["latest_round"] for item in projected] == [1, 2, 3, 4]
     assert "mechanism_evidence" not in projected[0]["experiment_evidence"]
@@ -1836,18 +1893,25 @@ def test_direct_v3_code_context_contains_source_not_research_history(
         snapshot.inputs.provider_context(include_renderer_inputs=True)
     )
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
-    ledger = context["proposal_source_ledger"]
-    target = next(item for item in ledger["entries"] if item["path"] == target_file)
+    source_context = context["editable_source_context"]
+    sources = source_context["sources"]
+    source_paths = [source["path"] for source in sources]
+    target = next(source for source in sources if source["path"] == target_file)
 
-    assert target["visibility"] == "full_current"
+    assert source_context["approved_target"] == target_file
+    assert len(source_paths) == len(set(source_paths))
+    assert all(set(source) == {"path", "content"} for source in sources)
+    assert all(isinstance(source["content"], str) for source in sources)
+    assert isinstance(target["content"], str)
     assert target["content"]
-    assert target["digest"]
     assert context["approved_hypothesis"]["target_file"] == target_file
     assert "follow the tool schema's edit protocol" in user_prompt
     assert "source owner, provenance, and digest" not in user_prompt
     assert "setattr, delattr, dynamic-name getattr" not in user_prompt
     assert "globals, locals, or vars" not in user_prompt
-    assert "process, network, environment, dynamic-import, or file APIs" in user_prompt
+    assert (
+        "process, network, environment, dynamic-import, or file APIs" not in user_prompt
+    )
     assert "must-not-enter-code-context" not in rendered
     assert set(context).isdisjoint(
         {
@@ -1861,12 +1925,15 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     )
     assert "target_intent" not in rendered
     canonical = json.loads(blocks[1]["text"].split("\n", 1)[1])
+    assert set(canonical) == {"approved_hypothesis", "editable_source_context"}
     assert canonical["approved_hypothesis"]["target_file"] == target_file
     assert "proposal_source_ledger" not in canonical
     provider_sources = canonical["editable_source_context"]
     assert provider_sources["approved_target"] == target_file
     assert set(provider_sources) == {
-        "approved_target", "sources", "target_api_guidance",
+        "approved_target",
+        "sources",
+        "target_api_guidance",
     }
     assert provider_sources["sources"]
     assert all(set(item) == {"path", "content"} for item in provider_sources["sources"])
@@ -1874,7 +1941,7 @@ def test_direct_v3_code_context_contains_source_not_research_history(
         assert f'"{hidden}"' not in blocks[1]["text"]
 
 
-def test_direct_v3_cvrp_create_ledger_proves_target_and_support_sources() -> None:
+def test_direct_v3_cvrp_create_context_has_empty_target_and_support_sources() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     target_file = "policies/baseline_modules/new_mechanism.py"
     hypothesis = HypothesisProposal(
@@ -1894,11 +1961,15 @@ def test_direct_v3_cvrp_create_ledger_proves_target_and_support_sources() -> Non
         legacy,
         step_history=[],
     )
-    ledger = context["proposal_source_ledger"]
-    target = next(item for item in ledger["entries"] if item["path"] == target_file)
+    source_context = context["editable_source_context"]
+    sources = source_context["sources"]
+    source_paths = [source["path"] for source in sources]
+    target = next(source for source in sources if source["path"] == target_file)
+    support_sources = [source for source in sources if source["path"] != target_file]
 
-    assert target["visibility"] == "new_file_placeholder"
-    assert target_file not in ledger["views"]["api_reference"]
-    assert ledger["views"]["api_reference"]
-    assert ledger["views"]["integration_full"]
-    assert ledger["views"]["champion_research"]
+    assert source_context["approved_target"] == target_file
+    assert len(source_paths) == len(set(source_paths))
+    assert target["content"] is None
+    assert support_sources
+    assert all(set(source) == {"path", "content"} for source in sources)
+    assert all(isinstance(source["content"], str) for source in support_sources)

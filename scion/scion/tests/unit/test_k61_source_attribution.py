@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -28,45 +27,27 @@ from scion.core.models import (
     ProtocolResult,
     VerificationResult,
 )
-from scion.proposal.context_manager.code_context import _validate_source_ledger
-from scion.proposal.edit_protocol.source_discovery import source_digest_for_content
+from scion.proposal.edit_protocol.source_discovery import (
+    source_digest_for_content,
+    source_records_from_context,
+)
 from scion.proposal.engine.parsing import _parse_patch
 from scion.runtime.workspace import WorkspaceMaterializer
 
 
-def _source_ledger(primary: str, integration: str) -> dict[str, object]:
+def _editable_sources(primary: str, integration: str) -> dict[str, object]:
     return {
-        "schema_version": "proposal-source-ledger.v2",
         "approved_target": "solver.py",
-        "entries": [
+        "sources": [
             {
                 "path": "solver.py",
                 "content": primary,
-                "digest": source_digest_for_content(primary),
-                "owner": "approved_target",
-                "provenance": "champion_snapshot",
-                "visibility": "full_current",
-                "reason": "ok",
             },
             {
                 "path": "scheduler.py",
                 "content": integration,
-                "digest": source_digest_for_content(integration),
-                "owner": "branch_current_integration",
-                "provenance": "branch_workspace",
-                "visibility": "full_current",
-                "reason": "ok",
             },
         ],
-        "views": {
-            "champion_research": [],
-            "reference": [],
-            "api_reference": ["solver.py"],
-            "integration_full": ["solver.py", "scheduler.py"],
-            "integration_summary": [],
-            "branch_current": ["scheduler.py"],
-            "required_full": [],
-        },
         "target_api_guidance": "",
     }
 
@@ -124,40 +105,28 @@ def _multi_file_patch(primary: str, integration: str):
             ],
             "test_hint": None,
         },
-        context={"proposal_source_ledger": _source_ledger(primary, integration)},
+        context={"editable_source_context": _editable_sources(primary, integration)},
     )
 
 
-def test_source_ledger_requires_one_valid_owner_for_every_file() -> None:
+def test_editable_source_context_requires_unique_canonical_paths() -> None:
     primary = "def solve():\n    return 1\n"
     integration = "def schedule():\n    return 1\n"
-    ledger = _source_ledger(primary, integration)
-
-    assert {
-        entry["path"]: entry["owner"] for entry in ledger["entries"]  # type: ignore[index]
-    } == {
-        "solver.py": "approved_target",
-        "scheduler.py": "branch_current_integration",
+    source_context = _editable_sources(primary, integration)
+    records = source_records_from_context({"editable_source_context": source_context})
+    assert {path: record.content for path, record in records.items()} == {
+        "solver.py": primary,
+        "scheduler.py": integration,
     }
-    _validate_source_ledger(ledger)
 
-    missing_owner = deepcopy(ledger)
-    del missing_owner["entries"][0]["owner"]  # type: ignore[index]
-    with pytest.raises(ValueError, match="unknown or missing keys"):
-        _validate_source_ledger(missing_owner)
-
-    invalid_owner = deepcopy(ledger)
-    invalid_owner["entries"][0]["owner"] = "renderer_guess"  # type: ignore[index]
-    with pytest.raises(ValueError, match="invalid source ledger owner"):
-        _validate_source_ledger(invalid_owner)
-
-    wrong_target_owner = deepcopy(ledger)
-    wrong_target_owner["entries"][0]["owner"] = "champion_api_support"  # type: ignore[index]
-    with pytest.raises(ValueError, match="approved target has invalid owner"):
-        _validate_source_ledger(wrong_target_owner)
+    sources = source_context["sources"]
+    assert isinstance(sources, list)
+    sources.append({"path": "solver.py", "content": primary})
+    with pytest.raises(ValueError, match="duplicate editable source path"):
+        source_records_from_context({"editable_source_context": source_context})
 
 
-def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay(
+def test_direct_multi_file_edit_survives_artifact_and_fixed_replay(
     tmp_path: Path,
 ) -> None:
     campaign_dir = tmp_path / "campaign"
@@ -256,9 +225,10 @@ def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay
     artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
     assert artifact["schema"] == "scion.formal_candidate_patch_artifact.v2"
     normalization_events = artifact["patch"]["normalization_events"]
-    assert {
-        event["repair_kind"] for event in normalization_events
-    } == {"typed_edit_normalization", "typed_edit_noop_dropped"}
+    assert {event["repair_kind"] for event in normalization_events} == {
+        "typed_edit_normalization",
+        "typed_edit_noop_dropped",
+    }
     serial_events = [
         event
         for event in normalization_events
@@ -273,7 +243,8 @@ def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay
         for event in normalization_events
     )
     assert any(
-        event == {
+        event
+        == {
             "repair_kind": "typed_edit_noop_dropped",
             "file_path": "scheduler.py",
             "reason": "exact_replace_noop",
@@ -281,22 +252,8 @@ def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay
         for event in normalization_events
     )
     files = {item["file_path"]: item for item in artifact["patch"]["files"]}
-    assert files["solver.py"]["source_attribution"] == {
-        "schema_version": "formal-file-source-attribution.v1",
-        "origin": "proposal_source_ledger",
-        "source_ledger_owner": "approved_target",
-        "source_provenance": "champion_snapshot",
-        "source_visibility": "full_current",
-        "source_digest": source_digest_for_content(primary),
-    }
-    assert files["scheduler.py"]["source_attribution"] == {
-        "schema_version": "formal-file-source-attribution.v1",
-        "origin": "proposal_source_ledger",
-        "source_ledger_owner": "branch_current_integration",
-        "source_provenance": "branch_workspace",
-        "source_visibility": "full_current",
-        "source_digest": source_digest_for_content(integration),
-    }
+    assert "source_attribution" not in files["solver.py"]
+    assert "source_attribution" not in files["scheduler.py"]
 
     manifest = build_fixed_candidate_replay_manifest(
         campaign_dir,
@@ -320,6 +277,7 @@ def test_direct_multi_file_source_attribution_survives_artifact_and_fixed_replay
     assert (replay_workspace / "scheduler.py").read_text(encoding="utf-8") == (
         patch.additional_changes[0].code_content
     )
+
 
 def test_v3_replay_materializes_cumulative_branch_from_champion(
     tmp_path: Path,
@@ -466,38 +424,37 @@ def test_v3_replay_materializes_cumulative_branch_from_champion(
     r1_artifact = json.loads((campaign_dir / r1_ref).read_text(encoding="utf-8"))
     r2_artifact = json.loads((campaign_dir / r2_ref).read_text(encoding="utf-8"))
     assert r1_artifact["schema"] == "scion.formal_candidate_patch_artifact.v3"
+    assert [entry["file_path"] for entry in r1_artifact["patch"]["files"]] == [
+        "a.py",
+        "b.py",
+    ]
     assert [
-        entry["file_path"] for entry in r1_artifact["patch"]["files"]
-    ] == ["a.py", "b.py"]
-    assert [
-        entry["file_path"]
-        for entry in r1_artifact["replay_materialization"]["files"]
+        entry["file_path"] for entry in r1_artifact["replay_materialization"]["files"]
     ] == ["a.py", "b.py"]
 
     assert r2_artifact["lineage_id"] == branch.lineage_id
     assert r2_artifact["parent_hypothesis_id"] == "h-r1"
     assert r2_artifact["proposal_target_files"] == ["c.py"]
-    assert [
-        entry["file_path"] for entry in r2_artifact["patch"]["files"]
-    ] == ["c.py"]
+    assert [entry["file_path"] for entry in r2_artifact["patch"]["files"]] == ["c.py"]
     assert r2_artifact["target_files"] == ["a.py", "b.py", "c.py"]
     assert r2_artifact["inherited_files"] == ["a.py", "b.py"]
     assert r2_artifact["activation_files"] == []
-    assert r2_artifact["proposal_patch_digest"] == r2_artifact["patch"][
-        "patch_digest"
-    ]
-    assert r2_artifact["formal_patch_digest"] == r2_artifact[
-        "replay_materialization"
-    ]["patch_digest"]
-    assert r2_artifact["replay_identity"]["patch_digest"] == r2_artifact[
-        "formal_patch_digest"
-    ]
-    assert r2_artifact["proposal_patch_digest"] != r2_artifact[
-        "formal_patch_digest"
-    ]
-    assert r2_artifact["replay_materialization"]["candidate_identity_manifest"][
-        "code_hash"
-    ] == branch.current_code_hash
+    assert r2_artifact["proposal_patch_digest"] == r2_artifact["patch"]["patch_digest"]
+    assert (
+        r2_artifact["formal_patch_digest"]
+        == r2_artifact["replay_materialization"]["patch_digest"]
+    )
+    assert (
+        r2_artifact["replay_identity"]["patch_digest"]
+        == r2_artifact["formal_patch_digest"]
+    )
+    assert r2_artifact["proposal_patch_digest"] != r2_artifact["formal_patch_digest"]
+    assert (
+        r2_artifact["replay_materialization"]["candidate_identity_manifest"][
+            "code_hash"
+        ]
+        == branch.current_code_hash
+    )
 
     closure_files = {
         entry["file_path"]: entry
@@ -507,9 +464,7 @@ def test_v3_replay_materializes_cumulative_branch_from_champion(
         assert closure_files[inherited_path]["candidate_attribution"]["scope"] == (
             "inherited_verified"
         )
-        assert closure_files[inherited_path]["source_attribution"]["origin"] == (
-            "inherited_verified_branch"
-        )
+        assert "source_attribution" not in closure_files[inherited_path]
     assert closure_files["c.py"]["candidate_attribution"]["scope"] == (
         "current_proposal"
     )

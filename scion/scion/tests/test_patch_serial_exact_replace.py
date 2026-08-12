@@ -7,39 +7,19 @@ from scion.proposal.engine import ProposalValidationError, _parse_patch
 from scion.proposal.schemas import PATCH_TOOL
 
 
-def _source_ledger(target: str, scheduler: str) -> dict[str, object]:
+def _editable_sources(target: str, scheduler: str) -> dict[str, object]:
     return {
-        "schema_version": "proposal-source-ledger.v2",
         "approved_target": "destroy_repair.py",
-        "entries": [
+        "sources": [
             {
                 "path": "destroy_repair.py",
                 "content": target,
-                "digest": source_digest_for_content(target),
-                "owner": "approved_target",
-                "provenance": "champion_snapshot",
-                "visibility": "full_current",
-                "reason": "ok",
             },
             {
                 "path": "scheduler.py",
                 "content": scheduler,
-                "digest": source_digest_for_content(scheduler),
-                "owner": "champion_api_support",
-                "provenance": "champion_snapshot",
-                "visibility": "full_current",
-                "reason": "ok",
             },
         ],
-        "views": {
-            "champion_research": ["destroy_repair.py", "scheduler.py"],
-            "reference": [],
-            "api_reference": ["destroy_repair.py", "scheduler.py"],
-            "integration_full": ["destroy_repair.py", "scheduler.py"],
-            "integration_summary": [],
-            "branch_current": [],
-            "required_full": [],
-        },
         "target_api_guidance": "",
     }
 
@@ -51,8 +31,7 @@ def _serial_patch(target: str, scheduler: str) -> dict[str, object]:
         "edit_intent": "exact_replace",
         "old_string": "from .state import Route\n\n\n",
         "new_string": (
-            "from .state import Route, route_distance\n\n\n"
-            "CHAIN_LIMIT = 10\n\n\n"
+            "from .state import Route, route_distance\n\n\nCHAIN_LIMIT = 10\n\n\n"
         ),
         "replace_all": False,
         "evidence_refs": [],
@@ -75,9 +54,7 @@ def _serial_patch(target: str, scheduler: str) -> dict[str, object]:
                 "action": "modify",
                 "edit_intent": "exact_replace",
                 "old_string": "from .destroy_repair import greedy\n",
-                "new_string": (
-                    "from .destroy_repair import ejection_chain, greedy\n"
-                ),
+                "new_string": ("from .destroy_repair import ejection_chain, greedy\n"),
                 "replace_all": False,
                 "evidence_refs": [],
             },
@@ -98,31 +75,27 @@ def test_provider_schema_omits_host_source_binding_fields() -> None:
     schema = PATCH_TOOL["input_schema"]
 
     assert "source_digest" not in schema["properties"]
-    assert "source_digest" not in schema["properties"]["additional_changes"][
-        "items"
-    ]["properties"]
+    assert (
+        "source_digest"
+        not in schema["properties"]["additional_changes"]["items"]["properties"]
+    )
     assert "source_digest" not in PATCH_TOOL["description"]
     assert "provenance" not in PATCH_TOOL["description"]
 
 
 def test_parser_derives_source_bindings_for_digest_free_provider_edits() -> None:
     target = "from .state import Route\n\n\ndef greedy():\n    return 1\n"
-    scheduler = (
-        "from .destroy_repair import greedy\n\n\n"
-        "repair_ops = [greedy]\n"
-    )
+    scheduler = "from .destroy_repair import greedy\n\n\nrepair_ops = [greedy]\n"
 
     patch = _parse_patch(
         _serial_patch(target, scheduler),
-        context={"proposal_source_ledger": _source_ledger(target, scheduler)},
+        context={"editable_source_context": _editable_sources(target, scheduler)},
     )
 
     bindings = {
         (
             item["file_path"],
             item["source_digest"],
-            item["source_owner"],
-            item["source_provenance"],
         )
         for item in patch.repair_attribution
         if item.get("action") == "normalized_to_canonical_full_content"
@@ -131,14 +104,10 @@ def test_parser_derives_source_bindings_for_digest_free_provider_edits() -> None
         (
             "destroy_repair.py",
             source_digest_for_content(target),
-            "approved_target",
-            "champion_snapshot",
         ),
         (
             "scheduler.py",
             source_digest_for_content(scheduler),
-            "champion_api_support",
-            "champion_snapshot",
         ),
     }
 
@@ -156,7 +125,7 @@ def test_parser_derives_source_binding_for_full_file_modify() -> None:
             "full_file_reason": "Implement the approved algorithm change.",
             "evidence_refs": [],
         },
-        context={"proposal_source_ledger": _source_ledger(target, scheduler)},
+        context={"editable_source_context": _editable_sources(target, scheduler)},
     )
 
     binding = next(
@@ -165,34 +134,30 @@ def test_parser_derives_source_binding_for_full_file_modify() -> None:
         if item.get("action") == "normalized_to_canonical_full_content"
     )
     assert binding["source_digest"] == source_digest_for_content(target)
-    assert binding["source_owner"] == "approved_target"
 
 
-def test_parser_rejects_tampered_host_source_ledger() -> None:
+def test_parser_rejects_duplicate_editable_source_paths() -> None:
     target = "from .state import Route\n\n\ndef greedy():\n    return 1\n"
     scheduler = "from .destroy_repair import greedy\n"
-    ledger = _source_ledger(target, scheduler)
-    entries = ledger["entries"]
-    assert isinstance(entries, list)
-    entries[0]["digest"] = "0" * 64
+    source_context = _editable_sources(target, scheduler)
+    sources = source_context["sources"]
+    assert isinstance(sources, list)
+    sources.append({"path": "destroy_repair.py", "content": target})
 
-    with pytest.raises(ValueError, match="source ledger digest mismatch"):
+    with pytest.raises(ValueError, match="duplicate editable source path"):
         _parse_patch(
             _serial_patch(target, scheduler),
-            context={"proposal_source_ledger": ledger},
+            context={"editable_source_context": source_context},
         )
 
 
 def test_parser_serially_composes_ordered_same_file_exact_replaces() -> None:
     target = "from .state import Route\n\n\ndef greedy():\n    return 1\n"
-    scheduler = (
-        "from .destroy_repair import greedy\n\n\n"
-        "repair_ops = [greedy]\n"
-    )
+    scheduler = "from .destroy_repair import greedy\n\n\nrepair_ops = [greedy]\n"
 
     patch = _parse_patch(
         _serial_patch(target, scheduler),
-        context={"proposal_source_ledger": _source_ledger(target, scheduler)},
+        context={"editable_source_context": _editable_sources(target, scheduler)},
     )
 
     assert patch.file_path == "destroy_repair.py"
@@ -200,10 +165,7 @@ def test_parser_serially_composes_ordered_same_file_exact_replaces() -> None:
     assert "Route, route_distance" in patch.code_content
     assert len(patch.additional_changes) == 1
     assert patch.additional_changes[0].file_path == "scheduler.py"
-    assert (
-        "import ejection_chain, greedy"
-        in patch.additional_changes[0].code_content
-    )
+    assert "import ejection_chain, greedy" in patch.additional_changes[0].code_content
     assert "[greedy, ejection_chain]" in patch.additional_changes[0].code_content
     compositions = [
         item
@@ -261,7 +223,7 @@ def test_local_exact_replaces_preserve_unmentioned_terminal_return() -> None:
                 }
             ],
         },
-        context={"proposal_source_ledger": _source_ledger(target, scheduler)},
+        context={"editable_source_context": _editable_sources(target, scheduler)},
     )
 
     assert "operators = [two_opt, relocate, swap]" in patch.code_content
@@ -271,10 +233,7 @@ def test_local_exact_replaces_preserve_unmentioned_terminal_return() -> None:
 
 def test_parser_rejects_serial_exact_replaces_in_the_wrong_order() -> None:
     target = "from .state import Route\n\n\ndef greedy():\n    return 1\n"
-    scheduler = (
-        "from .destroy_repair import greedy\n\n\n"
-        "repair_ops = [greedy]\n"
-    )
+    scheduler = "from .destroy_repair import greedy\n\n\nrepair_ops = [greedy]\n"
     raw = _serial_patch(target, scheduler)
     additional = raw["additional_changes"]
     assert isinstance(additional, list)
@@ -290,16 +249,13 @@ def test_parser_rejects_serial_exact_replaces_in_the_wrong_order() -> None:
     ):
         _parse_patch(
             raw,
-            context={"proposal_source_ledger": _source_ledger(target, scheduler)},
+            context={"editable_source_context": _editable_sources(target, scheduler)},
         )
 
 
 def test_parser_rejects_stale_digest_in_later_same_file_edit() -> None:
     target = "from .state import Route\n\n\ndef greedy():\n    return 1\n"
-    scheduler = (
-        "from .destroy_repair import greedy\n\n\n"
-        "repair_ops = [greedy]\n"
-    )
+    scheduler = "from .destroy_repair import greedy\n\n\nrepair_ops = [greedy]\n"
     raw = _serial_patch(target, scheduler)
     additional = raw["additional_changes"]
     assert isinstance(additional, list)
@@ -310,16 +266,13 @@ def test_parser_rejects_stale_digest_in_later_same_file_edit() -> None:
     with pytest.raises(ProposalValidationError, match="stale_source"):
         _parse_patch(
             raw,
-            context={"proposal_source_ledger": _source_ledger(target, scheduler)},
+            context={"editable_source_context": _editable_sources(target, scheduler)},
         )
 
 
 def test_parser_rejects_same_file_exact_replace_mixed_with_full_file() -> None:
     target = "from .state import Route\n\n\ndef greedy():\n    return 1\n"
-    scheduler = (
-        "from .destroy_repair import greedy\n\n\n"
-        "repair_ops = [greedy]\n"
-    )
+    scheduler = "from .destroy_repair import greedy\n\n\nrepair_ops = [greedy]\n"
     raw = _serial_patch(target, scheduler)
     additional = raw["additional_changes"]
     assert isinstance(additional, list)
@@ -339,16 +292,13 @@ def test_parser_rejects_same_file_exact_replace_mixed_with_full_file() -> None:
     ):
         _parse_patch(
             raw,
-            context={"proposal_source_ledger": _source_ledger(target, scheduler)},
+            context={"editable_source_context": _editable_sources(target, scheduler)},
         )
 
 
 def test_parser_rejects_matching_full_file_after_same_file_exact_replace() -> None:
     target = "from .state import Route\n\n\ndef greedy():\n    return 1\n"
-    scheduler = (
-        "from .destroy_repair import greedy\n\n\n"
-        "repair_ops = [greedy]\n"
-    )
+    scheduler = "from .destroy_repair import greedy\n\n\nrepair_ops = [greedy]\n"
     raw = _serial_patch(target, scheduler)
     additional = raw["additional_changes"]
     assert isinstance(additional, list)
@@ -373,5 +323,5 @@ def test_parser_rejects_matching_full_file_after_same_file_exact_replace() -> No
     ):
         _parse_patch(
             raw,
-            context={"proposal_source_ledger": _source_ledger(target, scheduler)},
+            context={"editable_source_context": _editable_sources(target, scheduler)},
         )

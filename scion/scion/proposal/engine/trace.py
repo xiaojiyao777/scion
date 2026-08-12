@@ -8,6 +8,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, Mapping
 
+
 class _TraceWriter:
     """Persist the exact provider request and its terminal response."""
 
@@ -42,6 +43,7 @@ class _TraceWriter:
             "created_at": datetime.now().isoformat(),
             "branch_id": context.get("branch_id"),
             "champion_version": context.get("champion_version"),
+            "structured_context": context,
             "system_blocks": system_blocks,
             "user_prompt": prompt,
             "tool_schema": tool.get("input_schema")

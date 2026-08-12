@@ -11,16 +11,24 @@ from typing import Any, Mapping
 
 from scion.proposal.edit_protocol.errors import (
     PatchEditProtocolError,
+)
+from scion.proposal.edit_protocol.errors import (
     raise_duplicate_file_error as _raise_duplicate_file_error,
 )
 from scion.proposal.edit_protocol.exact_replace import (
     apply_exact_replace as _apply_exact_replace,
+)
+from scion.proposal.edit_protocol.exact_replace import (
     digest_text as _digest_text,
+)
+from scion.proposal.edit_protocol.exact_replace import (
     validate_optional_source_digest as _validate_optional_source_digest,
 )
 from scion.proposal.edit_protocol.source_discovery import (
     SourceRecord,
     source_digest_for_content,
+)
+from scion.proposal.edit_protocol.source_discovery import (
     source_records_from_context as _source_records_from_context,
 )
 from scion.proposal.schemas.patch import (
@@ -68,15 +76,7 @@ def normalize_patch_typed_edits(
     except PatchSchemaPreflightError as exc:
         raise PatchEditProtocolError(str(exc)) from exc
 
-    source_files = {
-        path: record.content for path, record in source_records.items()
-    }
-    source_provenance = {
-        path: record.provenance for path, record in source_records.items()
-    }
-    source_owners = {
-        path: record.owner for path, record in source_records.items()
-    }
+    source_files = {path: record.content for path, record in source_records.items()}
     reject_legacy_code_content = bool(
         (context or {}).get("reject_legacy_code_content_full_file_modify")
     )
@@ -86,8 +86,9 @@ def normalize_patch_typed_edits(
     normalized, metadata = _normalize_patch_set_changes(
         normalized,
         source_files=source_files,
-        source_provenance=source_provenance,
-        source_owners=source_owners,
+        has_source_context=isinstance(
+            (context or {}).get("editable_source_context"), Mapping
+        ),
         reject_legacy_code_content=reject_legacy_code_content,
         allow_host_internal_full_file_modify=allow_host_internal_full_file_modify,
     )
@@ -100,7 +101,7 @@ def _bind_host_source_digests(
     *,
     source_records: Mapping[str, SourceRecord],
 ) -> dict[str, Any]:
-    """Attach source bindings from the validated host ledger, never model echo."""
+    """Bind selectors to the frozen editable source, never a model echo."""
 
     def bind(change: Mapping[str, Any], pointer: str) -> dict[str, Any]:
         bound = dict(change)
@@ -138,8 +139,6 @@ def _normalize_change(
     raw_change: Mapping[str, Any],
     *,
     source_files: Mapping[str, str],
-    source_provenance: Mapping[str, str] | None = None,
-    source_owners: Mapping[str, str] | None = None,
     original_source_files: Mapping[str, str] | None = None,
     change_pointer: str,
     allow_original_source_digest: bool = False,
@@ -255,16 +254,6 @@ def _normalize_change(
         action=action,
         edit_intent=edit_intent,
         before=before,
-        source_provenance=(
-            source_provenance.get(file_path)
-            if source_provenance is not None
-            else None
-        ),
-        source_owner=(
-            source_owners.get(file_path)
-            if source_owners is not None
-            else None
-        ),
         content_after=content_after,
         change_pointer=change_pointer,
         eof_final_newline_tolerated=eof_final_newline_tolerated,
@@ -277,8 +266,7 @@ def _normalize_patch_set_changes(
     normalized: dict[str, Any],
     *,
     source_files: Mapping[str, str],
-    source_provenance: Mapping[str, str] | None = None,
-    source_owners: Mapping[str, str] | None = None,
+    has_source_context: bool = False,
     reject_legacy_code_content: bool = False,
     allow_host_internal_full_file_modify: bool = False,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -324,8 +312,6 @@ def _normalize_patch_set_changes(
         change, change_metadata = _normalize_change(
             slot.raw,
             source_files=source_state,
-            source_provenance=source_provenance,
-            source_owners=source_owners,
             original_source_files=source_files,
             change_pointer=slot.pointer,
             allow_original_source_digest=(
@@ -333,7 +319,7 @@ def _normalize_patch_set_changes(
             ),
             composing_same_file=prior is not None,
             prior_change_pointers=tuple(prior.json_pointers) if prior else (),
-            has_source_context=bool(source_files),
+            has_source_context=has_source_context,
             reject_legacy_code_content=reject_legacy_code_content,
             allow_host_internal_full_file_modify=allow_host_internal_full_file_modify,
         )
@@ -457,10 +443,7 @@ def _validate_same_file_action_sequence(
             prior_change_pointers=tuple(prior.json_pointers),
             detail="delete mixed with create/modify cannot be safely composed",
         )
-    if (
-        actions.intersection({"create", "create_new", "full_file"})
-        and len(actions) > 1
-    ):
+    if actions.intersection({"create", "create_new", "full_file"}) and len(actions) > 1:
         _raise_duplicate_file_error(
             reason="mixed_create_modify",
             file_path=file_path,
@@ -671,13 +654,9 @@ def _validate_existing_file_full_file_modify(
 ) -> None:
     if action != "modify" or allow_host_internal_full_file_modify:
         return
-    if before is not None and (
-        explicit_intent == "full_file" or has_content_after
-    ):
+    if before is not None and (explicit_intent == "full_file" or has_content_after):
         return
-    if before is not None and (
-        not has_code_content or not reject_legacy_code_content
-    ):
+    if before is not None and (not has_code_content or not reject_legacy_code_content):
         return
     content_field = "content_after" if has_content_after else "code_content"
     reason = (
@@ -709,7 +688,7 @@ def _validate_existing_file_full_file_modify(
             "content_after/code_content, provide a non-empty "
             "old_string copied exactly from the current file, and "
             "provide new_string with only the replacement text. "
-            "Use new_string: \"\" for deletion; do not omit new_string or set "
+            'Use new_string: "" for deletion; do not omit new_string or set '
             "it to null. old_string must match exactly once unless "
             "replace_all=true."
         ),
@@ -718,7 +697,7 @@ def _validate_existing_file_full_file_modify(
             "action": "modify",
             "edit_intent": "exact_replace",
             "old_string": "<non-empty exact current text>",
-            "new_string": "<replacement text; use \"\" for deletion>",
+            "new_string": '<replacement text; use "" for deletion>',
             "replace_all": False,
         },
     }
@@ -765,7 +744,7 @@ def _validate_existing_file_create_action(
             "action": "modify",
             "edit_intent": "exact_replace",
             "old_string": "<non-empty exact current text>",
-            "new_string": "<replacement text; use \"\" for deletion>",
+            "new_string": '<replacement text; use "" for deletion>',
             "replace_all": False,
         },
     }
@@ -785,8 +764,6 @@ def _normalization_metadata(
     action: str,
     edit_intent: str,
     before: str | None,
-    source_provenance: str | None = None,
-    source_owner: str | None = None,
     content_after: str,
     change_pointer: str,
     eof_final_newline_tolerated: bool = False,
@@ -810,8 +787,6 @@ def _normalization_metadata(
         "edit_intent": edit_intent,
         "source_digest": _digest_text(change.get("source_digest")) or before_digest,
         "source_record_digest": before_digest,
-        "source_owner": source_owner or "",
-        "source_provenance": source_provenance or "",
         "content_after_digest": after_digest,
         "derived_diff_ref": derived_diff_ref,
         "derived_diff_summary": diff_stats,
@@ -862,14 +837,10 @@ def _diff_stats(before: str | None, after: str) -> dict[str, Any]:
         )
     )
     added = sum(
-        1
-        for line in diff_lines
-        if line.startswith("+") and not line.startswith("+++")
+        1 for line in diff_lines if line.startswith("+") and not line.startswith("+++")
     )
     removed = sum(
-        1
-        for line in diff_lines
-        if line.startswith("-") and not line.startswith("---")
+        1 for line in diff_lines if line.startswith("-") and not line.startswith("---")
     )
     return {
         "before_line_count": len(before.splitlines()),

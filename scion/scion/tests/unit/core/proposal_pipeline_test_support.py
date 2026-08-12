@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import threading
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Mapping
 
@@ -22,12 +22,11 @@ from scion.core.models import (
     VerificationResult,
 )
 from scion.core.proposal_pipeline import ProposalPipeline
-from scion.proposal.engine import ProviderCallDiagnostics
-
-from ..source_ledger_test_support import ledgerize_code_context
 from scion.core.public_refs import contains_absolute_path
-from scion.proposal.engine import ProposalValidationError
+from scion.proposal.engine import ProposalValidationError, ProviderCallDiagnostics
 from scion.proposal.llm_client import LLMBalanceError
+
+from ..editable_source_context_test_support import editable_code_context
 
 
 class FakeProblemRuntime:
@@ -41,9 +40,7 @@ class FakeProblemRuntime:
         return {
             "problem_summary": "fixture",
             "branch_id": kwargs["branch"].branch_id,
-            "research_surfaces": [
-                {"name": "local_search", "kind": "operator"}
-            ],
+            "research_surfaces": [{"name": "local_search", "kind": "operator"}],
             "champion_operators_code": "",
             "champion_stats": {},
         }
@@ -51,26 +48,29 @@ class FakeProblemRuntime:
     def build_code_context(self, **kwargs):
         self.code_kwargs = kwargs
         hypothesis = kwargs["hypothesis"]
-        return ledgerize_code_context({
-            "problem_summary": "fixture",
-            "branch_id": kwargs["branch"].branch_id,
-            "approved_hypothesis": {
-                "hypothesis_text": hypothesis.hypothesis_text,
-                "change_locus": hypothesis.change_locus,
-                "action": hypothesis.action,
+        return editable_code_context(
+            {
+                "problem_summary": "fixture",
+                "branch_id": kwargs["branch"].branch_id,
+                "approved_hypothesis": {
+                    "hypothesis_text": hypothesis.hypothesis_text,
+                    "change_locus": hypothesis.change_locus,
+                    "action": hypothesis.action,
+                    "target_file": hypothesis.target_file,
+                    "predicted_direction": hypothesis.predicted_direction,
+                    "target_weakness": hypothesis.target_weakness,
+                    "expected_effect": hypothesis.expected_effect,
+                    "suggested_weight": hypothesis.suggested_weight,
+                },
                 "target_file": hypothesis.target_file,
-                "predicted_direction": hypothesis.predicted_direction,
-                "target_weakness": hypothesis.target_weakness,
-                "expected_effect": hypothesis.expected_effect,
-                "suggested_weight": hypothesis.suggested_weight,
-            },
-            "target_file": hypothesis.target_file,
-            "target_file_code": "",
-            "operator_interface_spec": "",
-            "editable_patterns": "operators/*.py",
-            "frozen_patterns": "solver.py",
-            "action": hypothesis.action,
-        })
+                "target_file_code": "",
+                "operator_interface_spec": "",
+                "editable_patterns": "operators/*.py",
+                "frozen_patterns": "solver.py",
+                "action": hypothesis.action,
+            }
+        )
+
 
 class FakeCreative:
     def __init__(
@@ -148,6 +148,7 @@ class FakeCreative:
         if call_context is not None:
             self.call_contexts["code"] = dict(call_context)
         return self.generate_code(context), self._diagnostics(snapshot)
+
 
 class FakeBranchController:
     def __init__(self, branches):
@@ -247,7 +248,7 @@ def _pipeline(
                     modify_allowed=True,
                     remove_allowed=False,
                 )
-            ]
+            ],
         )
     runtime = FakeProblemRuntime(spec=problem_spec)
     failures: list[tuple[Branch, FailureEvent]] = []
@@ -278,7 +279,5 @@ def _pipeline(
 
 
 __all__ = [
-    name
-    for name in globals()
-    if not (name.startswith("__") and name.endswith("__"))
+    name for name in globals() if not (name.startswith("__") and name.endswith("__"))
 ]

@@ -1,7 +1,8 @@
 """Helpers for code-generation context assembly."""
+
 from __future__ import annotations
 
-from enum import Enum
+import os
 from typing import Any, Mapping, Optional, Sequence
 
 from scion.core.candidate_disposition import (
@@ -16,8 +17,7 @@ from scion.core.models import (
     StepRecord,
     patch_file_changes,
 )
-from scion.proposal.context.surfaces import _find_research_surface
-from scion.proposal.edit_protocol.source_discovery import source_digest_for_content
+from scion.core.paths import normalize_relative_patch_path
 
 from .io import (
     _list_champion_operator_files,
@@ -26,7 +26,6 @@ from .io import (
     _read_solver_design_context_artifact,
     _read_surface_file,
 )
-
 
 DURABLE_BRANCH_CREATED_FILES_KEY = "verified_branch_created_files"
 DURABLE_BRANCH_TOUCHED_FILES_KEY = "verified_branch_touched_files"
@@ -208,159 +207,26 @@ def _branch_current_context_paths(
         for item in collection or ():
             if not str(item or "").strip():
                 continue
-            rel = _normalize_ledger_path(item)
+            rel = _normalize_source_path(item)
             if rel and rel not in paths:
                 paths.append(rel)
     return tuple(paths)
 
 
-SOURCE_LEDGER_KEY = "proposal_source_ledger"
+EDITABLE_SOURCE_CONTEXT_KEY = "editable_source_context"
 
 
-class SourceLedgerOwner(str, Enum):
-    """The single full-content ownership role for one ledger path."""
-
-    APPROVED_TARGET = "approved_target"
-    BRANCH_CURRENT_INTEGRATION = "branch_current_integration"
-    BRANCH_HELPER = "branch_helper"
-    CHAMPION_API_SUPPORT = "champion_api_support"
+def _normalize_source_path(value: Any) -> str:
+    try:
+        return normalize_relative_patch_path(str(value or ""))
+    except ValueError as exc:
+        raise ValueError(f"invalid editable source path: {value!r}") from exc
 
 
-_LEDGER_KEYS = frozenset({
-    "schema_version", "approved_target", "entries", "views", "target_api_guidance",
-})
-_ENTRY_KEYS = frozenset({
-    "path", "content", "digest", "owner", "provenance", "visibility", "reason",
-})
-_VIEW_KEYS = frozenset({
-    "champion_research", "reference", "api_reference", "integration_full",
-    "integration_summary", "branch_current", "required_full",
-})
-_PROVENANCE_VALUES = frozenset({
-    "branch_history_current",
-    "branch_workspace",
-    "champion_snapshot",
-    "champion_snapshot_fallback",
-    "missing_current_source",
-    "new_file_placeholder",
-})
-_VISIBILITY_VALUES = frozenset({
-    "full_current",
-    "new_file_placeholder",
-    "not_visible",
-})
-_OWNER_PRIORITY = {
-    SourceLedgerOwner.APPROVED_TARGET.value: 0,
-    SourceLedgerOwner.BRANCH_CURRENT_INTEGRATION.value: 1,
-    SourceLedgerOwner.BRANCH_HELPER.value: 2,
-    SourceLedgerOwner.CHAMPION_API_SUPPORT.value: 3,
-}
-_PROVENANCE_PRIORITY = {
-    "branch_history_current": 0,
-    "branch_workspace": 1,
-    "champion_snapshot": 2,
-    "champion_snapshot_fallback": 3,
-    "new_file_placeholder": 4,
-    "missing_current_source": 5,
-}
-
-
-def _normalize_ledger_path(value: Any) -> str:
-    raw = str(value or "").replace("\\", "/")
-    path = raw.lstrip("/")
-    if (
-        not path
-        or raw.startswith("/")
-        or path.split("/", 1)[0].endswith(":")
-        or any(part in {"", ".", ".."} for part in path.split("/"))
-    ):
-        raise ValueError(f"invalid source ledger path: {raw}")
-    return path
-
-
-def _validate_canonical_ledger_path(value: Any) -> str:
-    if not isinstance(value, str):
-        raise ValueError(f"source ledger path must be a string: {value!r}")
-    normalized = _normalize_ledger_path(value)
-    if value != normalized:
-        raise ValueError(f"source ledger path is not canonical: {value}")
-    return normalized
-
-
-def _validate_source_ledger(value: Any) -> dict[str, Any]:
-    if not isinstance(value, Mapping) or set(value) != _LEDGER_KEYS:
-        raise ValueError("source ledger has unknown or missing keys")
-    if value.get("schema_version") != "proposal-source-ledger.v2":
-        raise ValueError("unsupported source ledger schema")
-    if not isinstance(value.get("target_api_guidance"), str):
-        raise ValueError("source ledger target_api_guidance must be a string")
-    entries = value.get("entries")
-    views = value.get("views")
-    if not isinstance(entries, list) or not isinstance(views, Mapping) or set(views) != _VIEW_KEYS:
-        raise ValueError("source ledger entries or views are invalid")
-    paths: set[str] = set()
-    owners: dict[str, str] = {}
-    for entry in entries:
-        if not isinstance(entry, Mapping) or set(entry) != _ENTRY_KEYS:
-            raise ValueError("source ledger entry has unknown or missing keys")
-        path = _validate_canonical_ledger_path(entry.get("path"))
-        if path in paths:
-            raise ValueError(f"duplicate source ledger path: {path}")
-        paths.add(path)
-        content = entry.get("content")
-        digest = entry.get("digest")
-        owner = entry.get("owner")
-        provenance = entry.get("provenance")
-        visibility = entry.get("visibility")
-        reason = entry.get("reason")
-        if owner not in _OWNER_PRIORITY:
-            raise ValueError(f"invalid source ledger owner: {path}")
-        owners[path] = str(owner)
-        if provenance not in _PROVENANCE_VALUES:
-            raise ValueError(f"invalid source ledger provenance: {path}")
-        if visibility not in _VISIBILITY_VALUES:
-            raise ValueError(f"invalid source ledger visibility: {path}")
-        if not isinstance(reason, str):
-            raise ValueError(f"invalid source ledger reason: {path}")
-        visible = visibility == "full_current"
-        if visible and (not isinstance(content, str) or digest != source_digest_for_content(content)):
-            raise ValueError(f"source ledger digest mismatch: {path}")
-        if not visible and (content is not None or digest is not None):
-            raise ValueError(f"non-visible source ledger entry owns content: {path}")
-        if visibility == "new_file_placeholder" and provenance != "new_file_placeholder":
-            raise ValueError(f"source ledger placeholder provenance mismatch: {path}")
-        if visibility == "not_visible" and provenance != "missing_current_source":
-            raise ValueError(f"source ledger missing provenance mismatch: {path}")
-        if visible and provenance in {"missing_current_source", "new_file_placeholder"}:
-            raise ValueError(f"source ledger visible provenance mismatch: {path}")
-    target = _validate_canonical_ledger_path(value.get("approved_target"))
-    if target not in paths:
-        raise ValueError("source ledger approved target has no entry")
-    if owners[target] != SourceLedgerOwner.APPROVED_TARGET.value:
-        raise ValueError("source ledger approved target has invalid owner")
-    if any(
-        path != target and owner == SourceLedgerOwner.APPROVED_TARGET.value
-        for path, owner in owners.items()
-    ):
-        raise ValueError("source ledger has multiple approved target owners")
-    for name, members in views.items():
-        if not isinstance(members, list):
-            raise ValueError(f"source ledger view is invalid: {name}")
-        normalized_members = [
-            _validate_canonical_ledger_path(path) for path in members
-        ]
-        if len(normalized_members) != len(set(normalized_members)):
-            raise ValueError(f"source ledger view is invalid: {name}")
-        if any(path not in paths for path in normalized_members):
-            raise ValueError(f"source ledger view has unknown path: {name}")
-    return dict(value)
-
-
-def _build_code_source_ledger(
+def _build_editable_source_context(
     *,
     champion: ChampionState,
     research_surfaces: list[Any],
-    change_locus: str,
     source_root: str,
     target_file: Optional[str],
     target_action: str,
@@ -369,84 +235,48 @@ def _build_code_source_ledger(
     branch_touched_files: Sequence[str] = (),
     branch_current_file_sources: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
-    """Collect one complete primitive source owner per repository path."""
+    """Collect each current editable source once, with no identity metadata."""
 
-    target = _normalize_ledger_path(target_file)
-    branch_paths = _branch_current_context_paths(branch_created_files, branch_touched_files)
+    target = _normalize_source_path(target_file)
+    branch_paths = _branch_current_context_paths(
+        branch_created_files, branch_touched_files
+    )
     overrides = branch_current_file_sources or {}
-    entries: dict[str, dict[str, Any]] = {}
-    owner_scores: dict[str, tuple[int, int]] = {}
+    sources: dict[str, str | None] = {}
 
-    def add(
-        rel: str,
-        *,
-        owner: str,
-        helper: bool = False,
-        target_entry: bool = False,
-        champion_only: bool = False,
-    ) -> None:
-        path = _normalize_ledger_path(rel)
-        if target_entry and path in overrides:
-            artifact = {
-                "source": "branch_history_current",
-                "readable": True,
-                "reason": "ok",
-                "content": overrides[path],
-            }
-        else:
-            artifact = _read_solver_design_context_artifact(
-                path,
-                source_root=(champion.code_snapshot_path if champion_only else source_root),
-                champion_root=champion.code_snapshot_path,
-                source_overrides=overrides,
-                allow_champion_fallback=(False if helper or target_entry else path not in branch_paths),
-            )
-        readable = bool(artifact.get("readable"))
-        if (
-            readable
-            and path in branch_paths
-            and artifact.get("source") == "branch_workspace"
-        ):
-            artifact = {**artifact, "source": "branch_history_current"}
-        if target_entry and target_action == "create_new" and not readable:
-            provenance, visibility = "new_file_placeholder", "new_file_placeholder"
-        else:
-            provenance = str(artifact.get("source") or "missing_current_source")
-            visibility = "full_current" if readable else "not_visible"
-        content = str(artifact.get("content") or "") if readable else None
-        entry = {
-            "path": path,
-            "content": content,
-            "digest": source_digest_for_content(content) if content is not None else None,
-            "owner": owner,
-            "provenance": provenance,
-            "visibility": visibility,
-            "reason": str(artifact.get("reason") or ""),
-        }
-        score = (
-            _OWNER_PRIORITY[owner],
-            _PROVENANCE_PRIORITY.get(provenance, 99),
-        )
-        previous_score = owner_scores.get(path)
-        if previous_score is not None and previous_score <= score:
+    def add(rel: str) -> None:
+        path = _normalize_source_path(rel)
+        if path in sources:
             return
-        entries[path] = entry
-        owner_scores[path] = score
+        if (
+            path in branch_paths
+            and path not in overrides
+            and _same_source_root(source_root, champion.code_snapshot_path)
+        ):
+            sources[path] = None
+            return
+        artifact = _read_solver_design_context_artifact(
+            path,
+            source_root=source_root,
+            champion_root=champion.code_snapshot_path,
+            source_overrides=overrides,
+            # A durable branch touch makes absence authoritative. Falling back
+            # would silently resurrect a deleted helper from the champion.
+            allow_champion_fallback=path not in branch_paths,
+        )
+        content = artifact.get("content")
+        sources[path] = (
+            content if artifact.get("readable") and isinstance(content, str) else None
+        )
 
-    add(target, owner="approved_target", target_entry=True)
+    add(target)
     operator_paths = _list_champion_operator_files(champion)
     surface_paths = _list_champion_surface_files(
         champion, research_surfaces=research_surfaces
     )
     champion_paths = list(dict.fromkeys([*operator_paths, *surface_paths]))
     for path in champion_paths:
-        add(path, owner="champion_api_support", champion_only=True)
-    surface = _find_research_surface(research_surfaces, change_locus)
-    reference_paths = (
-        operator_paths
-        if surface is None or getattr(surface, "kind", "operator") == "operator"
-        else []
-    )
+        add(path)
     api_paths = list(
         dict.fromkeys(
             [
@@ -455,30 +285,30 @@ def _build_code_source_ledger(
             ]
         )
     )
-    full_paths = list(_solver_design_integration_full_files(provider, fallback=(target,)))
+    full_paths = list(
+        _solver_design_integration_full_files(provider, fallback=(target,))
+    )
     summary_paths = list(_solver_design_integration_summary_files(provider))
     for path in dict.fromkeys([*api_paths]):
-        add(path, owner="champion_api_support")
+        add(path)
     for path in dict.fromkeys([*full_paths, *summary_paths]):
-        add(path, owner="branch_current_integration")
+        add(path)
     for path in branch_paths:
-        add(path, owner="branch_helper", helper=True)
-    ledger = {
-        "schema_version": "proposal-source-ledger.v2",
+        add(path)
+    if target_action not in {"create", "create_new"} and sources[target] is None:
+        raise ValueError(f"approved modify target has no current source: {target}")
+    return {
         "approved_target": target,
-        "entries": list(entries.values()),
-        "views": {
-            "champion_research": champion_paths,
-            "reference": reference_paths,
-            "api_reference": api_paths,
-            "integration_full": full_paths,
-            "integration_summary": summary_paths,
-            "branch_current": list(branch_paths),
-            "required_full": [],
-        },
+        "sources": [
+            {"path": path, "content": content} for path, content in sources.items()
+        ],
         "target_api_guidance": _solver_design_target_api_guidance(provider, target),
     }
-    return _validate_source_ledger(ledger)
+
+
+def _same_source_root(left: str, right: str) -> bool:
+    return bool(left and right) and os.path.realpath(left) == os.path.realpath(right)
+
 
 def _solver_design_api_manifest_files(
     provider: Any | None,
@@ -541,7 +371,7 @@ def _provider_string_sequence(
     for item in raw_items or ():
         if not str(item or "").strip():
             continue
-        rel = _normalize_ledger_path(item)
+        rel = _normalize_source_path(item)
         if rel and rel not in items:
             items.append(rel)
     if items:
@@ -550,7 +380,7 @@ def _provider_string_sequence(
     for item in fallback:
         if not str(item or "").strip():
             continue
-        rel = _normalize_ledger_path(item)
+        rel = _normalize_source_path(item)
         if rel and rel not in fallback_items:
             fallback_items.append(rel)
     return tuple(fallback_items)

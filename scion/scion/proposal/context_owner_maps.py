@@ -23,10 +23,17 @@ HYPOTHESIS_CONTEXT_OWNER_MAP = {
     **_owners(
         "static.problem",
         (
-            "problem_summary", "problem_object", "solver_mechanics",
-            "champion_version", "research_surfaces", "available_actions",
-            "existing_target_files", "create_path_patterns", "champion_stats",
-            "objective_policy_guidance", "problem_measurement_diagnostics",
+            "problem_summary",
+            "problem_object",
+            "solver_mechanics",
+            "champion_version",
+            "research_surfaces",
+            "available_actions",
+            "existing_target_files",
+            "create_path_patterns",
+            "champion_stats",
+            "objective_policy_guidance",
+            "problem_measurement_diagnostics",
         ),
     ),
     **_owners(
@@ -36,7 +43,9 @@ HYPOTHESIS_CONTEXT_OWNER_MAP = {
     **_owners(
         "static.task_constraints",
         (
-            "branch_id", "research_question", "seed",
+            "branch_id",
+            "research_question",
+            "seed",
         ),
     ),
     **_owners(
@@ -55,10 +64,15 @@ CODE_CONTEXT_OWNER_MAP = {
     **_owners(
         "static.problem",
         (
-            "problem_summary", "problem_object", "solver_mechanics",
-            "champion_version", "research_surface", "operator_interface_spec",
+            "problem_summary",
+            "problem_object",
+            "solver_mechanics",
+            "champion_version",
+            "research_surface",
+            "operator_interface_spec",
             "import_whitelist",
-            "active_subject_code_constraints", "problem_id",
+            "active_subject_code_constraints",
+            "problem_id",
         ),
     ),
     **_owners(
@@ -67,12 +81,14 @@ CODE_CONTEXT_OWNER_MAP = {
     ),
     **_owners(
         "static.source_index",
-        ("proposal_source_ledger",),
+        ("editable_source_context",),
     ),
     **_owners(
         "static.task_constraints",
         (
-            "branch_id", "editable_patterns", "frozen_patterns",
+            "branch_id",
+            "editable_patterns",
+            "frozen_patterns",
             "seed",
         ),
     ),
@@ -100,7 +116,7 @@ _EXTRACTORS = {
                 "problem_summary",
                 "branch_id",
                 "approved_hypothesis",
-                "proposal_source_ledger",
+                "editable_source_context",
                 "operator_interface_spec",
                 "editable_patterns",
                 "frozen_patterns",

@@ -796,15 +796,29 @@ the complete source, named the correct owner/symbol and stayed focused on
 solver mechanisms. C is the observed fidelity bottleneck despite seeing the
 same complete 11-file union, but the completed strict-diff treatment failed
 exact source application in all four fixtures. R51 closes that direction
-instead of adding a shell, tool loop or repair gate. Before any later provider
-campaign, the visible projection will make a net reduction:
-campaign/branch/version IDs, schema/taint and repeated
-`Decision-excluded` notices, negative frozen patterns and duplicated API/edit
-rules move to trace or Contract, while objective/invariants, mechanics, legal
-positive surfaces, complete current source, screening-level algorithm evidence
-and the latest actionable rejection remain. Potential absolute-objective,
-headroom or case-structure additions wait for the provider-free measurement
-diagnosis and remain proposal context only.
+instead of adding a shell, tool loop or repair gate. The subsequent R52
+research-hot-path subtraction is complete across nine production files at
+`+273/-551`, net `-278`. `proposal_source_ledger` and its owner, provenance,
+view and self-proof machinery are deleted. One ordinary
+`editable_source_context` holds the approved target, unique canonical
+path/content values and consolidated positive Warehouse/CVRP API, object-model
+and legal-surface guidance. Branch-current history/workspace source takes
+precedence over champion;
+a touched-missing helper does not fall back to champion; `None` remains distinct
+from an existing empty file; and create/modify behavior stays strict. The exact
+selector digest remains only as runtime content binding.
+
+H provider input now excludes recursive host/control metadata while retaining
+the complete research science, source and evidence. C provider input is exactly
+the approved hypothesis plus `editable_source_context`. The complete raw
+structured context remains durable in trace, and Contract continues to own
+negative path/import/edit constraints. No gate, Trust/Hash authority, ledger or
+provider tool loop was added. Main focused regression passed 169 tests and an
+independent expanded run passed 207. The real CVRP direct outer smoke passed
+once in 32.70 seconds. The Warehouse outer smoke traversed the complete V3
+chain, then failed only at an unrelated dirty V8 `typed_telemetry_summary`
+assertion; it is therefore not recorded as passing. Potential objective,
+headroom or case-structure additions remain separate scientific questions.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1002,19 +1016,15 @@ checkpoints.
 
 ## Known residuals
 
-1. CVRP H input grew about 20.7k -> 47.3k -> 73.7k -> 100.2k tokens across
-   four rounds because prior evidence and telemetry were repeated in full;
-   Warehouse production similarly reached 83.8k by its final H. The correction
-   keeps complete raw lineage but uses the fixed V3 semantic view:
-   recent current attempts detailed, older current evidence structured, and
-   sibling state brief. It is not token-triggered truncation, top-k selection,
-   an opaque summary or a gate. C now sees plain path/content rather than
-   owner, digest, provenance or view metadata. A legacy internal source ledger
-   remains host-only; it is not provider-visible authority, a gate, or a
-   research-path blocker. After the frozen C-expression A/B, it is queued for a
-   source-binding simplification to ordinary path/content/API context with at
-   least 150 net production lines deleted; no replacement identity, digest or
-   ledger layer is allowed.
+1. CVRP H input historically grew about 20.7k -> 47.3k -> 73.7k -> 100.2k
+   tokens across four rounds; Warehouse production similarly reached 83.8k by
+   its final H. R52 now keeps complete raw lineage and research evidence while
+   removing host/control wrappers from the provider projection. C receives one
+   ordinary approved-target/path/content/API context, with no legacy source
+   ledger, owner/provenance/view metadata or self-rehashing validation. This is
+   semantic projection rather than token-triggered truncation, top-k selection,
+   an opaque summary or a gate. Future prompt growth still needs observation,
+   but no further compression is justified by size alone.
 2. Warehouse lacks direct per-operator invocation counts, and CVRP R4 lacks
    fast/fallback/2-opt-probe counters.  Conclusions therefore keep the narrower
    candidate-level or association-only attribution.
@@ -1088,8 +1098,11 @@ and one negative. R50 is complete provider-free descriptive diagnosis, not a
 promotion or recovery result. The complete one-off driver/test source remains
 experiment-owned and is not committed into Scion. H-context A/B is not
 triggered by the seven audited H calls. The C-expression A/B is terminal under
-R51: retain exact and close strict diff. This status does not design or
-preregister a later experiment.
+R51: retain exact and close strict diff. R52 then closes the provider/source
+subtraction by net deletion while keeping raw trace completeness and runtime
+source binding. The remaining task boundary is solver evidence: CVRP still
+needs a fresh clean screening -> validation -> frozen promotion and independent
+B0 retention. This status does not design or preregister that later experiment.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are

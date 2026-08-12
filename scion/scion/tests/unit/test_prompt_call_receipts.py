@@ -6,10 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from .source_ledger_test_support import ledgerize_code_context
-
-import scion.proposal.engine.provider_call as provider_call
-import scion.proposal.engine.hypothesis_prompts as hypothesis_prompts
 from scion.core.models import (
     Branch,
     BranchState,
@@ -34,11 +30,13 @@ from scion.proposal.engine import (
     CreativeLayer,
     ProposalValidationError,
     build_prompt_turn_snapshot,
+    hypothesis_prompts,
+    provider_call,
     provider_call_diagnostics_from_error,
 )
 from scion.proposal.llm_client import (
-    LLMFormatError,
     LLMClient,
+    LLMFormatError,
     LLMProviderError,
 )
 from scion.proposal.schemas import HYPOTHESIS_TOOL, PATCH_TOOL
@@ -47,6 +45,7 @@ from scion.protocol.experiment.proposal_evidence import (
 )
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
+from .editable_source_context_test_support import editable_code_context
 
 _HYPOTHESIS_RESPONSE = {
     "hypothesis_text": "Try one bounded local improvement move.",
@@ -67,15 +66,52 @@ _PATCH_RESPONSE = {
     "evidence_refs": [],
 }
 
+_PROVIDER_HOST_CONTROL_KEYS = frozenset(
+    {
+        "branch_id",
+        "champion_version",
+        "schema_version",
+        "taint",
+        "proposal_visibility_only",
+        "decision_features_excluded",
+        "llm_trace_excluded",
+        "gate_influence",
+    }
+)
+
+
+def _without_provider_host_control(value):
+    if isinstance(value, dict):
+        return {
+            key: _without_provider_host_control(child)
+            for key, child in value.items()
+            if key not in _PROVIDER_HOST_CONTROL_KEYS
+        }
+    if isinstance(value, list):
+        return [_without_provider_host_control(child) for child in value]
+    return value
+
+
+def _nested_keys(value) -> set[str]:
+    if isinstance(value, dict):
+        keys = set(value)
+        for child in value.values():
+            keys.update(_nested_keys(child))
+        return keys
+    if isinstance(value, list):
+        keys = set()
+        for child in value:
+            keys.update(_nested_keys(child))
+        return keys
+    return set()
+
 
 def test_patch_tool_consistently_supports_ordered_same_file_exact_replace() -> None:
     guidance = "multiple ordered exact_replace change objects"
     assert guidance in PATCH_TOOL["description"]
     schema_guidance = " ".join(
         (
-            PATCH_TOOL["input_schema"]["properties"]["edit_intent"][
-                "description"
-            ],
+            PATCH_TOOL["input_schema"]["properties"]["edit_intent"]["description"],
             PATCH_TOOL["input_schema"]["properties"]["additional_changes"][
                 "description"
             ],
@@ -115,9 +151,7 @@ class _CaptureClient:
         self.error = error
         self.response = dict(response or _HYPOTHESIS_RESPONSE)
         self.response_diagnostics = (
-            dict(response_diagnostics)
-            if response_diagnostics is not None
-            else None
+            dict(response_diagnostics) if response_diagnostics is not None else None
         )
         self.expected_tool = expected_tool
         self.calls: list[tuple[str, list[dict], str]] = []
@@ -132,9 +166,7 @@ class _CaptureClient:
         request_kind=None,
     ):
         del model
-        self.calls.append(
-            (str(prompt), list(system_blocks or []), str(request_kind))
-        )
+        self.calls.append((str(prompt), list(system_blocks or []), str(request_kind)))
         self.tools.append(json.loads(json.dumps(tool)))
         if self.error is not None:
             raise self.error
@@ -203,27 +235,29 @@ def _hypothesis_context() -> dict:
 
 
 def _code_context() -> dict:
-    return ledgerize_code_context({
-        "problem_summary": "Synthetic routing control.",
-        "target_file": "operators/bounded_receipt.py",
-        "target_file_code": "",
-        "action": "create_new",
-        "approved_hypothesis": {
-            "hypothesis_text": "Try one local improvement move.",
-            "change_locus": "local_search",
-            "action": "create_new",
+    return editable_code_context(
+        {
+            "problem_summary": "Synthetic routing control.",
             "target_file": "operators/bounded_receipt.py",
-            "predicted_direction": "improve",
-            "target_weakness": "The current solver lacks this move.",
-            "expected_effect": "Improve screening outcomes.",
-        },
-        "operator_interface_spec": "",
-        "research_surface": {"name": "local_search", "kind": "operator"},
-        "editable_patterns": ["operators/*.py"],
-        "frozen_patterns": ["solver.py"],
-        "branch_id": "branch-receipt",
-        "champion_version": 1,
-    })
+            "target_file_code": "",
+            "action": "create_new",
+            "approved_hypothesis": {
+                "hypothesis_text": "Try one local improvement move.",
+                "change_locus": "local_search",
+                "action": "create_new",
+                "target_file": "operators/bounded_receipt.py",
+                "predicted_direction": "improve",
+                "target_weakness": "The current solver lacks this move.",
+                "expected_effect": "Improve screening outcomes.",
+            },
+            "operator_interface_spec": "",
+            "research_surface": {"name": "local_search", "kind": "operator"},
+            "editable_patterns": ["operators/*.py"],
+            "frozen_patterns": ["solver.py"],
+            "branch_id": "branch-receipt",
+            "champion_version": 1,
+        }
+    )
 
 
 def _trace_from_ref(root: Path, trace_ref: str) -> dict:
@@ -258,12 +292,10 @@ def test_provider_call_uses_one_snapshot_for_trace_and_provider(
     assert trace["user_prompt"] == snapshot.user_prompt
     assert "prompt_hash" not in trace
     assert "prompt_manifest" not in trace
-    assert client.tools[0]["input_schema"]["properties"]["change_locus"][
-        "enum"
-    ] == ["local_search"]
-    assert "enum" not in HYPOTHESIS_TOOL["input_schema"]["properties"][
-        "change_locus"
+    assert client.tools[0]["input_schema"]["properties"]["change_locus"]["enum"] == [
+        "local_search"
     ]
+    assert "enum" not in HYPOTHESIS_TOOL["input_schema"]["properties"]["change_locus"]
     assert trace["tool_schema"]["properties"]["change_locus"]["enum"] == [
         "local_search"
     ]
@@ -315,9 +347,9 @@ def test_provider_response_cannot_append_description_to_change_locus(
         creative.generate_direct_hypothesis(context, snapshot)
 
     assert len(client.calls) == 1
-    assert client.tools[0]["input_schema"]["properties"]["change_locus"][
-        "enum"
-    ] == ["local_search"]
+    assert client.tools[0]["input_schema"]["properties"]["change_locus"]["enum"] == [
+        "local_search"
+    ]
     diagnostics = provider_call_diagnostics_from_error(caught.value)
     assert diagnostics is not None
     assert diagnostics.provider_ok is True
@@ -341,9 +373,10 @@ def test_hypothesis_tool_enum_is_generic_across_visible_surfaces(
 
     creative.generate_direct_hypothesis(context, snapshot)
 
-    assert client.tools[0]["input_schema"]["properties"]["change_locus"][
-        "enum"
-    ] == ["local_search", "construction"]
+    assert client.tools[0]["input_schema"]["properties"]["change_locus"]["enum"] == [
+        "local_search",
+        "construction",
+    ]
 
 
 @pytest.mark.parametrize(
@@ -378,9 +411,7 @@ def test_provider_call_uses_frozen_owned_context_value(
     turn = build_prompt_turn_snapshot("hypothesis", raw_context)
     authority = turn.authoritative_context
     assert authority is not None
-    provider_context = authority.inputs.provider_context(
-        include_renderer_inputs=True
-    )
+    provider_context = authority.inputs.provider_context(include_renderer_inputs=True)
 
     _, diagnostics = creative.generate_direct_hypothesis(
         provider_context,
@@ -388,7 +419,9 @@ def test_provider_call_uses_frozen_owned_context_value(
     )
 
     assert diagnostics.ok is True
-    assert authority.inputs.provider_context(include_renderer_inputs=True) == raw_context
+    assert (
+        authority.inputs.provider_context(include_renderer_inputs=True) == raw_context
+    )
 
     original_call_count = len(client.calls)
     with pytest.raises(ValueError, match="provider context differs"):
@@ -427,9 +460,7 @@ def test_provider_call_context_is_trace_diagnostics_only(
     snapshot = build_prompt_turn_snapshot("hypothesis", raw_context)
     authority = snapshot.authoritative_context
     assert authority is not None
-    provider_context = authority.inputs.provider_context(
-        include_renderer_inputs=True
-    )
+    provider_context = authority.inputs.provider_context(include_renderer_inputs=True)
     call_context = {
         "schema_version": "proposal-call-context.v1",
         "campaign_id": "campaign-host-only-sentinel",
@@ -502,8 +533,7 @@ def test_direct_context_preserves_complete_authoritative_inputs(
         "champion_stats": {"marker": sentinels["champion_stats"]},
         "branch_current_code": sentinels["branch_code"],
         "experiment_history": [
-            {"round_num": index, "marker": f"round-{index}"}
-            for index in range(8)
+            {"round_num": index, "marker": f"round-{index}"} for index in range(8)
         ]
         + [
             {
@@ -519,6 +549,12 @@ def test_direct_context_preserves_complete_authoritative_inputs(
         ],
         "problem_measurement_diagnostics": {
             "measurement_context": sentinels["measurement"],
+            "schema_version": "host-schema-control",
+            "taint": "host-taint-control",
+            "proposal_visibility_only": True,
+            "decision_features_excluded": True,
+            "llm_trace_excluded": True,
+            "gate_influence": False,
         },
         "research_question": {
             "schema_version": "scion.typed_research_question.v2",
@@ -527,14 +563,19 @@ def test_direct_context_preserves_complete_authoritative_inputs(
         },
         "proposal_renderer_inputs": {
             "solver_design_prompt_guidance": {
-                "hypothesis_guidance": [
-                    "Use the complete source and evidence once."
-                ]
+                "hypothesis_guidance": ["Use the complete source and evidence once."]
             }
         },
     }
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
     assert client.calls == []
+    assert snapshot.authoritative_context is not None
+    assert (
+        snapshot.authoritative_context.inputs.provider_context(
+            include_renderer_inputs=True
+        )
+        == context
+    )
 
     _, diagnostics = creative.generate_direct_hypothesis(context, snapshot)
 
@@ -572,8 +613,12 @@ def test_direct_context_preserves_complete_authoritative_inputs(
         hypothesis_prompts._DIRECT_V3_STATIC_CONTEXT_KEYS & set(context)
     )
     assert set(evidence_payload) == (
-        set(context) - hypothesis_prompts._DIRECT_V3_STATIC_CONTEXT_KEYS
+        set(context)
+        - hypothesis_prompts._DIRECT_V3_STATIC_CONTEXT_KEYS
+        - {"branch_id", "champion_version"}
     )
+    provider_payload = {**static_payload, **evidence_payload}
+    assert not (_nested_keys(provider_payload) & _PROVIDER_HOST_CONTROL_KEYS)
     assert evidence_payload["branch_current_code"] == sentinels["branch_code"]
     for forbidden_marker in (
         "compact_research_signals.v1",
@@ -593,6 +638,9 @@ def test_direct_context_preserves_complete_authoritative_inputs(
     ]
     assert trace["system_blocks"] == list(snapshot.system_blocks)
     assert trace["user_prompt"] == snapshot.user_prompt
+    assert trace["structured_context"] == context
+    assert trace["branch_id"] == context["branch_id"]
+    assert trace["champion_version"] == context["champion_version"]
     assert "prompt_hash" not in trace
     assert "prompt_manifest" not in trace
 
@@ -676,8 +724,7 @@ def test_cvrp_research_prior_reaches_actual_hypothesis_provider_request(
         assert hidden_detail not in provider_bytes
     assert "algorithmically material hypothesis" in provider_bytes
     assert (
-        "one evidence-grounded mechanism-level change or refinement"
-        in provider_prompt
+        "one evidence-grounded mechanism-level change or refinement" in provider_prompt
     )
     assert "materially different mechanism" not in provider_bytes
     assert diagnostics.trace_ref is not None
@@ -821,7 +868,21 @@ def test_actual_h_provider_gets_latest_cvrp_evidence_once(
         problem_spec=legacy,
         step_history=[screening],
     )
+    raw_mechanism = context["experiment_history"][0]["experiment_evidence"][
+        "mechanism_evidence"
+    ]
+    assert raw_mechanism == mechanism
     snapshot = build_prompt_turn_snapshot("hypothesis", context)
+    assert snapshot.authoritative_context is not None
+    snapshot_context = snapshot.authoritative_context.inputs.provider_context(
+        include_renderer_inputs=True
+    )
+    assert (
+        snapshot_context["experiment_history"][0]["experiment_evidence"][
+            "mechanism_evidence"
+        ]
+        == mechanism
+    )
     response = {
         **_HYPOTHESIS_RESPONSE,
         "change_locus": "solver_design",
@@ -829,7 +890,9 @@ def test_actual_h_provider_gets_latest_cvrp_evidence_once(
         "target_file": "policies/baseline_modules/destroy_repair.py",
     }
     client = _CaptureClient(response=response)
-    CreativeLayer(client, trace_dir=str(tmp_path / "traces")).generate_direct_hypothesis(
+    CreativeLayer(
+        client, trace_dir=str(tmp_path / "traces")
+    ).generate_direct_hypothesis(
         context,
         snapshot,
     )
@@ -848,15 +911,15 @@ def test_actual_h_provider_gets_latest_cvrp_evidence_once(
             "losses": 0,
             "ties": 0,
             "win_rate": 1.0,
-                "dominant_result": "win",
-                "seed_pattern": "uniform",
-                "median_deltas": {"total_distance": 3.75},
+            "dominant_result": "win",
+            "seed_pattern": "uniform",
+            "median_deltas": {"total_distance": 3.75},
             "decisive_metric": "total_distance",
             "seed_consistency": 1.0,
             "case_features": {"dimension": 64, "size_bucket": "medium"},
         }
     ]
-    assert latest["mechanism_evidence"] == mechanism
+    assert latest["mechanism_evidence"] == _without_provider_host_control(mechanism)
     ejection_prior = next(
         line
         for line in CROSS_CAMPAIGN_RESEARCH_PRIOR
@@ -898,6 +961,74 @@ def test_code_provider_call_preserves_prompt_value(tmp_path: Path) -> None:
     assert "prompt_manifest" not in trace
 
 
+def test_code_prompt_trace_and_parser_share_one_frozen_source_value(
+    tmp_path: Path,
+) -> None:
+    source_before = "FROZEN_SOURCE_MARKER = 'before'\n"
+    source_after = "FROZEN_SOURCE_MARKER = 'after'\n"
+    caller_mutation = "MUTATED_CALLER_MARKER = True\n"
+    response = {
+        "file_path": "operators/bounded_receipt.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "old_string": source_before,
+        "new_string": source_after,
+        "replace_all": False,
+        "evidence_refs": [],
+    }
+    client = _CaptureClient(response=response, expected_tool="generate_patch")
+    creative = CreativeLayer(client, trace_dir=str(tmp_path / "traces"))
+    raw_context = _code_context()
+    raw_context["approved_hypothesis"].update(
+        {
+            "action": "modify",
+            "target_file": "operators/bounded_receipt.py",
+        }
+    )
+    raw_context["editable_source_context"] = {
+        "approved_target": "operators/bounded_receipt.py",
+        "sources": [
+            {
+                "path": "operators/bounded_receipt.py",
+                "content": source_before,
+            }
+        ],
+        "target_api_guidance": "Keep bounded_receipt callable.",
+    }
+    turn = build_prompt_turn_snapshot("code", raw_context)
+    authority = turn.authoritative_context
+    assert authority is not None
+
+    raw_context["editable_source_context"]["sources"][0]["content"] = caller_mutation
+    frozen_context = authority.inputs.provider_context(include_renderer_inputs=True)
+    patch, diagnostics = creative.generate_direct_code(frozen_context, turn)
+
+    assert diagnostics.trace_ref is not None
+    trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
+    provider_context = json.loads(client.calls[0][1][1]["text"].split("\n", 1)[1])
+    provider_source = provider_context["editable_source_context"]["sources"][0]
+    trace_source = trace["structured_context"]["editable_source_context"]["sources"][0]
+    assert set(provider_context) == {
+        "approved_hypothesis",
+        "editable_source_context",
+    }
+    assert provider_source["content"] == source_before
+    assert trace_source["content"] == source_before
+    assert patch.code_content == source_after
+    assert trace["structured_context"] == frozen_context
+    assert trace["structured_context"]["problem_summary"] == (
+        "Synthetic routing control."
+    )
+    provider_and_trace = json.dumps(
+        {
+            "system_blocks": client.calls[0][1],
+            "structured_context": trace["structured_context"],
+        },
+        sort_keys=True,
+    )
+    assert caller_mutation not in provider_and_trace
+
+
 def test_direct_hypothesis_and_code_use_provider_managed_output_without_cap(
     tmp_path: Path,
 ) -> None:
@@ -923,9 +1054,7 @@ def test_direct_hypothesis_and_code_use_provider_managed_output_without_cap(
     for diagnostics in (hypothesis_diagnostics, code_diagnostics):
         assert diagnostics.trace_ref is not None
         trace = _trace_from_ref(tmp_path, diagnostics.trace_ref)
-        assert trace["request_policy"]["output_token_policy"] == (
-            "provider_managed"
-        )
+        assert trace["request_policy"]["output_token_policy"] == ("provider_managed")
         assert trace["request_policy"]["output_token_parameter"] == "omitted"
         assert "max_tokens" not in trace["request_policy"]
         assert "truncation_retries" not in trace["request_policy"]
@@ -1064,9 +1193,7 @@ def test_provider_response_mechanical_diagnostics_reach_trace_and_call_result(
         "selected_choice_index": 0,
         "selected_choice_index_scope": "response.choices",
         "selected_tool_call_index": 0,
-        "selected_tool_call_index_scope": (
-            "response.choices[0].message.tool_calls"
-        ),
+        "selected_tool_call_index_scope": ("response.choices[0].message.tool_calls"),
         "selected_tool_name": "generate_hypothesis",
         "selected_arguments_bytes": 321,
         "selected_arguments_json_valid": True,
@@ -1129,9 +1256,7 @@ def test_provider_format_failure_keeps_mechanical_response_trace(
         "selected_choice_index": 0,
         "selected_choice_index_scope": "response.choices",
         "selected_tool_call_index": 0,
-        "selected_tool_call_index_scope": (
-            "response.choices[0].message.tool_calls"
-        ),
+        "selected_tool_call_index_scope": ("response.choices[0].message.tool_calls"),
         "selected_tool_name": "generate_hypothesis",
         "selected_arguments_bytes": 17,
         "selected_arguments_json_valid": False,

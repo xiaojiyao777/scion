@@ -6,12 +6,12 @@ import hashlib
 from dataclasses import dataclass
 from typing import Any, Mapping
 
+from scion.core.paths import normalize_relative_patch_path
+
 
 @dataclass(frozen=True)
 class SourceRecord:
     content: str
-    provenance: str
-    owner: str = ""
 
     @property
     def digest(self) -> str:
@@ -36,51 +36,47 @@ def source_records_from_context(
 ) -> dict[str, SourceRecord]:
     if not context:
         return {}
-    ledger = context.get("proposal_source_ledger")
-    if not isinstance(ledger, Mapping):
+    source_context = context.get("editable_source_context")
+    if not isinstance(source_context, Mapping):
         return {}
-    # Import lazily because the source-ledger builder uses the canonical digest
-    # owned by this module. Every consumer validates the sole durable source
-    # owner before treating ledger content as editable source.
-    from scion.proposal.context_manager.code_context import (
-        _validate_source_ledger,
-    )
-
-    ledger = _validate_source_ledger(ledger)
+    if set(source_context) != {
+        "approved_target",
+        "sources",
+        "target_api_guidance",
+    }:
+        raise ValueError("editable source context has unknown or missing keys")
+    target = _canonical_path(source_context.get("approved_target"))
+    if not isinstance(source_context.get("target_api_guidance"), str):
+        raise ValueError("editable source target_api_guidance must be a string")
+    sources = source_context.get("sources")
+    if not isinstance(sources, list):
+        raise ValueError("editable source context sources must be a list")
     records: dict[str, SourceRecord] = {}
-    for entry in ledger.get("entries") or ():
-        if not isinstance(entry, Mapping) or entry.get("visibility") != "full_current":
-            continue
-        path = _normalize_path(entry.get("path"))
+    seen: set[str] = set()
+    for entry in sources:
+        if not isinstance(entry, Mapping) or set(entry) != {"path", "content"}:
+            raise ValueError("editable source entry has unknown or missing keys")
+        path = _canonical_path(entry.get("path"))
+        if path in seen:
+            raise ValueError(f"duplicate editable source path: {path}")
+        seen.add(path)
         content = entry.get("content")
-        if path and isinstance(content, str):
-            _put_source_record(
-                records,
-                path,
-                content,
-                str(entry.get("provenance") or "proposal_source_ledger"),
-                owner=str(entry.get("owner") or ""),
-            )
+        if content is not None and not isinstance(content, str):
+            raise ValueError(f"editable source content must be text or null: {path}")
+        if isinstance(content, str):
+            records[path] = SourceRecord(content=content)
+    if target not in seen:
+        raise ValueError("editable source approved target is missing")
     return records
 
 
-def _put_source_record(
-    records: dict[str, SourceRecord],
-    path: str,
-    content: str,
-    provenance: str,
-    *,
-    owner: str = "",
-) -> None:
-    normalized_path = _normalize_path(path)
-    if not normalized_path or content is None:
-        return
-    records[normalized_path] = SourceRecord(
-        content=str(content),
-        provenance=provenance,
-        owner=owner,
-    )
-
-
-def _normalize_path(value: Any) -> str:
-    return str(value or "").replace("\\", "/").lstrip("/").strip()
+def _canonical_path(value: Any) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"editable source path must be a string: {value!r}")
+    try:
+        path = normalize_relative_patch_path(value)
+    except ValueError as exc:
+        raise ValueError(f"invalid editable source path: {value!r}") from exc
+    if path != value:
+        raise ValueError(f"editable source path is not canonical: {value}")
+    return path

@@ -2,34 +2,13 @@ from __future__ import annotations
 
 import pytest
 
-from scion.proposal.edit_protocol import source_digest_for_content
 from scion.proposal.engine import ProposalValidationError, _parse_patch
 
 
-def _source_ledger(content: str) -> dict[str, object]:
+def _editable_sources(content: str) -> dict[str, object]:
     return {
-        "schema_version": "proposal-source-ledger.v2",
         "approved_target": "solver.py",
-        "entries": [
-            {
-                "path": "solver.py",
-                "content": content,
-                "digest": source_digest_for_content(content),
-                "owner": "approved_target",
-                "provenance": "champion_snapshot",
-                "visibility": "full_current",
-                "reason": "ok",
-            }
-        ],
-        "views": {
-            "champion_research": ["solver.py"],
-            "reference": [],
-            "api_reference": ["solver.py"],
-            "integration_full": ["solver.py"],
-            "integration_summary": [],
-            "branch_current": [],
-            "required_full": [],
-        },
+        "sources": [{"path": "solver.py", "content": content}],
         "target_api_guidance": "",
     }
 
@@ -49,31 +28,17 @@ def _patch(old_string: str, new_string: str, *, replace_all: bool = False):
 def _parse(content: str, old_string: str, new_string: str, *, replace_all=False):
     return _parse_patch(
         _patch(old_string, new_string, replace_all=replace_all),
-        context={"proposal_source_ledger": _source_ledger(content)},
+        context={"editable_source_context": _editable_sources(content)},
     )
 
 
 def test_unique_internal_blank_line_run_drift_is_repaired_and_attributed() -> None:
     content = (
-        "def solve():\n"
-        "    pending.append(customer)\n"
-        "\n"
-        "\n"
-        "def helper():\n"
-        "    return 1\n"
+        "def solve():\n    pending.append(customer)\n\n\ndef helper():\n    return 1\n"
     )
-    old_string = (
-        "    pending.append(customer)\n"
-        "\n"
-        "def helper():\n"
-        "    return 1\n"
-    )
+    old_string = "    pending.append(customer)\n\ndef helper():\n    return 1\n"
     new_string = (
-        "    pending.append(customer)\n"
-        "\n"
-        "\n"
-        "def helper(value=0):\n"
-        "    return value + 1\n"
+        "    pending.append(customer)\n\n\ndef helper(value=0):\n    return value + 1\n"
     )
 
     patch = _parse(content, old_string, new_string)
@@ -86,10 +51,7 @@ def test_unique_internal_blank_line_run_drift_is_repaired_and_attributed() -> No
         if item.get("action") == "normalized_to_canonical_full_content"
     )
     assert normalization["repair_kind"] == "typed_edit_normalization"
-    assert (
-        normalization["selector_repair"]
-        == "blank_line_run_count_drift_tolerated"
-    )
+    assert normalization["selector_repair"] == "blank_line_run_count_drift_tolerated"
     assert normalization["blank_line_run_count_tolerated"] is True
 
 
@@ -106,9 +68,7 @@ def test_exact_match_wins_without_selector_repair() -> None:
 
     assert patch.code_content.count("return 2") == 1
     assert tolerant_only in patch.code_content
-    assert all(
-        "selector_repair" not in item for item in patch.repair_attribution
-    )
+    assert all("selector_repair" not in item for item in patch.repair_attribution)
 
 
 def test_blank_line_run_repair_is_disabled_for_replace_all() -> None:
@@ -120,11 +80,7 @@ def test_blank_line_run_repair_is_disabled_for_replace_all() -> None:
 
 
 def test_ambiguous_blank_line_run_candidates_fail_closed() -> None:
-    content = (
-        "def target():\n\n    return 1\n"
-        "\n"
-        "def target():\n\n\n\n    return 1\n"
-    )
+    content = "def target():\n\n    return 1\n\ndef target():\n\n\n\n    return 1\n"
     old_string = "def target():\n\n\n    return 1\n"
 
     with pytest.raises(ProposalValidationError, match="old_string_not_found"):

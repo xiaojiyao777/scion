@@ -17,13 +17,15 @@ from scion.core.models import (
     ProtocolResult,
     StepRecord,
 )
-from scion.problem.bridge import legacy_problem_spec_from_v1, load_problem_spec_v1_from_yaml
+from scion.problem.bridge import (
+    legacy_problem_spec_from_v1,
+    load_problem_spec_v1_from_yaml,
+)
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.problems.cvrp.research_guidance import CROSS_CAMPAIGN_RESEARCH_PRIOR
 from scion.problems.cvrp.solver_design.manifest import SOLVER_DESIGN_API_MANIFEST_FILES
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.code_context import _step_can_own_branch_source
-from scion.proposal.edit_protocol.source_discovery import source_digest_for_content
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
@@ -32,16 +34,9 @@ def _active_solver_source_paths() -> tuple[str, ...]:
     module_dir = _CVRP_ROOT / "policies" / "baseline_modules"
     paths = [
         _CVRP_ROOT / "policies" / "baseline_algorithm.py",
-        *(
-            path
-            for path in module_dir.glob("*.py")
-            if path.name != "__init__.py"
-        ),
+        *(path for path in module_dir.glob("*.py") if path.name != "__init__.py"),
     ]
-    return tuple(
-        path.relative_to(_CVRP_ROOT).as_posix()
-        for path in sorted(paths)
-    )
+    return tuple(path.relative_to(_CVRP_ROOT).as_posix() for path in sorted(paths))
 
 
 def _runtime():
@@ -145,14 +140,13 @@ def test_branch_source_ownership_requires_typed_decision_and_features() -> None:
     assert _step_can_own_branch_source(rejected) is True
     assert _step_can_own_branch_source(replace(rejected, decision=None)) is False
     assert (
-        _step_can_own_branch_source(
-            replace(rejected, decision_features_snapshot=None)
-        )
+        _step_can_own_branch_source(replace(rejected, decision_features_snapshot=None))
         is False
     )
-    assert _step_can_own_branch_source(
-        replace(rejected, decision_reason_codes=())
-    ) is False
+    assert (
+        _step_can_own_branch_source(replace(rejected, decision_reason_codes=()))
+        is False
+    )
 
 
 def test_branch_source_ownership_keeps_explicit_retaining_dispositions() -> None:
@@ -186,7 +180,7 @@ def test_branch_source_ownership_keeps_explicit_retaining_dispositions() -> None
     assert _step_can_own_branch_source(promoted) is True
 
 
-def test_cvrp_source_ledger_does_not_expose_ambiguous_rejected_history() -> None:
+def test_cvrp_editable_sources_do_not_expose_ambiguous_rejected_history() -> None:
     spec, legacy, champion, branch = _runtime()
     rejected_sentinel = "# REJECTED_ANCESTRY_SENTINEL\n"
     rejected = _verified_source_step(
@@ -209,21 +203,24 @@ def test_cvrp_source_ledger_does_not_expose_ambiguous_rejected_history() -> None
         branch_workspace=str(_CVRP_ROOT),
         step_history=[rejected],
     )
-    ledger = context["proposal_source_ledger"]
+    source_context = context["editable_source_context"]
     scheduler_path = "policies/baseline_modules/scheduler.py"
     scheduler = next(
-        entry for entry in ledger["entries"] if entry["path"] == scheduler_path
+        source
+        for source in source_context["sources"]
+        if source["path"] == scheduler_path
     )
     clean_source = (_CVRP_ROOT / scheduler_path).read_text()
 
     assert scheduler["content"] == clean_source
-    assert scheduler["digest"] == source_digest_for_content(clean_source)
-    assert scheduler["provenance"] != "branch_history_current"
     assert rejected_sentinel.strip() not in scheduler["content"]
-    assert scheduler_path not in ledger["views"]["branch_current"]
+    assert all(
+        rejected_sentinel.strip() not in str(source["content"])
+        for source in source_context["sources"]
+    )
 
 
-def test_direct_cvrp_declared_sources_have_one_full_source_owner() -> None:
+def test_direct_cvrp_declared_sources_are_unique_complete_source_pairs() -> None:
     spec, legacy, champion, branch = _runtime()
     target = "policies/baseline_modules/local_search.py"
     hypothesis = HypothesisProposal(
@@ -239,22 +236,22 @@ def test_direct_cvrp_declared_sources_have_one_full_source_owner() -> None:
         champion,
         legacy,
     )
-    ledger = context["proposal_source_ledger"]
-    entries = ledger["entries"]
-    owned_paths = [entry["path"] for entry in entries]
+    source_context = context["editable_source_context"]
+    sources = source_context["sources"]
+    source_paths = [source["path"] for source in sources]
     active_paths = _active_solver_source_paths()
 
-    assert ledger["schema_version"] == "proposal-source-ledger.v2"
-    assert ledger["approved_target"] == target
-    assert set(owned_paths) == set(active_paths)
-    assert Counter(owned_paths) == Counter(
-        {path: 1 for path in active_paths}
-    )
-    assert set(SOLVER_DESIGN_API_MANIFEST_FILES).issubset(owned_paths)
-    assert set(active_paths).issubset(ledger["views"]["api_reference"])
-    assert [entry["owner"] for entry in entries].count("approved_target") == 1
-    assert all(entry["content"] for entry in entries)
-    assert all(entry["digest"] for entry in entries)
+    assert set(source_context) == {
+        "approved_target",
+        "sources",
+        "target_api_guidance",
+    }
+    assert source_context["approved_target"] == target
+    assert set(source_paths) == set(active_paths)
+    assert Counter(source_paths) == Counter({path: 1 for path in active_paths})
+    assert set(SOLVER_DESIGN_API_MANIFEST_FILES).issubset(source_paths)
+    assert all(set(source) == {"path", "content"} for source in sources)
+    assert all(isinstance(source["content"], str) for source in sources)
     system_blocks, user_prompt = _split_code_context(context)
     del user_prompt
     provider_context = json.loads(system_blocks[1]["text"].split("\n", 1)[1])
@@ -309,9 +306,10 @@ def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:
     assert all("*" not in path for path in context["existing_target_files"])
     for path in _active_solver_source_paths():
         assert path in context["existing_target_files"]
-        assert context["champion_operators_code"].count(
-            f"### {path} (research surface)"
-        ) == 1
+        assert (
+            context["champion_operators_code"].count(f"### {path} (research surface)")
+            == 1
+        )
     assert "target_intent" not in rendered
     assert "read_active_solver_map" not in rendered
 
@@ -334,9 +332,14 @@ def test_direct_cvrp_code_context_renders_source_and_object_model() -> None:
     )
     system_blocks, user_prompt = _split_code_context(context)
     rendered = "\n".join(block["text"] for block in system_blocks) + user_prompt
+    provider_context = json.loads(system_blocks[1]["text"].split("\n", 1)[1])
 
     assert "proposal_renderer_inputs" not in context
-    assert rendered.count('"active_subject_code_constraints"') == 1
+    assert set(provider_context) == {
+        "approved_hypothesis",
+        "editable_source_context",
+    }
+    assert '"active_subject_code_constraints"' not in rendered
     assert '"solver_design_prompt_guidance"' not in rendered
     assert '"code_rules"' not in rendered
     assert '"user_constraints"' not in rendered
@@ -344,6 +347,7 @@ def test_direct_cvrp_code_context_renders_source_and_object_model() -> None:
     assert "_Route" in rendered
     assert "shared by initial and embedded VNS" in rendered
     assert "target phase only" in rendered
+    assert rendered.count("smallest complete scheduler wiring") == 1
     instrumentation_guidance = "\n".join(
         (
             str(context["operator_interface_spec"]),
@@ -360,9 +364,14 @@ def test_direct_cvrp_code_context_renders_source_and_object_model() -> None:
     assert "stable entrypoint" not in instrumentation_guidance
     assert "Excess route count is reported as fleet_violation" in rendered
     assert "route-count-violating outputs" not in rendered
-    assert "record_move" not in instrumentation_guidance
-    assert "record_phase" not in instrumentation_guidance
-    assert "record_iteration" not in instrumentation_guidance
+    target_guidance = context["editable_source_context"]["target_api_guidance"]
+    assert "record_move" in target_guidance
+    assert "record_phase" in target_guidance
+    assert "record_iteration" in target_guidance
+    assert '"object_model_hints"' not in target_guidance
+    assert '"api_contracts"' not in target_guidance
+    assert "ObjectiveValue arithmetic" not in target_guidance
+    assert "case ids, reference objectives" not in target_guidance
     assert "telemetry_identity_allowlist" not in instrumentation_guidance
     assert "target_intent" not in rendered
     assert "agentic_code_scope_control" not in rendered

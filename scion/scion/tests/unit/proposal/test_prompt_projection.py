@@ -8,7 +8,7 @@ import pytest
 from scion.proposal import prompt_projection as subject
 from scion.proposal.context_owner_maps import proposal_context_snapshot
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
-from scion.tests.unit.source_ledger_test_support import ledgerize_code_context
+from scion.tests.unit.editable_source_context_test_support import editable_code_context
 
 
 def _hypothesis_context() -> dict:
@@ -25,7 +25,7 @@ def _hypothesis_context() -> dict:
 
 
 def _code_context() -> dict:
-    return ledgerize_code_context(
+    return editable_code_context(
         {
             "problem_summary": "Synthetic routing control.",
             "branch_id": "branch-pure-projection",
@@ -70,17 +70,8 @@ def test_project_prompt_is_a_pure_value_projection(
     assert json.loads(projection.structured_context_json) == expected
 
 
-@pytest.mark.parametrize(
-    ("splitter", "canonical_block_indexes"),
-    [
-        (_split_hypothesis_context, (1, 2)),
-        (_split_code_context, (1,)),
-    ],
-)
-def test_direct_v3_canonical_blocks_are_lossless_compact_and_deterministic(
-    splitter,
-    canonical_block_indexes: tuple[int, ...],
-) -> None:
+def test_direct_v3_canonical_blocks_are_lossless_compact_and_deterministic() -> None:
+    splitter = _split_hypothesis_context
     context = {
         "problem_summary": "Caf\u00e9\nrouting control.",
         "champion_stats": {"coordinates": (1, 2)},
@@ -100,7 +91,7 @@ def test_direct_v3_canonical_blocks_are_lossless_compact_and_deterministic(
     assert first_user_prompt == second_user_prompt
     decoded_context = {}
     rendered_bodies = []
-    for index in canonical_block_indexes:
+    for index in (1, 2):
         body = first_blocks[index]["text"].split("\n", 1)[1]
         decoded = json.loads(body)
         assert "\n" not in body
@@ -128,6 +119,33 @@ def test_direct_v3_canonical_blocks_are_lossless_compact_and_deterministic(
 
     with pytest.raises(TypeError, match="non-finite float"):
         splitter({"problem_summary": float("nan")})
+
+
+def test_code_canonical_block_contains_only_research_core() -> None:
+    context = _code_context()
+    context["editable_source_context"]["target_api_guidance"] = "Café API"
+    context["host_only_marker"] = "must-not-reach-provider"
+
+    first_blocks, first_prompt = _split_code_context(context)
+    second_blocks, second_prompt = _split_code_context(context)
+
+    assert first_blocks == second_blocks
+    assert first_prompt == second_prompt
+    body = first_blocks[1]["text"].split("\n", 1)[1]
+    provider_context = json.loads(body)
+    assert body == json.dumps(
+        provider_context,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+        allow_nan=False,
+    )
+    assert "\\u00e9" in body
+    assert set(provider_context) == {
+        "approved_hypothesis",
+        "editable_source_context",
+    }
+    assert "must-not-reach-provider" not in body
 
 
 def test_project_prompt_rejects_phase_mismatch_and_unknown_kind() -> None:

@@ -31,7 +31,6 @@ from scion.core.models import (
 )
 from scion.core.paths import normalize_relative_patch_path
 from scion.core.public_refs import public_artifact_ref
-from scion.proposal.context_manager.code_context import SourceLedgerOwner
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +122,6 @@ class FormalCandidatePatchArtifactRecorder:
             replay_materialization = self._build_replay_materialization(
                 branch=branch,
                 proposal_changes=proposal_changes,
-                repair_attribution=tuple(patch.repair_attribution or ()),
                 workspace=workspace,
                 base_workspace=base_workspace,
             )
@@ -236,11 +234,6 @@ class FormalCandidatePatchArtifactRecorder:
                 change,
                 workspace=workspace,
                 base_workspace=base_workspace,
-                is_proposal_change=(
-                    self.schema == self.cumulative_schema
-                    or normalize_relative_patch_path(change.file_path) in proposal_paths
-                ),
-                repair_attribution=tuple(patch.repair_attribution or ()),
             )
             for change in (
                 proposal_changes if self.schema == self.cumulative_schema else changes
@@ -445,7 +438,6 @@ class FormalCandidatePatchArtifactRecorder:
         *,
         branch: Branch,
         proposal_changes: tuple[PatchFileChange, ...],
-        repair_attribution: tuple[Mapping[str, Any], ...],
         workspace: str | None,
         base_workspace: str | None,
     ) -> dict[str, Any]:
@@ -519,8 +511,6 @@ class FormalCandidatePatchArtifactRecorder:
                     change,
                     workspace=workspace,
                     base_workspace=base_workspace,
-                    is_proposal_change=candidate_scope == "current_proposal",
-                    repair_attribution=repair_attribution,
                     candidate_scope=candidate_scope,
                 )
             )
@@ -975,8 +965,6 @@ def _change_payload(
     *,
     workspace: str | None,
     base_workspace: str | None,
-    is_proposal_change: bool,
-    repair_attribution: tuple[Mapping[str, Any], ...],
     candidate_scope: str | None = None,
 ) -> dict[str, Any]:
     code = change.code_content or ""
@@ -986,13 +974,6 @@ def _change_payload(
         "action": change.action,
         "code_sha256": hashlib.sha256(code.encode("utf-8")).hexdigest(),
         "code_content": code,
-        "source_attribution": _file_source_attribution(
-            change,
-            base_hash=base_hash,
-            is_proposal_change=is_proposal_change,
-            repair_attribution=repair_attribution,
-            candidate_scope=candidate_scope,
-        ),
     }
     if candidate_scope is not None:
         payload["candidate_attribution"] = {
@@ -1005,91 +986,6 @@ def _change_payload(
     if base_hash:
         payload["base_sha256"] = base_hash
     return payload
-
-
-_SOURCE_LEDGER_OWNER_VALUES = frozenset(owner.value for owner in SourceLedgerOwner)
-
-
-def _file_source_attribution(
-    change: PatchFileChange,
-    *,
-    base_hash: str | None,
-    is_proposal_change: bool,
-    repair_attribution: tuple[Mapping[str, Any], ...],
-    candidate_scope: str | None = None,
-) -> dict[str, Any]:
-    """Return the durable, per-file source identity used to form a patch."""
-
-    path = normalize_relative_patch_path(change.file_path)
-    typed_edits = [
-        item
-        for item in repair_attribution
-        if isinstance(item, Mapping)
-        and item.get("repair_kind") == "typed_edit_normalization"
-        and normalize_relative_patch_path(str(item.get("file_path") or "")) == path
-    ]
-    owner_values = {
-        str(item.get("source_owner") or "")
-        for item in typed_edits
-        if str(item.get("source_owner") or "")
-    }
-    if len(owner_values) > 1 or any(
-        owner not in _SOURCE_LEDGER_OWNER_VALUES for owner in owner_values
-    ):
-        raise ValueError(f"inconsistent source ledger owner attribution: {path}")
-    provenance_values = [
-        str(item.get("source_provenance") or "")
-        for item in typed_edits
-        if str(item.get("source_provenance") or "")
-    ]
-    source_digests = [
-        str(item.get("source_record_digest") or "")
-        for item in typed_edits
-        if str(item.get("source_record_digest") or "")
-    ]
-    owner = next(iter(owner_values), "")
-    source_digest = source_digests[0] if source_digests else base_hash
-
-    if candidate_scope == "inherited_verified":
-        origin = "inherited_verified_branch"
-    elif owner:
-        origin = "proposal_source_ledger"
-    elif not is_proposal_change:
-        origin = "runtime_activation"
-    elif change.action == "create":
-        origin = "new_file"
-    else:
-        origin = "base_workspace"
-
-    if change.action == "create":
-        visibility = "new_file_placeholder" if owner else "new_file_absent"
-        source_digest = None
-    elif source_digest:
-        visibility = "full_current"
-    else:
-        visibility = "not_visible"
-
-    provenance = (
-        "verified_branch_workspace"
-        if candidate_scope == "inherited_verified"
-        else provenance_values[0]
-        if provenance_values
-        else "runtime_activation"
-        if not is_proposal_change
-        else "new_file"
-        if change.action == "create"
-        else "base_workspace"
-        if base_hash
-        else "missing_current_source"
-    )
-    return {
-        "schema_version": "formal-file-source-attribution.v1",
-        "origin": origin,
-        "source_ledger_owner": owner or None,
-        "source_provenance": provenance,
-        "source_visibility": visibility,
-        "source_digest": source_digest,
-    }
 
 
 def render_full_file_replacement_diff(
@@ -1133,10 +1029,30 @@ def _validate_existing_artifact_metadata(
         raise ValueError("existing formal candidate metadata is unreadable") from exc
     if not isinstance(existing, Mapping):
         raise ValueError("existing formal candidate metadata is invalid")
-    comparable_expected = _jsonable(expected)
+    comparable_existing = _without_legacy_source_attribution(existing)
+    comparable_expected = _without_legacy_source_attribution(expected)
     comparable_expected["created_at"] = existing.get("created_at")
-    if dict(existing) != comparable_expected:
+    if comparable_existing != comparable_expected:
         raise ValueError("existing formal candidate metadata conflicts with record")
+
+
+def _without_legacy_source_attribution(
+    metadata: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Ignore only the retired per-file source-ledger field when rereading."""
+
+    comparable = _jsonable(metadata)
+    for section_name in ("patch", "replay_materialization"):
+        section = comparable.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        files = section.get("files")
+        if not isinstance(files, list):
+            continue
+        for file_entry in files:
+            if isinstance(file_entry, dict):
+                file_entry.pop("source_attribution", None)
+    return comparable
 
 
 def _restore_or_validate_artifact_text(path: Path, expected: str) -> None:
