@@ -82,14 +82,17 @@ evidence prerequisite exists:
    by ordinary editable source context with 278 net production lines deleted.
    H scientific content and tools remain unchanged; only host/control wrappers
    leave the provider view.
-6. **Minute one-step before another long rung:** the fresh short CVRP
-   [one-step preregistration](docs/experiments/v0.4/v0.4-cvrp-minute-one-step-preregistration-20260812.md)
-   is `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION` on the
-   clean `e4b6b98d` runtime. It permits at most one Terra H, one conditional C,
-   canary and one four-case SCREENING call through `run_one_step()` exactly
-   once. It never drains validation/frozen, promotes or resumes. Analyze its
-   terminal agent/code/subject/Protocol evidence before designing another long
-   rung. Warehouse measurement reanalysis remains non-blocking backlog.
+6. **Minute one-step complete:** the fresh short CVRP
+   [one-step experiment](docs/experiments/v0.4/v0.4-cvrp-minute-one-step-postrun-20260812.md)
+   completed once with exit `0` on the clean `e4b6b98d` runtime. One Terra H
+   and one approved-H-bound C produced a single active solver change; Contract,
+   Verification, canary and four fresh SCREENING pairs completed through
+   `run_one_step()` exactly once. The exact result is `0W/1L/3T`, median
+   `0 [-16,0]`, no fleet regression and
+   `SCREENING_FAIL_CASE_QUALITY`; B0/v1 remains champion. The run proves a
+   stable analyzable research step, not solver improvement. It never drained
+   validation/frozen, promoted or resumed. Warehouse measurement reanalysis
+   remains non-blocking backlog.
 7. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
@@ -297,6 +300,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R50 | proven complete provider-free diagnosis; no broad immediate-base advance | R3 completed with exit `0`, 37/37 atomic blocks and 1,056/1,056 unique fresh AB/BA pairs. Independent B0 A/A gives `MDE@80%=2.0` only for the frozen `12x8`, `1x`, homogeneous-additive estimand. Full `12x8` candidate median signs are 0 positive / 5 zero / 1 negative. Candidate five is uniformly harmful; candidate four did not implement its claimed time-aware-credit mechanism; the elapsed-budget-SA-related sources retain only descriptive scoped/`2x` opportunity. Added-case and joint contrasts never improve a candidate median. Interaction and whole-budget-arm machine drift remain `UNIDENTIFIABLE`. | Seal R3 `VALID_COMPLETE_PROVIDER_FREE_DIAGNOSIS / DESCRIPTIVE_COHORT_ONLY / NO_BROAD_IMMEDIATE_BASE_ADVANCE`. The exact-roster sensitivity and budget diagnoses are complete, but they do not promote, recover, rank or reinterpret an R3 candidate. Treat implementation fidelity, cross-case generalization and search opportunity as CVRP research questions; add no deployment, Trust/Hash, identity, ledger, recorder or candidate gate. |
 | R51 | proven strict-diff expression negative; exact retained | The frozen matched C-expression A/B completed exit `0` with 8/8 terminal provider cells, no provider failure and no solver call. All four exact cells normalized, applied and passed Contract; all four diff cells had hunk-position/context mismatches and correctly failed the frozen no-offset/no-fuzzy application with fixed `0/0` scores. Two blind reviewers agreed on exact scores (`2/2`, `1/1`, `1/1`, `1/1`), totaling H=`5` and source-anchor=`5` versus diff `0/0`. | Classify `VALID_COMPLETE_C_EXPRESSION_DIAGNOSTIC / STRICT_DIFF_NOT_ADOPTED / EXACT_RETAINED`: all four adoption conditions fail. Do not retry, relax the parser, add a patch grader/gate or change production. This diagnoses only proposal expression, not solver quality; continue net-deletion context/source simplification before a short real CVRP research block. |
 | R52 | proven research-hot-path subtraction; independently reviewed | Nine production files changed by `+273/-551`, net `-278`: the source ledger and its owner/provenance/view/self-proof machinery are gone. One ordinary `editable_source_context` now supplies approved target, unique canonical path/content values and consolidated target API guidance; H sees the research core and C sees exactly approved H plus that source context, while the complete raw context remains in trace. | Close source-context and provider-projection cleanup. Keep branch-current history/workspace source precedence over champion, touched-missing no-fallback semantics, `None` versus empty content and exact selector content binding. Add no replacement ledger, Trust/Hash authority, gate or provider tool loop. Main focused tests passed 169 and the independent expanded set passed 207; CVRP direct outer passed once in 32.70s. Warehouse outer traversed the full V3 chain but failed only at an unrelated dirty V8 `typed_telemetry_summary` assertion, so it is not claimed as passing. |
+| R53 | proven complete one-step V3 algorithm experiment; negative exact screen | The clean `e4b6b98d` minute run completed exit `0` with exactly one Terra H, one approved-H-bound C, one canary and one four-pair SCREENING call. The only semantic candidate change set `EMBEDDED_VNS_MAX_RUNTIME_SHARE` from `0.0` to `0.35`. All pairs were fresh, successful and feasible; independent recomputation is `0W/1L/3T`, effects `[-16,0,0,0]`, median `0 [-16,0]`, with no fleet regression. Telemetry is consistent with a real allocation shift—ALNS iterations `44 -> 151`, ALNS-core share `0.195208 -> 0.382246`, embedded-VNS share `0.419914 -> 0.287778`—but best updates fell `7 -> 4` and final quality did not improve. | Seal `VALID_COMPLETED_ONE_STEP_SCREEN / SCREENING_FAIL_CASE_QUALITY / NO_PROMOTION`. Keep the telemetry `association_only`; do not validate, freeze, promote, resume or retry this root. Retain the result only as neutral research evidence. It proves that the simplified V3 chain can complete one analyzable algorithm step, not that Scion has achieved CVRP improvement or continuous optimization. Add no gate, ledger, Trust/Hash or telemetry requirement. |
 
 ## Modular execution plan
 
@@ -832,18 +836,17 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   push has become the limiting context surface. Any treatment is restricted to
   list/read/search over the same already legal source and requires a separate
   V3 runtime design update; it never reads Protocol or protected evidence.
-- [ ] After fresh explicit authorization for this new source-derived H/C send,
-  run the
+- [x] After fresh explicit authorization, run the
   [minute one-step exploratory screen](docs/experiments/v0.4/v0.4-cvrp-minute-one-step-preregistration-20260812.md)
-  once from its prepared clean `e4b6b98d` bundle. Preserve H/C limits `1/1`,
-  retry zero, the two-second canary/Verification budgets, seed `11`, four frozen
+  once from its clean `e4b6b98d` bundle and complete independent read-only
+  [postrun analysis](docs/experiments/v0.4/v0.4-cvrp-minute-one-step-postrun-20260812.md).
+  The run preserved H/C limits `1/1`, retry zero, two-second
+  canary/Verification budgets, seed `11`, the four frozen
   `8/12/12/15`-second cases, fresh cache-off `AB/BA/AB/BA`, the 720-second
-  driver wall and exactly one `CampaignManager.run_one_step()`. Stop after the
-  returned step even if Decision queues validation. In independent read-only
-  postrun analysis, treat complete subject failure as terminal negative evidence
-  rather than a comparison, and partial/configuration/malformed evidence as
-  invalid; none of these labels becomes a hot-path gate. Do not infer promotion,
-  broad CVRP improvement or task completion from this diagnostic.
+  driver wall and exactly one `CampaignManager.run_one_step()`. It terminalized
+  `VALID_COMPLETED_ONE_STEP_SCREEN` at `0W/1L/3T`, median `0 [-16,0]`, no fleet
+  regression and no promotion. This remains a valid negative diagnostic, not
+  broad CVRP improvement or task completion.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:
@@ -957,10 +960,12 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   remains B0/v1. No recovery candidate exists. R51 retains exact and closes
   strict diff; R52 closes the provider/source subtraction by 278 net deleted
   production lines after 169 main and 207 independent tests. It adds no gate,
-  Trust/Hash authority, ledger or provider tool loop. The next minute one-step
-  CVRP bundle is `PREPARED_NOT_STARTED` and
-  `AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; no provider or solver call has
-  started. Its normal completion is only `COMPLETED_ONE_STEP_WRAPPER`, with
-  scientific classification deferred to independent read-only postrun analysis.
+  Trust/Hash authority, ledger or provider tool loop. R53 then completed the
+  clean minute one-step once with exit `0`: exactly one Terra H/C sequence,
+  Contract, Verification, canary and four fresh pairs produced a valid
+  analyzable screen. The `0.35` embedded-VNS cap shifted aggregate runtime
+  toward ALNS, but finished `0W/1L/3T`, median `0 [-16,0]`, with one P-case
+  regression and no fleet regression. Decision correctly recorded
+  `SCREENING_FAIL_CASE_QUALITY / continue_explore`; champion remains B0/v1.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.

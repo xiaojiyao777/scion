@@ -820,17 +820,38 @@ chain, then failed only at an unrelated dirty V8 `typed_telemetry_summary`
 assertion; it is therefore not recorded as passing. Potential objective,
 headroom or case-structure additions remain separate scientific questions.
 
-The next bounded CVRP diagnostic is now
-[`PREPARED_NOT_STARTED`](../experiments/v0.4/v0.4-cvrp-minute-one-step-preregistration-20260812.md)
-from a clean ordinary-user archive of `e4b6b98d`. It freezes one Terra H, one
-conditional C, a two-second canary and Verification boundary, and one fresh
-four-case cache-off `AB/BA/AB/BA` SCREENING step. It calls
-`CampaignManager.run_one_step()` exactly once and cannot execute validation,
-frozen holdout or promotion. A normal returned and finalized step is only
-`COMPLETED_ONE_STEP_WRAPPER`; scientific classification is independent read-only
-postrun analysis, not a driver gate. No provider or solver call has started;
-status is `AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. A complete result remains
-an exploratory diagnostic and cannot satisfy the CVRP acceptance target.
+The bounded CVRP minute diagnostic has now completed and is sealed in its
+[postrun report](../experiments/v0.4/v0.4-cvrp-minute-one-step-postrun-20260812.md)
+as `VALID_COMPLETED_ONE_STEP_SCREEN / SCREENING_FAIL_CASE_QUALITY /
+NO_PROMOTION`. It ran once from the clean ordinary-user `e4b6b98d` archive with
+exit `0`, exactly one Terra H, one approved-H-bound C, one canary, one
+`CampaignManager.run_one_step()` and one fresh four-case cache-off
+`AB/BA/AB/BA` SCREENING call. It executed no validation or frozen stage.
+
+Terra proposed the active embedded-VNS runtime-share mechanism and C made one
+minimal solver change: `EMBEDDED_VNS_MAX_RUNTIME_SHARE = 0.0 -> 0.35`, while
+retaining repair-improvement rescue. Contract, Verification and the typed
+candidate canary passed. The canary artifact records one attempted candidate
+and no raw or champion-side result, so it is not claimed as independently
+auditable paired canary evidence.
+
+All four formal pairs were successful, feasible and fresh. Independent
+recomputation is `0W/1L/3T`, effects `[-16,0,0,0]`, median `0` with 95% CI
+`[-16,0]`, and zero fleet regression. Aggregate telemetry is consistent with
+the proposed allocation shift: ALNS iterations increased `44 -> 151`, ALNS-core
+share increased `0.195208 -> 0.382246`, and embedded-VNS share fell
+`0.419914 -> 0.287778`. Useful conversion did not improve: best updates fell
+`7 -> 4`, VNS improvements fell `192 -> 90`, and `P-n65-k10` became 16
+distance units worse. The mechanism artifact itself remains `association_only`
+and does not enter Decision.
+
+Decision correctly recorded `continue_explore` with
+`SCREENING_FAIL_CASE_QUALITY`; B0/v1 remains the only champion and the verified
+candidate is only a provisional branch head. The wrapper classification
+`COMPLETED_ONE_STEP_WRAPPER` and campaign-summary `run_complete=true` describe
+the bounded one-step lifecycle only, not validation, frozen holdout or campaign
+completion. The run demonstrates one stable analyzable algorithm-research step,
+not retained CVRP improvement, continuous optimization or task completion.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1112,11 +1133,12 @@ experiment-owned and is not committed into Scion. H-context A/B is not
 triggered by the seven audited H calls. The C-expression A/B is terminal under
 R51: retain exact and close strict diff. R52 then closes the provider/source
 subtraction by net deletion while keeping raw trace completeness and runtime
-source binding. The remaining task boundary is solver evidence: CVRP still
-needs a fresh clean screening -> validation -> frozen promotion and independent
-B0 retention. The prepared minute one-step above is the only next provider
-experiment; it remains unlaunched pending fresh source-send authorization and
-cannot itself close this boundary.
+source binding. R53 completes the clean minute one-step with a stable V3
+research lifecycle but a negative exact screen: `0W/1L/3T`, median
+`0 [-16,0]`, no fleet regression and no promotion. The remaining task boundary
+is solver evidence: CVRP still needs a fresh clean screening -> validation ->
+frozen promotion and independent B0 retention. R53 cannot itself close this
+boundary.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
