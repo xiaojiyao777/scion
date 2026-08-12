@@ -93,17 +93,18 @@ evidence prerequisite exists:
    stable analyzable research step, not solver improvement. It never drained
    validation/frozen, promoted or resumed. Warehouse measurement reanalysis
    remains non-blocking backlog.
-7. **R54 feedback-conditioned one-step:** the second short CVRP
-   [preregistration](docs/experiments/v0.4/v0.4-cvrp-minute-feedback-one-step-preregistration-20260812.md)
-   is `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION` from
-   fresh B0 on the same clean `e4b6b98d` runtime. It keeps R53's seed-11
-   roster, budgets, order, cache-off execution and one-step V3 envelope fixed;
-   only the H question/prior changes to supply the R53 negative and request a
-   second causal mechanism rather than the tested global embedded-VNS cap.
-   Because this reuses feedback-forming evidence, even a positive result is an
-   adaptive same-roster screen. It must stop and first earn a separately
-   preregistered seed-29 replication of the fixed candidate before any later
-   validation or promotion design.
+7. **R54 feedback-conditioned one-step terminal:** the second short CVRP
+   [postrun](docs/experiments/v0.4/v0.4-cvrp-minute-feedback-one-step-postrun-20260812.md)
+   is sealed `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON /
+   FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`. H used
+   the R53 feedback well and selected elapsed-budget simulated annealing. C was
+   conceptually faithful but removed `cool()` while leaving three negative-path
+   calls. Verification did not cover those branches; P-n65 produced a typed
+   candidate runtime-audit failure, while E-n101, X-n120 and X-n233 were three
+   valid ties. P's emitted objective is excluded from delta and W/L/T. Decision
+   abandoned the candidate, then canonical screening-context persistence raised
+   a separate cardinality `ValueError`, causing wrapper exit `1`. B0/v1 remains
+   champion; no next experiment is preregistered by this closeout.
 8. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
@@ -312,6 +313,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R51 | proven strict-diff expression negative; exact retained | The frozen matched C-expression A/B completed exit `0` with 8/8 terminal provider cells, no provider failure and no solver call. All four exact cells normalized, applied and passed Contract; all four diff cells had hunk-position/context mismatches and correctly failed the frozen no-offset/no-fuzzy application with fixed `0/0` scores. Two blind reviewers agreed on exact scores (`2/2`, `1/1`, `1/1`, `1/1`), totaling H=`5` and source-anchor=`5` versus diff `0/0`. | Classify `VALID_COMPLETE_C_EXPRESSION_DIAGNOSTIC / STRICT_DIFF_NOT_ADOPTED / EXACT_RETAINED`: all four adoption conditions fail. Do not retry, relax the parser, add a patch grader/gate or change production. This diagnoses only proposal expression, not solver quality; continue net-deletion context/source simplification before a short real CVRP research block. |
 | R52 | proven research-hot-path subtraction; independently reviewed | Nine production files changed by `+273/-551`, net `-278`: the source ledger and its owner/provenance/view/self-proof machinery are gone. One ordinary `editable_source_context` now supplies approved target, unique canonical path/content values and consolidated target API guidance; H sees the research core and C sees exactly approved H plus that source context, while the complete raw context remains in trace. | Close source-context and provider-projection cleanup. Keep branch-current history/workspace source precedence over champion, touched-missing no-fallback semantics, `None` versus empty content and exact selector content binding. Add no replacement ledger, Trust/Hash authority, gate or provider tool loop. Main focused tests passed 169 and the independent expanded set passed 207; CVRP direct outer passed once in 32.70s. Warehouse outer traversed the full V3 chain but failed only at an unrelated dirty V8 `typed_telemetry_summary` assertion, so it is not claimed as passing. |
 | R53 | proven complete one-step V3 algorithm experiment; negative exact screen | The clean `e4b6b98d` minute run completed exit `0` with exactly one Terra H, one approved-H-bound C, one canary and one four-pair SCREENING call. The only semantic candidate change set `EMBEDDED_VNS_MAX_RUNTIME_SHARE` from `0.0` to `0.35`. All pairs were fresh, successful and feasible; independent recomputation is `0W/1L/3T`, effects `[-16,0,0,0]`, median `0 [-16,0]`, with no fleet regression. Telemetry is consistent with a real allocation shift—ALNS iterations `44 -> 151`, ALNS-core share `0.195208 -> 0.382246`, embedded-VNS share `0.419914 -> 0.287778`—but best updates fell `7 -> 4` and final quality did not improve. | Seal `VALID_COMPLETED_ONE_STEP_SCREEN / SCREENING_FAIL_CASE_QUALITY / NO_PROMOTION`. Keep the telemetry `association_only`; do not validate, freeze, promote, resume or retry this root. Retain the result only as neutral research evidence. It proves that the simplified V3 chain can complete one analyzable algorithm step, not that Scion has achieved CVRP improvement or continuous optimization. Add no gate, ledger, Trust/Hash or telemetry requirement. |
+| R54 | proven feedback uptake plus candidate/runtime and framework persistence defects | The clean fresh-B0 feedback-conditioned step used exactly one Terra H/C sequence. H explicitly converted R53's “more iterations, fewer best updates” negative into an elapsed-budget-SA hypothesis. C implemented the core elapsed-fraction mechanism but deleted `_SimulatedAnnealing.cool` while leaving three calls in repair-error, infeasible and route-limit paths. Contract and nine recorded Verification checks passed, but unit/regression checks were skipped and the controlled smoke missed those branches. Formal raw completed 4/4 attempts: E101/X120/X233 are three valid ties; P65 has a typed candidate `solver_algorithm_runtime_error` and its emitted objective is inadmissible for delta/W/L/T. Decision durably recorded `abandon / CANDIDATE_RUNTIME_FAILURE`. Afterward, canonical screening-context persistence rejected the three-item valid feedback against `valid=3 + candidate_failed=1`, raising `ValueError` and causing wrapper exit `1`. | Seal `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON / FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`. Keep candidate failure, Decision, and later framework error as separate facts. Do not reinterpret the three valid ties as a four-case result, use the P objective, retry/resume the root, validate/freeze/promote the candidate, or add a candidate-quality gate. The report preregisters no successor. |
 
 ## Modular execution plan
 
@@ -858,20 +860,19 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `VALID_COMPLETED_ONE_STEP_SCREEN` at `0W/1L/3T`, median `0 [-16,0]`, no fleet
   regression and no promotion. This remains a valid negative diagnostic, not
   broad CVRP improvement or task completion.
-- [ ] After a new explicit authorization for the new source-derived H/C send,
-  run the
+- [x] After fresh explicit authorization, run the
   [R54 minute feedback one-step](docs/experiments/v0.4/v0.4-cvrp-minute-feedback-one-step-preregistration-20260812.md)
-  once from fresh B0 on clean `e4b6b98d`. Preserve Terra H/C limits `1/1`,
-  retry zero, two-second canary/Verification, the exact seed-11
-  P65/E101/X120/X233 `8/12/12/15`-second roster, fresh cache-off
-  `AB/BA/AB/BA`, the 720-second wall and exactly one
-  `CampaignManager.run_one_step()`. The only design change from R53 is the
-  feedback-conditioned request for a second mechanism; do not inherit the
-  `0.35` candidate. Stop after the returned step with no expansion,
-  validation, frozen or promotion. Treat any positive result as adaptive
-  same-roster evidence only; it must first pass a separately preregistered
-  seed-29 replication of the exact fixed candidate and cannot route directly
-  to promotion.
+  once from fresh B0 on clean `e4b6b98d`, then complete independent read-only
+  [postrun analysis](docs/experiments/v0.4/v0.4-cvrp-minute-feedback-one-step-postrun-20260812.md).
+  H/C, canary and formal-call counts stayed `1/1/1/1`; no validation, frozen or
+  promotion ran. H used R53's negative evidence well, while C left three calls
+  to its deleted `cool()` method. E101/X120/X233 are three valid ties; P65 is a
+  typed candidate runtime-audit failure and has no admissible delta/W/L/T.
+  Decision recorded `abandon`, after which a separate canonical-context
+  cardinality `ValueError` caused wrapper exit `1`. Seal the root
+  `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON /
+  FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`; do not
+  resume, retry or promote it.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:
@@ -992,11 +993,14 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   toward ALNS, but finished `0W/1L/3T`, median `0 [-16,0]`, with one P-case
   regression and no fleet regression. Decision correctly recorded
   `SCREENING_FAIL_CASE_QUALITY / continue_explore`; champion remains B0/v1.
-  R54 is now prepared from fresh B0 on the same clean runtime, with every
-  measurement and lifecycle field held fixed and only the R53-conditioned
-  research question/prior changed. It remains
-  `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; no R54
-  provider or solver call has started. A positive R54 screen would still
-  require independent seed-29 replication before any promotion path.
+  R54 then ran once from fresh B0 on the same clean runtime. H correctly used
+  the R53-conditioned feedback to choose elapsed-budget SA, but C removed
+  `cool()` while leaving three negative-path calls and Verification did not
+  cover them. Formal evidence is three valid ties plus one P-case candidate
+  runtime-audit failure; P has no admissible delta/W/L/T. Decision recorded
+  `abandon`, then a separate post-Decision screening-context cardinality error
+  caused wrapper exit `1`. R54 is sealed
+  `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON /
+  FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.

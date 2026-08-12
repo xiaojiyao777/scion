@@ -853,23 +853,29 @@ the bounded one-step lifecycle only, not validation, frozen holdout or campaign
 completion. The run demonstrates one stable analyzable algorithm-research step,
 not retained CVRP improvement, continuous optimization or task completion.
 
-The next bounded provider experiment is R54, frozen in the
-[minute feedback one-step preregistration](../experiments/v0.4/v0.4-cvrp-minute-feedback-one-step-preregistration-20260812.md)
-as `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. It starts
-again from B0/v1 on the clean `e4b6b98d` archive and holds seed `11`, the
+R54 has now run once and is sealed in the
+[minute feedback one-step postrun](../experiments/v0.4/v0.4-cvrp-minute-feedback-one-step-postrun-20260812.md)
+as `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON /
+FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`. It started
+again from B0/v1 on the clean `e4b6b98d` archive and preserved seed `11`, the
 P65/E101/X120/X233 roster, `8/12/12/15`-second limits, `AB/BA/AB/BA`, cache-off
-subjects, Terra H/C limits `1/1`, canary, Verification and exactly one
-`run_one_step()` fixed. The only design change is the H question/prior: it
-supplies R53's negative allocation evidence and asks the agent for a second
-causal mechanism materially different from the tested global embedded-VNS cap.
-No R54 provider or solver call has started.
+subjects, Terra H/C limits `1/1`, one canary and one formal SCREENING call.
 
-The reused seed-11 roster already shaped that feedback, so R54 is explicitly
-adaptive same-roster evidence. Even a positive screen cannot establish
-independent generalization or enter validation/promotion. It must stop first;
-the only admissible next evidence would be a separately preregistered seed-29
-replication of the exact fixed candidate. R54 does not authorize or design that
-replication.
+H incorporated R53's negative feedback directly and selected a source-grounded
+elapsed-budget simulated-annealing mechanism. C implemented the central
+elapsed-fraction design but deleted `_SimulatedAnnealing.cool` while leaving
+three calls in repair-error, infeasible and route-limit branches. Contract and
+all nine recorded Verification checks reported pass, but V3/V4 were skipped
+and the controlled smoke did not traverse those branches. Formal evidence is
+three valid ties on E101/X120/X233 plus one P65 candidate runtime-audit failure.
+The P candidate's emitted objective is excluded from delta and W/L/T.
+
+Decision durably recorded `abandon / CANDIDATE_RUNTIME_FAILURE`, and B0/v1
+remains the only champion. A separate post-Decision context projection then
+raised a feedback-cardinality `ValueError`, causing wrapper exit `1` after the
+scientific Decision was already stored. Candidate failure, Decision, and the
+framework persistence exception are kept as separate facts. The root is not
+resumed or retried; this closeout preregisters no next experiment.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1156,10 +1162,12 @@ research lifecycle but a negative exact screen: `0W/1L/3T`, median
 `0 [-16,0]`, no fleet regression and no promotion. The remaining task boundary
 is solver evidence: CVRP still needs a fresh clean screening -> validation ->
 frozen promotion and independent B0 retention. R53 cannot itself close this
-boundary. R54 is the prepared next one-step diagnostic, still blocked on fresh
-source-send authorization. It changes only the R53-conditioned research input,
-not source, champion, measurement or lifecycle; a positive result remains
-adaptive until separately replicated on seed `29`.
+boundary. R54 is also terminal: its feedback-conditioned H was strong, but C
+left three calls to a removed `cool()` method; formal evidence contains three
+valid ties and one candidate runtime-audit failure. Decision abandoned the
+candidate, and a separate post-Decision context-persistence `ValueError`
+caused wrapper exit `1`. B0/v1 remains champion and no R54 objective from the
+failed P row is used as delta/W/L/T evidence.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
