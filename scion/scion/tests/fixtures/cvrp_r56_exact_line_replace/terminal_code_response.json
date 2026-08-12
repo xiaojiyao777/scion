@@ -1,0 +1,67 @@
+{
+  "action": "modify",
+  "additional_changes": [
+    {
+      "action": "modify",
+      "edit_intent": "exact_replace",
+      "evidence_refs": [
+        "approved_hypothesis",
+        "policies/baseline_modules/scheduler.py"
+      ],
+      "file_path": "policies/baseline_modules/scheduler.py",
+      "new_string": "                    annealing.set_progress(\n                        self._annealing_progress(start_ms, reserve)\n                    )\n",
+      "old_string": "                    annealing.cool()\n",
+      "replace_all": true,
+      "test_hint": "Exercise empty-destroy, repair-error, infeasible, and route-limit branches and confirm each advances annealing from elapsed budget."
+    },
+    {
+      "action": "modify",
+      "edit_intent": "exact_replace",
+      "evidence_refs": [
+        "approved_hypothesis",
+        "policies/baseline_modules/scheduler.py"
+      ],
+      "file_path": "policies/baseline_modules/scheduler.py",
+      "new_string": "            elif annealing.accept(\n                current.total_cost,\n                candidate.total_cost,\n                rng,\n                progress=self._annealing_progress(start_ms, reserve),\n            ):\n",
+      "old_string": "            elif annealing.accept(current.total_cost, candidate.total_cost, rng):\n",
+      "replace_all": false,
+      "test_hint": "Verify worsening acceptance receives explicit clamped elapsed-budget progress."
+    },
+    {
+      "action": "modify",
+      "edit_intent": "exact_replace",
+      "evidence_refs": [
+        "approved_hypothesis",
+        "policies/baseline_modules/scheduler.py"
+      ],
+      "file_path": "policies/baseline_modules/scheduler.py",
+      "new_string": "    def _annealing_progress(self, start_ms, reserve):\n        usable_budget_ms = max(1.0, (self.time_limit - reserve) * 1000.0)\n        elapsed_ms = max(0.0, self.context.elapsed_ms() - start_ms)\n        return min(1.0, elapsed_ms / usable_budget_ms)\n\n    def _within_budget(self, start_ms, reserve):\n        elapsed_s = max(0.0, (self.context.elapsed_ms() - start_ms) / 1000.0)\n        return elapsed_s < self.time_limit and self.context.remaining_time() > reserve\n",
+      "old_string": "    def _within_budget(self, start_ms, reserve):\n        elapsed_s = max(0.0, (self.context.elapsed_ms() - start_ms) / 1000.0)\n        return elapsed_s < self.time_limit and self.context.remaining_time() > reserve\n",
+      "replace_all": false,
+      "test_hint": "Check progress is zero at solver start, one at usable-budget exhaustion, and clamped outside that range."
+    },
+    {
+      "action": "modify",
+      "edit_intent": "exact_replace",
+      "evidence_refs": [
+        "approved_hypothesis",
+        "policies/baseline_modules/acceptance.py"
+      ],
+      "file_path": "policies/baseline_modules/acceptance.py",
+      "new_string": "class _SimulatedAnnealing:\n    def __init__(self, initial_cost, start_ratio=0.05, end_ratio=0.0001):\n        base = max(float(initial_cost), 1.0)\n        self.start_temp = max(base * start_ratio, 1e-9)\n        self.end_temp = max(base * end_ratio, 1e-12)\n        self.temperature = self.start_temp\n\n    def set_progress(self, progress):\n        progress = min(1.0, max(0.0, float(progress)))\n        self.temperature = self.start_temp * (\n            self.end_temp / self.start_temp\n        ) ** progress\n\n    def accept(self, current_cost, candidate_cost, rng, *, progress):\n        self.set_progress(progress)\n        delta = float(candidate_cost) - float(current_cost)\n        if delta <= 0:\n            return True\n        if self.temperature <= 0:\n            return False\n        return rng.random() < math.exp(-delta / self.temperature)\n",
+      "old_string": "class _SimulatedAnnealing:\n    def __init__(self, initial_cost, estimated_iterations, start_ratio=0.05, end_ratio=0.0001):\n        base = max(float(initial_cost), 1.0)\n        self.start_temp = max(base * start_ratio, 1e-9)\n        self.end_temp = max(base * end_ratio, 1e-12)\n        self.temperature = self.start_temp\n        estimated_iterations = max(1, int(estimated_iterations))\n        self.cooling_rate = (self.end_temp / self.start_temp) ** (1.0 / estimated_iterations)\n\n    def accept(self, current_cost, candidate_cost, rng):\n        delta = float(candidate_cost) - float(current_cost)\n        if delta <= 0:\n            return True\n        if self.temperature <= 0:\n            return False\n        return rng.random() < math.exp(-delta / self.temperature)\n\n    def cool(self):\n        self.temperature = max(self.end_temp, self.temperature * self.cooling_rate)\n",
+      "replace_all": false,
+      "test_hint": "Unit-test progress 0, 0.5, and 1: temperatures must be start, geometric midpoint, and end; accept must require explicit progress."
+    }
+  ],
+  "edit_intent": "exact_replace",
+  "evidence_refs": [
+    "approved_hypothesis",
+    "policies/baseline_modules/scheduler.py"
+  ],
+  "file_path": "policies/baseline_modules/scheduler.py",
+  "new_string": "        annealing = _SimulatedAnnealing(current.total_cost)\n",
+  "old_string": "        estimated_iterations = max(100, int(self.time_limit * 50))\n        annealing = _SimulatedAnnealing(current.total_cost, estimated_iterations)\n",
+  "replace_all": false,
+  "test_hint": "With a fixed seed and controlled clock, verify the temperature follows elapsed usable-budget progress rather than ALNS iteration count, including rejected early paths."
+}

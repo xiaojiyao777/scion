@@ -15,6 +15,9 @@ from scion.proposal.edit_protocol.errors import (
 from scion.proposal.edit_protocol.errors import (
     raise_duplicate_file_error as _raise_duplicate_file_error,
 )
+from scion.proposal.edit_protocol.exact_line_replace import (
+    apply_exact_line_replace as _apply_exact_line_replace,
+)
 from scion.proposal.edit_protocol.exact_replace import (
     apply_exact_replace as _apply_exact_replace,
 )
@@ -175,7 +178,8 @@ def _normalize_change(
             change_pointer=change_pointer,
         )
         return change, []
-    if edit_intent not in {"exact_replace", "full_file"}:
+    local_edit_intents = {"exact_replace", "exact_line_replace"}
+    if edit_intent not in {*local_edit_intents, "full_file"}:
         raise PatchEditProtocolError(
             f"{change_pointer}: unsupported edit_intent {edit_intent!r}"
         )
@@ -190,6 +194,7 @@ def _normalize_change(
         before=before,
         change_pointer=change_pointer,
     )
+    exact_line_match_count: int | None = None
     if edit_intent == "exact_replace":
         content_after = _apply_exact_replace(
             change,
@@ -208,6 +213,22 @@ def _normalize_change(
         blank_line_run_count_tolerated = bool(
             change.pop("_host_blank_line_run_count_tolerated", False)
         )
+    elif edit_intent == "exact_line_replace":
+        line_result = _apply_exact_line_replace(
+            change,
+            file_path=file_path,
+            action=action,
+            before=before,
+            original_before=original_before,
+            change_pointer=change_pointer,
+            allow_original_source_digest=allow_original_source_digest,
+            composing_same_file=composing_same_file,
+            prior_change_pointers=prior_change_pointers,
+        )
+        content_after = line_result.content_after
+        exact_line_match_count = line_result.match_count
+        eof_final_newline_tolerated = False
+        blank_line_run_count_tolerated = False
     else:
         eof_final_newline_tolerated = False
         blank_line_run_count_tolerated = False
@@ -244,7 +265,7 @@ def _normalize_change(
 
     if edit_intent == "full_file" and "content_after" in change:
         change["code_content"] = content_after
-    elif edit_intent == "exact_replace":
+    elif edit_intent in local_edit_intents:
         change["content_after"] = content_after
         change["code_content"] = content_after
 
@@ -258,6 +279,7 @@ def _normalize_change(
         change_pointer=change_pointer,
         eof_final_newline_tolerated=eof_final_newline_tolerated,
         blank_line_run_count_tolerated=blank_line_run_count_tolerated,
+        exact_line_match_count=exact_line_match_count,
     )
     return change, [metadata]
 
@@ -315,7 +337,7 @@ def _normalize_patch_set_changes(
             original_source_files=source_files,
             change_pointer=slot.pointer,
             allow_original_source_digest=(
-                prior is not None and _prior_intents_are_exact_replace(prior)
+                prior is not None and _prior_intents_are_local_edits(prior)
             ),
             composing_same_file=prior is not None,
             prior_change_pointers=tuple(prior.json_pointers) if prior else (),
@@ -461,7 +483,7 @@ def _validate_same_file_action_sequence(
             prior_change_pointers=tuple(prior.json_pointers),
             detail=(
                 "full_file cannot be mixed with another same-file change; "
-                "emit one full_file object or ordered exact_replace objects"
+                "emit one full_file object or ordered source-bound local edits"
             ),
         )
 
@@ -527,23 +549,35 @@ def _composition_metadata(
         serial_exact_replace = all(
             intent == "exact_replace" for intent in record.intents
         )
+        serial_local_edits = all(
+            intent in {"exact_replace", "exact_line_replace"}
+            for intent in record.intents
+        )
         metadata.append(
             {
                 "field": "patch_set_change",
                 "repair_kind": (
                     "typed_edit_normalization"
-                    if serial_exact_replace
+                    if serial_local_edits
                     else "patch_set_composition"
                 ),
                 "root_cause": (
                     "serial_same_file_exact_replace"
                     if serial_exact_replace
-                    else "duplicate_file_path"
+                    else (
+                        "serial_same_file_local_edits"
+                        if serial_local_edits
+                        else "duplicate_file_path"
+                    )
                 ),
                 "action": (
                     "composed_serial_exact_replace_changes"
                     if serial_exact_replace
-                    else "composed_duplicate_file_changes"
+                    else (
+                        "composed_serial_local_edit_changes"
+                        if serial_local_edits
+                        else "composed_duplicate_file_changes"
+                    )
                 ),
                 "file_path": record.path,
                 "canonical_json_pointer": record.json_pointers[0],
@@ -554,9 +588,9 @@ def _composition_metadata(
     return metadata
 
 
-def _prior_intents_are_exact_replace(record: _ComposedChange) -> bool:
+def _prior_intents_are_local_edits(record: _ComposedChange) -> bool:
     return bool(record.intents) and all(
-        intent == "exact_replace" for intent in record.intents
+        intent in {"exact_replace", "exact_line_replace"} for intent in record.intents
     )
 
 
@@ -768,6 +802,7 @@ def _normalization_metadata(
     change_pointer: str,
     eof_final_newline_tolerated: bool = False,
     blank_line_run_count_tolerated: bool = False,
+    exact_line_match_count: int | None = None,
 ) -> dict[str, Any]:
     before_digest = source_digest_for_content(before) if before is not None else None
     after_digest = source_digest_for_content(content_after)
@@ -792,6 +827,8 @@ def _normalization_metadata(
         "derived_diff_summary": diff_stats,
         "evidence_refs": _string_list(change.get("evidence_refs")),
     }
+    if exact_line_match_count is not None:
+        metadata["selector_match_count"] = exact_line_match_count
     if eof_final_newline_tolerated:
         metadata.update(
             {

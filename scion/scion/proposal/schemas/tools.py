@@ -8,7 +8,6 @@ from typing import Any, Dict, Mapping
 from .hypothesis import HYPOTHESIS_PROPOSAL_SCHEMA
 from .patch import PATCH_PROPOSAL_SCHEMA
 
-
 HYPOTHESIS_TOOL: Dict[str, Any] = {
     "name": "generate_hypothesis",
     "description": (
@@ -29,16 +28,23 @@ PATCH_TOOL: Dict[str, Any] = {
         "necessary same-mechanism support edit in additional_changes.\n\n"
         "- For localized existing-file edits, prefer exact_replace so source "
         "outside the named selector is preserved.\n"
+        "- When the same complete logical-line body must change at different "
+        "indentation depths, use exact_line_replace with an unindented, "
+        "line-ending-free old_string and replace_all=true. Provide new_string "
+        "as an LF-separated relative-indentation block without a terminal "
+        "newline; the host replays each match's outer indentation and EOL.\n"
         "- Reserve full_file for creates, broad rewrites, or an edit with no "
         "stable exact selector. Deletes declare the typed delete action.\n"
         "- When one existing file needs multiple non-contiguous edits, emit "
         "multiple ordered exact_replace change objects for the same file_path "
-        "in application order. Repeat file_path, and make each later old_string "
-        "match the source produced by the earlier changes. The host binds, "
-        "applies, and composes them serially. Do not mix same-file exact_replace edits "
-        "with create, delete, or full_file; use one full_file change instead.\n"
-        "- For exact_replace provide non-empty old_string, new_string, and "
-        "replace_all. To delete text use new_string: \"\"; "
+        "in application order. These may be mixed with ordered "
+        "exact_line_replace objects. Repeat file_path, and make each later "
+        "old_string match the source produced by the earlier changes. The host "
+        "binds, applies, and composes them serially. Do not mix same-file local "
+        "edits with create, delete, or full_file; use one full_file change "
+        "instead.\n"
+        "- For exact_replace or exact_line_replace provide non-empty old_string, "
+        'new_string, and replace_all. To delete text use new_string: ""; '
         "never omit new_string or set it to null. Do not emit unified diffs."
     ),
     "input_schema": PATCH_PROPOSAL_SCHEMA,
@@ -74,9 +80,7 @@ def bind_hypothesis_tool_to_context(
                 f"leading or trailing whitespace at index {index}"
             )
         if name in names:
-            raise ValueError(
-                f"duplicate hypothesis provider research surface: {name}"
-            )
+            raise ValueError(f"duplicate hypothesis provider research surface: {name}")
         names.append(name)
 
     tool = deepcopy(HYPOTHESIS_TOOL)
