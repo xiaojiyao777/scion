@@ -115,17 +115,18 @@ evidence prerequisite exists:
    formal screen. No provider call or Protocol/formal experiment was rerun;
    only provider-free unit/smoke verification ran. No next H/C is launched or
    authorized by this correction.
-9. **R56 corrected-runtime minute step prepared, not started:** the
-   [preregistration](docs/experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-preregistration-20260812.md)
-   freezes clean `acdc80ba` fresh B0/v1, one Terra H and conditional C, retry
-   zero, the same seed-11 four-case `8/12/12/15`-second cache-off
-   `AB/BA/AB/BA` screen, and no expansion, validation, frozen or promotion.
-   R55 remains host-side runtime rationale; the provider-visible question and
-   prior contain only R53–R54 algorithm evidence. Provider-free static and
-   subsecond V3/V4 preparation checks are permitted, but proxy and formal
-   Protocol calls remain blocked. Status is `PREPARED_NOT_STARTED /
-   AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; generic assent does not authorize
-   this exact new source send.
+9. **R56 corrected-runtime minute step terminal at Verification:** the
+   [postrun](docs/experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-postrun-20260812.md)
+   seals `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION /
+   VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION /
+   NO_PROMOTION`. The wrapper exited `0` after one Terra H/C and a passing
+   Contract. H explicitly required elapsed-budget updates on all recovery paths
+   and no stale cooling API. C retained that intent but its indentation-specific
+   `replace_all` matched only one of five calls, leaving four calls to the
+   removed `cool()` method. V3 rejected all three recovery fixtures in 519 ms;
+   V4, canary, formal Protocol and Decision were not reached. B0/v1 remains
+   champion. Do not repair or retry this root; redesign and test the minimal C
+   expression/tool seam provider-free before considering another short run.
 10. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
@@ -336,6 +337,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R53 | proven complete one-step V3 algorithm experiment; negative exact screen | The clean `e4b6b98d` minute run completed exit `0` with exactly one Terra H, one approved-H-bound C, one canary and one four-pair SCREENING call. The only semantic candidate change set `EMBEDDED_VNS_MAX_RUNTIME_SHARE` from `0.0` to `0.35`. All pairs were fresh, successful and feasible; independent recomputation is `0W/1L/3T`, effects `[-16,0,0,0]`, median `0 [-16,0]`, with no fleet regression. Telemetry is consistent with a real allocation shift—ALNS iterations `44 -> 151`, ALNS-core share `0.195208 -> 0.382246`, embedded-VNS share `0.419914 -> 0.287778`—but best updates fell `7 -> 4` and final quality did not improve. | Seal `VALID_COMPLETED_ONE_STEP_SCREEN / SCREENING_FAIL_CASE_QUALITY / NO_PROMOTION`. Keep the telemetry `association_only`; do not validate, freeze, promote, resume or retry this root. Retain the result only as neutral research evidence. It proves that the simplified V3 chain can complete one analyzable algorithm step, not that Scion has achieved CVRP improvement or continuous optimization. Add no gate, ledger, Trust/Hash or telemetry requirement. |
 | R54 | proven feedback uptake plus candidate/runtime and framework persistence defects | The clean fresh-B0 feedback-conditioned step used exactly one Terra H/C sequence. H explicitly converted R53's “more iterations, fewer best updates” negative into an elapsed-budget-SA hypothesis. C implemented the core elapsed-fraction mechanism but deleted `_SimulatedAnnealing.cool` while leaving three calls in repair-error, infeasible and route-limit paths. Contract and nine recorded Verification checks passed, but unit/regression checks were skipped and the controlled smoke missed those branches. Formal raw completed 4/4 attempts: E101/X120/X233 are three valid ties; P65 has a typed candidate `solver_algorithm_runtime_error` and its emitted objective is inadmissible for delta/W/L/T. Decision durably recorded `abandon / CANDIDATE_RUNTIME_FAILURE`. Afterward, canonical screening-context persistence rejected the three-item valid feedback against `valid=3 + candidate_failed=1`, raising `ValueError` and causing wrapper exit `1`. | Seal `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON / FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`. Keep candidate failure, Decision, and later framework error as separate facts. Do not reinterpret the three valid ties as a four-case result, use the P objective, retry/resume the root, validate/freeze/promote the candidate, or add a candidate-quality gate. The report preregisters no successor. |
 | R55 | proven narrow persistence and CVRP Verification coverage correction | Commit `3221416c` permits feedback cardinality from the exact valid-pair count through valid plus candidate-failed pairs while retaining exact observed W/L/T accounting. Commit `9aedfb64` makes CVRP V3/V4 execute subsecond problem-owned operator-recovery and public-entrypoint tests. A provider-free materialization of the exact R54 patch fails the repair-error, infeasible and route-limit fixtures; the ordinary focused/adjacent suite passes 25 tests on B0. | Retain these tests as mechanism-agnostic runtime-consistency coverage only. They add no quality, novelty, promotion or research-direction gate. No provider call or Protocol/formal experiment was rerun; only provider-free unit/smoke verification ran. No successor H/C is preregistered, launched or authorized by this correction. |
+| R56 | proven clean early rejection plus repeated C multi-site expression defect | The clean `acdc80ba` step completed wrapper exit `0` with exactly one Terra H/C and passing Contract. H explicitly required elapsed-budget updates on every recovery path and no stale cooling API. C preserved the mechanism but an indentation-specific `replace_all` matched only one of five `annealing.cool()` calls after removing the method, leaving four residual calls. V3 executed in 519 ms and all three recovery fixtures failed with `AttributeError`; the fourth ordinary-path call remained latent. V4 and later checks, canary, formal Protocol and Decision were not reached; B0/v1 remained champion. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Draw no algorithm-quality conclusion and do not repair/retry the root. Treat this as evidence for minimal provider-free C expression/tool redesign, not another rule or candidate gate. No R57 or successor H/C is preregistered, authorized or launched. |
 
 ## Modular execution plan
 
@@ -895,15 +897,16 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON /
   FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`; do not
   resume, retry or promote it.
-- [ ] After fresh explicit authorization, run the
+- [x] After fresh explicit authorization, launch the
   [R56 corrected-runtime minute one-step](docs/experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-preregistration-20260812.md)
-  exactly once. It is currently `PREPARED_NOT_STARTED /
-  AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. Before that authorization, only
-  provider-free static and subsecond V3/V4 preparation checks may run; do not
-  call the proxy, canary or formal Protocol. Keep the exact fresh-B0 source,
-  R53–R54-only provider prior, H/C limits `1/1`, seed-11 roster and one-step
-  claim boundary frozen. A clean result is one post-correction observation,
-  not long-campaign readiness or solver promotion.
+  exactly once, then complete independent read-only
+  [postrun analysis](docs/experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-postrun-20260812.md).
+  The wrapper exited `0` after one H/C and a passing Contract. V3 rejected all
+  three recovery fixtures on residual calls to the removed `cool()` API; V4,
+  canary, formal Protocol and Decision were not reached. Seal
+  `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED /
+  ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. B0/v1 remains champion;
+  do not repair, retry or infer algorithm quality.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:

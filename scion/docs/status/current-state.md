@@ -891,27 +891,45 @@ No provider call or Protocol/formal experiment was rerun; only provider-free
 unit/smoke verification ran. No next H/C is preregistered, launched or
 authorized by this correction.
 
-R56 is now frozen in its
+R56 was frozen in its
 [corrected-runtime minute one-step preregistration](../experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-preregistration-20260812.md)
-as `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. Its clean
-`acdc80ba` archive starts again from B0/v1 and keeps the seed-11
-P65/E101/X120/X233 roster, `8/12/12/15`-second limits, cache-off
-`AB/BA/AB/BA`, Terra H/C maxima `1/1`, retry zero, one canary and at most one
-formal SCREENING call. Expanded screening, validation, frozen and promotion
-are unreachable. The same twice-observed roster is retained only for a
-controlled first post-R55 short lifecycle observation; it cannot provide
-independent replication, generalization, stability or long-campaign readiness.
+from clean `acdc80ba`, fresh B0/v1, Terra H/C maxima `1/1` and retry zero. It
+has now terminalized and is sealed in the
+[postrun](../experiments/v0.4/v0.4-cvrp-r56-minute-corrected-one-step-postrun-20260812.md)
+as `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION /
+VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION /
+NO_PROMOTION`.
 
 R55 persistence and test mechanics remain host-side preregistration/runtime
 rationale and are absent from the provider-visible research context. The
 R56-specific provider additions are only the neutral algorithm question and
 R53–R54 algorithm evidence alongside the ordinary complete problem-owned
 context; R54 mechanism quality remains unidentifiable because its failed P row
-has no admissible delta. Provider-free static checks
-and subsecond V3/V4 microtests may run during preparation, but proxy, canary and
-formal Protocol calls remain blocked. R53/R54 authorization and generic assent
-do not authorize this exact `acdc80ba` source send; fresh explicit authorization
-is still required. No R56 provider or formal solver result exists yet.
+has no admissible delta.
+
+The user subsequently supplied the exact authorization for the `acdc80ba`
+fresh-B0 problem-owned source-derived context, the neutral R53–R54 algorithm
+prior, the R56 question, at most one Terra H and conditional C, and this one
+minute screen. The frozen ordinary-user launcher was invoked exactly once and
+its control marker records inner-process acquisition at
+`2026-08-12T15:05:33Z`, with startup-observation PID `277510`. The PID is not a
+durable identity or continued-liveness claim. The wrapper exited `0` normally
+about 51 seconds later with `COMPLETED_ONE_STEP_WRAPPER`, one H/C and a passing
+Contract.
+
+H strongly followed the neutral evidence and explicitly required
+elapsed-budget updates after every ordinary or recovery-path iteration, with
+no calls to a removed cooling API. C preserved the algorithm intent but its
+20-space `replace_all` matched only one of the five original calls. Four calls
+remained after `_SimulatedAnnealing.cool()` was removed: three recovery paths
+and one ordinary loop-tail path. V3 ran the problem-owned fixtures in 519 ms
+and rejected all three recovery cases with `AttributeError`; the fourth call
+is a source-proven latent defect. V4 and all later Verification checks, canary,
+formal Protocol and Decision were not reached. There are no raw metrics,
+admissible pairs, W/L/T or solver-quality conclusions. B0/v1 remains champion.
+The root is not repaired or retried. This is evidence for minimal provider-free
+C expression/tool redesign; no R57 or successor H/C is preregistered,
+authorized or launched.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1208,10 +1226,15 @@ feedback-cardinality persistence defect and makes CVRP V3/V4 execute real
 subsecond problem-owned consistency tests; an exact provider-free R54 patch
 replay fails all three newly covered recovery paths. This is corrective test
 evidence only: it reruns no provider or Protocol/formal experiment, adds no
-candidate gate, and by itself authorizes no next H/C. R56 is separately
-preregistered from clean `acdc80ba` as one more short fresh-B0 observation, but
-remains `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION` with
-no provider or formal Protocol result.
+candidate gate, and by itself authorizes no next H/C. R56 then completed one
+H/C and a passing Contract on clean `acdc80ba`, after which the new V3 fixtures
+rejected three residual calls to the removed `cool()` API in 519 ms.
+Independent source audit found a fourth latent residual call. The wrapper
+exited `0`; V4, canary, formal Protocol and Decision were not reached, so there
+is zero solver-quality evidence and B0/v1 remains champion. R56 is sealed
+`VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED /
+ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. No R57 is preregistered
+or authorized.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
