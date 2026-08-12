@@ -93,7 +93,18 @@ evidence prerequisite exists:
    stable analyzable research step, not solver improvement. It never drained
    validation/frozen, promoted or resumed. Warehouse measurement reanalysis
    remains non-blocking backlog.
-7. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+7. **R54 feedback-conditioned one-step:** the second short CVRP
+   [preregistration](docs/experiments/v0.4/v0.4-cvrp-minute-feedback-one-step-preregistration-20260812.md)
+   is `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION` from
+   fresh B0 on the same clean `e4b6b98d` runtime. It keeps R53's seed-11
+   roster, budgets, order, cache-off execution and one-step V3 envelope fixed;
+   only the H question/prior changes to supply the R53 negative and request a
+   second causal mechanism rather than the tested global embedded-VNS cap.
+   Because this reuses feedback-forming evidence, even a positive result is an
+   adaptive same-roster screen. It must stop and first earn a separately
+   preregistered seed-29 replication of the fixed candidate before any later
+   validation or promotion design.
+8. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -847,6 +858,20 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `VALID_COMPLETED_ONE_STEP_SCREEN` at `0W/1L/3T`, median `0 [-16,0]`, no fleet
   regression and no promotion. This remains a valid negative diagnostic, not
   broad CVRP improvement or task completion.
+- [ ] After a new explicit authorization for the new source-derived H/C send,
+  run the
+  [R54 minute feedback one-step](docs/experiments/v0.4/v0.4-cvrp-minute-feedback-one-step-preregistration-20260812.md)
+  once from fresh B0 on clean `e4b6b98d`. Preserve Terra H/C limits `1/1`,
+  retry zero, two-second canary/Verification, the exact seed-11
+  P65/E101/X120/X233 `8/12/12/15`-second roster, fresh cache-off
+  `AB/BA/AB/BA`, the 720-second wall and exactly one
+  `CampaignManager.run_one_step()`. The only design change from R53 is the
+  feedback-conditioned request for a second mechanism; do not inherit the
+  `0.35` candidate. Stop after the returned step with no expansion,
+  validation, frozen or promotion. Treat any positive result as adaptive
+  same-roster evidence only; it must first pass a separately preregistered
+  seed-29 replication of the exact fixed candidate and cannot route directly
+  to promotion.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:
@@ -967,5 +992,11 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   toward ALNS, but finished `0W/1L/3T`, median `0 [-16,0]`, with one P-case
   regression and no fleet regression. Decision correctly recorded
   `SCREENING_FAIL_CASE_QUALITY / continue_explore`; champion remains B0/v1.
+  R54 is now prepared from fresh B0 on the same clean runtime, with every
+  measurement and lifecycle field held fixed and only the R53-conditioned
+  research question/prior changed. It remains
+  `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; no R54
+  provider or solver call has started. A positive R54 screen would still
+  require independent seed-29 replication before any promotion path.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.
