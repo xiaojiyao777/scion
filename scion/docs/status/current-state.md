@@ -761,23 +761,33 @@ expression A/B trigger, but do not prove that the typed schema caused them.
 That post-terminal A/B remains a proposal-surface diagnosis, never a candidate
 gate or solver-outcome comparison; H remains unchanged.
 
-The experiment-owned input bundle is now `LAUNCH_READY_NOT_STARTED` at
+The experiment-owned input bundle remains `LAUNCH_READY_NOT_STARTED` at
 `campaign_out/v04-cvrp-c-expression-ab-20260811-input`. It freezes the four
 historical H/C traces, each trace's ordinary 11-file source, both complete
 terminal tool definitions and per-fixture outcome-blind checklists. The
 203-line runner, 123-line strict diff parser and 139-line input loader add zero
 production lines. Fifteen focused fake/parser tests, frozen-input validation
-and `bash -n` pass; output and control roots remain absent. The existing real
+and `bash -n` pass. At 2026-08-12 08:41:11Z an acquisition attempt failed before
+the driver: output, status, cells, driver log and exit were absent, with zero
+scientific/model-generation calls, zero solver calls and zero cells. The cause is
+`PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE`; this was not a scientific run or
+consumed launch. Its control-only observation is archived unchanged at
+`campaign_out/v04-cvrp-c-expression-ab-20260811-control-pre-driver-acquisition-failure-20260812T084111Z`,
+and the live output and control roots are absent. The launcher now uses ordinary
+`clawd`, explicit tmux socket `/tmp/scion-c-ab.tmux.sock`, and child-acquired
+marker/PID/log/exit observations without changing scientific design. Two
+independent reviews pass, so the first scientific launch may proceed under the
+user's existing explicit authorization. The existing real
 CVRP direct-v3 outer smoke also passes `1 passed in 32.55s`, but its MockLLM
 multi-file no-op and real 12-case/one-seed/one-second screening establish only
 local short-chain stability, not provider or algorithm evidence. No
-C-expression provider/solver call or launch has occurred. Terminal parse/apply
+C-expression scientific provider/solver call has occurred. Terminal parse/apply
 rejection receives deterministic zero/zero rubric scores and no blind packet;
 Contract rejection keeps its normalized-patch packet and two blind reviews.
 Both continue as measured cells; missing/misbound provider response or invalid
 input binding stops without retry or resume. Independent frozen-input,
-transport, parser, treatment, blind-packet and launcher review passed before
-either fresh root existed.
+transport, parser, treatment and blind-packet review passed; two independent
+reviews of the corrected acquisition seam also pass and execution remains open.
 
 A separate result-blind provider-surface audit reaches the same priority. The
 seven H calls do not justify more H tools or history compression: all received

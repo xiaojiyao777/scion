@@ -769,9 +769,17 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   all named the correct source owner/symbol and remained algorithm-focused.
 - [x] Prepare, but do not launch, the frozen C-expression A/B input bundle at
   `campaign_out/v04-cvrp-c-expression-ab-20260811-input`. Status is
-  `LAUNCH_READY_NOT_STARTED`; independent frozen-input, transport, parser,
-  blind-packet and launcher review passed, and the sole output and control
-  roots remain absent. It references exactly the four historical H/C
+  `LAUNCH_READY_NOT_STARTED`. The 2026-08-12 08:41:11Z attempt failed before
+  driver acquisition: output, status, cells, driver log and exit were absent,
+  with zero scientific/model-generation calls, zero solver calls and zero cells; the cause is
+  `PROCESS_DISAPPEARANCE_CAUSE_UNIDENTIFIABLE`. Its control-only observation is
+  archived at
+  `campaign_out/v04-cvrp-c-expression-ab-20260811-control-pre-driver-acquisition-failure-20260812T084111Z`.
+  This was not a scientific run or consumed launch. The corrected ordinary-user
+  launcher uses explicit tmux socket `/tmp/scion-c-ab.tmux.sock` and records a
+  child-acquired marker, PID, log and exit without changing scientific design;
+  two independent reviews pass. The live output and control roots remain
+  absent. The bundle references exactly the four historical H/C
   traces and their embedded ordinary 11-file source, freezes both complete
   terminal tool definitions and four outcome-blind checklists, and adds zero
   production lines. Its clear experiment-owned modules are 203-line runner,
@@ -804,6 +812,9 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   counterbalanced order, blind rubrics and the conservative adoption rule are
   frozen in the
   [C-expression A/B preregistration](docs/experiments/v0.4/v0.4-cvrp-c-expression-ab-preregistration-20260810.md).
+  This execution checkbox remains open; the corrected acquisition seam has now
+  passed independent review, so the first scientific launch may proceed under
+  the user's existing explicit authorization.
 - [ ] After the frozen C-expression A/B, replace the internal
   `proposal_source_ledger` with one ordinary `editable_source_context` value:
   approved target, unique canonical path/content pairs and target API guidance.
