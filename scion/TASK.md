@@ -82,10 +82,14 @@ evidence prerequisite exists:
    by ordinary editable source context with 278 net production lines deleted.
    H scientific content and tools remain unchanged; only host/control wrappers
    leave the provider view.
-6. **Fresh CVRP rung only if justified:** freeze one experimental change at a
-   time, run `gpt-5.6-terra`, drain queued stages, and require the unchanged V3
-   promotion path plus independent B0 retention. Warehouse measurement
-   reanalysis is useful non-blocking backlog, not a CVRP prerequisite.
+6. **Minute one-step before another long rung:** the fresh short CVRP
+   [one-step preregistration](docs/experiments/v0.4/v0.4-cvrp-minute-one-step-preregistration-20260812.md)
+   is `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION` on the
+   clean `e4b6b98d` runtime. It permits at most one Terra H, one conditional C,
+   canary and one four-case SCREENING call through `run_one_step()` exactly
+   once. It never drains validation/frozen, promotes or resumes. Analyze its
+   terminal agent/code/subject/Protocol evidence before designing another long
+   rung. Warehouse measurement reanalysis remains non-blocking backlog.
 7. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
@@ -828,6 +832,18 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   push has become the limiting context surface. Any treatment is restricted to
   list/read/search over the same already legal source and requires a separate
   V3 runtime design update; it never reads Protocol or protected evidence.
+- [ ] After fresh explicit authorization for this new source-derived H/C send,
+  run the
+  [minute one-step exploratory screen](docs/experiments/v0.4/v0.4-cvrp-minute-one-step-preregistration-20260812.md)
+  once from its prepared clean `e4b6b98d` bundle. Preserve H/C limits `1/1`,
+  retry zero, the two-second canary/Verification budgets, seed `11`, four frozen
+  `8/12/12/15`-second cases, fresh cache-off `AB/BA/AB/BA`, the 720-second
+  driver wall and exactly one `CampaignManager.run_one_step()`. Stop after the
+  returned step even if Decision queues validation. In independent read-only
+  postrun analysis, treat complete subject failure as terminal negative evidence
+  rather than a comparison, and partial/configuration/malformed evidence as
+  invalid; none of these labels becomes a hot-path gate. Do not infer promotion,
+  broad CVRP improvement or task completion from this diagnostic.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:
@@ -941,5 +957,10 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   remains B0/v1. No recovery candidate exists. R51 retains exact and closes
   strict diff; R52 closes the provider/source subtraction by 278 net deleted
   production lines after 169 main and 207 independent tests. It adds no gate,
-  Trust/Hash authority, ledger or provider tool loop. S6 final closure remains
-  pending, and CVRP still has no Protocol-complete promotion.
+  Trust/Hash authority, ledger or provider tool loop. The next minute one-step
+  CVRP bundle is `PREPARED_NOT_STARTED` and
+  `AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; no provider or solver call has
+  started. Its normal completion is only `COMPLETED_ONE_STEP_WRAPPER`, with
+  scientific classification deferred to independent read-only postrun analysis.
+  S6 final closure remains pending, and CVRP still has no Protocol-complete
+  promotion.

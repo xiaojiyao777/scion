@@ -820,6 +820,18 @@ chain, then failed only at an unrelated dirty V8 `typed_telemetry_summary`
 assertion; it is therefore not recorded as passing. Potential objective,
 headroom or case-structure additions remain separate scientific questions.
 
+The next bounded CVRP diagnostic is now
+[`PREPARED_NOT_STARTED`](../experiments/v0.4/v0.4-cvrp-minute-one-step-preregistration-20260812.md)
+from a clean ordinary-user archive of `e4b6b98d`. It freezes one Terra H, one
+conditional C, a two-second canary and Verification boundary, and one fresh
+four-case cache-off `AB/BA/AB/BA` SCREENING step. It calls
+`CampaignManager.run_one_step()` exactly once and cannot execute validation,
+frozen holdout or promotion. A normal returned and finalized step is only
+`COMPLETED_ONE_STEP_WRAPPER`; scientific classification is independent read-only
+postrun analysis, not a driver gate. No provider or solver call has started;
+status is `AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. A complete result remains
+an exploratory diagnostic and cannot satisfy the CVRP acceptance target.
+
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
 deadline-driven solver was evaluating several pairs. All CPU-heavy repository
@@ -1102,7 +1114,9 @@ R51: retain exact and close strict diff. R52 then closes the provider/source
 subtraction by net deletion while keeping raw trace completeness and runtime
 source binding. The remaining task boundary is solver evidence: CVRP still
 needs a fresh clean screening -> validation -> frozen promotion and independent
-B0 retention. This status does not design or preregister that later experiment.
+B0 retention. The prepared minute one-step above is the only next provider
+experiment; it remains unlaunched pending fresh source-send authorization and
+cannot itself close this boundary.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
