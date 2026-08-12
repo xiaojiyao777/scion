@@ -136,18 +136,19 @@ evidence prerequisite exists:
    expression-fidelity evidence only, not a new R56 or solver-quality result;
    no provider, canary, formal Protocol or Decision call ran. R57 itself did
    not preregister, authorize or launch a successor H/C experiment.
-11. **R58 expression-corrected seed-29 minute step prepared, not started:** the
-   [preregistration](docs/experiments/v0.4/v0.4-cvrp-r58-minute-expression-corrected-one-step-preregistration-20260812.md)
-   freezes clean `42535efc` fresh B0/v1, one Terra H and conditional C, retry
-   zero, seed `29`, the same four `8/12/12/15`-second cases, fresh cache-off
-   subjects in `AB/BA/AB/BA` order, and no expansion, validation, frozen or
-   promotion. Seed `29` differs from the immediate R53–R56 seed `11`, but R3
-   already used it on these exact cases; only the R58 subject executions are
-   fresh, so no independent replication or generalization claim is allowed.
-   R57's `exact_line_replace` is an optional C tool fact, not H algorithm
-   evidence or a required-use gate. Status is `PREPARED_NOT_STARTED /
-   AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; generic assent authorizes only
-   preparation, not this exact new source send or launch.
+11. **R58 expression-corrected seed-29 minute step terminal at Verification:**
+   the [postrun](docs/experiments/v0.4/v0.4-cvrp-r58-minute-expression-corrected-one-step-postrun-20260812.md)
+   seals `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION /
+   VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION /
+   NO_PROMOTION`. The clean `42535efc` wrapper exited `0` after one valid Terra
+   H/C and passing Contract. H again chose elapsed-budget SA. C saw all 11 files
+   and the optional `exact_line_replace` form but emitted six uniquely applying
+   `exact_replace` edits, deleted `cool()` and removed only two of five calls.
+   V3 rejected the three residual recovery-path calls in 568 ms. V4, canary,
+   formal Protocol, seed-29 comparison and Decision were not reached; B0/v1
+   remains champion. Pause provider algorithm experiments and redesign/test the
+   C expression-selection surface provider-free. Do not retry, resume, launch
+   R59, a long campaign or a WSL run.
 12. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
@@ -360,6 +361,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R55 | proven narrow persistence and CVRP Verification coverage correction | Commit `3221416c` permits feedback cardinality from the exact valid-pair count through valid plus candidate-failed pairs while retaining exact observed W/L/T accounting. Commit `9aedfb64` makes CVRP V3/V4 execute subsecond problem-owned operator-recovery and public-entrypoint tests. A provider-free materialization of the exact R54 patch fails the repair-error, infeasible and route-limit fixtures; the ordinary focused/adjacent suite passes 25 tests on B0. | Retain these tests as mechanism-agnostic runtime-consistency coverage only. They add no quality, novelty, promotion or research-direction gate. No provider call or Protocol/formal experiment was rerun; only provider-free unit/smoke verification ran. No successor H/C is preregistered, launched or authorized by this correction. |
 | R56 | proven clean early rejection plus repeated C multi-site expression defect | The clean `acdc80ba` step completed wrapper exit `0` with exactly one Terra H/C and passing Contract. H explicitly required elapsed-budget updates on every recovery path and no stale cooling API. C preserved the mechanism but an indentation-specific `replace_all` matched only one of five `annealing.cool()` calls after removing the method, leaving four residual calls. V3 executed in 519 ms and all three recovery fixtures failed with `AttributeError`; the fourth ordinary-path call remained latent. V4 and later checks, canary, formal Protocol and Decision were not reached; B0/v1 remained champion. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Draw no algorithm-quality conclusion and do not repair/retry the root. Treat this as evidence for minimal provider-free C expression/tool redesign, not another rule or candidate gate. No successor H/C experiment is preregistered, authorized or launched. |
 | R57 | proven provider-free C expression correction; no algorithm experiment | Commit `f537fed5` adds optional source-bound `exact_line_replace`: it matches a complete logical line independent of its outer indentation and replays replacement indentation under each exact match. A counterfactual re-expression of the frozen R56 C response matched all five `annealing.cool()` callsites through the production parse -> Contract -> materialize path; non-skipped V3 and V4 passed. The combined regression passed 183 tests, and independent review passed focused 38 plus adjacent 92 tests. | Retain this only as expression-fidelity and regression evidence. It adds no provider source-search/tool loop, retry, quality gate or Decision input. It is not an R56 repair/retry, a new R56 result or solver-quality evidence: no provider, canary, formal Protocol or Decision call ran. R57 itself did not preregister, authorize or launch a successor H/C experiment. |
+| R58 | proven clean early rejection plus unresolved C expression-selection defect | The clean `42535efc` run completed wrapper exit `0` with one terminal valid Terra H/C, retry/repair zero and passing Contract. H again selected elapsed-budget SA. C received all 11 editable files and the optional `exact_line_replace` form, but emitted six uniquely matching `exact_replace` edits and no line-oriented edit. It removed two of five `annealing.cool()` calls while deleting the method, leaving three 16-space recovery-path calls. V3 rejected all three fixtures in 568 ms; V4, canary, formal Protocol and Decision were not reached. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Seed-29 W/L/T, effect, CI and fleet comparison are undefined; draw no algorithm-quality conclusion. Pause provider algorithm experiments and redesign/test C expression selection provider-free, without a source-navigation loop, retry/repair call, patch grader, algorithm rule or quality gate. Do not launch R59, long or WSL work. |
 
 ## Modular execution plan
 
@@ -929,18 +931,19 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED /
   ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. B0/v1 remains champion;
   do not repair, retry or infer algorithm quality.
-- [ ] After fresh exact authorization, launch the
+- [x] After fresh exact authorization, launch the
   [R58 expression-corrected seed-29 minute one-step](docs/experiments/v0.4/v0.4-cvrp-r58-minute-expression-corrected-one-step-preregistration-20260812.md)
-  exactly once. It is `PREPARED_NOT_STARTED /
-  AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION` on clean `42535efc`; the current
-  generic assent covers preparation only. Keep Terra H/C maxima `1/1`, retry
-  zero, fresh B0, the experiment-owned `[29]` seed roster, four
-  `8/12/12/15`-second cache-off pairs in `AB/BA/AB/BA` order, and the one-step
-  claim boundary frozen. Seed `29` and all four cases have prior R3 exposure;
-  call only the subject executions fresh. R57's optional line edit must not
-  become an H algorithm fact, required-use rule, repair loop or quality gate.
-  Before exact authorization, do not call the proxy, canary, formal Protocol or
-  solver screen and do not create the future output/control roots.
+  exactly once, then complete independent read-only
+  [postrun analysis](docs/experiments/v0.4/v0.4-cvrp-r58-minute-expression-corrected-one-step-postrun-20260812.md).
+  The wrapper exited `0` after one valid H/C and passing Contract. Although C
+  saw the optional R57 line-oriented form, it used six exact edits, removed two
+  of five calls and left three calls to the deleted method. V3 rejected all
+  three recovery fixtures in 568 ms; V4, canary, formal Protocol and Decision
+  were not reached. Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION /
+  VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION /
+  NO_PROMOTION`. Do not infer seed-29 or algorithm quality, repair/retry the
+  root, or launch R59/long/WSL work. Pause provider experiments for a minimal
+  provider-free C expression-selection redesign and test.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:

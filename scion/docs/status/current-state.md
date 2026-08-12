@@ -945,10 +945,9 @@ or Decision call ran. Therefore this is expression-fidelity and regression
 evidence only, not a repair or retry of R56, a new R56 result, or solver-quality
 evidence.
 
-R58 is now frozen in its
+R58 was frozen in its
 [expression-corrected seed-29 minute one-step preregistration](../experiments/v0.4/v0.4-cvrp-r58-minute-expression-corrected-one-step-preregistration-20260812.md)
-as `PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`. Its clean
-`42535efc` archive starts from B0/v1 and permits at most one Terra H and
+from clean `42535efc`, B0/v1, with at most one Terra H and
 conditional C with retry zero. If Contract, non-skipped Verification and the
 veto-only canary permit, the sole formal call uses seed `29` on the same
 P65/E101/X120/X233 cases with `8/12/12/15`-second limits, fresh cache-off
@@ -965,11 +964,42 @@ generalization, validation, retained improvement or long-campaign readiness.
 R57's `exact_line_replace` is an optional C tool fact and is absent from the H
 algorithm prior; it adds no required-use gate, repair loop or algorithm claim.
 
-The current generic assent authorizes preparation only. It does not authorize
-the exact `42535efc` source-derived send, R53–R56 prior, R58 question, Terra H/C
-envelope or launch. Before fresh exact authorization, the proxy, provider,
-canary, formal Protocol and solver screen remain blocked, and the future output
-and control roots remain absent. No R58 scientific result exists.
+After the earlier generic preparation assent, the user supplied exact
+authorization for the clean `42535efc` fresh-B0 problem-owned source-derived
+context, R53–R56 neutral algorithm prior, R58 question, local Codex proxy send
+to Terra, at most one H and conditional C, and one minute screen. The frozen
+launcher was invoked exactly once. Its control marker records successful
+inner-process acquisition at `2026-08-12T23:38:22Z`, PID `316499`. The PID is a
+startup observation only. The wrapper terminalized normally about 44 seconds
+later with exit `0`, `COMPLETED_ONE_STEP_WRAPPER`, one terminal valid Terra H/C,
+zero retry/repair calls and a passing Contract. Research eligibility is
+`invalid_research_rejected_only / ineligible_zero_evaluated`, not an
+infrastructure-invalid wrapper.
+
+H received the exact question and R53–R56 prior once and again selected a
+source-grounded, falsifiable elapsed-budget-SA mechanism. C received that exact
+approved H, all 11 editable files and a tool surface containing optional
+`exact_line_replace`. It nevertheless emitted six `exact_replace` edits and no
+line-oriented edit. Every selector matched uniquely and Contract passed, but
+the applied source removed only the 20-space and 12-space calls while deleting
+`_SimulatedAnnealing.cool()`. Three 16-space calls remained on repair-error,
+candidate-infeasible and route-limit recovery paths. V1, V1b and V2 passed;
+V3 rejected all three fixtures with `AttributeError` in 568 ms. V4 and later
+checks, canary, formal Protocol and Decision were not reached. Candidate
+cleanup succeeded and B0/v1 remains the only champion.
+
+The independent
+[postrun](../experiments/v0.4/v0.4-cvrp-r58-minute-expression-corrected-one-step-postrun-20260812.md)
+seals `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION /
+VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION /
+NO_PROMOTION`. Seed-29 W/L/T, delta, CI and fleet comparison are undefined, so
+there is no algorithm-quality, replication or generalization result. The
+provider-free R57 replay proved the optional line form expressive; R58 shows
+that making it available did not make C select it. Pause provider CVRP
+algorithm experiments and redesign/test the C expression-selection surface
+provider-free. Add no source-navigation loop, repair/retry call, patch grader,
+algorithm-direction rule, candidate-quality gate or Decision input. Do not
+launch R59, a long campaign or a WSL run.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1275,10 +1305,12 @@ is zero solver-quality evidence and B0/v1 remains champion. R56 is sealed
 `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED /
 ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. R57 is not an algorithm
 experiment; its evidence label records only the provider-free expression
-correction at `f537fed5`. R58 is separately preregistered from clean `42535efc`
-as one seed-29 minute observation with fresh subject executions, but remains
-`PREPARED_NOT_STARTED / AWAITING_FRESH_SOURCE_SEND_AUTHORIZATION`; no provider,
-canary, formal Protocol or solver result exists.
+correction at `f537fed5`. R58 was separately preregistered from clean `42535efc`
+as one seed-29 minute observation with fresh subject executions. Exact
+authorization was later recorded and the one launcher invocation exited `0`.
+R58 is sealed at Verification with zero canary, Protocol or Decision evidence;
+B0/v1 remains champion and provider algorithm experiments pause for
+provider-free C expression-selection work.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
