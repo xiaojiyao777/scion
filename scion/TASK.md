@@ -162,9 +162,24 @@ evidence prerequisite exists:
    V3/V4. The scoped suite passed 170 tests and independent review passed 68.
    This is tool-presentation evidence only: no provider, canary, formal
    Protocol or Decision call ran and it supplies no algorithm evidence.
-   Provider experiments remain paused; no R60 experiment is preregistered,
-   authorized or launched.
-13. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+   Provider algorithm experiments remain paused.
+13. **R60 C-only tool-presentation pair prepared, not started:** the
+   [preregistration](docs/experiments/v0.4/v0.4-cvrp-r60-c-tool-presentation-pair-preregistration-20260813.md)
+   freezes the exact R58 approved-H C turn and changes only the complete
+   `PATCH_TOOL` presentation: OLD `42535efc` then NEW `47fe81ee`, at most one
+   Terra C per reached arm and two total, 180-second timeout and retry zero.
+   The experiment wrapper symmetrically omits explicit `prompt_cache_key` so
+   captured request kwargs differ only in the complete tool value.
+   Both terminal responses must be stored before provider-free production
+   parse -> source binding -> Contract -> materialize -> non-skipped V3/V4
+   scoring under opaque cell labels; after materialization V3 and V4 each run
+   independently once, and the arm reveal follows both primary records. H,
+   canary, formal Protocol, Decision and algorithm-quality calls are zero.
+   This single ordered pair has no population, p-value or algorithm-causal
+   claim. Status is
+   `PREPARED_NOT_STARTED / AWAITING_EXACT_SOURCE_SEND_AUTHORIZATION`; the
+   preceding generic assent does not authorize launch.
+14. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -377,7 +392,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R56 | proven clean early rejection plus repeated C multi-site expression defect | The clean `acdc80ba` step completed wrapper exit `0` with exactly one Terra H/C and passing Contract. H explicitly required elapsed-budget updates on every recovery path and no stale cooling API. C preserved the mechanism but an indentation-specific `replace_all` matched only one of five `annealing.cool()` calls after removing the method, leaving four residual calls. V3 executed in 519 ms and all three recovery fixtures failed with `AttributeError`; the fourth ordinary-path call remained latent. V4 and later checks, canary, formal Protocol and Decision were not reached; B0/v1 remained champion. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Draw no algorithm-quality conclusion and do not repair/retry the root. Treat this as evidence for minimal provider-free C expression/tool redesign, not another rule or candidate gate. No successor H/C experiment is preregistered, authorized or launched. |
 | R57 | proven provider-free C expression correction; no algorithm experiment | Commit `f537fed5` adds optional source-bound `exact_line_replace`: it matches a complete logical line independent of its outer indentation and replays replacement indentation under each exact match. A counterfactual re-expression of the frozen R56 C response matched all five `annealing.cool()` callsites through the production parse -> Contract -> materialize path; non-skipped V3 and V4 passed. The combined regression passed 183 tests, and independent review passed focused 38 plus adjacent 92 tests. | Retain this only as expression-fidelity and regression evidence. It adds no provider source-search/tool loop, retry, quality gate or Decision input. It is not an R56 repair/retry, a new R56 result or solver-quality evidence: no provider, canary, formal Protocol or Decision call ran. R57 itself did not preregister, authorize or launch a successor H/C experiment. |
 | R58 | proven clean early rejection plus unresolved C expression-selection defect | The clean `42535efc` run completed wrapper exit `0` with one terminal valid Terra H/C, retry/repair zero and passing Contract. H again selected elapsed-budget SA. C received all 11 editable files and the optional `exact_line_replace` form, but emitted six uniquely matching `exact_replace` edits and no line-oriented edit. It removed two of five `annealing.cool()` calls while deleting the method, leaving three 16-space recovery-path calls. V3 rejected all three fixtures in 568 ms; V4, canary, formal Protocol and Decision were not reached. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Seed-29 W/L/T, effect, CI and fleet comparison are undefined; draw no algorithm-quality conclusion. Pause provider algorithm experiments and redesign/test C expression selection provider-free, without a source-navigation loop, retry/repair call, patch grader, algorithm rule or quality gate. Do not launch an R59 provider experiment, long or WSL work. |
-| R59 | proven provider-free typed-tool presentation correction; no algorithm experiment | Commit `47fe81ee` uses one flat root/nested schema factory, dispatches explicit intents through four singleton-intent branches, preserves legacy missing intent and `replace_all=false`, and presents exact-span and indentation-neutral exact-line choices neutrally with one shape-only example. A mocked OpenAI request's actual `tools[0]` matches the tracked payload snapshot. Frozen R56/R58 replay retains the R58 original's three residual calls; its line re-expression matches all five and passes V3/V4. Scoped tests passed 170 and independent review passed 68. | Retain this only as tool-presentation, transport and expression-fidelity evidence. It adds no provider source-navigation loop, retry/repair call, patch grader, algorithm rule, quality gate or Decision input. No provider, canary, formal Protocol or Decision call ran, so there is no algorithm evidence. Provider experiments remain paused; no R60 experiment is preregistered, authorized or launched. |
+| R59 | proven provider-free typed-tool presentation correction; no algorithm experiment | Commit `47fe81ee` uses one flat root/nested schema factory, dispatches explicit intents through four singleton-intent branches, preserves legacy missing intent and `replace_all=false`, and presents exact-span and indentation-neutral exact-line choices neutrally with one shape-only example. A mocked OpenAI request's actual `tools[0]` matches the tracked payload snapshot. Frozen R56/R58 replay retains the R58 original's three residual calls; its line re-expression matches all five and passes V3/V4. Scoped tests passed 170 and independent review passed 68. | Retain this only as tool-presentation, transport and expression-fidelity evidence. It adds no provider source-navigation loop, retry/repair call, patch grader, algorithm rule, quality gate or Decision input. No provider, canary, formal Protocol or Decision call ran, so there is no algorithm evidence. At R59 closeout, no R60 experiment had been preregistered, authorized or launched; R60 is now separately preregistered below and still awaits exact authorization. |
 
 ## Modular execution plan
 
@@ -961,6 +976,20 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   root, or launch an R59 provider experiment or long/WSL work. Pause provider
   experiments for a minimal provider-free C expression-selection redesign and
   test.
+- [ ] After a new exact source-send authorization, run the
+  [R60 C-only tool-presentation matched pair](docs/experiments/v0.4/v0.4-cvrp-r60-c-tool-presentation-pair-preregistration-20260813.md)
+  once. Hold the full R58 C turn constant and call Terra in fixed OLD
+  `42535efc` then NEW `47fe81ee` order, at most one C per arm and retry zero.
+  Omit explicit `prompt_cache_key` symmetrically in the experiment wrapper and
+  prove the actual captured request kwargs otherwise match. Store both
+  terminal responses before the provider-free production parser,
+  source-bound Contract, materializer and non-skipped V3/V4 score opaque cells;
+  after materialization, V3 and V4 each run independently even when V3 fails.
+  Reveal the arms only after both primary records. Treat concrete edit intent,
+  selector-match count and residual calls as
+  descriptive diagnostics, not gates. Run no H, canary, formal Protocol,
+  Decision or algorithm-quality comparison. An incomplete provider pair is
+  unidentifiable and is never retried or resumed.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:
@@ -1090,5 +1119,10 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   caused wrapper exit `1`. R54 is sealed
   `VALID_TERMINAL_CANDIDATE_RUNTIME_FAILURE / DECISION_ABANDON /
   FRAMEWORK_POST_DECISION_CONTEXT_PERSISTENCE_ERROR / NO_PROMOTION`.
+  R58 is likewise sealed at V3 with zero Protocol evidence. R59 completed the
+  provider-free typed-tool presentation correction. R60 now freezes one
+  C-only OLD-then-NEW matched pair over the exact R58 turn, but remains
+  `PREPARED_NOT_STARTED / AWAITING_EXACT_SOURCE_SEND_AUTHORIZATION`; no R60
+  provider, solver-quality or Decision call has run.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.

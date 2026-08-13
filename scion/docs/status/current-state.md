@@ -1018,8 +1018,43 @@ whereas the line re-expression matches all five callsites and passes non-skipped
 V3/V4. The scoped suite passed 170 tests and independent review passed 68. No
 provider, canary, formal Protocol or Decision call ran, so R59 provides no
 algorithm-quality evidence and does not repair or retry R58. Provider
-experiments remain paused; no R60 experiment is preregistered, authorized or
-launched.
+algorithm experiments remain paused.
+
+R60 is now prospectively frozen as one C-only tool-presentation matched pair,
+not an algorithm experiment. Its
+[preregistration](../experiments/v0.4/v0.4-cvrp-r60-c-tool-presentation-pair-preregistration-20260813.md)
+holds the complete R58 approved-H C turn, prompt, two system blocks and all 11
+problem-owned source files constant. It permits at most one Terra C for the
+complete old `42535efc` `PATCH_TOOL` and then at most one for the complete new
+`47fe81ee` tool, using 180-second timeouts and retry zero. Both terminal
+responses must be stored before equal provider-free production parse -> source
+binding -> Contract -> materialize -> non-skipped V3/V4 scoring. H, canary,
+formal Protocol, Decision and algorithm-quality calls are zero; the V3/V4 path
+contains only the configured subsecond problem-owned consistency fixtures.
+
+The experiment-owned wrapper omits explicit schema-derived `prompt_cache_key`
+symmetrically in both arms, without changing production. Provider-free request
+capture must show that actual request kwargs otherwise differ only in the
+complete `tools[0]` value.
+
+Primary scoring uses opaque cell labels: its production parser necessarily
+reads the stored response and shared canonical context, but receives no arm,
+order or tool mapping. After materialization V3 and V4 each run independently
+once, so a V3 failure does not suppress the V4 observation. Both primary score
+records precede the arm reveal; edit-intent diagnostics are computed after
+reveal and cannot alter the primary vector.
+
+The primary result is each arm's mechanical `full_executable` vector. Edit
+intent, a five-site line-selector match and residual `annealing.cool()` calls
+are descriptive diagnostics only, never host gates. Any nonterminal or
+transport provider failure makes the pair incomplete and unidentifiable with
+no retry or resume; a terminal parse, Contract, materialization or V3/V4
+failure is a valid measured arm outcome. Because this is one fixed old-then-new
+pair, order, time and provider noise remain confounded; it supplies no
+population rate, p-value or algorithm-causal claim. The historical R58 response
+is neither sent nor treated as a cell. R60 remains
+`PREPARED_NOT_STARTED / AWAITING_EXACT_SOURCE_SEND_AUTHORIZATION`; the generic
+assent authorizes preparation only.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1333,7 +1368,10 @@ B0/v1 remains champion and provider algorithm experiments pause for
 provider-free C expression-selection work. R59 records the provider-free
 typed-tool presentation correction at `47fe81ee`; its frozen replay and
 transport/regression tests add no algorithm evidence. Provider experiments
-remain paused, and no R60 experiment is preregistered, authorized or launched.
+remain paused. R60 is preregistered as one C-only OLD-then-NEW matched pair
+over the frozen R58 turn, but is not authorized or launched; it can produce
+only a bounded tool-presentation diagnostic and zero algorithm-quality or
+Decision evidence.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
