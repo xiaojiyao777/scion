@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from typing import Any, Dict, Mapping
 
 from .hypothesis import HYPOTHESIS_PROPOSAL_SCHEMA
-from .patch import PATCH_PROPOSAL_SCHEMA
+from .patch import EXACT_LINE_REPLACE_EXAMPLE, PATCH_PROPOSAL_SCHEMA
+
+_EXACT_LINE_REPLACE_EXAMPLE_JSON = json.dumps(
+    EXACT_LINE_REPLACE_EXAMPLE,
+    separators=(",", ":"),
+)
 
 HYPOTHESIS_TOOL: Dict[str, Any] = {
     "name": "generate_hypothesis",
@@ -26,19 +32,22 @@ PATCH_TOOL: Dict[str, Any] = {
         "Generate one complete typed edit set implementing the approved "
         "hypothesis. Keep the primary edit on its approved target and put every "
         "necessary same-mechanism support edit in additional_changes.\n\n"
-        "- For localized existing-file edits, prefer exact_replace so source "
-        "outside the named selector is preserved.\n"
-        "- When the same complete logical-line body must change at different "
-        "indentation depths, use exact_line_replace with an unindented, "
+        "- Choose exact_replace for an exact source block whose indentation is "
+        "part of the selector. Choose "
+        "exact_line_replace when the identical complete logical-line body repeats "
+        "at different outer indentation depths; use an unindented, "
         "line-ending-free old_string and replace_all=true. Provide new_string "
         "as an LF-separated relative-indentation block without a terminal "
-        "newline; the host replays each match's outer indentation and EOL.\n"
-        "- Reserve full_file for creates, broad rewrites, or an edit with no "
+        "newline; the host replays each match's outer indentation and EOL. One "
+        "example illustrating only the JSON shape, without requiring this edit "
+        "intent, is: "
+        f"{_EXACT_LINE_REPLACE_EXAMPLE_JSON}\n"
+        "- Choose full_file for creates, broad rewrites, or an edit with no "
         "stable exact selector. Deletes declare the typed delete action.\n"
         "- When one existing file needs multiple non-contiguous edits, emit "
-        "multiple ordered exact_replace change objects for the same file_path "
-        "in application order. These may be mixed with ordered "
-        "exact_line_replace objects. Repeat file_path, and make each later "
+        "multiple ordered localized-edit change objects for the same file_path "
+        "in application order; choose exact_replace or exact_line_replace for "
+        "each object using the conditions above. Repeat file_path, and make each later "
         "old_string match the source produced by the earlier changes. The host "
         "binds, applies, and composes them serially. Do not mix same-file local "
         "edits with create, delete, or full_file; use one full_file change "

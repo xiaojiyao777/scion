@@ -5,7 +5,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
 from scion.core.models import (
     Branch,
     BranchState,
@@ -106,8 +105,8 @@ def _nested_keys(value) -> set[str]:
     return set()
 
 
-def test_patch_tool_consistently_supports_ordered_same_file_exact_replace() -> None:
-    guidance = "multiple ordered exact_replace change objects"
+def test_patch_tool_consistently_supports_ordered_same_file_localized_edits() -> None:
+    guidance = "multiple ordered localized-edit change objects"
     assert guidance in PATCH_TOOL["description"]
     schema_guidance = " ".join(
         (
@@ -122,13 +121,16 @@ def test_patch_tool_consistently_supports_ordered_same_file_exact_replace() -> N
     code_snapshot = build_prompt_turn_snapshot("code", _code_context())
     code_guidance = code_snapshot.user_prompt
     for expected in (
-        "localized existing-file edits",
-        "prefer exact_replace",
-        "source outside the named selector is preserved",
+        "Choose exact_replace",
+        "exact source block",
+        "whose indentation is part of the selector",
+        "Choose exact_line_replace",
+        "identical complete logical-line body repeats",
+        "choose exact_replace or exact_line_replace for each object",
         "application order",
         "later old_string",
         "source produced by the earlier changes",
-        "full_file for creates, broad rewrites",
+        "Choose full_file for creates, broad rewrites",
         "no stable exact selector",
     ):
         assert expected in PATCH_TOOL["description"]
@@ -953,10 +955,16 @@ def test_code_provider_call_preserves_prompt_value(tmp_path: Path) -> None:
     assert client.calls == [
         (snapshot.user_prompt, list(snapshot.system_blocks), "code")
     ]
+    assert client.tools == [snapshot.provider_tool]
+    assert client.tools[0] is not snapshot.provider_tool
+    assert snapshot.provider_tool == PATCH_TOOL
+    assert snapshot.provider_tool is not PATCH_TOOL
+    assert snapshot.provider_tool["input_schema"] is not PATCH_TOOL["input_schema"]
     assert diagnostics.request_kind == "code"
     assert diagnostics.provider_ok is diagnostics.ok is True
     assert trace["system_blocks"] == list(snapshot.system_blocks)
     assert trace["user_prompt"] == snapshot.user_prompt
+    assert trace["tool_schema"] == snapshot.provider_tool["input_schema"]
     assert "prompt_hash" not in trace
     assert "prompt_manifest" not in trace
 
