@@ -1020,41 +1020,43 @@ provider, canary, formal Protocol or Decision call ran, so R59 provides no
 algorithm-quality evidence and does not repair or retry R58. Provider
 algorithm experiments remain paused.
 
-R60 is now prospectively frozen as one C-only tool-presentation matched pair,
-not an algorithm experiment. Its
-[preregistration](../experiments/v0.4/v0.4-cvrp-r60-c-tool-presentation-pair-preregistration-20260813.md)
-holds the complete R58 approved-H C turn, prompt, two system blocks and all 11
-problem-owned source files constant. It permits at most one Terra C for the
-complete old `42535efc` `PATCH_TOOL` and then at most one for the complete new
-`47fe81ee` tool, using 180-second timeouts and retry zero. Both terminal
-responses must be stored before equal provider-free production parse -> source
-binding -> Contract -> materialize -> non-skipped V3/V4 scoring. H, canary,
-formal Protocol, Decision and algorithm-quality calls are zero; the V3/V4 path
-contains only the configured subsecond problem-owned consistency fixtures.
+R60 has now completed as one C-only tool-presentation matched pair, not an
+algorithm experiment. Its
+[postrun](../experiments/v0.4/v0.4-cvrp-r60-c-tool-presentation-pair-postrun-20260813.md)
+seals `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / BOTH_LINE_SELECTION /
+NO_IDENTIFIED_PRESENTATION_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`.
+The frozen wrapper held the complete R58 approved-H C turn, prompt, two system
+blocks and all 11 problem-owned source files constant. It called Terra once
+with the complete OLD `42535efc` tool and then once with the complete NEW
+`47fe81ee` tool, with zero H calls and retries. Both responses were terminal
+before provider-free scoring; both opaque primary records preceded the reveal.
+The wrapper exited `0` after about `69.043` seconds.
 
-The experiment-owned wrapper omits explicit schema-derived `prompt_cache_key`
-symmetrically in both arms, without changing production. Provider-free request
-capture must show that actual request kwargs otherwise differ only in the
-complete `tools[0]` value.
+Both arms passed production parse, source binding, Contract, materialization
+and independently executed non-skipped V3/V4. OLD V3/V4 took 555/854 ms and
+NEW took 508/844 ms; these are local consistency-test timings, not provider or
+algorithm performance. After reveal, both responses contained exactly one
+unindented `exact_line_replace` for `annealing.cool()` with
+`replace_all=true`, each matched all five sites and left zero residual calls.
+OLD used six other exact edits; NEW used three and had one no-op exact edit
+dropped by normalization. Thus both primary and descriptive patterns are
+`BOTH`; the new presentation has no identified advantage on this pair.
 
-Primary scoring uses opaque cell labels: its production parser necessarily
-reads the stored response and shared canonical context, but receives no arm,
-order or tool mapping. After materialization V3 and V4 each run independently
-once, so a V3 failure does not suppress the V4 observation. Both primary score
-records precede the arm reveal; edit-intent diagnostics are computed after
-reveal and cannot alter the primary vector.
+Independent post-hoc source inspection is outside the preregistered endpoints.
+OLD's normalized scheduler repeats `destroy_weights.record(d_idx, score)`
+consecutively; the average ratio often cancels but the accounting is
+semantically unclean. NEW defines `set_deadline_progress` but never calls it,
+leaving temperature at `start_temp` and the approved mechanism inactive.
+Neither implementation enters canary, formal solver testing, branch retention
+or promotion. Canary, formal Protocol, algorithm-quality and Decision calls
+are all zero.
 
-The primary result is each arm's mechanical `full_executable` vector. Edit
-intent, a five-site line-selector match and residual `annealing.cool()` calls
-are descriptive diagnostics only, never host gates. Any nonterminal or
-transport provider failure makes the pair incomplete and unidentifiable with
-no retry or resume; a terminal parse, Contract, materialization or V3/V4
-failure is a valid measured arm outcome. Because this is one fixed old-then-new
-pair, order, time and provider noise remain confounded; it supplies no
-population rate, p-value or algorithm-causal claim. The historical R58 response
-is neither sent nor treated as a cell. R60 remains
-`PREPARED_NOT_STARTED / AWAITING_EXACT_SOURCE_SEND_AUTHORIZATION`; the generic
-assent authorizes preparation only.
+The single fixed OLD-then-NEW pair confounds presentation with order, time and
+model stochasticity. Historical R58 is not another cell. R58-to-R60 shows only
+that both presentations could and in this pair did select the five-site line
+expression; it does not prove an R59 causal improvement, provider population
+rate or reproducibility. Provider algorithm experiments remain paused, and no
+R61 is preregistered, authorized or launched.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1368,10 +1370,12 @@ B0/v1 remains champion and provider algorithm experiments pause for
 provider-free C expression-selection work. R59 records the provider-free
 typed-tool presentation correction at `47fe81ee`; its frozen replay and
 transport/regression tests add no algorithm evidence. Provider experiments
-remain paused. R60 is preregistered as one C-only OLD-then-NEW matched pair
-over the frozen R58 turn, but is not authorized or launched; it can produce
-only a bounded tool-presentation diagnostic and zero algorithm-quality or
-Decision evidence.
+remain paused. R60 then completed one C-only OLD-then-NEW matched pair over the
+frozen R58 turn. Both arms were fully executable and both selected the five-site
+line expression, so it is sealed `BOTH / BOTH_LINE_SELECTION /
+NO_IDENTIFIED_PRESENTATION_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`.
+Post-hoc source observations keep both proposals out of algorithm testing; no
+R61 is preregistered, authorized or launched.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
