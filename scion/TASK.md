@@ -4,7 +4,7 @@
 
 *Accepted runtime baseline: `4d637959`*
 
-*Last updated: 2026-08-12*
+*Last updated: 2026-08-13*
 
 This is the active task source. `design/scion-architecture-v3.md` is the
 sole architecture authority. The direct-runtime addendum may explain an
@@ -147,9 +147,24 @@ evidence prerequisite exists:
    V3 rejected the three residual recovery-path calls in 568 ms. V4, canary,
    formal Protocol, seed-29 comparison and Decision were not reached; B0/v1
    remains champion. Pause provider algorithm experiments and redesign/test the
-   C expression-selection surface provider-free. Do not retry, resume, launch
-   R59, a long campaign or a WSL run.
-12. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+   C expression-selection surface provider-free. Do not retry, resume, or
+   launch an R59 provider experiment, a long campaign or a WSL run.
+12. **R59 provider-free typed-tool presentation correction complete:** commit
+   `47fe81ee` gives root and nested changes one shared flat schema factory.
+   When `edit_intent` is explicit, four branches discriminate the three typed
+   intents and their valid actions; legacy missing intent and default
+   `replace_all=false` remain compatible. Exact-span and indentation-neutral
+   exact-line choices are described in parallel, with one shape-only line-edit
+   example that does not require its use. A mocked OpenAI request proves the
+   actual `tools[0]` payload matches the version-controlled snapshot. Frozen
+   R56/R58 counterfactual replays preserve the R58 original's three residual
+   calls, while the line re-expression matches all five and passes non-skipped
+   V3/V4. The scoped suite passed 170 tests and independent review passed 68.
+   This is tool-presentation evidence only: no provider, canary, formal
+   Protocol or Decision call ran and it supplies no algorithm evidence.
+   Provider experiments remain paused; no R60 experiment is preregistered,
+   authorized or launched.
+13. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -361,7 +376,8 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R55 | proven narrow persistence and CVRP Verification coverage correction | Commit `3221416c` permits feedback cardinality from the exact valid-pair count through valid plus candidate-failed pairs while retaining exact observed W/L/T accounting. Commit `9aedfb64` makes CVRP V3/V4 execute subsecond problem-owned operator-recovery and public-entrypoint tests. A provider-free materialization of the exact R54 patch fails the repair-error, infeasible and route-limit fixtures; the ordinary focused/adjacent suite passes 25 tests on B0. | Retain these tests as mechanism-agnostic runtime-consistency coverage only. They add no quality, novelty, promotion or research-direction gate. No provider call or Protocol/formal experiment was rerun; only provider-free unit/smoke verification ran. No successor H/C is preregistered, launched or authorized by this correction. |
 | R56 | proven clean early rejection plus repeated C multi-site expression defect | The clean `acdc80ba` step completed wrapper exit `0` with exactly one Terra H/C and passing Contract. H explicitly required elapsed-budget updates on every recovery path and no stale cooling API. C preserved the mechanism but an indentation-specific `replace_all` matched only one of five `annealing.cool()` calls after removing the method, leaving four residual calls. V3 executed in 519 ms and all three recovery fixtures failed with `AttributeError`; the fourth ordinary-path call remained latent. V4 and later checks, canary, formal Protocol and Decision were not reached; B0/v1 remained champion. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Draw no algorithm-quality conclusion and do not repair/retry the root. Treat this as evidence for minimal provider-free C expression/tool redesign, not another rule or candidate gate. No successor H/C experiment is preregistered, authorized or launched. |
 | R57 | proven provider-free C expression correction; no algorithm experiment | Commit `f537fed5` adds optional source-bound `exact_line_replace`: it matches a complete logical line independent of its outer indentation and replays replacement indentation under each exact match. A counterfactual re-expression of the frozen R56 C response matched all five `annealing.cool()` callsites through the production parse -> Contract -> materialize path; non-skipped V3 and V4 passed. The combined regression passed 183 tests, and independent review passed focused 38 plus adjacent 92 tests. | Retain this only as expression-fidelity and regression evidence. It adds no provider source-search/tool loop, retry, quality gate or Decision input. It is not an R56 repair/retry, a new R56 result or solver-quality evidence: no provider, canary, formal Protocol or Decision call ran. R57 itself did not preregister, authorize or launch a successor H/C experiment. |
-| R58 | proven clean early rejection plus unresolved C expression-selection defect | The clean `42535efc` run completed wrapper exit `0` with one terminal valid Terra H/C, retry/repair zero and passing Contract. H again selected elapsed-budget SA. C received all 11 editable files and the optional `exact_line_replace` form, but emitted six uniquely matching `exact_replace` edits and no line-oriented edit. It removed two of five `annealing.cool()` calls while deleting the method, leaving three 16-space recovery-path calls. V3 rejected all three fixtures in 568 ms; V4, canary, formal Protocol and Decision were not reached. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Seed-29 W/L/T, effect, CI and fleet comparison are undefined; draw no algorithm-quality conclusion. Pause provider algorithm experiments and redesign/test C expression selection provider-free, without a source-navigation loop, retry/repair call, patch grader, algorithm rule or quality gate. Do not launch R59, long or WSL work. |
+| R58 | proven clean early rejection plus unresolved C expression-selection defect | The clean `42535efc` run completed wrapper exit `0` with one terminal valid Terra H/C, retry/repair zero and passing Contract. H again selected elapsed-budget SA. C received all 11 editable files and the optional `exact_line_replace` form, but emitted six uniquely matching `exact_replace` edits and no line-oriented edit. It removed two of five `annealing.cool()` calls while deleting the method, leaving three 16-space recovery-path calls. V3 rejected all three fixtures in 568 ms; V4, canary, formal Protocol and Decision were not reached. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Seed-29 W/L/T, effect, CI and fleet comparison are undefined; draw no algorithm-quality conclusion. Pause provider algorithm experiments and redesign/test C expression selection provider-free, without a source-navigation loop, retry/repair call, patch grader, algorithm rule or quality gate. Do not launch an R59 provider experiment, long or WSL work. |
+| R59 | proven provider-free typed-tool presentation correction; no algorithm experiment | Commit `47fe81ee` uses one flat root/nested schema factory, dispatches explicit intents through four singleton-intent branches, preserves legacy missing intent and `replace_all=false`, and presents exact-span and indentation-neutral exact-line choices neutrally with one shape-only example. A mocked OpenAI request's actual `tools[0]` matches the tracked payload snapshot. Frozen R56/R58 replay retains the R58 original's three residual calls; its line re-expression matches all five and passes V3/V4. Scoped tests passed 170 and independent review passed 68. | Retain this only as tool-presentation, transport and expression-fidelity evidence. It adds no provider source-navigation loop, retry/repair call, patch grader, algorithm rule, quality gate or Decision input. No provider, canary, formal Protocol or Decision call ran, so there is no algorithm evidence. Provider experiments remain paused; no R60 experiment is preregistered, authorized or launched. |
 
 ## Modular execution plan
 
@@ -942,8 +958,9 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   were not reached. Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION /
   VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION /
   NO_PROMOTION`. Do not infer seed-29 or algorithm quality, repair/retry the
-  root, or launch R59/long/WSL work. Pause provider experiments for a minimal
-  provider-free C expression-selection redesign and test.
+  root, or launch an R59 provider experiment or long/WSL work. Pause provider
+  experiments for a minimal provider-free C expression-selection redesign and
+  test.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:

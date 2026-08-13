@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-12*
+*Last updated: 2026-08-13*
 
 Read `TASK.md` first. `design/scion-architecture-v3.md` is the sole architecture
 authority. `design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` only
@@ -999,7 +999,27 @@ that making it available did not make C select it. Pause provider CVRP
 algorithm experiments and redesign/test the C expression-selection surface
 provider-free. Add no source-navigation loop, repair/retry call, patch grader,
 algorithm-direction rule, candidate-quality gate or Decision input. Do not
-launch R59, a long campaign or a WSL run.
+launch an R59 provider experiment, a long campaign or a WSL run.
+
+R59 is a provider-free tool-presentation correction, not a successor algorithm
+experiment. Commit `47fe81ee` builds the root and nested change objects from
+one shared flat schema factory. An explicit `edit_intent` selects among four
+singleton-intent branches for localized replacement, line replacement,
+complete-file create/modify and typed deletion; the legacy missing-intent shape
+and default `replace_all=false` remain compatible. Exact-span and
+indentation-neutral exact-line intents now have neutral parallel descriptions,
+and the latter has one explicitly shape-only example that does not require its
+selection. A mocked OpenAI transport call proves its actual `tools[0]` equals
+the version-controlled payload snapshot.
+
+Frozen provider-free R56/R58 counterfactual replay keeps the R58 original
+result distinct: the original exact edits leave three residual `cool()` calls,
+whereas the line re-expression matches all five callsites and passes non-skipped
+V3/V4. The scoped suite passed 170 tests and independent review passed 68. No
+provider, canary, formal Protocol or Decision call ran, so R59 provides no
+algorithm-quality evidence and does not repair or retry R58. Provider
+experiments remain paused; no R60 experiment is preregistered, authorized or
+launched.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1310,7 +1330,10 @@ as one seed-29 minute observation with fresh subject executions. Exact
 authorization was later recorded and the one launcher invocation exited `0`.
 R58 is sealed at Verification with zero canary, Protocol or Decision evidence;
 B0/v1 remains champion and provider algorithm experiments pause for
-provider-free C expression-selection work.
+provider-free C expression-selection work. R59 records the provider-free
+typed-tool presentation correction at `47fe81ee`; its frozen replay and
+transport/regression tests add no algorithm evidence. Provider experiments
+remain paused, and no R60 experiment is preregistered, authorized or launched.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
