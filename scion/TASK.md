@@ -306,7 +306,39 @@ evidence prerequisite exists:
    and support no causal speed claim. Decision and promotion are null; all
    declared zero-call/action fields remain zero. R65 stops with no effect
    inference and no R66.
-19. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+19. **R66 H-only mechanism-frontier probe prepared and explicitly
+   authorized:** the
+   [preregistration](docs/experiments/v0.4/v0.4-cvrp-r66-h-only-mechanism-frontier-probe-preregistration-20260814.md)
+   freezes one prior-informed, non-blind Terra H observation over the exact
+   fresh-B0 11-source values at `51f9bbd7` and the clean production H carrier
+   at `47fe81ee`. Source is carried only as production
+   `champion_operators_code`; the typed question has no `research_prior`, and
+   experiment history, last rejection, branch-current code and the ordinary
+   outcome-rich cross-campaign prior are absent. The exact current question
+   asks for one bounded causal mechanism outside the neutral E01–E10
+   replay/tuning/repair frontier; the
+   ledger is not a novelty gate or permanent blacklist. Production system
+   blocks and the base H prompt remain unchanged; the exact production
+   context-bound H tool permits only `change_locus=solver_design`, with no
+   experiment-owned schema change. The exact ledger block is appended with no
+   explicit `prompt_cache_key`. The
+   envelope is H at most one, 180-second provider timeout, retry zero and a
+   300-second outer wall. Mechanical recording is limited to provider
+   completion, exactly one expected named tool, argument availability/JSON and
+   typed hypothesis-schema validity. Scientific classification, algorithm
+   quality, Decision and promotion remain null. C, patch, materialization,
+   Contract, V3/V4, solver, canary, Protocol, quality/formal evaluation,
+   Decision, promotion, repair, retry/resume/substitution and R67 remain zero.
+   The user separately authorized this one immediate H-only action verbatim:
+
+   > 好，你准备好这份机制排除表和 H-only 预注册包之后直接进行后续操作，不用停下来等授权，直接开始，明确给你授权
+
+   This authorization is resolved only to preparation plus one H-only Terra
+   call after provider-free preflight. It does not inherit from R65, authorize
+   a candidate or demonstrate novelty, feasibility, quality or S6 progress.
+   Current status is `PREPARED_AUTHORIZED_NOT_STARTED`; no R66 provider call or
+   downstream action has started.
+20. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -526,6 +558,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R63 | proven complete single C-message pair; no identified message-review advantage or algorithm evidence | The authorized fixed CONTROL→REVIEW pair completed exit `0` in about 55 seconds with H/retry zero, two terminal C outcomes, two opaque primary records and two opaque sidecars. All 13 primary fields are true in both arms (`BOTH`). Both proposals use one-file `_two_opt_star` exact replacement with nearly the same boundary-delta semantics; REVIEW differs only in depot-assignment placement/format and has 51 more input tokens. Sidecars are `UNKNOWN/TRUE` for both, aggregate null. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / NO_IDENTIFIED_MESSAGE_REVIEW_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. V3/V4 do not enter `_two_opt_star`: V3 disables embedded VNS; V4 passes `0.01` seconds, but `_algorithm_time_limit` clamps the scheduler time limit to `0.05` seconds, equal to its minimum `0.05`-second reserve, so strict `remaining_time() > reserve` is not met. Claim neither review benefit nor ineffectiveness from one confounded ordered pair; the seal does not mean the suffix was ineffective or the model did not review. Run no canary, formal Protocol, quality solver, Decision or promotion. At R63 closeout, no R64 was preregistered, authorized or launched. |
 | R64 | terminal complete provider-free `_two_opt_star` semantic diagnostic; durable calibrated reproduction only | The unique formal root was created at `2026-08-14T09:41:56Z` and contains only mode-`0600` `result.json`/`status.json` under a mode-`0700` root. Both arms report cut/near/state `TRUE/TRUE/TRUE` and descriptive route-distance calls `0`. All 27 cut and three near-EPS cases equal their references without exception. State candidate/reference accepted-move counts are `0/0`, `1/1`, and `5/5`; complete traces/final partition/load/cost states equal the reference and all invariants hold. | `TERMINAL_DIAGNOSTIC`, `complete=true`, `semantic_endpoints_claimed=true`; classification and both aggregates are null. Formal role `DURABLE_REPRODUCTION_OF_EXACT_CANDIDATE_CALIBRATED_PROVIDER_FREE_DIAGNOSTIC`, with `outcome_blind=false` and `independent_confirmation=false`. Nested `preparation_calibration.formal_output_created=false` describes only the earlier temporary calibration, not current root absence. This finite-fixture result is non-gating, zero algorithm-quality evidence, and no independent confirmation. Provider/Contract/V3/V4/canary/formal Protocol/quality/Decision/mutation counters are zero; provider pause remains and no R65 is authorized. |
 | R65 | terminal complete exposed-coordinate minute calibration; no signal | The exact authorized B0→alpha canary and four seed-73 AB/BA/AB/BA pairs completed all 10 fresh subprocesses and 98 declared subject-seconds. Canary subjects both succeeded feasibly with runtime-audit validity, distance 20 and fleet violation zero. P65/E101/X120/X233 are exact B0/alpha ties at 798/1124/14250/20112; all eight screen subjects are successful, feasible, runtime-audit valid and fleet-safe. | Seal `VALID_COMPLETE_EXPOSED_COORDINATE_MINUTE_CALIBRATION / EXPLORATORY_SCREEN_NO_SIGNAL / ORDINARY_MINUTE_RULE_NOT_MET / NO_GO_EFFECT_INFERENCE / NO_MORE_PROVIDER_FREE / NO_R66`. Pair/case result is `0W/0L/4T`, all deltas zero, median `0 [0,0]`, protected regressions zero. Only CI-low, loss-rate and fleet criteria pass; win-rate, practical median and net-score criteria fail. Decision/promotion are null; provider/H/C/Contract/V3/V4/validation/frozen/Decision/promotion/beta/R66 are zero. Do not infer an effect, pool R1, extend the screen or launch R66. |
+| R66 | prepared, explicitly authorized H-only mechanism-frontier observation; not started | The exact fresh-B0 11-source values at `51f9bbd7`, clean `47fe81ee` production H carrier, frozen question and neutral E01–E10 exclusion ledger permit at most one forced Terra H call, timeout 180 seconds, retry zero and outer wall 300 seconds. Historical raw H/C responses, candidates and results are excluded; the prior-informed ledger makes the observation non-blind. | Status `PREPARED_AUTHORIZED_NOT_STARTED`. Record only the six mechanical H fields and a parsed observation when available; scientific classification, quality, Decision and promotion remain null. C/patch/materialize/Contract/V3/V4/solver/canary/Protocol/quality/formal/Decision/promotion/repair/retry/resume/substitution/R67 are zero. No novelty gate, candidate adoption, automatic C or R67 follows. |
 
 ## Modular execution plan
 
@@ -1316,5 +1349,13 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   promotion/beta/R66 are zero. This exposed-coordinate result is neither effect
   evidence nor independent confirmation, does not pool with R1, and authorizes
   no extension or R66.
+  A later, separate user authorization now covers the prepared R66 H-only
+  mechanism-frontier probe. It is not an R65 extension: exact fresh-B0 source
+  plus a neutral E01–E10 ledger may be sent once to Terra for one forced H
+  observation, with H at most one, retry zero and every C/patch/solver/
+  Protocol/Decision/promotion/R67 action zero. Status is
+  `PREPARED_AUTHORIZED_NOT_STARTED`; no R66 provider call has started. The H
+  can neither establish novelty or quality nor automatically authorize C or
+  R67.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.

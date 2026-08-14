@@ -1260,6 +1260,50 @@ R1, and authorizes no extension or R66. Alpha-minus-B0 elapsed deltas are
 `[-80,-24,-4,-427]` ms, median `-52` ms, with approximate median ratio
 `0.992741`; these are association-only and support no causal speed claim.
 
+R66 is now
+[preregistered](../experiments/v0.4/v0.4-cvrp-r66-h-only-mechanism-frontier-probe-preregistration-20260814.md)
+as a single H-only mechanism-frontier probe with status
+`PREPARED_AUTHORIZED_NOT_STARTED`. This is a separate, narrowly authorized
+provider observation, not an extension or reinterpretation of R65. It binds
+the exact ordered eleven fresh-B0 CVRP source values at subject commit
+`51f9bbd77f1e93777bbe9c401b8ba05c09a3e819` and the clean production H
+carrier/tool at `47fe81ee6e17c04bc805197e2b2ad34e0fff4d14`. Production carries the
+eleven values only under `champion_operators_code`; the typed question payload
+has no `research_prior`, and the context has no experiment history, last
+research rejection, branch-current code or ordinary outcome-rich
+cross-campaign prior. It contains no historical raw H/C response, candidate or
+result. It does contain a neutral E01–E10 mechanism-exclusion ledger derived
+from prior evidence, so the observation is explicitly prior-informed,
+non-blind and not independent.
+
+The exact production H system blocks and base prompt remain unchanged. The
+production context-bound H tool is frozen with the sole allowed
+`change_locus=solver_design` and no experiment-owned schema change. The exact
+discovery question is carried in
+`research_question.current_question`; the frozen ledger block is appended in
+E01→E10 order, one row per line, with no trailing prose and no explicit
+`prompt_cache_key`. The request uses the local Codex proxy at
+`http://127.0.0.1:8080`, `gpt-5.6-terra`, at most one H call, a 180-second
+provider timeout, retry zero and a 300-second outer wall. Its only mechanical
+fields are provider completion, exactly one expected named tool, argument
+availability, valid argument JSON and typed hypothesis-schema validity.
+Scientific classification, algorithm-quality evidence, Decision and promotion
+remain null.
+
+The user's exact raw authorization is recorded verbatim:
+
+> 好，你准备好这份机制排除表和 H-only 预注册包之后直接进行后续操作，不用停下来等授权，直接开始，明确给你授权
+
+That statement is resolved only to provider-free preparation plus one
+immediate H-only Terra call after preflight. C, patch, materialization,
+Contract/ContractGate, V3/V4, solver, canary, Protocol, quality/formal
+evaluation, Decision, promotion, repair, retry/resume/substitution and R67 are
+all zero. The ledger is neither a novelty gate nor a permanent blacklist;
+human overlap review is descriptive only. A terminal H cannot automatically
+launch C or R67 or claim feasibility, correctness, executability, quality,
+runtime improvement, generalization or S6 progress. No R66 provider call or
+downstream action had started at this prepared-state update.
+
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
 deadline-driven solver was evaluating several pairs. All CPU-heavy repository
@@ -1624,6 +1668,13 @@ promotion are null; provider/H/C/Contract/V3/V4/validation/frozen/Decision/
 promotion/beta/R66 are zero. The result is neither effect evidence nor
 independent confirmation, does not pool with R1, and authorizes no extension
 or R66.
+
+A new, separate authorization now covers only the prepared R66 H-only
+mechanism-frontier probe. Its fresh-B0 context and neutral E01–E10 ledger may
+support one forced Terra H observation with retry zero; C, candidate creation,
+solver evidence, Decision, promotion and R67 remain zero. R66 is
+`PREPARED_AUTHORIZED_NOT_STARTED`, supplies no novelty or quality gate, and
+cannot advance S6 without a later separately justified and authorized design.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
