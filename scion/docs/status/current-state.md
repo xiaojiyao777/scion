@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-13*
+*Last updated: 2026-08-14*
 
 Read `TASK.md` first. `design/scion-architecture-v3.md` is the sole architecture
 authority. `design/scion-architecture-v3-v0.4-direct-runtime-addendum.md` only
@@ -1056,7 +1056,34 @@ model stochasticity. Historical R58 is not another cell. R58-to-R60 shows only
 that both presentations could and in this pair did select the five-site line
 expression; it does not prove an R59 causal improvement, provider population
 rate or reproducibility. Provider algorithm experiments remain paused, and no
-R61 is preregistered, authorized or launched.
+R61 was preregistered, authorized or launched at R60 closeout.
+
+R61 was later executed as an independent provider-free semantic audit over
+the sealed R60 materialized workspaces. Its
+[postrun](../experiments/v0.4/v0.4-cvrp-r61-provider-free-semantic-audit-postrun-20260813.md)
+seals `TERMINAL_DIAGNOSTIC / SEPARATE_ENDPOINT_TRADEOFF /
+ZERO_ALGORITHM_QUALITY_EVIDENCE`. Each cell and each progress coordinate used
+a fresh temporary copy and subprocess. A fake solution, fake instance,
+controlled elapsed clock and patched operators drove exactly one ordinary
+worsening-candidate scheduler iteration at progress `0.1` and `0.9`.
+
+OLD called its candidate `set_progress` once before accept at both coordinates.
+Acceptance temperature fell from `2.6857958838184386` early to
+`0.018616455666360693` late, so deadline wiring passes. The same ordinary path
+dynamically recorded the destroy weight twice and repair weight once at each
+coordinate, so accounting fails `2/1`. NEW defines
+`set_deadline_progress` but the candidate scheduler called no setter; early and
+late acceptance both observed start temperature `5.0`, so deadline wiring
+fails. Its destroy/repair recording was exactly `1/1`, so accounting passes.
+
+The two endpoint booleans remain separate and
+`aggregate_algorithm_success=null`. Static callsite counts are corroboration
+only; the decisions come from the isolated dynamic probes. The synthetic state
+is not a CVRP model, feasibility check, objective-quality comparison or
+benchmark. Provider, canary, formal Protocol solver, quality solver and
+benchmark/BKS inputs are all zero. R61 does not rewrite R60, enter Protocol or
+Decision, rank the candidates or establish generalization. Provider algorithm
+experiments remain paused; no R62 is preregistered, authorized or launched.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1375,7 +1402,13 @@ frozen R58 turn. Both arms were fully executable and both selected the five-site
 line expression, so it is sealed `BOTH / BOTH_LINE_SELECTION /
 NO_IDENTIFIED_PRESENTATION_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`.
 Post-hoc source observations keep both proposals out of algorithm testing; no
-R61 is preregistered, authorized or launched.
+R61 had been preregistered, authorized or launched at R60 closeout. R61 later
+completed provider-free over those sealed workspaces: OLD passes deadline
+wiring but fails `2/1` weight accounting; NEW fails deadline wiring at constant
+temperature `5.0` but passes `1/1` accounting. The endpoints stay separate,
+`aggregate_algorithm_success` is null, and there is zero provider, formal or
+quality evidence. Provider pause remains; no R62 is preregistered, authorized
+or launched.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are

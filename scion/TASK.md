@@ -4,7 +4,7 @@
 
 *Accepted runtime baseline: `4d637959`*
 
-*Last updated: 2026-08-13*
+*Last updated: 2026-08-14*
 
 This is the active task source. `design/scion-architecture-v3.md` is the
 sole architecture authority. The direct-runtime addendum may explain an
@@ -177,9 +177,21 @@ evidence prerequisite exists:
    Post-hoc source inspection found duplicate destroy-weight recording in OLD
    and an uncalled deadline-progress setter in NEW, so neither proposal enters
    algorithm testing. Canary, formal Protocol, Decision and algorithm-quality
-   calls are zero; provider algorithm experiments remain paused and no R61 is
-   preregistered or launched.
-14. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+   calls are zero. At R60 closeout, provider algorithm experiments remained
+   paused and no R61 had been preregistered or launched.
+14. **R61 provider-free semantic audit terminal:** the
+   [postrun](docs/experiments/v0.4/v0.4-cvrp-r61-provider-free-semantic-audit-postrun-20260813.md)
+   seals `TERMINAL_DIAGNOSTIC / SEPARATE_ENDPOINT_TRADEOFF /
+   ZERO_ALGORITHM_QUALITY_EVIDENCE`. Fresh subprocesses drove one synthetic
+   ordinary worsening iteration at progress `0.1` and `0.9` from read-only R60
+   workspaces. OLD wired progress and cooled
+   `2.6857958838184386 -> 0.018616455666360693`, but recorded destroy/repair
+   weights `2/1`. NEW defined the deadline setter but called it zero times and
+   stayed `5.0 -> 5.0`, while weight accounting was `1/1`. The endpoint vector
+   remains separate and `aggregate_algorithm_success=null`. Provider, canary,
+   formal, quality and benchmark calls are zero; R60 primary evidence is not
+   rewritten, provider pause remains and no R62 is preregistered or launched.
+15. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -393,7 +405,8 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R57 | proven provider-free C expression correction; no algorithm experiment | Commit `f537fed5` adds optional source-bound `exact_line_replace`: it matches a complete logical line independent of its outer indentation and replays replacement indentation under each exact match. A counterfactual re-expression of the frozen R56 C response matched all five `annealing.cool()` callsites through the production parse -> Contract -> materialize path; non-skipped V3 and V4 passed. The combined regression passed 183 tests, and independent review passed focused 38 plus adjacent 92 tests. | Retain this only as expression-fidelity and regression evidence. It adds no provider source-search/tool loop, retry, quality gate or Decision input. It is not an R56 repair/retry, a new R56 result or solver-quality evidence: no provider, canary, formal Protocol or Decision call ran. R57 itself did not preregister, authorize or launch a successor H/C experiment. |
 | R58 | proven clean early rejection plus unresolved C expression-selection defect | The clean `42535efc` run completed wrapper exit `0` with one terminal valid Terra H/C, retry/repair zero and passing Contract. H again selected elapsed-budget SA. C received all 11 editable files and the optional `exact_line_replace` form, but emitted six uniquely matching `exact_replace` edits and no line-oriented edit. It removed two of five `annealing.cool()` calls while deleting the method, leaving three 16-space recovery-path calls. V3 rejected all three fixtures in 568 ms; V4, canary, formal Protocol and Decision were not reached. | Seal `VALID_TERMINAL_RESEARCH_PROCESS_OBSERVATION / VERIFICATION_LIGHT_REJECTED / ZERO_PROTOCOL_EVIDENCE / NO_DECISION / NO_PROMOTION`. Seed-29 W/L/T, effect, CI and fleet comparison are undefined; draw no algorithm-quality conclusion. Pause provider algorithm experiments and redesign/test C expression selection provider-free, without a source-navigation loop, retry/repair call, patch grader, algorithm rule or quality gate. Do not launch an R59 provider experiment, long or WSL work. |
 | R59 | proven provider-free typed-tool presentation correction; no algorithm experiment | Commit `47fe81ee` uses one flat root/nested schema factory, dispatches explicit intents through four singleton-intent branches, preserves legacy missing intent and `replace_all=false`, and presents exact-span and indentation-neutral exact-line choices neutrally with one shape-only example. A mocked OpenAI request's actual `tools[0]` matches the tracked payload snapshot. Frozen R56/R58 replay retains the R58 original's three residual calls; its line re-expression matches all five and passes V3/V4. Scoped tests passed 170 and independent review passed 68. | Retain this only as tool-presentation, transport and expression-fidelity evidence. It adds no provider source-navigation loop, retry/repair call, patch grader, algorithm rule, quality gate or Decision input. No provider, canary, formal Protocol or Decision call ran, so there is no algorithm evidence. R60 later tested the complete presentation separately and is recorded below. |
-| R60 | proven complete single matched-pair tool-presentation observation; no identified advantage or algorithm evidence | The fixed OLD `42535efc` then NEW `47fe81ee` C-only pair completed exit `0` with 2/2 terminal provider responses and 2/2 opaque primary records before reveal. Both arms passed parse, source binding, Contract, materialization and non-skipped V3/V4 (`full_executable=true`). Both chose one unindented five-match line replacement with zero residual `annealing.cool()` calls. OLD emitted six other exact edits; NEW emitted three and had one no-op dropped. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / BOTH_LINE_SELECTION / NO_IDENTIFIED_PRESENTATION_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Because one OLD-then-NEW pair confounds presentation with order, time and model stochasticity, claim no population rate, p-value or R59 causal benefit. Post-hoc OLD duplicate weight recording and NEW inactive deadline setter keep both out of algorithm testing. Provider pause remains; no R61 is preregistered, authorized or launched. |
+| R60 | proven complete single matched-pair tool-presentation observation; no identified advantage or algorithm evidence | The fixed OLD `42535efc` then NEW `47fe81ee` C-only pair completed exit `0` with 2/2 terminal provider responses and 2/2 opaque primary records before reveal. Both arms passed parse, source binding, Contract, materialization and non-skipped V3/V4 (`full_executable=true`). Both chose one unindented five-match line replacement with zero residual `annealing.cool()` calls. OLD emitted six other exact edits; NEW emitted three and had one no-op dropped. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / BOTH_LINE_SELECTION / NO_IDENTIFIED_PRESENTATION_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Because one OLD-then-NEW pair confounds presentation with order, time and model stochasticity, claim no population rate, p-value or R59 causal benefit. Post-hoc OLD duplicate weight recording and NEW inactive deadline setter keep both out of algorithm testing. At R60 closeout, provider pause remained and no R61 had been preregistered, authorized or launched. |
+| R61 | proven provider-free scheduler semantics; separate crossed endpoints only | Fresh subprocesses copied the sealed R60 workspaces and drove exactly one fake ordinary worsening-candidate iteration at progress `0.1` and `0.9`. OLD called `set_progress` before accept and cooled `2.6857958838184386 -> 0.018616455666360693`, but dynamically recorded destroy/repair weights `2/1`. NEW defines `set_deadline_progress` but called no setter and remained `5.0 -> 5.0`, while dynamically recording `1/1`. | Seal `TERMINAL_DIAGNOSTIC / SEPARATE_ENDPOINT_TRADEOFF / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Keep `deadline_wiring_pass` and `ordinary_weight_accounting_pass` separate with `aggregate_algorithm_success=null`. The fake state and controlled clock prove only scheduler control flow; provider/canary/formal/quality/benchmark calls are zero. Do not rewrite R60, rank candidates, infer quality/generalization or enter Protocol/Decision. Provider pause remains; no R62 is preregistered, authorized or launched. |
 
 ## Modular execution plan
 
@@ -998,6 +1011,16 @@ optimization; prod-1.2 and its replay establish retained production transfer.
   post-hoc source inspection keeps both implementations out of algorithm
   testing; see the
   [postrun](docs/experiments/v0.4/v0.4-cvrp-r60-c-tool-presentation-pair-postrun-20260813.md).
+- [x] Run the independent provider-free
+  [R61 semantic audit](docs/experiments/v0.4/v0.4-cvrp-r61-provider-free-semantic-audit-postrun-20260813.md)
+  over the sealed R60 workspaces. Each cell/progress probe used a fresh
+  temporary copy and subprocess with one synthetic ordinary worsening
+  iteration. OLD passed deadline wiring but failed weight accounting at `2/1`;
+  NEW failed deadline wiring with temperature fixed at `5.0` but passed weight
+  accounting at `1/1`. Retain the two booleans separately and leave aggregate
+  algorithm success undefined. This provider-free control-flow audit used no
+  case, benchmark, provider, canary, formal Protocol, quality solver or
+  Decision call and does not rewrite R60.
 - [ ] If a new CVRP promotion campaign is required, pre-register a fresh root
   after the diagnostic inputs are frozen. Change one measurement axis at a
   time (`8x4 -> 8x8 -> 12x8`) on a four-cell connecting quality population:
@@ -1134,7 +1157,10 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   BOTH_LINE_SELECTION / NO_IDENTIFIED_PRESENTATION_ADVANTAGE`. Post-hoc OLD
   duplicate accounting and NEW inactive deadline progress prevent either from
   entering algorithm tests. R60 used no H, canary, formal Protocol, algorithm
-  quality or Decision call; provider experiments remain paused and no R61 is
-  preregistered or launched.
+  quality or Decision call. R61 subsequently audited the two normalized
+  scheduler semantics provider-free: OLD has deadline wiring pass/accounting
+  fail `2/1`, while NEW has deadline wiring fail at constant `5.0`/accounting
+  pass `1/1`. `aggregate_algorithm_success` remains null, R60 is unchanged,
+  provider experiments remain paused and no R62 is preregistered or launched.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.
