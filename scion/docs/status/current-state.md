@@ -1135,49 +1135,38 @@ nor ineffectiveness; the seal does not mean the suffix was ineffective or the
 model did not review. Provider algorithm experiments remain paused. At R63
 closeout, no R64 was preregistered, authorized or launched.
 
-R64 is now `PREPARED_NOT_STARTED` as one
-[preregistered provider-free semantic diagnostic](../experiments/v0.4/v0.4-cvrp-r64-provider-free-two-opt-star-semantic-diagnostic-preregistration-20260814.md)
-over the two sealed R63 `_two_opt_star` sources. Candidate authority remains
-subject `51f9bbd77f1e93777bbe9c401b8ba05c09a3e819`, approved-H trace
-`20260809T082821069862_hypothesis_c6409fa4`, frozen C-input trace
-`20260809T082849758576_code_21402fe4` and the ordered 11-source values; clean
-`47fe81ee6e17c04bc805197e2b2ad34e0fff4d14` is runtime authority only. The
-current user instruction `可以啊，你继续吧` authorizes exactly one fresh atomic
-formal publication of this local action; because no source leaves the machine,
-no new source-send authorization is required. The formal output root is absent.
-Here `PREPARED_NOT_STARTED` refers only to that formal publication, not to the
-absence of exact-candidate observations.
+R64 subsequently completed its unique
+[provider-free semantic diagnostic](../experiments/v0.4/v0.4-cvrp-r64-provider-free-two-opt-star-semantic-diagnostic-postrun-20260814.md).
+The mode-`0700` formal root was created at `2026-08-14T09:41:56Z` and contains
+only mode-`0600` `result.json` and `status.json`. Its terminal record is
+`TERMINAL_DIAGNOSTIC` with `complete=true` and
+`semantic_endpoints_claimed=true`.
 
-Preparation `launch.sh --check` returned `CHECK_OK` for 11 sources, two arms and
-zero dynamic calls; bundle pytest passed 22 tests in 1.18 seconds, and default
-Ruff check/format passed. Those tests
-ran the exact sealed alpha and beta candidates in temporary roots and observed
-`cut_delta_equivalence=TRUE`, `near_eps_decision_equivalence=TRUE`,
+Both sealed R63 arms report `cut_delta_equivalence=TRUE`,
+`near_eps_decision_equivalence=TRUE`,
 `first_improvement_state_equivalence=TRUE`, and
-`candidate_route_distance_evaluation_calls=0` for both. Therefore
-`preformal_calibration_status=EXACT_CANDIDATE_TEMPORARY_REPRODUCTION_OBSERVED`.
-Any future formal publication has role
+`candidate_route_distance_evaluation_calls=0`. All 27 cut cases and three
+near-EPS cases equal their references without exception. The three state
+fixtures have candidate/reference accepted-move counts `0/0`, `1/1`, and
+`5/5`; complete traces and final partition/load/cost state are equal, every
+frozen invariant holds, and no candidate exception occurred. Classification,
+`aggregate_semantic_correctness`, and `aggregate_algorithm_success` remain
+null, with no cross-arm ranking.
+
+The formal role is
 `DURABLE_REPRODUCTION_OF_EXACT_CANDIDATE_CALIBRATED_PROVIDER_FREE_DIAGNOSTIC`,
 with `outcome_blind=false`, `independent_confirmation=false`, and claim boundary
-`preformal_exact_candidate_outcomes_seen_no_independent_confirmation`.
+`preformal_exact_candidate_outcomes_seen_no_independent_confirmation`. Exact
+candidate endpoint values had already been observed in pytest temporary roots.
+The nested `preparation_calibration.formal_output_created=false` therefore
+describes only that earlier calibration snapshot; it does not mean the current
+formal root is absent.
 
-For each arm independently, R64 freezes regular symmetric/directed orientation
-and `0`/end/interior-cut equivalence across 27 cases, below/equal/above-`-EPS`
-decisions across three cases,
-over-capacity rejection, accepted empty-route cleanup, post-accept state
-invariants after every accept, the complete accepted-move trace and final state
-through the multi-accept termination case, and a descriptive call count through
-the local-search module's route-distance binding during actual candidate
-execution.
-Cut and near-EPS checks evaluate the uniquely def-used allowlisted delta AST
-expression and actual comparison; only the state endpoint executes
-`_two_opt_star`. The three semantic endpoints are
-`TRUE`/`FALSE`/`NOT_EVALUABLE`; the call count is a non-negative integer or
-`NOT_EVALUABLE`. Classification,
-`aggregate_semantic_correctness`, and `aggregate_algorithm_success` are null,
-and there is no cross-arm rank. R64 is post-hoc R63-informed and non-gating. It
-cannot rewrite R63, and it runs no provider, Contract, V3/V4, canary, formal
-Protocol, quality solver or Decision. No R65 is preregistered, authorized or
+All provider, H/C, canary, Contract, V3/V4, formal solver/Protocol,
+algorithm-quality, Decision, benchmark/BKS, production-change, and R63-mutation
+counters are zero. R64 is finite-fixture, non-gating, not an independent
+confirmation, and supplies no quality or generalization claim. Provider
+algorithm experiments remain paused; no R65 is preregistered, authorized or
 launched.
 
 The R3 run also exposed an operator-side validity problem: pytest
@@ -1520,20 +1509,15 @@ benefit and does not establish that the suffix was ineffective or the model
 did not review. At R63 closeout, no R64 was preregistered, authorized or
 launched.
 
-R64 is now prepared and authorized for one fresh atomic formal publication,
-whose output root remains absent. Preparation pytest has already executed both
-exact sealed R63 candidates in temporary roots and observed all three semantic
-endpoints `TRUE` with distance-evaluation calls `0`; therefore any formal action
-is durable reproduction, not outcome-blind discovery or independent
-confirmation. Cut-delta,
-near-EPS-decision and first-improvement-state equivalence remain separate per
-arm. The first two evaluate a bound delta AST expression; only the state
-endpoint executes `_two_opt_star` through termination and compares the complete
-accepted-move trace and final state. Values are
-`TRUE`/`FALSE`/`NOT_EVALUABLE`, distance-evaluation calls are descriptive
-integer-or-`NOT_EVALUABLE`, and classification plus both aggregate fields are
-null. R64 is post-hoc, non-gating and cannot
-rewrite R63 or produce provider, formal, quality, Decision or R65 evidence.
+R64 subsequently published one complete provider-free `TERMINAL_DIAGNOSTIC`.
+Both exact sealed R63 candidates durably reproduce all three separate semantic
+endpoints as `TRUE`, with distance-evaluation calls `0`; all 27 cut, three
+near-EPS, and three state fixtures equal their references without exception.
+Classification and both aggregate fields remain null. Because preparation had
+already observed the exact candidate vectors, the formal record is durable
+reproduction with `outcome_blind=false` and `independent_confirmation=false`,
+not independent evidence. R64 is finite-fixture and non-gating, leaves R63
+unchanged, and produces no provider, solver-quality, Decision or R65 evidence.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
