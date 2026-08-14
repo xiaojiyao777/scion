@@ -1171,7 +1171,8 @@ preregistered, authorized or launched.
 
 R65 is now
 [preregistered](../experiments/v0.4/v0.4-cvrp-r65-provider-free-r63-alpha-minute-quality-calibration-preregistration-20260814.md)
-as an exact-alpha, provider-free minute quality calibration, but remains
+as an exact-alpha, provider-free minute quality calibration. At final
+preparation it remained
 `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_SOLVER_EXECUTION_AUTHORIZATION`.
 Only sealed R63 `cell_alpha/control_original_message` is selected, by neutral
 ordinal-0 tie-break rather than quality. The exact action is one fresh,
@@ -1187,9 +1188,9 @@ median `0 [0,0]`; later R1 B0 observations were mostly cached. R65 does not
 pool with or reinterpret R1. It is only an implementation-specific, exposed-
 coordinate, lower-bound-style minute calibration, where lower-bound-style is
 not a mathematical bound because deadline trajectories are nonmonotone. It is
-not held-out, independent or effect evidence. The current generic continuation
-instruction and consumed
-R64 authorization do not authorize a solver. Provider/H/C, Contract, V3/V4,
+not held-out, independent or effect evidence. The generic continuation
+instruction and consumed R64 authorization did not authorize a solver.
+Provider/H/C, Contract, V3/V4,
 retry/repair, validation/frozen, Decision, promotion, beta and R66 remain zero.
 Any terminal outcome stops R65.
 
@@ -1214,9 +1215,50 @@ the sealed R63 cell to its score, and captures the actual child Python and six
 thread-variable environment. It also persists and re-requires the sealed
 production runtime-audit validity endpoint. Direct B0/alpha canary and
 SCREENING audit-only failure negatives preserve comparator/candidate precedence
-and null aggregates. Cache/pyc is absent, the exact formal output,
-process-control and socket roots remain absent, and no exact candidate or
-solver ran. These are preparation facts, not solver or quality evidence.
+and null aggregates. At preparation close, cache/pyc and the exact formal
+output, process-control and socket roots were absent, and no exact candidate or
+solver had run. These are preparation facts, not solver or quality evidence.
+
+The user subsequently recorded this exact R65 authorization verbatim:
+
+> 我明确授权执行一次 v04-cvrp-r65-provider-free-r63-alpha-minute-quality-calibration-20260814：以 51f9bbd77f1e93777bbe9c401b8ba05c09a3e819 的 exact B0 为对照，只使用 sealed R63 cell_alpha/control_original_message 候选和 sealed 47fe81ee6e17c04bc805197e2b2ad34e0fff4d14 runtime；先串行运行 B0/alpha 的 seed-101、每个 2 秒 veto canary，通过后仅在 P65/E101/X120/X233、seed 73、每 subject 8/12/12/15 秒、AB/BA/AB/BA、fresh 且 cache disabled 下运行一次四对 SCREENING。最多 10 个 solver subprocess、98 subject-seconds、单并发、300 秒 hard wall；provider/H/C/Contract/V3/V4/retry/repair/validation/frozen/Decision/promotion/beta/R66 均为 0。失败不重试、恢复、替换或追加 seed；无论结果如何 R65 停止。此授权仅覆盖这一 R65。
+
+Launch-only history: the launcher returned `R65_FORMAL_LAUNCHED` after
+acquisition at `2026-08-14T12:53:36Z`, with `inner_pid=514140`. At that
+launch-only update status was `IN_FLIGHT`, and no outcome was read. The
+byte-bound R65
+preregistration was not edited and remains SHA-256
+`4905fdfca6b91d6c24d5e8be3eb736060671dad9d468976122e9ee953323f8ac`.
+
+R65 is now terminal. The mode-`0700` formal root reached terminal mtime
+`2026-08-14T12:54:59.619678635Z`; mode-`0600` `result.json` and `status.json`
+have SHA-256 values
+`336bbc89fa4bf3463122ae41a18d377a0bd8d372ff09fd2a30eb62fbae589f73`
+and `d75d000d4a8dceb2a24b21ecf87aab35df61c001d1df09d69dbd56d6441e7a0c`,
+respectively,
+and process-control `exit.code` is `0`. All 10 fresh subprocesses and 98
+declared subject-seconds completed. B0 then alpha both passed the seed-101
+canary at distance 20, feasible, fleet-safe and runtime-audit valid. The
+seed-73 AB/BA/AB/BA screen reports exact B0/alpha ties at P65=798, E101=1124,
+X120=14250 and X233=20112. Every screen subject is successful, feasible,
+fleet-safe and runtime-audit valid; routes also tie `10/10`, `14/14`, `6/6`
+and `17/17`. Raw metrics are 4/4 valid with zero failures and zero cache
+hits/misses/writes. All 11 durable references resolve under the final output,
+with no temporary, partial, symlink or cache path; sealed R63/R64 remain
+unchanged.
+
+The complete result is `0W/0L/4T`, signed deltas `[0,0,0,0]`, median
+`0 [0,0]`, and zero protected fleet regressions. Only the CI-lower-bound,
+loss-rate and fleet criteria pass; win-rate, practical-median and net-score
+criteria fail. R65 seals
+`VALID_COMPLETE_EXPOSED_COORDINATE_MINUTE_CALIBRATION /
+EXPLORATORY_SCREEN_NO_SIGNAL / ORDINARY_MINUTE_RULE_NOT_MET /
+NO_GO_EFFECT_INFERENCE / NO_MORE_PROVIDER_FREE / NO_R66`. Decision and
+promotion are null. Provider/H/C/Contract/V3/V4/validation/frozen/Decision/
+promotion/beta/R66 remain zero. This is no effect inference, does not pool with
+R1, and authorizes no extension or R66. Alpha-minus-B0 elapsed deltas are
+`[-80,-24,-4,-427]` ms, median `-52` ms, with approximate median ratio
+`0.992741`; these are association-only and support no causal speed claim.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1568,23 +1610,20 @@ reproduction with `outcome_blind=false` and `independent_confirmation=false`,
 not independent evidence. R64 is finite-fixture and non-gating, leaves R63
 unchanged, and produces no provider, solver-quality, Decision or R65 evidence.
 
-R65 is now preregistered but remains
-`PREPARED_NOT_STARTED / AWAITING_EXPLICIT_SOLVER_EXECUTION_AUTHORIZATION`.
-It freezes only sealed R63 alpha against exact B0: a fresh two-subject
-seed-101 canary, then conditionally four fresh cache-disabled seed-73 legacy
-pairs with a 10-subprocess/98-subject-second/300-second ceiling. Alpha is a
-neutral ordinal-0 selection. Historical same-mechanism R1 evidence is not
-pooled or reinterpreted, and this exposed-coordinate action cannot estimate an
-effect or provide independent confirmation. Generic continuation and R64
-authority do not authorize its solver subprocesses; no R66 is authorized. The
-frozen nine-file input binds prereg SHA `4905fdfc...`; env-i preparation passed
-42 tests in 0.87 seconds and independently 42 in 0.80 seconds, plus Ruff
-check/format, `bash -n`, `jq` and launcher check. Fake acquisition, atomic
-staging-ref, science-surface/predelegate ledger, timeout-wrapper non-self-
-conflict, direct R63 cell-score, actual child-env and sealed runtime-audit
-validity paths are covered. Audit-only B0/alpha failures retain typed precedence
-and null aggregates; cache/pyc and formal output/control/socket roots are
-absent, and no exact solver ran.
+R65 subsequently completed the exact authorized provider-free alpha minute
+calibration. All 10 fresh subprocesses and 98 declared subject-seconds
+completed. B0 and alpha tied at distance 20 on the seed-101 canary and tied on
+all seed-73 screen cases: P65=798, E101=1124, X120=14250 and X233=20112. Every
+subject was successful, feasible, runtime-audit valid and fleet-safe. The
+complete result is `0W/0L/4T`, deltas `[0,0,0,0]`, median `0 [0,0]`, and zero
+protected regressions. It seals
+`VALID_COMPLETE_EXPOSED_COORDINATE_MINUTE_CALIBRATION /
+EXPLORATORY_SCREEN_NO_SIGNAL / ORDINARY_MINUTE_RULE_NOT_MET /
+NO_GO_EFFECT_INFERENCE / NO_MORE_PROVIDER_FREE / NO_R66`. Decision and
+promotion are null; provider/H/C/Contract/V3/V4/validation/frozen/Decision/
+promotion/beta/R66 are zero. The result is neither effect evidence nor
+independent confirmation, does not pool with R1, and authorizes no extension
+or R66.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
