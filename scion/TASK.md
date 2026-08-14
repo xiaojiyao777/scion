@@ -191,7 +191,20 @@ evidence prerequisite exists:
    remains separate and `aggregate_algorithm_success=null`. Provider, canary,
    formal, quality and benchmark calls are zero; R60 primary evidence is not
    rewritten, provider pause remains and no R62 is preregistered or launched.
-15. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+15. **R62 provider-free C semantic-risk sidecar terminal:** the
+   [postrun](docs/experiments/v0.4/v0.4-cvrp-r62-provider-free-c-semantic-risk-sidecar-postrun-20260814.md)
+   seals `TERMINAL_CALIBRATION / SEPARATE_SYNTAX_RISK_SIGNALS /
+   ZERO_ALGORITHM_QUALITY_EVIDENCE`. The frozen fresh-B0 projection, sealed R60
+   workspaces and ephemeral controls calibrate two independent T/F/UNKNOWN
+   syntax signals. Alpha is same-name-call `TRUE` and adjacent-call-risk-absent
+   `FALSE`; beta is `FALSE / TRUE`. Fresh B0 is `UNKNOWN / UNKNOWN`; cleaned
+   controls are `TRUE / TRUE`, the branch control is `UNKNOWN / TRUE`, and the
+   callback control is `UNKNOWN / FALSE`. Receiver type and call effects are
+   unresolved; both aggregate fields remain null. Provider, Contract, V3/V4,
+   Protocol, Decision, quality and benchmark calls are zero. No production
+   source, gate, R60 or R61 artifact changed; provider pause remains and no R63
+   is preregistered, authorized or launched.
+16. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -407,6 +420,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R59 | proven provider-free typed-tool presentation correction; no algorithm experiment | Commit `47fe81ee` uses one flat root/nested schema factory, dispatches explicit intents through four singleton-intent branches, preserves legacy missing intent and `replace_all=false`, and presents exact-span and indentation-neutral exact-line choices neutrally with one shape-only example. A mocked OpenAI request's actual `tools[0]` matches the tracked payload snapshot. Frozen R56/R58 replay retains the R58 original's three residual calls; its line re-expression matches all five and passes V3/V4. Scoped tests passed 170 and independent review passed 68. | Retain this only as tool-presentation, transport and expression-fidelity evidence. It adds no provider source-navigation loop, retry/repair call, patch grader, algorithm rule, quality gate or Decision input. No provider, canary, formal Protocol or Decision call ran, so there is no algorithm evidence. R60 later tested the complete presentation separately and is recorded below. |
 | R60 | proven complete single matched-pair tool-presentation observation; no identified advantage or algorithm evidence | The fixed OLD `42535efc` then NEW `47fe81ee` C-only pair completed exit `0` with 2/2 terminal provider responses and 2/2 opaque primary records before reveal. Both arms passed parse, source binding, Contract, materialization and non-skipped V3/V4 (`full_executable=true`). Both chose one unindented five-match line replacement with zero residual `annealing.cool()` calls. OLD emitted six other exact edits; NEW emitted three and had one no-op dropped. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / BOTH_LINE_SELECTION / NO_IDENTIFIED_PRESENTATION_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Because one OLD-then-NEW pair confounds presentation with order, time and model stochasticity, claim no population rate, p-value or R59 causal benefit. Post-hoc OLD duplicate weight recording and NEW inactive deadline setter keep both out of algorithm testing. At R60 closeout, provider pause remained and no R61 had been preregistered, authorized or launched. |
 | R61 | proven provider-free scheduler semantics; separate crossed endpoints only | Fresh subprocesses copied the sealed R60 workspaces and drove exactly one fake ordinary worsening-candidate iteration at progress `0.1` and `0.9`. OLD called `set_progress` before accept and cooled `2.6857958838184386 -> 0.018616455666360693`, but dynamically recorded destroy/repair weights `2/1`. NEW defines `set_deadline_progress` but called no setter and remained `5.0 -> 5.0`, while dynamically recording `1/1`. | Seal `TERMINAL_DIAGNOSTIC / SEPARATE_ENDPOINT_TRADEOFF / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Keep `deadline_wiring_pass` and `ordinary_weight_accounting_pass` separate with `aggregate_algorithm_success=null`. The fake state and controlled clock prove only scheduler control flow; provider/canary/formal/quality/benchmark calls are zero. Do not rewrite R60, rank candidates, infer quality/generalization or enter Protocol/Decision. Provider pause remains; no R62 is preregistered, authorized or launched. |
+| R62 | proven provider-free static sidecar calibration; separate syntax signals only | Frozen fresh-B0, the sealed R60 workspaces and in-memory controls calibrate same-name direct Attribute Call and changed-span adjacent identical call signals. Alpha is `TRUE/FALSE`; beta `FALSE/TRUE`; B0 `UNKNOWN/UNKNOWN`; cleaned alpha/beta `TRUE/TRUE`; branch `UNKNOWN/TRUE`; callback `UNKNOWN/FALSE`. | Seal `TERMINAL_CALIBRATION / SEPARATE_SYNTAX_RISK_SIGNALS / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Keep receiver resolution and callee effects explicitly unknown, both diagnostics separate and both aggregate fields null. This is post-hoc R60-informed calibration, not C completeness, candidate correctness, a gate, prompt change or repair loop. Provider/Contract/V3/V4/Protocol/Decision/quality/benchmark calls and production/R60/R61 changes are zero. Provider pause remains; no R63 is preregistered, authorized or launched. |
 
 ## Modular execution plan
 
@@ -1161,6 +1175,10 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   scheduler semantics provider-free: OLD has deadline wiring pass/accounting
   fail `2/1`, while NEW has deadline wiring fail at constant `5.0`/accounting
   pass `1/1`. `aggregate_algorithm_success` remains null, R60 is unchanged,
-  provider experiments remain paused and no R62 is preregistered or launched.
+  provider experiments remain paused. R62 subsequently completed its
+  provider-free static sidecar calibration: alpha's separate syntax signals are
+  `TRUE/FALSE`, beta's are `FALSE/TRUE`, and both aggregate fields are null.
+  It adds no provider, solver, quality, gate, prompt or repair-loop evidence;
+  provider pause remains and no R63 is preregistered or launched.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.

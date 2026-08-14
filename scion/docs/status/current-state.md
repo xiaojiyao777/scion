@@ -1085,6 +1085,28 @@ benchmark/BKS inputs are all zero. R61 does not rewrite R60, enter Protocol or
 Decision, rank the candidates or establish generalization. Provider algorithm
 experiments remain paused; no R62 is preregistered, authorized or launched.
 
+R62 later completed as an independent provider-free static C semantic-risk
+sidecar over frozen fresh-B0, the sealed R60 workspaces and ephemeral in-memory
+controls. Its
+[postrun](../experiments/v0.4/v0.4-cvrp-r62-provider-free-c-semantic-risk-sidecar-postrun-20260814.md)
+seals `TERMINAL_CALIBRATION / SEPARATE_SYNTAX_RISK_SIGNALS /
+ZERO_ALGORITHM_QUALITY_EVIDENCE`. The two independent T/F/UNKNOWN signals are a
+same-name direct Attribute Call signal for introduced internal method names and
+a changed-span adjacent AST-identical `Expr(Call)` risk-absence signal. Alpha
+is `TRUE / FALSE`, beta is `FALSE / TRUE`, B0 is `UNKNOWN / UNKNOWN`, both
+cleaned controls are `TRUE / TRUE`, the branch control is `UNKNOWN / TRUE`, and
+the callback control is `UNKNOWN / FALSE`.
+
+Receiver type and callee effects are deliberately unresolved. Same-name-call
+`TRUE` does not prove the introduced method is used; adjacent-risk `FALSE` does
+not prove a side effect or defect. `UNKNOWN` is not coerced, the diagnostics
+remain separate, and both `aggregate_semantic_completeness` and
+`aggregate_algorithm_success` are null. Provider, Contract, V3/V4, Protocol,
+Decision, quality and benchmark calls are zero. No production source, gate,
+R60 or R61 artifact changed. R62 implements no prompt/tool change or feedback,
+retry or repair loop. Provider algorithm experiments remain paused; no R63 is
+preregistered, authorized or launched.
+
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
 deadline-driven solver was evaluating several pairs. All CPU-heavy repository
@@ -1409,6 +1431,11 @@ temperature `5.0` but passes `1/1` accounting. The endpoints stay separate,
 `aggregate_algorithm_success` is null, and there is zero provider, formal or
 quality evidence. Provider pause remains; no R62 is preregistered, authorized
 or launched.
+R62 later completed provider-free as a static, post-hoc R60-informed sidecar
+calibration. Alpha's two separate syntax signals are `TRUE/FALSE`, beta's are
+`FALSE/TRUE`, and both aggregate fields are null. It adds no provider, solver,
+quality, gate, prompt or repair-loop evidence. Provider pause remains; no R63
+is preregistered, authorized or launched.
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
