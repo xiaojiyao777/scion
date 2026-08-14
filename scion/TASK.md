@@ -222,9 +222,34 @@ evidence prerequisite exists:
    equivalence, directed correctness or near-EPS behavior. No canary,
    formal Protocol, quality solver or Decision ran. One fixed pair cannot show
    review benefit, ineffectiveness or harm; the seal does not mean the suffix
-   was ineffective or the model did not review. No R64 is preregistered,
-   authorized or launched.
-17. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+   was ineffective or the model did not review. At R63 closeout, no R64 was
+   preregistered, authorized or launched.
+17. **R64 provider-free `_two_opt_star` semantic diagnostic prepared and
+   authorized; formal publication not started:** the
+   [preregistration](docs/experiments/v0.4/v0.4-cvrp-r64-provider-free-two-opt-star-semantic-diagnostic-preregistration-20260814.md)
+   freezes one fresh atomic local action over the two sealed R63 arms. It keeps
+   `cut_delta_equivalence`, `near_eps_decision_equivalence` and
+   `first_improvement_state_equivalence` separate per arm, records descriptive
+   `candidate_route_distance_evaluation_calls`, and fixes both aggregate fields
+   and classification to null. The cut/near-EPS checks evaluate the uniquely
+   def-used allowlisted delta AST expression; only the state endpoint executes
+   `_two_opt_star` through termination and compares its complete accepted-move
+   trace and final state. Boolean endpoint values are
+   `TRUE`/`FALSE`/`NOT_EVALUABLE`, and the descriptive count is integer-or-
+   `NOT_EVALUABLE`. Preparation pytest already ran both exact sealed candidates
+   in temporary roots and observed all three endpoints `TRUE` with distance-
+   evaluation calls `0` for both; the final bundle suite passed 22 tests, plus
+   default Ruff check and format check. Thus `PREPARED_NOT_STARTED` refers only
+   to the absent formal output: a future formal action is
+   `DURABLE_REPRODUCTION_OF_EXACT_CANDIDATE_CALIBRATED_PROVIDER_FREE_DIAGNOSTIC`,
+   with `outcome_blind=false` and `independent_confirmation=false`. The current
+   claim boundary is
+   `preformal_exact_candidate_outcomes_seen_no_independent_confirmation`. The
+   current user instruction `可以啊，你继续吧` authorizes only that unique
+   formal publication. No provider, Contract, V3/V4, formal Protocol, quality
+   solver, Decision or R65 work is authorized or started, and R63 remains
+   sealed and unchanged.
+18. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -441,7 +466,8 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R60 | proven complete single matched-pair tool-presentation observation; no identified advantage or algorithm evidence | The fixed OLD `42535efc` then NEW `47fe81ee` C-only pair completed exit `0` with 2/2 terminal provider responses and 2/2 opaque primary records before reveal. Both arms passed parse, source binding, Contract, materialization and non-skipped V3/V4 (`full_executable=true`). Both chose one unindented five-match line replacement with zero residual `annealing.cool()` calls. OLD emitted six other exact edits; NEW emitted three and had one no-op dropped. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / BOTH_LINE_SELECTION / NO_IDENTIFIED_PRESENTATION_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Because one OLD-then-NEW pair confounds presentation with order, time and model stochasticity, claim no population rate, p-value or R59 causal benefit. Post-hoc OLD duplicate weight recording and NEW inactive deadline setter keep both out of algorithm testing. At R60 closeout, provider pause remained and no R61 had been preregistered, authorized or launched. |
 | R61 | proven provider-free scheduler semantics; separate crossed endpoints only | Fresh subprocesses copied the sealed R60 workspaces and drove exactly one fake ordinary worsening-candidate iteration at progress `0.1` and `0.9`. OLD called `set_progress` before accept and cooled `2.6857958838184386 -> 0.018616455666360693`, but dynamically recorded destroy/repair weights `2/1`. NEW defines `set_deadline_progress` but called no setter and remained `5.0 -> 5.0`, while dynamically recording `1/1`. | Seal `TERMINAL_DIAGNOSTIC / SEPARATE_ENDPOINT_TRADEOFF / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Keep `deadline_wiring_pass` and `ordinary_weight_accounting_pass` separate with `aggregate_algorithm_success=null`. The fake state and controlled clock prove only scheduler control flow; provider/canary/formal/quality/benchmark calls are zero. Do not rewrite R60, rank candidates, infer quality/generalization or enter Protocol/Decision. Provider pause remains; no R62 is preregistered, authorized or launched. |
 | R62 | proven provider-free static sidecar calibration; separate syntax signals only | Frozen fresh-B0, the sealed R60 workspaces and in-memory controls calibrate same-name direct Attribute Call and changed-span adjacent identical call signals. Alpha is `TRUE/FALSE`; beta `FALSE/TRUE`; B0 `UNKNOWN/UNKNOWN`; cleaned alpha/beta `TRUE/TRUE`; branch `UNKNOWN/TRUE`; callback `UNKNOWN/FALSE`. | Seal `TERMINAL_CALIBRATION / SEPARATE_SYNTAX_RISK_SIGNALS / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Keep receiver resolution and callee effects explicitly unknown, both diagnostics separate and both aggregate fields null. This is post-hoc R60-informed calibration, not C completeness, candidate correctness, a gate, prompt change or repair loop. Provider/Contract/V3/V4/Protocol/Decision/quality/benchmark calls and production/R60/R61 changes are zero. At R62 closeout, provider pause remained and no R63 was preregistered, authorized or launched. |
-| R63 | proven complete single C-message pair; no identified message-review advantage or algorithm evidence | The authorized fixed CONTROL→REVIEW pair completed exit `0` in about 55 seconds with H/retry zero, two terminal C outcomes, two opaque primary records and two opaque sidecars. All 13 primary fields are true in both arms (`BOTH`). Both proposals use one-file `_two_opt_star` exact replacement with nearly the same boundary-delta semantics; REVIEW differs only in depot-assignment placement/format and has 51 more input tokens. Sidecars are `UNKNOWN/TRUE` for both, aggregate null. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / NO_IDENTIFIED_MESSAGE_REVIEW_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. V3/V4 do not enter `_two_opt_star`: V3 disables embedded VNS; V4 passes `0.01` seconds, but `_algorithm_time_limit` clamps the scheduler time limit to `0.05` seconds, equal to its minimum `0.05`-second reserve, so strict `remaining_time() > reserve` is not met. Claim neither review benefit nor ineffectiveness from one confounded ordered pair; the seal does not mean the suffix was ineffective or the model did not review. Run no canary, formal Protocol, quality solver, Decision or promotion; no R64 is preregistered or authorized. |
+| R63 | proven complete single C-message pair; no identified message-review advantage or algorithm evidence | The authorized fixed CONTROL→REVIEW pair completed exit `0` in about 55 seconds with H/retry zero, two terminal C outcomes, two opaque primary records and two opaque sidecars. All 13 primary fields are true in both arms (`BOTH`). Both proposals use one-file `_two_opt_star` exact replacement with nearly the same boundary-delta semantics; REVIEW differs only in depot-assignment placement/format and has 51 more input tokens. Sidecars are `UNKNOWN/TRUE` for both, aggregate null. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / NO_IDENTIFIED_MESSAGE_REVIEW_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. V3/V4 do not enter `_two_opt_star`: V3 disables embedded VNS; V4 passes `0.01` seconds, but `_algorithm_time_limit` clamps the scheduler time limit to `0.05` seconds, equal to its minimum `0.05`-second reserve, so strict `remaining_time() > reserve` is not met. Claim neither review benefit nor ineffectiveness from one confounded ordered pair; the seal does not mean the suffix was ineffective or the model did not review. Run no canary, formal Protocol, quality solver, Decision or promotion. At R63 closeout, no R64 was preregistered, authorized or launched. |
+| R64 | prepared authorized provider-free `_two_opt_star` semantic diagnostic; formal publication not started | The frozen local action ordinary-value binds the `51f9bbd7` R63 candidate authority, H/C traces, ordered 11 source values, terminal/reveal/score/workspace records and clean `47fe81ee` runtime. Per arm, cut and near-EPS endpoints evaluate the uniquely def-used allowlisted delta AST expression; only the state endpoint executes `_two_opt_star` through termination and compares the complete accepted-move trace plus final partition/load/cost state to an independent reference. Fixtures cover 27 symmetric/directed 0/end/interior cut cases, three below/equal/above-`-EPS` cases, over-capacity rejection, accepted empty-route cleanup and multi-accept termination. Preparation pytest temporary roots already observed all three endpoints `TRUE` and distance-evaluation calls `0` for both exact candidates; the final suite passed 22 tests and default Ruff check/format. | Status `PREPARED_NOT_STARTED / PROVIDER_FREE / NON_GATING / ZERO_ALGORITHM_QUALITY_EVIDENCE` means only that the formal output is absent. `preformal_calibration_status=EXACT_CANDIDATE_TEMPORARY_REPRODUCTION_OBSERVED`; any `TERMINAL_DIAGNOSTIC` formal publication has role `DURABLE_REPRODUCTION_OF_EXACT_CANDIDATE_CALIBRATED_PROVIDER_FREE_DIAGNOSTIC`, `outcome_blind=false`, and `independent_confirmation=false`. The first three endpoints are `TRUE`/`FALSE`/`NOT_EVALUABLE`; the descriptive count is non-negative-integer-or-`NOT_EVALUABLE`; classification and both aggregates are null. Do not rank arms or reinterpret R63. Provider, Contract, V3/V4, canary, formal Protocol, quality solver, Decision, repair/resume and R65 work are zero and unauthorized. |
 
 ## Modular execution plan
 
@@ -1208,7 +1234,19 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   source-similar, but V3/V4 do not enter `_two_opt_star` and do not test all
   cut, directed or near-EPS cases. R63 adds zero algorithm-quality evidence and
   neither supports nor refutes a review benefit. Its seal does not mean the
-  suffix was ineffective or the model did not review. No R64 is preregistered,
-  authorized or launched.
+  suffix was ineffective or the model did not review. At R63 closeout, no R64
+  was preregistered, authorized or launched. R64 is now prepared and authorized
+  for one provider-free, fresh atomic formal publication over the sealed R63
+  arms, but the formal output remains absent. Its per-arm cut,
+  near-EPS and first-improvement-state endpoints remain separate. Cut/near-EPS
+  evaluate the bound delta AST expression; only the state endpoint executes the
+  function through termination and compares its complete accepted-move trace
+  and final state. Endpoint values are `TRUE`/`FALSE`/`NOT_EVALUABLE`, the
+  distance-evaluation count is descriptive integer-or-`NOT_EVALUABLE`, and
+  classification plus both aggregate fields are null. Preparation pytest
+  temporary roots already observed `TRUE/TRUE/TRUE` and calls `0` for both exact
+  candidates, so a future formal publication is durable reproduction, not
+  outcome-blind discovery or independent confirmation. It cannot rewrite R63
+  or supply provider, formal, quality, Decision or R65 evidence.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.
