@@ -239,8 +239,47 @@ evidence prerequisite exists:
    with `outcome_blind=false` and `independent_confirmation=false`; it is not
    independent evidence. All provider, Contract, V3/V4, canary, formal
    Protocol, quality, Decision and mutation counters are zero. Provider pause
-   remains, R63 is unchanged, and no R65 is preregistered or authorized.
-18. **S6 closeout:** only after retained CVRP improvement, run the full relevant
+   remains and R63 is unchanged. At R64 closeout, no R65 was preregistered or
+   authorized.
+18. **R65 exact-alpha minute quality calibration prepared, not authorized:**
+   the
+   [preregistration](docs/experiments/v0.4/v0.4-cvrp-r65-provider-free-r63-alpha-minute-quality-calibration-preregistration-20260814.md)
+   freezes a provider-free comparison of exact B0 against only sealed R63
+   `cell_alpha/control_original_message`. Alpha is a neutral ordinal-0
+   tie-break, not a quality selection. After one fresh B0/alpha seed-101
+   two-second veto canary, a passing canary permits exactly four fresh,
+   cache-disabled pairs on P65/E101/X120/X233 with seed 73, per-subject limits
+   8/12/12/15 seconds and orders AB/BA/AB/BA. The ceiling is ten solver
+   subprocesses, 98 subject-seconds, 300 seconds and concurrency one; provider,
+   H/C, Contract, V3/V4, retry/repair, validation/frozen, Decision, promotion,
+   beta and R66 are zero. Historical R1 already tested the same mechanism more
+   strongly (`3W/0L/29T` pairs, `0W/0L/8T` cases, median `0 [0,0]`): stage 1
+   had zero champion cache hits, while most later R1 B0 observations were
+   cached. R65 is only an implementation-specific exposed-
+   coordinate calibration, never effect or independent evidence. Status is
+   `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_SOLVER_EXECUTION_AUTHORIZATION`;
+   no canary or SCREENING subprocess is authorized by generic assent or R64.
+   The frozen nine-file input binds preregistration SHA-256
+   `4905fdfca6b91d6c24d5e8be3eb736060671dad9d468976122e9ee953323f8ac`.
+   Env-injected `launch.sh --preflight-tests` passed 42 tests in 0.87 seconds;
+   an independent run passed the same 42 in 0.80 seconds.
+   Outer pytest uses an `env -i` allowlist, with API/proxy/auth sentinels proven
+   absent. Ruff check/format, `bash -n`, `jq`, and `launch.sh --check` pass;
+   cache/pyc and the formal output/control/socket roots are absent. Atomic
+   staging-ref tests require durable `raw_metrics_ref`/fresh-workspace paths
+   only after final rename. Fake acquisition proves the pid/acquired marker,
+   `LAUNCHED` return and exit-code precedence without waiting for the formal
+   output. Five manifest science-surface mutation negatives exact-bind formal
+   role, research question, estimand, endpoints and claim boundary. The input
+   tests also exclude timeout-ancestor self-conflict, bind the exact
+   predelegated 10-subprocess/98-second ledger, directly bind R63 cell to score,
+   capture the minimal child Python environment, and persist/re-require the
+   sealed production runtime-audit validity endpoint. B0/alpha canary and
+   SCREENING audit-only failure negatives preserve comparator/candidate
+   precedence and null aggregates. The input directory and launcher are mode
+   `0700`, the other eight regular non-symlink files are mode `0600`, and no
+   exact candidate or solver ran.
+19. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
 ## V3 non-negotiable boundary
@@ -459,6 +498,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R62 | proven provider-free static sidecar calibration; separate syntax signals only | Frozen fresh-B0, the sealed R60 workspaces and in-memory controls calibrate same-name direct Attribute Call and changed-span adjacent identical call signals. Alpha is `TRUE/FALSE`; beta `FALSE/TRUE`; B0 `UNKNOWN/UNKNOWN`; cleaned alpha/beta `TRUE/TRUE`; branch `UNKNOWN/TRUE`; callback `UNKNOWN/FALSE`. | Seal `TERMINAL_CALIBRATION / SEPARATE_SYNTAX_RISK_SIGNALS / ZERO_ALGORITHM_QUALITY_EVIDENCE`. Keep receiver resolution and callee effects explicitly unknown, both diagnostics separate and both aggregate fields null. This is post-hoc R60-informed calibration, not C completeness, candidate correctness, a gate, prompt change or repair loop. Provider/Contract/V3/V4/Protocol/Decision/quality/benchmark calls and production/R60/R61 changes are zero. At R62 closeout, provider pause remained and no R63 was preregistered, authorized or launched. |
 | R63 | proven complete single C-message pair; no identified message-review advantage or algorithm evidence | The authorized fixed CONTROL→REVIEW pair completed exit `0` in about 55 seconds with H/retry zero, two terminal C outcomes, two opaque primary records and two opaque sidecars. All 13 primary fields are true in both arms (`BOTH`). Both proposals use one-file `_two_opt_star` exact replacement with nearly the same boundary-delta semantics; REVIEW differs only in depot-assignment placement/format and has 51 more input tokens. Sidecars are `UNKNOWN/TRUE` for both, aggregate null. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / NO_IDENTIFIED_MESSAGE_REVIEW_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. V3/V4 do not enter `_two_opt_star`: V3 disables embedded VNS; V4 passes `0.01` seconds, but `_algorithm_time_limit` clamps the scheduler time limit to `0.05` seconds, equal to its minimum `0.05`-second reserve, so strict `remaining_time() > reserve` is not met. Claim neither review benefit nor ineffectiveness from one confounded ordered pair; the seal does not mean the suffix was ineffective or the model did not review. Run no canary, formal Protocol, quality solver, Decision or promotion. At R63 closeout, no R64 was preregistered, authorized or launched. |
 | R64 | terminal complete provider-free `_two_opt_star` semantic diagnostic; durable calibrated reproduction only | The unique formal root was created at `2026-08-14T09:41:56Z` and contains only mode-`0600` `result.json`/`status.json` under a mode-`0700` root. Both arms report cut/near/state `TRUE/TRUE/TRUE` and descriptive route-distance calls `0`. All 27 cut and three near-EPS cases equal their references without exception. State candidate/reference accepted-move counts are `0/0`, `1/1`, and `5/5`; complete traces/final partition/load/cost states equal the reference and all invariants hold. | `TERMINAL_DIAGNOSTIC`, `complete=true`, `semantic_endpoints_claimed=true`; classification and both aggregates are null. Formal role `DURABLE_REPRODUCTION_OF_EXACT_CANDIDATE_CALIBRATED_PROVIDER_FREE_DIAGNOSTIC`, with `outcome_blind=false` and `independent_confirmation=false`. Nested `preparation_calibration.formal_output_created=false` describes only the earlier temporary calibration, not current root absence. This finite-fixture result is non-gating, zero algorithm-quality evidence, and no independent confirmation. Provider/Contract/V3/V4/canary/formal Protocol/quality/Decision/mutation counters are zero; provider pause remains and no R65 is authorized. |
+| R65 | prepared exposed-coordinate minute calibration; solver execution not authorized | Exact B0 is frozen against only sealed R63 `cell_alpha/control_original_message`, chosen by a neutral ordinal-0 tie-break. The only permitted action is a fresh cache-disabled seed-101 two-subject veto canary followed conditionally by four P65/E101/X120/X233 seed-73 pairs at 8/12/12/15 seconds in AB/BA/AB/BA order. Maximum is 10 solver subprocesses, 98 subject-seconds, concurrency one and a 300-second hard wall. The frozen nine-file input binds prereg SHA `4905fdfc...`; env-i preparation passed 42 tests in 0.87 seconds and independently 42 in 0.80 seconds, plus check/lint/format/bash, with cache and formal roots absent. Acquisition, staging-ref, science-surface/ledger, host-self-conflict, R63 cell-score, child-env and sealed runtime-audit validity have direct coverage; audit-only B0/alpha failure negatives preserve precedence/null aggregates. No exact candidate or solver ran. | `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_SOLVER_EXECUTION_AUTHORIZATION`. This post-hoc adaptive re-expression follows stronger historical same-mechanism R1 evidence (`3/0/29` pair, `0/0/8` case, median `0 [0,0]`) and is only implementation-specific lower-bound-style calibration, not held-out, independent or effect evidence. Generic assent and R64 authorization do not transfer. Provider/H/C/Contract/V3/V4/retry/repair/validation/frozen/Decision/promotion/beta/R66 remain zero; any outcome stops R65. |
 
 ## Modular execution plan
 
@@ -1235,6 +1275,26 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   formal record is durable reproduction with `outcome_blind=false` and
   `independent_confirmation=false`, not new independent evidence. R63 remains
   unchanged; R64 supplies no provider, formal solver, quality, Decision or R65
-  evidence.
+  evidence. R65 is now preregistered but remains
+  `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_SOLVER_EXECUTION_AUTHORIZATION`.
+  It selects only sealed R63 alpha by a neutral ordinal-0 tie-break and freezes
+  one seed-101 two-second B0/alpha canary plus four fresh, cache-disabled
+  seed-73 P65/E101/X120/X233 pairs at 8/12/12/15 seconds in AB/BA/AB/BA order.
+  The maximum is 10 subprocesses, 98 subject-seconds, 300 seconds and one
+  concurrent subject. Historical same-mechanism R1 evidence was stronger
+  (`3/0/29` pair, `0/0/8` case, median `0 [0,0]`): stage 1 had zero champion
+  cache hits, while most later R1 B0 observations were cached. This is
+  only implementation-specific exposed-coordinate calibration, not an effect
+  or independent confirmation. Generic assent and the consumed R64 authority
+  cannot launch it; provider/H/C/Contract/V3/V4, retry/repair,
+  validation/frozen, Decision, promotion, beta and R66 remain zero. Its frozen
+  nine-file input binds prereg SHA `4905fdfc...`; env-i preparation passed 42
+  tests in 0.87 seconds and independently 42 in 0.80 seconds, plus Ruff
+  check/format, `bash -n`, `jq` and launcher check. Fake acquisition, atomic
+  staging-ref, science-surface/predelegate ledger, host-self-conflict,
+  R63 cell-score, child-env and sealed runtime-audit validity paths are covered;
+  audit-only B0/alpha failures retain typed precedence and null aggregates.
+  Cache/pyc and formal output/control/socket roots are absent, and no exact
+  solver ran.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.
