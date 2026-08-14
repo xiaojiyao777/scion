@@ -1104,8 +1104,25 @@ remain separate, and both `aggregate_semantic_completeness` and
 `aggregate_algorithm_success` are null. Provider, Contract, V3/V4, Protocol,
 Decision, quality and benchmark calls are zero. No production source, gate,
 R60 or R61 artifact changed. R62 implements no prompt/tool change or feedback,
-retry or repair loop. Provider algorithm experiments remain paused; no R63 is
-preregistered, authorized or launched.
+retry or repair loop. Provider algorithm experiments remained paused; at R62
+closeout no R63 was preregistered, authorized or launched.
+
+R63 is now prepared but not authorized or launched. Its
+[preregistration](../experiments/v0.4/v0.4-cvrp-r63-c-message-whole-patch-review-pair-preregistration-20260814.md)
+freezes one R1 approved-H C input with the historical C response absent and
+forbidden to the runner. CONTROL uses the original C user prompt; REVIEW's
+only provider-visible change is one exact silent pre-submit whole-patch-review
+suffix. Both arms share the complete `47fe81ee` tool, system blocks, approved
+H, ordered 11-source values and all other request parameters, and run in fixed
+CONTROL→REVIEW order with H/retry zero. If separately authorized, both terminal
+provider outcome envelopes must be durable before opaque provider-free
+production parse, source binding, Contract, materialization and independent
+non-skipped V3/V4 scoring. R62 syntax signals are descriptive T/F/UNKNOWN
+sidecars only when
+evaluable, with `NOT_EVALUABLE` kept distinct. R63 is a single carrier-specific
+mechanical calibration with zero canary, formal Protocol, Decision or
+algorithm-quality evidence; provider pause remains until the exact
+authorization quoted in its preregistration is recorded.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1434,8 +1451,15 @@ or launched.
 R62 later completed provider-free as a static, post-hoc R60-informed sidecar
 calibration. Alpha's two separate syntax signals are `TRUE/FALSE`, beta's are
 `FALSE/TRUE`, and both aggregate fields are null. It adds no provider, solver,
-quality, gate, prompt or repair-loop evidence. Provider pause remains; no R63
-is preregistered, authorized or launched.
+quality, gate, prompt or repair-loop evidence. At R62 closeout, provider pause
+remained and no R63 was preregistered, authorized or launched.
+
+R63 is now locally prepared and prospectively preregistered as a fixed
+CONTROL→REVIEW C-message pair on a historical-response-quarantined R1 input.
+No R63 provider call is authorized or launched. Its sole primary endpoint is
+mechanical `full_executable`; any R62 syntax signals stay descriptive and it
+cannot supply solver-quality or promotion evidence.
+
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
 Deployment, packaging, builds, root/systemd and self-proof infrastructure are
