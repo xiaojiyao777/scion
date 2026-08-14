@@ -1107,22 +1107,33 @@ R60 or R61 artifact changed. R62 implements no prompt/tool change or feedback,
 retry or repair loop. Provider algorithm experiments remained paused; at R62
 closeout no R63 was preregistered, authorized or launched.
 
-R63 is now prepared but not authorized or launched. Its
-[preregistration](../experiments/v0.4/v0.4-cvrp-r63-c-message-whole-patch-review-pair-preregistration-20260814.md)
-freezes one R1 approved-H C input with the historical C response absent and
-forbidden to the runner. CONTROL uses the original C user prompt; REVIEW's
-only provider-visible change is one exact silent pre-submit whole-patch-review
-suffix. Both arms share the complete `47fe81ee` tool, system blocks, approved
-H, ordered 11-source values and all other request parameters, and run in fixed
-CONTROL→REVIEW order with H/retry zero. If separately authorized, both terminal
-provider outcome envelopes must be durable before opaque provider-free
-production parse, source binding, Contract, materialization and independent
-non-skipped V3/V4 scoring. R62 syntax signals are descriptive T/F/UNKNOWN
-sidecars only when
-evaluable, with `NOT_EVALUABLE` kept distinct. R63 is a single carrier-specific
-mechanical calibration with zero canary, formal Protocol, Decision or
-algorithm-quality evidence; provider pause remains until the exact
-authorization quoted in its preregistration is recorded.
+R63 later completed as the separately
+[preregistered](../experiments/v0.4/v0.4-cvrp-r63-c-message-whole-patch-review-pair-preregistration-20260814.md)
+and authorized C-message pair. Its
+[postrun](../experiments/v0.4/v0.4-cvrp-r63-c-message-whole-patch-review-pair-postrun-20260814.md)
+seals `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH /
+NO_IDENTIFIED_MESSAGE_REVIEW_ADVANTAGE /
+ZERO_ALGORITHM_QUALITY_EVIDENCE`. The fixed
+CONTROL→REVIEW wrapper completed exit `0` in about 55 seconds with H/retry
+zero, two terminal provider outcomes, two opaque primary records, two opaque
+sidecars and two evaluated arms.
+
+All 13 primary mechanical fields are true for both arms. CONTROL V3/V4 passed
+in `615/934` ms and REVIEW in `569/838` ms. Both sidecars are
+`UNKNOWN/TRUE`, with aggregate semantic completeness null. Both raw proposals
+changed only `local_search.py` and used `exact_replace` on `_two_opt_star` for
+nearly the same boundary-delta strategy; REVIEW differs only in depot-assignment
+placement/format and used 51 more input tokens. These are descriptive facts.
+V3/V4 do not enter `_two_opt_star`: V3 disables embedded VNS. V4 passes `0.01`
+seconds, but `_algorithm_time_limit` clamps the scheduler time limit to `0.05`
+seconds, equal to its minimum `0.05`-second reserve, so the strict
+`remaining_time() > reserve` guard is not met. They therefore do not establish
+every cut-pair equivalence, directed-arc correctness or near-EPS behavior. No
+canary, formal Protocol, quality solver or Decision ran, and
+B0/v1 remains champion. One fixed ordered pair proves neither review benefit
+nor ineffectiveness; the seal does not mean the suffix was ineffective or the
+model did not review. Provider algorithm experiments remain paused; no R64 is
+preregistered, authorized or launched.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1454,11 +1465,14 @@ calibration. Alpha's two separate syntax signals are `TRUE/FALSE`, beta's are
 quality, gate, prompt or repair-loop evidence. At R62 closeout, provider pause
 remained and no R63 was preregistered, authorized or launched.
 
-R63 is now locally prepared and prospectively preregistered as a fixed
-CONTROL→REVIEW C-message pair on a historical-response-quarantined R1 input.
-No R63 provider call is authorized or launched. Its sole primary endpoint is
-mechanical `full_executable`; any R62 syntax signals stay descriptive and it
-cannot supply solver-quality or promotion evidence.
+R63 later completed the fixed authorized CONTROL→REVIEW C-message pair. Both
+arms passed all 13 mechanical fields, yielding `BOTH /
+NO_IDENTIFIED_MESSAGE_REVIEW_ADVANTAGE`; both descriptive sidecars are
+`UNKNOWN/TRUE` with null aggregate. V3/V4 do not enter `_two_opt_star`, and the
+near-matching one-file boundary-delta proposals have no formal or
+algorithm-quality evidence. The result neither supports nor refutes review
+benefit and does not establish that the suffix was ineffective or the model
+did not review. No R64 is preregistered, authorized or launched.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
