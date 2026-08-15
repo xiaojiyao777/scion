@@ -1406,25 +1406,34 @@ Recovery2 is provider-free prepared under a new R66 identity. Its only new
 correction vendors exact `jiter==0.13.0` as nine files under
 `vendor/python312`, retains `PYTHONNOUSERSITE=1`, and exercises the exact lazy
 chat dependency seam without HTTP. Its status is
-`RECOVERY2_PREPARED_AWAITING_EXPLICIT_AUTHORIZATION`. Recovery1's logical call
-counter remains one even though its audited HTTP count is zero. The broad,
-full source-send and exact recovery1 authorization fields remain preserved;
-new `recovery2_source_send_authorization_text` is null. No earlier field
-authorizes recovery2; it must not launch until the user explicitly authorizes
-the new fresh roots and one-H envelope and overrides the prior no-recovery2
-stop for this one action. C, solver, Decision, promotion and R67 remain zero.
+`RECOVERY2_PREPARED_AUTHORIZED_NOT_STARTED`. Recovery1's logical call counter
+remains one even though its audited HTTP count is zero. The broad, full source-
+send and exact recovery1 authorization fields remain preserved. After those
+facts and the prior no-recovery2 stop were disclosed, the user supplied this
+exact `recovery2_source_send_authorization_text`:
 
-The frozen recovery2 provider-free input-tree receipt covers 4,200 files and
-73,523,973 bytes, using sorted
+> 我已知 R66 recovery1 的 durable label 是 TERMINAL_HYPOTHESIS_PROVIDER_FAILURE、wrapper attempt/call 计数为 1，但只读审计确认它在 client.chat 本地缺少 jiter 时、HTTP 之前终止，实际 H HTTP request、research payload send 和 H observation 均为 0。我明确授权仅为一次 fresh v04-cvrp-r66-h-only-mechanism-frontier-probe-20260814-recovery2 覆盖 recovery1 的 no-recovery2 stop：保持原 R66 已授权的 commit 51f9bbd77f1e93777bbe9c401b8ba05c09a3e819 fresh-B0 CVRP 11-source、研究问题、E01–E10 ledger、clean 47fe81ee6e17c04bc805197e2b2ad34e0fff4d14 production H system/tool 和全部 provider-visible request bytes 不变；保持 fixed as_of=2026-08-14 与 PYTHONNOUSERSITE=1，仅使用逐文件冻结的 experiment-owned jiter==0.13.0 修复本地 OpenAI SDK 依赖，然后通过本机 Codex proxy http://127.0.0.1:8080 向 gpt-5.6-terra 最多发送 1 次 H HTTP request。Recovery2 最多 1 次 wrapper attempt、最多 1 次 actual H HTTP request、180 秒、SDK/provider retry 0；不得修改、复用或重写原 R66/recovery1 的 input、control、output、socket 或终态，不得发送历史 response、候选或结果；C、patch、materialization、Contract、V3/V4、solver、canary、Protocol、quality/formal、Decision、promotion、repair、resume、substitution、R67 和 recovery3 均为 0。任何 recovery2 终态立即停止。此授权仅覆盖这一 R66 recovery2 H-only 调用。
+
+This overrides the no-recovery2 stop only for one fresh recovery2 H-only
+action. C, solver, Decision, promotion and R67 remain zero. No recovery2
+provider call or acquisition has started. The authorization-bearing bundle
+refreeze, independent check and fresh-root confirmation below now pass.
+
+The authorization-bearing recovery2 input-tree receipt covers 4,200 files and
+73,527,199 bytes, using sorted
 `relative_path\0file_sha256\0size\n` records, with SHA-256
-`f8e82201700cbfebea9ba26f5bfeb0d30f5ee694824722ab3a9fcdf861a050d5`.
-The 14,315-byte manifest SHA-256 is
-`e056afcfe6e279bbc902c3b17b8e512eb466c9a28ae4e3e5ea4a4bf7e6fa8dc9`.
-Forty-seven tests passed in 12.15 seconds, with runner check, Ruff check/format,
+`a3178c2ddd5801ff2e6fff4ca69fa255311c24152340782c391436efabbb0779`.
+The 15,825-byte manifest SHA-256 is
+`b91bbec446296a490db5b5c9c16e8b0f7f9dc1f17302cbb2fe937dfef65a365e`.
+The exact 1,460-byte UTF-8 authorization field has SHA-256
+`25198479d96bc58b80e9bd0632ccb8f4bb55bf17d0d9c412070d2824eee46122`,
+and the formal launch sentinel equals the exact recovery2 label. Forty-seven
+tests passed in 12.19 seconds, with runner check, Ruff check/format,
 `bash -n` and `jq` green. The
 formal preauthorization path exits `2`, and output, control and socket roots
-remain absent; recursive cache/symlink exclusion passes. These are
-provider-free preparation facts, not launch or H evidence.
+remain absent; recursive cache/symlink exclusion passes. These are provider-
+free authorization-refreeze facts, not launch or H evidence. No provider call
+or acquisition has started.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1809,10 +1818,11 @@ outbound model requests, research-payload sends and H observations. Provider ret
 solver, Protocol, Decision, promotion and R67 are zero.
 
 A fresh R66 recovery2 is provider-free prepared with exact vendored
-`jiter==0.13.0`, but is
-`RECOVERY2_PREPARED_AWAITING_EXPLICIT_AUTHORIZATION`. The prior recovery1
-instruction does not authorize it; no recovery2 provider call may start
-without a new explicit user authorization.
+`jiter==0.13.0`. A new exact authorization now explicitly overrides the prior
+no-recovery2 stop for this single action, so its state is
+`RECOVERY2_PREPARED_AUTHORIZED_NOT_STARTED`. No recovery2 provider call or
+acquisition has started; the authorization-bearing bundle refreeze and fresh-
+root check now pass.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
