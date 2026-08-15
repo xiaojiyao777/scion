@@ -1329,6 +1329,46 @@ substitution, same-label relaunch, C, solver action or R67. This is a
 preparation-authority failure, not model, mechanism or algorithm-quality
 evidence.
 
+That original terminal history remains sealed. The user then gave this exact
+instruction after reviewing the one-field diagnosis:
+
+> 是的，那你直接去掉，做好修复，然后继续实验
+
+The append-only recovery amendment resolves it narrowly to the separately
+rooted R66 subtype
+`v04-cvrp-r66-h-only-mechanism-frontier-probe-20260814-recovery1`, not R67.
+Its manifest exact-binds three distinct fields: historical broad
+`authorization_text`, full eleven-source `source_send_authorization_text`, and
+the new `recovery_authorization_text`. The broad instruction does not replace
+explicit disclosure authority, while the disclosure authority does not by
+itself amend the original terminal stop.
+It replaces only live-current-date canonical reconstruction with manifest
+authority `static_context_as_of_date="2026-08-14"` and a typed date parsed from
+the same exact string. That deterministic rebuild must reproduce frozen
+`calibration_age_days=64`. Every other source,
+runtime, prompt, tool, question, ledger, schema, request-envelope and fresh-
+root check remains unchanged.
+
+Recovery1 uses fresh input, output, process-control and socket roots recorded
+in the preregistration amendment. The original consumed root is not reused or
+overwritten. Its current status is
+`RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`; no recovery provider request has
+started. The frozen recovery input-tree/manifest SHA-256 values are
+`89e7994a05a0663f3bc95a9c2453ca28328159608a2cfc3749222f6747138aaf` and
+`ba196da15b7a2d64b8b8918e2a56e6143846aba35a289c5a7e760f525d3fd4f1`.
+The tree has 4,191 files and 72,632,636 bytes; the provider-kwargs snapshot
+SHA-256 is
+`573d445126f41acab255d6f9bfa93d9aff43851fbc6458bca3cb0b9d9f5b470a`.
+All 36 provider-free tests pass in 11.91 seconds together with runner/style/
+shell/JSON checks, with fresh output/control/socket roots absent. Because the
+original H/provider count is zero, original plus recovery1 retain a combined
+maximum of one H call.
+Provider retry, C, patch,
+materialization, Contract, V3/V4, solver, canary, Protocol, quality/formal
+evaluation, Decision, promotion, resume, substitution and R67 remain zero.
+Every recovery terminal outcome stops without recovery2 or an automatic
+downstream action.
+
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
 deadline-driven solver was evaluating several pairs. All CPU-heavy repository
@@ -1694,14 +1734,22 @@ promotion/beta/R66 are zero. The result is neither effect evidence nor
 independent confirmation, does not pool with R1, and authorizes no extension
 or R66.
 
-A new, separate authorization covered only one R66 H-only mechanism-frontier
-action. Its fail-closed outer preflight found the single UTC-date-derived
-canonical drift `calibration_age_days: 64 -> 65` before inner acquisition or
-provider disclosure. R66 is terminal `PREP_INVALID / OuterPreflightFailure /
-NO_PROVIDER_REQUEST / NO_H_OBSERVATION / NO_RETRY / NO_R67`; H/provider and all
-downstream counters are zero, and no formal output exists. This is no novelty,
-quality or algorithm evidence and cannot advance S6. The frozen policy permits
-no repair, retry, same-label relaunch, C, solver action or automatic R67.
+A new, separate authorization covered the original R66 H-only action. Its
+fail-closed outer preflight found the single UTC-date-derived canonical drift
+`calibration_age_days: 64 -> 65` before inner acquisition or provider
+disclosure. The original remains terminal `PREP_INVALID /
+OuterPreflightFailure / NO_PROVIDER_REQUEST / NO_H_OBSERVATION`; H/provider and
+all downstream counters are zero, and no formal output exists. This is no
+novelty, quality or algorithm evidence and cannot advance S6.
+
+The user subsequently authorized removal of that erroneous date gate, repair
+and continuation. A fresh R66 recovery1 is now
+`RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`; its sole correction is
+deterministic production reconstruction with `as_of=2026-08-14`, preserving
+frozen `calibration_age_days=64` and every other authority check. Original plus
+recovery1 still allow at most one H call. Provider retry, C, solver, Protocol,
+Decision, promotion and R67 are zero, and no terminal result permits recovery2
+or automatic continuation.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
