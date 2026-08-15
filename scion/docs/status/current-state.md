@@ -1405,8 +1405,8 @@ the
 Recovery2 is provider-free prepared under a new R66 identity. Its only new
 correction vendors exact `jiter==0.13.0` as nine files under
 `vendor/python312`, retains `PYTHONNOUSERSITE=1`, and exercises the exact lazy
-chat dependency seam without HTTP. Its status is
-`RECOVERY2_PREPARED_AUTHORIZED_NOT_STARTED`. Recovery1's logical call counter
+chat dependency seam without HTTP. Its terminal status is
+`TERMINAL_HYPOTHESIS_OBSERVATION`. Recovery1's logical call counter
 remains one even though its audited HTTP count is zero. The broad, full source-
 send and exact recovery1 authorization fields remain preserved. After those
 facts and the prior no-recovery2 stop were disclosed, the user supplied this
@@ -1415,9 +1415,9 @@ exact `recovery2_source_send_authorization_text`:
 > 我已知 R66 recovery1 的 durable label 是 TERMINAL_HYPOTHESIS_PROVIDER_FAILURE、wrapper attempt/call 计数为 1，但只读审计确认它在 client.chat 本地缺少 jiter 时、HTTP 之前终止，实际 H HTTP request、research payload send 和 H observation 均为 0。我明确授权仅为一次 fresh v04-cvrp-r66-h-only-mechanism-frontier-probe-20260814-recovery2 覆盖 recovery1 的 no-recovery2 stop：保持原 R66 已授权的 commit 51f9bbd77f1e93777bbe9c401b8ba05c09a3e819 fresh-B0 CVRP 11-source、研究问题、E01–E10 ledger、clean 47fe81ee6e17c04bc805197e2b2ad34e0fff4d14 production H system/tool 和全部 provider-visible request bytes 不变；保持 fixed as_of=2026-08-14 与 PYTHONNOUSERSITE=1，仅使用逐文件冻结的 experiment-owned jiter==0.13.0 修复本地 OpenAI SDK 依赖，然后通过本机 Codex proxy http://127.0.0.1:8080 向 gpt-5.6-terra 最多发送 1 次 H HTTP request。Recovery2 最多 1 次 wrapper attempt、最多 1 次 actual H HTTP request、180 秒、SDK/provider retry 0；不得修改、复用或重写原 R66/recovery1 的 input、control、output、socket 或终态，不得发送历史 response、候选或结果；C、patch、materialization、Contract、V3/V4、solver、canary、Protocol、quality/formal、Decision、promotion、repair、resume、substitution、R67 和 recovery3 均为 0。任何 recovery2 终态立即停止。此授权仅覆盖这一 R66 recovery2 H-only 调用。
 
 This overrides the no-recovery2 stop only for one fresh recovery2 H-only
-action. C, solver, Decision, promotion and R67 remain zero. No recovery2
-provider call or acquisition has started. The authorization-bearing bundle
-refreeze, independent check and fresh-root confirmation below now pass.
+action. C, solver, Decision, promotion and R67 remain zero. The authorization-
+bearing bundle refreeze, independent check and fresh-root confirmation below
+passed before launch.
 
 The authorization-bearing recovery2 input-tree receipt covers 4,200 files and
 73,527,199 bytes, using sorted
@@ -1431,9 +1431,45 @@ and the formal launch sentinel equals the exact recovery2 label. Forty-seven
 tests passed in 12.19 seconds, with runner check, Ruff check/format,
 `bash -n` and `jq` green. The
 formal preauthorization path exits `2`, and output, control and socket roots
-remain absent; recursive cache/symlink exclusion passes. These are provider-
-free authorization-refreeze facts, not launch or H evidence. No provider call
-or acquisition has started.
+were absent; recursive cache/symlink exclusion passed. These are provider-free
+authorization-refreeze facts, not launch or H evidence.
+
+The launch-before documents were committed as `a0a005a6`. The launcher then
+returned `LAUNCHED inner_pid=655763`; durable acquisition occurred at
+`2026-08-15T05:35:19Z` after 47 preflight tests passed in 13.53 seconds. At
+that launch-only boundary, an `h-network-dispatch` marker existed, but its
+contents and every H response, usage, observation, classification, result,
+status and terminal artifact were unread. Marker existence alone did not
+establish completed HTTP or a provider return. No outcome-dependent action was
+taken at that boundary, and recovery2 remained `IN_FLIGHT / OUTCOME_UNREAD`.
+
+Recovery2 subsequently exited `0`. The unique mode-`0700` output root contains
+only mode-`0600` result/status files of 7,039/842 bytes, with SHA-256
+`19e01061df9e15749081a15834cf20d66fed6584103e976755c444a30a1da616`
+and `d6d359b7b0634b8ed9a0869d501a8447a918f7047850e08cbb2f388379e3fe08`.
+Wrapper attempts, H attempts, logical provider calls and actual network
+requests are all one; provider terminal response is true, retry zero, latency
+16,134 ms and all six mechanical-vector fields true. Usage is 20,808 input,
+687 output and 296 reasoning tokens; recorded cache counts are zero and cache
+hit false. Raw response and the full response envelope are unavailable.
+
+The typed H proposes a deadline-polled bounded intra-route 3-opt neighborhood
+after `_two_opt_intra`. Its primary `scientific_classification`, algorithm-
+quality evidence, Decision and promotion remain null. A separate read-only
+historical audit applies only the non-gating descriptive label
+`DESCRIPTIVE_DIRECT_OLD_BOUNDED_INTRA_ROUTE_3OPT_OVERLAP`: successor5 had weak
+below-MDE evidence; successor6 expanded the same branch to `18W/22L/8T`,
+median `0`, summary `-0.75`, then abandoned it; activated R3
+`three_opt_intra` was also soft-abandoned on negative median evidence. Seal
+`NO_NOVEL_FRONTIER_EVIDENCE / ZERO_ALGORITHM_QUALITY_EVIDENCE` and
+`NO_C / NO_R67 / NO_RECOVERY3` without rewriting the primary record or a
+novelty gate.
+
+Every downstream counter is zero. The control root records `exit.code=0` and
+retains the payload-free dispatch marker. The inner PID is gone; the audited
+live tmux server and mode-`0600` socket are deliberately retained. Full facts
+are in the
+[recovery2 postrun](../experiments/v0.4/v0.4-cvrp-r66-h-only-mechanism-frontier-probe-recovery2-postrun-20260815.md).
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1819,10 +1855,12 @@ solver, Protocol, Decision, promotion and R67 are zero.
 
 A fresh R66 recovery2 is provider-free prepared with exact vendored
 `jiter==0.13.0`. A new exact authorization now explicitly overrides the prior
-no-recovery2 stop for this single action, so its state is
-`RECOVERY2_PREPARED_AUTHORIZED_NOT_STARTED`. No recovery2 provider call or
-acquisition has started; the authorization-bearing bundle refreeze and fresh-
-root check now pass.
+no-recovery2 stop for this single action. The authorization-bearing bundle
+refreeze and fresh-root check passed, then PID `655763` acquired at
+`2026-08-15T05:35:19Z`. Recovery2 completed exit `0` as
+`TERMINAL_HYPOTHESIS_OBSERVATION`; its bounded intra-route 3-opt H directly
+overlaps old descriptive evidence. Research seal `NO_NOVEL_FRONTIER_EVIDENCE`,
+algorithm-quality evidence zero, and no C, R67 or recovery3.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
