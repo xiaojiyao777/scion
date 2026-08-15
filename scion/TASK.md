@@ -306,8 +306,8 @@ evidence prerequisite exists:
    and support no causal speed claim. Decision and promotion are null; all
    declared zero-call/action fields remain zero. R65 stops with no effect
    inference and no R66.
-19. **R66 original H-only action stopped at fail-closed outer preflight;
-   recovery1 prepared and authorized:** the
+19. **R66 original action and recovery1 are terminal infrastructure failures;
+   recovery2 is provider-free prepared and awaiting authorization:** the
    [preregistration](docs/experiments/v0.4/v0.4-cvrp-r66-h-only-mechanism-frontier-probe-preregistration-20260814.md)
    freezes one prior-informed, non-blind Terra H observation over the exact
    fresh-B0 11-source values at `51f9bbd7` and the clean production H carrier
@@ -363,13 +363,46 @@ evidence prerequisite exists:
    runtime, prompt, tool, question, ledger, schema and fresh-root equality
    remains. Original plus recovery1 still permit at most one H call because the
    original consumed zero; provider retry, C, patch, solver, Protocol,
-   Decision, promotion and R67 remain zero. Recovery1 is
-   `RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`; no recovery provider call has
-   started. Its frozen 4,191-file/72,632,636-byte input tree, provider-kwargs
-   snapshot and manifest SHA-256 values are `89e7994a...`, `573d4451...` and
-   `ba196da1...`; 36 provider-free tests pass in 11.91 seconds together with
+   Decision, promotion and R67 remain zero. At its provider-free launch freeze,
+   recovery1 was `RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`; no recovery
+   provider call had started. Its historical frozen input-tree preparation
+   receipt, public-call payload, counterfactual OpenAI-create kwargs and
+   manifest SHA-256 values are `89e7994a...`,
+   `573d4451...`, `0dc1c5b4...` and `ba196da1...`; the public receipt is not
+   the SDK kwargs. The counterfactual kwargs use float timeout `180.0`, exclude
+   `prompt_cache_key`, and were never emitted because recovery1 failed before
+   kwargs evaluation. The tree has 4,191 files and 72,632,636 bytes.
+   Thirty-six tests pass in 11.91 seconds together with
    runner/style/shell/JSON checks, with fresh output/control/socket roots
-   absent. Any terminal outcome stops without recovery2.
+   absent.
+
+   Recovery1 subsequently acquired at `2026-08-15T03:23:06Z`, PID `591276`,
+   and then exited `3`. The
+   [recovery1 postrun](docs/experiments/v0.4/v0.4-cvrp-r66-h-only-mechanism-frontier-probe-recovery1-postrun-20260815.md)
+   preserves the emitted `TERMINAL_HYPOTHESIS_PROVIDER_FAILURE`, logical
+   `h_attempts=1`/`hypothesis_provider_calls=1`, no provider terminal response,
+   error `API error: No module named 'jiter'` and latency 637 ms. Read-only
+   causal audit separately seals
+   `RUN_INVALID_LOCAL_INFRA / MISSING_JITER_BEFORE_REQUEST`: lazy
+   `client.chat` import failed before HTTP, so actual outbound model requests,
+   research-payload sends and H observations are zero. Every downstream/R67
+   counter is zero. Result/status SHA-256 values are `a781f1fb...` and
+   `af1608d8...`; `exit.code=3`, the inner PID is gone, and the mode-`0600`
+   recovery1 socket remains stale.
+
+   A provider-free recovery2 now vendors exact `jiter==0.13.0` as nine files
+   under `vendor/python312`, keeps `PYTHONNOUSERSITE=1`, and exercises the exact
+   lazy chat dependency seam without HTTP. Its status is
+   `RECOVERY2_PREPARED_AWAITING_EXPLICIT_AUTHORIZATION`. The earlier source-
+   send and recovery1 instructions remain preserved, while new field
+   `recovery2_source_send_authorization_text` is null; they do not authorize
+   recovery2. It must not launch until the user explicitly authorizes its exact
+   fresh roots and at-most-one H envelope and overrides the prior no-recovery2
+   stop for this one action; C, solver, Decision, promotion and R67 remain zero.
+   Its frozen provider-free receipt is 4,200 files/73,523,973 bytes, tree
+   SHA-256 `f8e82201...`, manifest SHA-256 `e056afcf...`, and 47 passing tests
+   in 12.15 seconds plus runner/style/shell/JSON checks. Output, control and
+   socket roots remain absent; this preparation sends no provider payload.
 20. **S6 closeout:** only after retained CVRP improvement, run the full relevant
    regression record and publish the cross-problem claim boundaries.
 
@@ -590,7 +623,7 @@ not incidental framework plumbing. Before every fresh provider campaign:
 | R63 | proven complete single C-message pair; no identified message-review advantage or algorithm evidence | The authorized fixed CONTROL→REVIEW pair completed exit `0` in about 55 seconds with H/retry zero, two terminal C outcomes, two opaque primary records and two opaque sidecars. All 13 primary fields are true in both arms (`BOTH`). Both proposals use one-file `_two_opt_star` exact replacement with nearly the same boundary-delta semantics; REVIEW differs only in depot-assignment placement/format and has 51 more input tokens. Sidecars are `UNKNOWN/TRUE` for both, aggregate null. | Seal `TERMINAL_MATCHED_PAIR_OBSERVATION / BOTH / NO_IDENTIFIED_MESSAGE_REVIEW_ADVANTAGE / ZERO_ALGORITHM_QUALITY_EVIDENCE`. V3/V4 do not enter `_two_opt_star`: V3 disables embedded VNS; V4 passes `0.01` seconds, but `_algorithm_time_limit` clamps the scheduler time limit to `0.05` seconds, equal to its minimum `0.05`-second reserve, so strict `remaining_time() > reserve` is not met. Claim neither review benefit nor ineffectiveness from one confounded ordered pair; the seal does not mean the suffix was ineffective or the model did not review. Run no canary, formal Protocol, quality solver, Decision or promotion. At R63 closeout, no R64 was preregistered, authorized or launched. |
 | R64 | terminal complete provider-free `_two_opt_star` semantic diagnostic; durable calibrated reproduction only | The unique formal root was created at `2026-08-14T09:41:56Z` and contains only mode-`0600` `result.json`/`status.json` under a mode-`0700` root. Both arms report cut/near/state `TRUE/TRUE/TRUE` and descriptive route-distance calls `0`. All 27 cut and three near-EPS cases equal their references without exception. State candidate/reference accepted-move counts are `0/0`, `1/1`, and `5/5`; complete traces/final partition/load/cost states equal the reference and all invariants hold. | `TERMINAL_DIAGNOSTIC`, `complete=true`, `semantic_endpoints_claimed=true`; classification and both aggregates are null. Formal role `DURABLE_REPRODUCTION_OF_EXACT_CANDIDATE_CALIBRATED_PROVIDER_FREE_DIAGNOSTIC`, with `outcome_blind=false` and `independent_confirmation=false`. Nested `preparation_calibration.formal_output_created=false` describes only the earlier temporary calibration, not current root absence. This finite-fixture result is non-gating, zero algorithm-quality evidence, and no independent confirmation. Provider/Contract/V3/V4/canary/formal Protocol/quality/Decision/mutation counters are zero; provider pause remains and no R65 is authorized. |
 | R65 | terminal complete exposed-coordinate minute calibration; no signal | The exact authorized B0→alpha canary and four seed-73 AB/BA/AB/BA pairs completed all 10 fresh subprocesses and 98 declared subject-seconds. Canary subjects both succeeded feasibly with runtime-audit validity, distance 20 and fleet violation zero. P65/E101/X120/X233 are exact B0/alpha ties at 798/1124/14250/20112; all eight screen subjects are successful, feasible, runtime-audit valid and fleet-safe. | Seal `VALID_COMPLETE_EXPOSED_COORDINATE_MINUTE_CALIBRATION / EXPLORATORY_SCREEN_NO_SIGNAL / ORDINARY_MINUTE_RULE_NOT_MET / NO_GO_EFFECT_INFERENCE / NO_MORE_PROVIDER_FREE / NO_R66`. Pair/case result is `0W/0L/4T`, all deltas zero, median `0 [0,0]`, protected regressions zero. Only CI-low, loss-rate and fleet criteria pass; win-rate, practical median and net-score criteria fail. Decision/promotion are null; provider/H/C/Contract/V3/V4/validation/frozen/Decision/promotion/beta/R66 are zero. Do not infer an effect, pool R1, extend the screen or launch R66. |
-| R66 | original terminal preflight invalid with zero provider/H; recovery1 prepared and authorized | The original action's sole exact difference was `/problem_measurement_diagnostics/measurement_readiness/calibration_age_days`, frozen `64` versus wall-clock rebuild `65`; it remains sealed `PREP_INVALID` with `exit.code=1`, no acquisition/output/payload and every call counter zero. The later exact recovery instruction permits one fresh recovery1 whose only correction is typed `as_of=2026-08-14` canonical reconstruction. | Recovery1 status `RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`. Preserve every other authority gate and use fresh recovery roots. Original plus recovery1 allow at most one H because original H/provider calls were zero. Provider retry, C/patch/materialize/Contract/V3/V4/solver/canary/Protocol/quality/formal/Decision/promotion/resume/substitution/R67 remain zero. Recovery1 is not R67 and cannot authorize C or a recovery2. |
+| R66 | original `PREP_INVALID`; recovery1 terminal local-infra failure before HTTP; recovery2 awaiting explicit authorization | Original stopped on the frozen `64` versus wall-clock `65` date drift with zero calls. Recovery1 fixed `as_of`, acquired, then emitted `TERMINAL_HYPOTHESIS_PROVIDER_FAILURE`, logical H attempt/call `1/1`, no terminal response and `No module named 'jiter'`. Audit classifies `RUN_INVALID_LOCAL_INFRA / MISSING_JITER_BEFORE_REQUEST`: actual outbound model requests, research-payload sends and H observations are zero. | Keep emitted and causal classifications separate; all downstream/R67 counters are zero and no algorithm/model claim follows. Recovery2 vendors exact `jiter==0.13.0` provider-free under a fresh identity and has a green 47-test preparation receipt, but is `RECOVERY2_PREPARED_AWAITING_EXPLICIT_AUTHORIZATION`. Do not launch it on prior instructions; a new exact authorization is mandatory. |
 
 ## Modular execution plan
 
@@ -1394,10 +1427,16 @@ seconds. The provider-free A/A/null calibration completed acceptably under its
   amendment keeps original R66 immutable and prepares a separately rooted R66
   recovery1. Only the date-sensitive canonical reconstruction changes: typed
   `as_of=2026-08-14` reproduces frozen `calibration_age_days=64`; every other
-  authority equality remains. Recovery1 is
+  authority equality remains. At launch freeze, recovery1 was
   `RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`. Original plus recovery1 still
-  permit at most one H call, while provider retry, C, solver, Protocol,
-  Decision, promotion and R67 remain zero; no recovery2 follows a terminal
-  outcome.
+  permitted at most one H call, while provider retry, C, solver, Protocol,
+  Decision, promotion and R67 remained zero; the then-frozen policy authorized
+  no recovery2. Recovery1 later acquired and emitted logical attempt/call `1/1`
+  with `TERMINAL_HYPOTHESIS_PROVIDER_FAILURE`, but audited cause is local
+  `MISSING_JITER_BEFORE_REQUEST`: no outbound model request, research payload
+  or H observation occurred. Every downstream/R67 counter remains zero. Recovery2
+  is now prepared provider-free with an exact vendored dependency and fresh
+  roots, but remains `RECOVERY2_PREPARED_AWAITING_EXPLICIT_AUTHORIZATION`.
+  Prior instructions do not authorize its launch.
   S6 final closure remains pending, and CVRP still has no Protocol-complete
   promotion.

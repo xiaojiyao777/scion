@@ -1351,14 +1351,21 @@ root check remains unchanged.
 
 Recovery1 uses fresh input, output, process-control and socket roots recorded
 in the preregistration amendment. The original consumed root is not reused or
-overwritten. Its current status is
-`RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`; no recovery provider request has
-started. The frozen recovery input-tree/manifest SHA-256 values are
+overwritten. At launch freeze its status was
+`RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`. The historical provider-free
+preparation input-tree/manifest SHA-256 values are
 `89e7994a05a0663f3bc95a9c2453ca28328159608a2cfc3749222f6747138aaf` and
 `ba196da15b7a2d64b8b8918e2a56e6143846aba35a289c5a7e760f525d3fd4f1`.
-The tree has 4,191 files and 72,632,636 bytes; the provider-kwargs snapshot
-SHA-256 is
-`573d445126f41acab255d6f9bfa93d9aff43851fbc6458bca3cb0b9d9f5b470a`.
+The tree has 4,191 files and 72,632,636 bytes. The 97,863-byte public-call
+payload receipt over `{prompt, tool, system_blocks, model}` has SHA-256
+`573d445126f41acab255d6f9bfa93d9aff43851fbc6458bca3cb0b9d9f5b470a`;
+it is not SDK kwargs. The 97,866-byte canonical counterfactual OpenAI-create
+kwargs receipt has SHA-256
+`0dc1c5b4da1283915fcceb2b3b83e141cb70f1be87b589dcd7ff5d322947b0e0`
+and exact keys `messages`, `model`, `timeout`, `tool_choice`, `tools`, with
+float timeout `180.0` and `prompt_cache_key` absent. Recovery1 failed before
+kwargs evaluation, so this is a reconstruction receipt, not an emitted
+request.
 All 36 provider-free tests pass in 11.91 seconds together with runner/style/
 shell/JSON checks, with fresh output/control/socket roots absent. Because the
 original H/provider count is zero, original plus recovery1 retain a combined
@@ -1366,8 +1373,58 @@ maximum of one H call.
 Provider retry, C, patch,
 materialization, Contract, V3/V4, solver, canary, Protocol, quality/formal
 evaluation, Decision, promotion, resume, substitution and R67 remain zero.
-Every recovery terminal outcome stops without recovery2 or an automatic
-downstream action.
+The then-frozen policy authorized no recovery2 or automatic downstream action.
+
+Recovery1 subsequently acquired at `2026-08-15T03:23:06Z`, inner PID
+`591276`; at that launch-only boundary it was `IN_FLIGHT` and outcome-unread.
+It later published a unique mode-`0700` output root and exited `3`. The durable
+result/status emit `TERMINAL_HYPOTHESIS_PROVIDER_FAILURE`, logical
+`h_attempts=1` and `hypothesis_provider_calls=1`, no provider terminal
+response, `mechanically_complete=false`, exact error
+`API error: No module named 'jiter'`, and latency 637 ms. There is no raw
+response, response envelope, usage, tool argument or H observation. Every
+downstream and R67 counter is zero.
+
+Read-only causal audit preserves those emitted fields but classifies the event
+as `RUN_INVALID_LOCAL_INFRA / MISSING_JITER_BEFORE_REQUEST`. The exact minimal
+formal environment lacked `jiter`, and the OpenAI SDK's lazy `client.chat`
+resource failed while importing it before the model request could reach HTTP.
+Audited outbound model/H requests and provider-visible research-payload sends
+are therefore both zero. Control-plane proxy liveness/model checks sent no
+research payload. This is not provider, model-format, mechanism or algorithm
+evidence.
+
+The output result/status SHA-256 values are
+`a781f1fb8444af8854536ff601416e0bef126c2d1020dff36b611b6fc0e75118`
+and `af1608d8f0a530da153b359a99e2a7a8fbae19536643dd1a61b647fde6e7a5cb`.
+The control root retains acquisition markers and `exit.code=3`; the inner PID
+is gone. The recovery1 socket remains stale at mode `0600`. Full facts are in
+the
+[recovery1 postrun](../experiments/v0.4/v0.4-cvrp-r66-h-only-mechanism-frontier-probe-recovery1-postrun-20260815.md).
+
+Recovery2 is provider-free prepared under a new R66 identity. Its only new
+correction vendors exact `jiter==0.13.0` as nine files under
+`vendor/python312`, retains `PYTHONNOUSERSITE=1`, and exercises the exact lazy
+chat dependency seam without HTTP. Its status is
+`RECOVERY2_PREPARED_AWAITING_EXPLICIT_AUTHORIZATION`. Recovery1's logical call
+counter remains one even though its audited HTTP count is zero. The broad,
+full source-send and exact recovery1 authorization fields remain preserved;
+new `recovery2_source_send_authorization_text` is null. No earlier field
+authorizes recovery2; it must not launch until the user explicitly authorizes
+the new fresh roots and one-H envelope and overrides the prior no-recovery2
+stop for this one action. C, solver, Decision, promotion and R67 remain zero.
+
+The frozen recovery2 provider-free input-tree receipt covers 4,200 files and
+73,523,973 bytes, using sorted
+`relative_path\0file_sha256\0size\n` records, with SHA-256
+`f8e82201700cbfebea9ba26f5bfeb0d30f5ee694824722ab3a9fcdf861a050d5`.
+The 14,315-byte manifest SHA-256 is
+`e056afcfe6e279bbc902c3b17b8e512eb466c9a28ae4e3e5ea4a4bf7e6fa8dc9`.
+Forty-seven tests passed in 12.15 seconds, with runner check, Ruff check/format,
+`bash -n` and `jq` green. The
+formal preauthorization path exits `2`, and output, control and socket roots
+remain absent; recursive cache/symlink exclusion passes. These are
+provider-free preparation facts, not launch or H evidence.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1743,13 +1800,19 @@ all downstream counters are zero, and no formal output exists. This is no
 novelty, quality or algorithm evidence and cannot advance S6.
 
 The user subsequently authorized removal of that erroneous date gate, repair
-and continuation. A fresh R66 recovery1 is now
-`RECOVERY1_PREPARED_AUTHORIZED_NOT_STARTED`; its sole correction is
-deterministic production reconstruction with `as_of=2026-08-14`, preserving
-frozen `calibration_age_days=64` and every other authority check. Original plus
-recovery1 still allow at most one H call. Provider retry, C, solver, Protocol,
-Decision, promotion and R67 are zero, and no terminal result permits recovery2
-or automatic continuation.
+and continuation. R66 recovery1 used the sole fixed-`as_of` correction,
+preserving frozen `calibration_age_days=64` and every other authority check.
+It then acquired, but the formal environment lacked `jiter`. Durable artifacts
+emit provider failure and logical H attempt/call `1/1`; causal audit seals
+`RUN_INVALID_LOCAL_INFRA / MISSING_JITER_BEFORE_REQUEST` with zero actual
+outbound model requests, research-payload sends and H observations. Provider retry, C,
+solver, Protocol, Decision, promotion and R67 are zero.
+
+A fresh R66 recovery2 is provider-free prepared with exact vendored
+`jiter==0.13.0`, but is
+`RECOVERY2_PREPARED_AWAITING_EXPLICIT_AUTHORIZATION`. The prior recovery1
+instruction does not authorize it; no recovery2 provider call may start
+without a new explicit user authorization.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
