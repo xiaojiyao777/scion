@@ -1260,9 +1260,9 @@ R1, and authorizes no extension or R66. Alpha-minus-B0 elapsed deltas are
 `[-80,-24,-4,-427]` ms, median `-52` ms, with approximate median ratio
 `0.992741`; these are association-only and support no causal speed claim.
 
-R66 is now
+R66 was
 [preregistered](../experiments/v0.4/v0.4-cvrp-r66-h-only-mechanism-frontier-probe-preregistration-20260814.md)
-as a single H-only mechanism-frontier probe with status
+as a single H-only mechanism-frontier probe with preparation status
 `PREPARED_AUTHORIZED_NOT_STARTED`. This is a separate, narrowly authorized
 provider observation, not an extension or reinterpretation of R65. It binds
 the exact ordered eleven fresh-B0 CVRP source values at subject commit
@@ -1290,9 +1290,9 @@ availability, valid argument JSON and typed hypothesis-schema validity.
 Scientific classification, algorithm-quality evidence, Decision and promotion
 remain null.
 
-The user's exact raw authorization is recorded verbatim:
+The user's final exact raw authorization is recorded verbatim:
 
-> 好，你准备好这份机制排除表和 H-only 预注册包之后直接进行后续操作，不用停下来等授权，直接开始，明确给你授权
+> 我明确授权执行一次 v04-cvrp-r66-h-only-mechanism-frontier-probe-20260814：将 commit 51f9bbd77f1e93777bbe9c401b8ba05c09a3e819 的 fresh-B0 CVRP problem-owned 11-source 源码派生上下文（local_search.py、baseline_algorithm.py、acceptance.py、config.py、construction.py、destroy_repair.py、route_first_heuristic.py、route_first_improvement.py、route_first_seeding.py、scheduler.py、state.py），连同冻结的研究问题、E01–E10 机制排除表以及 clean 47fe81ee6e17c04bc805197e2b2ad34e0fff4d14 production H system/tool，通过本机 Codex proxy http://127.0.0.1:8080 发送给 gpt-5.6-terra。最多执行 1 次 H、180 秒、retry 0；不得发送历史 H/C response、候选或结果；C、patch、solver、canary、Protocol、Decision、promotion 和 R67 均为 0。此授权仅覆盖这一 R66 H-only 调用。
 
 That statement is resolved only to provider-free preparation plus one
 immediate H-only Terra call after preflight. C, patch, materialization,
@@ -1302,7 +1302,32 @@ all zero. The ledger is neither a novelty gate nor a permanent blacklist;
 human overlap review is descriptive only. A terminal H cannot automatically
 launch C or R67 or claim feasibility, correctness, executability, quality,
 runtime improvement, generalization or S6 progress. No R66 provider call or
-downstream action had started at this prepared-state update.
+downstream action had started at that prepared-state update.
+
+The authorized R66 action was then invoked once after the UTC date changed to
+2026-08-15. The outer provider-free preflight stopped before inner-process
+acquisition, proxy/model preflight or any provider request. Independent
+reconstruction found one and only one canonical static-context difference:
+
+```text
+/problem_measurement_diagnostics/measurement_readiness/calibration_age_days
+frozen: 64
+production rebuild: 65
+```
+
+The date-sensitive calibration age advanced between preparation and launch.
+The fail-closed check therefore produced terminal `PREP_INVALID` with error
+type `OuterPreflightFailure`; no payload was sent and no H observation exists.
+The sole mode-`0700` process-control root contains mode-`0600`
+`outer_failure.json` and `exit.code=1`. It records H attempts/provider calls
+zero, no provider terminal response, `mechanically_complete=false`, and every
+downstream counter zero. The formal output root, socket/session, inner PID and
+acquisition marker are absent. The full durable record is in the
+[R66 postrun](../experiments/v0.4/v0.4-cvrp-r66-h-only-mechanism-frontier-probe-postrun-20260815.md).
+Under the frozen terminal policy there is no repair, retry, resume,
+substitution, same-label relaunch, C, solver action or R67. This is a
+preparation-authority failure, not model, mechanism or algorithm-quality
+evidence.
 
 The R3 run also exposed an operator-side validity problem: pytest
 ran concurrently on the same two-vCPU/one-physical-core host while the
@@ -1669,12 +1694,14 @@ promotion/beta/R66 are zero. The result is neither effect evidence nor
 independent confirmation, does not pool with R1, and authorizes no extension
 or R66.
 
-A new, separate authorization now covers only the prepared R66 H-only
-mechanism-frontier probe. Its fresh-B0 context and neutral E01–E10 ledger may
-support one forced Terra H observation with retry zero; C, candidate creation,
-solver evidence, Decision, promotion and R67 remain zero. R66 is
-`PREPARED_AUTHORIZED_NOT_STARTED`, supplies no novelty or quality gate, and
-cannot advance S6 without a later separately justified and authorized design.
+A new, separate authorization covered only one R66 H-only mechanism-frontier
+action. Its fail-closed outer preflight found the single UTC-date-derived
+canonical drift `calibration_age_days: 64 -> 65` before inner acquisition or
+provider disclosure. R66 is terminal `PREP_INVALID / OuterPreflightFailure /
+NO_PROVIDER_REQUEST / NO_H_OBSERVATION / NO_RETRY / NO_R67`; H/provider and all
+downstream counters are zero, and no formal output exists. This is no novelty,
+quality or algorithm evidence and cannot advance S6. The frozen policy permits
+no repair, retry, same-label relaunch, C, solver action or automatic R67.
 
 All diagnosis results remain excluded from Decision and cannot reinterpret the
 interrupted provider campaign's partial validation.
