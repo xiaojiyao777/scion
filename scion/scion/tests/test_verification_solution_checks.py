@@ -197,6 +197,8 @@ class TestSolutionConsistencyCheck:
                 {
                     "operator": "bad_op",
                     "status": "loaded",
+                    "failing_symbol": "Decoy.loaded_symbol",
+                    "callsite": "operators/decoy.py:1",
                 },
                 {
                     "operator": "bad_op",

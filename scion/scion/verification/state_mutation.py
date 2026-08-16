@@ -293,6 +293,7 @@ def _runtime_failure_metadata(
             item
             for item in events
             if isinstance(item, Mapping)
+            and str(item.get("status") or "").strip().lower() == "error"
             and any(item.get(key) for key in ("failing_symbol", "callsite"))
         ),
         None,
