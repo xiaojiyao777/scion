@@ -35,26 +35,6 @@ def _include_operator_files_for_research_code(surfaces: list[Any]) -> bool:
     )
 
 
-def _build_research_surfaces_block(surfaces: list[Any]) -> str:
-    if not surfaces:
-        return ""
-    lines = [
-        "## Research Surfaces",
-        (
-            "Metadata below is declared by the problem package. Framework core "
-            "treats algorithm roles, invocation points, bounds, scale terms, "
-            "and runtime evidence as problem-provided context."
-        ),
-    ]
-    for surface in surfaces:
-        name = getattr(surface, "name", "")
-        kind = getattr(surface, "kind", "")
-        description = getattr(surface, "description", "")
-        lines.append(f"- {name} [{kind}]: {description}")
-        _append_research_surface_metadata(lines, surface, prefix="  ")
-    return "\n".join(lines)
-
-
 def _build_research_surface_interface_spec(surface: Any) -> str:
     """Render a generic active-surface interface from declared metadata."""
     name = getattr(surface, "name", "")

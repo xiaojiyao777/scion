@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, List
 
 import pytest
@@ -12,10 +13,11 @@ import pytest
 from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
 from scion.core.campaign import CampaignManager
 from scion.core.models import (
-    Branch, BranchState, CanaryResult, ChampionState, Decision,
+    CanaryResult, ChampionState,
     EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
 )
 from scion.proposal.mock_client import MockLLMClient
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.verification.gate import VerificationGate
 
 # ---------------------------------------------------------------------------
@@ -92,7 +94,10 @@ def _make_protocol_result(
     )
 
 
-class _AlwaysPassVerificationGate:
+class _AlwaysPassVerificationGate(VerificationGate):
+    def __init__(self) -> None:
+        super().__init__()
+
     def run(self, workspace: str, champion_workspace: str, patch: Any) -> VerificationResult:
         check = CheckResult(
             name="SYNTAX", passed=True, severity="light",
@@ -109,6 +114,12 @@ class _MockExperimentProtocol:
         self._canary_pass = canary_pass
         self.canary_call_count = 0
         self.experiment_call_count = 0
+        self.runner = object()
+        self.config = ProtocolConfig()
+        self._metric_specs = (
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        )
+        self._problem_spec = None
 
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         self.canary_call_count += 1
@@ -145,10 +156,10 @@ def _build_campaign(
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="e2e_hash",
         code_snapshot_path=str(code_dir),
-        code_snapshot_hash="e2e_code_hash",
     )
+    protocol = experiment_protocol or _MockExperimentProtocol(results=[])
+    protocol._problem_spec = spec
 
     return CampaignManager(
         problem_spec=spec,
@@ -164,11 +175,13 @@ def _build_campaign(
             screening=["case1", "case2", "case3"],
             validation=["case4", "case5", "case6"],
             frozen=["case7", "case8", "case9"],
+            canary=["case10"],
         ),
         seed_ledger=SeedLedgerConfig(
             screening=[42, 137],
             validation=[7, 19, 83],
             frozen=[256, 512, 1024],
+            canary=[2048],
         ),
         llm_client=llm_client or MockLLMClient(
             hypothesis_response=_VALID_HYPOTHESIS,
@@ -177,7 +190,8 @@ def _build_campaign(
         champion=champion,
         campaign_dir=str(tmp_path / "campaign"),
         verification_gate=verification_gate or _AlwaysPassVerificationGate(),
-        experiment_protocol=experiment_protocol,
+        experiment_protocol=protocol,
+        adapter=SimpleNamespace(spec=spec),
     )
 
 
@@ -248,7 +262,7 @@ class TestFullMockCampaign:
         assert client.call_count >= 4
         branch = cm._branch_ctrl.get_branch(results[-1].branch_id)
         workspace = Path(cm._branch_workspaces[branch.branch_id])
-        assert branch.branch_code_status == "provisional"
+        assert branch.current_code_hash is not None
         assert (workspace / "operators" / "local_search.py").read_text() == (
             _VALID_CODE_AFTER_PATCH
         )
@@ -416,8 +430,8 @@ class TestCLISmoke:
             timeout=60,
         )
 
-        # Acceptable exit codes: 0 (success) or 1 (init error — campaign_dir not initted)
-        # The key is it must not segfault or hang
+        # Some minimal fixture combinations may be research-rejected, but the
+        # fresh-only command must terminate without hanging.
         assert result.returncode in (0, 1), (
             f"CLI exited with code {result.returncode}\n"
             f"stdout: {result.stdout}\n"
@@ -426,76 +440,6 @@ class TestCLISmoke:
         # If exit 0, it should report starting the campaign
         if result.returncode == 0:
             assert "Starting campaign" in result.stdout or "Campaign" in result.stdout
-
-    def test_cli_init_then_run(self, tmp_path, problem_dir):
-        """scion init followed by scion run --mock-llm --rounds 3."""
-        campaign_dir = tmp_path / "cli_init_campaign"
-        problem_yaml = problem_dir / "problem.yaml"
-
-        env = os.environ.copy()
-        scion_root = str(Path(__file__).parent.parent.parent)
-        env["PYTHONPATH"] = scion_root
-
-        base_cmd = [sys.executable, "-m", "scion.cli.main"]
-
-        # Step 1: init
-        init_result = subprocess.run(
-            base_cmd + [
-                "init",
-                "--problem", str(problem_yaml),
-                "--campaign-dir", str(campaign_dir),
-            ],
-            capture_output=True, text=True, env=env, timeout=30,
-        )
-        assert init_result.returncode == 0, (
-            f"scion init failed:\n{init_result.stderr}"
-        )
-
-        # Step 2: run
-        run_result = subprocess.run(
-            base_cmd + [
-                "run",
-                "--mock-llm",
-                "--rounds", "3",
-                "--campaign-dir", str(campaign_dir),
-            ],
-            capture_output=True, text=True, env=env, timeout=60,
-        )
-        assert run_result.returncode == 0, (
-            f"scion run failed:\n{run_result.stdout}\n{run_result.stderr}"
-        )
-        assert "Starting campaign" in run_result.stdout
-
-    def test_cli_report_after_init(self, tmp_path, problem_dir):
-        """scion report after scion init returns JSON output."""
-        campaign_dir = tmp_path / "report_campaign"
-        problem_yaml = problem_dir / "problem.yaml"
-
-        env = os.environ.copy()
-        scion_root = str(Path(__file__).parent.parent.parent)
-        env["PYTHONPATH"] = scion_root
-
-        base_cmd = [sys.executable, "-m", "scion.cli.main"]
-
-        # init first
-        subprocess.run(
-            base_cmd + ["init", "--problem", str(problem_yaml), "--campaign-dir", str(campaign_dir)],
-            env=env, timeout=30, capture_output=True,
-        )
-
-        # report summary (new sub-command interface; works even without scion.db)
-        report_result = subprocess.run(
-            base_cmd + ["report", "summary", "--campaign-dir", str(campaign_dir)],
-            capture_output=True, text=True, env=env, timeout=30,
-        )
-        assert report_result.returncode == 0, (
-            f"scion report summary failed:\n{report_result.stderr}"
-        )
-        import json
-        data = json.loads(report_result.stdout)
-        assert "problem_name" in data
-        assert data["problem_name"] == "smoke_test"
-
 
 # ---------------------------------------------------------------------------
 # Test 4: Warehouse Delivery problem config validation

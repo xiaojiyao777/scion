@@ -261,7 +261,6 @@ def test_protocol_config_surfaces_stale_measurement_calibration(tmp_path):
                 "n_pairs": 6,
                 "protocol_power": {"mde_at_power_80": 4.0},
                 "per_case": [{"delta_p90_abs": 1.0}],
-                "decision_features_excluded": True,
             }
         ),
         encoding="utf-8",

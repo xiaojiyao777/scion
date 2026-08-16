@@ -1,4 +1,5 @@
 """Tests for T02: V8 nondeterminism diagnostics enhancement."""
+
 from __future__ import annotations
 
 import json
@@ -31,26 +32,15 @@ def _make_spec(canary: str) -> ProblemSpec:
     )
 
 
-def _make_surface_spec(canary: str) -> ProblemSpec:
-    return _make_spec(canary).model_copy(
-        update={
-            "research_surfaces": [
-                {
-                    "name": "search_policy",
-                    "kind": "policy",
-                    "target_files": ["policies/search_policy.py"],
-                    "evidence": {"required_runtime_fields": []},
-                }
-            ],
-        }
-    )
-
-
 def _solver_output_dict(splits: int = 2, cost: int = 6600) -> dict:
     return {
         "vehicles": {"V0": {"vehicle_id": "V0", "cost": cost}},
         "assignment": {"O1": "V0"},
-        "objective": {"subcategory_splits": splits, "total_cost": cost, "solve_time_ms": 100},
+        "objective": {
+            "subcategory_splits": splits,
+            "total_cost": cost,
+            "solve_time_ms": 100,
+        },
         "feasible": True,
     }
 
@@ -74,32 +64,13 @@ def _make_nondeterministic_runner(tmp_path: Path) -> MagicMock:
             },
         )
         return RunResult(
-            success=True, exit_code=0, stdout="", stderr="",
-            elapsed_ms=100, output=sol, error_category=None,
-        )
-
-    runner.run_solver.side_effect = run_solver
-    return runner
-
-
-def _make_deterministic_runner(tmp_path: Path) -> MagicMock:
-    """Runner that always returns the same objective."""
-    runner = MagicMock()
-
-    def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
-        data = _solver_output_dict(splits=2, cost=6600)
-        sol = SolverOutput(
-            objective=data["objective"],
-            feasible=True,
-            solution_payload={
-                key: value
-                for key, value in data.items()
-                if key not in {"objective", "feasible", "runtime"}
-            },
-        )
-        return RunResult(
-            success=True, exit_code=0, stdout="", stderr="",
-            elapsed_ms=100, output=sol, error_category=None,
+            success=True,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            elapsed_ms=100,
+            output=sol,
+            error_category=None,
         )
 
     runner.run_solver.side_effect = run_solver
@@ -128,98 +99,120 @@ class TestStateleakDiagnostics:
         assert isinstance(detail["diff_keys"], list)
         assert len(detail["diff_keys"]) > 0
 
-    def test_v5_failure_saves_run_outputs(self, tmp_path: Path):
-        """When metrics_dir is given, two JSON run files must be written."""
+    def test_v8_failure_detail_caps_diff_keys_and_never_embeds_objectives(
+        self,
+        tmp_path: Path,
+    ) -> None:
         canary = str(tmp_path / "canary.json")
         Path(canary).write_text("{}")
         spec = _make_spec(canary)
-        metrics_dir = tmp_path / "metrics"
-        metrics_dir.mkdir()
-        runner = _make_nondeterministic_runner(tmp_path)
+        call_count = [0]
+        runner = MagicMock()
 
-        r = check_nondeterminism(spec, runner, str(tmp_path), metrics_dir=str(metrics_dir))
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            call_count[0] += 1
+            marker = (
+                "first-objective-secret"
+                if call_count[0] == 1
+                else ("second-objective-secret")
+            )
+            objective = {
+                f"metric_{index:03d}": f"{marker}-{index}" for index in range(100)
+            }
+            return RunResult(
+                success=True,
+                exit_code=0,
+                stdout="",
+                stderr="",
+                elapsed_ms=100,
+                output=SolverOutput(objective=objective, feasible=True),
+                error_category=None,
+            )
 
-        assert r.passed is False
-        run_files = list(metrics_dir.glob("v8_run*.json"))
-        assert len(run_files) == 2
-        payloads = [
-            json.loads(path.read_text(encoding="utf-8")) for path in run_files
-        ]
-        assert {payload["schema_version"] for payload in payloads} == {
-            "scion.v8-run-metric.v2"
-        }
-        for payload in payloads:
-            assert payload["artifact_kind"] == "v8_nondeterminism_run_metric"
-            assert payload["provider_hook_used"] is False
-            assert payload["provider_case_count"] == 0
-            assert payload["provider_case_attempted_count"] == 0
-            assert payload["feasible"] is True
-            ledger = payload["case_execution_ledger"]
-            assert len(ledger) == 1
-            assert ledger[0]["case_path_ref"] == canary
-            assert ledger[0]["case_source"] == "v8_nondeterminism_canary"
-            assert ledger[0]["seed"] == 77
-            assert ledger[0]["attempted"] is True
-            assert ledger[0]["success"] is True
-            assert ledger[0]["provider_hook_used"] is False
-            assert ledger[0]["case_digest"]
-            assert payload["runtime_case_ledger"] == ledger
+        runner.run_solver.side_effect = run_solver
 
-    def test_v5_failure_archives_candidate_code(self, tmp_path: Path):
-        """On failure, operators/ from workspace are archived to metrics_dir."""
+        result = check_nondeterminism(spec, runner, str(tmp_path))
+
+        assert result.passed is False
+        detail = json.loads(result.detail)
+        assert len(detail["diff_keys"]) == 32
+        assert all(len(key) <= 128 for key in detail["diff_keys"])
+        assert "run1_objective" not in detail
+        assert "run2_objective" not in detail
+        assert len(detail["run1_objective_digest"]) == 16
+        assert len(detail["run2_objective_digest"]) == 16
+        assert "first-objective-secret" not in result.detail
+        assert "second-objective-secret" not in result.detail
+        assert len(result.detail.encode("utf-8")) <= 8 * 1024
+
+    def test_v8_failure_writes_one_bounded_diagnostic(self, tmp_path: Path):
         canary = str(tmp_path / "canary.json")
         Path(canary).write_text("{}")
         spec = _make_spec(canary)
-
-        # Create a workspace with operators/
-        workspace = tmp_path / "ws"
-        (workspace / "operators").mkdir(parents=True)
-        (workspace / "operators" / "my_op.py").write_text("class MyOp: pass\n")
-
-        metrics_dir = tmp_path / "metrics"
-        metrics_dir.mkdir()
-        runner = _make_nondeterministic_runner(tmp_path)
-
-        r = check_nondeterminism(spec, runner, str(workspace), metrics_dir=str(metrics_dir))
-
-        assert r.passed is False
-        detail = json.loads(r.detail)
-        archive_ref = detail.get("candidate_archive_ref")
-        assert archive_ref is not None
-        assert Path(archive_ref).exists()
-
-    def test_v5_failure_archives_selected_surface_targets(self, tmp_path: Path):
-        """On failure, selected-surface target files are archived generically."""
-        canary = str(tmp_path / "canary.json")
-        Path(canary).write_text("{}")
-        spec = _make_surface_spec(canary)
-
-        workspace = tmp_path / "ws"
-        (workspace / "policies").mkdir(parents=True)
-        (workspace / "policies" / "search_policy.py").write_text(
-            "def baseline_time_fraction(instance, time_limit_sec):\n"
-            "    return 0.5\n"
-        )
-        (workspace / "operators").mkdir()
-        (workspace / "operators" / "my_op.py").write_text("class MyOp: pass\n")
-
         metrics_dir = tmp_path / "metrics"
         metrics_dir.mkdir()
         runner = _make_nondeterministic_runner(tmp_path)
 
         r = check_nondeterminism(
-            spec,
-            runner,
-            str(workspace),
-            metrics_dir=str(metrics_dir),
-            selected_surface="search_policy",
+            spec, runner, str(tmp_path), metrics_dir=str(metrics_dir)
         )
 
         assert r.passed is False
-        detail = json.loads(r.detail)
-        archive_ref = detail.get("candidate_archive_ref")
-        assert archive_ref is not None
-        assert (Path(archive_ref) / "policies" / "search_policy.py").exists()
+        diagnostics = list(metrics_dir.glob("v8_failure_*.json"))
+        assert len(diagnostics) == 1
+        assert diagnostics[0].stat().st_size <= 8 * 1024
+        assert json.loads(diagnostics[0].read_text(encoding="utf-8")) == json.loads(
+            r.detail
+        )
+        assert r.metadata == {"diagnostic_ref": str(diagnostics[0])}
+        assert "run1_ref" not in r.detail
+        assert "run2_ref" not in r.detail
+
+    def test_v8_success_writes_no_diagnostic_even_with_large_runtime(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        canary = str(tmp_path / "canary.json")
+        Path(canary).write_text("{}")
+        spec = _make_spec(canary)
+        metrics_dir = tmp_path / "metrics"
+        metrics_dir.mkdir()
+        call_count = [0]
+        runner = MagicMock()
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            call_count[0] += 1
+            size = 1 if call_count[0] == 1 else 10_000
+            runtime = {
+                "solver_algorithm_alns_iteration_trace": ["trace-secret"] * size,
+            }
+            return RunResult(
+                success=True,
+                exit_code=0,
+                stdout="",
+                stderr="",
+                elapsed_ms=100,
+                output=SolverOutput(
+                    objective={"total_cost": 6600},
+                    feasible=True,
+                    runtime=runtime,
+                    solution_payload={"routes": [["solution-secret"]] * size},
+                ),
+                error_category=None,
+            )
+
+        runner.run_solver.side_effect = run_solver
+
+        result = check_nondeterminism(
+            spec,
+            runner,
+            str(tmp_path),
+            metrics_dir=str(metrics_dir),
+        )
+
+        assert result.passed is True
+        assert not list(metrics_dir.iterdir())
+        assert "diagnostic_ref" not in result.metadata
 
     def test_v5_no_metrics_dir_still_works(self, tmp_path: Path):
         """metrics_dir=None must not crash and check still returns result."""
@@ -232,3 +225,40 @@ class TestStateleakDiagnostics:
 
         assert r.passed is False
         assert r.name == "V8_nondeterminism"
+
+    def test_v8_diagnostic_persistence_failure_does_not_change_result(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        canary = str(tmp_path / "canary.json")
+        Path(canary).write_text("{}")
+        metrics_dir = tmp_path / "metrics"
+        metrics_dir.mkdir()
+        baseline = check_nondeterminism(
+            _make_spec(canary),
+            _make_nondeterministic_runner(tmp_path),
+            str(tmp_path),
+        )
+
+        from scion.verification import nondeterminism
+
+        def fail_publish(source, target):
+            raise OSError("diagnostic publish failed")
+
+        monkeypatch.setattr(nondeterminism.os, "replace", fail_publish)
+
+        result = check_nondeterminism(
+            _make_spec(canary),
+            _make_nondeterministic_runner(tmp_path),
+            str(tmp_path),
+            metrics_dir=str(metrics_dir),
+        )
+
+        assert result.passed is baseline.passed is False
+        assert result.detail == baseline.detail
+        assert (
+            "diagnostic publish failed"
+            in result.metadata["diagnostic_persistence_error"]
+        )
+        assert not list(metrics_dir.iterdir())

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 from typing import Optional
@@ -18,10 +17,20 @@ def register_weight_commands(app: typer.Typer) -> None:
             "--campaign-dir",
             help="Campaign directory",
         ),
-        problem: Optional[str] = typer.Option(
-            None,
+        problem: str = typer.Option(
+            ...,
             "--problem",
-            help="Path to problem.yaml (overrides state file)",
+            help="Path to problem.yaml",
+        ),
+        snapshot: str = typer.Option(
+            ...,
+            "--snapshot",
+            help="Exact champion source directory to evaluate",
+        ),
+        champion_version: int = typer.Option(
+            0,
+            "--champion-version",
+            help="Ordinary label used in output only",
         ),
         protocol: Optional[str] = typer.Option(
             None,
@@ -41,19 +50,7 @@ def register_weight_commands(app: typer.Typer) -> None:
     ) -> None:
         """Manually trigger weight optimisation on the latest champion snapshot."""
         campaign_path = Path(campaign_dir).resolve()
-        state_file = campaign_path / ".scion_state.json"
-
-        if problem:
-            problem_yaml = Path(problem).resolve()
-        elif state_file.exists():
-            state = json.loads(state_file.read_text())
-            problem_yaml = Path(state["problem_yaml"])
-        else:
-            typer.echo(
-                "ERROR: no campaign state found - run 'scion init' first",
-                err=True,
-            )
-            raise typer.Exit(code=1)
+        problem_yaml = Path(problem).resolve()
 
         if not problem_yaml.exists():
             typer.echo(f"ERROR: problem.yaml not found: {problem_yaml}", err=True)
@@ -125,30 +122,10 @@ def register_weight_commands(app: typer.Typer) -> None:
                 else SeedLedgerConfig(screening=[42], validation=[1, 2], frozen=[10])
             )
 
-        db_path = campaign_path / "scion.db"
-        snapshot_path: Optional[Path] = None
-        champion_version = 0
-        if db_path.exists():
-            import sqlite3 as _sqlite3
-
-            try:
-                with _sqlite3.connect(str(db_path)) as conn:
-                    row = conn.execute(
-                        "SELECT version, code_snapshot_path FROM champions "
-                        "ORDER BY version DESC, weight_revision DESC LIMIT 1"
-                    ).fetchone()
-                    if row:
-                        champion_version = row[0]
-                        snapshot_path = Path(row[1]) if row[1] else None
-            except Exception:
-                pass
-
-        if snapshot_path is None:
-            snapshot_path = Path(spec.root_dir)
-            typer.echo(
-                f"WARNING: no champion in DB; using root_dir as snapshot: {snapshot_path}",
-                err=True,
-            )
+        snapshot_path = Path(snapshot).resolve()
+        if not snapshot_path.is_dir():
+            typer.echo(f"ERROR: snapshot directory not found: {snapshot_path}", err=True)
+            raise typer.Exit(code=1)
 
         registry_path = snapshot_path / "registry.yaml"
         if not registry_path.exists():

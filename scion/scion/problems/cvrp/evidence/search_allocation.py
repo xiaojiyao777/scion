@@ -408,7 +408,6 @@ def build_search_allocation_evidence(
         "evidence_scope": "screening_search_allocation",
         "hypothesis_attribution": "unbound",
         "interpretation_constraint": "association_only",
-        "gate_influence": False,
         "coverage": {
             "provider_inputs": len(pairs),
             "runtime_pairs": sum(

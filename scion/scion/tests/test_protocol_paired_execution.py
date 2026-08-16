@@ -16,6 +16,7 @@ from scion.protocol.experiment import (
     SplitManager,
     stages,
 )
+from scion.problem.spec import ObjectiveMetricSpec
 
 
 def _result(score=1, *, success=True, feasible=True, runtime=None):
@@ -88,6 +89,9 @@ def _protocol(tmp_path, *, cases=("case.json",), seeds=(7,), problem_spec=None):
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
+        metric_specs=(
+            ObjectiveMetricSpec(name="score", direction="minimize", priority=1),
+        ),
         problem_spec=problem_spec,
     )
     return protocol, runner, candidate, champion
@@ -114,9 +118,7 @@ def _run(protocol, candidate, champion, spec=None, *, selected_surface=None):
     )
 
 
-def test_spec_copies_freezes_and_preflights_before_raw_runner_or_digest(
-    tmp_path, monkeypatch
-):
+def test_spec_copies_freezes_and_preflights_before_runner(tmp_path):
     case_ordinals = {"case.json": 0}
     spec = _spec(cases=case_ordinals)
     case_ordinals["case.json"] = 9
@@ -125,10 +127,6 @@ def test_spec_copies_freezes_and_preflights_before_raw_runner_or_digest(
         spec.case_ordinals["case.json"] = 1
 
     protocol, runner, candidate, champion = _protocol(tmp_path)
-    monkeypatch.setattr(
-        stages, "compute_workspace_digest",
-        lambda *_args, **_kwargs: pytest.fail("digest reached before preflight"),
-    )
     invalid = _spec(cases={"case.json": True})
     with pytest.raises(ValueError, match="non-negative integer"):
         _run(protocol, candidate, champion, invalid)
@@ -156,7 +154,6 @@ def test_paired_order_is_global_fresh_and_records_complete_a_b_raw(tmp_path):
     for result, expected in ((ab, "AB"), (ba, "BA")):
         raw = json.loads(Path(result.raw_metrics_ref).read_text())
         assert "paired_execution" not in raw
-        assert raw["champion_result_cache"]["enabled"] is False
         pair = raw["pairs"][0]["paired_execution"]
         assert pair["scheduled_order"] == pair["actual_order"] == expected
         assert pair["block_ordinal"] == 0
@@ -205,19 +202,14 @@ def test_paired_invalid_b_is_counted_and_excluded_from_statistics(
     assert pair["paired_execution"]["B"]["failure"]
 
 
-def test_base_exception_keeps_original_and_best_effort_partial_order(tmp_path):
+def test_base_exception_keeps_original_without_partial_metrics(tmp_path):
     protocol, runner, candidate, champion = _protocol(tmp_path)
     error = KeyboardInterrupt("stop")
     runner.results[str(candidate)] = error
     with pytest.raises(KeyboardInterrupt) as raised:
         _run(protocol, candidate, champion, _spec())
     assert raised.value is error
-    raw_path = next((tmp_path / "metrics").glob("*.json"))
-    pair = json.loads(raw_path.read_text())["pairs"][0]
-    evidence = pair["paired_execution"]
-    assert evidence["actual_order"] == "AB"
-    assert evidence["A"] is not None and evidence["B"] is None
-    assert pair["failure"] == {"side": "B", "exception_type": "KeyboardInterrupt"}
+    assert list((tmp_path / "metrics").iterdir()) == []
 
 
 @pytest.mark.parametrize("runtime", [{}, {"surface_loaded": False}])
@@ -255,7 +247,7 @@ def test_paired_telemetry_diagnostics_do_not_reenter_legacy_champion_audit(
     } for call in calls)
 
 
-def test_default_path_keeps_order_cache_raw_and_progress_payloads(tmp_path):
+def test_default_path_executes_both_sides_fresh_and_reports_progress(tmp_path):
     protocol, runner, candidate, champion = _protocol(tmp_path)
     events = []
     protocol.set_progress_callback(lambda **payload: events.append(payload))
@@ -263,14 +255,17 @@ def test_default_path_keeps_order_cache_raw_and_progress_payloads(tmp_path):
     second = _run(protocol, candidate, champion)
 
     assert [call["workdir"] for call in runner.calls] == [
-        str(champion), str(candidate), str(candidate)
+        str(champion), str(candidate), str(champion), str(candidate)
     ]
-    assert second.champion_cache_hits == 1
     raw = json.loads(Path(first.raw_metrics_ref).read_text())
     assert "paired_execution" not in raw
     assert "paired_execution" not in raw["pairs"][0]
     assert events[0]["case"] is None and events[0]["seed"] is None
+    assert "raw_metrics_ref" not in events[0]
     pair_start = next(event for event in events if "time_limit_sec" in event)
     assert pair_start["case"] == "case.json" and pair_start["seed"] == 7
+    assert pair_start["attempted_pairs"] == 1
+    assert pair_start["valid_pairs"] == 0
     final = next(event for event in events if event.get("complete") is True)
     assert "case" not in final and "seed" not in final
+    assert final["raw_metrics_ref"] == first.raw_metrics_ref

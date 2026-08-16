@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from scion.config.problem import (
@@ -13,10 +13,10 @@ from scion.config.problem import (
 )
 from scion.core.campaign import CampaignManager
 import scion.core.campaign_composition as campaign_composition
-from scion.core.models import ChampionState, PatchProposal
-from scion.external_ingest.ingest import ExternalProposalIngestor
-import scion.external_ingest.ingest as ingest_module
+from scion.core.models import ChampionState
 from scion.proposal.mock_client import MockLLMClient
+from scion.problem.spec import ObjectiveMetricSpec
+from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 
 
 SOLVER_DESIGN_PATTERNS = (
@@ -93,16 +93,6 @@ def test_campaign_composition_passes_cvrp_solver_design_editable_patterns(
             snapshot.mkdir(parents=True, exist_ok=True)
             return str(snapshot)
 
-        def compute_snapshot_hash(self, workspace: str) -> str:
-            return "hash-for-" + str(self.editable_patterns)
-
-        def editable_identity_manifest(self, workspace: str) -> dict[str, object]:
-            return {
-                "schema_version": "scion.editable_identity_manifest.v1",
-                "files": [],
-                "code_hash": "0" * 64,
-            }
-
         def archive_workspace(self, workspace: str, branch_id: str) -> None:
             return None
 
@@ -116,87 +106,46 @@ def test_campaign_composition_passes_cvrp_solver_design_editable_patterns(
     )
     champion_root = tmp_path / "champion"
     champion_root.mkdir()
+    split = SplitManifest(
+        screening=["screening-case"],
+        validation=["validation-case"],
+        frozen=["frozen-case"],
+        canary=["canary-case"],
+    )
+    seeds = SeedLedgerConfig(
+        screening=[1], validation=[2], frozen=[3], canary=[4]
+    )
+    experiment_protocol = ExperimentProtocol(
+        ProtocolConfig(),
+        SplitManager(split),
+        SeedLedger(seeds),
+        runner=object(),
+        metrics_dir=str(tmp_path / "protocol-metrics"),
+        metric_specs=(
+            ObjectiveMetricSpec(
+                name="total_distance", direction="minimize", priority=1
+            ),
+        ),
+        problem_spec=cvrp_spec,
+    )
 
     manager = CampaignManager(
         problem_spec=cvrp_spec,
         protocol_config=ProtocolConfig(),
-        split_manifest=SplitManifest(),
-        seed_ledger=SeedLedgerConfig(),
+        split_manifest=split,
+        seed_ledger=seeds,
         llm_client=MockLLMClient(),
         champion=ChampionState(
             version=1,
             operator_pool={},
-            solver_config_hash="initial",
             code_snapshot_path=str(champion_root),
-            code_snapshot_hash="initial",
         ),
         campaign_dir=str(tmp_path / "campaign"),
+        experiment_protocol=experiment_protocol,
+        adapter=SimpleNamespace(spec=cvrp_spec),
     )
 
     assert manager._materializer is instances[0]
     assert instances[0].editable_patterns == SOLVER_DESIGN_PATTERNS
     assert "operators/*.py" not in instances[0].editable_patterns
     assert "policies/*.py" not in instances[0].editable_patterns
-
-
-def test_external_ingest_materializer_uses_same_editable_identity(
-    monkeypatch,
-    tmp_path: Path,
-) -> None:
-    instances: list[Any] = []
-
-    class FakeMaterializer:
-        def __init__(
-            self,
-            campaign_dir: str,
-            *,
-            frozen_patterns: frozenset[str] | None = None,
-            editable_patterns: tuple[str, ...] = (),
-        ) -> None:
-            self.campaign_dir = Path(campaign_dir)
-            self.frozen_patterns = frozen_patterns
-            self.editable_patterns = editable_patterns
-            instances.append(self)
-
-        def create_branch_workspace(self, branch_id: str, code_base: str) -> str:
-            workspace = self.campaign_dir / "workspaces" / branch_id
-            if workspace.exists():
-                shutil.rmtree(workspace)
-            shutil.copytree(code_base, workspace)
-            return str(workspace)
-
-        def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
-            target = Path(workspace) / patch.file_path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(patch.code_content, encoding="utf-8")
-            return "patched"
-
-    monkeypatch.setattr(ingest_module, "WorkspaceMaterializer", FakeMaterializer)
-
-    root = tmp_path / "solver"
-    _write_solver_design_workspace(root)
-    ingestor = ExternalProposalIngestor(
-        problem_spec=_solver_design_spec(root),
-        output_dir=tmp_path / "out",
-    )
-
-    workspace = ingestor._materialize_host_workspace(
-        ingest_id="ingest-1",
-        base_workspace=root,
-        patch=PatchProposal(
-            file_path="policies/baseline_modules/acceptance.py",
-            action="modify",
-            code_content="def accept(candidate):\n    return False\n",
-        ),
-        ingest_dir=tmp_path / "ingest",
-    )
-
-    assert instances[0].editable_patterns == SOLVER_DESIGN_PATTERNS
-    assert instances[0].frozen_patterns == frozenset({"solver.py"})
-    assert (
-        workspace / "policies" / "baseline_modules" / "acceptance.py"
-    ).read_text(encoding="utf-8").endswith("return False\n")
-    workspace_manifest = (
-        workspace / ".scion" / "external_ingest" / "workspace_manifest.json"
-    )
-    assert workspace_manifest.exists()

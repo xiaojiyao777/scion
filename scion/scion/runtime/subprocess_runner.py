@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import logging
-import hashlib
 import os
 import resource
 import signal
@@ -21,7 +20,6 @@ from scion.core.models import RunResult, SolverOutput
 from scion.runtime.runner import (
     STDIO_OFFLOAD_PREFIX,
     ResourceLimits,
-    resolve_offloaded,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,10 +62,6 @@ def _effective_scion_env(selected_surface: str | None = None) -> dict[str, str]:
     else:
         env.pop("SCION_SELECTED_SURFACE", None)
     return {k: v for k, v in env.items() if k.startswith("SCION_")}
-
-
-def _scion_env_value_digest(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8", errors="surrogateescape")).hexdigest()
 
 
 def _pythonpath_for_child_cwd(value: str, *, parent_cwd: Path) -> str:
@@ -152,17 +146,6 @@ class LocalSubprocessRunner:
                 _kill_proc(proc)
                 terminated += 1
         return terminated
-
-    def cache_identity(self, *, selected_surface: str | None = None) -> dict[str, Any]:
-        """Return subprocess inputs that affect cacheable champion results."""
-        scion_env = _effective_scion_env(selected_surface)
-        return {
-            "schema": "scion.local_subprocess_runner.cache_identity.v1",
-            "scion_env": {
-                name: _scion_env_value_digest(value)
-                for name, value in sorted(scion_env.items())
-            },
-        }
 
     def run_solver(
         self,

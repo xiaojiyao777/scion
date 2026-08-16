@@ -13,7 +13,6 @@ from scion.core.models import (
     CheckResult,
     ContractResult,
     HypothesisProposal,
-    HypothesisRecord,
     PatchProposal,
     patch_file_changes,
 )
@@ -137,9 +136,9 @@ class ContractGate:
     def validate_patch(
         self,
         patch: PatchProposal,
-        hypothesis: HypothesisProposal | HypothesisRecord | None = None,
+        hypothesis: HypothesisProposal | None = None,
         *,
-        approved_hypothesis: HypothesisProposal | HypothesisRecord | None = None,
+        approved_hypothesis: HypothesisProposal | None = None,
         selected_surface: str | None = None,
         base_snapshot_path: str | None = None,
         base_file_overrides: Mapping[str, str] | None = None,
@@ -186,7 +185,7 @@ class ContractGate:
     def _validate_patch_file_change(
         self,
         patch: PatchProposal,
-        hypothesis: HypothesisProposal | HypothesisRecord | None,
+        hypothesis: HypothesisProposal | None,
         *,
         selected_surface: str | None,
         enforce_hypothesis_target: bool,
@@ -289,7 +288,7 @@ class ContractGate:
     def _c4b_patch_action_target(
         self,
         patch: PatchProposal,
-        hypothesis: HypothesisProposal | HypothesisRecord | None,
+        hypothesis: HypothesisProposal | None,
         *,
         selected_surface: str | None = None,
         enforce_hypothesis_target: bool = True,
@@ -452,7 +451,7 @@ class ContractGate:
 
     @staticmethod
     def _selected_surface_name(
-        hypothesis: HypothesisProposal | HypothesisRecord | None,
+        hypothesis: HypothesisProposal | None,
     ) -> str | None:
         if hypothesis is None:
             return None

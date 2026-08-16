@@ -161,8 +161,8 @@ partial_output
 
 Campaign behavior:
 
-- if no valid hypothesis: record proposal failure step and let failure lifecycle
-  handle retry/block;
+- if no valid hypothesis: record one typed proposal outcome and let the outer
+  attempt apply its ordinary branch hold;
 - if hypothesis valid but no patch: store partial hypothesis as tainted memory,
   do not evaluate;
 - if patch produced but contract preview failed: either allow one repair loop or

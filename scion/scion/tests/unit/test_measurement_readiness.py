@@ -58,7 +58,6 @@ def _write_artifact(
                     {"case": "b", "delta_p90_abs": 1.25},
                 ],
                 "pair_evidence": [{"case_id": "raw-row-not-for-status"}],
-                "decision_features_excluded": True,
                 "policy": "problem_owned_measurement_diagnostic",
             }
         ),
@@ -71,7 +70,6 @@ def test_missing_calibration_ref_is_not_ready(tmp_path) -> None:
 
     assert readiness.status == "not_ready"
     assert readiness.reason_code == "missing_calibration_ref"
-    assert readiness.decision_features_excluded is True
 
 
 def test_missing_calibration_file_is_not_ready(tmp_path) -> None:

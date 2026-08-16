@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from scion.core.execution_outcome import ExecutionOutcome
-from scion.core.evidence_recorder import EvidenceRecorder
+from scion.core.campaign_loop import CampaignRunResult
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.core.evidence_recording import EvidenceRecorder
 from scion.core.models import (
     Branch,
     BranchState,
     CanaryResult,
+    CaseAggregateFeedback,
     ChampionState,
     CheckResult,
     ContractResult,
@@ -69,6 +71,19 @@ def _protocol_result(raw_metrics_ref: str = "/tmp/raw_metrics.json") -> Protocol
         raw_metrics_ref=raw_metrics_ref,
         case_ids=("case-1", "case-2"),
         seed_set=(11, 13),
+        case_feedback=(
+            CaseAggregateFeedback(
+                case_id="case-1",
+                n_pairs=2,
+                wins=2,
+                losses=0,
+                ties=0,
+                win_rate=1.0,
+                dominant_result="win",
+                decisive_metric="total_distance",
+                median_deltas={"total_distance": 0.12},
+            ),
+        ),
     )
 
 
@@ -84,15 +99,15 @@ def _step(raw_metrics_ref: str = "/tmp/raw_metrics.json") -> StepRecord:
         decision=Decision.QUEUE_VALIDATE,
         failure_stage=None,
         failure_detail=None,
-        cache_stats={"total": 100, "cache_read": 25, "cache_create": 75},
-        hypothesis_id="hyp-1",
         decision_reason_codes=("screening_positive",),
-        execution_outcome=ExecutionOutcome.EVALUATED,
-        execution_outcome_reason_code="PROTOCOL_EVALUATED",
-        execution_outcome_provenance={
-            "owner": "fixture_evaluation",
-            "stage": "screening",
-        },
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.EVALUATED,
+            reason_code="PROTOCOL_EVALUATED",
+            provenance={
+                "owner": "fixture_evaluation",
+                "stage": "screening",
+            },
+        ),
     )
 
 
@@ -108,11 +123,25 @@ def _champion(version: int = 7) -> ChampionState:
                 class_name="LocalSearch",
             )
         },
-        solver_config_hash="solver-hash",
         code_snapshot_path="/tmp/champion",
-        code_snapshot_hash="code-hash",
         weight_revision=2,
     )
+
+
+def _operator_state(*, n_steps: int = 0) -> dict[str, object]:
+    return {
+        "campaign_id": "camp-1",
+        "proposal_runtime_mode": "direct_v3",
+        "n_experiments": 0,
+        "screened_experiments": 0,
+        "n_steps": n_steps,
+        "champion_version": 7,
+        "branches": [],
+    }
+
+
+def _run_projection(requested_rounds: int = 1) -> dict[str, object]:
+    return CampaignRunResult.empty(requested_rounds).to_projection()
 
 
 def _branch() -> Branch:
@@ -120,7 +149,6 @@ def _branch() -> Branch:
         branch_id="branch-1",
         state=BranchState.EXPLORE,
         base_champion_id=6,
-        base_champion_hash="base-hash",
         current_code_hash="candidate-hash",
         failure_codes=["prior_timeout"],
         weight_revision=2,

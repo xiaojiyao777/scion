@@ -8,11 +8,8 @@ from scion.config.problem import ProblemSpec, SearchSpace, SolverConfig
 from scion.contract.gate import ContractGate
 from scion.core.models import (
     HypothesisProposal,
-    HypothesisRecord,
     PatchProposal,
 )
-
-import datetime
 
 
 # ---------------------------------------------------------------------------
@@ -54,16 +51,12 @@ def _hyp_record(
     action: str = "modify",
     target_file: str = "operators/sel.py",
     hypothesis_text: str = "New idea",
-) -> HypothesisRecord:
-    return HypothesisRecord(
-        hypothesis_id="h-001",
-        branch_id="b-001",
+) -> HypothesisProposal:
+    return HypothesisProposal(
+        hypothesis_text=hypothesis_text,
         change_locus=change_locus,
         action=action,
-        status="active",
         target_file=target_file,
-        hypothesis_text=hypothesis_text,
-        created_at=datetime.datetime.now(),
     )
 
 

@@ -18,6 +18,29 @@ from scion.problem.spec import ProblemSpecV1
 from scion.runtime.telemetry_events import TypedTelemetryEvent
 
 
+WAREHOUSE_PRODUCTION_RESEARCH_PRIOR = (
+    (
+        "In the preregistered prod-1.1 12-stage campaign, successive verified "
+        "DestroyRebuild refinements on one branch formed a valid research funnel. "
+        "The final candidate completed the five established validation cases at "
+        "5W/0L/0T cases and 14W/1L/0T pairs, with paired-run median total_cost "
+        "improvement +13200 (case-level median +13300)."
+    ),
+    (
+        "That campaign produced no promotion or frozen evidence. The final "
+        "validation runtime median candidate/champion ratio was 1.473 and is "
+        "diagnostic only. Four earlier DestroyRebuild expanded screenings each "
+        "had seven tied cases, hence case win rate 0.5, and did not pass screening."
+    ),
+    (
+        "These observations require neither continuing nor abandoning "
+        "DestroyRebuild and select no research surface, action, target file, or "
+        "mechanism. Choose the next direction from current source and branch "
+        "evidence."
+    ),
+)
+
+
 def typed_events_from_warehouse_operator_diagnostics(
     mechanism_id: str,
     diagnostics: Mapping[str, Any],
@@ -91,12 +114,17 @@ class WarehouseDeliveryAdapter:
     def spec(self) -> ProblemSpecV1:
         return self._spec
 
-    def research_guidance_provider(self) -> Any:
-        from scion.problems.warehouse_delivery.research_guidance import (
-            WarehouseResearchGuidanceProvider,
-        )
+    def research_question_payload(self) -> Mapping[str, Any]:
+        """Return ordinary safe research context without a contract graph."""
 
-        return WarehouseResearchGuidanceProvider()
+        return {
+            "current_question": (
+                "What source-grounded change on the order-level or vehicle-level "
+                "surface can improve the lexicographic warehouse objective while "
+                "preserving feasibility?"
+            ),
+            "research_prior": list(WAREHOUSE_PRODUCTION_RESEARCH_PRIOR),
+        }
 
     # --- lazy import of surrogate modules ---
 
@@ -274,16 +302,6 @@ research surface."""
 
         return {
             "schema_version": "warehouse_research_opportunity_diagnostic.v2",
-            "proposal_visibility_only": True,
-            "decision_features_excluded": True,
-            "proposal_visible_fields": [
-                "objective_model",
-                "measurable_opportunity_classes",
-                "opportunity_diagnostics",
-                "aggregate_objective_headroom",
-                "aggregate_noise_context",
-                "policy",
-            ],
             "objective_model": {
                 "mode": "lexicographic",
                 "metrics": ["subcategory_splits", "total_cost"],

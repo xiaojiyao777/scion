@@ -1,4 +1,5 @@
 """Sprint E3 tests — T06, T09, T10, T25, T23, T24."""
+# ruff: noqa: F401
 from __future__ import annotations
 
 import json
@@ -42,9 +43,6 @@ def _make_step(
     failure_detail: Optional[str] = None,
     protocol_result: Optional[ProtocolResult] = None,
     hypothesis_text: str = "test hypothesis",
-    verification_detail: Optional[str] = None,
-    code_archive_ref: Optional[str] = None,
-    cache_stats: Optional[Dict] = None,
 ) -> StepRecord:
     return StepRecord(
         round_num=round_num,
@@ -57,9 +55,6 @@ def _make_step(
         decision=decision,
         failure_stage=failure_stage,
         failure_detail=failure_detail,
-        verification_detail=verification_detail,
-        code_archive_ref=code_archive_ref,
-        cache_stats=cache_stats,
     )
 
 

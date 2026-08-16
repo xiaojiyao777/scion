@@ -1,13 +1,23 @@
 """Focused tests split from test_cli.py."""
 
-from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+import json
+from pathlib import Path
 
-from .cli_test_support import *  # noqa: F401,F403
+from typer.testing import CliRunner
+
+from scion.cli.main import app
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.lineage.registry import LineageRegistry
+
+from .cli_test_support import _make_campaign
+
+
+runner = CliRunner()
 
 
 class TestReportSummary:
     def test_report_summary_outputs_json(self, tmp_path):
-        campaign_dir, _, _ = _make_campaign(tmp_path)
+        campaign_dir, _ = _make_campaign(tmp_path)
         result = runner.invoke(
             app, ["report", "summary", "--campaign-dir", str(campaign_dir)]
         )
@@ -19,7 +29,7 @@ class TestReportSummary:
         assert "by_decision" in data
 
     def test_report_summary_write_to_file(self, tmp_path):
-        campaign_dir, _, _ = _make_campaign(tmp_path)
+        campaign_dir, _ = _make_campaign(tmp_path)
         out_file = tmp_path / "summary.json"
         result = runner.invoke(
             app,
@@ -40,16 +50,20 @@ class TestReportSummary:
 
 class TestReportFailures:
     def test_report_failures_outputs_json(self, tmp_path):
-        campaign_dir, branch_id, _ = _make_campaign(tmp_path)
-        # Add a failure event
+        campaign_dir, branch_id = _make_campaign(tmp_path)
+        # Add one typed Contract rejection.
         registry = LineageRegistry(str(campaign_dir / "scion.db"))
-        registry.record_event(
-            {
-                "branch_id": branch_id,
-                "contract_result": "failed",
-                "verification_result": "failed",
-                "decision": "abandon",
-            }
+        registry.record_execution_outcome(
+            campaign_id="campaign-typed-failure",
+            branch_id=branch_id,
+            record=ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                reason_code="HYPOTHESIS_CONTRACT_REJECTED",
+                detail="contract rejected",
+                provenance={"stage": "hypothesis_contract"},
+            ),
+            event_kind="contract_fail",
+            stage="hypothesis_contract",
         )
         result = runner.invoke(
             app, ["report", "failures", "--campaign-dir", str(campaign_dir)]
@@ -61,7 +75,7 @@ class TestReportFailures:
         assert data["total_failures"] >= 1
 
     def test_report_failures_empty_db(self, tmp_path):
-        campaign_dir, _, _ = _make_campaign(tmp_path)
+        campaign_dir, _ = _make_campaign(tmp_path)
         result = runner.invoke(
             app, ["report", "failures", "--campaign-dir", str(campaign_dir)]
         )
@@ -70,12 +84,11 @@ class TestReportFailures:
         assert data["total_failures"] == 0
 
     def test_typed_verification_rejection_is_reported(self, tmp_path):
-        campaign_dir, branch_id, _ = _make_campaign(tmp_path)
+        campaign_dir, branch_id = _make_campaign(tmp_path)
         registry = LineageRegistry(str(campaign_dir / "scion.db"))
         registry.record_execution_outcome(
             campaign_id="campaign-typed-failure",
             branch_id=branch_id,
-            hypothesis_id="hypothesis-typed-failure",
             record=ExecutionOutcomeRecord(
                 outcome=ExecutionOutcome.RESEARCH_REJECTED,
                 reason_code="VERIFICATION_LIGHT_REJECTED",
@@ -100,7 +113,9 @@ class TestReportFailures:
         assert failures.exit_code == 0, failures.output
         failure_data = json.loads(failures.output)
         assert failure_data["total_failures"] == 1
-        assert failure_data["by_type"] == {"verification:V1b_undefined_names": 1}
+        assert failure_data["by_type"] == {
+            "verification:VERIFICATION_LIGHT_REJECTED": 1
+        }
         assert failure_data["recent_failures"][0]["event_kind"] == ("verification_fail")
 
         summary = runner.invoke(
@@ -116,11 +131,11 @@ class TestReportFailures:
         assert summary_data["verification_gate_outcome_events"] == 2
         assert summary_data["verification_intercept_rate"] == 0.5
         assert summary_data["verification_failure_breakdown"] == {
-            "V1b_undefined_names": 1
+            "VERIFICATION_LIGHT_REJECTED": 1
         }
 
     def test_contract_failure_is_not_a_verification_opportunity(self, tmp_path):
-        campaign_dir, branch_id, _ = _make_campaign(tmp_path)
+        campaign_dir, branch_id = _make_campaign(tmp_path)
         registry = LineageRegistry(str(campaign_dir / "scion.db"))
         registry.record_execution_outcome(
             campaign_id="campaign-mixed-failures",
@@ -163,23 +178,10 @@ class TestReportFailures:
         assert data["verification_intercept_rate"] == 0.5
 
 
-class TestReportFamilyDistribution:
-    def test_report_includes_family_distribution(self, tmp_path):
-        """report summary JSON output includes family_distribution key."""
-        campaign_dir, _, _ = _make_campaign(tmp_path)
-        result = runner.invoke(
-            app, ["report", "summary", "--campaign-dir", str(campaign_dir)]
-        )
-        assert result.exit_code == 0, result.output
-        data = json.loads(result.output)
-        assert "family_distribution" in data
-        # order_level change_locus was set in _make_campaign
-        assert "order_level" in data["family_distribution"]
-        assert data["family_distribution"]["order_level"] >= 1
-
+class TestReportDetails:
     def test_report_includes_verification_failure_breakdown(self, tmp_path):
         """report summary JSON output includes verification_failure_breakdown key."""
-        campaign_dir, _, _ = _make_campaign(tmp_path)
+        campaign_dir, _ = _make_campaign(tmp_path)
         result = runner.invoke(
             app, ["report", "summary", "--campaign-dir", str(campaign_dir)]
         )
@@ -189,7 +191,7 @@ class TestReportFamilyDistribution:
 
     def test_report_includes_weight_optimization(self, tmp_path):
         """report summary JSON output includes weight_optimization key (None if no runs)."""
-        campaign_dir, _, _ = _make_campaign(tmp_path)
+        campaign_dir, _ = _make_campaign(tmp_path)
         result = runner.invoke(
             app, ["report", "summary", "--campaign-dir", str(campaign_dir)]
         )
@@ -199,7 +201,7 @@ class TestReportFamilyDistribution:
 
     def test_report_markdown_flag(self, tmp_path):
         """--markdown flag produces markdown output with section headers."""
-        campaign_dir, _, _ = _make_campaign(tmp_path)
+        campaign_dir, _ = _make_campaign(tmp_path)
         result = runner.invoke(
             app,
             ["report", "summary", "--markdown", "--campaign-dir", str(campaign_dir)],
@@ -212,16 +214,55 @@ class TestReportFamilyDistribution:
         assert "opportunities" in result.output
 
 
-class TestInspectShowsWeights:
+class TestInspect:
     def test_inspect_shows_weights(self, tmp_path):
         """inspect campaign output includes weight_optimization key."""
-        campaign_dir, _, _ = _make_campaign(tmp_path)
+        campaign_dir, _ = _make_campaign(tmp_path)
         result = runner.invoke(
             app, ["inspect", "campaign", "--campaign-dir", str(campaign_dir)]
         )
         assert result.exit_code == 0, result.output
         data = json.loads(result.output)
         assert "weight_optimization" in data
+
+    def test_inspect_branch_shows_only_branch_and_ordinary_experiments(
+        self, tmp_path
+    ):
+        campaign_dir, branch_id = _make_campaign(tmp_path)
+        registry = LineageRegistry(str(campaign_dir / "scion.db"))
+        registry.record_event(
+            {
+                "branch_id": branch_id,
+                "event_kind": "proposal_call",
+                "stage": "proposal_hypothesis",
+            }
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "inspect",
+                "branch",
+                branch_id,
+                "--campaign-dir",
+                str(campaign_dir),
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        data = json.loads(result.output)
+        assert set(data) == {"branch_id", "experiment_events"}
+        assert data["branch_id"] == branch_id
+        assert len(data["experiment_events"]) == 1
+        assert data["experiment_events"][0]["event_kind"] == "experiment"
+
+    def test_inspect_has_no_hypothesis_identity_command(self):
+        help_result = runner.invoke(app, ["inspect", "--help"])
+        assert help_result.exit_code == 0, help_result.output
+        assert "hypothesis" not in help_result.output.lower()
+
+        removed = runner.invoke(app, ["inspect", "hypothesis", "retired-id"])
+        assert removed.exit_code != 0
 
 
 class TestPostmortemJsonFlag:
@@ -234,7 +275,6 @@ class TestPostmortemJsonFlag:
             "verification_failure_breakdown": {"infra": 1},
             "action_locus_coverage": {"modify:order_level": 2},
             "diagnostics": [],
-            "cache_stats": {},
             "steps": [
                 {
                     "decision": "promote",
@@ -262,6 +302,7 @@ class TestPostmortemJsonFlag:
         assert data["campaign_id"] == "test-campaign"
         assert data["total_rounds"] == 5
         assert "family_coverage" in data
+        assert "cache_stats" not in data
 
     def test_postmortem_default_markdown(self, tmp_path):
         """Default postmortem output is markdown."""
@@ -272,21 +313,7 @@ class TestPostmortemJsonFlag:
         result = runner.invoke(app, ["postmortem", str(campaign_dir)])
         assert result.exit_code == 0, result.output
         assert "# Scion Campaign Postmortem" in result.output
-
-    def test_postmortem_comparison_section(self, tmp_path):
-        """Postmortem includes comparison section when sibling campaigns exist."""
-        campaign_a = tmp_path / "campaign_a"
-        campaign_b = tmp_path / "campaign_b"
-        campaign_a.mkdir()
-        campaign_b.mkdir()
-        self._make_summary(campaign_a)
-        self._make_summary(campaign_b)
-
-        result = runner.invoke(app, ["postmortem", str(campaign_a)])
-        assert result.exit_code == 0, result.output
-        assert "Comparison with Other Campaigns" in result.output
-        assert "campaign_b" in result.output
-
+        assert "LLM Cache Statistics" not in result.output
 
 class TestCliHelpText:
     def test_cli_help_text(self):

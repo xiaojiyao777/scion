@@ -1,14 +1,12 @@
 """Focused tests split from test_campaign_control_boundaries.py."""
 
 from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
-import hashlib
-from scion.core.models import DecisionFeatures
 import scion.verification.tests as verification_tests
 from scion.problem.preflight import ResearchEnvironmentPreflightError
 from scion.verification.gate import VerificationGate
 
 
-def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
+def test_explore_pipeline_contract_reads_current_branch_workspace(
     tmp_path: Path,
 ) -> None:
     helper_path = "operators/branch_helper.py"
@@ -30,9 +28,6 @@ def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
                 "file_path": helper_path,
                 "action": "modify",
                 "edit_intent": "exact_replace",
-                "source_digest": hashlib.sha256(
-                    helper_source.encode("utf-8")
-                ).hexdigest(),
                 "old_string": "    return value + 1\n",
                 "new_string": "    return value + 2\n",
                 "test_hint": None,
@@ -40,49 +35,10 @@ def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
         ),
     )
     branch = cm._branch_ctrl.create_branch(cm._champion)
-    cm._branch_store.save(branch)
-    cm._step_history.append(
-        StepRecord(
-            round_num=1,
-            branch_id=branch.branch_id,
-            hypothesis=HypothesisProposal(
-                hypothesis_text="Create a generic branch helper.",
-                change_locus="local_search",
-                action="create_new",
-                target_file=helper_path,
-            ),
-            patch=PatchProposal(
-                file_path=helper_path,
-                action="create",
-                code_content=helper_source,
-            ),
-            contract_passed=True,
-            verification_passed=True,
-            protocol_result=None,
-            decision=Decision.CONTINUE_EXPLORE,
-            failure_stage=None,
-            failure_detail=None,
-            decision_reason_codes=("SCREENING_UNCLEAR",),
-            decision_features_snapshot=DecisionFeatures(
-                branch_id=branch.branch_id,
-                hypothesis_action="create_new",
-                stage="screening",
-                contract_passed=True,
-                verification_passed=True,
-                canary_passed=True,
-                n_cases=1,
-                win_rate=0.0,
-                median_delta=0.0,
-                ci_low=0.0,
-                ci_high=0.0,
-                stale=False,
-                recent_failure_codes=(),
-                protocol_gate_outcome="unclear",
-                protocol_reason_codes=("SCREENING_UNCLEAR",),
-            ),
-        )
-    )
-    captured_overrides: list[dict[str, str]] = []
+    workspace = cm._setup_workspace(branch)
+    assert workspace is not None
+    (Path(workspace) / helper_path).write_text(helper_source)
+    captured_inputs: list[tuple[str | None, dict[str, str]]] = []
 
     assert cm._explore_step_pipeline.step_history is cm._step_history
     cm._contract_gate.validate_hypothesis = lambda *_args, **_kwargs: ContractResult(
@@ -91,7 +47,12 @@ def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
     )
 
     def fail_patch_contract(patch, *args, **kwargs):
-        captured_overrides.append(dict(kwargs.get("base_file_overrides") or {}))
+        captured_inputs.append(
+            (
+                kwargs.get("base_snapshot_path"),
+                dict(kwargs.get("base_file_overrides") or {}),
+            )
+        )
         return ContractResult(
             passed=False,
             checks=(),
@@ -104,8 +65,7 @@ def test_explore_pipeline_production_wiring_uses_step_history_base_overrides(
 
     assert result.reason == "patch contract rejected"
     assert cm._step_history[-1].failure_stage == "patch_contract"
-    assert captured_overrides
-    assert captured_overrides[0][helper_path] == helper_source
+    assert captured_inputs == [(workspace, {})]
 
 
 def test_campaign_run_preflights_missing_runtime_dependency_before_proposal(
@@ -114,7 +74,7 @@ def test_campaign_run_preflights_missing_runtime_dependency_before_proposal(
     missing = "scion_missing_campaign_preflight_dependency_987654321"
     cm = _campaign(tmp_path)
     object.__setattr__(
-        cm._spec,
+        cm._problem_runtime.spec,
         "runtime_dependencies",
         RuntimeDependencySpec(required_python_modules=[missing]),
     )
@@ -132,10 +92,13 @@ def test_campaign_run_preflights_missing_verification_pytest_before_proposal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cm = _campaign(tmp_path)
-    tests_dir = Path(cm._spec.root_dir) / "tests"
+    tests_dir = Path(cm._problem_runtime.spec.root_dir) / "tests"
     tests_dir.mkdir()
     (tests_dir / "test_operators.py").write_text("def test_ok(): pass\n")
-    cm._vgate = VerificationGate(problem_spec=cm._spec, runner=object())
+    cm._vgate = VerificationGate(
+        problem_spec=cm._problem_runtime.spec,
+        runner=object(),
+    )
     monkeypatch.setattr(
         verification_tests.importlib.util,
         "find_spec",
@@ -153,49 +116,54 @@ def test_campaign_run_preflights_missing_verification_pytest_before_proposal(
 
 
 
-class TestLastCleanCodeHash:
-    def test_last_clean_hash_updates_only_after_verification_pass(self, tmp_path):
-        """After apply_patch, last_clean_code_hash must NOT be set before verification passes."""
+class TestAcceptedBranchCodeHash:
+    def test_candidate_hash_becomes_current_only_after_disposition_accepts(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        protocol = _MockProtocol(results=[_make_protocol_result("pass")])
         cm = _campaign(
             tmp_path,
-            experiment_protocol=_MockProtocol(
-                results=[_make_protocol_result("pass")]
-            ),
+            experiment_protocol=protocol,
         )
-        branch_id_container: List[str] = []
+        observed_during_protocol: list[tuple[str | None, str, str]] = []
+        original_run_experiment = protocol.run_experiment
 
-        # Intercept record_candidate_code to capture state at that moment
-        original_record_candidate = cm._branch_ctrl.record_candidate_code
-        original_record_pass = cm._branch_ctrl.record_verification_pass
-        candidate_clean_at_apply: List[Optional[str]] = []
-        clean_after_verify: List[Optional[str]] = []
+        def observe_candidate(*args, **kwargs):
+            candidate_workspace = kwargs.get("candidate_ws")
+            if candidate_workspace is None:
+                candidate_workspace = args[1]
+            branch = next(iter(cm._branch_ctrl._branches.values()))
+            observed_during_protocol.append(
+                (
+                    branch.current_code_hash,
+                    cm._branch_workspaces[branch.branch_id],
+                    candidate_workspace,
+                )
+            )
+            return original_run_experiment(*args, **kwargs)
 
-        def spy_record_candidate(bid, code_hash):
-            branch = cm._branch_ctrl.get_branch(bid)
-            candidate_clean_at_apply.append(branch.last_clean_code_hash)
-            branch_id_container.append(bid)
-            return original_record_candidate(bid, code_hash)
-
-        def spy_record_pass(bid, code_hash):
-            result = original_record_pass(bid, code_hash)
-            branch = cm._branch_ctrl.get_branch(bid)
-            clean_after_verify.append(branch.last_clean_code_hash)
-            return result
-
-        cm._branch_ctrl.record_candidate_code = spy_record_candidate
-        cm._branch_ctrl.record_verification_pass = spy_record_pass
+        protocol.run_experiment = observe_candidate
 
         cm.run_one_step()
 
-        # A fresh branch has no accepted branch head yet.  The candidate hash
-        # only becomes clean once the formal Decision accepts its staging tree.
-        assert candidate_clean_at_apply, "record_candidate_code must be called"
-        assert candidate_clean_at_apply[0] is None
-        assert clean_after_verify
-        assert clean_after_verify[-1] != candidate_clean_at_apply[0]
+        assert len(observed_during_protocol) == 1
+        current_during_protocol, durable_during_protocol, candidate_workspace = (
+            observed_during_protocol[0]
+        )
+        assert current_during_protocol is None
+        assert durable_during_protocol != candidate_workspace
+        branch = next(iter(cm._branch_ctrl._branches.values()))
+        assert branch.current_code_hash is not None
+        durable_workspace = cm._branch_workspaces[branch.branch_id]
+        assert cm._materializer.compute_code_hash(durable_workspace) == (
+            branch.current_code_hash
+        )
 
-    def test_verification_fail_preserves_last_clean_hash(self, tmp_path):
-        """A verification failure restores the actual clean base workspace hash."""
+    def test_verification_failure_never_writes_current_code_hash(
+        self,
+        tmp_path: Path,
+    ) -> None:
         cm = _campaign(
             tmp_path,
             verification_gate=_AlwaysFailVerificationLight(),
@@ -205,9 +173,8 @@ class TestLastCleanCodeHash:
 
         cm.run_one_step()
 
-        # Find the branch that was created
-        branches = cm._branch_ctrl.get_active_branches()
-        all_branches = list(cm._branch_ctrl._branches.values())
-        for b in all_branches:
-            assert b.last_clean_code_hash is not None
-            assert b.current_code_hash == b.last_clean_code_hash
+        assert cm._branch_ctrl._branches
+        assert all(
+            branch.current_code_hash is None
+            for branch in cm._branch_ctrl._branches.values()
+        )

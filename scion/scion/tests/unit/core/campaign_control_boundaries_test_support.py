@@ -3,17 +3,19 @@
 Verifies:
 - fix patch re-passes Contract Gate before apply
 - pending hypothesis re-passes hypothesis Contract Gate
-- last_clean_code_hash only updated after verification pass
-- eval-only steps reuse original hypothesis_id
+- current_code_hash is written only after candidate acceptance
+- eval-only steps reuse the branch's ordinary hypothesis value
 - eval-only steps write StepRecord to step_history
 - stale reconcile runs Contract → Verification → re-screening
 - StepRecord.decision is None for early failures
 """
+# ruff: noqa: F401
 from __future__ import annotations
 
 import os
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import MagicMock, patch as mock_patch
 
@@ -24,11 +26,13 @@ from scion.core.campaign import CampaignManager
 from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, CheckResult,
     ContractResult, Decision, EvalStats, ExperimentStage, HypothesisProposal,
-    HypothesisRecord, PatchProposal, ProtocolResult, StepRecord, VerificationResult,
+    PatchProposal, ProtocolResult, StepRecord, VerificationResult,
 )
 from scion.problem.preflight import RuntimeDependencyPreflightError
 from scion.problem.spec import RuntimeDependencySpec
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.proposal.mock_client import MockLLMClient
+from scion.verification.gate import VerificationGate
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +59,10 @@ _VALID_HYPOTHESIS = {
 _VALID_PATCH = {
     "file_path": "operators/local_search.py",
     "action": "modify",
-    "code_content": _VALID_CODE,
+    "edit_intent": "exact_replace",
+    "old_string": "        return solution\n",
+    "new_string": "        candidate = solution\n        return candidate\n",
+    "replace_all": False,
     "test_hint": None,
 }
 
@@ -77,9 +84,7 @@ def _make_champion(code_dir: str) -> ChampionState:
     return ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="abc123",
         code_snapshot_path=str(code_dir),
-        code_snapshot_hash="deadbeef",
     )
 
 
@@ -109,7 +114,10 @@ def _make_protocol_result(
     )
 
 
-class _AlwaysPassVerification:
+class _AlwaysPassVerification(VerificationGate):
+    def __init__(self) -> None:
+        super().__init__()
+
     def run(self, *args, **kwargs) -> VerificationResult:
         return VerificationResult(
             passed=True,
@@ -117,7 +125,10 @@ class _AlwaysPassVerification:
         )
 
 
-class _AlwaysFailVerificationLight:
+class _AlwaysFailVerificationLight(VerificationGate):
+    def __init__(self) -> None:
+        super().__init__()
+
     def run(self, *args, **kwargs) -> VerificationResult:
         return VerificationResult(
             passed=False,
@@ -139,6 +150,12 @@ class _MockProtocol:
         self._canary_pass = canary_pass
         self.canary_calls: List[Tuple] = []
         self.experiment_calls: List[Tuple] = []
+        self.runner = object()
+        self.config = ProtocolConfig()
+        self._metric_specs = (
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        )
+        self._problem_spec = None
 
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         self.canary_calls.append((candidate_ws, champion_ws))
@@ -173,6 +190,8 @@ def _campaign(
     campaign_dir = str(tmp_path / "campaign")
     spec = _make_spec(str(code_dir))
     champion = _make_champion(code_dir)
+    protocol = experiment_protocol or _MockProtocol()
+    protocol._problem_spec = spec
 
     return CampaignManager(
         problem_spec=spec,
@@ -188,11 +207,13 @@ def _campaign(
             screening=["c1", "c2"],
             validation=["c3", "c4"],
             frozen=["c5", "c6"],
+            canary=["c7"],
         ),
         seed_ledger=SeedLedgerConfig(
             screening=[1, 2],
             validation=[3, 4],
             frozen=[5, 6],
+            canary=[7],
         ),
         llm_client=llm_client or MockLLMClient(
             hypothesis_response=_VALID_HYPOTHESIS,
@@ -201,7 +222,8 @@ def _campaign(
         champion=champion,
         campaign_dir=campaign_dir,
         verification_gate=verification_gate or _AlwaysPassVerification(),
-        experiment_protocol=experiment_protocol,
+        experiment_protocol=protocol,
+        adapter=SimpleNamespace(spec=spec),
     )
 
 

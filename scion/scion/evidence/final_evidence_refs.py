@@ -9,24 +9,10 @@ from scion.core.public_refs import public_artifact_ref
 
 __all__ = [
     "attach_final_evidence_package",
-    "build_final_evidence_closure_refs",
     "build_final_evidence_refs",
     "FINAL_QUALITY_ARTIFACT_KEYS",
-    "FINAL_EVIDENCE_CLOSURE_SCHEMA",
-    "FINAL_EVIDENCE_REASON_NORMAL_COMPLETION",
-    "FINAL_EVIDENCE_REASON_PENDING_EXTERNAL",
-    "FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED",
-    "FINAL_EVIDENCE_STATUS_PENDING_EXTERNAL",
     "MANIFEST_METADATA_KEYS",
 ]
-
-FINAL_EVIDENCE_CLOSURE_SCHEMA = "scion.final_evidence_refs.closure.v1"
-FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED = "non_formal_final_evidence_closed"
-FINAL_EVIDENCE_STATUS_PENDING_EXTERNAL = "pending_external_final_evidence"
-FINAL_EVIDENCE_REASON_NORMAL_COMPLETION = (
-    "normal_campaign_completed_without_formal_final_evidence"
-)
-FINAL_EVIDENCE_REASON_PENDING_EXTERNAL = "external_final_evidence_pending"
 
 FINAL_QUALITY_ARTIFACT_KEYS = (
     "manifest",
@@ -46,24 +32,6 @@ MANIFEST_METADATA_KEYS = (
     "candidate_label",
     "n_cases",
 )
-
-
-def build_final_evidence_closure_refs(
-    *,
-    reason: str,
-    reason_code: str = FINAL_EVIDENCE_REASON_NORMAL_COMPLETION,
-    status: str = FINAL_EVIDENCE_STATUS_NON_FORMAL_CLOSED,
-    required_for_formal_readiness: bool = False,
-) -> dict[str, Any]:
-    """Build a public closure index when no final evidence package is attached."""
-
-    return {
-        "schema": FINAL_EVIDENCE_CLOSURE_SCHEMA,
-        "status": status,
-        "reason_code": reason_code,
-        "reason": reason,
-        "required_for_formal_readiness": required_for_formal_readiness,
-    }
 
 
 def build_final_evidence_refs(

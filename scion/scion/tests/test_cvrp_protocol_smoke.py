@@ -6,25 +6,22 @@ import shutil
 from pathlib import Path
 
 import yaml
-
 from scion.config.problem import (
     ProblemSpec,
     ProtocolConfig,
-    SplitManifest,
     SeedLedgerConfig,
+    SplitManifest,
 )
 from scion.core.campaign import CampaignManager
-from scion.core.models import ChampionState
-from scion.core.models import ExperimentStage
+from scion.core.models import ChampionState, ExperimentStage
 from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
-from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.proposal.mock_client import MockLLMClient
+from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
 from scion.verification.gate import VerificationGate
-
 
 CVRP_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
 
@@ -69,7 +66,6 @@ def _make_protocol(tmp_path: Path) -> tuple[ExperimentProtocol, ProblemSpecV1]:
             metrics_dir=str(tmp_path / "metrics"),
             metric_specs=bridge.metric_specs,
             objective_policy=bridge.objective_policy,
-            require_metric_specs=True,
             problem_spec=bridge.problem_spec,
         ),
         spec_v1,
@@ -340,9 +336,7 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="cvrp-smoke",
         code_snapshot_path=str(CVRP_DIR),
-        code_snapshot_hash="cvrp-baseline",
     )
     llm = MockLLMClient(
         hypothesis_response={
@@ -389,7 +383,7 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
     )
 
     result = campaign.run_one_step()
-    if result.action == "create_branch" and not result.formal_protocol_evaluated:
+    if result.action == "create_branch" and result.protocol_result is None:
         result = campaign.run_one_step()
 
     assert result.action in {
@@ -400,7 +394,7 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
         "abandon",
         "noop",
     }
-    assert result.formal_protocol_evaluated is True
+    assert result.protocol_result is not None
     assert campaign._n_experiments >= 1
     assert campaign._step_history
     step = next(

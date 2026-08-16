@@ -32,7 +32,6 @@ from scion.proposal.llm.errors import (
     _is_transient_provider_error,
     _masked_hard_timeout_error,
     _parse_retry_after,
-    is_llm_infra_error,
 )
 from scion.proposal.llm.timeout import _llm_hard_timeout
 
@@ -66,5 +65,4 @@ __all__ = [
     "_normalize_request_kind",
     "_parse_retry_after",
     "_request_kind_env_key",
-    "is_llm_infra_error",
 ]

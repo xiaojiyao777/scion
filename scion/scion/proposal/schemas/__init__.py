@@ -7,9 +7,6 @@ from .hypothesis import (
     HYPOTHESIS_PROPOSAL_SCHEMA,
     HypothesisProposalInput,
 )
-from .normalization import (
-    normalize_patch_output_with_repair_attribution,
-)
 from .patch import (
     PATCH_PROPOSAL_SCHEMA,
     PatchEditIntent,
@@ -36,6 +33,5 @@ __all__ = [
     "PatchProposalInput",
     "PatchSchemaPreflightError",
     "bind_hypothesis_tool_to_context",
-    "normalize_patch_output_with_repair_attribution",
     "preflight_patch_exact_replace_shape",
 ]

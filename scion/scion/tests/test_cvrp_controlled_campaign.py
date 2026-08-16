@@ -20,7 +20,6 @@ from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
-from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
@@ -47,7 +46,6 @@ def _baseline_algorithm_solve_patch(new_solve: str) -> dict:
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": source_digest_for_content(source),
         "old_string": old_solve,
         "new_string": new_solve if new_solve.endswith("\n") else new_solve + "\n",
         "replace_all": False,
@@ -84,7 +82,6 @@ def _load_controlled_runtime(
         metrics_dir=str(tmp_path / "metrics"),
         metric_specs=bridge.metric_specs,
         objective_policy=bridge.objective_policy,
-        require_metric_specs=True,
         problem_spec=bridge.problem_spec,
     )
     return protocol, spec_v1, protocol_config, split_manifest, seed_ledger
@@ -128,9 +125,7 @@ def _make_campaign(tmp_path: Path) -> CampaignManager:
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="cvrp-controlled-smoke",
         code_snapshot_path=str(CVRP_DIR),
-        code_snapshot_hash="cvrp-controlled-baseline",
     )
     gate = VerificationGate(
         problem_spec=bridge.problem_spec,
@@ -195,16 +190,12 @@ def test_controlled_screening_runs_complete_on_vrp_cases(
         == len(split_manifest.screening)
     )
     assert result.stats.valid_pairs == len(split_manifest.screening)
-    assert result.champion_cache_hits == 0
-    assert result.champion_cache_misses == len(split_manifest.screening)
     assert result.raw_metrics_ref
 
     raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text(encoding="utf-8"))
     assert raw_metrics["complete"] is True
     assert raw_metrics["valid_pairs"] == len(split_manifest.screening)
     assert raw_metrics["failed_pairs"] == 0
-    assert raw_metrics["champion_cache_hits"] == 0
-    assert raw_metrics["champion_cache_misses"] == len(split_manifest.screening)
 
 
 def test_controlled_campaign_one_step_then_manual_final_evidence_refs(

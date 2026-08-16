@@ -23,15 +23,17 @@ def _decision_for_screening_result(result):
         branch_id=str(uuid.uuid4()),
         state=BranchState.EXPLORE,
         base_champion_id=0,
-        base_champion_hash="champion",
     )
     features = SafeFeatureExtractor().extract(
-        branch,
-        "modify",
-        ContractResult(passed=True, checks=()),
-        VerificationResult(passed=True, checks=()),
-        CanaryResult(passed=True),
-        result,
+        branch_state=branch.state,
+        screening_expand_count=branch.screening_expand_count,
+        validation_expand_count=branch.validation_expand_count,
+        failure_codes=tuple(branch.failure_codes),
+        hypothesis_action="modify",
+        contract=ContractResult(passed=True, checks=()),
+        verification=VerificationResult(passed=True, checks=()),
+        canary=CanaryResult(passed=True),
+        protocol=result,
     )
     return DecisionEngine(ProtocolConfig()).decide(features)
 
@@ -60,7 +62,7 @@ def test_screening_evidence_status_tracks_snapshot_lifecycle(
     )
 
 
-def test_screening_raw_metrics_remain_in_progress_until_final_snapshot(tmp_path):
+def test_screening_writes_raw_metrics_only_at_terminal(tmp_path):
     runner = MagicMock()
     runner.run_solver.side_effect = [
         _make_run_result(2, 1000),
@@ -83,11 +85,8 @@ def test_screening_raw_metrics_remain_in_progress_until_final_snapshot(tmp_path)
         "modify",
     )
 
-    incomplete = [snapshot for snapshot in snapshots if not snapshot["complete"]]
-    assert incomplete
-    assert {
-        snapshot["screening_evidence_status"] for snapshot in incomplete
-    } == {"in_progress"}
+    assert len(snapshots) == 1
+    assert snapshots[0]["complete"] is True
     final = json.loads(open(result.raw_metrics_ref, encoding="utf-8").read())
     assert final["complete"] is True
     assert final["screening_evidence_status"] == "complete"

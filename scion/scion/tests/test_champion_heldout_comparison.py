@@ -232,8 +232,6 @@ def test_formal_counts_invalid_output_on_its_arm(
         metric_specs=(
             ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
         ),
-        require_metric_specs=True,
-        champion_result_cache_enabled=False,
     )
     result = protocol.run_experiment(
         ExperimentStage.FROZEN, str(candidate), str(champion), "modify"
@@ -243,7 +241,7 @@ def test_formal_counts_invalid_output_on_its_arm(
     assert result.gate_outcome == "fail"
 
 
-def test_builder_selects_exact_12_by_3_and_disables_cache(tmp_path: Path) -> None:
+def test_builder_selects_exact_12_by_3(tmp_path: Path) -> None:
     protocol_path, split_path, seeds_path, cases, seeds = _matrix(tmp_path)
     protocol = build_champion_heldout_protocol(
         problem_yaml_path=_warehouse_problem(),
@@ -253,8 +251,6 @@ def test_builder_selects_exact_12_by_3_and_disables_cache(tmp_path: Path) -> Non
         metrics_dir=tmp_path / "metrics",
         time_limit_sec=3,
     )
-    assert protocol._champion_result_cache_enabled is False
-    assert protocol._champion_result_cache is None
     assert isinstance(protocol.runner.delegate, LocalSubprocessRunner)
     assert protocol.runner.metric_names == ("subcategory_splits", "total_cost")
     assert protocol._select_cases(ExperimentStage.FROZEN, "modify", 0) == cases

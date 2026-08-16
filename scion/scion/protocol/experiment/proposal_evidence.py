@@ -50,9 +50,6 @@ def problem_proposal_mechanism_evidence(
         "schema_version": _ENVELOPE_SCHEMA,
         "problem_family": family or "unknown",
         "producer": "problem_provider",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "gate_influence": False,
         "evidence": dict(raw),
     }
 
@@ -62,9 +59,6 @@ def is_proposal_mechanism_evidence_envelope(value: Any) -> bool:
         isinstance(value, Mapping)
         and value.get("schema_version") == _ENVELOPE_SCHEMA
         and value.get("producer") == "problem_provider"
-        and value.get("proposal_visibility_only") is True
-        and value.get("decision_features_excluded") is True
-        and value.get("gate_influence") is False
         and isinstance(value.get("evidence"), Mapping)
     )
 

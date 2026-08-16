@@ -138,7 +138,6 @@ def test_patch_validation_missing_code():
         "file_path": "operators/new_op.py",
         "action": "create",
         "edit_intent": "full_file",
-        "source_digest": None,
         "content_after": "",
         "full_file_reason": "Create the approved operator.",
         "evidence_refs": [],
@@ -153,7 +152,6 @@ def test_patch_validation_missing_file_path():
         "file_path": "",
         "action": "create",
         "edit_intent": "full_file",
-        "source_digest": None,
         "content_after": "class Foo:\n    pass\n",
         "full_file_reason": "Create the approved operator.",
         "evidence_refs": [],
@@ -168,7 +166,6 @@ def test_patch_validation_whitespace_code():
         "file_path": "operators/new_op.py",
         "action": "create",
         "edit_intent": "full_file",
-        "source_digest": None,
         "content_after": "   \n  ",
         "full_file_reason": "Create the approved operator.",
         "evidence_refs": [],
@@ -183,7 +180,6 @@ def test_valid_patch_passes_validation():
         "file_path": "operators/new_local_search.py",
         "action": "create",
         "edit_intent": "full_file",
-        "source_digest": None,
         "content_after": "class LocalSearch:\n    def execute(self, solution, rng):\n        return solution\n",
         "full_file_reason": "Create the approved local-search operator.",
         "evidence_refs": [],
@@ -201,7 +197,6 @@ def test_valid_patch_with_test_hint():
         "file_path": "operators/new_op.py",
         "action": "create",
         "edit_intent": "full_file",
-        "source_digest": None,
         "content_after": "class NewOp:\n    def execute(self, solution, rng):\n        return solution\n",
         "full_file_reason": "Create the approved operator.",
         "evidence_refs": [],
@@ -217,7 +212,6 @@ def test_patch_rejects_additional_changes_json_string_for_shape_retry():
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "full_file",
-        "source_digest": "abc123",
         "content_after": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
         "full_file_reason": "Implement the approved solver change.",
         "evidence_refs": [],
@@ -225,7 +219,6 @@ def test_patch_rejects_additional_changes_json_string_for_shape_retry():
             '[{"file_path": "policies/baseline_modules/helper.py", '
             '"action": "create", '
             '"edit_intent": "full_file", '
-            '"source_digest": null, '
             '"content_after": "def helper():\\n    return 1\\n"}]'
         ),
     }
@@ -242,7 +235,6 @@ def test_patch_rejects_unparseable_additional_changes_string():
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "full_file",
-        "source_digest": "abc123",
         "content_after": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
         "full_file_reason": "Implement the approved solver change.",
         "evidence_refs": [],
@@ -257,7 +249,6 @@ def test_patch_rejects_unknown_edit_fields_with_additional_changes_guidance():
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "full_file",
-        "source_digest": "abc123",
         "content_after": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
         "full_file_reason": "Implement the approved solver change.",
         "evidence_refs": [],
@@ -273,5 +264,5 @@ def test_patch_rejects_unknown_edit_fields_with_additional_changes_guidance():
     assert "old_string2" in message
     assert "new_string2" in message
     assert "additional_changes[]" in message
-    assert "multiple ordered exact_replace change objects" in message
-    assert "same file_path" in message
+    assert "Each file_path may appear once" in message
+    assert "one explicit typed edit" in message

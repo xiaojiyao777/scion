@@ -49,8 +49,8 @@ state priority/FIFO 选择 runnable branch。一个 branch 仍表示一个可持
 自然研究方向，不用 host-authored diversity/mechanism gate 强制分流。Contract
 与 Verification 通过且 screening 完成后，`CONTINUE_EXPLORE`（包括 screening
 fail）在下一轮复用同一个 branch 的 verified provisional head：第二个 H 能看到
-上一轮 canonical screening evidence，第二个 C 能从 SourceLedger 看到该 branch
-已验证的当前源码。只有 Verification 失败才回退到最后一个 clean branch source，
+上一轮 canonical screening evidence，第二个 C 能从普通 path/content source
+mapping 看到该 branch 已验证的当前源码。只有 Verification 失败才回退到最后一个 clean branch source，
 从未验证成功的 branch 才回到 champion。这个设置不限制轮数、调用、token、
 文件或持续时间。
 
@@ -202,7 +202,7 @@ postrun 工具的流程已 superseded，不能执行或用作当前验收依据�
 
 ## 9. 从 H/C 到 Decision 的诊断顺序
 
-不要先从最后一个 reason code 猜原因。按所有权边界逐层检查。
+不要先从最后一个 reason code 猜原因。按职责边界逐层检查。
 
 ### 9.1 H/C proposal call event、trace 与 typed outcome
 
@@ -275,7 +275,7 @@ jq '.steps[] | {
 
 ### 9.4 Protocol
 
-Protocol 是 comparative scientific judgment 的唯一 owner。检查 stage、case/seed、
+Protocol 组件只负责 comparative scientific judgment。检查 stage、case/seed、
 attempted/valid/failed pairs、win/loss/tie、median delta、CI、runtime，以及
 `raw_metrics_ref`。不要从 provider 自由文本或诊断遥测重算 Decision。
 
@@ -311,8 +311,8 @@ Scheduler 只负责 branch state、priority/FIFO 和 active slot；若它改变 
 - `branch_id` 与上一轮相同；
 - 第二个 H 的 canonical `experiment_history` 恰好包含该 branch 的上一条
   screening evidence；
-- 第二个 C 的 `proposal_source_ledger` 对上一轮触及的文件使用
-  `branch_history_current` provenance；
+- 第二个 C 的 editable source context 对上一轮触及的文件使用 branch-current
+  path/content value；
 - 每个候选仍只有一次 H 和一次 C，不因同分支迭代增加隐式调用。
 
 当前 solver-improvement 验收不投资 campaign reopen。若 live campaign 无法在
@@ -388,7 +388,7 @@ control 的研究证据隔离。
 2. 记录 `git rev-parse HEAD`、实际 CLI 参数和 `run_status.json`；
 3. 读取 `run_status.json`、`campaign_summary.json` 与 CLI report 输出；
 4. 检查 append-only proposal-call 事件、typed outcome 与 H/C trace；
-5. 确认失败 owner：provider/infra、Contract、Verification、Protocol 或 Decision；
+5. 确认失败层：provider/infra、Contract、Verification、Protocol 或 Decision；
 6. 若需代码修复，修改完成后创建新的 campaign，不复用旧 campaign state；
 7. 只有操作员显式决定后才启动新的 invocation。
 

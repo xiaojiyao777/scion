@@ -10,6 +10,13 @@ from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.models import ExperimentStage, RunResult, SolverOutput
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.protocol.experiment.selection import resolve_case_path_details
+from scion.problem.spec import ObjectiveMetricSpec
+
+
+_METRIC_SPECS = (
+    ObjectiveMetricSpec(name="subcategory_splits", direction="minimize", priority=1),
+    ObjectiveMetricSpec(name="total_cost", direction="minimize", priority=2),
+)
 
 
 WAREHOUSE_CONFIG_DIR = (
@@ -23,7 +30,6 @@ def test_strict_protocol_rejects_unresolved_relative_case_path(tmp_path: Path) -
         runner,
         tmp_path,
         SplitManifest(version="test", screening=["missing.json"]),
-        strict_case_paths=True,
     )
 
     with pytest.raises(ValueError, match="unresolved_relative"):
@@ -47,7 +53,6 @@ def test_strict_protocol_rejects_absolute_case_path_outside_allowed_roots(
         runner,
         tmp_path,
         SplitManifest(version="test", screening=[str(outside_case)]),
-        strict_case_paths=True,
     )
 
     with pytest.raises(ValueError, match="absolute_outside_roots"):
@@ -81,7 +86,6 @@ def test_strict_protocol_resolves_relative_case_path_under_safe_data_root(
             screening=["cvrplib/A/A-n32-k5.vrp"],
             safe_data_roots=[str(data_root)],
         ),
-        strict_case_paths=True,
     )
 
     result = proto.run_experiment(
@@ -103,42 +107,6 @@ def test_strict_protocol_resolves_relative_case_path_under_safe_data_root(
         "champion:resolved_safe_data_root": 1,
         "candidate:resolved_safe_data_root": 1,
     }
-
-
-def test_protocol_raw_metrics_record_case_path_resolution_status(
-    tmp_path: Path,
-) -> None:
-    runner = MagicMock()
-    runner.run_solver.side_effect = [
-        _run_result(2, 1000),
-        _run_result(1, 900),
-    ]
-    proto = _protocol(
-        runner,
-        tmp_path,
-        SplitManifest(version="test", screening=["missing.json"]),
-        strict_case_paths=False,
-    )
-
-    result = proto.run_experiment(
-        ExperimentStage.SCREENING,
-        str(tmp_path / "candidate"),
-        str(tmp_path / "champion"),
-        "modify",
-    )
-
-    raw = json.loads(Path(result.raw_metrics_ref).read_text(encoding="utf-8"))
-    resolution = raw["case_path_resolution"]
-    assert resolution["strict"] is False
-    assert resolution["status_counts"] == {
-        "candidate:unresolved_relative": 1,
-        "champion:unresolved_relative": 1,
-    }
-    assert resolution["cases"]["missing.json"]["candidate"]["safe"] is False
-    assert (
-        resolution["cases"]["missing.json"]["champion"]["status"]
-        == "unresolved_relative"
-    )
 
 
 def test_warehouse_prod_canary_paths_run_under_strict_protocol(
@@ -184,7 +152,7 @@ def test_warehouse_prod_canary_paths_run_under_strict_protocol(
         runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        strict_case_paths=True,
+        metric_specs=_METRIC_SPECS,
     )
 
     result = proto.run_canary(
@@ -204,8 +172,6 @@ def _protocol(
     runner: MagicMock,
     tmp_path: Path,
     manifest: SplitManifest,
-    *,
-    strict_case_paths: bool,
 ) -> ExperimentProtocol:
     (tmp_path / "candidate").mkdir(exist_ok=True)
     (tmp_path / "champion").mkdir(exist_ok=True)
@@ -224,7 +190,7 @@ def _protocol(
         runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        strict_case_paths=strict_case_paths,
+        metric_specs=_METRIC_SPECS,
     )
 
 

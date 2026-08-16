@@ -74,11 +74,12 @@ def test_run_experiment_uses_protocol_stage_time_limit_override(tmp_path):
                 },
             },
         }),
-        split_manager=SplitManager(_make_manifest()),
+        split_manager=SplitManager(_make_strict_manifest(tmp_path)),
         seed_ledger=SeedLedger(_make_ledger()),
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
+        metric_specs=_METRIC_SPECS,
     )
 
     result = proto.run_experiment(
@@ -92,31 +93,6 @@ def test_run_experiment_uses_protocol_stage_time_limit_override(tmp_path):
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["time_limit_policy"]["resolved_unique_sec"] == [30]
     assert all(pair["time_limit_sec"] == 30 for pair in raw["pairs"])
-
-
-def test_explicit_legacy_protocol_marks_objective_semantics(tmp_path):
-    runner = MagicMock()
-    pair = [_make_run_result(2, 1000), _make_run_result(1, 900)]
-    runner.run_solver.side_effect = pair * 4
-    proto = ExperimentProtocol(
-        protocol_config=ProtocolConfig(),
-        split_manager=SplitManager(_make_manifest()),
-        seed_ledger=SeedLedger(_make_ledger()),
-        runner=runner,
-        time_limit_sec=10,
-        metrics_dir=str(tmp_path / "metrics"),
-        allow_legacy_objective_fallback=True,
-    )
-
-    result = proto.run_experiment(
-        ExperimentStage.SCREENING, "/cand", "/champ", "modify"
-    )
-
-    assert result.objective_semantics == "legacy_all_minimize"
-    assert "objective_semantics=legacy_all_minimize" in result.exposed_summary
-    raw = json.loads(open(result.raw_metrics_ref).read())
-    assert raw["objective_semantics"] == "legacy_all_minimize"
-    assert all(p["objective_semantics"] == "legacy_all_minimize" for p in raw["pairs"])
 
 
 def test_run_experiment_keeps_runtime_tie_as_diagnostic_only(tmp_path):

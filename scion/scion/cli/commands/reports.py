@@ -13,322 +13,6 @@ from scion.core.public_refs import public_artifact_ref
 
 
 def register_report_commands(report_app: typer.Typer) -> None:
-    @report_app.command("proposal-trajectory-manifest")
-    def report_proposal_trajectory_manifest(
-        campaign_dir: str = typer.Option(
-            ...,
-            "--campaign-dir",
-            help="Campaign directory containing durable proposal-attempt events",
-        ),
-        observed_control_arm: str = typer.Option(
-            ...,
-            "--observed-control-arm",
-            help="Observed measurement-control arm: on or record_only",
-        ),
-        output: str = typer.Option(
-            ...,
-            "--output",
-            "-o",
-            help="Write proposal trajectory manifest JSON to this path",
-        ),
-        control_pair_key: Optional[str] = typer.Option(
-            None,
-            "--control-pair-key",
-            help="Optional report-only key linking comparable control-pair manifests",
-        ),
-    ) -> None:
-        """Build a report-only proposal trajectory manifest."""
-        from scion.core.proposal_trajectory_artifacts import (
-            write_proposal_trajectory_manifest,
-        )
-
-        try:
-            manifest_path = write_proposal_trajectory_manifest(
-                campaign_dir,
-                observed_control_arm=observed_control_arm,
-                control_pair_key=control_pair_key,
-                output_path=output,
-            )
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            typer.echo(
-                f"ERROR: failed to build proposal trajectory manifest: {exc}",
-                err=True,
-            )
-            raise typer.Exit(code=1)
-
-        counts = manifest["counts"]
-        typer.echo(
-            json.dumps(
-                {
-                    "manifest_path": str(manifest_path),
-                    "schema_version": manifest["schema_version"],
-                    "attempt_count": counts["attempt_count"],
-                    "proposal_attempt_transition_count": counts[
-                        "proposal_attempt_transition_count"
-                    ],
-                    "formal_candidate_count": counts["formal_candidate_count"],
-                    "observed_control_arm": manifest["observed_control_arm"],
-                    "control_pair_key": manifest.get("control_pair_key", ""),
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
-
-    @report_app.command("proposal-trajectory-compare")
-    def report_proposal_trajectory_compare(
-        left: str = typer.Option(
-            ...,
-            "--left",
-            help="Left proposal trajectory manifest JSON path",
-        ),
-        right: str = typer.Option(
-            ...,
-            "--right",
-            help="Right proposal trajectory manifest JSON path",
-        ),
-        output: str = typer.Option(
-            ...,
-            "--output",
-            "-o",
-            help="Write proposal trajectory comparison JSON to this path",
-        ),
-    ) -> None:
-        """Compare two report-only proposal trajectory manifests."""
-        from scion.core.proposal_trajectory_artifacts import (
-            write_proposal_trajectory_comparison,
-        )
-
-        try:
-            comparison_path = write_proposal_trajectory_comparison(
-                left,
-                right,
-                output_path=output,
-            )
-            comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            typer.echo(
-                f"ERROR: failed to compare proposal trajectory manifests: {exc}",
-                err=True,
-            )
-            raise typer.Exit(code=1)
-
-        summary = comparison["summary"]
-        typer.echo(
-            json.dumps(
-                {
-                    "comparison_path": str(comparison_path),
-                    "schema_version": comparison["schema_version"],
-                    "observational_only": comparison["observational_only"],
-                    "left_attempt_count": summary["left"]["attempt_count"],
-                    "right_attempt_count": summary["right"]["attempt_count"],
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
-
-    @report_app.command("fixed-candidate-replay-manifest")
-    def report_fixed_candidate_replay_manifest(
-        source: str = typer.Option(
-            ...,
-            "--source",
-            help="Source campaign directory or formal_candidates/index.jsonl",
-        ),
-        source_arm: str = typer.Option(
-            ...,
-            "--source-arm",
-            help="Source evaluation arm; eval-only fixed replay accepts on",
-        ),
-        comparison_id: str = typer.Option(
-            ...,
-            "--comparison-id",
-            help="Label for this eval-only replay",
-        ),
-        output: Optional[str] = typer.Option(
-            None,
-            "--output",
-            "-o",
-            help="Write manifest to this path",
-        ),
-        max_candidates: Optional[int] = typer.Option(
-            None,
-            "--max-candidates",
-            help="Maximum number of eligible candidates to include",
-        ),
-        candidate_id: Optional[list[str]] = typer.Option(
-            None,
-            "--candidate-id",
-            help="Candidate id to include; may be supplied multiple times",
-        ),
-        hypothesis_id: Optional[list[str]] = typer.Option(
-            None,
-            "--hypothesis-id",
-            help="Hypothesis id to include; may be supplied multiple times",
-        ),
-        stage: Optional[list[str]] = typer.Option(
-            None,
-            "--stage",
-            help=(
-                "Replay stage to include: screening, validation, or frozen; "
-                "may be supplied multiple times. Defaults to screening."
-            ),
-        ),
-        replay_arm: Optional[list[str]] = typer.Option(
-            None,
-            "--replay-arm",
-            help=(
-                "Evaluation arm to run; eval-only fixed replay accepts one on arm"
-            ),
-        ),
-        conditional_stages: bool = typer.Option(
-            False,
-            "--conditional-stages",
-            help="Run each requested stage only when the preceding stage passes",
-        ),
-        expand_screening: bool = typer.Option(
-            False,
-            "--expand-screening",
-            help="Use the expanded screening population for screening rows",
-        ),
-    ) -> None:
-        """Build a fixed-candidate replay manifest from formal artifacts."""
-        from scion.core.fixed_candidate_replay import (
-            write_fixed_candidate_replay_manifest,
-        )
-
-        try:
-            manifest_path = write_fixed_candidate_replay_manifest(
-                source,
-                source_arm=source_arm,
-                comparison_id=comparison_id,
-                output_path=output,
-                max_candidates=max_candidates,
-                candidate_ids=candidate_id,
-                hypothesis_ids=hypothesis_id,
-                stages=stage,
-                replay_arms=replay_arm,
-                conditional_stage_progression=conditional_stages,
-                expand_screening=expand_screening,
-            )
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            typer.echo(
-                f"ERROR: failed to build fixed-candidate replay manifest: {exc}",
-                err=True,
-            )
-            raise typer.Exit(code=1)
-
-        typer.echo(
-            json.dumps(
-                {
-                    "manifest_path": str(manifest_path),
-                    "candidate_count": manifest["candidate_count"],
-                    "filtered_out_row_count": manifest.get("filtered_out_row_count", 0),
-                    "omitted_row_count": len(manifest["omitted_rows"]),
-                    "stage_filter": manifest.get("stage_filter", []),
-                    "replay_arms": manifest.get("replay_arms", []),
-                    "conditional_stage_progression": manifest.get(
-                        "conditional_stage_progression", False
-                    ),
-                    "expand_screening": manifest.get("expand_screening", False),
-                    "schema_version": manifest["schema_version"],
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
-
-    @report_app.command("fixed-candidate-replay")
-    def report_fixed_candidate_replay(
-        manifest: str = typer.Option(
-            ...,
-            "--manifest",
-            help="fixed_candidate_replay_manifest.v1 JSON path",
-        ),
-        problem: str = typer.Option(
-            ...,
-            "--problem",
-            help="ProblemSpecV1 YAML path",
-        ),
-        output_dir: str = typer.Option(
-            ...,
-            "--output-dir",
-            help="Directory for materialized workspaces, metrics, and comparison JSON",
-        ),
-        protocol: Optional[str] = typer.Option(
-            None,
-            "--protocol",
-            help="protocol.yaml path; defaults to problem directory protocol.yaml",
-        ),
-        split: Optional[str] = typer.Option(
-            None,
-            "--split",
-            help="split_manifest.yaml path; defaults to problem directory split_manifest.yaml",
-        ),
-        seeds: Optional[str] = typer.Option(
-            None,
-            "--seeds",
-            help="seed_ledger.yaml path; defaults to problem directory seed_ledger.yaml",
-        ),
-        max_candidates: Optional[int] = typer.Option(
-            None,
-            "--max-candidates",
-            help="Maximum number of manifest candidates to replay",
-        ),
-        time_limit_sec: Optional[int] = typer.Option(
-            None,
-            "--time-limit-sec",
-            help="Solver subprocess time limit in seconds",
-        ),
-        output: Optional[str] = typer.Option(
-            None,
-            "--output",
-            "-o",
-            help="Comparison JSON path; defaults under output-dir",
-        ),
-    ) -> None:
-        """Run posthoc fixed-candidate replay for manifest stages and arms."""
-        from scion.core.fixed_candidate_replay import execute_fixed_candidate_replay
-
-        try:
-            comparison_path = execute_fixed_candidate_replay(
-                manifest,
-                problem_yaml_path=problem,
-                output_dir=output_dir,
-                protocol_path=protocol,
-                split_path=split,
-                seeds_path=seeds,
-                max_candidates=max_candidates,
-                time_limit_sec=time_limit_sec,
-                comparison_output_path=output,
-            )
-            comparison = json.loads(comparison_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            typer.echo(
-                f"ERROR: failed to execute fixed-candidate replay: {exc}",
-                err=True,
-            )
-            raise typer.Exit(code=1)
-
-        error_count = sum(
-            1 for row in comparison.get("rows", []) if row.get("status") == "error"
-        )
-        typer.echo(
-            json.dumps(
-                {
-                    "comparison_path": str(comparison_path),
-                    "candidate_count": comparison["candidate_count"],
-                    "row_count": comparison["row_count"],
-                    "error_count": error_count,
-                    "schema_version": comparison["schema_version"],
-                },
-                indent=2,
-                sort_keys=True,
-            )
-        )
-
     @report_app.command("champion-heldout-comparison")
     def report_champion_heldout_comparison(
         manifest: str = typer.Option(..., "--manifest"),
@@ -378,8 +62,11 @@ def register_report_commands(report_app: typer.Typer) -> None:
         """Campaign summary: rounds, champion version, and gate intercept rates."""
         campaign_path = Path(campaign_dir).resolve()
         db_path = campaign_path / "scion.db"
-        state_file = campaign_path / ".scion_state.json"
-        meta = json.loads(state_file.read_text()) if state_file.exists() else {}
+        summary_file = campaign_path / "campaign_summary.json"
+        try:
+            meta = json.loads(summary_file.read_text()) if summary_file.exists() else {}
+        except (OSError, ValueError):
+            meta = {}
 
         if db_path.exists():
             from scion.lineage.registry import LineageRegistry
@@ -387,7 +74,6 @@ def register_report_commands(report_app: typer.Typer) -> None:
             registry = LineageRegistry(str(db_path))
             db_summary = registry.get_campaign_summary()
             total_events = db_summary.get("total_events", 0)
-            n_champions = db_summary.get("n_champions", 0)
             contract_failures = db_summary.get("contract_failures", 0)
             verification_failures = db_summary.get("verification_failures", 0)
             gate_outcome_events = db_summary.get("gate_outcome_events", total_events)
@@ -403,13 +89,11 @@ def register_report_commands(report_app: typer.Typer) -> None:
             screening_rate_fields = {
                 key: db_summary.get(key)
                 for key in (
-                    "screening_win_rate_scope",
                     "screening_case_wins",
                     "screening_case_losses",
                     "screening_case_ties",
                     "screening_case_total",
                     "screening_case_win_rate",
-                    "screening_gate_win_rate",
                     "screening_pair_wins",
                     "screening_pair_losses",
                     "screening_pair_ties",
@@ -417,17 +101,6 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "screening_pair_win_rate",
                 )
             }
-
-            import sqlite3 as _sqlite3
-
-            family_dist: dict = {}
-            with _sqlite3.connect(str(db_path)) as conn:
-                for row in conn.execute(
-                    "SELECT change_locus, COUNT(*) FROM hypotheses "
-                    "WHERE change_locus IS NOT NULL "
-                    "GROUP BY change_locus ORDER BY 2 DESC"
-                ).fetchall():
-                    family_dist[row[0]] = row[1]
 
             weight_opt_records = registry.query_weight_optimizations()
             weight_opt_summary = None
@@ -445,17 +118,16 @@ def register_report_commands(report_app: typer.Typer) -> None:
             vfail_breakdown: dict = {}
             all_failures = registry.query_failures()
             for evt in all_failures:
-                if evt.get("verification_result") == "failed":
-                    stage = evt.get("failure_code") or "unknown"
+                if evt.get("event_kind") == "verification_fail":
+                    stage = evt.get("reason_code") or "unknown"
                     vfail_breakdown[stage] = vfail_breakdown.get(stage, 0) + 1
         else:
-            total_events = n_champions = contract_failures = verification_failures = 0
+            total_events = contract_failures = verification_failures = 0
             gate_outcome_events = 0
             contract_gate_outcome_events = 0
             verification_gate_outcome_events = 0
             by_decision = {}
             screening_rate_fields = {}
-            family_dist = {}
             weight_opt_summary = None
             vfail_breakdown = {}
 
@@ -478,6 +150,7 @@ def register_report_commands(report_app: typer.Typer) -> None:
             round(screening_pass / screening_total, 4) if screening_total > 0 else 0.0
         )
         promoted = by_decision.get("promote", 0)
+        latest_champion_version = 1 + promoted if db_path.exists() else 0
 
         report = {
             "campaign_dir": public_artifact_ref(
@@ -491,13 +164,12 @@ def register_report_commands(report_app: typer.Typer) -> None:
             "contract_gate_outcome_events": contract_gate_outcome_events,
             "verification_gate_outcome_events": verification_gate_outcome_events,
             "champion_promotions": promoted,
-            "latest_champion_version": n_champions,
+            "latest_champion_version": latest_champion_version,
             "contract_intercept_rate": c_intercept,
             "verification_intercept_rate": v_intercept,
             "screening_pass_rate": screening_pass_rate,
             **screening_rate_fields,
             "by_decision": by_decision,
-            "family_distribution": family_dist,
             "verification_failure_breakdown": vfail_breakdown,
             "weight_optimization": weight_opt_summary,
         }
@@ -507,14 +179,13 @@ def register_report_commands(report_app: typer.Typer) -> None:
                 meta=meta,
                 total_events=total_events,
                 promoted=promoted,
-                n_champions=n_champions,
+                latest_champion_version=latest_champion_version,
                 c_intercept=c_intercept,
                 v_intercept=v_intercept,
                 contract_gate_outcome_events=contract_gate_outcome_events,
                 verification_gate_outcome_events=verification_gate_outcome_events,
                 screening_pass_rate=screening_pass_rate,
                 screening_rate_fields=screening_rate_fields,
-                family_dist=family_dist,
                 vfail_breakdown=vfail_breakdown,
                 weight_opt_summary=weight_opt_summary,
             )
@@ -552,16 +223,15 @@ def register_report_commands(report_app: typer.Typer) -> None:
 
         by_type: dict = {}
         for evt in all_failures:
-            contract_failed = evt.get("contract_result") == "failed"
-            verification_failed = evt.get("verification_result") == "failed"
-            failure_code = evt.get("failure_code") or ""
+            event_kind = evt.get("event_kind")
+            reason_code = evt.get("reason_code") or ""
 
-            if contract_failed:
+            if event_kind == "contract_fail":
                 key = "contract"
-            elif verification_failed:
+            elif event_kind == "verification_fail":
                 key = (
-                    f"verification:{failure_code}"
-                    if failure_code
+                    f"verification:{reason_code}"
+                    if reason_code
                     else "verification"
                 )
             else:
@@ -578,14 +248,10 @@ def register_report_commands(report_app: typer.Typer) -> None:
                     "branch_id": e.get("branch_id"),
                     "timestamp": e.get("timestamp"),
                     "event_kind": e.get("event_kind"),
-                    "contract_result": e.get("contract_result"),
-                    "verification_result": e.get("verification_result"),
-                    "failure_detail": (
-                        e.get("failure_detail") or e.get("execution_outcome_detail")
-                    ),
-                    "failure_code": e.get("failure_code"),
-                    "failed_check": e.get("failed_check"),
-                    "decision": e.get("decision"),
+                    "outcome": e.get("outcome"),
+                    "stage": e.get("stage"),
+                    "reason_code": e.get("reason_code"),
+                    "detail": e.get("detail"),
                 }
                 for e in all_failures
             ],
@@ -604,14 +270,13 @@ def _summary_report_markdown(
     meta: dict,
     total_events: int,
     promoted: int,
-    n_champions: int,
+    latest_champion_version: int,
     c_intercept: float,
     v_intercept: float,
     contract_gate_outcome_events: int,
     verification_gate_outcome_events: int,
     screening_pass_rate: float,
     screening_rate_fields: dict,
-    family_dist: dict,
     vfail_breakdown: dict,
     weight_opt_summary: dict | None,
 ) -> str:
@@ -621,7 +286,7 @@ def _summary_report_markdown(
         "## Overview",
         f"- Total experiments: {total_events}",
         f"- Champion promotions: {promoted}",
-        f"- Latest champion version: {n_champions}",
+        f"- Latest champion version: {latest_champion_version}",
         (
             f"- Contract intercept rate: {c_intercept:.1%} "
             f"({contract_gate_outcome_events} opportunities)"
@@ -644,11 +309,6 @@ def _summary_report_markdown(
         ),
         "",
     ]
-    if family_dist:
-        lines.append("## Hypothesis Family Distribution")
-        for fam, cnt in family_dist.items():
-            lines.append(f"- {fam}: {cnt}")
-        lines.append("")
     if vfail_breakdown:
         lines.append("## Verification Failure Breakdown")
         for reason, cnt in sorted(vfail_breakdown.items(), key=lambda x: -x[1]):

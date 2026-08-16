@@ -59,8 +59,12 @@ def test_report_requires_cases_from_the_explicit_data_root(tmp_path: Path) -> No
     assert report["declared_case_count"] == 2
     assert report["missing_cases"] == []
     assert report["missing_companions"] == []
-    assert report["identity_file_count"] == 3
-    assert len(str(report["identity_sha256"])) == 64
+    assert report["checked_file_count"] == 3
+    assert report["checked_files"] == [
+        "cvrplib/A/unit.vrp",
+        "cvrplib/A/unit.sol",
+        "controlled/data/canary.vrp",
+    ]
 
 
 def test_report_fails_when_the_explicit_data_root_is_missing(tmp_path: Path) -> None:
@@ -93,31 +97,3 @@ def test_report_requires_external_solution_companion(tmp_path: Path) -> None:
     assert report["ok"] is False
     assert report["missing_cases"] == []
     assert report["missing_companions"] == ["cvrplib/A/unit.sol"]
-
-
-def test_main_fails_closed_when_expected_identity_changes(
-    tmp_path: Path,
-    capsys,
-) -> None:
-    tool = _load_tool_module()
-    problem, split, data_root = _write_specs(tmp_path)
-    instance = data_root / "cvrplib" / "A" / "unit.vrp"
-    instance.parent.mkdir(parents=True)
-    instance.write_text("NAME : unit\n", encoding="utf-8")
-    instance.with_suffix(".sol").write_text("Cost 1\n", encoding="utf-8")
-
-    status = tool.main(
-        [
-            "--problem",
-            str(problem),
-            "--split",
-            str(split),
-            "--data-root",
-            str(data_root),
-            "--expected-identity-sha256",
-            "0" * 64,
-        ]
-    )
-
-    assert status == tool.FAILURE_EXIT
-    assert '"identity_matches_expected": false' in capsys.readouterr().out

@@ -57,12 +57,7 @@ def test_exact_line_replace_replays_relative_block_at_every_outer_indent() -> No
         "\t\tif elapsed < 1.0:\n"
         "\t\t    annealing.update(elapsed)\n"
     )
-    attribution = next(
-        item
-        for item in patch.repair_attribution
-        if item.get("edit_intent") == "exact_line_replace"
-    )
-    assert attribution["selector_match_count"] == 2
+    assert not hasattr(patch, "repair_attribution")
 
 
 def test_exact_line_replace_requires_unique_match_unless_replace_all() -> None:
@@ -196,7 +191,7 @@ def test_exact_line_replace_matches_snapshot_without_recursing_into_replacement(
     assert patch.code_content.count("annealing.cool()") == 1
 
 
-def test_exact_line_replace_serially_composes_with_exact_replace() -> None:
+def test_exact_line_replace_rejects_duplicate_same_file_change() -> None:
     source = "def solve():\n    annealing.cool()\n    return best\n"
     raw = _change(new_string="annealing.update(elapsed)")
     raw["additional_changes"] = [
@@ -211,21 +206,11 @@ def test_exact_line_replace_serially_composes_with_exact_replace() -> None:
         }
     ]
 
-    patch = _parse_patch(raw, context=_context(source))
-
-    assert patch.code_content == (
-        "def solve():\n    annealing.update(elapsed)\n    return incumbent\n"
-    )
-    composition = next(
-        item
-        for item in patch.repair_attribution
-        if item.get("action") == "composed_serial_local_edit_changes"
-    )
-    assert composition["root_cause"] == "serial_same_file_local_edits"
-    assert composition["merged_change_count"] == 2
+    with pytest.raises(ProposalValidationError, match="duplicate file_path"):
+        _parse_patch(raw, context=_context(source))
 
 
-def test_exact_replace_line_replace_exact_replace_compose_in_order() -> None:
+def test_three_same_file_changes_are_rejected_instead_of_composed() -> None:
     source = "def solve():\n    annealing.cool()\n    return best\n"
     raw: dict[str, object] = {
         "file_path": "solver.py",
@@ -249,26 +234,11 @@ def test_exact_replace_line_replace_exact_replace_compose_in_order() -> None:
         ],
     }
 
-    patch = _parse_patch(raw, context=_context(source))
-
-    assert patch.code_content == (
-        "def solve(budget):\n"
-        "    annealing.update(budget.fraction())\n"
-        "    return incumbent\n"
-    )
-    composition = next(
-        item
-        for item in patch.repair_attribution
-        if item.get("action") == "composed_serial_local_edit_changes"
-    )
-    assert composition["source_json_pointers"] == [
-        "/",
-        "/additional_changes/0",
-        "/additional_changes/1",
-    ]
+    with pytest.raises(ProposalValidationError, match="duplicate file_path"):
+        _parse_patch(raw, context=_context(source))
 
 
-def test_serial_line_replace_miss_reports_prior_same_file_context() -> None:
+def test_duplicate_path_fails_before_second_selector_is_considered() -> None:
     source = "def solve():\n    annealing.cool()\n"
     raw: dict[str, object] = {
         "file_path": "solver.py",
@@ -282,7 +252,7 @@ def test_serial_line_replace_miss_reports_prior_same_file_context() -> None:
 
     with pytest.raises(
         ProposalValidationError,
-        match="exact_line_replace_not_serializable",
+        match="duplicate file_path",
     ):
         _parse_patch(raw, context=_context(source))
 

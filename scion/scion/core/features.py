@@ -4,36 +4,21 @@ from math import isfinite
 from typing import Any, Optional, Tuple, get_args
 
 from scion.core.models import (
-    Branch, BranchState, ContractResult, VerificationResult,
+    BranchState, ContractResult, VerificationResult,
     CanaryResult, ProtocolResult, DecisionFeatures,
     DecisionRuntimeEvidenceConfidence, DecisionRuntimeEvidenceStatus,
 )
 from scion.core.screening_visibility import runtime_confidence_for_protocol
 
 
-# Failure taxonomy — two layers, both allowed in branch.failure_codes / DecisionFeatures.
-#
-# Layer 1: raw failure category (what pipeline stage the failure happened in).
-# These are what campaign._handle_failure pushes (uppercased from FailureEvent.category).
-_RAW_CATEGORIES = frozenset({
-    "PROPOSAL", "CONTRACT",
-    "VERIFICATION_LIGHT", "VERIFICATION_HEAVY",
-    "EVALUATION", "INFRA", "SEARCH_GUIDANCE",
-})
-# Layer 2: normalized check / outcome codes. Used by some legacy lineage paths
-# and by protocol outcomes. Kept for backward compatibility — v0.3 doesn't push
-# these from _handle_failure, but lineage_store / tests may carry them.
-_NORMALIZED_CODES = frozenset({
+# Normalized verification and Protocol values accepted by DecisionFeatures.
+KNOWN_FAILURE_CODES = frozenset({
     "SYNTAX", "INTERFACE", "UNIT_TEST", "REGRESSION",
     "FEASIBILITY", "OBJECTIVE", "SOLUTION_CONSISTENCY", "STATE_LEAK",
     "WALL_CLOCK", "NONDETERMINISM",
     "CANARY_FAIL", "SCREENING_FAIL", "VALIDATION_FAIL", "FROZEN_FAIL",
 })
-KNOWN_FAILURE_CODES = _RAW_CATEGORIES | _NORMALIZED_CODES
 
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-)
 _METRIC_ID_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,79}$")
 RUNTIME_EVIDENCE_CONFIDENCE_VALUES = frozenset(
     get_args(DecisionRuntimeEvidenceConfidence)
@@ -118,10 +103,14 @@ def _branch_state_to_stage(state: BranchState) -> str:
 class SafeFeatureExtractor:
     def extract(
         self,
-        branch: Branch,
+        *,
+        branch_state: BranchState,
+        screening_expand_count: int,
+        validation_expand_count: int,
+        failure_codes: tuple[str, ...],
         hypothesis_action: str,
-        contract: ContractResult,
-        verification: VerificationResult,
+        contract: ContractResult | bool,
+        verification: VerificationResult | bool,
         canary: CanaryResult,
         protocol: Optional[ProtocolResult],
     ) -> DecisionFeatures:
@@ -129,7 +118,7 @@ class SafeFeatureExtractor:
         Extract DecisionFeatures from raw stage results.
         All fields are numeric/enum — no free text.
         """
-        stage = _branch_state_to_stage(branch.state)
+        stage = _branch_state_to_stage(branch_state)
 
         win_rate: Optional[float] = None
         median_delta: Optional[float] = None
@@ -212,17 +201,20 @@ class SafeFeatureExtractor:
                 pair_ties = len(pair_feedback) - pair_wins - pair_losses
 
         recent_failure_codes: Tuple[str, ...] = tuple(
-            c for c in branch.failure_codes if c in KNOWN_FAILURE_CODES
+            c for c in failure_codes if c in KNOWN_FAILURE_CODES
         )
         runtime_guard_passed, runtime_guard_ratio, runtime_guard_timeout = (
             _extract_runtime_guard(verification)
         )
         features = DecisionFeatures(
-            branch_id=branch.branch_id,
             hypothesis_action=hypothesis_action,  # type: ignore[arg-type]
             stage=stage,  # type: ignore[arg-type]
-            contract_passed=contract.passed,
-            verification_passed=verification.passed,
+            contract_passed=(contract if isinstance(contract, bool) else contract.passed),
+            verification_passed=(
+                verification
+                if isinstance(verification, bool)
+                else verification.passed
+            ),
             canary_passed=canary.passed,
             n_cases=n_cases,
             wins=wins,
@@ -234,9 +226,9 @@ class SafeFeatureExtractor:
             ci_high=ci_high,
             statistical_status=statistical_status,
             statistical_metric=statistical_metric,
-            stale=branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE),
-            screening_expand_count=branch.screening_expand_count,
-            validation_expand_count=branch.validation_expand_count,
+            stale=branch_state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE),
+            screening_expand_count=screening_expand_count,
+            validation_expand_count=validation_expand_count,
             recent_failure_codes=recent_failure_codes,
             runtime_guard_passed=runtime_guard_passed,
             runtime_guard_ratio=runtime_guard_ratio,
@@ -269,10 +261,6 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
     Runtime invariant: DecisionFeatures must not carry free text.
     Raises DecisionInputGuardError if violated.
     """
-    if not _UUID_RE.match(features.branch_id):
-        raise DecisionInputGuardError(
-            f"branch_id is not a valid UUID: {features.branch_id!r}"
-        )
     if features.hypothesis_action not in ("modify", "create_new", "remove"):
         raise DecisionInputGuardError(
             f"hypothesis_action is not a known enum: {features.hypothesis_action!r}"
@@ -395,9 +383,11 @@ def _declared_statistical_metric_id(stats: Any) -> str | None:
 
 
 def _extract_runtime_guard(
-    verification: VerificationResult,
+    verification: VerificationResult | bool,
 ) -> tuple[Optional[bool], Optional[float], bool]:
     """Extract structured V9 facts for DecisionFeatures without free text."""
+    if isinstance(verification, bool):
+        return None, None, False
     for check in verification.checks:
         if check.name != "V9_perf_guard":
             continue

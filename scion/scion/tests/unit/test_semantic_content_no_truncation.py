@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from scion.contract.gate import _syntax_source_detail
-from scion.core.evidence_recording.artifact_refs import _audit_check_detail
-from scion.core.evidence_recording.lineage import _lineage_error
 from scion.protocol.experiment.failures import (
     _format_runtime_failure_categories,
     _runtime_failure_summary,
@@ -38,8 +36,6 @@ def test_semantic_text_and_collections_preserve_long_tail() -> None:
         component="solver",
         detail_summary=long_text,
     )["detail_summary"] == long_text
-    assert _lineage_error(RuntimeError(long_text))["message"] == long_text
-    assert _audit_check_detail(long_text) == long_text
 
 
 def test_semantic_lists_and_rendered_details_preserve_every_item() -> None:

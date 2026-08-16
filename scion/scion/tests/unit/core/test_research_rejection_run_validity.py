@@ -1,105 +1,54 @@
-from __future__ import annotations
-
 from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.run_validity import (
-    RUN_VALIDITY_INVALID_RESEARCH_REJECTED_ONLY,
+    RUN_VALIDITY_INVALID_NO_EVALUATED_OUTCOME,
+    RUN_VALIDITY_PENDING,
     RUN_VALIDITY_VALID,
-    RUN_VALIDITY_VALID_BUT_INCOMPLETE,
-    build_run_validity,
+    RUN_VALIDITY_VALID_INCOMPLETE,
+    classify_run_validity,
 )
 
 
-def _counts(*, evaluated: int, rejected: int) -> dict[str, int]:
-    return {
-        ExecutionOutcome.EVALUATED.value: evaluated,
-        ExecutionOutcome.RESEARCH_REJECTED.value: rejected,
+def _counts(**overrides: int) -> dict[str, int]:
+    counts = {outcome.value: 0 for outcome in ExecutionOutcome}
+    counts.update(overrides)
+    return counts
+
+
+def test_running_result_is_pending() -> None:
+    assert classify_run_validity(
+        terminal=False,
+        completed=False,
+        execution_outcome_counts=_counts(),
+    ) == {"status": "pending", "reason": RUN_VALIDITY_PENDING, "valid": None}
+
+
+def test_completed_evaluated_result_is_valid() -> None:
+    assert classify_run_validity(
+        terminal=True,
+        completed=True,
+        execution_outcome_counts=_counts(evaluated=2),
+    ) == {"status": "valid", "reason": RUN_VALIDITY_VALID, "valid": True}
+
+
+def test_partial_evaluated_result_is_valid_incomplete() -> None:
+    assert classify_run_validity(
+        terminal=True,
+        completed=False,
+        execution_outcome_counts=_counts(evaluated=1, interrupted=1),
+    ) == {
+        "status": "valid",
+        "reason": RUN_VALIDITY_VALID_INCOMPLETE,
+        "valid": True,
     }
 
 
-def test_formal_target_with_prior_committed_rejection_is_valid_complete() -> None:
-    validity = build_run_validity(
-        requested_rounds=1,
-        effective_rounds_completed=1,
-        n_experiments=1,
-        protocol_metric_results=1,
-        proposal_attempts=2,
-        execution_outcome_counts=_counts(evaluated=1, rejected=1),
-        committed_research_rejections=1,
-        stopped_reason="requested_rounds_completed",
-    )
-
-    assert validity["status"] == "valid"
-    assert validity["reason"] == RUN_VALIDITY_VALID
-    assert validity["complete"] is True
-    assert validity["blocking_non_evaluated_count"] == 0
-
-
-def test_loop_audit_cannot_increase_typed_rejection_count() -> None:
-    validity = build_run_validity(
-        requested_rounds=1,
-        effective_rounds_completed=1,
-        n_experiments=1,
-        protocol_metric_results=1,
-        proposal_attempts=3,
-        execution_outcome_counts=_counts(evaluated=1, rejected=1),
-        committed_research_rejections=2,
-        stopped_reason="requested_rounds_completed",
-    )
-
-    assert validity["execution_outcome_counts"]["evaluated"] == 1
-    assert validity["execution_outcome_counts"]["research_rejected"] == 1
-    assert validity["committed_scheduler_forward_rejections"] == 1
-    assert validity["blocking_non_evaluated_count"] == 0
-
-
-def test_formal_target_is_complete_despite_candidate_local_rejection() -> None:
-    validity = build_run_validity(
-        requested_rounds=12,
-        effective_rounds_completed=12,
-        n_experiments=12,
-        protocol_metric_results=12,
-        proposal_attempts=13,
-        execution_outcome_counts=_counts(evaluated=12, rejected=1),
-        stopped_reason="requested_rounds_completed",
-    )
-
-    assert validity["status"] == "valid"
-    assert validity["reason"] == RUN_VALIDITY_VALID
-    assert validity["complete"] is True
-    assert validity["completeness_status"] == "complete"
-    assert validity["blocking_non_evaluated_count"] == 1
-
-
-def test_committed_rejection_without_evaluation_remains_invalid() -> None:
-    validity = build_run_validity(
-        requested_rounds=1,
-        effective_rounds_completed=0,
-        n_experiments=0,
-        protocol_metric_results=0,
-        proposal_attempts=1,
-        execution_outcome_counts=_counts(evaluated=0, rejected=1),
-        committed_research_rejections=1,
-        stopped_reason="operator_requested",
-    )
-
-    assert validity["status"] == "invalid"
-    assert validity["reason"] == RUN_VALIDITY_INVALID_RESEARCH_REJECTED_ONLY
-    assert validity["complete"] is False
-
-
-def test_operator_stop_after_evaluation_before_target_is_valid_incomplete() -> None:
-    validity = build_run_validity(
-        requested_rounds=2,
-        effective_rounds_completed=1,
-        n_experiments=1,
-        protocol_metric_results=1,
-        proposal_attempts=2,
-        execution_outcome_counts=_counts(evaluated=1, rejected=1),
-        committed_research_rejections=1,
-        stopped_reason="operator_requested",
-    )
-
-    assert validity["status"] == "valid"
-    assert validity["reason"] == RUN_VALIDITY_VALID_BUT_INCOMPLETE
-    assert validity["complete"] is False
-    assert validity["completeness_status"] == "incomplete"
+def test_non_evaluated_outcomes_are_not_reclassified_from_reason_text() -> None:
+    assert classify_run_validity(
+        terminal=True,
+        completed=False,
+        execution_outcome_counts=_counts(research_rejected=3),
+    ) == {
+        "status": "invalid",
+        "reason": RUN_VALIDITY_INVALID_NO_EVALUATED_OUTCOME,
+        "valid": False,
+    }

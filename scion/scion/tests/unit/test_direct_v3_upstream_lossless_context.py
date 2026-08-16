@@ -4,8 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-
-from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
     Branch,
     BranchState,
@@ -26,23 +25,19 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problem.loader import load_problem_adapter
-from scion.problems.cvrp.research_guidance import CROSS_CAMPAIGN_RESEARCH_PRIOR
-from scion.problems.warehouse_delivery.research_guidance import (
+from scion.problems.cvrp.adapter import CROSS_CAMPAIGN_RESEARCH_PRIOR
+from scion.problems.warehouse_delivery.adapter import (
     WAREHOUSE_PRODUCTION_RESEARCH_PRIOR,
 )
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.history_projection import (
     proposal_screening_history,
-    verification_failure_projection,
 )
 from scion.proposal.context_manager.manager import (
-    CANONICAL_SCREENING_HISTORY_KEY,
     _screening_projection,
-    canonical_screening_history,
-    canonical_screening_record,
-    persist_canonical_screening_record,
+    screening_record,
 )
-from scion.proposal.context_owner_maps import proposal_context_snapshot
+from scion.proposal.context_snapshot import freeze_proposal_context
 from scion.proposal.engine import (
     _parse_hypothesis,
     _split_code_context,
@@ -64,15 +59,12 @@ def _runtime(problem_id: str):
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="champion-config",
         code_snapshot_path=legacy.root_dir,
-        code_snapshot_hash="champion-code",
     )
     branch = Branch(
         branch_id=f"direct-{problem_id}",
         state=BranchState.EXPLORE,
         base_champion_id=1,
-        base_champion_hash="champion-code",
     )
     return spec, legacy, adapter, champion, branch
 
@@ -128,7 +120,7 @@ def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
         problem_spec=legacy,
     )
     h_blocks, h_user = _split_hypothesis_context(
-        proposal_context_snapshot("hypothesis", h_context).inputs.provider_context(
+        freeze_proposal_context("hypothesis", h_context).provider_context(
             include_renderer_inputs=True
         )
     )
@@ -161,7 +153,7 @@ def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
         legacy,
     )
     c_blocks, c_user = _split_code_context(
-        proposal_context_snapshot("code", c_context).inputs.provider_context(
+        freeze_proposal_context("code", c_context).provider_context(
             include_renderer_inputs=True
         )
     )
@@ -300,7 +292,6 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="attempt-screening-1",
     )
     pre_protocol = StepRecord(
         round_num=2,
@@ -338,9 +329,9 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         problem_spec=legacy,
         step_history=[screening, pre_protocol],
     )
-    snapshot = proposal_context_snapshot("hypothesis", context)
+    snapshot = freeze_proposal_context("hypothesis", context)
     blocks, user_prompt = _split_hypothesis_context(
-        snapshot.inputs.provider_context(include_renderer_inputs=True)
+        snapshot.provider_context(include_renderer_inputs=True)
     )
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
 
@@ -358,7 +349,13 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         "case_outcomes",
         "runtime_errors",
     }
-    assert evidence["candidate_composition"] == {
+    composition = evidence["candidate_composition"]
+    assert not composition.get("current_step")
+    assert {
+        key: value
+        for key, value in composition.items()
+        if key != "current_step"
+    } == {
         "attribution_scope": "cumulative_branch_candidate",
         "protocol_comparison_scope": "candidate_vs_champion",
         "evaluation_candidate": "reused_verified_branch_state",
@@ -373,6 +370,9 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert evidence["experiment_evidence"]["decision_outcome"] == {
         "decision": "continue_explore",
     }
+    assert evidence["experiment_evidence"]["runtime_errors"] == {
+        "categories": {"crash": 1}
+    }
     aggregation = evidence["experiment_evidence"]["objective_outcome"]["aggregation"]
     assert aggregation["statistical_unit"] == "case"
     assert aggregation["win_rate_scope"] == "case_level_gate"
@@ -384,7 +384,7 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert "pair_median_delta" not in aggregation
     assert objective_tail in rendered
     assert "case-visible" not in rendered
-    assert runtime_error_tail in rendered
+    assert runtime_error_tail not in rendered
     assert safe_diagnostic in rendered
     assert hidden_phase_telemetry not in rendered
     assert pre_protocol_noise not in rendered
@@ -394,22 +394,15 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert "champion-code" not in rendered
     assert "champion-config" not in rendered
     research_question = context["research_question"]
-    assert research_question["schema_version"] == ("scion.typed_research_question.v2")
-    expected_research_question_fields = {
-        "schema_version",
-        "problem_family",
-        "current_question",
-    }
     expected_prior = (
         CROSS_CAMPAIGN_RESEARCH_PRIOR
         if problem_id == "cvrp"
         else WAREHOUSE_PRODUCTION_RESEARCH_PRIOR
     )
-    expected_research_question_fields.add("research_prior")
     assert research_question["research_prior"] == list(expected_prior)
     for line in expected_prior:
         assert rendered.count(line) == 1
-    assert set(research_question) == expected_research_question_fields
+    assert research_question["current_question"]
     assert "report_only" not in rendered
     assert "branch_direction" not in context
     assert branch.direction not in rendered
@@ -439,52 +432,12 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         assert forbidden not in lowered
 
 
-def test_fresh_h_receives_only_compact_durable_rejection_fact() -> None:
-    _spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
-    context = ContextManager(adapter=adapter).build_hypothesis_context(
-        branch=branch,
-        champion=champion,
-        problem_spec=legacy,
-        step_history=[],
-        last_research_rejection={
-            "failure_stage": "verification",
-            "failure_detail": "V5_solution_consistency",
-            "failing_symbol": "_SimulatedAnnealing.cool",
-            "callsite": "policies/baseline_modules/scheduler.py:229",
-            "branch_id": "FORBIDDEN_BRANCH_ID",
-            "raw_traceback": "FORBIDDEN_RAW_TRACEBACK",
-            "provider_prose": "FORBIDDEN_PROVIDER_PROSE",
-        },
-    )
-    assert context["last_research_rejection"] == {
-        "failure_stage": "verification",
-        "failure_detail": "V5_solution_consistency",
-        "failing_symbol": "_SimulatedAnnealing.cool",
-        "callsite": "policies/baseline_modules/scheduler.py:229",
-    }
-    assert "research_rejection_history" not in context
-
-    snapshot = proposal_context_snapshot("hypothesis", context)
-    blocks, user_prompt = _split_hypothesis_context(
-        snapshot.inputs.provider_context(include_renderer_inputs=True)
-    )
-    rendered = "\n".join(block["text"] for block in blocks) + user_prompt
-    for forbidden in (
-        "FORBIDDEN_BRANCH_ID",
-        "FORBIDDEN_RAW_TRACEBACK",
-        "FORBIDDEN_PROVIDER_PROSE",
-    ):
-        assert forbidden not in rendered
-    assert rendered.count("_SimulatedAnnealing.cool") == 1
-
-
-def test_legacy_rejection_steps_cannot_bypass_compact_durable_projection() -> None:
+def test_rejection_steps_do_not_become_h_repair_steering() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
     sibling = Branch(
         branch_id="prior-rejected-sibling",
         state=BranchState.EXPLORE,
         base_champion_id=champion.version,
-        base_champion_hash=champion.code_snapshot_hash,
     )
     hypothesis = HypothesisProposal(
         hypothesis_text="FORBIDDEN_PROVIDER_HYPOTHESIS_PROSE",
@@ -522,12 +475,13 @@ def test_legacy_rejection_steps_cannot_bypass_compact_durable_projection() -> No
             decision=None,
             failure_stage=phase,
             failure_detail="FORBIDDEN_PROVIDER_OR_CHECK_PROSE",
-            execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
-            execution_outcome_reason_code=reason_code,
-            execution_outcome_detail="FORBIDDEN_EXECUTION_DETAIL",
-            execution_outcome_provenance={
-                "stage": phase,
-                checks_key: [
+            execution_outcome=ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                reason_code=reason_code,
+                detail="FORBIDDEN_EXECUTION_DETAIL",
+                provenance={
+                    "stage": phase,
+                    checks_key: [
                     {
                         "name": check_code,
                         "passed": False,
@@ -541,8 +495,9 @@ def test_legacy_rejection_steps_cannot_bypass_compact_durable_projection() -> No
                         "name": "PASSED_CHECK_MUST_NOT_APPEAR",
                         "passed": True,
                     },
-                ],
-            },
+                    ],
+                },
+            ),
         )
 
     steps = [
@@ -630,25 +585,12 @@ def test_legacy_rejection_steps_cannot_bypass_compact_durable_projection() -> No
         champion=champion,
         problem_spec=legacy,
         step_history=steps,
-        campaign_branches=[branch, sibling],
-        last_research_rejection={
-            "failure_stage": "verification",
-            "failure_detail": "V5_solution_consistency",
-            "failing_symbol": "_SimulatedAnnealing.cool",
-            "callsite": "policies/baseline_modules/scheduler.py:229",
-        },
     )
 
-    assert context["last_research_rejection"] == {
-        "failure_stage": "verification",
-        "failure_detail": "V5_solution_consistency",
-        "failing_symbol": "_SimulatedAnnealing.cool",
-        "callsite": "policies/baseline_modules/scheduler.py:229",
-    }
-    assert "research_rejection_history" not in context
-    snapshot = proposal_context_snapshot("hypothesis", context)
+    assert "last_research_rejection" not in context
+    snapshot = freeze_proposal_context("hypothesis", context)
     blocks, user_prompt = _split_hypothesis_context(
-        snapshot.inputs.provider_context(include_renderer_inputs=True)
+        snapshot.provider_context(include_renderer_inputs=True)
     )
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
     for forbidden in (
@@ -669,58 +611,9 @@ def test_legacy_rejection_steps_cannot_bypass_compact_durable_projection() -> No
         "syntax_error: expected an indented block",
     ):
         assert forbidden not in rendered
-    assert rendered.count("_SimulatedAnnealing.cool") == 1
 
 
-def test_verification_failure_projection_selects_one_typed_pytest_event() -> None:
-    projected = verification_failure_projection(
-        {
-            "name": "V3_unit_tests",
-            "detail": (
-                "pytest exit=1: ================= failures ================= | "
-                "FAILED tests/test_solver.py::test_capacity - assert 2 == 1 | "
-                "captured stdout: MANY REPEATED LOG LINES"
-            ),
-        }
-    )
-
-    assert projected == {
-        "check_code": "V3_unit_tests",
-        "failure_kind": "unit_test",
-        "summary": "FAILED tests/test_solver.py::test_capacity - assert 2 == 1",
-    }
-
-
-def test_verification_failure_projection_keeps_traceback_root_cause_only() -> None:
-    projected = verification_failure_projection(
-        {
-            "name": "V5_solution_consistency",
-            "detail": (
-                "[ENV] Traceback (most recent call last):\n"
-                '  File "/private/candidate/solver.py", line 12, in solve\n'
-                "    run()\n"
-                '  File "/private/candidate/operators/split_vehicle.py", '
-                "line 154, in _recipient_sets\n"
-                "    int(resized_cost)\n"
-                "OverflowError: cannot convert float infinity to integer"
-            ),
-        }
-    )
-
-    assert projected == {
-        "check_code": "V5_solution_consistency",
-        "failure_kind": "state",
-        "summary": "OverflowError: cannot convert float infinity to integer",
-        "exception_type": "OverflowError",
-        "message": "cannot convert float infinity to integer",
-        "location_file": "operators/split_vehicle.py",
-        "location_line": "154",
-        "location_function": "_recipient_sets",
-    }
-    assert "/private/candidate" not in str(projected)
-
-
-def test_canonical_screening_history_deduplicates_durable_and_live_record() -> None:
+def test_live_screening_step_is_the_single_in_process_scientific_record() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     hypothesis = HypothesisProposal(
         hypothesis_text="Test one durable screening observation.",
@@ -755,10 +648,8 @@ def test_canonical_screening_history_deduplicates_durable_and_live_record() -> N
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="same-hypothesis",
     )
 
-    assert persist_canonical_screening_record(branch, screening) is True
     context = ContextManager(adapter=adapter).build_hypothesis_context(
         branch=branch,
         champion=champion,
@@ -771,10 +662,9 @@ def test_canonical_screening_history_deduplicates_durable_and_live_record() -> N
     assert projected["summary_level"] == "full"
     assert "attempt_id" not in projected
     assert "screening_attempt_id" not in projected
-    assert persist_canonical_screening_record(branch, screening) is False
 
 
-def test_budget_exhausting_runtime_policy_reaches_canonical_h_history() -> None:
+def test_raw_runtime_facts_reach_canonical_h_history_without_advice() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     screening = StepRecord(
         round_num=1,
@@ -810,7 +700,6 @@ def test_budget_exhausting_runtime_policy_reaches_canonical_h_history() -> None:
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="budget-exhausting-attempt",
     )
 
     context = ContextManager(adapter=adapter).build_hypothesis_context(
@@ -820,195 +709,19 @@ def test_budget_exhausting_runtime_policy_reaches_canonical_h_history() -> None:
         step_history=[screening],
     )
 
-    policy = context["experiment_history"][0]["experiment_evidence"][
-        "runtime_evidence_policy"
-    ]
-    assert policy["runtime_model"] == "budget_exhausting"
-    assert policy["runtime_model_interpretation"] == (
-        "budget_exhausting_runtime_aggregates_observational_not_standalone"
-    )
-    assert policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
-    assert policy["standalone_optimization_signal"] is False
-    assert policy["decision_features_excluded"] is True
+    evidence = context["experiment_history"][0]["experiment_evidence"]
+    assert evidence["runtime_model"] == "budget_exhausting"
+    assert evidence["protocol_outcome"] == {
+        "gate_outcome": "fail",
+        "reason_codes": ["SCREENING_FAIL_WIN_RATE"],
+    }
+    aggregate = evidence["objective_outcome"]["aggregate"]
+    assert aggregate["runtime_pairs"] == 4
+    assert "runtime_evidence_status" not in aggregate
+    assert "runtime_confidence" not in evidence
 
 
-def test_new_branch_sees_all_reopened_sibling_screenings_without_lifecycle_leaks() -> (
-    None
-):
-    _spec, legacy, adapter, champion, old_branch = _runtime("cvrp")
-    old_branch.branch_id = "terminal-screening-owner"
-    old_branch.state = BranchState.ABANDONED
-    old_branch.direction = "FORBIDDEN_TERMINAL_DIRECTION"
-    old_branch.failure_codes = ["FORBIDDEN_TERMINAL_FAILURE"]
-    current_branch = Branch(
-        branch_id="fresh-sibling",
-        state=BranchState.EXPLORE,
-        base_champion_id=champion.version,
-        base_champion_hash=champion.code_snapshot_hash,
-    )
-    hypothesis = HypothesisProposal(
-        hypothesis_text="Evaluate one reusable screening mechanism.",
-        change_locus="solver_design",
-        action="modify",
-        target_file="policies/baseline_modules/local_search.py",
-    )
-
-    for round_num in range(1, 5):
-        step = StepRecord(
-            round_num=round_num,
-            branch_id=old_branch.branch_id,
-            hypothesis=hypothesis,
-            patch=PatchProposal(
-                file_path="policies/baseline_modules/local_search.py",
-                action="modify",
-                code_content=f"FORBIDDEN_PATCH_BODY_{round_num}",
-            ),
-            contract_passed=True,
-            verification_passed=True,
-            protocol_result=ProtocolResult(
-                stage=ExperimentStage.SCREENING,
-                stats=EvalStats(
-                    n_cases=1,
-                    wins=1,
-                    losses=0,
-                    ties=0,
-                    win_rate=1.0,
-                    median_delta=float(round_num),
-                    ci_low=0.0,
-                    ci_high=float(round_num),
-                ),
-                gate_outcome="pass",
-                reason_codes=("SCREENING_PASS",),
-                exposed_summary=f"FORBIDDEN_EXPOSED_SUMMARY_{round_num}",
-                raw_metrics_ref=f"FORBIDDEN_RAW_REF_{round_num}",
-            ),
-            decision=Decision.QUEUE_VALIDATE,
-            failure_stage=None,
-            failure_detail=None,
-            hypothesis_id=f"screening-attempt-{round_num}",
-            decision_reason_codes=("SCREENING_PASS",),
-        )
-        assert persist_canonical_screening_record(old_branch, step) is True
-
-    non_screening_steps = [
-        StepRecord(
-            round_num=5 + index,
-            branch_id=old_branch.branch_id,
-            hypothesis=HypothesisProposal(
-                hypothesis_text=f"FORBIDDEN_{stage.value.upper()}_HYPOTHESIS",
-                change_locus="solver_design",
-                action="modify",
-                target_file="policies/baseline_modules/local_search.py",
-            ),
-            patch=None,
-            contract_passed=True,
-            verification_passed=True,
-            protocol_result=ProtocolResult(
-                stage=stage,
-                stats=EvalStats(
-                    n_cases=1,
-                    wins=0,
-                    losses=1,
-                    ties=0,
-                    win_rate=0.0,
-                    median_delta=-1.0,
-                    ci_low=-2.0,
-                    ci_high=0.0,
-                ),
-                gate_outcome="fail",
-                reason_codes=(f"FORBIDDEN_{stage.value.upper()}_REASON",),
-                exposed_summary=f"FORBIDDEN_{stage.value.upper()}_SUMMARY",
-                raw_metrics_ref=f"FORBIDDEN_{stage.value.upper()}_RAW_REF",
-            ),
-            decision=Decision.ABANDON,
-            failure_stage=None,
-            failure_detail=f"FORBIDDEN_{stage.value.upper()}_FAILURE_DETAIL",
-            hypothesis_id=f"{stage.value}-attempt",
-        )
-        for index, stage in enumerate(
-            (ExperimentStage.VALIDATION, ExperimentStage.FROZEN)
-        )
-    ]
-    non_screening_steps.append(
-        StepRecord(
-            round_num=7,
-            branch_id=old_branch.branch_id,
-            hypothesis=HypothesisProposal(
-                hypothesis_text="FORBIDDEN_PREPROTOCOL_HYPOTHESIS",
-                change_locus="solver_design",
-                action="modify",
-                target_file="policies/baseline_modules/local_search.py",
-            ),
-            patch=None,
-            contract_passed=False,
-            verification_passed=False,
-            protocol_result=None,
-            decision=None,
-            failure_stage="verification",
-            failure_detail="FORBIDDEN_PREPROTOCOL_FAILURE_DETAIL",
-        )
-    )
-
-    context = ContextManager(adapter=adapter).build_hypothesis_context(
-        branch=current_branch,
-        champion=champion,
-        problem_spec=legacy,
-        # Simulate reopen: screening StepRecords are absent; only their durable
-        # terminal-branch owner remains available through BranchStore.load_all.
-        step_history=non_screening_steps,
-        campaign_branches=[old_branch, current_branch],
-    )
-
-    history = context["experiment_history"]
-    assert len(history) == 1
-    assert history[0]["latest_round"] == 4
-    assert history[0]["summary_level"] == "sibling_brief"
-    assert history[0]["relation"] == "sibling"
-    assert "screening_trajectory" not in history[0]
-    assert (
-        history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
-            "median_delta"
-        ]
-        == 4.0
-    )
-    assert set(history[0]).isdisjoint(
-        {
-            "attempt_id",
-            "screening_attempt_id",
-            "source_branch_id",
-            "branch_state",
-            "state",
-            "direction",
-            "failure_detail",
-        }
-    )
-    durable = old_branch.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY]
-    assert all("source_branch_id" not in record for record in durable)
-    assert all("relation" not in record for record in durable)
-
-    snapshot = proposal_context_snapshot("hypothesis", context)
-    blocks, user_prompt = _split_hypothesis_context(
-        snapshot.inputs.provider_context(include_renderer_inputs=True)
-    )
-    rendered = "\n".join(block["text"] for block in blocks) + user_prompt
-    for forbidden in (
-        "FORBIDDEN_TERMINAL_DIRECTION",
-        "FORBIDDEN_TERMINAL_FAILURE",
-        "FORBIDDEN_PATCH_BODY_",
-        "FORBIDDEN_EXPOSED_SUMMARY_",
-        "FORBIDDEN_RAW_REF_",
-        "FORBIDDEN_VALIDATION_",
-        "FORBIDDEN_FROZEN_",
-        "FORBIDDEN_PREPROTOCOL_",
-        "omitted_item_count",
-        "compact_to_fit",
-        "top_n",
-        "truncation",
-    ):
-        assert forbidden not in rendered
-
-
-def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> None:
+def test_step_history_is_the_scientific_context_owner() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     hypothesis = HypothesisProposal(
         hypothesis_text="Test one durable screening observation.",
@@ -1043,23 +756,7 @@ def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> 
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="legacy-attempt",
     )
-    legacy_record = canonical_screening_record(screening)
-    legacy_record.pop("candidate_composition")
-    legacy_evidence = legacy_record["experiment_evidence"]
-    legacy_evidence.pop("protocol_outcome")
-    legacy_evidence.pop("decision_outcome")
-    legacy_evidence["objective_outcome"].pop("aggregation")
-    legacy_record["screening_attempt_id"] = "legacy-schema-dependent-id"
-    branch.branch_evidence_summary = {CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]}
-
-    upgraded_durable = canonical_screening_history(branch, [screening])[0]
-    assert upgraded_durable["attempt_id"] == "legacy-attempt"
-    assert upgraded_durable["screening_attempt_id"] != "legacy-schema-dependent-id"
-    assert "candidate_composition" in upgraded_durable
-    assert "protocol_outcome" in upgraded_durable["experiment_evidence"]
-
     context = ContextManager(adapter=adapter).build_hypothesis_context(
         branch=branch,
         champion=champion,
@@ -1068,74 +765,16 @@ def test_canonical_screening_history_upgrades_legacy_row_without_duplicate() -> 
     )
 
     assert len(context["experiment_history"]) == 1
-    upgraded = context["experiment_history"][0]
-    assert "attempt_id" not in upgraded
-    assert "screening_attempt_id" not in upgraded
-    assert "candidate_composition" in upgraded
-    assert "protocol_outcome" in upgraded["experiment_evidence"]
-    assert upgraded["experiment_evidence"]["decision_outcome"] == {
+    projected = context["experiment_history"][0]
+    assert projected["experiment_evidence"]["decision_outcome"] == {
         "decision": "continue_explore",
     }
-    assert persist_canonical_screening_record(branch, screening) is True
-    assert len(branch.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY]) == 1
-
-
-def test_canonical_screening_history_rejects_conflicting_legacy_fact() -> None:
-    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
-    hypothesis = HypothesisProposal(
-        hypothesis_text="Test conflicting durable evidence.",
-        change_locus="solver_design",
-        action="modify",
-        target_file="policies/baseline_modules/local_search.py",
+    assert (
+        projected["experiment_evidence"]["objective_outcome"]["aggregate"][
+            "median_delta"
+        ]
+        == -4.0
     )
-    screening = StepRecord(
-        round_num=1,
-        branch_id=branch.branch_id,
-        hypothesis=hypothesis,
-        patch=None,
-        contract_passed=True,
-        verification_passed=True,
-        protocol_result=ProtocolResult(
-            stage=ExperimentStage.SCREENING,
-            stats=EvalStats(
-                n_cases=1,
-                wins=1,
-                losses=0,
-                ties=0,
-                win_rate=1.0,
-                median_delta=2.0,
-                ci_low=1.0,
-                ci_high=3.0,
-            ),
-            gate_outcome="pass",
-            reason_codes=("SCREENING_PASS",),
-            exposed_summary="screening passed",
-            raw_metrics_ref="metrics/legacy-conflict.json",
-        ),
-        decision=Decision.QUEUE_VALIDATE,
-        failure_stage=None,
-        failure_detail=None,
-        hypothesis_id="legacy-conflict",
-    )
-    legacy_record = canonical_screening_record(screening)
-    legacy_record.pop("candidate_composition")
-    evidence = legacy_record["experiment_evidence"]
-    evidence.pop("protocol_outcome")
-    evidence.pop("decision_outcome")
-    evidence["objective_outcome"].pop("aggregation")
-    evidence["objective_outcome"]["aggregate"]["median_delta"] = -999.0
-    branch.branch_evidence_summary = {CANONICAL_SCREENING_HISTORY_KEY: [legacy_record]}
-
-    with pytest.raises(
-        ValueError,
-        match="canonical screening history conflicts with current step",
-    ):
-        ContextManager(adapter=adapter).build_hypothesis_context(
-            branch=branch,
-            champion=champion,
-            problem_spec=legacy,
-            step_history=[screening],
-        )
 
 
 @pytest.mark.parametrize(
@@ -1150,7 +789,7 @@ def test_canonical_screening_history_rejects_conflicting_legacy_fact() -> None:
         (None, "cumulative_branch_candidate", False),
     ),
 )
-def test_canonical_screening_record_uses_host_owned_candidate_parent_scope(
+def test_screening_record_uses_host_owned_candidate_parent_scope(
     candidate_parent_scope: str | None,
     expected_attribution_scope: str,
     expected_incremental_effect_isolated: bool,
@@ -1200,11 +839,10 @@ def test_canonical_screening_record_uses_host_owned_candidate_parent_scope(
         decision=Decision.QUEUE_VALIDATE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="hypothesis-2",
         candidate_parent_scope=candidate_parent_scope,
     )
 
-    record = canonical_screening_record(step)
+    record = screening_record(step)
 
     composition = record["candidate_composition"]
     assert composition["attribution_scope"] == expected_attribution_scope
@@ -1217,7 +855,6 @@ def test_canonical_screening_record_uses_host_owned_candidate_parent_scope(
         composition["incremental_effect_isolated"]
         is expected_incremental_effect_isolated
     )
-    assert composition["current_step"]["hypothesis_id"] == "hypothesis-2"
     assert composition["current_step"]["target_files"] == [
         "policies/scheduler.py",
         "policies/solver.py",
@@ -1240,7 +877,7 @@ def test_canonical_screening_record_uses_host_owned_candidate_parent_scope(
         ),
     ),
 )
-def test_canonical_screening_record_rejects_pair_stats_row_conflict(
+def test_screening_record_rejects_pair_stats_row_conflict(
     pair_stats: dict[str, int],
     expected_error: str,
 ) -> None:
@@ -1286,14 +923,13 @@ def test_canonical_screening_record_rejects_pair_stats_row_conflict(
         decision=Decision.QUEUE_VALIDATE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="hypothesis-1",
     )
 
     with pytest.raises(
         ValueError,
         match=expected_error,
     ):
-        canonical_screening_record(step)
+        screening_record(step)
 
 
 def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() -> None:
@@ -1335,8 +971,6 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
         problem_spec=legacy,
         adapter=adapter,
     )
-    packet["taint"] = "proposal_only"
-    packet["llm_trace_excluded"] = True
     hypothesis = HypothesisProposal(
         hypothesis_text="Test measured repair behavior.",
         change_locus="solver_design",
@@ -1371,7 +1005,6 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="mechanism-attempt",
     )
 
     context = ContextManager(adapter=adapter).build_hypothesis_context(
@@ -1405,14 +1038,7 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
     ][0]["experiment_evidence"]["mechanism_evidence"]
     assert '"paired_comparison"' in rendered
     assert '"comparison_columns"' in rendered
-    host_control_keys = {
-        "schema_version",
-        "taint",
-        "proposal_visibility_only",
-        "decision_features_excluded",
-        "llm_trace_excluded",
-        "gate_influence",
-    }
+    host_control_keys = {"schema_version"}
 
     def research_projection(value):
         if isinstance(value, dict):
@@ -1426,13 +1052,7 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
         return value
 
     assert packet["schema_version"]
-    assert packet["taint"] == "proposal_only"
-    assert packet["proposal_visibility_only"] is True
-    assert packet["decision_features_excluded"] is True
-    assert packet["llm_trace_excluded"] is True
-    assert packet["gate_influence"] is False
     assert packet["evidence"]["schema_version"]
-    assert packet["evidence"]["gate_influence"] is False
     assert rendered_mechanism == research_projection(packet)
     assert rendered_mechanism["evidence"] == research_projection(packet["evidence"])
     assert host_control_keys.isdisjoint(rendered_mechanism)
@@ -1482,9 +1102,6 @@ def test_marked_legacy_mechanism_envelope_round_trips_losslessly() -> None:
         "schema_version": "scion.problem_proposal_mechanism_evidence.v1",
         "problem_family": "cvrp",
         "producer": "problem_provider",
-        "proposal_visibility_only": True,
-        "decision_features_excluded": True,
-        "gate_influence": False,
         "evidence": {
             "schema_version": "scion.cvrp.alns_proposal_mechanism_evidence.v1",
             "trace_coverage": {"candidate_trace_pairs": 0},
@@ -1513,7 +1130,7 @@ def test_marked_legacy_mechanism_envelope_round_trips_losslessly() -> None:
     assert _screening_projection(protocol)["mechanism_evidence"] == legacy_envelope
 
 
-def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis() -> (
+def test_step_history_keeps_multiple_screenings_of_one_hypothesis() -> (
     None
 ):
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
@@ -1552,37 +1169,33 @@ def test_canonical_screening_history_keeps_multiple_screenings_of_one_hypothesis
             decision=Decision.CONTINUE_EXPLORE,
             failure_stage=None,
             failure_detail=None,
-            hypothesis_id="same-hypothesis",
         )
 
     first = screening(1, "private/round-1.json", -1.0)
     second = screening(2, "private/round-2.json", 0.5)
-    assert persist_canonical_screening_record(branch, first) is True
-    assert persist_canonical_screening_record(branch, second) is True
 
     context = ContextManager(adapter=adapter).build_hypothesis_context(
         branch=branch,
         champion=champion,
         problem_spec=legacy,
-        step_history=[],
+        step_history=[first, second],
     )
     history = context["experiment_history"]
-    assert len(history) == 1
-    assert history[0]["latest_round"] == 2
-    assert history[0]["summary_level"] == "full"
-    assert [item["round_num"] for item in history[0]["screening_trajectory"]] == [1]
+    assert len(history) == 2
+    assert [item["latest_round"] for item in history] == [1, 2]
+    assert {item["summary_level"] for item in history} == {"full"}
+    assert all("screening_trajectory" not in item for item in history)
     assert (
-        history[0]["experiment_evidence"]["objective_outcome"]["aggregate"][
+        history[-1]["experiment_evidence"]["objective_outcome"]["aggregate"][
             "median_delta"
         ]
         == 0.5
     )
     assert "attempt_id" not in history[0]
     assert "screening_attempt_id" not in history[0]
-    assert len(canonical_screening_history(branch, [])) == 2
 
 
-def test_provider_history_keeps_three_recent_current_attempts_full() -> None:
+def test_provider_history_keeps_every_current_screening_full() -> None:
     records = [
         {
             "attempt_id": f"attempt-{round_num}",
@@ -1599,13 +1212,17 @@ def test_provider_history_keeps_three_recent_current_attempts_full() -> None:
             "candidate_composition": {
                 "attribution_scope": "current_step_candidate",
                 "incremental_effect_isolated": True,
-                "current_step": {"hypothesis_id": f"attempt-{round_num}"},
             },
             "experiment_evidence": {
                 "stage": "screening",
                 "protocol_outcome": {"gate_outcome": "fail"},
                 "objective_outcome": {
-                    "aggregate": {"median_delta": float(round_num)},
+                    "aggregate": {
+                        "median_delta": float(round_num),
+                        "runtime_pairs": round_num,
+                        "runtime_evidence_status": "insufficient",
+                        "runtime_confidence": "FORBIDDEN_DERIVED_CONFIDENCE",
+                    },
                 },
                 "case_outcomes": {"case_feedback": []},
                 "runtime_errors": {},
@@ -1618,14 +1235,14 @@ def test_provider_history_keeps_three_recent_current_attempts_full() -> None:
 
     projected = proposal_screening_history(records)
 
-    assert [item["summary_level"] for item in projected] == [
-        "compact",
-        "full",
-        "full",
-        "full",
-    ]
+    assert [item["summary_level"] for item in projected] == ["full"] * 4
     assert [item["latest_round"] for item in projected] == [1, 2, 3, 4]
-    assert "mechanism_evidence" not in projected[0]["experiment_evidence"]
+    assert projected[0]["experiment_evidence"]["objective_outcome"][
+        "aggregate"
+    ] == {"median_delta": 1.0, "runtime_pairs": 1}
+    assert projected[0]["experiment_evidence"]["mechanism_evidence"] == {
+        "signal": "detail-1"
+    }
     assert projected[-1]["experiment_evidence"]["mechanism_evidence"] == {
         "signal": "detail-4"
     }
@@ -1649,7 +1266,7 @@ def test_provider_history_rejects_non_screening_durable_evidence(stage: str) -> 
         proposal_screening_history([record])
 
 
-def test_provider_history_rejects_relation_changes_within_one_attempt() -> None:
+def test_provider_history_does_not_use_attempt_identity_as_a_gate() -> None:
     records = [
         {
             "attempt_id": "attempt-1",
@@ -1661,127 +1278,13 @@ def test_provider_history_rejects_relation_changes_within_one_attempt() -> None:
         for round_num, relation in ((1, "current"), (2, "sibling"))
     ]
 
-    with pytest.raises(ValueError, match="relation changed"):
-        proposal_screening_history(records)
+    projected = proposal_screening_history(records)
+
+    assert [item["relation"] for item in projected] == ["current", "sibling"]
+    assert [item["latest_round"] for item in projected] == [1, 2]
 
 
-def test_canonical_screening_history_fails_closed_on_malformed_durable_owner() -> None:
-    _spec, legacy, adapter, champion, branch = _runtime("cvrp")
-    branch.branch_evidence_summary = {
-        CANONICAL_SCREENING_HISTORY_KEY: {"not": "a list"}
-    }
-
-    with pytest.raises(ValueError, match="canonical screening history is invalid"):
-        ContextManager(adapter=adapter).build_hypothesis_context(
-            branch=branch,
-            champion=champion,
-            problem_spec=legacy,
-            step_history=[],
-        )
-
-
-def test_campaign_screening_history_fails_closed_on_duplicate_sibling_owner() -> None:
-    _spec, legacy, adapter, champion, first_owner = _runtime("cvrp")
-    first_owner.branch_id = "first-owner"
-    screening = StepRecord(
-        round_num=1,
-        branch_id=first_owner.branch_id,
-        hypothesis=HypothesisProposal(
-            hypothesis_text="Own one canonical screening record.",
-            change_locus="solver_design",
-            action="modify",
-            target_file="policies/baseline_modules/local_search.py",
-        ),
-        patch=None,
-        contract_passed=True,
-        verification_passed=True,
-        protocol_result=ProtocolResult(
-            stage=ExperimentStage.SCREENING,
-            stats=EvalStats(
-                n_cases=1,
-                wins=1,
-                losses=0,
-                ties=0,
-                win_rate=1.0,
-                median_delta=1.0,
-                ci_low=0.0,
-                ci_high=2.0,
-            ),
-            gate_outcome="pass",
-            reason_codes=("SCREENING_PASS",),
-            exposed_summary="screening passed",
-            raw_metrics_ref="private/owner.json",
-        ),
-        decision=Decision.QUEUE_VALIDATE,
-        failure_stage=None,
-        failure_detail=None,
-        hypothesis_id="one-global-attempt",
-    )
-    assert persist_canonical_screening_record(first_owner, screening) is True
-    duplicated = dict(
-        first_owner.branch_evidence_summary[CANONICAL_SCREENING_HISTORY_KEY][0]
-    )
-    second_owner = Branch(
-        branch_id="second-owner",
-        state=BranchState.ABANDONED,
-        base_champion_id=champion.version,
-        base_champion_hash=champion.code_snapshot_hash,
-        branch_evidence_summary={CANONICAL_SCREENING_HISTORY_KEY: [duplicated]},
-    )
-    current = Branch(
-        branch_id="current-owner",
-        state=BranchState.EXPLORE,
-        base_champion_id=champion.version,
-        base_champion_hash=champion.code_snapshot_hash,
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="campaign canonical screening ownership is invalid",
-    ):
-        ContextManager(adapter=adapter).build_hypothesis_context(
-            branch=current,
-            champion=champion,
-            problem_spec=legacy,
-            step_history=[],
-            campaign_branches=[first_owner, second_owner, current],
-        )
-
-
-def test_campaign_screening_history_rejects_spoofed_durable_provenance() -> None:
-    _spec, legacy, adapter, champion, sibling = _runtime("cvrp")
-    sibling.branch_id = "spoofing-sibling"
-    sibling.branch_evidence_summary = {
-        CANONICAL_SCREENING_HISTORY_KEY: [
-            {
-                "attempt_id": "spoofed-attempt",
-                "round_num": 1,
-                "source_branch_id": "forged-owner",
-                "relation": "current",
-            }
-        ]
-    }
-    current = Branch(
-        branch_id="actual-current",
-        state=BranchState.EXPLORE,
-        base_champion_id=champion.version,
-        base_champion_hash=champion.code_snapshot_hash,
-    )
-
-    with pytest.raises(
-        ValueError,
-        match="canonical screening record provenance is reserved",
-    ):
-        ContextManager(adapter=adapter).build_hypothesis_context(
-            branch=current,
-            champion=champion,
-            problem_spec=legacy,
-            step_history=[],
-            campaign_branches=[sibling, current],
-        )
-
-
-def test_complete_campaign_scope_rejects_unknown_live_screening_owner() -> None:
+def test_live_screening_relation_does_not_require_owner_registration() -> None:
     _spec, legacy, adapter, champion, current = _runtime("cvrp")
     unknown_step = StepRecord(
         round_num=1,
@@ -1815,26 +1318,16 @@ def test_complete_campaign_scope_rejects_unknown_live_screening_owner() -> None:
         decision=Decision.QUEUE_VALIDATE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="unknown-owner-attempt",
     )
 
-    with pytest.raises(ValueError, match="campaign screening step owner is unknown"):
-        ContextManager(adapter=adapter).build_hypothesis_context(
-            branch=current,
-            champion=champion,
-            problem_spec=legacy,
-            step_history=[unknown_step],
-            campaign_branches=[current],
-        )
-
-    legacy_context = ContextManager(adapter=adapter).build_hypothesis_context(
+    context = ContextManager(adapter=adapter).build_hypothesis_context(
         branch=current,
         champion=champion,
         problem_spec=legacy,
         step_history=[unknown_step],
-        campaign_branches=None,
     )
-    assert legacy_context["experiment_history"] == []
+    assert len(context["experiment_history"]) == 1
+    assert context["experiment_history"][0]["relation"] == "sibling"
 
 
 @pytest.mark.parametrize(
@@ -1888,9 +1381,9 @@ def test_direct_v3_code_context_contains_source_not_research_history(
             )
         ],
     )
-    snapshot = proposal_context_snapshot("code", context)
+    snapshot = freeze_proposal_context("code", context)
     blocks, user_prompt = _split_code_context(
-        snapshot.inputs.provider_context(include_renderer_inputs=True)
+        snapshot.provider_context(include_renderer_inputs=True)
     )
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
     source_context = context["editable_source_context"]

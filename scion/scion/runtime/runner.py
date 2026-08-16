@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import inspect
-from typing import Optional, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from scion.core.models import RunResult
 

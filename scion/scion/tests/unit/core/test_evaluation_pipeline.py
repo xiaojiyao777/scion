@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import uuid
-
 import pytest
 
 from scion.core.evaluation_pipeline import EvaluationPipeline, EvaluationRequest
@@ -9,12 +7,10 @@ from scion.core.models import (
     BranchState,
     CanaryResult,
     CaseAggregateFeedback,
-    CheckResult,
     EvalStats,
     ExperimentStage,
     PairwiseCaseFeedback,
     ProtocolResult,
-    VerificationResult,
 )
 from scion.core.runtime_budget_diagnostics import SCREENING_RUNTIME_BUDGET_SATURATION
 
@@ -23,16 +19,13 @@ def _request(
     *,
     state: BranchState = BranchState.EXPLORE,
     selected_surface: str | None = None,
-    force_fresh_champion: bool = False,
 ) -> EvaluationRequest:
     return EvaluationRequest(
-        branch_id=str(uuid.uuid4()),
         branch_state=state,
         candidate_workspace="/tmp/candidate",
         champion_workspace="/tmp/champion",
         hypothesis_action="modify",
         selected_surface=selected_surface,
-        force_fresh_champion=force_fresh_champion,
     )
 
 
@@ -134,29 +127,16 @@ def test_screening_result_generates_numeric_decision_features() -> None:
 
 
 def test_verification_failure_skips_protocol() -> None:
-    failed = CheckResult(
-        name="V6_feasibility",
-        passed=False,
-        severity="heavy",
-        detail="capacity violation",
-        elapsed_ms=17,
-    )
-
-    def verification(_: EvaluationRequest) -> VerificationResult:
-        return VerificationResult(
-            passed=False,
-            checks=(failed,),
-            failure_severity="heavy",
-            first_failure="V6_feasibility",
-        )
-
     protocol = RecordingProtocol(_protocol_result())
-    outcome = EvaluationPipeline(
-        verification_evaluator=verification,
-        experiment_protocol=protocol,
-    ).evaluate(_request())
+    request = EvaluationRequest(
+        branch_state=BranchState.EXPLORE,
+        candidate_workspace="/tmp/candidate",
+        champion_workspace="/tmp/champion",
+        hypothesis_action="modify",
+        verification_passed=False,
+    )
+    outcome = EvaluationPipeline(experiment_protocol=protocol).evaluate(request)
 
-    assert outcome.verification_result.passed is False
     assert outcome.protocol_result is None
     assert protocol.experiment_calls == []
 

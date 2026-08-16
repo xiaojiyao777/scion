@@ -31,11 +31,6 @@ _HOST_CONTROL_KEYS = frozenset(
         "branch_id",
         "champion_version",
         "schema_version",
-        "taint",
-        "proposal_visibility_only",
-        "decision_features_excluded",
-        "llm_trace_excluded",
-        "gate_influence",
     }
 )
 

@@ -73,7 +73,6 @@ class PostmortemReport:
         n_failed: int,
         n_promoted: int,
         failure_stages: dict,
-        sibling_summaries: list[tuple[str, dict]],
     ) -> None:
         self.summary = summary
         self.campaign_path = campaign_path
@@ -81,7 +80,6 @@ class PostmortemReport:
         self.n_failed = n_failed
         self.n_promoted = n_promoted
         self.failure_stages = failure_stages
-        self.sibling_summaries = sibling_summaries
 
     def to_json(self) -> dict:
         summary = self.summary
@@ -101,15 +99,6 @@ class PostmortemReport:
             "failure_stages": self.failure_stages,
             "action_locus_coverage": summary.get("action_locus_coverage", {}),
             "diagnostics": summary.get("diagnostics", []),
-            "cache_stats": summary.get("cache_stats", {}),
-            "comparisons": [
-                {
-                    "name": name,
-                    "total_rounds": sibling.get("total_rounds", 0),
-                    "champion_version": sibling.get("champion_version", 0),
-                }
-                for name, sibling in self.sibling_summaries
-            ],
         }
 
     def to_markdown(self) -> str:
@@ -126,11 +115,9 @@ class PostmortemReport:
         lines.extend(self._family_lines())
         lines.extend(self._failure_lines())
         lines.extend(self._action_locus_lines())
-        lines.extend(self._cache_lines())
         lines.extend(self._diagnostic_lines())
         lines.extend(self._promoted_lines())
         lines.extend(self._recommendation_lines())
-        lines.extend(self._comparison_lines())
         return "\n".join(lines)
 
     def _family_lines(self) -> list[str]:
@@ -168,50 +155,6 @@ class PostmortemReport:
         for combo, count in sorted(action_locus.items(), key=lambda x: -x[1]):
             lines.append(f"- {combo}: {count}")
         return lines + [""]
-
-    def _cache_lines(self) -> list[str]:
-        cache_stats = self.summary.get("cache_stats", {})
-        if not cache_stats:
-            return []
-        lines = [
-            "## LLM Cache Statistics",
-            f"- Total tokens: {cache_stats.get('total_tokens', 0)}",
-            f"- Cache read tokens: {cache_stats.get('cache_read_tokens', 0)}",
-            f"- Cache hit rate: {cache_stats.get('cache_hit_rate', 0.0):.1%}",
-        ]
-        modes = cache_stats.get("cache_accounting_modes", {})
-        if modes:
-            rendered = ", ".join(f"{key}={value}" for key, value in sorted(modes.items()))
-            lines.append(f"- Cache accounting modes: {rendered}")
-        detail_rows = cache_stats.get("by_request_kind_provider", [])
-        if detail_rows:
-            lines.append("- By request kind/provider:")
-            for row in detail_rows:
-                lines.append(
-                    "  - "
-                    f"{row.get('request_kind', '?')}/{row.get('provider', '?')}: "
-                    f"calls={row.get('calls', 0)}, "
-                    f"prompt_tokens_total={row.get('prompt_tokens_total', 0)}, "
-                    f"input_tokens={row.get('input_tokens', 0)}, "
-                    f"output_tokens={row.get('output_tokens', 0)}, "
-                    f"cache_read={row.get('cache_read_tokens', 0)}, "
-                    f"cache_miss={row.get('cache_miss_tokens', 0)}, "
-                    f"hit_rate={row.get('hit_rate', 0.0):.1%}, "
-                    f"pending_no_usage_traces={row.get('pending_no_usage_traces', 0)}"
-                )
-        no_read_groups = cache_stats.get("repeated_cache_key_no_read", [])
-        if no_read_groups:
-            lines.append("- Repeated cache keys without reads:")
-            for group in no_read_groups:
-                lines.append(
-                    "  - "
-                    f"{group.get('request_kind', '?')} "
-                    f"cache={group.get('cacheable_system_blocks_hash', '?')} "
-                    f"tool_schema={group.get('tool_schema_hash', '?')} "
-                    f"calls={group.get('calls', 0)}"
-                )
-        return lines + [""]
-
 
     def _diagnostic_lines(self) -> list[str]:
         diagnostics = self.summary.get("diagnostics", [])
@@ -285,31 +228,6 @@ class PostmortemReport:
             lines.append(f"- Dominant family was '{dominant_family}' - consider diversifying.")
         return lines + [""]
 
-    def _comparison_lines(self) -> list[str]:
-        if not self.sibling_summaries:
-            return []
-        summary = self.summary
-        lines = [
-            "## Comparison with Other Campaigns",
-            "| Campaign | Rounds | Champion | Promotions |",
-            "|---|---|---|---|",
-        ]
-        lines.append(
-            f"| **{self.campaign_path.name}** | {summary.get('total_rounds', 0)} | "
-            f"{summary.get('champion_version', 0)} | {self.n_promoted} |"
-        )
-        for sibling_name, sibling in self.sibling_summaries:
-            sibling_steps = sibling.get("steps", [])
-            sibling_promoted = sum(
-                1 for step in sibling_steps if step.get("decision") == "promote"
-            )
-            lines.append(
-                f"| {sibling_name} | {sibling.get('total_rounds', 0)} | "
-                f"{sibling.get('champion_version', 0)} | {sibling_promoted} |"
-            )
-        return lines + [""]
-
-
 def build_postmortem(summary: dict, campaign_path: Path) -> PostmortemReport:
     steps = summary.get("steps", [])
     failure_stages: dict = {}
@@ -325,24 +243,7 @@ def build_postmortem(summary: dict, campaign_path: Path) -> PostmortemReport:
         n_failed=sum(1 for step in steps if step.get("failure_stage")),
         n_promoted=sum(1 for step in steps if step.get("decision") == "promote"),
         failure_stages=failure_stages,
-        sibling_summaries=_load_sibling_summaries(campaign_path),
     )
-
-
-def _load_sibling_summaries(campaign_path: Path) -> list[tuple[str, dict]]:
-    parent = campaign_path.parent
-    sibling_summaries = []
-    for sibling in sorted(parent.iterdir()):
-        if sibling == campaign_path or not sibling.is_dir():
-            continue
-        summary_file = sibling / "campaign_summary.json"
-        if not summary_file.exists():
-            continue
-        try:
-            sibling_summaries.append((sibling.name, json.loads(summary_file.read_text())))
-        except Exception:
-            pass
-    return sibling_summaries
 
 
 __all__ = ["build_postmortem", "register_postmortem_command"]

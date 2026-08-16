@@ -7,17 +7,13 @@ import os
 from pathlib import Path
 import random
 import time
-from typing import Any
 
 from scion.problems.cvrp.adapter import CvrpAdapter
 from scion.problems.cvrp.models import CvrpInstance, CvrpSolution
 from scion.problems.cvrp.solver_runtime.algorithm_runtime import (
-    ObjectiveValue as _ObjectiveValue,
-    SolverAlgorithmContext as _SolverAlgorithmContext,
     load_baseline_algorithm as _load_baseline_algorithm,
     nearest_neighbor_solution as _nearest_neighbor_solution,
     solver_algorithm_active as _solver_algorithm_active,
-    solver_algorithm_defaults as _solver_algorithm_defaults,
 )
 
 _ALLOWED_CONSTRUCTION_MODES = frozenset(

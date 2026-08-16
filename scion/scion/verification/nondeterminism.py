@@ -13,17 +13,17 @@ Common sources of nondeterminism:
 This is distinct from V5_solution_consistency. A candidate can pass V5 but fail
 V8 if it uses uuid or non-deterministic iteration patterns.
 """
+
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
 import hashlib
 import json
 import os
-from pathlib import Path
-import shutil
 import time
+from dataclasses import asdict, is_dataclass
+from itertools import chain
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Mapping
-import uuid
 
 from scion.config.problem import ProblemSpec
 from scion.core.models import CheckResult
@@ -38,7 +38,6 @@ from scion.verification.feasibility import _registry_path, resolve_problem_path
 from scion.verification.requirements import (
     declared_objective_metric_names,
     requires_adapter_for_runtime,
-    research_surface_target_files,
 )
 
 if TYPE_CHECKING:
@@ -46,6 +45,11 @@ if TYPE_CHECKING:
 
 
 _CANARY_SEED = 77  # fixed seed used for both runs
+_FAILURE_DETAIL_MAX_BYTES = 8 * 1024
+_FAILURE_ERROR_MAX_CHARS = 1024
+_FAILURE_VALUE_MAX_CHARS = 512
+_MAX_DIFF_KEYS = 32
+_MAX_DIFF_KEY_CHARS = 128
 
 
 def check_nondeterminism(
@@ -101,103 +105,73 @@ def check_nondeterminism(
     else:
         raw1, err1 = dict(first_execution.raw_output), ""
     if raw1 is None:
-        detail = f"first run failed: {err1}" if err1 else "first run failed"
-        return _cr(False, detail, t0)
+        return _failure_result(
+            t0=t0,
+            metrics_dir=metrics_dir,
+            comparison_mode="solver_execution",
+            selected_surface=selected_surface,
+            error=f"first run failed: {err1}" if err1 else "first run failed",
+            run="first",
+        )
     audit_failure = runtime_audit_failure_from_raw(
         raw1,
         problem_spec=problem_spec,
         selected_surface=selected_surface,
     )
     if runtime_audit_issue_blocks_execution(audit_failure):
-        return _cr(
-            False,
-            _failure_detail(
-                comparison_mode="runtime_audit",
-                selected_surface=selected_surface,
-                error=(
-                    "first run runtime audit failed: "
-                    + format_runtime_audit_failure(audit_failure)
-                ),
-                run="first",
+        return _failure_result(
+            t0=t0,
+            metrics_dir=metrics_dir,
+            comparison_mode="runtime_audit",
+            selected_surface=selected_surface,
+            error=(
+                "first run runtime audit failed: "
+                + format_runtime_audit_failure(audit_failure)
             ),
-            t0,
+            run="first",
         )
 
     raw2, err2 = _run()
     if raw2 is None:
-        detail = f"second run failed: {err2}" if err2 else "second run failed"
-        return _cr(False, detail, t0)
+        return _failure_result(
+            t0=t0,
+            metrics_dir=metrics_dir,
+            comparison_mode="solver_execution",
+            selected_surface=selected_surface,
+            error=f"second run failed: {err2}" if err2 else "second run failed",
+            run="second",
+        )
     audit_failure = runtime_audit_failure_from_raw(
         raw2,
         problem_spec=problem_spec,
         selected_surface=selected_surface,
     )
     if runtime_audit_issue_blocks_execution(audit_failure):
-        return _cr(
-            False,
-            _failure_detail(
-                comparison_mode="runtime_audit",
-                selected_surface=selected_surface,
-                error=(
-                    "second run runtime audit failed: "
-                    + format_runtime_audit_failure(audit_failure)
-                ),
-                run="second",
+        return _failure_result(
+            t0=t0,
+            metrics_dir=metrics_dir,
+            comparison_mode="runtime_audit",
+            selected_surface=selected_surface,
+            error=(
+                "second run runtime audit failed: "
+                + format_runtime_audit_failure(audit_failure)
             ),
-            t0,
+            run="second",
         )
-
-    # Save run outputs to metrics_dir if provided
-    short_id = uuid.uuid4().hex[:8]
-    run1_path: str | None = None
-    run2_path: str | None = None
-    if metrics_dir and os.path.isdir(metrics_dir):
-        run1_path = os.path.join(metrics_dir, f"v8_run1_{short_id}.json")
-        run2_path = os.path.join(metrics_dir, f"v8_run2_{short_id}.json")
-        try:
-            with open(run1_path, "w", encoding="utf-8") as f:
-                json.dump(
-                    _run_metric_payload(
-                        raw1,
-                        run_label="v8_run1",
-                        canary=canary,
-                        selected_surface=selected_surface,
-                    ),
-                    f,
-                    indent=2,
-                )
-            with open(run2_path, "w", encoding="utf-8") as f:
-                json.dump(
-                    _run_metric_payload(
-                        raw2,
-                        run_label="v8_run2",
-                        canary=canary,
-                        selected_surface=selected_surface,
-                    ),
-                    f,
-                    indent=2,
-                )
-        except OSError:
-            run1_path = None
-            run2_path = None
 
     if adapter is None and requires_adapter_for_runtime(
         problem_spec,
         explicit=require_adapter_for_runtime,
     ):
-        return _cr(
-            False,
-            _failure_detail(
-                comparison_mode="adapter_required_missing",
-                selected_surface=selected_surface,
-                error=(
-                    "problem adapter is required for adapter-backed runtime "
-                    "verification; legacy nondeterminism fallback disabled"
-                ),
-                run1_ref=run1_path,
-                run2_ref=run2_path,
+        return _failure_result(
+            t0=t0,
+            metrics_dir=metrics_dir,
+            comparison_mode="adapter_required_missing",
+            selected_surface=selected_surface,
+            error=(
+                "problem adapter is required for adapter-backed runtime "
+                "verification; legacy nondeterminism fallback disabled"
             ),
-            t0,
         )
 
     if adapter is not None:
@@ -207,11 +181,7 @@ def check_nondeterminism(
             raw2=raw2,
             canary=canary,
             problem_spec=problem_spec,
-            candidate_workspace=candidate_workspace,
             metrics_dir=metrics_dir,
-            short_id=short_id,
-            run1_path=run1_path,
-            run2_path=run2_path,
             selected_surface=selected_surface,
             t0=t0,
         )
@@ -232,28 +202,16 @@ def check_nondeterminism(
             },
         )
 
-    # Archive candidate code on failure
-    archive_ref: str | None = None
-    if metrics_dir and os.path.isdir(metrics_dir):
-        archive_ref = _archive_candidate_code(
-            workspace=candidate_workspace,
-            archive_dir=metrics_dir,
-            tag=f"v8_archive_{short_id}",
-            problem_spec=problem_spec,
-            selected_surface=selected_surface,
-        )
-
-    detail = json.dumps({
-        "comparison_mode": "legacy_objective",
-        "selected_surface": selected_surface,
-        "run1_objective": obj1,
-        "run2_objective": obj2,
-        "diff_keys": _diff_keys(obj1, obj2),
-        "run1_ref": run1_path,
-        "run2_ref": run2_path,
-        "candidate_archive_ref": archive_ref,
-    }, sort_keys=True)
-    return _cr(False, detail, t0)
+    return _failure_result(
+        t0=t0,
+        metrics_dir=metrics_dir,
+        comparison_mode="legacy_objective",
+        selected_surface=selected_surface,
+        error="legacy objectives differ across same-seed runs",
+        run1_objective_digest=_metric_digest(obj1),
+        run2_objective_digest=_metric_digest(obj2),
+        diff_keys=_diff_keys(obj1, obj2),
+    )
 
 
 def _check_via_adapter(
@@ -263,11 +221,7 @@ def _check_via_adapter(
     raw2: dict,
     canary: str,
     problem_spec: ProblemSpec,
-    candidate_workspace: str,
     metrics_dir: str | None,
-    short_id: str,
-    run1_path: str | None,
-    run2_path: str | None,
     selected_surface: str | None,
     t0: int,
 ) -> CheckResult:
@@ -276,13 +230,25 @@ def _check_via_adapter(
         artifact1 = adapter.deserialize_solver_output(raw1, instance)
         artifact2 = adapter.deserialize_solver_output(raw2, instance)
     except Exception as exc:
-        return _cr(False, f"adapter deserialize error: {exc}", t0)
+        return _failure_result(
+            t0=t0,
+            metrics_dir=metrics_dir,
+            comparison_mode="adapter_deserialize",
+            selected_surface=selected_surface,
+            error=f"adapter deserialize error: {exc}",
+        )
 
     try:
         sig1, mode = _canonical_signature(adapter, artifact1, instance, problem_spec)
         sig2, _ = _canonical_signature(adapter, artifact2, instance, problem_spec)
     except Exception as exc:
-        return _cr(False, f"adapter canonical signature error: {exc}", t0)
+        return _failure_result(
+            t0=t0,
+            metrics_dir=metrics_dir,
+            comparison_mode="adapter_canonical_signature",
+            selected_surface=selected_surface,
+            error=f"adapter canonical signature error: {exc}",
+        )
 
     sig1_text = _stable_json(sig1)
     sig2_text = _stable_json(sig2)
@@ -299,30 +265,16 @@ def _check_via_adapter(
             },
         )
 
-    archive_ref: str | None = None
-    if metrics_dir and os.path.isdir(metrics_dir):
-        archive_ref = _archive_candidate_code(
-            workspace=candidate_workspace,
-            archive_dir=metrics_dir,
-            tag=f"v8_archive_{short_id}",
-            problem_spec=problem_spec,
-            selected_surface=selected_surface,
-        )
-
-    detail = json.dumps(
-        {
-            "comparison_mode": mode,
-            "selected_surface": selected_surface,
-            "run1_signature": sig1,
-            "run2_signature": sig2,
-            "diff_keys": _diff_keys(sig1, sig2),
-            "run1_ref": run1_path,
-            "run2_ref": run2_path,
-            "candidate_archive_ref": archive_ref,
-        },
-        sort_keys=True,
+    return _failure_result(
+        t0=t0,
+        metrics_dir=metrics_dir,
+        comparison_mode=mode,
+        selected_surface=selected_surface,
+        error="canonical solver artifacts differ across same-seed runs",
+        run1_signature_digest=_metric_digest(sig1),
+        run2_signature_digest=_metric_digest(sig2),
+        diff_keys=_diff_keys(sig1, sig2),
     )
-    return _cr(False, detail, t0)
 
 
 def _canonical_signature(
@@ -357,62 +309,93 @@ def _failure_detail(
     error: str,
     **extra: Any,
 ) -> str:
+    payload = {
+        "comparison_mode": _bounded_detail_string(comparison_mode),
+        "selected_surface": (
+            _bounded_detail_string(selected_surface)
+            if selected_surface is not None
+            else None
+        ),
+        "error": _bounded_detail_string(error, maximum=_FAILURE_ERROR_MAX_CHARS),
+        **{
+            str(key)[:_MAX_DIFF_KEY_CHARS]: _bounded_detail_value(
+                value,
+                field_name=str(key),
+            )
+            for key, value in extra.items()
+        },
+    }
+    detail = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    if len(detail.encode("utf-8")) <= _FAILURE_DETAIL_MAX_BYTES:
+        return detail
     return json.dumps(
         {
-            "comparison_mode": comparison_mode,
-            "selected_surface": selected_surface,
-            "error": error,
-            **extra,
+            "comparison_mode": payload["comparison_mode"],
+            "selected_surface": payload["selected_surface"],
+            "error": "failure detail exceeded fixed encoding limit",
+            "detail_omitted": True,
         },
         sort_keys=True,
+        separators=(",", ":"),
     )
 
 
-def _run_metric_payload(
-    raw: Mapping[str, Any],
+def _failure_result(
     *,
-    run_label: str,
-    canary: str,
+    t0: int,
+    metrics_dir: str | None,
+    comparison_mode: str,
     selected_surface: str | None,
-) -> dict[str, Any]:
-    payload = dict(raw)
-    case_ref = Path(canary).name
-    if canary:
-        case_ref = str(canary)
-    ledger = [
-        {
-            "label": run_label,
-            "case": case_ref,
-            "case_path_ref": case_ref,
-            "case_source": "v8_nondeterminism_canary",
-            "seed": _CANARY_SEED,
-            "provider_hook_used": False,
-            "attempted": True,
-            "success": True,
-            "passed": True,
-            "selected_surface": selected_surface,
-            "case_digest": _metric_digest(
-                {
-                    "case": case_ref,
-                    "seed": _CANARY_SEED,
-                    "run_label": run_label,
-                    "selected_surface": selected_surface,
-                }
-            )[:16],
-        }
-    ]
-    payload.update(
-        {
-            "schema_version": "scion.v8-run-metric.v2",
-            "artifact_kind": "v8_nondeterminism_run_metric",
-            "runtime_case_ledger": ledger,
-            "case_execution_ledger": ledger,
-            "provider_hook_used": False,
-            "provider_case_count": 0,
-            "provider_case_attempted_count": 0,
-        }
+    error: str,
+    **extra: Any,
+) -> CheckResult:
+    """Return the Verification failure; persistence is diagnostic-only."""
+
+    detail = _failure_detail(
+        comparison_mode=comparison_mode,
+        selected_surface=selected_surface,
+        error=error,
+        **extra,
     )
-    return payload
+    diagnostic_ref, persistence_error = _persist_failure_diagnostic(
+        detail=detail,
+        metrics_dir=metrics_dir,
+    )
+    metadata: dict[str, Any] = {}
+    if diagnostic_ref is not None:
+        metadata["diagnostic_ref"] = diagnostic_ref
+    if persistence_error is not None:
+        metadata["diagnostic_persistence_error"] = persistence_error
+    return _cr(False, detail, t0, metadata=metadata)
+
+
+def _persist_failure_diagnostic(
+    *,
+    detail: str,
+    metrics_dir: str | None,
+) -> tuple[str | None, str | None]:
+    """Best-effort atomic persistence of the one bounded failure diagnostic."""
+
+    if not metrics_dir or not os.path.isdir(metrics_dir):
+        return None, None
+
+    target = Path(metrics_dir) / f"v8_failure_{time.monotonic_ns()}.json"
+    temporary = target.with_suffix(".json.tmp")
+    try:
+        with temporary.open("x", encoding="utf-8") as handle:
+            handle.write(detail)
+        os.replace(temporary, target)
+        return str(target), None
+    except OSError as exc:
+        return None, _bounded_detail_string(
+            f"diagnostic persistence failed: {exc}",
+            maximum=_FAILURE_ERROR_MAX_CHARS,
+        )
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _metric_digest(value: Any) -> str:
@@ -425,11 +408,7 @@ def _objective_for_signature(
 ) -> dict[str, Any]:
     declared_names = declared_objective_metric_names(problem_spec)
     if declared_names:
-        return {
-            name: objective[name]
-            for name in declared_names
-            if name in objective
-        }
+        return {name: objective[name] for name in declared_names if name in objective}
     return {
         str(key): value
         for key, value in objective.items()
@@ -472,85 +451,42 @@ def _stable_json(value: Any) -> str:
 
 
 def _diff_keys(left: Mapping[str, Any], right: Mapping[str, Any]) -> list[str]:
-    keys = sorted(set(left) | set(right), key=str)
-    return [str(key) for key in keys if left.get(key) != right.get(key)]
+    different: list[str] = []
+    keys = chain(left, (key for key in right if key not in left))
+    for key in keys:
+        if left.get(key) == right.get(key):
+            continue
+        different.append(str(key)[:_MAX_DIFF_KEY_CHARS])
+        if len(different) >= _MAX_DIFF_KEYS:
+            break
+    return sorted(different)
 
 
-def _archive_candidate_code(
-    workspace: str,
-    archive_dir: str,
-    tag: str,
+def _bounded_detail_value(value: Any, *, field_name: str) -> Any:
+    if value is None or isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        limit = (1 << 63) - 1
+        return max(-limit, min(limit, value))
+    if isinstance(value, float):
+        return value if value == value and abs(value) != float("inf") else None
+    if isinstance(value, str):
+        return _bounded_detail_string(value)
+    if field_name == "diff_keys" and isinstance(value, (list, tuple)):
+        return [
+            _bounded_detail_string(str(item), maximum=_MAX_DIFF_KEY_CHARS)
+            for item in value[:_MAX_DIFF_KEYS]
+        ]
+    return {"omitted_value_type": type(value).__name__[:64]}
+
+
+def _bounded_detail_string(
+    value: str | None,
     *,
-    problem_spec: ProblemSpec | None = None,
-    selected_surface: str | None = None,
-) -> str | None:
-    """Archive selected-surface target files, falling back to operators/."""
-
-    workspace_path = Path(workspace)
-    archive_path = Path(archive_dir) / tag
-    try:
-        copied = _archive_surface_targets(
-            workspace_path=workspace_path,
-            archive_path=archive_path,
-            patterns=research_surface_target_files(problem_spec, selected_surface),
-        )
-        if copied:
-            return str(archive_path)
-
-        operators_src = workspace_path / "operators"
-        if not operators_src.is_dir():
-            return None
-        shutil.copytree(
-            operators_src,
-            archive_path / "operators",
-            symlinks=False,
-            dirs_exist_ok=True,
-        )
-        return str(archive_path)
-    except Exception:
-        return None
-
-
-def _archive_surface_targets(
-    *,
-    workspace_path: Path,
-    archive_path: Path,
-    patterns: tuple[str, ...],
-) -> bool:
-    copied = False
-    if not patterns:
-        return False
-
-    workspace_root = workspace_path.resolve()
-    for pattern in patterns:
-        for source in _matching_workspace_paths(workspace_path, pattern):
-            try:
-                resolved = source.resolve()
-                relative = resolved.relative_to(workspace_root)
-            except (OSError, ValueError):
-                continue
-            target = archive_path / relative
-            if resolved.is_dir():
-                shutil.copytree(
-                    resolved,
-                    target,
-                    symlinks=False,
-                    dirs_exist_ok=True,
-                )
-            elif resolved.is_file():
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(resolved, target)
-            else:
-                continue
-            copied = True
-    return copied
-
-
-def _matching_workspace_paths(workspace_path: Path, pattern: str) -> list[Path]:
-    if os.path.isabs(pattern):
-        candidate = Path(pattern)
-        return [candidate] if candidate.exists() else []
-    return [path for path in workspace_path.glob(pattern) if path.exists()]
+    maximum: int = _FAILURE_VALUE_MAX_CHARS,
+) -> str:
+    rendered = str(value or "")
+    return rendered if len(rendered) <= maximum else rendered[:maximum]
 
 
 def _cr(

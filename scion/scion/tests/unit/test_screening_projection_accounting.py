@@ -12,7 +12,7 @@ from scion.core.models import (
     ProtocolResult,
     StepRecord,
 )
-from scion.proposal.context_manager.manager import canonical_screening_record
+from scion.proposal.context_manager.manager import screening_record
 
 
 def _screening_step(
@@ -75,7 +75,6 @@ def _screening_step(
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
-        hypothesis_id="hypothesis-1",
     )
 
 
@@ -115,7 +114,7 @@ def _screening_step(
 def test_canonical_screening_projection_accepts_protocol_accounting(
     step: StepRecord,
 ) -> None:
-    record = canonical_screening_record(step)
+    record = screening_record(step)
 
     case_outcomes = record["experiment_evidence"].get("case_outcomes", {})
     feedback = case_outcomes.get("pair_feedback", [])
@@ -135,7 +134,7 @@ def test_canonical_screening_projection_accepts_paired_candidate_failure_without
         comparisons=("tie", "tie", "tie"),
     )
 
-    record = canonical_screening_record(step)
+    record = screening_record(step)
 
     feedback = record["experiment_evidence"]["case_outcomes"]["pair_feedback"]
     assert len(feedback) == step.protocol_result.stats.valid_pairs
@@ -157,4 +156,4 @@ def test_canonical_screening_projection_rejects_feedback_accounting_mismatch() -
             "valid/candidate-failure pair counts"
         ),
     ):
-        canonical_screening_record(step)
+        screening_record(step)

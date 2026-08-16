@@ -1,65 +1,56 @@
 """Structural protocols for the proposal pipeline facade."""
+
 from __future__ import annotations
 
-from typing import Any, Protocol
+from dataclasses import dataclass
+from typing import Any, Generic, Protocol, TypeVar
 
-from scion.core.models import (
-    Branch,
-    HypothesisProposal,
-    HypothesisRecord,
-    PatchProposal,
-)
-from scion.proposal.engine import ProviderCallDiagnostics, PromptTurnSnapshot
+from scion.core.execution_outcome import ExecutionOutcomeRecord
+from scion.core.models import HypothesisProposal, PatchProposal
+from scion.proposal.engine import PromptTurnSnapshot
+
+
+ProposalT = TypeVar("ProposalT", HypothesisProposal, PatchProposal)
+
+
+@dataclass(frozen=True)
+class ProposalAttempt(Generic[ProposalT]):
+    """One direct provider attempt: either a proposal or a typed failure."""
+
+    proposal: ProposalT | None = None
+    execution_outcome: ExecutionOutcomeRecord | None = None
+
+    def __post_init__(self) -> None:
+        if (self.proposal is None) == (self.execution_outcome is None):
+            raise ValueError(
+                "proposal attempt must contain exactly one of proposal or execution_outcome"
+            )
+
+    @classmethod
+    def success(cls, proposal: ProposalT) -> "ProposalAttempt[ProposalT]":
+        return cls(proposal=proposal)
+
+    @classmethod
+    def failure(
+        cls,
+        execution_outcome: ExecutionOutcomeRecord,
+    ) -> "ProposalAttempt[ProposalT]":
+        return cls(execution_outcome=execution_outcome)
 
 
 class CreativeLayerLike(Protocol):
     def generate_direct_hypothesis(
         self,
-        context: dict[str, Any],
         snapshot: PromptTurnSnapshot,
-        *,
-        call_context: dict[str, Any],
-    ) -> tuple[HypothesisProposal, ProviderCallDiagnostics]:
-        ...
+    ) -> HypothesisProposal: ...
 
     def generate_direct_code(
         self,
-        context: dict[str, Any],
         snapshot: PromptTurnSnapshot,
-        *,
-        call_context: dict[str, Any],
-    ) -> tuple[PatchProposal, ProviderCallDiagnostics]: ...
+    ) -> PatchProposal: ...
 
 
 class ProblemRuntimeLike(Protocol):
-    def build_hypothesis_context(self, **kwargs: Any) -> dict[str, Any]:
-        ...
+    def build_hypothesis_context(self, **kwargs: Any) -> dict[str, Any]: ...
 
-    def build_code_context(self, **kwargs: Any) -> dict[str, Any]:
-        ...
-
-class BranchControllerLike(Protocol):
-    def get_active_branches(self) -> list[Branch]:
-        ...
-
-
-class HypothesisStoreLike(Protocol):
-    def save(self, record: HypothesisRecord) -> None:
-        ...
-
-    def mark_status(self, hypothesis_id: str, status: str) -> None:
-        ...
-
-    def get_one(self, hypothesis_id: str) -> HypothesisRecord | None:
-        ...
-
-    def get_by_status(self, status: str) -> list[HypothesisRecord]:
-        ...
-
-    def get_by_branch(self, branch_id: str) -> list[HypothesisRecord]:
-        ...
-
-
-class ClassifierLike(Protocol):
-    def classify(self, text: str) -> Any:
-        ...
+    def build_code_context(self, **kwargs: Any) -> dict[str, Any]: ...

@@ -84,20 +84,6 @@ def extract_mechanism_label(
     return UNKNOWN_FAMILY_LABEL
 
 
-def _match_family_label(text: str, families: list[str]) -> str | None:
-    matches = _collect_family_matches(text, families, {})
-    return _best_family_match(matches) if matches else None
-
-
-def _match_family_alias(
-    text: str,
-    families: list[str],
-    aliases: dict[str, list[str]],
-) -> str | None:
-    matches = _collect_family_matches(text, families, aliases, include_family_labels=False)
-    return _best_family_match(matches) if matches else None
-
-
 def _canonical_family(label: str | None, families: list[str]) -> str | None:
     if not label:
         return None

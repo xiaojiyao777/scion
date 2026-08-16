@@ -1,20 +1,17 @@
 from __future__ import annotations
 
-import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
-
-from scion.core.evidence_recording import EvidenceRecorder
+from scion.core.campaign_loop import CampaignRunResult
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
+from scion.core.evidence_recording import EvidenceRecorder
 from scion.core.execution_outcome import (
-    AttemptDisposition,
     ExecutionOutcome,
     ExecutionOutcomeRecord,
-    ResearchRejectionDisposition,
 )
 from scion.core.models import (
-    ChampionState,
     Decision,
     EvalStats,
     ExperimentStage,
@@ -23,7 +20,33 @@ from scion.core.models import (
     StepRecord,
 )
 from scion.core.step_result import StepResult
+from scion.core.evidence_recording.status import project_last_result
 from scion.lineage.registry import LineageRegistry
+
+
+def _run_projection(outcome: ExecutionOutcome) -> dict[str, object]:
+    result = CampaignRunResult.empty(1)
+    counts = dict(result.execution_outcome_counts)
+    counts[outcome.value] = 1
+    return replace(
+        result,
+        scheduled_calls=1,
+        stop_reason=f"execution_{outcome.value}",
+        execution_outcome_counts=counts,
+        last_execution_outcome={
+            "outcome": outcome.value,
+            "reason_code": f"TEST_{outcome.value.upper()}",
+        },
+    ).to_projection()
+
+
+def _operator_state() -> dict[str, object]:
+    return {
+        "campaign_id": "campaign-1",
+        "proposal_runtime_mode": "direct_v3",
+        "champion_version": 1,
+        "branches": [],
+    }
 
 
 def _hypothesis() -> HypothesisProposal:
@@ -60,6 +83,7 @@ def _step(
     *,
     decision: Decision | None = None,
     protocol_result: ProtocolResult | None = None,
+    execution_outcome: ExecutionOutcomeRecord | None = None,
 ) -> StepRecord:
     return StepRecord(
         round_num=1,
@@ -72,10 +96,15 @@ def _step(
         decision=decision,
         failure_stage=None,
         failure_detail=None,
-        execution_outcome=outcome,
-        execution_outcome_reason_code=f"TEST_{outcome.value.upper()}",
-        execution_outcome_detail="typed outcome fixture",
-        execution_outcome_provenance={"source": "unit", "nested": [1, True]},
+        execution_outcome=(
+            execution_outcome
+            or ExecutionOutcomeRecord(
+                outcome=outcome,
+                reason_code=f"TEST_{outcome.value.upper()}",
+                detail="typed outcome fixture",
+                provenance={"source": "unit", "nested": [1, True]},
+            )
+        ),
     )
 
 
@@ -99,39 +128,39 @@ def test_six_state_roundtrip_event_query_step_result_and_step_record(
         record=record,
         stage="screening",
     )
-    queried = registry.get_latest_execution_outcome(
-        campaign_id="campaign-1",
-        branch_id=branch_id,
-    )
     query_results = registry.query_execution_outcomes(
         campaign_id="campaign-1",
         branch_id=branch_id,
     )
+    queried = query_results[0]
 
-    assert queried is not None
     assert query_results == [queried]
     assert {
         key: queried[key]
         for key in ("outcome", "reason_code", "detail", "provenance")
     } == record.to_primitive()
 
-    projected_outcome = ExecutionOutcome(queried["outcome"])
+    projected_outcome = ExecutionOutcomeRecord.from_primitive(queried)
     decision = Decision.CONTINUE_EXPLORE if outcome is ExecutionOutcome.EVALUATED else None
     protocol = _protocol() if outcome is ExecutionOutcome.EVALUATED else None
     step_result = StepResult(
         action="explore",
         branch_id=branch_id,
         decision=decision,
+        protocol_result=protocol,
         execution_outcome=projected_outcome,
-        execution_outcome_reason_code=queried["reason_code"],
-        execution_outcome_detail=queried["detail"],
-        execution_outcome_provenance=queried["provenance"],
     )
-    step_record = _step(outcome, decision=decision, protocol_result=protocol)
+    step_record = _step(
+        outcome,
+        decision=decision,
+        protocol_result=protocol,
+        execution_outcome=projected_outcome,
+    )
 
-    assert step_result.execution_outcome is outcome
-    assert step_record.execution_outcome is outcome
-    assert step_record.execution_outcome_provenance == record.provenance
+    assert step_result.execution_outcome == record
+    assert step_record.execution_outcome == record
+    assert step_result.execution_outcome is step_record.execution_outcome
+    assert step_record.execution_outcome.provenance == record.provenance
 
 
 def test_non_evaluated_outcome_rejects_decision_and_protocol() -> None:
@@ -139,14 +168,39 @@ def test_non_evaluated_outcome_rejects_decision_and_protocol() -> None:
         StepResult(
             action="explore",
             decision=Decision.ABANDON,
-            execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
-            execution_outcome_reason_code="CONTRACT_REJECTED",
+            execution_outcome=ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                reason_code="CONTRACT_REJECTED",
+            ),
         )
 
     with pytest.raises(ValueError, match="cannot carry a ProtocolResult"):
         _step(
             ExecutionOutcome.NOT_EVALUATED,
             protocol_result=_protocol(),
+        )
+
+
+def test_step_values_reject_a_bare_outcome_enum() -> None:
+    with pytest.raises(TypeError, match="ExecutionOutcomeRecord"):
+        StepResult(
+            action="explore",
+            execution_outcome=ExecutionOutcome.NOT_EVALUATED,  # type: ignore[arg-type]
+        )
+
+    with pytest.raises(TypeError, match="ExecutionOutcomeRecord"):
+        StepRecord(
+            round_num=1,
+            branch_id="branch-1",
+            hypothesis=_hypothesis(),
+            patch=None,
+            contract_passed=False,
+            verification_passed=False,
+            protocol_result=None,
+            decision=None,
+            failure_stage=None,
+            failure_detail=None,
+            execution_outcome=ExecutionOutcome.NOT_EVALUATED,  # type: ignore[arg-type]
         )
 
 
@@ -160,37 +214,6 @@ def test_evaluation_execution_result_is_not_a_tuple_api() -> None:
 
     with pytest.raises(TypeError):
         tuple(result)
-
-
-def test_contract_failure_is_research_rejected_without_decision(tmp_path: Path) -> None:
-    registry = LineageRegistry(str(tmp_path / "lineage.db"))
-    hypothesis_text = "invalid hypothesis " * 40 + "complete-tail"
-
-    registry.record_contract_failure(
-        campaign_id="campaign-1",
-        branch_id="branch-1",
-        hypothesis_text=hypothesis_text,
-        change_locus="solver.py:search",
-        action="modify",
-        target_file="solver.py",
-        failure_reason="missing clean-fork claim",
-    )
-
-    events = registry.query_by_branch("branch-1")
-    assert len(events) == 1
-    event = events[0]
-    assert event["event_kind"] == "contract_fail"
-    assert event["hypothesis_text"] == hypothesis_text
-    assert event["decision"] is None
-    assert event["execution_outcome"] == "research_rejected"
-    assert event["execution_outcome_reason_code"] == "CONTRACT_REJECTED"
-    audit_payload = json.loads(event["audit_payload_json"])
-    assert audit_payload["schema"] == "execution-outcome-event.v1"
-    assert audit_payload["execution_outcome"]["outcome"] == "research_rejected"
-    latest = registry.get_latest_execution_outcome(branch_id="branch-1")
-    assert latest is not None
-    assert latest["detail"] == "missing clean-fork claim"
-    assert latest["provenance"]["owner"] == "outer_contract"
 
 
 def test_historical_row_without_outcome_remains_readable_and_unknown(
@@ -208,10 +231,7 @@ def test_historical_row_without_outcome_remains_readable_and_unknown(
     events = registry.query_by_branch("branch-old")
     assert len(events) == 1
     assert events[0]["execution_outcome"] is None
-    assert registry.get_latest_execution_outcome(branch_id="branch-old") is None
-    assert registry.rebuild_latest_execution_outcomes(
-        campaign_id="campaign-old"
-    ) == {}
+    assert registry.query_execution_outcomes(branch_id="branch-old") == []
 
     historical_step = StepRecord(
         round_num=1,
@@ -243,58 +263,39 @@ def test_generic_event_writer_cannot_bypass_typed_outcome_owner(
         )
 
 
-def test_rebuild_uses_latest_append_only_outcome_per_branch(tmp_path: Path) -> None:
-    registry = LineageRegistry(str(tmp_path / "lineage.db"))
-    for outcome in (
-        ExecutionOutcome.NOT_EVALUATED,
-        ExecutionOutcome.INTERRUPTED,
-    ):
-        registry.record_execution_outcome(
-            campaign_id="campaign-1",
-            branch_id="branch-1",
-            record=ExecutionOutcomeRecord(
-                outcome=outcome,
-                reason_code=outcome.value.upper(),
-            ),
-        )
-
-    rebuilt = registry.rebuild_latest_execution_outcomes(campaign_id="campaign-1")
-    assert rebuilt["branch-1"]["outcome"] == "interrupted"
-
-
 def test_summary_and_status_project_explicit_non_evaluated_without_screening(
     tmp_path: Path,
 ) -> None:
     recorder = EvidenceRecorder(campaign_id="campaign-1", campaign_dir=tmp_path)
     step = _step(ExecutionOutcome.NOT_EVALUATED)
 
-    status = recorder.write_status(
-        last_result=StepResult(
-            action="explore",
-            branch_id=step.branch_id,
-            execution_outcome=ExecutionOutcome.NOT_EVALUATED,
-            execution_outcome_reason_code="TEST_NOT_EVALUATED",
-            execution_outcome_detail="typed outcome fixture",
-            execution_outcome_provenance={"source": "unit"},
-        )
-    )
-    summary = recorder.write_campaign_summary(
-        step_history=[step],
-        round_num=1,
-        champion=ChampionState(
-            version=1,
-            operator_pool={},
-            solver_config_hash="config",
-            code_snapshot_path="snapshot",
-            code_snapshot_hash="hash",
+    last_result = StepResult(
+        action="explore",
+        branch_id=step.branch_id,
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.NOT_EVALUATED,
+            reason_code="TEST_NOT_EVALUATED",
+            detail="typed outcome fixture",
+            provenance={"source": "unit"},
         ),
     )
+    state = _operator_state()
+    state["last_result"] = project_last_result(last_result)
+    run_projection = _run_projection(ExecutionOutcome.NOT_EVALUATED)
+    status = recorder.write_status(state=state, run_result=run_projection)
+    summary = recorder.write_campaign_summary(
+        state=state,
+        run_result=run_projection,
+        step_history=[step],
+    )
 
-    assert status["last_execution_outcome"]["outcome"] == "not_evaluated"
-    assert status["last_result"]["execution_outcome_reason_code"] == (
+    assert status["run_result"]["last_execution_outcome"]["outcome"] == (
+        "not_evaluated"
+    )
+    assert status["last_result"]["execution_outcome"]["reason_code"] == (
         "TEST_NOT_EVALUATED"
     )
-    assert summary["execution_outcome_counts"] == {
+    assert summary["run_result"]["execution_outcome_counts"] == {
         "evaluated": 0,
         "research_rejected": 0,
         "not_evaluated": 1,
@@ -302,47 +303,48 @@ def test_summary_and_status_project_explicit_non_evaluated_without_screening(
         "resource_exhausted": 0,
         "interrupted": 0,
     }
-    assert summary["last_execution_outcome"]["outcome"] == "not_evaluated"
-    assert summary["steps"][0]["execution_outcome"] == "not_evaluated"
-    assert summary["steps"][0]["execution_outcome_reason_code"] == (
+    assert summary["run_result"]["last_execution_outcome"]["outcome"] == (
+        "not_evaluated"
+    )
+    assert summary["steps"][0]["execution_outcome"]["outcome"] == "not_evaluated"
+    assert summary["steps"][0]["execution_outcome"]["reason_code"] == (
         "TEST_NOT_EVALUATED"
     )
-    assert summary["steps"][0]["screened_experiment"] is False
-    assert summary["steps"][0]["screened_experiment_effective"] is False
-    assert step.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+    assert "screened_experiment" not in summary["steps"][0]
+    assert "screened_experiment_effective" not in summary["steps"][0]
+    assert step.execution_outcome.outcome is ExecutionOutcome.NOT_EVALUATED
 
 
-def test_status_and_summary_project_typed_research_rejection_disposition(
+def test_status_and_summary_use_the_single_research_rejection_outcome(
     tmp_path: Path,
 ) -> None:
     recorder = EvidenceRecorder(campaign_id="campaign-1", campaign_dir=tmp_path)
-    marker = ResearchRejectionDisposition(
-        disposition=AttemptDisposition.ATTEMPT_REJECT_TO_BASE,
-        rejection_phase="verification",
-        lineage_event_id="event-1",
-    )
     result = StepResult(
         action="explore",
         branch_id="branch-1",
-        execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
-        execution_outcome_reason_code="VERIFICATION_LIGHT_REJECTED",
-        attempt_disposition=marker,
-    )
-    step = _step(ExecutionOutcome.RESEARCH_REJECTED)
-    step.attempt_disposition = marker
-
-    status = recorder.write_status(last_result=result)
-    summary = recorder.write_campaign_summary(
-        step_history=[step],
-        round_num=1,
-        champion=ChampionState(
-            version=1,
-            operator_pool={},
-            solver_config_hash="config",
-            code_snapshot_path="snapshot",
-            code_snapshot_hash="hash",
+        failure_stage="verification",
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code="VERIFICATION_LIGHT_REJECTED",
         ),
     )
+    step = _step(ExecutionOutcome.RESEARCH_REJECTED)
 
-    assert status["last_result"]["attempt_disposition"] == marker.to_primitive()
-    assert summary["steps"][0]["attempt_disposition"] == marker.to_primitive()
+    state = _operator_state()
+    state["last_result"] = project_last_result(result)
+    run_projection = _run_projection(ExecutionOutcome.RESEARCH_REJECTED)
+    status = recorder.write_status(state=state, run_result=run_projection)
+    summary = recorder.write_campaign_summary(
+        state=state,
+        run_result=run_projection,
+        step_history=[step],
+    )
+
+    assert status["last_result"]["execution_outcome"]["outcome"] == (
+        "research_rejected"
+    )
+    assert summary["steps"][0]["execution_outcome"]["outcome"] == (
+        "research_rejected"
+    )
+    assert "attempt_disposition" not in status["last_result"]
+    assert "attempt_disposition" not in summary["steps"][0]

@@ -1,4 +1,5 @@
 """Tests for scion/protocol/ — evaluation, stats, gates, experiment."""
+# ruff: noqa: F401
 from __future__ import annotations
 import inspect
 import json
@@ -17,6 +18,13 @@ from scion.protocol.evaluation import lexicographic_compare, compute_delta
 from scion.protocol.stats import compute_eval_stats, bootstrap_ci
 from scion.protocol.gates import GateResult, screening_gate, validation_gate, frozen_gate
 from scion.protocol.experiment import SplitManager, SeedLedger, ExperimentProtocol
+from scion.problem.spec import ObjectiveMetricSpec
+
+
+_METRIC_SPECS = (
+    ObjectiveMetricSpec(name="subcategory_splits", direction="minimize", priority=1),
+    ObjectiveMetricSpec(name="total_cost", direction="minimize", priority=2),
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -119,6 +127,34 @@ def _make_manifest():
     )
 
 
+def _make_strict_manifest(tmp_path):
+    case_dir = tmp_path / "cases"
+    case_dir.mkdir(exist_ok=True)
+    names = (
+        "case_a",
+        "case_b",
+        "case_c",
+        "case_d",
+        "case_e",
+        "case_f",
+        "canary_x",
+        "canary_y",
+    )
+    paths = {}
+    for name in names:
+        path = case_dir / name
+        path.write_text("{}\n", encoding="utf-8")
+        paths[name] = str(path)
+    return SplitManifest(
+        version="test",
+        screening=[paths["case_a"], paths["case_b"]],
+        validation=[paths["case_c"], paths["case_d"]],
+        frozen=[paths["case_e"], paths["case_f"]],
+        canary=[paths["canary_x"], paths["canary_y"]],
+        safe_data_roots=[str(case_dir)],
+    )
+
+
 def _make_ledger():
     return SeedLedgerConfig(
         version="test",
@@ -180,11 +216,12 @@ def _make_run_failure(category: str = "timeout", elapsed_ms: int = 1000) -> RunR
 def _make_protocol(runner, tmp_path, problem_spec=None) -> ExperimentProtocol:
     return ExperimentProtocol(
         protocol_config=ProtocolConfig(),
-        split_manager=SplitManager(_make_manifest()),
+        split_manager=SplitManager(_make_strict_manifest(tmp_path)),
         seed_ledger=SeedLedger(_make_ledger()),
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
+        metric_specs=_METRIC_SPECS,
         problem_spec=problem_spec,
     )
 

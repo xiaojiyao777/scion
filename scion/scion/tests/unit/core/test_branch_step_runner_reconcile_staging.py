@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 from scion.core.branch import BranchController
 from scion.core.branch_step_runner import BranchStepRunner
-from scion.core.candidate_evaluation import candidate_evaluation
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
@@ -16,21 +15,19 @@ from scion.core.models import (
     CheckResult,
     ContractResult,
     HypothesisProposal,
-    HypothesisRecord,
     PatchProposal,
     VerificationResult,
 )
 from scion.core.scheduler import Scheduler
 from scion.core.step_result import StepResult
+from scion.core.workspace_service import CandidateWorkspace
 
 
 def _champion(version: int) -> ChampionState:
     return ChampionState(
         version=version,
         operator_pool={},
-        solver_config_hash="solver",
         code_snapshot_path=f"/tmp/champion-{version}",
-        code_snapshot_hash=f"champion-{version}",
     )
 
 
@@ -51,15 +48,9 @@ def _runner(*, verification_passed: bool, evaluate):
         action="modify",
         code_content="class LocalSearch: pass\n",
     )
-    record = HypothesisRecord(
-        hypothesis_id="reconcile-hypothesis",
-        branch_id=branch.branch_id,
-        change_locus=hypothesis.change_locus,
-        action=hypothesis.action,
-        status="active",
-    )
+    branch.hypothesis = hypothesis
     workspaces = {branch.branch_id: "/tmp/old-branch"}
-    applied: list[tuple[str, bool]] = []
+    applied: list[str] = []
     rejected: list[str] = []
 
     class _VerificationGate:
@@ -78,27 +69,26 @@ def _runner(*, verification_passed: bool, evaluate):
                 first_failure=None if verification_passed else "failed",
             )
 
-    def apply_candidate(_branch, base_workspace, _patch, **kwargs):
-        applied.append((base_workspace, kwargs["remember_patch"]))
-        workspaces[branch.branch_id] = "/tmp/reconcile-staging"
-        return SimpleNamespace(
-            workspace="/tmp/reconcile-staging", code_hash="candidate"
+    def apply_candidate(base_workspace, _patch, **_kwargs):
+        applied.append(base_workspace)
+        return CandidateWorkspace(
+            workspace="/tmp/reconcile-staging",
+            source_digest="candidate",
         )
 
-    def reject_candidate(_branch, workspace):
-        rejected.append(workspace)
-        workspaces[branch.branch_id] = "/tmp/reconcile-base"
+    def verify_candidate(candidate):
+        return candidate
+
+    def reject_candidate(candidate):
+        rejected.append(candidate.workspace)
 
     runner = BranchStepRunner(
         branch_controller=controller,
         scheduler=Scheduler(),
         champion_lock=nullcontext(),
         get_champion=lambda: new_champion,
-        branch_store=SimpleNamespace(save=lambda _branch: None),
         branch_workspaces=workspaces,
-        branch_hypotheses={branch.branch_id: hypothesis},
         branch_patches={branch.branch_id: patch},
-        branch_current_hypothesis={branch.branch_id: record},
         experiment_protocol_provider=lambda: object(),
         contract_gate=SimpleNamespace(
             validate_patch=lambda *_args, **_kwargs: ContractResult(
@@ -110,19 +100,16 @@ def _runner(*, verification_passed: bool, evaluate):
         drain_weight_opt_events=lambda: None,
         should_stop=lambda: False,
         get_last_stop_reason=lambda: None,
-        persist_branch_state=lambda _branch_id: None,
         setup_workspace=lambda *_args, **_kwargs: "/tmp/reconcile-base",
-        apply_patch=lambda *_args, **_kwargs: None,
         evaluate=evaluate,
         apply_decision_and_finalize=lambda **_kwargs: StepResult(action="reconcile"),
         record_step=lambda _step: None,
-        decision_reason_codes_for=lambda *_args: None,
         run_explore_step=lambda _branch: StepResult(action="explore"),
         run_eval_step_callback=lambda _branch: StepResult(action="validate"),
         run_reconcile_step_callback=lambda _branch: StepResult(action="reconcile"),
         increment_round=lambda: 1,
-        hypothesis_store=SimpleNamespace(mark_status=lambda *_args: None),
         apply_reconcile_candidate=apply_candidate,
+        verify_reconcile_candidate=verify_candidate,
         reject_reconcile_candidate=reject_candidate,
     )
     return runner, controller, branch, workspaces, applied, rejected
@@ -138,22 +125,22 @@ def test_reconcile_verification_failure_rejects_staging_before_abandoning() -> N
 
     result = runner.run_reconcile_step(branch)
 
-    assert applied == [("/tmp/reconcile-base", False)]
+    assert applied == ["/tmp/champion-2"]
     assert rejected == ["/tmp/reconcile-staging"]
     assert result.failure_stage == "verification"
     assert controller.get_branch(branch.branch_id).state is BranchState.ABANDONED
 
 
-def test_reconcile_success_enters_protocol_with_pending_staging_candidate() -> None:
+def test_reconcile_protocol_failure_rejects_direct_staging_candidate() -> None:
     observed: list[tuple[str, str]] = []
 
-    def not_evaluated(branch, workspace, _hypothesis):
-        observed.append((branch.state.value, workspace))
+    def not_evaluated(branch, workspace, _hypothesis, **stage_values):
+        observed.append((stage_values["branch_state"].value, workspace))
         return EvaluationExecutionResult(
             execution_outcome=ExecutionOutcomeRecord(
                 outcome=ExecutionOutcome.NOT_EVALUATED,
                 reason_code="TEMPORARY_PROTOCOL_FAILURE",
-                detail="retry this staging candidate",
+                detail="protocol did not evaluate the staging candidate",
             )
         )
 
@@ -164,15 +151,10 @@ def test_reconcile_success_enters_protocol_with_pending_staging_candidate() -> N
 
     result = runner.run_reconcile_step(branch)
 
-    restored = controller.get_branch(branch.branch_id)
-    assert applied == [("/tmp/reconcile-base", False)]
-    assert rejected == []
+    current = controller.get_branch(branch.branch_id)
+    assert applied == ["/tmp/champion-2"]
+    assert rejected == ["/tmp/reconcile-staging"]
     assert observed == [("explore", "/tmp/reconcile-staging")]
-    assert workspaces[branch.branch_id] == "/tmp/reconcile-staging"
-    assert restored.state is BranchState.EXPLORE
-    assert candidate_evaluation(restored) == {
-        "status": "pending",
-        "hypothesis_id": "reconcile-hypothesis",
-        "kind": "reconcile",
-    }
-    assert result.execution_outcome is ExecutionOutcome.NOT_EVALUATED
+    assert workspaces[branch.branch_id] == "/tmp/old-branch"
+    assert current.state is BranchState.BLOCKED_INFRA
+    assert result.execution_outcome.outcome is ExecutionOutcome.NOT_EVALUATED

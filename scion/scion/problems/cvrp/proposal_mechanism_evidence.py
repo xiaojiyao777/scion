@@ -57,7 +57,6 @@ def _project_for_proposal(packet: Mapping[str, Any]) -> dict[str, Any]:
         "evidence_scope": packet.get("evidence_scope"),
         "hypothesis_attribution": packet.get("hypothesis_attribution"),
         "interpretation_constraint": packet.get("interpretation_constraint"),
-        "gate_influence": False,
         "comparison_columns": list(_COMPARISON_COLUMNS),
         "coverage_columns": ["candidate", "champion", "paired"],
         "coverage": {

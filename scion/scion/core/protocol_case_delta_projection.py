@@ -4,12 +4,14 @@ The projection is intentionally problem-neutral and lossless: problem-owned
 postrun reviewers receive every public case pair and metric without core
 teaching problem semantics or substituting a bounded summary for evidence.
 """
+
 from __future__ import annotations
 
 import json
 from collections import Counter
 from pathlib import Path
 from typing import Any, Mapping
+
 
 def protocol_case_level_deltas(
     protocol: Mapping[str, Any],
@@ -71,14 +73,9 @@ def _resolve_public_metrics_path(
 
 
 def _public_metrics_ref(protocol: Mapping[str, Any]) -> str:
-    public_ref = _clean_str(protocol.get("raw_metrics_public_ref"))
-    if public_ref:
-        return public_ref
     raw_ref = _clean_str(protocol.get("raw_metrics_ref"))
     if not raw_ref:
         return ""
-    if _clean_str(protocol.get("raw_metrics_ref_scope")) == "public_artifact_ref":
-        return raw_ref
     if not Path(raw_ref).is_absolute():
         return raw_ref
     return ""

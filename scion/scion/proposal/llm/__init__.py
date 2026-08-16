@@ -9,7 +9,6 @@ from scion.proposal.llm.errors import (
     LLMRateLimitError,
     LLMTimeoutError,
     LLMTransportError,
-    is_llm_infra_error,
 )
 
 __all__ = [
@@ -22,5 +21,4 @@ __all__ = [
     "LLMRateLimitError",
     "LLMTimeoutError",
     "LLMTransportError",
-    "is_llm_infra_error",
 ]

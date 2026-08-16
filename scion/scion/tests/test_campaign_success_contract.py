@@ -1,8 +1,49 @@
 """Focused tests split from test_campaign.py."""
 
-from .campaign_test_support import *  # noqa: F401,F403
+from scion.core.branch import StateTransitionError
 from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.scheduler import Scheduler
+
+from .campaign_test_support import *  # noqa: F401,F403
+
+
+def _assert_single_typed_terminal(
+    cm,
+    result,
+    *,
+    reason_code: str,
+    event_kind: str,
+    event_stage: str,
+    failure_stage: str,
+):
+    assert result.branch_id is not None
+    record = result.execution_outcome
+    assert record is not None
+    assert record.outcome is ExecutionOutcome.BLOCKED_INFRA
+    assert record.reason_code == reason_code
+    assert record.provenance["stage"] == event_stage
+    assert result.failure_stage == failure_stage
+    assert result.failure_category == ExecutionOutcome.BLOCKED_INFRA.value
+    assert result.decision is None
+    assert result.protocol_result is None
+
+    branch = cm._branch_ctrl.get_branch(result.branch_id)
+    assert branch.state is BranchState.BLOCKED_INFRA
+
+    step = cm._step_history[-1]
+    assert step.execution_outcome is record
+    assert step.decision is None
+    assert step.protocol_result is None
+    assert step.failure_stage == failure_stage
+
+    outcomes = cm._registry.query_execution_outcomes(branch_id=result.branch_id)
+    assert len(outcomes) == 1
+    assert outcomes[0]["event_kind"] == event_kind
+    assert outcomes[0]["stage"] == event_stage
+    assert outcomes[0]["outcome"] == ExecutionOutcome.BLOCKED_INFRA.value
+    assert outcomes[0]["reason_code"] == reason_code
+    return record
+
 
 class TestFullSuccessPath:
     def test_validation_and_frozen_reuse_do_not_regenerate_h_or_c(self, tmp_path):
@@ -86,8 +127,7 @@ class TestFullSuccessPath:
         cm.run_one_step()
         assert cm._champion.version == 2
 
-    def test_promoted_champion_records_promotion_experiment_id(self, tmp_path):
-        """Structural promotions persist the event id on the champion row."""
+    def test_promote_writes_one_ordinary_experiment_event(self, tmp_path):
         protocol = MockExperimentProtocol(results=[
             _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
             _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="pass",
@@ -101,62 +141,13 @@ class TestFullSuccessPath:
         cm.run_one_step()
         cm.run_one_step()
 
-        promoted = cm._champion_store.get_by_version(2)
-        assert promoted is not None
-        assert promoted.promotion_experiment_id
-        assert promoted.promotion_experiment_id == cm._champion.promotion_experiment_id
+        assert cm._champion.version == 2
         with sqlite3.connect(Path(cm._campaign_dir) / "scion.db") as conn:
-            event = conn.execute(
-                "SELECT event_kind, decision FROM experiment_events WHERE event_id = ?",
-                (promoted.promotion_experiment_id,),
-            ).fetchone()
-        assert event == ("experiment", "promote")
-
-    def test_promotion_lineage_record_event_failure_is_visible_degraded(
-        self,
-        tmp_path,
-        monkeypatch,
-    ):
-        """PROMOTE cannot look normal when the champion link has no lineage row."""
-        protocol = MockExperimentProtocol(results=[
-            _make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass"),
-            _make_protocol_result(ExperimentStage.VALIDATION, gate_outcome="pass",
-                                  win_rate=0.7, ci_low=0.005, ci_high=0.02),
-            _make_protocol_result(ExperimentStage.FROZEN, gate_outcome="pass",
-                                  win_rate=0.7, ci_low=0.005, ci_high=0.02),
-        ])
-        cm = _campaign(tmp_path, experiment_protocol=protocol)
-        original_record_event = cm._registry.record_event
-
-        def fail_promote_record_event(event):
-            if event.get("decision") == "promote":
-                raise OSError("registry event unavailable")
-            return original_record_event(event)
-
-        monkeypatch.setattr(cm._registry, "record_event", fail_promote_record_event)
-
-        cm.run_one_step()
-        cm.run_one_step()
-        result = cm.run_one_step()
-
-        assert result.decision == Decision.PROMOTE
-        assert result.reason.startswith("promotion_lineage_degraded")
-        assert result.failure_category == "promotion_recovery"
-        marker = cm._branch_ctrl.get_branch(result.branch_id).branch_evidence_summary[
-            "promotion_integrity"
-        ]
-        assert marker["status"] == "lineage_degraded"
-        assert marker["lineage_status"] == "degraded"
-
-        promoted = cm._champion_store.get_by_version(2)
-        assert promoted is not None
-        assert promoted.promotion_experiment_id == marker["promotion_event_id"]
-        with sqlite3.connect(Path(cm._campaign_dir) / "scion.db") as conn:
-            event = conn.execute(
-                "SELECT event_id FROM experiment_events WHERE event_id = ?",
-                (promoted.promotion_experiment_id,),
-            ).fetchone()
-        assert event is None
+            events = conn.execute(
+                "SELECT event_kind, decision FROM experiment_events "
+                "WHERE event_kind = 'experiment' AND decision = 'promote'",
+            ).fetchall()
+        assert events == [("experiment", "promote")]
 
     def test_promote_marks_other_branches_stale(self, tmp_path):
         """After PROMOTE, all sibling branches should be STALE."""
@@ -170,8 +161,7 @@ class TestFullSuccessPath:
         ])
         cm = _campaign(tmp_path, experiment_protocol=protocol)
         # Step 1: creates branch A (EXPLORE → QUEUE_VALIDATE)
-        r1 = cm.run_one_step()
-        bid_a = r1.branch_id
+        cm.run_one_step()
 
         # Manually create a second branch for testing
         branch_b = cm._branch_ctrl.create_branch(cm._champion)
@@ -183,6 +173,42 @@ class TestFullSuccessPath:
         # Branch B should now be STALE
         branch_b_state = cm._branch_ctrl.get_branch(branch_b.branch_id)
         assert branch_b_state.state == BranchState.STALE
+
+    def test_promote_precondition_failure_is_one_typed_terminal(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        cm = _campaign(tmp_path, experiment_protocol=_promote_protocol())
+        screening = cm.run_one_step()
+        bid = screening.branch_id
+        assert bid is not None
+        cm.run_one_step()
+
+        def fail_precondition(_branch):
+            raise StateTransitionError("forced promotion precondition failure")
+
+        monkeypatch.setattr(
+            cm._decision_finalizer,
+            "require_promotable_branch",
+            fail_precondition,
+        )
+        result = cm.run_one_step()
+
+        assert result.reason.startswith("promotion_precondition_failed")
+        _assert_single_typed_terminal(
+            cm,
+            result,
+            reason_code="PROMOTION_PRECONDITION_FAILED",
+            event_kind="promotion_execution_outcome",
+            event_stage="promotion_precondition",
+            failure_stage="promotion_precondition",
+        )
+        assert cm._champion.version == 1
+        assert bid is not None
+        branch = cm._branch_ctrl.get_branch(bid)
+        assert branch.state is BranchState.BLOCKED_INFRA
+        assert branch.hypothesis is not None
 
     def test_promote_snapshot_failure_does_not_commit_state(self, tmp_path, monkeypatch):
         """PROMOTE snapshot/freeze failure must not mark branch/hypothesis/champion promoted."""
@@ -204,13 +230,20 @@ class TestFullSuccessPath:
         monkeypatch.setattr(cm._materializer, "freeze_snapshot", fail_freeze)
         result = cm.run_one_step()
 
-        assert result.decision is None
-        assert result.reason.startswith("promote_prepare_failed")
+        assert result.reason.startswith("promotion_failed")
+        _assert_single_typed_terminal(
+            cm,
+            result,
+            reason_code="PROMOTION_FAILED",
+            event_kind="promotion_execution_outcome",
+            event_stage="promotion",
+            failure_stage="promotion",
+        )
         assert cm._champion.version == 1
         assert bid is not None
         branch = cm._branch_ctrl.get_branch(bid)
-        assert branch.state == BranchState.BLOCKED_INFRA
-        assert cm._hyp_store.get_by_status("promoted") == []
+        assert branch.state is BranchState.BLOCKED_INFRA
+        assert branch.hypothesis is not None
 
 
 class TestContractFailure:
@@ -220,7 +253,6 @@ class TestContractFailure:
             "file_path": "solver.py",  # frozen file — C5 will fail
             "action": "create",
             "edit_intent": "full_file",
-            "source_digest": None,
             "content_after": _VALID_CODE,
             "test_hint": None,
         }
@@ -240,7 +272,6 @@ class TestContractFailure:
             "file_path": "solver.py",  # frozen file
             "action": "create",
             "edit_intent": "full_file",
-            "source_digest": None,
             "content_after": _VALID_CODE,
             "test_hint": None,
         }
@@ -250,8 +281,8 @@ class TestContractFailure:
         branch = cm._branch_ctrl.get_branch(result.branch_id)
         assert branch.state == BranchState.EXPLORE  # can still be retried
 
-    def test_workspace_creation_failure_routes_as_infra(self, tmp_path):
-        """Workspace setup failures should enter failure lifecycle, not just record a step."""
+    def test_workspace_creation_failure_is_one_typed_terminal(self, tmp_path):
+        """Workspace setup failure stops the branch with one typed outcome."""
         cm = _campaign(tmp_path)
 
         def fail_create_workspace(branch_id, source_snapshot):
@@ -261,47 +292,40 @@ class TestContractFailure:
 
         result = cm.run_one_step()
 
-        assert result.branch_id is not None
         assert result.reason == "workspace setup failed"
-        assert result.execution_outcome is ExecutionOutcome.BLOCKED_INFRA
-        assert result.execution_outcome_reason_code == "WORKSPACE_SETUP_FAILED"
-        branch = cm._branch_ctrl.get_branch(result.branch_id)
-        assert branch.state == BranchState.BLOCKED_INFRA
-        assert cm._failure_streak["infra"] == 1
-        records = cm._hyp_store.get_by_branch(result.branch_id)
-        assert records[-1].status == "blocked_infra"
-        assert cm._step_history[-1].decision is None
-        assert cm._step_history[-1].protocol_result is None
-        assert (
-            cm._step_history[-1].execution_outcome
-            is ExecutionOutcome.BLOCKED_INFRA
+        _assert_single_typed_terminal(
+            cm,
+            result,
+            reason_code="WORKSPACE_SETUP_FAILED",
+            event_kind="workspace_execution_outcome",
+            event_stage="workspace_setup",
+            failure_stage="workspace",
         )
+        branch = cm._branch_ctrl.get_branch(result.branch_id)
+        assert branch.hypothesis is None
 
-    def test_patch_materialization_failure_routes_as_infra(self, tmp_path):
+    def test_patch_materialization_failure_is_one_typed_terminal(self, tmp_path):
         """Post-Contract filesystem failure is not a research rejection."""
         cm = _campaign(tmp_path)
 
         def fail_apply_patch(*args, **kwargs):
             raise OSError("disk write unavailable")
 
-        cm._workspace_lifecycle.apply_candidate_patch = fail_apply_patch
+        cm._explore_step_pipeline.apply_patch = fail_apply_patch
 
         result = cm.run_one_step()
 
-        assert result.branch_id is not None
         assert result.reason == "apply_patch failed"
-        assert result.execution_outcome is ExecutionOutcome.BLOCKED_INFRA
-        assert (
-            result.execution_outcome_reason_code
-            == "PATCH_MATERIALIZATION_FAILED"
+        _assert_single_typed_terminal(
+            cm,
+            result,
+            reason_code="PATCH_MATERIALIZATION_FAILED",
+            event_kind="workspace_execution_outcome",
+            event_stage="patch_materialization",
+            failure_stage="workspace",
         )
         branch = cm._branch_ctrl.get_branch(result.branch_id)
-        assert branch.state == BranchState.BLOCKED_INFRA
-        assert cm._failure_streak["infra"] == 1
-        records = cm._hyp_store.get_by_branch(result.branch_id)
-        assert records[-1].status == "blocked_infra"
-        assert cm._step_history[-1].decision is None
-        assert cm._step_history[-1].protocol_result is None
+        assert branch.hypothesis is None
 
     def test_hypothesis_locus_outside_call_enum_is_provider_invalid(self, tmp_path):
         """An enum-external locus is rejected before publishing a hypothesis."""
@@ -319,9 +343,8 @@ class TestContractFailure:
         result = cm.run_one_step()
         assert result.branch_id is not None
         assert result.decision is None
-        records = cm._hyp_store.get_by_branch(result.branch_id)
-        assert records == []
-        assert result.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
+        assert cm._branch_ctrl.get_branch(result.branch_id).hypothesis is None
+        assert result.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
 
     def test_contract_fail_next_tick_starts_fresh_candidate_same_branch(self, tmp_path):
         """An explicit next tick starts a fresh candidate on the same branch.
@@ -332,7 +355,6 @@ class TestContractFailure:
             "file_path": "solver.py",  # frozen file
             "action": "create",
             "edit_intent": "full_file",
-            "source_digest": None,
             "content_after": _VALID_CODE,
             "test_hint": None,
         }
@@ -344,7 +366,6 @@ class TestContractFailure:
             "file_path": "operators/other_op.py",
             "action": "create",
             "edit_intent": "full_file",
-            "source_digest": None,
             "content_after": _VALID_CODE,
             "test_hint": None,
         }

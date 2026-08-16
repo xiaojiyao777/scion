@@ -3,7 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
-from scion.core.evidence_recorder import EvidenceRecorder
+from scion.core.campaign_loop import CampaignRunResult
+from scion.core.evidence_recording import EvidenceRecorder
 from scion.core.models import (
     ChampionState,
     Decision,
@@ -27,6 +28,20 @@ _ARTIFACT_KEYS = (
     "runtime_summary",
     "failure_summary",
 )
+
+
+def _operator_state() -> dict[str, object]:
+    return {
+        "campaign_id": "camp-1",
+        "proposal_runtime_mode": "direct_v3",
+        "n_steps": 1,
+        "champion_version": 1,
+        "branches": [],
+    }
+
+
+def _run_projection() -> dict[str, object]:
+    return CampaignRunResult.empty(1).to_projection()
 
 
 def _manifest(**overrides: object) -> dict[str, object]:
@@ -97,9 +112,7 @@ def _champion() -> ChampionState:
     return ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="solver-hash",
         code_snapshot_path="/tmp/champion",
-        code_snapshot_hash="code-hash",
     )
 
 
@@ -166,10 +179,9 @@ def test_attach_helper_updates_summary_refs_without_changing_step_schema(
     recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
     result = _package_result(tmp_path / "evidence")
     before = recorder.write_campaign_summary(
+        state=_operator_state(),
+        run_result=_run_projection(),
         step_history=[_step()],
-        round_num=1,
-        champion=_champion(),
-        stopped_reason="max_rounds_exhausted",
     )
     assert "formal_readiness" not in before
     assert "final_evidence_refs" not in before
@@ -177,9 +189,9 @@ def test_attach_helper_updates_summary_refs_without_changing_step_schema(
 
     payload = attach_final_evidence_package(recorder, result)
     after = recorder.write_campaign_summary(
+        state=_operator_state(),
+        run_result=_run_projection(),
         step_history=[_step()],
-        round_num=1,
-        champion=_champion(),
     )
 
     assert payload == {"final_quality": after["final_evidence_refs"]["final_quality"]}
@@ -204,9 +216,9 @@ def test_multiple_attach_calls_merge_labels_without_overwriting_other_labels(
     attach_final_evidence_package(recorder, final_result, label="final_quality")
     attach_final_evidence_package(recorder, frozen_result, label="frozen_quality")
     summary = recorder.write_campaign_summary(
+        state=_operator_state(),
+        run_result=_run_projection(),
         step_history=[_step()],
-        round_num=1,
-        champion=_champion(),
     )
 
     refs = summary["final_evidence_refs"]
@@ -234,9 +246,9 @@ def test_manual_final_evidence_refs_are_redacted_in_summary(tmp_path: Path) -> N
     diagnostic_report = tmp_path / "diagnostics" / "final.json"
 
     summary = recorder.write_campaign_summary(
+        state=_operator_state(),
+        run_result=_run_projection(),
         step_history=[_step()],
-        round_num=1,
-        champion=_champion(),
         final_evidence_refs={
             "final_quality": {
                 "problem_id": "cvrp",

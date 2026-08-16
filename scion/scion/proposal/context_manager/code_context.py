@@ -3,23 +3,13 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Optional, Sequence
 
-from scion.core.candidate_disposition import (
-    CandidateDisposition,
-    CandidateDispositionError,
-    CandidateDispositionMapper,
-)
-from scion.core.models import (
-    Branch,
-    ChampionState,
-    DecisionOutcome,
-    StepRecord,
-    patch_file_changes,
-)
+from scion.core.models import ChampionState
 from scion.core.paths import normalize_relative_patch_path
 
 from .io import (
+    _list_branch_surface_files,
     _list_champion_operator_files,
     _list_champion_surface_files,
     _read_champion_operators,
@@ -27,146 +17,12 @@ from .io import (
     _read_surface_file,
 )
 
-DURABLE_BRANCH_CREATED_FILES_KEY = "verified_branch_created_files"
-DURABLE_BRANCH_TOUCHED_FILES_KEY = "verified_branch_touched_files"
-
-
-def _branch_steps(
-    branch: Branch,
-    steps: Sequence[StepRecord],
-) -> tuple[StepRecord, ...]:
-    return tuple(step for step in steps if step.branch_id == branch.branch_id)
-
-
-def _verified_branch_steps(
-    branch: Branch,
-    steps: Sequence[StepRecord],
-) -> tuple[StepRecord, ...]:
-    """Return only patch facts that reached the durable verified workspace."""
-
-    return tuple(
-        step
-        for step in _branch_steps(branch, steps)
-        if step.verification_passed
-        and step.patch is not None
-        and _step_can_own_branch_source(step)
-    )
-
-
-def _step_can_own_branch_source(step: StepRecord) -> bool:
-    """Accept branch source only for an explicit code-retaining disposition."""
-
-    if step.decision is None or step.decision_features_snapshot is None:
-        return False
-    try:
-        plan = CandidateDispositionMapper.map(
-            DecisionOutcome(
-                decision=step.decision,
-                reason_codes=tuple(step.decision_reason_codes or ()),
-                features_snapshot=step.decision_features_snapshot,
-            )
-        )
-    except (CandidateDispositionError, TypeError):
-        return False
-    return plan.disposition in {
-        CandidateDisposition.PROVISIONAL_HEAD,
-        CandidateDisposition.EXACT_REUSE,
-        CandidateDisposition.PROMOTE_EXACT,
-    }
-
 
 def _clean_history_path(value: Any) -> str:
     text = str(value or "").strip().replace("\\", "/").lstrip("/")
     if not text or any(part in {"", ".", ".."} for part in text.split("/")):
         return ""
     return text
-
-
-def _append_unique_path(paths: list[str], value: Any) -> None:
-    path = _clean_history_path(value)
-    if path and path not in paths:
-        paths.append(path)
-
-
-def branch_created_files(
-    branch: Branch | None,
-    steps: Sequence[StepRecord] | None,
-) -> tuple[str, ...]:
-    """Return every file created on the durable branch history."""
-
-    if branch is None:
-        return ()
-    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
-    durable = summary.get(DURABLE_BRANCH_CREATED_FILES_KEY, [])
-    if not isinstance(durable, list):
-        raise ValueError("durable branch created-file history is invalid")
-    files: list[str] = []
-    for path in durable:
-        _append_unique_path(files, path)
-    for step in _verified_branch_steps(branch, steps or ()):
-        hypothesis = getattr(step, "hypothesis", None)
-        if getattr(hypothesis, "action", None) == "create_new":
-            _append_unique_path(files, getattr(hypothesis, "target_file", ""))
-        patch = getattr(step, "patch", None)
-        if patch is None:
-            continue
-        for change in patch_file_changes(patch):
-            if getattr(change, "action", None) == "create":
-                _append_unique_path(files, getattr(change, "file_path", ""))
-    return tuple(files)
-
-
-def branch_touched_files(
-    branch: Branch | None,
-    steps: Sequence[StepRecord] | None,
-) -> tuple[str, ...]:
-    """Return every file touched on the durable branch history."""
-
-    if branch is None:
-        return ()
-    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
-    durable = summary.get(DURABLE_BRANCH_TOUCHED_FILES_KEY, [])
-    if not isinstance(durable, list):
-        raise ValueError("durable branch touched-file history is invalid")
-    files: list[str] = []
-    for path in durable:
-        _append_unique_path(files, path)
-    for step in _verified_branch_steps(branch, steps or ()):
-        hypothesis = getattr(step, "hypothesis", None)
-        _append_unique_path(files, getattr(hypothesis, "target_file", ""))
-        patch = getattr(step, "patch", None)
-        if patch is None:
-            continue
-        for change in patch_file_changes(patch):
-            _append_unique_path(files, getattr(change, "file_path", ""))
-    return tuple(files)
-
-
-def branch_current_file_sources(
-    branch: Branch | None,
-    steps: Sequence[StepRecord] | None,
-) -> dict[str, str]:
-    """Reconstruct current branch-owned sources from all durable patch facts."""
-
-    if branch is None:
-        return {}
-    sources: dict[str, str] = {}
-    for step in _verified_branch_steps(branch, steps or ()):
-        patch = getattr(step, "patch", None)
-        if patch is None:
-            continue
-        for change in patch_file_changes(patch):
-            path = _clean_history_path(getattr(change, "file_path", ""))
-            action = str(getattr(change, "action", "") or "")
-            if not path:
-                continue
-            if action == "delete":
-                sources.pop(path, None)
-                continue
-            content = getattr(change, "code_content", None)
-            if action in {"create", "modify"} and isinstance(content, str):
-                sources[path] = content
-    return sources
 
 
 def _read_champion_research_code(
@@ -198,21 +54,6 @@ def _read_champion_research_code(
     return "\n\n".join(section for section in sections if section)
 
 
-def _branch_current_context_paths(
-    branch_created_files: Sequence[str],
-    branch_touched_files: Sequence[str],
-) -> tuple[str, ...]:
-    paths: list[str] = []
-    for collection in (branch_created_files, branch_touched_files):
-        for item in collection or ():
-            if not str(item or "").strip():
-                continue
-            rel = _normalize_source_path(item)
-            if rel and rel not in paths:
-                paths.append(rel)
-    return tuple(paths)
-
-
 EDITABLE_SOURCE_CONTEXT_KEY = "editable_source_context"
 
 
@@ -231,38 +72,21 @@ def _build_editable_source_context(
     target_file: Optional[str],
     target_action: str,
     provider: Any | None,
-    branch_created_files: Sequence[str] = (),
-    branch_touched_files: Sequence[str] = (),
-    branch_current_file_sources: Mapping[str, str] | None = None,
 ) -> dict[str, Any]:
     """Collect each current editable source once, with no identity metadata."""
 
     target = _normalize_source_path(target_file)
-    branch_paths = _branch_current_context_paths(
-        branch_created_files, branch_touched_files
-    )
-    overrides = branch_current_file_sources or {}
     sources: dict[str, str | None] = {}
 
     def add(rel: str) -> None:
         path = _normalize_source_path(rel)
         if path in sources:
             return
-        if (
-            path in branch_paths
-            and path not in overrides
-            and _same_source_root(source_root, champion.code_snapshot_path)
-        ):
-            sources[path] = None
-            return
         artifact = _read_solver_design_context_artifact(
             path,
             source_root=source_root,
             champion_root=champion.code_snapshot_path,
-            source_overrides=overrides,
-            # A durable branch touch makes absence authoritative. Falling back
-            # would silently resurrect a deleted helper from the champion.
-            allow_champion_fallback=path not in branch_paths,
+            allow_champion_fallback=False,
         )
         content = artifact.get("content")
         sources[path] = (
@@ -270,12 +94,12 @@ def _build_editable_source_context(
         )
 
     add(target)
-    operator_paths = _list_champion_operator_files(champion)
-    surface_paths = _list_champion_surface_files(
-        champion, research_surfaces=research_surfaces
+    operator_paths = _list_current_operator_files(source_root, champion)
+    surface_paths = _list_branch_surface_files(
+        source_root,
+        research_surfaces=research_surfaces,
     )
-    champion_paths = list(dict.fromkeys([*operator_paths, *surface_paths]))
-    for path in champion_paths:
+    for path in dict.fromkeys([*operator_paths, *surface_paths]):
         add(path)
     api_paths = list(
         dict.fromkeys(
@@ -293,8 +117,6 @@ def _build_editable_source_context(
         add(path)
     for path in dict.fromkeys([*full_paths, *summary_paths]):
         add(path)
-    for path in branch_paths:
-        add(path)
     if target_action not in {"create", "create_new"} and sources[target] is None:
         raise ValueError(f"approved modify target has no current source: {target}")
     return {
@@ -306,8 +128,29 @@ def _build_editable_source_context(
     }
 
 
-def _same_source_root(left: str, right: str) -> bool:
-    return bool(left and right) and os.path.realpath(left) == os.path.realpath(right)
+def _list_current_operator_files(
+    source_root: str,
+    champion: ChampionState,
+) -> tuple[str, ...]:
+    """List operator source that actually exists in the selected source tree."""
+
+    files = {
+        path
+        for path in _list_champion_operator_files(champion)
+        if os.path.isfile(os.path.join(source_root, path))
+    }
+    operators_dir = os.path.join(source_root, "operators")
+    try:
+        files.update(
+            f"operators/{name}"
+            for name in os.listdir(operators_dir)
+            if name.endswith(".py")
+            and name not in {"__init__.py", "base.py"}
+            and os.path.isfile(os.path.join(operators_dir, name))
+        )
+    except OSError:
+        pass
+    return tuple(sorted(files))
 
 
 def _solver_design_api_manifest_files(

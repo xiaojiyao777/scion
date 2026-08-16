@@ -4,18 +4,19 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import uuid
 from datetime import datetime
 from typing import Any, Dict, Mapping
 
 
 class _TraceWriter:
-    """Persist the exact provider request and its terminal response."""
+    """Atomically persist one optional terminal provider diagnostic."""
 
     def __init__(self, trace_dir: str | None) -> None:
         self._trace_dir = trace_dir
 
-    def write_start(
+    def write_terminal(
         self,
         *,
         request_kind: str,
@@ -24,23 +25,29 @@ class _TraceWriter:
         prompt: str,
         system_blocks: list[dict],
         context: Dict[str, Any],
+        ok: bool,
+        started_at: str,
+        response: Dict[str, Any] | None = None,
+        error: str | None = None,
+        error_type: str | None = None,
+        llm_usage: Dict[str, Any] | None = None,
         request_policy: Dict[str, Any] | None = None,
-        provider_call_context: Mapping[str, Any] | None = None,
-    ) -> str | None:
+        provider_response_diagnostics: Mapping[str, Any] | None = None,
+    ) -> None:
         if not self._trace_dir:
-            return None
+            return
         os.makedirs(self._trace_dir, exist_ok=True)
-        trace_id = (
+        file_stem = (
             f"{datetime.now().strftime('%Y%m%dT%H%M%S%f')}_"
             f"{request_kind}_{uuid.uuid4().hex[:8]}"
         )
-        path = os.path.join(self._trace_dir, f"{trace_id}.json")
+        path = os.path.join(self._trace_dir, f"{file_stem}.json")
         payload: Dict[str, Any] = {
-            "trace_id": trace_id,
             "request_kind": request_kind,
             "model": model,
             "tool_name": tool.get("name"),
-            "created_at": datetime.now().isoformat(),
+            "started_at": started_at,
+            "finished_at": datetime.now().isoformat(),
             "branch_id": context.get("branch_id"),
             "champion_version": context.get("champion_version"),
             "structured_context": context,
@@ -48,49 +55,46 @@ class _TraceWriter:
             "user_prompt": prompt,
             "tool_schema": tool.get("input_schema")
             or tool.get("function", {}).get("parameters"),
-            "ok": None,
+            "ok": ok,
         }
-        if request_policy:
-            payload["request_policy"] = dict(request_policy)
-        if provider_call_context:
-            payload["provider_call_context"] = dict(provider_call_context)
-        _write_json(path, payload)
-        return path
-
-    def write_finish(
-        self,
-        path: str | None,
-        *,
-        ok: bool,
-        response: Dict[str, Any] | None = None,
-        error: str | None = None,
-        llm_usage: Dict[str, Any] | None = None,
-        provider_response_diagnostics: Mapping[str, Any] | None = None,
-    ) -> None:
-        if not path:
-            return
-        try:
-            with open(path, encoding="utf-8") as fh:
-                payload = json.load(fh)
-        except (OSError, json.JSONDecodeError):
-            payload = {}
-        payload.update({"finished_at": datetime.now().isoformat(), "ok": ok})
         if response is not None:
             payload["response"] = response
         if error is not None:
             payload["error"] = error
+        if error_type is not None:
+            payload["error_type"] = error_type
         if llm_usage is not None:
             payload["llm_usage"] = llm_usage
+        if request_policy:
+            payload["request_policy"] = dict(request_policy)
         if provider_response_diagnostics is not None:
             payload["provider_response_diagnostics"] = dict(
                 provider_response_diagnostics
             )
-        _write_json(path, payload)
+        _write_json_atomic(path, payload)
 
 
-def _write_json(path: str, payload: Dict[str, Any]) -> None:
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2, default=str)
+def _write_json_atomic(path: str, payload: Dict[str, Any]) -> None:
+    """Publish one complete JSON value without exposing a partial trace."""
+
+    directory = os.path.dirname(path)
+    fd, temporary_path = tempfile.mkstemp(
+        dir=directory,
+        prefix=f".{os.path.basename(path)}.",
+        suffix=".tmp",
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2, default=str)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(temporary_path, path)
+    except BaseException:
+        try:
+            os.unlink(temporary_path)
+        except OSError:
+            pass
+        raise
 
 
 def _client_request_policy(
@@ -110,5 +114,5 @@ def _client_request_policy(
 __all__ = [
     "_TraceWriter",
     "_client_request_policy",
-    "_write_json",
+    "_write_json_atomic",
 ]

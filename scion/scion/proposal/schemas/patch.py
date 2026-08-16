@@ -258,14 +258,12 @@ class PatchFileChangeInput(BaseModel):
     file_path: str
     action: str
     code_content: str = ""
-    edit_intent: Optional[PatchEditIntent] = None
-    source_digest: Optional[Any] = None
+    edit_intent: PatchEditIntent
     old_string: Optional[str] = None
     new_string: Optional[str] = None
     replace_all: bool = False
     content_after: Optional[str] = None
     full_file_reason: Optional[str] = None
-    derived_diff_ref: Optional[str] = None
     evidence_refs: list[str] = Field(default_factory=list)
     test_hint: Optional[str] = None
 
@@ -300,14 +298,12 @@ class PatchProposalInput(BaseModel):
     file_path: str = ""
     action: str = "modify"
     code_content: str = ""
-    edit_intent: Optional[PatchEditIntent] = None
-    source_digest: Optional[Any] = None
+    edit_intent: PatchEditIntent
     old_string: Optional[str] = None
     new_string: Optional[str] = None
     replace_all: bool = False
     content_after: Optional[str] = None
     full_file_reason: Optional[str] = None
-    derived_diff_ref: Optional[str] = None
     evidence_refs: list[str] = Field(default_factory=list)
     test_hint: Optional[str] = None
     additional_changes: list[PatchFileChangeInput] = Field(default_factory=list)
@@ -365,15 +361,9 @@ _ADDITIONAL_CHANGES_DESCRIPTION = (
     "approved algorithm change to be executable. Use this for solver_design "
     "module additions that also need scheduler or entrypoint integration. Each "
     "change is independently checked by Contract and applied in the same "
-    "tainted candidate workspace. When one existing file needs multiple "
-    "non-contiguous edits, emit multiple ordered localized-edit change objects "
-    "for the same file_path in application order; choose exact_replace or "
-    "exact_line_replace for each object using the conditions above. Repeat "
-    "file_path, and make each later "
-    "old_string match the source produced by the earlier changes. The host "
-    "binds them to the original visible source, then applies and composes them "
-    "serially. Do not mix same-file local edits with create, delete, or "
-    "full_file; use one full_file change instead."
+    "tainted candidate workspace. Each file_path may appear exactly once. "
+    "Express all intended changes to one file in that single typed edit; the "
+    "host rejects duplicate paths and never composes model outputs."
 )
 
 
@@ -462,56 +452,53 @@ def _patch_change_properties() -> Dict[str, Any]:
 
 
 def _edit_intent_all_of() -> list[Dict[str, Any]]:
-    """Describe all explicit intents while keeping a missing intent compatible."""
+    """Describe the three required explicit edit intents."""
 
     localized_required = ["edit_intent", "old_string", "new_string"]
     return [
         {
-            "if": {"required": ["edit_intent"]},
-            "then": {
-                "oneOf": [
-                    {
-                        "title": "Exact source-span replacement",
-                        "properties": {
-                            "action": {"enum": ["modify"]},
-                            "edit_intent": {"enum": ["exact_replace"]},
-                        },
-                        "required": list(localized_required),
+            "oneOf": [
+                {
+                    "title": "Exact source-span replacement",
+                    "properties": {
+                        "action": {"enum": ["modify"]},
+                        "edit_intent": {"enum": ["exact_replace"]},
                     },
-                    {
-                        "title": "Indentation-neutral exact-line replacement",
-                        "description": (
-                            "The example illustrates only the JSON shape for one "
-                            "unindented repeated logical-line selector applied at "
-                            "every indentation depth with replace_all=true; it "
-                            "does not require this edit intent."
-                        ),
-                        "properties": {
-                            "action": {"enum": ["modify"]},
-                            "edit_intent": {"enum": ["exact_line_replace"]},
-                        },
-                        "required": list(localized_required),
-                        "examples": [dict(EXACT_LINE_REPLACE_EXAMPLE)],
+                    "required": list(localized_required),
+                },
+                {
+                    "title": "Indentation-neutral exact-line replacement",
+                    "description": (
+                        "The example illustrates only the JSON shape for one "
+                        "unindented repeated logical-line selector applied at "
+                        "every indentation depth with replace_all=true; it "
+                        "does not require this edit intent."
+                    ),
+                    "properties": {
+                        "action": {"enum": ["modify"]},
+                        "edit_intent": {"enum": ["exact_line_replace"]},
                     },
-                    {
-                        "title": "Complete-file creation or modification",
-                        "properties": {
-                            "action": {"enum": ["modify", "create"]},
-                            "edit_intent": {"enum": ["full_file"]},
-                            "content_after": {"type": "string"},
-                        },
-                        "required": ["edit_intent", "content_after"],
+                    "required": list(localized_required),
+                    "examples": [dict(EXACT_LINE_REPLACE_EXAMPLE)],
+                },
+                {
+                    "title": "Complete-file creation or modification",
+                    "properties": {
+                        "action": {"enum": ["modify", "create"]},
+                        "edit_intent": {"enum": ["full_file"]},
+                        "content_after": {"type": "string"},
                     },
-                    {
-                        "title": "Typed file deletion",
-                        "properties": {
-                            "action": {"enum": ["delete"]},
-                            "edit_intent": {"enum": ["full_file"]},
-                        },
-                        "required": ["edit_intent"],
+                    "required": ["edit_intent", "content_after"],
+                },
+                {
+                    "title": "Typed file deletion",
+                    "properties": {
+                        "action": {"enum": ["delete"]},
+                        "edit_intent": {"enum": ["full_file"]},
                     },
-                ]
-            },
+                    "required": ["edit_intent"],
+                },
+            ],
         }
     ]
 
@@ -521,7 +508,7 @@ def _patch_change_schema() -> Dict[str, Any]:
 
     return {
         "type": "object",
-        "required": ["file_path", "action"],
+        "required": ["file_path", "action", "edit_intent"],
         "additionalProperties": False,
         "properties": _patch_change_properties(),
         "allOf": _edit_intent_all_of(),

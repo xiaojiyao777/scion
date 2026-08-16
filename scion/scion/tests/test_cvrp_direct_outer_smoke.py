@@ -1,7 +1,6 @@
 """Real CVRP direct-v3 outer smoke with a multi-file no-op patch."""
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
 
@@ -13,7 +12,6 @@ from scion.core.models import ChampionState, ExperimentStage
 from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
-from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.runtime.runner import ResourceLimits
@@ -111,7 +109,6 @@ def _patch_response() -> dict[str, object]:
         "file_path": "policies/baseline_modules/construction.py",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": source_digest_for_content(construction),
         "old_string": construction_old,
         "new_string": construction_new,
         "replace_all": False,
@@ -121,7 +118,6 @@ def _patch_response() -> dict[str, object]:
                 "file_path": "policies/baseline_modules/scheduler.py",
                 "action": "modify",
                 "edit_intent": "exact_replace",
-                "source_digest": source_digest_for_content(scheduler),
                 "old_string": scheduler_old,
                 "new_string": scheduler_new,
                 "replace_all": False,
@@ -164,7 +160,6 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
         metrics_dir=str(tmp_path / "metrics"),
         metric_specs=bridge.metric_specs,
         objective_policy=bridge.objective_policy,
-        require_metric_specs=True,
         problem_spec=bridge.problem_spec,
     )
     gate = VerificationGate(
@@ -191,9 +186,7 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
         champion=ChampionState(
             version=1,
             operator_pool={},
-            solver_config_hash="cvrp-direct-outer-smoke",
             code_snapshot_path=str(CVRP_DIR),
-            code_snapshot_hash="cvrp-controlled-baseline",
         ),
         campaign_dir=str(campaign_dir),
         verification_gate=gate,
@@ -223,23 +216,15 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
     assert step.protocol_result.stage == ExperimentStage.SCREENING
 
     events = campaign._registry.query_by_branch(step.branch_id)
-    call_ref = step.proposal_session_ref
-    assert call_ref is not None
-    assert call_ref["phase"] == "code"
-    assert call_ref["status"] == "generated"
-    assert call_ref["hypothesis_id"] == step.hypothesis_id
 
-    call_rows = [
-        (row, json.loads(row["audit_payload_json"]))
-        for row in reversed(events)
-        if row["event_kind"] == "proposal_call"
+    experiment_events = [
+        row for row in events if row["event_kind"] == "experiment"
     ]
-    calls = [payload for _row, payload in call_rows]
-    assert [item["phase"] for item in calls] == ["hypothesis", "code"]
-    assert [item["status"] for item in calls] == ["generated", "generated"]
-    assert all(item["hypothesis_id"] == step.hypothesis_id for item in calls)
-    assert call_rows[1][0]["event_id"] == call_ref["lineage_event_id"]
-    assert all("attempt_id" not in item for item in calls)
+    assert len(experiment_events) == 1
+    assert experiment_events[0]["stage"] == "screening"
+    assert experiment_events[0]["hypothesis_text"] == (
+        _hypothesis_response()["hypothesis_text"]
+    )
 
     # The active path retains the evaluated multi-file source directly in the
     # branch workspace; it does not emit a second identity/hash closure.

@@ -23,7 +23,7 @@ current task requires them.
 - `status/v0.4-history.md`: curated milestone index. Read only for provenance
   questions or when the current state points to a specific milestone.
 - `../design/`: design-source documents and accepted architecture contracts.
-- `engineering/`: code ownership maps and implementation references.
+- `engineering/`: code responsibility maps and implementation references.
 - `experiments/`: bounded post-run analysis. Prefer these over raw run
   artifacts.
 - `audits/`: audit findings and governance reviews.
@@ -48,7 +48,8 @@ For APS-backed runs, analyze both phases per round:
 - code/implementation session;
 - tools called and context observed;
 - selected surface and forced-surface constraints;
-- hypothesis identity and `novelty_signature`;
+- exact hypothesis content, declared locus/action and whether prior evidence was
+  used without turning novelty into a gate;
 - patch target and actual mechanism/strategy change;
 - Contract, Verification, canary, Protocol, and Decision path;
 - whether feedback/runtime observations reached final generation prompts.
@@ -92,14 +93,14 @@ Read:
    contract.
 3. [Framework code map](engineering/framework-code-map/README.md).
 4. One or two relevant code-map sections:
-   - campaign lifecycle: `01-core-campaign.md`;
+   - campaign flow and branch state: `01-core-campaign.md`;
    - proposal/context/APS: `02-proposal-context.md`;
    - gates/protocol/decision: `03-evaluation-decision.md`;
    - evidence/lineage: `04-evidence-lineage.md`;
    - adapter boundary: `05-problem-adapter-boundary.md`;
    - CVRP package: `06-cvrp-package-map.md`;
    - extension risks: `07-extension-points-and-risks.md`.
-5. Source files only after the map identifies the likely owners.
+5. Source files only after the map identifies the likely responsible components.
 
 Update:
 
@@ -112,8 +113,8 @@ Verification:
 
 - use focused tests first;
 - use `/home/clawd/miniconda3/envs/claw/bin/python`;
-- broaden to the full suite when touching shared governance, protocol,
-  adapters, or campaign lifecycle.
+- broaden to the full suite when touching shared boundaries, protocol,
+  adapters, or campaign flow.
 
 ## Profile: CVRP Surface Work
 
@@ -134,9 +135,9 @@ Keep the boundary clear:
   `policies/baseline_algorithm.py::solve(...)` plus focused branch-owned
   modules under `policies/baseline_modules/`; `policies/solver_algorithm.py`
   remains only as a compatibility hook.
-  Component policies and the older `main_search_strategy` lifecycle table are
-  legacy implementation/regression surfaces; they should not define the top-
-  level research target for current CVRP optimization work.
+  Component policies and the older `main_search_strategy` state table are
+  legacy implementation/regression surfaces; they should not define the
+  top-level research target for current CVRP optimization work.
 
 ## Profile: New Problem Or Solver Onboarding
 

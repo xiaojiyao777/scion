@@ -15,6 +15,7 @@ from scion.core.models import (
     ProtocolResult,
 )
 from scion.proposal.mock_client import MockLLMClient
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.protocol.experiment.selection import select_cases
 from scion.protocol.gates import screening_gate, validation_gate
@@ -44,8 +45,13 @@ class _FormalPopulationTracingProtocol(ExperimentProtocol):
             seed_ledger=SeedLedger(seeds),
             runner=object(),
             metrics_dir=str(metrics_dir),
-            allow_legacy_objective_fallback=True,
-            champion_result_cache_enabled=False,
+            metric_specs=(
+                ObjectiveMetricSpec(
+                    name="total_distance",
+                    direction="minimize",
+                    priority=1,
+                ),
+            ),
         )
         self.calls: list[dict[str, Any]] = []
 
@@ -183,7 +189,8 @@ def test_formal_screening_expansion_reuses_exact_candidate_then_enters_validatio
     initial = campaign.run_one_step()
     branch_id = initial.branch_id
     branch = campaign._branch_ctrl.get_branch(branch_id)
-    hypothesis_id = campaign._branch_current_hypothesis[branch_id].hypothesis_id
+    hypothesis = branch.hypothesis
+    assert hypothesis is not None
 
     assert initial.decision is Decision.EXPAND_SCREENING
     assert branch.state is BranchState.EXPLORE_EXPAND
@@ -203,7 +210,7 @@ def test_formal_screening_expansion_reuses_exact_candidate_then_enters_validatio
     assert branch.screening_expand_count == 1
     assert provider.call_count == 2
     assert len(candidate_workspace_creations) == 1
-    assert campaign._branch_current_hypothesis[branch_id].hypothesis_id == hypothesis_id
+    assert branch.hypothesis == hypothesis
     assert protocol.calls[1]["gate_outcome"] == "pass"
     assert protocol.calls[1]["reason_codes"] == ("SCREENING_PASS",)
     assert protocol.calls[1]["expand"] is True

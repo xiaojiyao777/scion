@@ -1,24 +1,15 @@
-"""AsyncWeightOptCoordinator — background weight optimization lifecycle.
-
-Extracted from CampaignManager (v0.3 §B2 per optimization-design doc).
-Owns thread lifecycle + the optimization loop body that was previously part
-of the CampaignManager god-object:
+"""Coordinate optional background weight optimization.
 
   - ``_pending_threads`` — background thread registry
   - ``_latest_result`` — last drained optimization result (for LLM feedback)
-  - ``_completed_events`` — worker results awaiting CampaignManager commit
-  - ``spawn_for_promoted_champion`` — entry point from ``_on_promote`` tail
-  - ``run_optimization`` — the optimization loop body (formerly
-    ``CampaignManager._run_weight_optimization``)
+  - ``_completed_events`` — worker results awaiting main-thread application
+  - ``spawn_for_promoted_champion`` — entry point after promotion
+  - ``run_optimization`` — the optimization loop body
   - ``wait_all`` — shutdown join
 
-The coordinator holds a reference to ``CampaignManager`` (v0.3 minimum
-extraction — dependency injection is for v1.0) and reads manager services via
-``self._mgr._xxx``. It intentionally does NOT own champion or branch state.
-The bg thread delegates the optimization call through
-``self._mgr._run_weight_optimization(...)`` so that existing tests which
-monkey-patch that method continue to work, then enqueues a completion event
-for CampaignManager to commit on the main loop boundary.
+The coordinator reads the campaign services it needs but does not own champion
+or branch state. A worker enqueues its result for application on the campaign
+thread.
 """
 from __future__ import annotations
 
@@ -79,7 +70,7 @@ def bounded_terminal_wait_timeout(timeout: Optional[float]) -> float:
 
 @dataclass(frozen=True)
 class WeightOptCompletionEvent:
-    """Completed weight optimization work ready for main-thread commit."""
+    """Completed weight optimization work ready for the campaign thread."""
 
     version: int
     base_weight_revision: int
@@ -88,7 +79,6 @@ class WeightOptCompletionEvent:
     improved: bool
     new_revision: Optional[int] = None
     snapshot_path: Optional[str] = None
-    snapshot_hash: Optional[str] = None
     operator_pool: Optional[dict[str, "OperatorConfig"]] = None
 
 
@@ -103,7 +93,7 @@ def _thread_weight_opt_version(name: str) -> int | None:
 
 
 class AsyncWeightOptCoordinator:
-    """Owns async weight-optimization thread lifecycle and the opt loop body."""
+    """Run optional weight optimization and report completed work."""
 
     def __init__(self, manager: "CampaignManager") -> None:
         self._mgr = manager
@@ -126,11 +116,6 @@ class AsyncWeightOptCoordinator:
     @latest_result.setter
     def latest_result(self, value: Optional[Any]) -> None:
         self._latest_result = value
-
-    @property
-    def pending_threads(self) -> List[threading.Thread]:
-        """Direct access to the pending thread list (for backward-compat)."""
-        return self._pending_threads
 
     @property
     def pending_count(self) -> int:
@@ -187,10 +172,10 @@ class AsyncWeightOptCoordinator:
     ) -> None:
         """Launch bg weight optimization for a freshly promoted champion.
 
-        Called from ``CampaignManager._on_promote`` tail. No-op if weight opt
+        Called after promotion. No-op if weight opt
         is disabled or no experiment_protocol is available.
         """
-        param_cfg = self._mgr._spec.parameter_search
+        param_cfg = self._mgr._problem_runtime.spec.parameter_search
         if (
             self.shutdown_requested
             or not (param_cfg.enabled and self._mgr._experiment_protocol is not None)
@@ -348,7 +333,7 @@ class AsyncWeightOptCoordinator:
         base_weight_revision: int = 0,
     ) -> None:
         """Run weight optimization inline for resource-constrained campaigns."""
-        param_cfg = self._mgr._spec.parameter_search
+        param_cfg = self._mgr._problem_runtime.spec.parameter_search
         if not (param_cfg.enabled and self._mgr._experiment_protocol is not None):
             return
         self._set_status(
@@ -392,7 +377,7 @@ class AsyncWeightOptCoordinator:
         """Background thread: run weight opt and prepare an event on success.
 
         The worker may create immutable snapshot artifacts, but campaign state
-        changes are committed later by CampaignManager on the main loop boundary.
+        changes are applied later on the campaign thread.
         """
         self._run_weight_opt_task(
             staging_path,
@@ -410,7 +395,7 @@ class AsyncWeightOptCoordinator:
         base_weight_revision: int = 0,
         mode: str = "async",
     ) -> None:
-        """Run optimization and enqueue a main-thread commit event."""
+        """Run optimization and enqueue a result for the campaign thread."""
         import os as _os
         import shutil as _shutil
         import time as _time
@@ -428,9 +413,7 @@ class AsyncWeightOptCoordinator:
         )
         t0 = _time.monotonic()
         try:
-            # Call through the manager so that test monkey-patches of
-            # ``cm._run_weight_optimization`` still take effect.
-            opt_result = self._mgr._run_weight_optimization(
+            opt_result = self.run_optimization(
                 staging_path, version, current_weights
             )
         except WeightOptShutdownRequested:
@@ -514,14 +497,13 @@ class AsyncWeightOptCoordinator:
             self._finish_status(version, phase="failed", error=str(exc))
             return
 
-        # Recompute hash and read updated pool
+        # Read the updated scientific operator pool.
         try:
             registry_path = _os.path.join(new_snapshot_path, "registry.yaml")
             new_pool = read_registry(registry_path)
-            new_hash = self._mgr._materializer.compute_snapshot_hash(new_snapshot_path)
         except Exception as exc:
             logger.error(
-                "%s weight opt: failed to recompute hash for champion v%d_r%d: %s",
+                "%s weight opt: failed to read registry for champion v%d_r%d: %s",
                 label, version, new_revision, exc,
             )
             self._finish_status(version, phase="failed", error=str(exc))
@@ -539,7 +521,6 @@ class AsyncWeightOptCoordinator:
             improved=True,
             new_revision=new_revision,
             snapshot_path=new_snapshot_path,
-            snapshot_hash=new_hash,
             operator_pool=new_pool,
         ))
         self._finish_status(
@@ -556,7 +537,7 @@ class AsyncWeightOptCoordinator:
             self._completed_events.append(event)
 
     # ------------------------------------------------------------------
-    # Optimization loop body (formerly CampaignManager._run_weight_optimization)
+    # Optimization loop body
     # ------------------------------------------------------------------
 
     def run_optimization(
@@ -578,7 +559,8 @@ class AsyncWeightOptCoordinator:
         from scion.parameter.evaluator import collect_baseline, evaluate_weights
         from scion.parameter.search_space import ParameterSearchSpace
 
-        param_cfg = self._mgr._spec.parameter_search
+        problem_spec = self._mgr._problem_runtime.spec
+        param_cfg = problem_spec.parameter_search
         self._set_status(version, phase="preparing_workspace")
 
         # Locate runner
@@ -614,12 +596,14 @@ class AsyncWeightOptCoordinator:
         if not eval_cases:
             eval_cases = list(self._mgr._split_manifest.screening)
         resolved_cases = [
-            _os.path.join(self._mgr._spec.root_dir, c) if not _os.path.isabs(c) else c
+            _os.path.join(problem_spec.root_dir, c) if not _os.path.isabs(c) else c
             for c in eval_cases
         ]
 
         seeds = list(self._mgr._seed_ledger.screening)[:param_cfg.n_eval_seeds]
-        time_limit = getattr(getattr(self._mgr._spec, 'solver', None), 'time_limit_sec', 300)
+        time_limit = getattr(
+            getattr(problem_spec, "solver", None), "time_limit_sec", 300
+        )
 
         operator_names = tuple(current_weights.keys())
         total_evaluations = 1 + param_cfg.n_initial_random + param_cfg.n_iterations

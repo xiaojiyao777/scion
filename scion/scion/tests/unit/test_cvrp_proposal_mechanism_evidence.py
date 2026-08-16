@@ -11,7 +11,7 @@ from scion.problems.cvrp.models import CvrpInstance, CvrpNode
 from scion.problems.cvrp.proposal_mechanism_evidence import (
     CvrpProposalMechanismEvidenceProvider,
 )
-from scion.proposal.context_owner_maps import proposal_context_snapshot
+from scion.proposal.context_snapshot import freeze_proposal_context
 from scion.protocol.experiment.proposal_evidence import (
     problem_proposal_mechanism_evidence,
 )
@@ -135,7 +135,6 @@ def test_search_allocation_aggregates_runtime_lifecycle_and_paired_math() -> Non
     )
 
     assert payload["schema_version"] == "scion.cvrp.search_allocation_evidence.v1"
-    assert payload["gate_influence"] is False
     assert payload["candidate"]["solver_algorithm_elapsed_ms"] == 100
     assert payload["candidate"]["phase_runtime_share"] == {
         "alns_core": 0.3,
@@ -379,7 +378,6 @@ def test_proposal_projection_keeps_paired_research_signals_without_side_mirrors(
     assert "candidate" not in payload
     assert "champion" not in payload
     assert "comparison" not in payload
-    assert payload["gate_influence"] is False
     paired = payload["paired_comparison"]
     assert paired["solver_algorithm_elapsed_ms"] == [100, 80, 20]
     assert paired["phase_runtime_share"] == {
@@ -1051,8 +1049,8 @@ def test_benchmark_reference_aggregate_passes_h_context_and_raw_bks_key_fails(
         ],
     }
 
-    snapshot = proposal_context_snapshot("hypothesis", context)
-    provider_context = snapshot.inputs.provider_context()
+    snapshot = freeze_proposal_context("hypothesis", context)
+    provider_context = snapshot.provider_context()
     rendered = json.dumps(provider_context, sort_keys=True)
     source_counts = envelope["evidence"]["instance_feasibility"]["coverage"][
         "reference_route_source_counts"
@@ -1079,10 +1077,10 @@ def test_benchmark_reference_aggregate_passes_h_context_and_raw_bks_key_fails(
         ValueError,
         match=r"forbidden proposal context field.*bks_routes",
     ):
-        proposal_context_snapshot("hypothesis", unsafe_context)
+        freeze_proposal_context("hypothesis", unsafe_context)
 
 
-def test_problem_owned_search_allocation_envelope_remains_proposal_only() -> None:
+def test_problem_owned_search_allocation_envelope_preserves_evidence() -> None:
     envelope = problem_proposal_mechanism_evidence(
         stage="screening",
         selected_surface="solver_design",
@@ -1108,10 +1106,6 @@ def test_problem_owned_search_allocation_envelope_remains_proposal_only() -> Non
     )
 
     assert projected == envelope
-    assert envelope["proposal_visibility_only"] is True
-    assert envelope["decision_features_excluded"] is True
-    assert envelope["gate_influence"] is False
-    assert envelope["evidence"]["gate_influence"] is False
     assert "activation_evidence_status" not in projected
     assert "objective_effect_status" not in projected
 

@@ -127,7 +127,6 @@ def test_aa_calibration_payload_is_problem_owned_diagnostic() -> None:
     )
 
     assert payload["schema"] == "scion.aa_noise_floor.v1"
-    assert payload["decision_features_excluded"] is True
     assert payload["selected_cases"] == ["case-a"]
     assert payload["selected_seeds"] == [1]
     assert payload["replicate_count"] == 1
@@ -136,7 +135,6 @@ def test_aa_calibration_payload_is_problem_owned_diagnostic() -> None:
     assert payload["selected_surface"] == "solver_design"
     assert payload["runtime_policy"] == runtime_policy
     assert payload["safe_data_roots"] == ["/data"]
-    assert payload["calibration_run"]["decision_features_excluded"] is True
     assert payload["calibration_run"]["selected_cases"] == ["case-a"]
     assert payload["calibration_run"]["selected_seeds"] == [1]
     assert payload["calibration_run"]["replicate_count"] == 1
@@ -200,7 +198,6 @@ def test_combined_case_rule_all_tie_null_never_passes() -> None:
     assert result["null_pass_count"] == 0
     assert result["null_pass_rate"] == 0.0
     assert 0.0 < result["null_pass_rate_wilson_upper_95"] < 0.1
-    assert result["decision_features_excluded"] is True
 
 
 def test_combined_case_rule_polarized_observation_fails() -> None:

@@ -1,13 +1,12 @@
 """Focused tests split from test_campaign.py."""
 
 import json
-import shutil
 from pathlib import Path
 
-from .campaign_test_support import *  # noqa: F401,F403
-from scion.core.models import HypothesisRecord
 from scion.core.scheduler import Scheduler
 from scion.proposal.llm_client import LLMProviderError
+
+from .campaign_test_support import *  # noqa: F401,F403
 
 
 class TestCampaignBasics:
@@ -59,113 +58,17 @@ class TestCampaignBasics:
         summary = json.loads(
             (tmp_path / "campaign" / "campaign_summary.json").read_text()
         )
-        assert status["stopped_reason"] == "requested_rounds_completed"
+        assert status["run_result"]["stop_reason"] == "requested_rounds_completed"
         assert status["n_active_branches"] == 1
         assert status["branches"][0]["state"] == branch.state.value
-        assert summary["stopped_reason"] == "requested_rounds_completed"
+        assert summary["run_result"] == status["run_result"]
         assert summary["n_active_branches"] == 1
         assert summary["branches"][0]["state"] == branch.state.value
         assert summary["proposal_runtime_mode"] == "direct_v3"
-        assert summary["formal_candidate_artifact_count"] is None
+        assert "formal_candidate_artifact_count" not in summary
         assert not (tmp_path / "campaign" / "artifacts" / "formal_candidates").exists()
-        with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
-            row = conn.execute(
-                "SELECT state, failure_codes FROM branches WHERE branch_id = ?",
-                (branch.branch_id,),
-            ).fetchone()
-        assert row is not None
-        assert row[0] == branch.state.value
-        assert row[0] != BranchState.ABANDONED.value
-        assert "MAX_ROUNDS_EXHAUSTED" not in (row[1] or "")
         assert "final_evidence_refs" not in summary
         assert "formal_readiness" not in summary
-
-    def test_reopened_campaign_restores_champion_active_branch_and_workspace(
-        self, tmp_path
-    ):
-        cm = _campaign(tmp_path)
-        branch = cm._branch_ctrl.create_branch(cm._champion)
-        branch.state = BranchState.EXPLORE_EXPAND
-        branch.current_code_hash = "candidate-hash"
-        branch.last_clean_code_hash = "candidate-hash"
-        branch.branch_evidence_summary = {
-            "stage": "screening",
-            "tier": "marginal",
-            "case_level_negative_cases": [{"case_id": "CMT4.vrp"}],
-        }
-        cm._branch_store.save(branch)
-        active_hypothesis = HypothesisRecord(
-            hypothesis_id="active-demand-slack",
-            branch_id=branch.branch_id,
-            change_locus="solver_design",
-            action="modify",
-            status="active",
-            target_file="policies/baseline_modules/destroy_repair.py",
-            hypothesis_text="Follow demand slack regret insertion.",
-            predicted_direction="improve",
-        )
-        cm._hyp_store.save(active_hypothesis)
-
-        workspace = tmp_path / "campaign" / "workspaces" / branch.branch_id
-        workspace.mkdir(parents=True)
-        (workspace / "solver.py").write_text("# retained branch workspace\n")
-        branch.current_code_hash = cm._materializer.compute_code_hash(str(workspace))
-        branch.last_clean_code_hash = branch.current_code_hash
-        cm._branch_store.save(branch)
-        cm._champion_store.promote(
-            ChampionState(
-                version=2,
-                operator_pool={},
-                solver_config_hash="promoted",
-                code_snapshot_path=cm._champion.code_snapshot_path,
-                code_snapshot_hash="promoted-hash",
-            )
-        )
-        shutil.rmtree(tmp_path / "champion_code")
-
-        reopened = _campaign(tmp_path)
-
-        assert reopened._champion.version == 2
-        restored = reopened._branch_ctrl.get_branch(branch.branch_id)
-        assert restored.state == BranchState.EXPLORE_EXPAND
-        assert restored.branch_evidence_summary["tier"] == "marginal"
-        assert reopened._branch_workspaces[branch.branch_id] == str(workspace)
-        assert (
-            reopened._branch_current_hypothesis[branch.branch_id].hypothesis_id
-            == "active-demand-slack"
-        )
-        restored_hypothesis = reopened._branch_hypotheses[branch.branch_id]
-        assert restored_hypothesis.target_file == (
-            "policies/baseline_modules/destroy_repair.py"
-        )
-        assert restored_hypothesis.hypothesis_text == (
-            "Follow demand slack regret insertion."
-        )
-        assert branch.branch_id not in reopened._branch_patches
-        assert reopened.get_state()["n_active_branches"] == 1
-
-    def test_reopened_copied_campaign_reanchors_current_champion_snapshot(
-        self, tmp_path
-    ):
-        cm = _campaign(tmp_path)
-        current = cm._champion_store.get_current()
-        assert current is not None
-
-        source_root = tmp_path / "source_root"
-        stale_snapshot = source_root / "champions" / "champion_v1"
-        stale_snapshot.mkdir(parents=True)
-        cm._champion_store._conn.execute(
-            "UPDATE champions SET code_snapshot_path = ? WHERE version = 1",
-            (str(stale_snapshot),),
-        )
-        cm._champion_store._conn.commit()
-        shutil.rmtree(tmp_path / "champion_code")
-
-        reopened = _campaign(tmp_path)
-
-        assert reopened._champion.code_snapshot_path == str(
-            tmp_path / "campaign" / "champions" / "champion_v1"
-        )
 
     def test_final_round_leaves_validation_for_next_invocation(self, tmp_path):
         cm = _campaign(
@@ -191,9 +94,10 @@ class TestCampaignBasics:
         branch = next(iter(cm._branch_ctrl._branches.values()))
         assert branch.state == BranchState.READY_VALIDATE
         status = json.loads((tmp_path / "campaign" / "status.json").read_text())
-        assert status["stopped_reason"] == "requested_rounds_completed"
-        assert status["effective_rounds_completed"] == 1
-        assert status["protocol_stage_counts"] == {
+        run_result = status["run_result"]
+        assert run_result["stop_reason"] == "requested_rounds_completed"
+        assert run_result["evaluated_rounds"] == 1
+        assert run_result["protocol_stage_counts"] == {
             "screening": 1,
             "validation": 0,
             "frozen": 0,
@@ -234,15 +138,18 @@ class TestCampaignBasics:
             (tmp_path / "campaign" / "campaign_summary.json").read_text()
         )
         assert cm._last_stop_reason == "execution_blocked_infra"
-        assert status["stopped_reason"] == "execution_blocked_infra"
-        assert status["effective_rounds_completed"] == 0
+        run_result = status["run_result"]
+        assert run_result["stop_reason"] == "execution_blocked_infra"
+        assert run_result["evaluated_rounds"] == 0
         assert status["n_experiments"] == 0
-        assert status["run_validity"]["status"] == "invalid"
-        assert status["run_validity"]["reason"] == "invalid_infra_only"
-        assert status["campaign_loop"]["failure_categories"] == {"infra": 1}
-        assert status["campaign_loop"]["scheduled_calls"] == 1
-        assert summary["run_validity"]["reason"] == "invalid_infra_only"
-        assert summary["failure_categories"] == {"infra": 1}
+        assert run_result["run_validity"] == {
+            "status": "invalid",
+            "reason": "invalid_no_evaluated_outcome",
+            "valid": False,
+        }
+        assert run_result["failure_categories"] == {"blocked_infra": 1}
+        assert run_result["scheduled_calls"] == 1
+        assert summary["run_result"] == run_result
 
     def test_should_stop_false_initially(self, tmp_path):
         cm = _campaign(tmp_path)
@@ -255,8 +162,14 @@ class TestCampaignBasics:
 
         assert cm.should_stop()
         assert cm._last_stop_reason == "operator_requested_stop"
-        status = json.loads((tmp_path / "campaign" / "status.json").read_text())
-        assert status["stopped_reason"] == "operator_requested_stop"
+        status_path = tmp_path / "campaign" / "status.json"
+        assert not status_path.exists()
+
+        terminal = cm.run(requested_rounds=1)
+
+        assert terminal.stop_reason == "operator_requested_stop"
+        status = json.loads(status_path.read_text())
+        assert status["run_result"]["stop_reason"] == "operator_requested_stop"
 
     def test_run_one_step_creates_branch(self, tmp_path):
         cm = _campaign(
@@ -296,13 +209,7 @@ class TestContinueExplore:
         result = cm.run_one_step()
         assert result.decision == Decision.CONTINUE_EXPLORE
         branch = cm._branch_ctrl.get_branch(result.branch_id)
-        assert branch.branch_code_status == "provisional"
-        assert branch.branch_evidence_summary["candidate_disposition"] == {
-            "schema_version": "candidate-disposition.v1",
-            "disposition": "provisional_head",
-            "hypothesis_status": "provisional",
-            "rule": "protocol_provisional",
-        }
+        assert branch.current_code_hash is not None
 
     def test_continue_explore_retains_verified_workspace(self, tmp_path):
         """CONTINUE_EXPLORE keeps the branch's executable verified codebase."""
@@ -340,8 +247,7 @@ class TestContinueExplore:
         )
         result = cm.run_one_step()
         bid = result.branch_id
-        assert bid not in cm._branch_hypotheses
-        assert bid not in cm._branch_current_hypothesis
+        assert cm._branch_ctrl.get_branch(bid).hypothesis is None
 
     def test_continue_explore_branch_stays_in_explore(self, tmp_path):
         """Branch should remain in EXPLORE state after CONTINUE_EXPLORE."""
@@ -482,116 +388,6 @@ class TestContinueExplore:
         assert "candidate = solution" in prior_source["content"]
 
         workspace = Path(cm._branch_workspaces[r2.branch_id])
-        assert (
-            "candidate = solution"
-            in (workspace / "operators" / "local_search.py").read_text()
-        )
-        assert (workspace / "operators" / "other_op.py").is_file()
-
-    def test_reopen_iterates_same_branch_with_durable_history_and_source(
-        self, tmp_path
-    ):
-        """A process reopen preserves prior screening facts and verified code."""
-        first = _campaign(
-            tmp_path,
-            experiment_protocol=MockExperimentProtocol(
-                [
-                    _make_protocol_result(
-                        ExperimentStage.SCREENING,
-                        gate_outcome="fail",
-                        win_rate=0.1,
-                        median_delta=-12.0,
-                    )
-                ]
-            ),
-        )
-        first._scheduler = Scheduler(max_active_branches=1)
-        first._branch_step_runner.scheduler = first._scheduler
-        r1 = first.run_one_step()
-        assert r1.decision == Decision.CONTINUE_EXPLORE
-        first_workspace = Path(first._branch_workspaces[r1.branch_id])
-        assert (
-            "candidate = solution"
-            in (first_workspace / "operators" / "local_search.py").read_text()
-        )
-
-        hypothesis = dict(_VALID_HYPOTHESIS)
-        hypothesis["action"] = "create_new"
-        hypothesis["target_file"] = "operators/other_op.py"
-        patch = {
-            "file_path": "operators/other_op.py",
-            "action": "create",
-            "edit_intent": "full_file",
-            "content_after": _VALID_CODE,
-            "test_hint": None,
-        }
-
-        class ReopenLLM:
-            def __init__(self):
-                self.provider_calls = []
-
-            def call(self, prompt, schema, model=None, system_blocks=None):
-                return patch if _schema_requests_patch(schema) else hypothesis
-
-            def call_with_tool(
-                self, prompt, tool, model=None, system_blocks=None, request_kind=None
-            ):
-                self.provider_calls.append(
-                    {
-                        "request_kind": request_kind,
-                        "prompt": prompt,
-                        "system_blocks": system_blocks,
-                    }
-                )
-                return self.call(
-                    prompt,
-                    tool.get("input_schema", {}),
-                    model,
-                    system_blocks,
-                )
-
-        llm = ReopenLLM()
-        shutil.rmtree(tmp_path / "champion_code")
-        reopened = _campaign(
-            tmp_path,
-            llm_client=llm,
-            experiment_protocol=MockExperimentProtocol(
-                [_make_protocol_result(ExperimentStage.SCREENING, gate_outcome="pass")]
-            ),
-        )
-        reopened._scheduler = Scheduler(max_active_branches=1)
-        reopened._branch_step_runner.scheduler = reopened._scheduler
-        assert reopened._branch_workspaces[r1.branch_id] == str(first_workspace)
-
-        r2 = reopened.run_one_step()
-        assert r2.decision == Decision.QUEUE_VALIDATE
-        assert r2.branch_id == r1.branch_id
-        assert len(reopened._branch_ctrl._branches) == 1
-
-        hypothesis_call = next(
-            call for call in llm.provider_calls if call["request_kind"] == "hypothesis"
-        )
-        h_evidence = json.loads(
-            hypothesis_call["system_blocks"][2]["text"].split("\n", 1)[1]
-        )
-        assert len(h_evidence["experiment_history"]) == 1
-        prior = h_evidence["experiment_history"][0]
-        prior_aggregate = prior["experiment_evidence"]["objective_outcome"]["aggregate"]
-        assert prior_aggregate["median_delta"] == -12.0
-        assert "candidate = solution" in h_evidence.get("branch_current_code", "")
-
-        code_call = next(
-            call for call in llm.provider_calls if call["request_kind"] == "code"
-        )
-        c_context = json.loads(code_call["system_blocks"][1]["text"].split("\n", 1)[1])
-        prior_source = next(
-            entry
-            for entry in c_context["editable_source_context"]["sources"]
-            if entry["path"] == "operators/local_search.py"
-        )
-        assert "candidate = solution" in prior_source["content"]
-
-        workspace = Path(reopened._branch_workspaces[r2.branch_id])
         assert (
             "candidate = solution"
             in (workspace / "operators" / "local_search.py").read_text()

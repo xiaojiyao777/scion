@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from scion.proposal.context_owner_maps import proposal_context_snapshot
+from scion.proposal.context_snapshot import freeze_proposal_context
 from scion.proposal.engine.hypothesis_prompts import _direct_v3_canonical_json
 from scion.proposal.prompt_projection import project_prompt
 
@@ -30,7 +30,6 @@ def test_h_provider_receives_research_core_while_snapshot_remains_complete() -> 
                 "name": "solver_design",
                 "target_files": ["policies/scheduler.py"],
                 "allowed_actions": ["modify"],
-                "gate_influence": "none",
             }
         ],
         "available_actions": ["modify"],
@@ -41,31 +40,20 @@ def test_h_provider_receives_research_core_while_snapshot_remains_complete() -> 
         "champion_stats": {"version": 7, "algorithm": "ALNS+VNS"},
         "problem_measurement_diagnostics": {
             "screening_signal": "phase starvation",
-            "taint": "proposal_only",
-            "decision_features_excluded": True,
         },
         "experiment_history": [
             {
                 "case": "P-n65-k10",
                 "candidate_distance": 111.0,
                 "control_distance": 113.0,
-                "proposal_visibility_only": True,
             },
             {
                 "case": "X-n120-k6",
                 "candidate_distance": 222.0,
                 "control_distance": 225.0,
-                "llm_trace_excluded": True,
             },
         ],
-        "last_research_rejection": {
-            "failure_stage": "verification",
-            "failure_detail": "deadline overrun",
-            "schema_version": "rejection.v1",
-        },
         "research_question": {
-            "schema_version": "question.v2",
-            "problem_family": "cvrp",
             "current_question": "How should useful search time be allocated?",
             "research_prior": ["Inspect current source and paired evidence."],
         },
@@ -78,12 +66,14 @@ def test_h_provider_receives_research_core_while_snapshot_remains_complete() -> 
         "branch_id": "branch-host-only",
         "champion_version": 7,
     }
-    snapshot = proposal_context_snapshot("hypothesis", context)
+    snapshot = freeze_proposal_context("hypothesis", context)
     projection = project_prompt("hypothesis", snapshot)
     raw = projection.structured_context
     assert raw["branch_id"] == "branch-host-only"
     assert raw["champion_version"] == 7
-    assert raw["research_question"]["schema_version"] == "question.v2"
+    assert raw["research_question"]["current_question"] == (
+        "How should useful search time be allocated?"
+    )
     assert raw["champion_stats"]["version"] == 7
 
     provider: dict[str, Any] = {}
@@ -95,11 +85,6 @@ def test_h_provider_receives_research_core_while_snapshot_remains_complete() -> 
             "branch_id",
             "champion_version",
             "schema_version",
-            "taint",
-            "proposal_visibility_only",
-            "decision_features_excluded",
-            "llm_trace_excluded",
-            "gate_influence",
             "problem_family",
         }
     )
@@ -120,10 +105,7 @@ def test_h_provider_receives_research_core_while_snapshot_remains_complete() -> 
         "current_question": "How should useful search time be allocated?",
         "research_prior": ["Inspect current source and paired evidence."],
     }
-    assert provider["last_research_rejection"] == {
-        "failure_stage": "verification",
-        "failure_detail": "deadline overrun",
-    }
+    assert "last_research_rejection" not in provider
 
 
 def test_shared_canonical_json_does_not_strip_code_metadata() -> None:
@@ -132,11 +114,11 @@ def test_shared_canonical_json_does_not_strip_code_metadata() -> None:
             {
                 "editable_source_context": {
                     "schema_version": "source.v1",
-                    "taint": "code-owned",
+                    "source_role": "editable",
                 }
             }
         )
     )["editable_source_context"] == {
         "schema_version": "source.v1",
-        "taint": "code-owned",
+        "source_role": "editable",
     }

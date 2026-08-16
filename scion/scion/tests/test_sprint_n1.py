@@ -5,9 +5,9 @@ import os
 import yaml
 import pytest
 
-from scion.problem.contracts import CheckReport, LowerBoundEstimate, ProblemAdapter, SolverArtifact
+from scion.problem.contracts import LowerBoundEstimate, ProblemAdapter
 from scion.problem.loader import load_problem_adapter
-from scion.problem.objectives import compare_lexicographic, ObjectiveComparison
+from scion.problem.objectives import compare_lexicographic
 from scion.problem.spec import ProblemSpecV1, ObjectiveMetricSpec
 from scion.problem.milp_bounds import compute_optimum_gap, OptimumGapReport
 
@@ -155,7 +155,6 @@ class TestExperimentGenericPath:
                 SeedLedger(ledger),
                 MagicMock(),
                 metrics_dir=str(tmp_path / "metrics"),
-                require_metric_specs=True,
             )
 
         with pytest.raises(ValueError, match="metric_specs"):
@@ -166,81 +165,7 @@ class TestExperimentGenericPath:
                 MagicMock(),
                 metrics_dir=str(tmp_path / "metrics-empty"),
                 metric_specs=(),
-                require_metric_specs=True,
             )
-
-    def test_problem_v1_protocol_auto_hydrates_declared_objectives(
-        self, tmp_path
-    ) -> None:
-        from unittest.mock import MagicMock
-        from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
-        from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
-
-        with open(WAREHOUSE_YAML, encoding="utf-8") as fh:
-            spec = ProblemSpecV1(**yaml.safe_load(fh))
-
-        proto = ExperimentProtocol(
-            ProtocolConfig(),
-            SplitManager(SplitManifest(screening=[], validation=[], frozen=[])),
-            SeedLedger(SeedLedgerConfig(screening=[], validation=[], frozen=[])),
-            MagicMock(),
-            metrics_dir=str(tmp_path / "metrics"),
-            problem_spec=spec,
-        )
-
-        assert tuple(proto._metric_specs) == tuple(spec.objectives)
-        assert proto._objective_policy == spec.objective_policy
-        assert proto.objective_semantics == (
-            f"declared_objectives_{spec.objective_policy.mode}"
-        )
-
-    def test_adapter_backed_protocol_without_declared_objectives_fails_closed(
-        self, tmp_path
-    ) -> None:
-        from types import SimpleNamespace
-        from unittest.mock import MagicMock
-        from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
-        from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
-
-        adapter_backed_spec = SimpleNamespace(
-            spec_version="problem-v1",
-            requires_adapter_for_runtime=True,
-        )
-
-        with pytest.raises(ValueError, match="allow_legacy_objective_fallback=True"):
-            ExperimentProtocol(
-                ProtocolConfig(),
-                SplitManager(SplitManifest(screening=[], validation=[], frozen=[])),
-                SeedLedger(SeedLedgerConfig(screening=[], validation=[], frozen=[])),
-                MagicMock(),
-                metrics_dir=str(tmp_path / "metrics"),
-                problem_spec=adapter_backed_spec,
-            )
-
-    def test_explicit_legacy_objective_fallback_remains_available(
-        self, tmp_path
-    ) -> None:
-        from types import SimpleNamespace
-        from unittest.mock import MagicMock
-        from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
-        from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
-
-        adapter_backed_spec = SimpleNamespace(
-            spec_version="problem-v1",
-            requires_adapter_for_runtime=True,
-        )
-        proto = ExperimentProtocol(
-            ProtocolConfig(),
-            SplitManager(SplitManifest(screening=[], validation=[], frozen=[])),
-            SeedLedger(SeedLedgerConfig(screening=[], validation=[], frozen=[])),
-            MagicMock(),
-            metrics_dir=str(tmp_path / "metrics"),
-            problem_spec=adapter_backed_spec,
-            allow_legacy_objective_fallback=True,
-        )
-
-        assert proto._metric_specs is None
-        assert proto.objective_semantics == "legacy_all_minimize"
 
     def test_warehouse_production_stack_loads_strict_adapter_and_metrics(
         self, tmp_path
@@ -271,7 +196,6 @@ class TestExperimentGenericPath:
             MagicMock(),
             metrics_dir=str(tmp_path / "metrics"),
             metric_specs=adapter_spec.objectives,
-            require_metric_specs=True,
             problem_spec=adapter_spec,
         )
         gate = VerificationGate(
@@ -284,7 +208,6 @@ class TestExperimentGenericPath:
         )
 
         assert proto._metric_specs == adapter_spec.objectives
-        assert proto._require_metric_specs is True
         assert gate._adapter is adapter
         assert gate._require_adapter_for_runtime is True
 

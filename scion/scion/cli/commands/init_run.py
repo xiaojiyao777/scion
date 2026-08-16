@@ -1,15 +1,13 @@
-"""`scion init` and `scion run` command registration."""
+"""`scion run` command registration."""
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 import signal
 from contextlib import contextmanager
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Optional
 
 import typer
 
@@ -18,67 +16,17 @@ from scion.cli.commands.data_roots import (
     validate_declared_problem_data_cases,
     with_declared_problem_data_roots,
 )
-from scion.core.research_surface_index import editable_identity_patterns
 
 logger = logging.getLogger(__name__)
 
 
 class _CampaignSignalStop(KeyboardInterrupt):
-    """Raised by the CLI signal handler after recording stop intent."""
+    """Raised by the CLI signal handler to stop the active campaign."""
 
     def __init__(self, signum: int, reason: str) -> None:
         self.signum = signum
         self.reason = reason
         super().__init__(reason)
-
-
-def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace(
-        "+00:00",
-        "Z",
-    )
-
-
-def _fd_target(fd: int) -> str:
-    proc_fd = Path(f"/proc/self/fd/{fd}")
-    try:
-        return os.readlink(proc_fd)
-    except OSError:
-        return f"fd:{fd}"
-
-
-def _pattern_set(patterns: Any) -> frozenset[str] | None:
-    normalized = frozenset(
-        pattern
-        for pattern in (str(value).strip() for value in (patterns or ()))
-        if pattern
-    )
-    return normalized or None
-
-
-def _materializer_kwargs_from_problem_spec(problem_spec: Any) -> dict[str, Any]:
-    search_space = getattr(problem_spec, "search_space", None)
-    return {
-        "frozen_patterns": _pattern_set(getattr(search_space, "frozen", ())),
-        "editable_patterns": editable_identity_patterns(problem_spec),
-    }
-
-
-def _build_workspace_materializer(campaign_path: Path, problem_spec: Any) -> Any:
-    from scion.runtime.workspace import WorkspaceMaterializer
-
-    return WorkspaceMaterializer(
-        str(campaign_path),
-        **_materializer_kwargs_from_problem_spec(problem_spec),
-    )
-
-
-def _compute_initial_champion_snapshot_hash(
-    campaign_path: Path,
-    problem_spec: Any,
-) -> str:
-    materializer = _build_workspace_materializer(campaign_path, problem_spec)
-    return materializer.compute_snapshot_hash(problem_spec.root_dir)
 
 
 def _close_llm_client(llm_client: Any) -> None:
@@ -89,94 +37,6 @@ def _close_llm_client(llm_client: Any) -> None:
         close()
     except Exception:
         logger.warning("Failed to close LLM client resources", exc_info=True)
-
-
-class _RunAudit:
-    """Best-effort CLI wrapper audit files for detached/nohup launches."""
-
-    def __init__(self, campaign_path: Path) -> None:
-        self.campaign_path = campaign_path
-        self.path = campaign_path / "run_status.json"
-        self.exit_path = campaign_path / "exit.txt"
-        self.started_at = _utc_now_iso()
-        self.payload = {
-            "schema": "scion.run_wrapper_audit.v1",
-            "status": "running",
-            "run_pid": os.getpid(),
-            "started_at": self.started_at,
-            "ended_at": None,
-            "wrapper_exit_status": None,
-            "wrapper_signal": None,
-            "proposal_runtime_mode": "direct_v3",
-            "stdout": _fd_target(1),
-            "stderr": _fd_target(2),
-        }
-
-    def start(self) -> None:
-        self._write()
-
-    def finish(
-        self,
-        *,
-        exit_status: int,
-        reason: str,
-        signal_name: str | None = None,
-        extra: Mapping[str, Any] | None = None,
-    ) -> None:
-        status = "signal" if signal_name else "finished"
-        if (
-            not signal_name
-            and extra
-            and extra.get("campaign_exit_status") == "incomplete_infra_stop"
-        ):
-            status = "incomplete"
-        self.payload.update(
-            {
-                "status": status,
-                "ended_at": _utc_now_iso(),
-                "wrapper_exit_status": int(exit_status),
-                "wrapper_signal": signal_name,
-                "exit_reason": reason,
-            }
-        )
-        if extra:
-            self.payload.update(dict(extra))
-        self._write()
-        self._write_exit_txt()
-
-    def _write(self) -> None:
-        try:
-            self.campaign_path.mkdir(parents=True, exist_ok=True)
-            tmp = self.path.with_suffix(".json.tmp")
-            tmp.write_text(
-                json.dumps(self.payload, indent=2, sort_keys=True),
-                encoding="utf-8",
-            )
-            tmp.replace(self.path)
-        except OSError:
-            pass
-
-    def _write_exit_txt(self) -> None:
-        try:
-            lines = [
-                f"WRAPPER_EXIT_STATUS:{self.payload.get('wrapper_exit_status')}",
-                f"WRAPPER_SIGNAL:{self.payload.get('wrapper_signal') or ''}",
-                f"EXIT_REASON:{self.payload.get('exit_reason') or ''}",
-                f"CAMPAIGN_EXIT_STATUS:{self.payload.get('campaign_exit_status') or ''}",
-                f"RUN_VALIDITY_STATUS:{self.payload.get('run_validity_status') or ''}",
-                f"RUN_COMPLETE:{self.payload.get('run_complete')}",
-                "COMPLETED_REQUESTED_ROUNDS:"
-                f"{self.payload.get('completed_requested_rounds')}",
-                f"LAST_STOP_REASON:{self.payload.get('last_stop_reason') or ''}",
-                f"RUN_PID:{self.payload.get('run_pid')}",
-                f"STARTED_AT:{self.payload.get('started_at')}",
-                f"ENDED_AT:{self.payload.get('ended_at')}",
-                f"STDOUT:{self.payload.get('stdout') or ''}",
-                f"STDERR:{self.payload.get('stderr') or ''}",
-            ]
-            self.exit_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        except OSError:
-            pass
 
 
 @contextmanager
@@ -203,143 +63,25 @@ def _campaign_signal_handlers(manager):
 _INCOMPLETE_INFRA_STOP_EXIT_STATUS = 20
 
 
-def _wrapper_completion_from_campaign(
-    campaign_path: Path,
-) -> tuple[int, str, dict[str, Any]]:
-    for filename in ("campaign_summary.json", "status.json"):
-        payload = _read_json_mapping(campaign_path / filename)
-        if not payload:
-            continue
-        result = _wrapper_completion_from_payload(payload)
-        if result is not None:
-            return result
-    return 0, "command_returned", {"campaign_exit_status": "complete_or_unknown"}
-
-
-def _read_json_mapping(path: Path) -> dict[str, Any]:
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
-def _wrapper_completion_from_payload(
-    payload: Mapping[str, Any],
-) -> tuple[int, str, dict[str, Any]] | None:
-    raw_validity = payload.get("run_validity")
-    if not isinstance(raw_validity, Mapping):
-        return None
-    validity: Mapping[str, Any] = raw_validity
-    completed = _bool_value(
-        validity.get(
-            "completed_requested_rounds",
-            validity.get("complete", payload.get("run_complete")),
-        ),
-        default=False,
-    )
-    stopped_reason = str(
-        payload.get("last_stop_reason")
-        or payload.get("stopped_reason")
-        or validity.get("stopped_reason")
-        or ""
-    )
-    validity_reason = str(
-        validity.get("reason") or payload.get("run_validity_status") or ""
-    )
-    run_fields = {
-        "campaign_exit_status": "complete" if completed else "incomplete",
-        "run_validity_status": validity_reason,
-        "run_complete": completed,
-        "completed_requested_rounds": completed,
-        "last_stop_reason": stopped_reason,
-        "run_completeness_status": validity.get("completeness_status"),
-    }
+def _completion_from_run_result(result: Any) -> tuple[int, str]:
+    completed = bool(getattr(result, "completed", False))
+    stopped_reason = str(getattr(result, "stop_reason", "") or "")
+    failure_categories = dict(getattr(result, "failure_categories", {}) or {})
     if completed:
-        return 0, "command_returned", run_fields
-    if _is_incomplete_infra_stop(payload, validity, stopped_reason=stopped_reason):
-        run_fields["campaign_exit_status"] = "incomplete_infra_stop"
+        return 0, "command_returned"
+    if stopped_reason == "api_balance_exhausted" or any(
+        "infra" in str(category).lower()
+        or "provider" in str(category).lower()
+        for category in failure_categories
+    ):
         return (
             _INCOMPLETE_INFRA_STOP_EXIT_STATUS,
-            f"incomplete_infra_stop:{validity_reason or stopped_reason}",
-            run_fields,
+            f"incomplete_infra_stop:{stopped_reason}",
         )
-    return 0, "command_returned", run_fields
+    return 0, "command_returned"
 
 
-def _is_incomplete_infra_stop(
-    payload: Mapping[str, Any],
-    validity: Mapping[str, Any],
-    *,
-    stopped_reason: str,
-) -> bool:
-    if stopped_reason == "api_balance_exhausted":
-        return True
-    if str(payload.get("stop_category") or "") == "provider_error":
-        return True
-    provider_error = payload.get("provider_error")
-    if isinstance(provider_error, Mapping) and provider_error:
-        return True
-    try:
-        if int(validity.get("infra_failure_attempts") or 0) > 0:
-            return True
-    except (TypeError, ValueError):
-        pass
-    return False
-
-
-def _bool_value(value: Any, *, default: bool) -> bool:
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    text = str(value).strip().lower()
-    if text in {"1", "true", "yes", "y"}:
-        return True
-    if text in {"0", "false", "no", "n"}:
-        return False
-    return default
-
-
-def register_init_run_commands(app: typer.Typer) -> None:
-    @app.command()
-    def init(
-        problem: str = typer.Option(..., "--problem", help="Path to problem.yaml"),
-        campaign_dir: str = typer.Option(
-            "campaign_out",
-            "--campaign-dir",
-            help="Output directory for campaign artefacts",
-        ),
-    ) -> None:
-        """Initialise a Scion campaign from a problem.yaml specification."""
-        problem_path = Path(problem).resolve()
-        if not problem_path.exists():
-            typer.echo(f"ERROR: problem file not found: {problem_path}", err=True)
-            raise typer.Exit(code=1)
-
-        campaign_path = Path(campaign_dir).resolve()
-        campaign_path.mkdir(parents=True, exist_ok=True)
-
-        try:
-            from scion.config.problem import ProblemSpec
-
-            spec = ProblemSpec.from_yaml(str(problem_path))
-        except Exception as exc:
-            typer.echo(f"ERROR: failed to parse problem.yaml: {exc}", err=True)
-            raise typer.Exit(code=1)
-
-        state = {
-            "problem_yaml": str(problem_path),
-            "campaign_dir": str(campaign_path),
-            "problem_name": spec.name,
-        }
-        state_file = campaign_path / ".scion_state.json"
-        state_file.write_text(json.dumps(state, indent=2))
-
-        typer.echo(f"Campaign initialised: {campaign_path}")
-        typer.echo(f"  problem : {spec.name}")
-        typer.echo(f"  root_dir: {spec.root_dir}")
-
+def register_run_command(app: typer.Typer) -> None:
     @app.command()
     def run(
         mock_llm: bool = typer.Option(
@@ -355,12 +97,12 @@ def register_init_run_commands(app: typer.Typer) -> None:
         campaign_dir: str = typer.Option(
             "campaign_out",
             "--campaign-dir",
-            help="Campaign directory (from scion init)",
+            help="Fresh output directory for this campaign",
         ),
-        problem: Optional[str] = typer.Option(
-            None,
+        problem: str = typer.Option(
+            ...,
             "--problem",
-            help="Path to problem.yaml (overrides state file)",
+            help="Path to problem.yaml",
         ),
         protocol: Optional[str] = typer.Option(
             None,
@@ -385,34 +127,14 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 "solver.time_limit_sec"
             ),
         ),
-        allow_skeleton: bool = typer.Option(
-            False,
-            "--allow-skeleton",
-            help=(
-                "Explicitly allow legacy skeleton/demo fallback when production "
-                "adapter/protocol evidence is incomplete"
-            ),
-        ),
     ) -> None:
         """Run the Scion main loop.
 
         Use --mock-llm for local testing (no API key required).
         """
         campaign_path = Path(campaign_dir).resolve()
-        state_file = campaign_path / ".scion_state.json"
 
-        if problem:
-            problem_yaml = Path(problem).resolve()
-        elif state_file.exists():
-            state = json.loads(state_file.read_text())
-            problem_yaml = Path(state["problem_yaml"])
-        else:
-            typer.echo(
-                "ERROR: no campaign state found - run 'scion init --problem <yaml>' first",
-                err=True,
-            )
-            raise typer.Exit(code=1)
-
+        problem_yaml = Path(problem).resolve()
         if not problem_yaml.exists():
             typer.echo(f"ERROR: problem.yaml not found: {problem_yaml}", err=True)
             raise typer.Exit(code=1)
@@ -513,7 +235,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 else SeedLedgerConfig(screening=[42], validation=[1, 2], frozen=[10])
             )
 
-        from scion.core.production_boundary import is_adapter_backed_production_campaign
         from scion.protocol.experiment import (
             ExperimentProtocol,
             SeedLedger,
@@ -531,12 +252,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
             if time_limit_sec is not None
             else getattr(getattr(spec, "solver", None), "time_limit_sec", 300)
         )
-        production_campaign = is_adapter_backed_production_campaign(
-            problem_spec=spec,
-            adapter=adapter,
-            allow_skeleton=allow_skeleton,
-        )
-        require_metric_specs = production_campaign
         effective_metric_specs = metric_specs if metric_specs else None
         try:
             experiment_protocol = ExperimentProtocol(
@@ -548,7 +263,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 metrics_dir=metrics_dir,
                 metric_specs=effective_metric_specs,
                 objective_policy=objective_policy,
-                require_metric_specs=require_metric_specs,
                 problem_spec=spec,
             )
         except ValueError as exc:
@@ -559,16 +273,14 @@ def register_init_run_commands(app: typer.Typer) -> None:
             runner,
             metrics_dir=metrics_dir,
             adapter=adapter,
-            strict_runtime_checks=production_campaign,
-            require_adapter_for_runtime=production_campaign,
-            allow_adapter_runtime_fallback=allow_skeleton,
+            strict_runtime_checks=True,
+            require_adapter_for_runtime=True,
+            allow_adapter_runtime_fallback=False,
             operator_execute_signature=operator_execute_signature,
             max_runtime_ratio=proto_cfg.runtime.max_runtime_ratio,
         )
         from scion.core.models import ChampionState
         from scion.runtime.pool_manager import read_registry
-
-        code_hash = _compute_initial_champion_snapshot_hash(campaign_path, spec)
 
         registry_path = os.path.join(spec.root_dir, "registry.yaml")
         if os.path.exists(registry_path):
@@ -586,9 +298,7 @@ def register_init_run_commands(app: typer.Typer) -> None:
         champion = ChampionState(
             version=1,
             operator_pool=operator_pool,
-            solver_config_hash="initial",
             code_snapshot_path=spec.root_dir,
-            code_snapshot_hash=code_hash,
         )
 
         from scion.core.campaign import CampaignManager
@@ -619,7 +329,6 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 experiment_protocol=experiment_protocol,
                 adapter=adapter,
                 operator_execute_signature=operator_execute_signature,
-                allow_skeleton_mode=allow_skeleton,
             )
 
             requested_rounds = rounds
@@ -627,34 +336,16 @@ def register_init_run_commands(app: typer.Typer) -> None:
                 f"Starting campaign: {spec.name} "
                 f"(requested_rounds={requested_rounds}, mock_llm={mock_llm})"
             )
-            run_audit = _RunAudit(campaign_path)
-            run_audit.start()
             try:
                 with _campaign_signal_handlers(mgr):
-                    mgr.run(requested_rounds=requested_rounds)
+                    run_result = mgr.run(requested_rounds=requested_rounds)
             except _CampaignSignalStop as exc:
                 mgr.finalize_requested_stop(exc.reason)
-                run_audit.finish(
-                    exit_status=128 + int(exc.signum),
-                    reason=exc.reason,
-                    signal_name=signal.Signals(exc.signum).name,
-                )
                 typer.echo(f"Campaign stopped: {exc.reason}", err=True)
                 raise typer.Exit(code=128 + int(exc.signum))
-            except Exception as exc:
-                run_audit.finish(
-                    exit_status=1,
-                    reason=f"exception:{type(exc).__name__}",
-                )
-                raise
             else:
-                exit_status, exit_reason, exit_extra = _wrapper_completion_from_campaign(
-                    campaign_path
-                )
-                run_audit.finish(
-                    exit_status=exit_status,
-                    reason=exit_reason,
-                    extra=exit_extra,
+                exit_status, exit_reason = _completion_from_run_result(
+                    run_result
                 )
                 if exit_status != 0:
                     typer.echo(f"Campaign incomplete: {exit_reason}", err=True)
@@ -669,4 +360,4 @@ def register_init_run_commands(app: typer.Typer) -> None:
             _close_llm_client(llm_client)
 
 
-__all__ = ["register_init_run_commands"]
+__all__ = ["register_run_command"]

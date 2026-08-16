@@ -2,15 +2,16 @@
 
 from .evidence_recorder_test_support import *  # noqa: F401,F403
 
+
 def test_campaign_summary_file_is_single_top_level_json_object(
     tmp_path: Path,
 ) -> None:
     recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
 
     summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
         step_history=[_step()],
-        round_num=1,
-        champion=_champion(),
     )
 
     content = (tmp_path / "campaign_summary.json").read_text(encoding="utf-8")
@@ -62,27 +63,14 @@ def test_campaign_summary_distinguishes_pair_and_case_screening_rates(
     )
 
     summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
         step_history=[step],
-        round_num=1,
-        champion=_champion(),
     )
 
     protocol = summary["steps"][0]["protocol_result"]
-    assert protocol["screening_win_rate"] == 0.0
-    assert protocol["screening_win_rate_scope"] == "case_level_gate"
     assert protocol["screening_case_win_rate"] == 0.0
-    assert protocol["screening_case_level_gate_wins"] == protocol["screening_case_wins"]
-    assert protocol["screening_case_level_gate_losses"] == protocol[
-        "screening_case_losses"
-    ]
-    assert protocol["screening_case_level_gate_ties"] == protocol["screening_case_ties"]
-    assert protocol["screening_case_level_gate_total"] == protocol[
-        "screening_case_total"
-    ]
-    assert protocol["screening_case_level_gate_win_rate"] == protocol[
-        "screening_case_win_rate"
-    ]
-    assert protocol["screening_gate_win_rate"] == 0.0
+    assert "win_rate" not in protocol
     assert protocol["screening_pair_wins"] == 2
     assert protocol["screening_pair_losses"] == 2
     assert protocol["screening_pair_ties"] == 12
@@ -123,9 +111,9 @@ def test_campaign_summary_exposes_complete_runtime_failure_summary(
     )
 
     summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
         step_history=[step],
-        round_num=1,
-        champion=_champion(),
     )
 
     protocol = summary["steps"][0]["protocol_result"]
@@ -190,9 +178,9 @@ def test_campaign_summary_exposes_selected_surface_runtime_summary(
     )
 
     summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
         step_history=[step],
-        round_num=1,
-        champion=_champion(),
     )
 
     protocol = summary["steps"][0]["protocol_result"]
@@ -231,20 +219,16 @@ def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(
     beta.hypothesis.change_locus = "beta"
 
     summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=2),
+        run_result=_run_projection(2),
         step_history=[alpha, beta],
-        round_num=2,
-        champion=_champion(),
     )
 
     assert summary["family_coverage"] == {"alpha": 1, "beta": 1}
 
 
 def test_protocol_progress_status_uses_public_raw_metrics_ref(tmp_path: Path) -> None:
-    recorder = EvidenceRecorder(
-        campaign_id="camp-1",
-        campaign_dir=tmp_path,
-        state_provider=lambda: {"campaign_id": "camp-1", "round": 4},
-    )
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
 
     progress = recorder.record_protocol_progress(
         branch_id="branch-1",
@@ -253,12 +237,15 @@ def test_protocol_progress_status_uses_public_raw_metrics_ref(tmp_path: Path) ->
         completed_cases=2,
     )
 
-    status = json.loads((tmp_path / "status.json").read_text())
+    state = _operator_state()
+    state["current_progress"] = progress
+    status = recorder.write_status(
+        state=state,
+        run_result=_run_projection(),
+    )
     assert progress["raw_metrics_ref"] != "/tmp/progress-metrics.json"
     assert not progress["raw_metrics_ref"].startswith("/")
     assert "progress-metrics.json" in progress["raw_metrics_ref"]
-    assert progress["raw_metrics_ref_scope"] == "public_artifact_ref"
-    assert progress["raw_metrics_internal_only"] is True
     assert status["current_progress"]["raw_metrics_ref"] == progress["raw_metrics_ref"]
     assert not status["current_progress"]["raw_metrics_ref"].startswith("/")
     assert status["current_progress"]["completed_cases"] == 2

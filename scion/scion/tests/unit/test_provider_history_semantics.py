@@ -36,7 +36,6 @@ def test_eval_only_screening_separates_proposal_intent_from_patch_execution() ->
         {
             "current_step_change_scope": "eval_only_reuse",
             "evaluation_candidate": "reused_verified_branch_state",
-            "current_step": {"hypothesis_id": "attempt-1"},
         }
     )
 
@@ -56,7 +55,6 @@ def test_patch_files_are_projected_from_recorded_current_step_only() -> None:
             "current_step_change_scope": "incremental_patch",
             "evaluation_candidate": "branch_state_after_current_step_patch",
             "current_step": {
-                "hypothesis_id": "attempt-1",
                 "target_files": [
                     "policies/executed_a.py",
                     "policies/executed_b.py",

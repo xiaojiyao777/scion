@@ -7,28 +7,18 @@ import pytest
 
 from scion.core.branch import BranchController
 from scion.core.models import Branch, BranchState, ChampionState, OperatorConfig
-from scion.core.promotion_service import (
-    PromotionCommitError,
-    PromotionPlan,
-    PromotionRequest,
-    PromotionService,
-)
+from scion.core.promotion_service import PromotionService
 
 
 class FakeMaterializer:
     def __init__(self, *, fail_freeze: bool = False) -> None:
         self.fail_freeze = fail_freeze
         self.frozen: list[str] = []
-        self.hashes: list[str] = []
 
     def freeze_snapshot(self, path: str) -> None:
         if self.fail_freeze:
             raise OSError("freeze failed")
         self.frozen.append(path)
-
-    def compute_snapshot_hash(self, workspace: str) -> str:
-        self.hashes.append(workspace)
-        return "snapshot-hash"
 
 
 def _operator(name: str = "ls") -> OperatorConfig:
@@ -45,14 +35,17 @@ def _champion(version: int = 1) -> ChampionState:
     return ChampionState(
         version=version,
         operator_pool={"ls": _operator()},
-        solver_config_hash="solver-hash",
         code_snapshot_path=f"/tmp/champion_v{version}",
-        code_snapshot_hash=f"hash-{version}",
         promoted_at="2026-05-01T00:00:00",
     )
 
 
-def _workspace(path: Path, *, with_registry: bool = True, registry_text: str | None = None) -> Path:
+def _workspace(
+    path: Path,
+    *,
+    with_registry: bool = True,
+    registry_text: str | None = None,
+) -> Path:
     ops = path / "operators"
     ops.mkdir(parents=True)
     (ops / "ls.py").write_text("class LS: pass\n", encoding="utf-8")
@@ -76,261 +69,172 @@ def _workspace(path: Path, *, with_registry: bool = True, registry_text: str | N
     return path
 
 
-def test_prepare_success_returns_immutable_plan(tmp_path: Path) -> None:
+def test_promote_is_one_operation_from_workspace_through_state_hooks(
+    tmp_path: Path,
+) -> None:
     workspace = _workspace(tmp_path / "candidate")
-    champion = _champion()
+    calls: list[tuple[str, object]] = []
     materializer = FakeMaterializer()
     service = PromotionService(
         snapshot_root=tmp_path / "champions",
         materializer=materializer,
+        set_champion=lambda champion: calls.append(("champion", champion.version)),
+        promote_branch=lambda branch_id, champion: calls.append(
+            ("branch", (branch_id, champion.version))
+        ),
+        mark_stale=lambda version: calls.append(("stale", version)) or ("branch-2",),
         clock=lambda: "2026-05-01T12:00:00",
     )
 
-    plan = service.prepare(
-        PromotionRequest.from_champion(
-            branch_id="branch-1",
-            candidate_workspace=str(workspace),
-            champion=champion,
-        )
+    result = service.promote(
+        branch_id="branch-1",
+        candidate_workspace=str(workspace),
+        champion=_champion(),
     )
 
-    assert plan.branch_id == "branch-1"
-    assert plan.new_champion_version == 2
-    assert plan.weight_revision == 0
-    assert plan.candidate_snapshot_ref == str(tmp_path / "champions" / "champion_v2")
-    assert plan.champion.version == 2
-    assert plan.champion.operator_pool["ls"].class_name == "LS"
-    assert plan.champion.code_snapshot_hash == "snapshot-hash"
-    assert materializer.frozen == [plan.candidate_snapshot_ref]
-
+    expected_snapshot = str(tmp_path / "champions" / "champion_v2")
+    assert result.champion.version == 2
+    assert result.champion.code_snapshot_path == expected_snapshot
+    assert result.champion.operator_pool["ls"].class_name == "LS"
+    assert result.stale_branch_ids == ("branch-2",)
+    assert materializer.frozen == [expected_snapshot]
+    assert calls == [
+        ("champion", 2),
+        ("branch", ("branch-1", 2)),
+        ("stale", 2),
+    ]
     with pytest.raises(FrozenInstanceError):
-        plan.new_champion_version = 3  # type: ignore[misc]
+        result.stale_branch_ids = ()  # type: ignore[misc]
     with pytest.raises(TypeError):
-        plan.current_weights["ls"] = 0.5  # type: ignore[index]
+        result.current_weights["ls"] = 0.5  # type: ignore[index]
 
 
-def test_prepare_failure_does_not_call_mutating_dependencies(tmp_path: Path) -> None:
+def test_snapshot_failure_stops_before_state_hooks(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "candidate")
     calls: list[str] = []
     service = PromotionService(
         snapshot_root=tmp_path / "champions",
         materializer=FakeMaterializer(fail_freeze=True),
-        commit_champion=lambda champion: calls.append(f"champion:{champion.version}"),
-        commit_pool=lambda pool: calls.append(f"pool:{len(pool)}"),
-        persist_champion=lambda champion: calls.append(f"persist:{champion.version}"),
+        set_champion=lambda champion: calls.append(f"champion:{champion.version}"),
         mark_stale=lambda version: calls.append(f"stale:{version}") or (),
     )
 
     with pytest.raises(RuntimeError, match="freeze champion snapshot failed"):
-        service.prepare(
-            PromotionRequest.from_champion(
-                branch_id="branch-1",
-                candidate_workspace=str(workspace),
-                champion=_champion(),
-            )
+        service.promote(
+            branch_id="branch-1",
+            candidate_workspace=str(workspace),
+            champion=_champion(),
         )
 
     assert calls == []
 
 
-def test_prepare_registry_read_failure_blocks_promotion_when_registry_exists(
-    tmp_path: Path,
-) -> None:
+def test_registry_read_failure_stops_promotion(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "candidate", registry_text="operators: [")
     service = PromotionService(
         snapshot_root=tmp_path / "champions",
         materializer=FakeMaterializer(),
-        read_weights_fn=lambda registry_path: {},
+        read_weights_fn=lambda _registry_path: {},
     )
 
     with pytest.raises(RuntimeError, match="read champion registry failed"):
-        service.prepare(
-            PromotionRequest.from_champion(
-                branch_id="branch-1",
-                candidate_workspace=str(workspace),
-                champion=_champion(),
-            )
+        service.promote(
+            branch_id="branch-1",
+            candidate_workspace=str(workspace),
+            champion=_champion(),
         )
 
 
-def test_prepare_absent_registry_uses_previous_operator_pool_legacy_fallback(
-    tmp_path: Path,
-) -> None:
+def test_absent_registry_preserves_current_operator_pool(tmp_path: Path) -> None:
     workspace = _workspace(tmp_path / "candidate", with_registry=False)
     service = PromotionService(
         snapshot_root=tmp_path / "champions",
         materializer=FakeMaterializer(),
-        clock=lambda: "2026-05-01T12:00:00",
     )
-    previous_pool = {"legacy": _operator("legacy")}
+    champion = _champion()
 
-    plan = service.prepare(
-        PromotionRequest(
+    result = service.promote(
+        branch_id="branch-1",
+        candidate_workspace=str(workspace),
+        champion=champion,
+    )
+
+    assert result.champion.operator_pool == champion.operator_pool
+
+
+def test_existing_snapshot_fails_closed_without_replacement(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "candidate")
+    snapshot = tmp_path / "champions" / "champion_v2"
+    snapshot.mkdir(parents=True)
+    marker = snapshot / "keep"
+    marker.write_text("existing\n", encoding="utf-8")
+    service = PromotionService(
+        snapshot_root=tmp_path / "champions",
+        materializer=FakeMaterializer(),
+    )
+
+    with pytest.raises(RuntimeError, match="champion snapshot already exists"):
+        service.promote(
             branch_id="branch-1",
             candidate_workspace=str(workspace),
-            champion_version=1,
-            champion_weight_revision=0,
-            solver_config_hash="solver-hash",
-            previous_operator_pool=previous_pool,
+            champion=_champion(),
         )
-    )
 
-    assert set(plan.champion.operator_pool) == {"legacy"}
-    assert plan.champion.operator_pool["legacy"].class_name == "LEGACY"
+    assert marker.read_text(encoding="utf-8") == "existing\n"
 
 
-def test_commit_success_calls_champion_pool_and_stale_hooks() -> None:
+def test_state_hook_failure_stops_later_hooks(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "candidate")
     calls: list[tuple[str, object]] = []
-    champion = _champion(version=2)
-    plan = PromotionPlan(
-        branch_id="branch-1",
-        candidate_snapshot_ref="/tmp/champion_v2",
-        new_champion_version=2,
-        weight_revision=0,
-        champion=champion,
-        current_weights={"ls": 1.0},
-    )
-    service = PromotionService(
-        before_commit=lambda prepared: calls.append(("before", prepared.new_champion_version)),
-        commit_champion=lambda committed: calls.append(("champion", committed.version)),
-        commit_pool=lambda pool: calls.append(("pool", tuple(pool))),
-        persist_champion=lambda committed: calls.append(("persist", committed.version)),
-        promote_branch=lambda branch_id, committed: calls.append(
-            ("promote_branch", (branch_id, committed.version))
-        ),
-        mark_stale=lambda version: calls.append(("stale", version)) or ("branch-2",),
-        persist_branch_states=lambda: calls.append(("persist_branches", None)),
-        on_promoted_branch=lambda branch_id, committed: calls.append(
-            ("branch", (branch_id, committed.version))
-        ),
-    )
 
-    result = service.commit(plan)
-
-    assert result.branch_id == "branch-1"
-    assert result.champion_version == 2
-    assert result.stale_branch_ids == ("branch-2",)
-    assert calls == [
-        ("persist", 2),
-        ("before", 2),
-        ("champion", 2),
-        ("pool", ("ls",)),
-        ("promote_branch", ("branch-1", 2)),
-        ("stale", 2),
-        ("persist_branches", None),
-        ("branch", ("branch-1", 2)),
-    ]
-
-
-def test_commit_champion_store_failure_aborts_mutating_side_effects() -> None:
-    calls: list[tuple[str, object]] = []
-    plan = PromotionPlan(
-        branch_id="branch-1",
-        candidate_snapshot_ref="/tmp/champion_v2",
-        new_champion_version=2,
-        weight_revision=0,
-        champion=_champion(version=2),
-        current_weights={"ls": 1.0},
-    )
-
-    def fail_persist(committed: ChampionState) -> None:
-        calls.append(("persist", committed.version))
-        raise OSError("store unavailable")
+    def fail_champion(champion: ChampionState) -> None:
+        calls.append(("champion", champion.version))
+        raise RuntimeError("memory install unavailable")
 
     service = PromotionService(
-        before_commit=lambda prepared: calls.append(("before", prepared.new_champion_version)),
-        commit_champion=lambda committed: calls.append(("champion", committed.version)),
-        commit_pool=lambda pool: calls.append(("pool", tuple(pool))),
-        persist_champion=fail_persist,
-        promote_branch=lambda branch_id, committed: calls.append(
-            ("promote_branch", (branch_id, committed.version))
+        snapshot_root=tmp_path / "champions",
+        materializer=FakeMaterializer(),
+        set_champion=fail_champion,
+        promote_branch=lambda branch_id, champion: calls.append(
+            ("branch", (branch_id, champion.version))
         ),
-        mark_stale=lambda version: calls.append(("stale", version)) or ("branch-2",),
-        persist_branch_states=lambda: calls.append(("persist_branches", None)),
-        on_promoted_branch=lambda branch_id, committed: calls.append(
-            ("branch", (branch_id, committed.version))
-        ),
+        mark_stale=lambda version: calls.append(("stale", version)) or (),
     )
 
-    with pytest.raises(
-        PromotionCommitError,
-        match="persist_champion: store unavailable",
-    ) as exc_info:
-        service.commit(plan)
+    with pytest.raises(RuntimeError, match="memory install unavailable"):
+        service.promote(
+            branch_id="branch-1",
+            candidate_workspace=str(workspace),
+            champion=_champion(),
+        )
 
-    assert exc_info.value.phase == "persist_champion"
-    assert exc_info.value.champion_persisted is False
-    assert exc_info.value.completed_phases == ()
-    assert calls == [
-        ("persist", 2),
-    ]
+    assert calls == [("champion", 2)]
 
 
-def test_commit_later_hook_failure_reports_durable_promotion_phase() -> None:
-    calls: list[tuple[str, object]] = []
-    plan = PromotionPlan(
-        branch_id="branch-1",
-        candidate_snapshot_ref="/tmp/champion_v2",
-        new_champion_version=2,
-        weight_revision=0,
-        champion=_champion(version=2),
-        current_weights={"ls": 1.0},
-    )
-
-    def fail_commit_champion(committed: ChampionState) -> None:
-        calls.append(("champion", committed.version))
-        raise RuntimeError("memory install failed")
-
-    service = PromotionService(
-        before_commit=lambda prepared: calls.append(("before", prepared.new_champion_version)),
-        commit_champion=fail_commit_champion,
-        persist_champion=lambda committed: calls.append(("persist", committed.version)),
-        promote_branch=lambda branch_id, committed: calls.append(
-            ("promote_branch", (branch_id, committed.version))
-        ),
-        mark_stale=lambda version: calls.append(("stale", version)) or ("branch-2",),
-    )
-
-    with pytest.raises(
-        PromotionCommitError,
-        match="commit_champion: memory install failed",
-    ) as exc_info:
-        service.commit(plan)
-
-    assert exc_info.value.phase == "commit_champion"
-    assert exc_info.value.champion_persisted is True
-    assert exc_info.value.completed_phases == ("persist_champion", "before_commit")
-    assert calls == [
-        ("persist", 2),
-        ("before", 2),
-        ("champion", 2),
-    ]
-
-
-def test_commit_stale_hook_preserves_frozen_branch_skip_behavior() -> None:
+def test_stale_marking_preserves_frozen_branch(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path / "candidate")
     ctrl = BranchController()
     ctrl._branches["frozen"] = Branch(
         branch_id="frozen",
         state=BranchState.FROZEN_TESTING,
         base_champion_id=1,
-        base_champion_hash="hash-1",
     )
     ctrl._branches["ready"] = Branch(
         branch_id="ready",
         state=BranchState.READY_VALIDATE,
         base_champion_id=1,
-        base_champion_hash="hash-1",
     )
-    plan = PromotionPlan(
-        branch_id="promoted",
-        candidate_snapshot_ref="/tmp/champion_v2",
-        new_champion_version=2,
-        weight_revision=0,
-        champion=_champion(version=2),
+    service = PromotionService(
+        snapshot_root=tmp_path / "champions",
+        materializer=FakeMaterializer(),
+        mark_stale=ctrl.mark_all_stale,
     )
-    service = PromotionService(mark_stale=ctrl.mark_all_stale)
 
-    result = service.commit(plan)
+    result = service.promote(
+        branch_id="promoted",
+        candidate_workspace=str(workspace),
+        champion=_champion(),
+    )
 
     assert result.stale_branch_ids == ("ready",)
     assert ctrl._branches["frozen"].state == BranchState.FROZEN_TESTING

@@ -76,17 +76,10 @@ class LLMClient(PolicyMixin, TransportMixin):
             "SCION_LLM_TIMEOUT_SEC",
             _DEFAULT_TIMEOUT_SEC if timeout_sec is None else timeout_sec,
         )
-        self._cache_stats = {"calls": 0, "cache_read_tokens": 0, "cache_create_tokens": 0, "uncached_tokens": 0}
         self._last_usage_metadata: dict[str, Any] | None = None
         self._last_response_diagnostics: dict[str, Any] | None = None
-        self._last_prompt_cache_key: str | None = None
         self._anthropic_client: Any = None
         self._openai_client: Any = None
-        self._token_tracker: Any = None  # W13: set via set_token_tracker()
-
-    def set_token_tracker(self, tracker) -> None:
-        """W13: Attach a TokenUsageTracker for per-call recording."""
-        self._token_tracker = tracker
 
     def close(self) -> None:
         """Close cached provider SDK clients and their HTTP transports."""
@@ -108,7 +101,6 @@ class LLMClient(PolicyMixin, TransportMixin):
         """Start one public provider call without observations from its predecessor."""
         self._last_usage_metadata = None
         self._last_response_diagnostics = None
-        self._last_prompt_cache_key = None
 
     # ------------------------------------------------------------------
     # Public API

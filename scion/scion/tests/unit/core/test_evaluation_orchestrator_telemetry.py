@@ -45,9 +45,7 @@ def _champion() -> ChampionState:
                 class_name="Solver",
             )
         },
-        solver_config_hash="solver-hash",
         code_snapshot_path="/tmp/champion",
-        code_snapshot_hash="champion-hash",
     )
 
 
@@ -586,7 +584,7 @@ class _RuntimeSlowLowMidProtocol:
         (BranchState.EXPLORE, 2, 4, 2, 4, False, 1, ExperimentStage.SCREENING),
     ),
 )
-def test_expand_uses_effective_count_without_mutating_persisted_source(
+def test_expand_uses_effective_count_without_mutating_branch_counters(
     branch_state: BranchState,
     initial_screening_count: int,
     initial_validation_count: int,
@@ -597,30 +595,14 @@ def test_expand_uses_effective_count_without_mutating_persisted_source(
     expected_stage: ExperimentStage,
 ) -> None:
     branch = Branch(
-        str(uuid.uuid4()),
-        branch_state,
-        1,
-        "champ",
+        branch_id=str(uuid.uuid4()),
+        state=branch_state,
+        base_champion_id=1,
         screening_expand_count=initial_screening_count,
         validation_expand_count=initial_validation_count,
     )
-    branch.branch_evidence_summary = {
-        "case_level_negative_cases": [{"case_id": "CMT2.vrp"}],
-        "case_level_positive_cases": [{"case_id": "CMT4.vrp"}],
-    }
     events: list[tuple[object, ...]] = []
     protocol = _RecordingExpandProtocol(events)
-
-    def persist_branch_state(branch_id: str) -> None:
-        assert branch_id == branch.branch_id
-        events.append(
-            (
-                "persist",
-                branch.screening_expand_count,
-                branch.validation_expand_count,
-                branch.weight_revision,
-            )
-        )
 
     orchestrator = EvaluationOrchestrator(
         branch_controller=_BranchController(),
@@ -628,17 +610,12 @@ def test_expand_uses_effective_count_without_mutating_persisted_source(
         get_champion=lambda: replace(_champion(), weight_revision=7),
         branch_patches={},
         branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
         experiment_protocol_provider=lambda: protocol,
         feature_extractor=SafeFeatureExtractor(),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes={},
         campaign_id="campaign",
         registry=SimpleNamespace(),
         materializer=SimpleNamespace(),
-        hypothesis_store=SimpleNamespace(),
-        persist_branch_state=persist_branch_state,
         begin_status_progress=lambda **_kwargs: None,
         end_status_progress=lambda: None,
         increment_experiment_count=lambda: None,
@@ -649,12 +626,6 @@ def test_expand_uses_effective_count_without_mutating_persisted_source(
     assert result.execution_outcome.outcome is ExecutionOutcome.EVALUATED
     assert events == [
         (
-            "persist",
-            initial_screening_count,
-            initial_validation_count,
-            7,
-        ),
-        (
             "evaluate",
             expected_expand,
             expected_expand_round,
@@ -664,30 +635,30 @@ def test_expand_uses_effective_count_without_mutating_persisted_source(
     ]
     assert branch.screening_expand_count == initial_screening_count
     assert branch.validation_expand_count == initial_validation_count
-    features = orchestrator.decision_feature_snapshots[branch.branch_id]
+    assert result.decision_features is not None
+    features = result.decision_features
     assert features.screening_expand_count == effective_screening_count
     assert features.validation_expand_count == effective_validation_count
 
 
 def test_explicit_evaluation_infra_cause_is_blocked_infra() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch = Branch(
+        branch_id=str(uuid.uuid4()),
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+    )
     orchestrator = EvaluationOrchestrator(
         branch_controller=_BranchController(),
         champion_lock=nullcontext(),
         get_champion=_champion,
         branch_patches={},
         branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
         experiment_protocol_provider=_InfraRaisingProtocol,
         feature_extractor=SafeFeatureExtractor(),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes={},
         campaign_id="campaign",
         registry=SimpleNamespace(),
         materializer=SimpleNamespace(),
-        hypothesis_store=SimpleNamespace(),
-        persist_branch_state=lambda _branch_id: None,
         begin_status_progress=lambda **_kwargs: None,
         end_status_progress=lambda: None,
         increment_experiment_count=lambda: None,
@@ -711,17 +682,12 @@ def _later_stage_orchestrator(
         get_champion=_champion,
         branch_patches={},
         branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
         experiment_protocol_provider=protocol_type,
         feature_extractor=SafeFeatureExtractor(),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes={},
         campaign_id="campaign",
         registry=SimpleNamespace(),
         materializer=SimpleNamespace(),
-        hypothesis_store=SimpleNamespace(),
-        persist_branch_state=lambda _branch_id: None,
         begin_status_progress=lambda **_kwargs: None,
         end_status_progress=lambda: None,
         increment_experiment_count=lambda: None,
@@ -730,10 +696,9 @@ def _later_stage_orchestrator(
 
 def test_later_stage_champion_evidence_failure_blocks_before_decision() -> None:
     branch = Branch(
-        str(uuid.uuid4()),
-        BranchState.FROZEN_TESTING,
-        1,
-        "champ",
+        branch_id=str(uuid.uuid4()),
+        state=BranchState.FROZEN_TESTING,
+        base_champion_id=1,
     )
     orchestrator = _later_stage_orchestrator(
         branch,
@@ -751,7 +716,6 @@ def test_later_stage_champion_evidence_failure_blocks_before_decision() -> None:
     assert result.canary_result is not None
     assert result.canary_result.passed is True
     assert result.execution_outcome.provenance == {
-        "owner": "evaluation_orchestrator",
         "stage": "frozen",
         "failure_scope": "champion_or_shared",
         "raw_metrics_ref": "/tmp/frozen-partial-metrics.json",
@@ -765,21 +729,19 @@ def test_later_stage_champion_evidence_failure_blocks_before_decision() -> None:
         "failed_pairs": 1,
         "candidate_failed_pairs": 0,
         "champion_failed_pairs": 1,
-        "operator_resume_required": True,
     }
-    assert orchestrator.decision_engine_reason_codes[branch.branch_id] == ()
-    assert orchestrator.bypass_reason_codes[branch.branch_id] == (
+    assert result.decision_engine_reason_codes == ()
+    assert result.bypass_reason_codes == (
         "EVALUATION_CHAMPION_EVIDENCE_BLOCKED",
     )
-    assert branch.branch_id not in orchestrator.decision_feature_snapshots
+    assert result.decision_features is None
 
 
 def test_later_stage_candidate_failure_remains_evaluated_abandon() -> None:
     branch = Branch(
-        str(uuid.uuid4()),
-        BranchState.FROZEN_TESTING,
-        1,
-        "champ",
+        branch_id=str(uuid.uuid4()),
+        state=BranchState.FROZEN_TESTING,
+        base_champion_id=1,
     )
     orchestrator = _later_stage_orchestrator(
         branch,
@@ -800,30 +762,27 @@ def test_later_stage_candidate_failure_remains_evaluated_abandon() -> None:
 def test_canary_config_failure_rewrites_public_reason_without_changing_decision_boundary() -> (
     None
 ):
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch = Branch(
+        branch_id=str(uuid.uuid4()),
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+    )
     branch_controller = _BranchController()
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
     orchestrator = EvaluationOrchestrator(
         branch_controller=branch_controller,
         champion_lock=nullcontext(),
         get_champion=_champion,
         branch_patches={},
         branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
         experiment_protocol_provider=_PathSafetyCanaryProtocol,
         feature_extractor=SafeFeatureExtractor(),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
         campaign_id="campaign",
         registry=SimpleNamespace(record_event=lambda payload: None),
         materializer=SimpleNamespace(
             archive_workspace=lambda *args, **kwargs: None,
             cleanup=lambda *args, **kwargs: None,
         ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
         begin_status_progress=lambda **_kwargs: None,
         end_status_progress=lambda: None,
         increment_experiment_count=lambda: None,
@@ -843,40 +802,37 @@ def test_canary_config_failure_rewrites_public_reason_without_changing_decision_
     assert canary_result.passed is False
     assert canary_result.failure_category == "configuration_error"
     assert canary_result.reason_codes == ("CANARY_CONFIG_ERROR",)
-    assert decision_reason_codes[branch.branch_id] == ("CANARY_CONFIG_ERROR",)
-    assert orchestrator.decision_engine_reason_codes[branch.branch_id] == (
+    assert evaluation.decision_reason_codes == ("CANARY_CONFIG_ERROR",)
+    assert evaluation.decision_engine_reason_codes == (
         "CANARY_FAILED",
     )
-    assert orchestrator.diagnostic_reason_codes[branch.branch_id] == (
+    assert evaluation.diagnostic_reason_codes == (
         "CANARY_CONFIG_ERROR",
     )
 
 
 def test_ordinary_canary_failure_keeps_public_algorithm_reason() -> None:
-    branch = Branch(str(uuid.uuid4()), BranchState.EXPLORE, 1, "champ")
+    branch = Branch(
+        branch_id=str(uuid.uuid4()),
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+    )
     branch_controller = _BranchController()
-    decision_reason_codes: dict[str, tuple[str, ...]] = {}
-
     orchestrator = EvaluationOrchestrator(
         branch_controller=branch_controller,
         champion_lock=nullcontext(),
         get_champion=_champion,
         branch_patches={},
         branch_workspaces={branch.branch_id: "/tmp/candidate"},
-        branch_hypotheses={},
-        branch_current_hypothesis={},
         experiment_protocol_provider=_OrdinaryFailingCanaryProtocol,
         feature_extractor=SafeFeatureExtractor(),
         decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
-        decision_reason_codes=decision_reason_codes,
         campaign_id="campaign",
         registry=SimpleNamespace(record_event=lambda payload: None),
         materializer=SimpleNamespace(
             archive_workspace=lambda *args, **kwargs: None,
             cleanup=lambda *args, **kwargs: None,
         ),
-        hypothesis_store=SimpleNamespace(mark_status=lambda *args: None),
-        persist_branch_state=lambda _branch_id: None,
         begin_status_progress=lambda **_kwargs: None,
         end_status_progress=lambda: None,
         increment_experiment_count=lambda: None,
@@ -895,8 +851,8 @@ def test_ordinary_canary_failure_keeps_public_algorithm_reason() -> None:
     assert protocol_result is None
     assert canary_result.failure_category == "candidate_failure"
     assert canary_result.reason_codes == ("CANARY_FAILED",)
-    assert decision_reason_codes[branch.branch_id] == ("CANARY_FAILED",)
-    assert orchestrator.decision_engine_reason_codes[branch.branch_id] == (
+    assert evaluation.decision_reason_codes == ("CANARY_FAILED",)
+    assert evaluation.decision_engine_reason_codes == (
         "CANARY_FAILED",
     )
-    assert orchestrator.diagnostic_reason_codes[branch.branch_id] == ()
+    assert evaluation.diagnostic_reason_codes == ()

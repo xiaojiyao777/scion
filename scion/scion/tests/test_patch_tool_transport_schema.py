@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -16,16 +15,10 @@ _LOCALIZED_REQUIRED = {
     "old_string",
     "new_string",
 }
-_OPENAI_TOOL_SNAPSHOT = (
-    Path(__file__).resolve().parent / "fixtures" / "patch_tool_openai_payload.json"
-)
-
-
 def _intent_branches(schema: dict) -> list[dict]:
     conditional = schema["allOf"]
     assert len(conditional) == 1
-    assert conditional[0]["if"] == {"required": ["edit_intent"]}
-    return conditional[0]["then"]["oneOf"]
+    return conditional[0]["oneOf"]
 
 
 def _intent_branch(schema: dict, edit_intent: str, action: str = "modify") -> dict:
@@ -41,8 +34,8 @@ def test_patch_schema_discriminates_local_edits_at_root_and_nested_levels() -> N
     root = PATCH_TOOL["input_schema"]
     nested = root["properties"]["additional_changes"]["items"]
 
-    assert root["required"] == ["file_path", "action"]
-    assert nested["required"] == ["file_path", "action"]
+    assert root["required"] == ["file_path", "action", "edit_intent"]
+    assert nested["required"] == ["file_path", "action", "edit_intent"]
     assert "additional_changes" not in root["required"]
     assert "additional_changes" not in nested["properties"]
 
@@ -71,7 +64,7 @@ def test_patch_schema_discriminates_local_edits_at_root_and_nested_levels() -> N
         ]
 
 
-def test_patch_schema_keeps_legacy_flat_pydantic_shapes_compatible() -> None:
+def test_patch_schema_accepts_only_explicit_flat_typed_values() -> None:
     exact = PatchProposalInput.model_validate(
         {
             "file_path": "module.py",
@@ -94,12 +87,13 @@ def test_patch_schema_keeps_legacy_flat_pydantic_shapes_compatible() -> None:
         {
             "file_path": "obsolete.py",
             "action": "delete",
+            "edit_intent": "full_file",
         }
     )
 
     assert exact.replace_all is False
     assert created.code_content == "VALUE = 1\n"
-    assert deleted.edit_intent is None
+    assert deleted.edit_intent == "full_file"
 
 
 def test_openai_transport_sends_complete_patch_schema_without_projection() -> None:
@@ -118,6 +112,7 @@ def test_openai_transport_sends_complete_patch_schema_without_projection() -> No
                                     {
                                         "file_path": "obsolete.py",
                                         "action": "delete",
+                                        "edit_intent": "full_file",
                                     }
                                 ),
                             )
@@ -141,7 +136,11 @@ def test_openai_transport_sends_complete_patch_schema_without_projection() -> No
             request_kind="code",
         )
 
-    assert result == {"file_path": "obsolete.py", "action": "delete"}
+    assert result == {
+        "file_path": "obsolete.py",
+        "action": "delete",
+        "edit_intent": "full_file",
+    }
     assert fake_openai_client.chat.completions.create.call_count == 1
     request = fake_openai_client.chat.completions.create.call_args.kwargs
     expected_function = {
@@ -150,9 +149,6 @@ def test_openai_transport_sends_complete_patch_schema_without_projection() -> No
         "parameters": PATCH_TOOL["input_schema"],
     }
     assert request["tools"] == [{"type": "function", "function": expected_function}]
-    assert request["tools"][0] == json.loads(
-        _OPENAI_TOOL_SNAPSHOT.read_text(encoding="utf-8")
-    )
     assert request["tool_choice"] == {
         "type": "function",
         "function": {"name": PATCH_TOOL["name"]},

@@ -4,7 +4,6 @@ from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
 from scion.core.execution_outcome import ExecutionOutcome
 
 
-
 class TestContractFailStepRecord:
     def test_contract_fail_step_record_has_no_decision(self, tmp_path):
         """StepRecord.decision must be None (not ABANDON) for contract failures."""
@@ -28,26 +27,25 @@ class TestContractFailStepRecord:
                 f"but got {step.decision!r}"
             )
 
-    def test_hypothesis_proposal_failure_writes_step_record(self, tmp_path):
-        """Round-1 LLM/schema failures must appear in step history and summaries."""
+    def test_hypothesis_proposal_failure_has_no_scientific_step_record(self, tmp_path):
+        """A failed H call has an outcome event, not a fabricated scientific H."""
         cm = _campaign(tmp_path, llm_client=MockLLMClient(mode="format_error"))
 
         result = cm.run_one_step()
 
-        proposal_steps = [
-            s for s in cm._step_history
-            if s.failure_stage == "proposal_hypothesis"
-        ]
         assert result.reason == "MockLLMClient: simulated format error"
-        assert proposal_steps, "proposal failure should write a StepRecord"
-        step = proposal_steps[0]
-        assert step.round_num == 1
-        assert step.decision is None
-        assert step.protocol_result is None
-        assert "simulated format error" in (step.failure_detail or "")
-        assert step.hypothesis.change_locus == "proposal"
+        assert result.failure_stage == "proposal_hypothesis"
+        assert result.execution_outcome is not None
+        assert cm._step_history == []
+        branch = cm._branch_ctrl.get_branch(result.branch_id)
+        assert branch.state is not BranchState.BLOCKED_INFRA
         events = cm._registry.query_by_branch(result.branch_id)
-        assert any(
-            e.get("event_kind") == "proposal_execution_outcome"
-            for e in events
+        outcomes = [
+            event
+            for event in events
+            if event.get("event_kind") == "proposal_execution_outcome"
+        ]
+        assert len(outcomes) == 1
+        assert outcomes[0]["execution_outcome"] == (
+            ExecutionOutcome.RESEARCH_REJECTED.value
         )

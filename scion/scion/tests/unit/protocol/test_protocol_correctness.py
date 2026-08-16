@@ -13,9 +13,7 @@ Verifies:
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
-from typing import List
 from unittest.mock import MagicMock
 
 import pytest
@@ -23,20 +21,20 @@ import pytest
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.config.protocol_config import ScreeningConfig, ValidationConfig, FrozenConfig
 from scion.core.models import (
-    ExperimentStage, EvalStats, RunResult, SolverOutput,
+    ExperimentStage, RunResult, SolverOutput,
     PairwiseCaseFeedback,
 )
 from scion.protocol.stats import compute_eval_stats, bootstrap_ci
-from scion.protocol.experiment import (
-    ExperimentProtocol, SplitManager, SeedLedger, _aggregate_pairs_to_case_level,
-    _select_evenly_spaced_cases,
-)
+from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
+from scion.protocol.experiment.feedback import _aggregate_pairs_to_case_level
+from scion.protocol.experiment.selection import _select_evenly_spaced_cases
 from scion.protocol.experiment.selection import select_cases
 from scion.protocol.experiment.feedback import _protected_objective_regressions
 from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
     load_problem_spec_v1_from_yaml,
 )
+from scion.problem.spec import ObjectiveMetricSpec
 
 
 # ---------------------------------------------------------------------------
@@ -177,14 +175,36 @@ def _make_pair_fb(case_id: str, seed: int, comparison: str, delta: float) -> Pai
     )
 
 
+def _strict_manifest(manifest, tmp_path) -> SplitManifest:
+    data_root = tmp_path / "cases"
+    for case in (
+        *manifest.screening,
+        *manifest.validation,
+        *manifest.frozen,
+        *manifest.canary,
+    ):
+        path = data_root / case
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}\n", encoding="utf-8")
+    return manifest.model_copy(update={"safe_data_roots": [str(data_root)]})
+
+
 def _make_proto(runner, config, manifest, ledger, tmp_path) -> ExperimentProtocol:
     return ExperimentProtocol(
         protocol_config=config,
-        split_manager=SplitManager(manifest),
+        split_manager=SplitManager(_strict_manifest(manifest, tmp_path)),
         seed_ledger=SeedLedger(ledger),
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
+        metric_specs=(
+            ObjectiveMetricSpec(
+                name="subcategory_splits", direction="minimize", priority=1
+            ),
+            ObjectiveMetricSpec(
+                name="total_cost", direction="minimize", priority=2
+            ),
+        ),
     )
 
 
@@ -354,8 +374,9 @@ def test_canary_uses_canary_split_and_canary_seeds(
         call.kwargs["instance_path"] for call in runner.run_solver.call_args_list
     }
     # Canary cases are c1, c2
-    assert "c1" in called_instances
-    assert "c2" in called_instances
+    called_names = {Path(value).name for value in called_instances}
+    assert "c1" in called_names
+    assert "c2" in called_names
     # Screening cases (s1..s8) must NOT be used
     screening_cases = set(minimal_manifest.screening)
     assert called_instances.isdisjoint(screening_cases), (
@@ -700,11 +721,12 @@ def test_screening_pair_ledger_persists_candidate_and_champion_runtime(
     problem_spec = legacy_problem_spec_from_v1(load_problem_spec_v1_from_yaml(spec_path))
     proto = ExperimentProtocol(
         protocol_config=minimal_config,
-        split_manager=SplitManager(minimal_manifest),
+        split_manager=SplitManager(_strict_manifest(minimal_manifest, tmp_path)),
         seed_ledger=SeedLedger(minimal_ledger),
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
+        metric_specs=problem_spec.objectives,
         problem_spec=problem_spec,
     )
 

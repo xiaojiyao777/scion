@@ -8,14 +8,6 @@ from __future__ import annotations
 from scion.core.models import ProtocolResult
 
 
-def screened_experiment_effective(
-    protocol_result: ProtocolResult | None,
-) -> bool:
-    """A completed Protocol result is an evaluated experiment."""
-
-    return protocol_result is not None
-
-
 def formal_screening_attempted(
     protocol_result: ProtocolResult | None,
 ) -> bool:
@@ -25,7 +17,4 @@ def formal_screening_attempted(
     return str(stage or "").strip().lower() == "screening"
 
 
-__all__ = [
-    "formal_screening_attempted",
-    "screened_experiment_effective",
-]
+__all__ = ["formal_screening_attempted"]

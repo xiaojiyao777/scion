@@ -80,7 +80,7 @@ def run_research_environment_preflight(
     adapter: Any | None = None,
     verification_gate: Any | None = None,
 ) -> ResearchEnvironmentPreflightReport:
-    """Materialize the complete problem environment once before the first H."""
+    """Validate concrete runtime and source prerequisites before the first H."""
 
     checks: list[str] = []
     reasons: list[str] = []
@@ -93,12 +93,6 @@ def run_research_environment_preflight(
     reasons.extend(_research_surface_reasons(spec))
     if not any(reason.startswith("research surface") for reason in reasons):
         checks.append("research_surfaces")
-
-    try:
-        _materialize_problem_guidance(spec, adapter)
-        checks.append("problem_guidance")
-    except Exception as exc:
-        reasons.append(f"problem guidance unavailable: {exc}")
 
     verification_preflight = getattr(verification_gate, "run_preflight", None)
     if callable(verification_preflight):
@@ -177,37 +171,6 @@ def _surface_has_existing_file(root: Path | None, patterns: Iterable[Any]) -> bo
         except OSError:
             continue
     return False
-
-
-def _materialize_problem_guidance(spec: Any, adapter: Any | None) -> None:
-    from scion.problem.providers import (
-        resolve_solver_design_prompt_provider,
-        typed_research_question_payload,
-    )
-    from scion.proposal.solver_design_guidance import (
-        materialize_solver_design_prompt_guidance,
-    )
-
-    typed_research_question_payload(problem_spec=spec, adapter=adapter)
-    surfaces = list(getattr(spec, "research_surfaces", ()) or ())
-    if not any(
-        str(getattr(surface, "kind", "") or "") == "solver_design"
-        for surface in surfaces
-    ):
-        return
-    provider = resolve_solver_design_prompt_provider(
-        problem_spec=spec,
-        adapter=adapter,
-    )
-    if provider is None:
-        raise RuntimeError("solver-design surface has no prompt guidance provider")
-    packet = materialize_solver_design_prompt_guidance(
-        provider,
-        {},
-        phase="hypothesis",
-    )
-    if not any(packet.values()):
-        raise RuntimeError("solver-design prompt guidance is empty")
 
 
 def _python_module_available(module_name: str) -> bool:

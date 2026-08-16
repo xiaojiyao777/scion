@@ -1,4 +1,5 @@
 """Tests for T20: CampaignManager — full pipeline with MockLLMClient."""
+# ruff: noqa: F401
 from __future__ import annotations
 
 import json
@@ -6,6 +7,7 @@ import os
 import sqlite3
 import uuid
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, Dict, List
 import pytest
 
@@ -15,8 +17,8 @@ from scion.core.models import (
     Branch, BranchState, CanaryResult, ChampionState, Decision,
     EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
 )
-from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.verification.gate import VerificationGate
 
 
@@ -45,7 +47,6 @@ _VALID_PATCH = {
     "file_path": "operators/local_search.py",
     "action": "modify",
     "edit_intent": "exact_replace",
-    "source_digest": source_digest_for_content(_VALID_CODE),
     "old_string": "        return solution\n",
     "new_string": "        candidate = solution\n        return candidate\n",
     "replace_all": False,
@@ -61,7 +62,6 @@ _VALID_PATCH_REPAIR = {
     "file_path": "operators/local_search.py",
     "action": "modify",
     "edit_intent": "exact_replace",
-    "source_digest": source_digest_for_content(_VALID_CODE_AFTER_PATCH),
     "old_string": "        return candidate\n",
     "new_string": "        return candidate\n",
     "replace_all": False,
@@ -96,9 +96,7 @@ def _make_champion(code_dir: str) -> ChampionState:
     return ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="abc123",
         code_snapshot_path=code_dir,
-        code_snapshot_hash="deadbeef",
     )
 
 
@@ -180,6 +178,12 @@ class MockExperimentProtocol:
         self._canary_pass = canary_pass
         self.canary_call_count = 0
         self.experiment_call_count = 0
+        self.runner = object()
+        self.config = ProtocolConfig()
+        self._metric_specs = (
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        )
+        self._problem_spec = None
 
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         self.canary_call_count += 1
@@ -201,8 +205,11 @@ class MockExperimentProtocol:
         return _make_protocol_result(stage)
 
 
-class AlwaysPassVerificationGate:
+class AlwaysPassVerificationGate(VerificationGate):
     """Verification gate stub that always passes."""
+
+    def __init__(self) -> None:
+        super().__init__()
 
     def run(self, workspace: str, champion_workspace: str, patch: Any) -> VerificationResult:
         check = CheckResult(
@@ -211,8 +218,11 @@ class AlwaysPassVerificationGate:
         return VerificationResult(passed=True, checks=(check,))
 
 
-class AlwaysFailVerificationGate:
+class AlwaysFailVerificationGate(VerificationGate):
     """Verification gate stub that always fails (light)."""
+
+    def __init__(self) -> None:
+        super().__init__()
 
     def run(self, workspace: str, champion_workspace: str, patch: Any) -> VerificationResult:
         check = CheckResult(
@@ -240,12 +250,20 @@ def _campaign(
     campaign_dir = str(tmp_path / "campaign")
     spec = _make_problem_spec(str(code_dir))
     champion = _make_champion(str(code_dir))
+    protocol = experiment_protocol or MockExperimentProtocol(results=[])
+    protocol._problem_spec = spec
+    if not getattr(protocol, "_metric_specs", None):
+        protocol._metric_specs = (
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        )
 
     return CampaignManager(
         problem_spec=spec,
         protocol_config=_make_protocol_config(),
-        split_manifest=_make_split_manifest(),
-        seed_ledger=_make_seed_ledger(),
+        split_manifest=_make_split_manifest().model_copy(
+            update={"canary": ["canary-case"]}
+        ),
+        seed_ledger=_make_seed_ledger().model_copy(update={"canary": [7]}),
         llm_client=llm_client or MockLLMClient(
             hypothesis_response=_VALID_HYPOTHESIS,
             patch_response=_VALID_PATCH,
@@ -253,7 +271,8 @@ def _campaign(
         champion=champion,
         campaign_dir=campaign_dir,
         verification_gate=verification_gate or AlwaysPassVerificationGate(),
-        experiment_protocol=experiment_protocol,
+        experiment_protocol=protocol,
+        adapter=SimpleNamespace(spec=spec),
     )
 
 
@@ -264,7 +283,7 @@ def _campaign(
 
 
 # ---------------------------------------------------------------------------
-# CONTINUE_EXPLORE path (no protocol — auto-continue)
+# CONTINUE_EXPLORE path
 # ---------------------------------------------------------------------------
 
 
@@ -320,7 +339,7 @@ def _campaign(
 
 
 # ---------------------------------------------------------------------------
-# T16 — _on_promote weight optimization hook
+# T16 — promotion weight optimization hook
 # ---------------------------------------------------------------------------
 
 def _promote_protocol():
@@ -343,8 +362,8 @@ def _run_to_promote(cm):
     return result
 
 
-def _setup_for_on_promote(tmp_path, with_registry=False):
-    """Create a campaign + workspace ready to call _on_promote directly.
+def _setup_for_promotion(tmp_path, with_registry=False):
+    """Create a campaign and frozen branch ready for the normal promote path.
 
     Returns (cm, branch, ws_path).
     """
@@ -371,6 +390,12 @@ def _setup_for_on_promote(tmp_path, with_registry=False):
     return cm, branch, str(ws)
 
 
+def _promote_frozen_branch(cm, branch):
+    """Drive the same direct promotion used by DecisionFinalizer."""
+    cm._require_promotable_branch(branch)
+    cm._promote_branch(branch)
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -380,7 +405,7 @@ def _setup_for_on_promote(tmp_path, with_registry=False):
 
 
 # ---------------------------------------------------------------------------
-# T1: No fake HypothesisRecord fallback in eval step (Sprint G-patch)
+# T1: Eval steps use the branch's ordinary hypothesis value
 # ---------------------------------------------------------------------------
 
 

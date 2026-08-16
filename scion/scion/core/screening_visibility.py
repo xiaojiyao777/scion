@@ -11,13 +11,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from scion.core.screening_visibility_runtime import (
-    runtime_aggregate_exclusion_for_protocol,
     runtime_confidence_for_protocol,
-    runtime_evidence_policy_counts_for_steps,
-    runtime_evidence_policy_for_protocol,
-    runtime_evidence_policy_summary,
-    runtime_gate_visibility_for_protocol,
-    runtime_gate_visibility_summary,
 )
 
 _EPS = 1e-12
@@ -231,12 +225,6 @@ __all__ = [
     "no_objective_effect_for_protocol",
     "opportunity_diagnostics_for_protocol",
     "opportunity_status_for_diagnostics",
-    "runtime_aggregate_exclusion_for_protocol",
     "runtime_confidence_for_protocol",
-    "runtime_evidence_policy_counts_for_steps",
-    "runtime_evidence_policy_for_protocol",
-    "runtime_evidence_policy_summary",
-    "runtime_gate_visibility_for_protocol",
-    "runtime_gate_visibility_summary",
     "telemetry_guard_for_protocol",
 ]

@@ -6,12 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from scion.proposal.edit_protocol.errors import (
-    PatchEditProtocolError,
-    raise_duplicate_file_error,
-)
-from scion.proposal.edit_protocol.exact_replace import digest_text
-from scion.proposal.edit_protocol.source_discovery import source_digest_for_content
+from scion.proposal.edit_protocol.errors import PatchEditProtocolError
 
 
 @dataclass(frozen=True)
@@ -36,11 +31,7 @@ def apply_exact_line_replace(
     file_path: str,
     action: str,
     before: str | None,
-    original_before: str | None,
     change_pointer: str,
-    allow_original_source_digest: bool = False,
-    composing_same_file: bool = False,
-    prior_change_pointers: tuple[str, ...] = (),
 ) -> ExactLineReplaceResult:
     """Replace complete logical lines while replaying their outer indentation."""
 
@@ -52,15 +43,6 @@ def apply_exact_line_replace(
         raise PatchEditProtocolError(
             f"{change_pointer}: exact_line_replace source unavailable for {file_path}"
         )
-    _validate_required_source_digest(
-        change,
-        file_path=file_path,
-        before=before,
-        original_before=original_before,
-        change_pointer=change_pointer,
-        allow_original_source_digest=allow_original_source_digest,
-    )
-
     old_string = change.get("old_string")
     new_string = change.get("new_string")
     if not isinstance(old_string, str) or old_string == "":
@@ -89,20 +71,14 @@ def apply_exact_line_replace(
             f"{change_pointer}: exact_line_replace new_string must not include "
             "a terminal line ending"
         )
+    if old_string == new_string:
+        raise PatchEditProtocolError(
+            f"{change_pointer}: exact_line_replace old_string and new_string "
+            "are identical"
+        )
 
     matches = _find_line_matches(before, old_string)
     if not matches:
-        if composing_same_file:
-            raise_duplicate_file_error(
-                reason="exact_line_replace_not_serializable",
-                file_path=file_path,
-                change_pointer=change_pointer,
-                prior_change_pointers=prior_change_pointers,
-                detail=(
-                    "exact_line_replace old_string does not match a complete "
-                    "line in the content after prior same-file edits"
-                ),
-            )
         raise PatchEditProtocolError(
             f"{change_pointer}: old_line_not_found in {file_path}"
         )
@@ -142,35 +118,6 @@ def apply_exact_line_replace(
         content_after=content_after,
         match_count=len(selected),
     )
-
-
-def _validate_required_source_digest(
-    change: Mapping[str, Any],
-    *,
-    file_path: str,
-    before: str,
-    original_before: str | None,
-    change_pointer: str,
-    allow_original_source_digest: bool,
-) -> None:
-    expected_digest = digest_text(change.get("source_digest"))
-    if not expected_digest:
-        raise PatchEditProtocolError(
-            f"{change_pointer}: exact_line_replace has no host source binding"
-        )
-    actual_digest = source_digest_for_content(before)
-    original_digest = (
-        source_digest_for_content(original_before)
-        if original_before is not None
-        else ""
-    )
-    if expected_digest != actual_digest and not (
-        allow_original_source_digest and expected_digest == original_digest
-    ):
-        raise PatchEditProtocolError(
-            f"{change_pointer}: stale_source for {file_path}: "
-            f"expected {expected_digest}, current {actual_digest}"
-        )
 
 
 def _find_line_matches(source: str, old_string: str) -> list[_LineMatch]:

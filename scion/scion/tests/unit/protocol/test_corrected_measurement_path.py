@@ -7,7 +7,6 @@ from unittest.mock import MagicMock
 import pytest
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
-from scion.core.decision_lifecycle_actions import _protocol_evidence_projection
 from scion.core.models import (
     EvalStats,
     ExperimentStage,
@@ -374,6 +373,8 @@ def test_experiment_persists_recomputable_corrected_case_measurement(
         }
     )
     runner = MagicMock()
+    case_path = tmp_path / "case-a.vrp"
+    case_path.write_text("NAME : case-a\n", encoding="utf-8")
     candidate_distances = {11: 900.0, 29: 900.0, 43: 1001.0, 59: 1001.0}
 
     def run_solver(**kwargs):
@@ -397,7 +398,9 @@ def test_experiment_persists_recomputable_corrected_case_measurement(
     runner.run_solver.side_effect = run_solver
     protocol = ExperimentProtocol(
         protocol_config=config,
-        split_manager=SplitManager(SplitManifest(screening=["case-a.vrp"])),
+        split_manager=SplitManager(
+            SplitManifest(screening=[str(case_path)], safe_data_roots=[str(tmp_path)])
+        ),
         seed_ledger=SeedLedger(
             SeedLedgerConfig(screening=[11, 29, 43, 59, 71, 73])
         ),
@@ -412,7 +415,6 @@ def test_experiment_persists_recomputable_corrected_case_measurement(
                 name="total_distance", direction="minimize", priority=2
             ),
         ),
-        champion_result_cache_enabled=False,
     )
 
     result = protocol.run_experiment(
@@ -446,8 +448,6 @@ def test_experiment_persists_recomputable_corrected_case_measurement(
             },
         }
     ]
-    durable = _protocol_evidence_projection(result, decision_reason_codes=())
-    assert durable["case_aggregation"] == raw["case_aggregation"]
     proposal = _screening_projection(result)
     assert (
         proposal["objective_outcome"]["aggregation"]["method"]
@@ -476,6 +476,8 @@ def test_experiment_candidate_failure_remains_typed_measurement_evidence(
         }
     )
     runner = MagicMock()
+    case_path = tmp_path / "case-a.vrp"
+    case_path.write_text("NAME : case-a\n", encoding="utf-8")
 
     def run_solver(**kwargs):
         if kwargs["workdir"] == "/candidate":
@@ -502,7 +504,9 @@ def test_experiment_candidate_failure_remains_typed_measurement_evidence(
     runner.run_solver.side_effect = run_solver
     protocol = ExperimentProtocol(
         protocol_config=config,
-        split_manager=SplitManager(SplitManifest(screening=["case-a.vrp"])),
+        split_manager=SplitManager(
+            SplitManifest(screening=[str(case_path)], safe_data_roots=[str(tmp_path)])
+        ),
         seed_ledger=SeedLedger(SeedLedgerConfig(screening=[11])),
         runner=runner,
         time_limit_sec=10,
@@ -515,7 +519,6 @@ def test_experiment_candidate_failure_remains_typed_measurement_evidence(
                 name="total_distance", direction="minimize", priority=2
             ),
         ),
-        champion_result_cache_enabled=False,
     )
 
     result = protocol.run_experiment(

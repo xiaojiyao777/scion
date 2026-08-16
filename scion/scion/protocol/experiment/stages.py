@@ -25,8 +25,6 @@ from scion.core.screening_visibility import (
     mechanism_evidence_for_protocol,
     opportunity_diagnostics_for_protocol,
     opportunity_status_for_diagnostics,
-    runtime_gate_visibility_summary,
-    runtime_evidence_policy_summary,
 )
 from scion.protocol.gates import (
     GateResult,
@@ -43,7 +41,6 @@ from scion.runtime.audit import (
     runtime_audit_issue_blocks_execution,
 )
 
-from .cache import compute_workspace_digest
 from .failures import (
     _candidate_audit_failure_category,
     _candidate_process_failure_category,
@@ -159,10 +156,6 @@ def run_experiment(
     champion_elapsed_samples_ms: list[float] = []
     candidate_time_limit_samples_sec: list[float] = []
     champion_time_limit_samples_sec: list[float] = []
-    champion_cache_hits = 0
-    champion_cache_misses = 0
-    champion_cache_writes = 0
-    champion_cached_runtime_pairs = 0
     problem_runtime_pairs: list[dict[str, Any]] = []
     runtime_evidence_status = "sufficient"
     protected_objective_regressions: tuple[str, ...] = ()
@@ -171,7 +164,6 @@ def run_experiment(
         "runtime_model",
         "comparative",
     )
-    runtime_gate_visibility: dict[str, Any] = {}
     normalized_selected_surface = normalize_surface_name(selected_surface) or None
     objective_semantics = protocol.objective_semantics
     case_aggregation_method = protocol.config.case_aggregation
@@ -184,18 +176,6 @@ def run_experiment(
         else (protocol.config.effect_metric or "")
     )
     case_level_results: list[CaseLevelResult] = []
-    champion_cache = getattr(protocol, "_champion_result_cache", None)
-    champion_runtime_policy = protocol.config.runtime.champion_runtime_policy
-    champion_cache_enabled = bool(
-        paired_execution is None
-        and
-        getattr(protocol, "_champion_result_cache_enabled", False)
-        and champion_cache is not None
-        and champion_runtime_policy != "fresh_always"
-    )
-    champion_workspace_digest = (
-        compute_workspace_digest(champion_ws) if champion_cache_enabled else None
-    )
     candidate_runtime_counters: dict[str, int] = _candidate_runtime_counter_template(
         problem_spec=protocol._problem_spec,
         selected_surface=normalized_selected_surface,
@@ -251,37 +231,26 @@ def run_experiment(
                 counts[key] = counts.get(key, 0) + 1
         return counts
 
-    def _write_metrics_snapshot(*, complete: bool) -> None:
+    def _write_terminal_metrics(
+        *,
+        gate_outcome: str,
+        reason_codes: tuple[str, ...],
+    ) -> None:
         runtime_stats_snapshot = _build_runtime_stats(
             runtime_ratios,
             runtime_deltas_ms,
         )
-        runtime_confidence_snapshot = (
-            "low_cached_champion" if champion_cached_runtime_pairs else "high"
-        )
-        runtime_aggregate_excluded_snapshot = (
-            champion_cached_runtime_pairs > 0
-            and runtime_stats_snapshot["runtime_pairs"] <= 0
-        )
-        runtime_evidence_policy = runtime_evidence_policy_summary(
-            runtime_confidence=runtime_confidence_snapshot,
-            runtime_evidence_status=runtime_evidence_status,
-            runtime_model=runtime_model,
-            runtime_pairs=runtime_stats_snapshot["runtime_pairs"],
-            champion_cached_runtime_pairs=champion_cached_runtime_pairs,
-            runtime_aggregate_excluded=runtime_aggregate_excluded_snapshot,
-            candidate_runtime_pair_evidence_count=(
-                candidate_surface_runtime_summary.get("candidate_pairs", 0)
-                if runtime_aggregate_excluded_snapshot
-                else 0
-            ),
-        )
-        with open(raw_ref, "w") as f:
-            json.dump(
-                {
+        temporary_ref = f"{raw_ref}.tmp"
+        try:
+            with open(temporary_ref, "x", encoding="utf-8") as f:
+                json.dump(
+                    {
                     "stage": stage.value,
+                    "gate_outcome": gate_outcome,
+                    "reason_codes": list(reason_codes),
                     "selected_surface": normalized_selected_surface,
                     "objective_semantics": objective_semantics,
+                    "runtime_model": runtime_model,
                     "effect_metric": protocol.config.effect_metric or None,
                     "case_aggregation": {
                         "method": case_aggregation_method,
@@ -322,7 +291,7 @@ def run_experiment(
                     "champion_failed_pairs": champion_failed_pairs,
                     "screening_evidence_status": _screening_evidence_status(
                         stage=stage,
-                        complete=complete,
+                        complete=True,
                         champion_failed_pairs=champion_failed_pairs,
                     ),
                     "screening_partial_champion_evidence": (
@@ -335,21 +304,8 @@ def run_experiment(
                         )
                     ),
                     "runtime_stats": runtime_stats_snapshot,
-                    "runtime_confidence": runtime_confidence_snapshot,
+                    "runtime_confidence": "high",
                     "runtime_evidence_status": runtime_evidence_status,
-                    "runtime_evidence_policy": runtime_evidence_policy,
-                    "runtime_gate_visibility": runtime_gate_visibility,
-                    "champion_cache_hits": champion_cache_hits,
-                    "champion_cache_misses": champion_cache_misses,
-                    "champion_cache_writes": champion_cache_writes,
-                    "champion_cached_runtime_pairs": champion_cached_runtime_pairs,
-                    "champion_result_cache": {
-                        "enabled": champion_cache_enabled,
-                        "hits": champion_cache_hits,
-                        "misses": champion_cache_misses,
-                        "writes": champion_cache_writes,
-                        "cached_runtime_pairs": champion_cached_runtime_pairs,
-                    },
                     "candidate_surface_runtime_summary": (
                         _surface_runtime_summary_with_diagnostics(
                             candidate_surface_runtime_summary,
@@ -361,26 +317,32 @@ def run_experiment(
                             candidate_phase_telemetry_summary
                         )
                     ),
-                    "complete": complete,
+                    "complete": True,
                     "pairs": raw_pairs,
                     "failures": raw_failures,
-                },
-                f,
-            )
+                    },
+                    f,
+                )
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temporary_ref, raw_ref)
+        except BaseException:
+            if os.path.lexists(temporary_ref):
+                os.unlink(temporary_ref)
+            raise
 
     def _progress(case=None, seed=None, **payload) -> None:
         protocol._emit_progress(
             stage=stage.value, case=case, seed=seed,
             attempted_pairs=attempted_pairs, completed_pairs=valid_pairs,
-            total_pairs=total_pairs, raw_metrics_ref=raw_ref,
+            valid_pairs=valid_pairs, failed_pairs=failed_pairs,
+            candidate_failed_pairs=candidate_failed_pairs,
+            champion_failed_pairs=champion_failed_pairs,
+            total_pairs=total_pairs,
             **payload,
         )
 
-    def _snapshot_progress(case: str | None, seed: int | None) -> None:
-        _write_metrics_snapshot(complete=False)
-        _progress(case, seed)
-
-    _snapshot_progress(None, None)
+    _progress(None, None)
 
     for case in cases:
         case_features = _extract_case_features(case)
@@ -395,8 +357,6 @@ def run_experiment(
             )
             pair_budget_fields = {"time_limit_sec": pair_time_limit_sec}
             _progress(case, seed, time_limit_sec=pair_time_limit_sec)
-            champion_cache_key: dict[str, Any] | None = None
-            champion_result_source = "fresh"
             cand_r: RunResult | None = None
             paired_raw: dict[str, Any] | None = None
             if paired_execution is not None:
@@ -414,67 +374,29 @@ def run_experiment(
                              _case=case, _case_ordinal=case_ordinal, _seed_ordinal=seed_ordinal,
                              _order=order) -> RunResult:
                     _actual.append(side)
-                    try:
-                        result = protocol.runner.run_solver(
-                            workdir=workspace, instance_path=case_path, seed=_seed,
-                            time_limit_sec=_limit,
-                            registry_path=os.path.join(workspace, "registry.yaml"),
-                            selected_surface=normalized_selected_surface,
-                        )
-                    except BaseException as error:
-                        try:
-                            partial = _paired_raw(paired_execution, _case_ordinal,
-                                                  _seed_ordinal, _order, _actual, _results,
-                                                  _limit)
-                            raw_pairs.append({"case": _case, "seed": _seed,
-                                              "comparison": "invalid", "delta": None,
-                                              "paired_execution": partial,
-                                              "failure": {"side": side, "exception_type":
-                                                          type(error).__name__[:128]}})
-                            _write_metrics_snapshot(complete=False)
-                        except BaseException:
-                            pass
-                        raise
+                    result = protocol.runner.run_solver(
+                        workdir=workspace, instance_path=case_path, seed=_seed,
+                        time_limit_sec=_limit,
+                        registry_path=os.path.join(workspace, "registry.yaml"),
+                        selected_surface=normalized_selected_surface,
+                    )
                     _results[side] = result
                     return result
 
                 if order[0] == "B":
                     cand_r = run_side("B", candidate_ws, candidate_case_path)
-            if champion_cache_enabled:
-                champion_cache_key = champion_cache.build_key(
-                    champion_workspace=champion_ws,
-                    case_path=champion_case_path,
+            champ_r = (
+                run_side("A", champion_ws, champion_case_path)
+                if paired_execution is not None
+                else protocol.runner.run_solver(
+                    workdir=champion_ws,
+                    instance_path=champion_case_path,
                     seed=seed,
                     time_limit_sec=pair_time_limit_sec,
+                    registry_path=os.path.join(champion_ws, "registry.yaml"),
                     selected_surface=normalized_selected_surface,
-                    runner=protocol.runner,
-                    metric_specs=protocol._metric_specs,
-                    objective_policy=protocol._objective_policy,
-                    problem_spec=protocol._problem_spec,
-                    workspace_digest=champion_workspace_digest,
                 )
-                cached_champion = champion_cache.get(champion_cache_key)
-            else:
-                cached_champion = None
-            if cached_champion is not None:
-                champ_r = cached_champion
-                champion_result_source = "cached"
-                champion_cache_hits += 1
-            else:
-                if champion_cache_enabled:
-                    champion_cache_misses += 1
-                champ_r = (
-                    run_side("A", champion_ws, champion_case_path)
-                    if paired_execution is not None
-                    else protocol.runner.run_solver(
-                        workdir=champion_ws,
-                        instance_path=champion_case_path,
-                        seed=seed,
-                        time_limit_sec=pair_time_limit_sec,
-                        registry_path=os.path.join(champion_ws, "registry.yaml"),
-                        selected_surface=normalized_selected_surface,
-                    )
-                )
+            )
             if cand_r is None:
                 if paired_execution is not None:
                     cand_r = run_side("B", candidate_ws, candidate_case_path)
@@ -487,21 +409,6 @@ def run_experiment(
                         registry_path=os.path.join(candidate_ws, "registry.yaml"),
                         selected_surface=normalized_selected_surface,
                     )
-            champion_cache_digest = (
-                str(champion_cache_key.get("digest"))
-                if champion_cache_key is not None
-                else None
-            )
-            pair_cache_fields = {
-                "champion_result_source": champion_result_source,
-                "champion_cache_key": champion_cache_digest,
-                "runtime_confidence": (
-                    "low_cached_champion"
-                    if champion_result_source == "cached"
-                    else "high"
-                ),
-                "runtime_ratio_high_confidence": champion_result_source != "cached",
-            }
             if paired_execution is not None:
                 audits = {}
                 for label, result in results.items():
@@ -534,15 +441,10 @@ def run_experiment(
                         "metric_deltas": {}, "paired_execution": paired_raw,
                         "failure": failure_record,
                     })
-                    _snapshot_progress(case, seed)
+                    _progress(case, seed)
                     continue
-            if champion_result_source == "cached":
-                champion_cached_runtime_pairs += 1
-            else:
-                if _append_elapsed_sample(
-                    champion_elapsed_samples_ms, champ_r.elapsed_ms
-                ):
-                    champion_time_limit_samples_sec.append(float(pair_time_limit_sec))
+            if _append_elapsed_sample(champion_elapsed_samples_ms, champ_r.elapsed_ms):
+                champion_time_limit_samples_sec.append(float(pair_time_limit_sec))
             if _append_elapsed_sample(candidate_elapsed_samples_ms, cand_r.elapsed_ms):
                 candidate_time_limit_samples_sec.append(float(pair_time_limit_sec))
             _record_surface_runtime_sample(
@@ -560,12 +462,11 @@ def run_experiment(
                 selected_surface=normalized_selected_surface,
                 candidate_required_runtime_fields=surface_required_runtime_fields,
             )
-            if champion_result_source != "cached":
-                _record_runtime_sample(
-                    runtime_fields,
-                    runtime_ratios,
-                    runtime_deltas_ms,
-                )
+            _record_runtime_sample(
+                runtime_fields,
+                runtime_ratios,
+                runtime_deltas_ms,
+            )
             runtime_observation = _candidate_runtime_observation(
                 cand_r,
                 problem_spec=protocol._problem_spec,
@@ -591,15 +492,6 @@ def run_experiment(
                     if runtime_audit_issue_blocks_execution(champ_audit_issue)
                     else None
                 )
-                if (
-                    champ_audit_failure is None
-                    and champion_result_source == "fresh"
-                    and champion_cache_enabled
-                    and champion_cache_key is not None
-                    and champion_cache.put(champion_cache_key, champ_r)
-                ):
-                    champion_cache_writes += 1
-
             if not champ_r.success:
                 failed_pairs += 1
                 champion_failed_pairs += 1
@@ -629,7 +521,6 @@ def run_experiment(
                     "elapsed_ms": champ_r.elapsed_ms,
                     **pair_budget_fields,
                     **runtime_fields,
-                    **pair_cache_fields,
                     "stderr": champ_r.stderr or "",
                     "candidate_stderr": (cand_r.stderr or "" if side == "both" else ""),
                 }
@@ -648,7 +539,6 @@ def run_experiment(
                         "metric_deltas": {},
                         **pair_budget_fields,
                         **runtime_fields,
-                        **pair_cache_fields,
                         "failure": failure_record,
                     }
                 )
@@ -660,7 +550,7 @@ def run_experiment(
                     champ_r.error_category or "unknown",
                     champ_r.elapsed_ms,
                 )
-                _snapshot_progress(case, seed)
+                _progress(case, seed)
                 continue
 
             if not cand_r.success:
@@ -693,7 +583,6 @@ def run_experiment(
                     "elapsed_ms": cand_r.elapsed_ms,
                     **pair_budget_fields,
                     **runtime_fields,
-                    **pair_cache_fields,
                     "stderr": cand_r.stderr or "",
                 }
                 raw_failures.append(failure_record)
@@ -707,7 +596,6 @@ def run_experiment(
                         "metric_deltas": {},
                         **pair_budget_fields,
                         **runtime_fields,
-                        **pair_cache_fields,
                         "failure": failure_record,
                     }
                 )
@@ -728,7 +616,7 @@ def run_experiment(
                     cand_r.error_category or "unknown",
                     cand_r.elapsed_ms,
                 )
-                _snapshot_progress(case, seed)
+                _progress(case, seed)
                 continue
 
             if cand_r.output is None or champ_r.output is None:
@@ -762,7 +650,6 @@ def run_experiment(
                     "error_category": "missing_output",
                     **pair_budget_fields,
                     **runtime_fields,
-                    **pair_cache_fields,
                 }
                 raw_failures.append(failure_record)
                 raw_pairs.append(
@@ -775,11 +662,10 @@ def run_experiment(
                         "metric_deltas": {},
                         **pair_budget_fields,
                         **runtime_fields,
-                        **pair_cache_fields,
                         "failure": failure_record,
                     }
                 )
-                _snapshot_progress(case, seed)
+                _progress(case, seed)
                 continue
 
             if paired_execution is None:
@@ -819,7 +705,6 @@ def run_experiment(
                     "elapsed_ms": cand_r.elapsed_ms,
                     **pair_budget_fields,
                     **runtime_fields,
-                    **pair_cache_fields,
                     "runtime_audit": cand_audit_failure,
                 }
                 raw_failures.append(failure_record)
@@ -833,7 +718,6 @@ def run_experiment(
                         "metric_deltas": {},
                         **pair_budget_fields,
                         **runtime_fields,
-                        **pair_cache_fields,
                         "failure": failure_record,
                     }
                 )
@@ -853,7 +737,7 @@ def run_experiment(
                     seed,
                     format_runtime_audit_failure(cand_audit_failure),
                 )
-                _snapshot_progress(case, seed)
+                _progress(case, seed)
                 continue
 
             if champ_audit_failure is not None:
@@ -870,7 +754,6 @@ def run_experiment(
                     "elapsed_ms": champ_r.elapsed_ms,
                     **pair_budget_fields,
                     **runtime_fields,
-                    **pair_cache_fields,
                     "runtime_audit": champ_audit_failure,
                 }
                 raw_failures.append(failure_record)
@@ -884,7 +767,6 @@ def run_experiment(
                         "metric_deltas": {},
                         **pair_budget_fields,
                         **runtime_fields,
-                        **pair_cache_fields,
                         "failure": failure_record,
                     }
                 )
@@ -894,7 +776,7 @@ def run_experiment(
                     seed,
                     format_runtime_audit_failure(champ_audit_failure),
                 )
-                _snapshot_progress(case, seed)
+                _progress(case, seed)
                 continue
 
             cmp, breakdown = protocol._compare_objectives(
@@ -920,7 +802,6 @@ def run_experiment(
                     ),
                     **pair_budget_fields,
                     **runtime_fields,
-                    **pair_cache_fields,
                     **({"paired_execution": paired_raw} if paired_raw else {}),
                 }
             )
@@ -928,7 +809,6 @@ def run_experiment(
                 {
                     "candidate_runtime": dict(cand_r.output.runtime),
                     "champion_runtime": dict(champ_r.output.runtime),
-                    "champion_result_source": champion_result_source,
                 }
             )
             valid_pairs += 1
@@ -963,7 +843,7 @@ def run_experiment(
                 _cand_vals,
                 _chmp_vals,
             )
-            _snapshot_progress(case, seed)
+            _progress(case, seed)
 
     # T2: Aggregate pairs → case-level results
     all_pair_feedback = [fb for fbs in pairs_by_case.values() for fb in fbs]
@@ -1032,18 +912,12 @@ def run_experiment(
     )
 
     runtime_stats = _build_runtime_stats(runtime_ratios, runtime_deltas_ms)
-    runtime_evidence_status = _runtime_evidence_status(
-        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
-        runtime_pairs=runtime_stats["runtime_pairs"],
-        min_runtime_pairs=protocol.config.runtime.tie_min_runtime_pairs,
-    )
     stats = replace(
         stats,
         runtime_ratio_median=runtime_stats["runtime_ratio_median"],
         runtime_delta_median_ms=runtime_stats["runtime_delta_median_ms"],
         runtime_regression_rate=runtime_stats["runtime_regression_rate"],
         runtime_pairs=runtime_stats["runtime_pairs"],
-        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
         runtime_evidence_status=runtime_evidence_status,
         total_pairs=total_pairs,
         attempted_pairs=attempted_pairs,
@@ -1063,13 +937,6 @@ def run_experiment(
             gate = validation_gate(stats, protocol.config, expanded=expand)
         else:
             gate = frozen_gate(stats, protocol.config)
-
-        if "RUNTIME_TIE_FRESH_CHAMPION_REQUIRED" in gate.reason_codes:
-            runtime_evidence_status = "fresh_champion_required"
-            stats = replace(
-                stats,
-                runtime_evidence_status=runtime_evidence_status,
-            )
 
         if failed_pairs > 0 and stage in (
             ExperimentStage.VALIDATION,
@@ -1109,28 +976,16 @@ def run_experiment(
         champion_time_limit_sec=champion_time_limit_samples_sec,
         total_pairs=total_pairs,
     )
-    runtime_confidence = (
-        "low_cached_champion" if champion_cached_runtime_pairs else "high"
-    )
-    runtime_gate_visibility = runtime_gate_visibility_summary(
-        stage=stage.value,
+    runtime_confidence = "high"
+    _write_terminal_metrics(
         gate_outcome=gate.outcome,
         reason_codes=gate.reason_codes,
-        runtime_confidence=runtime_confidence,
-        runtime_evidence_status=runtime_evidence_status,
-        runtime_pairs=stats.runtime_pairs,
-        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
-        failed_pairs=failed_pairs,
-        candidate_failed_pairs=candidate_failed_pairs,
-        champion_failed_pairs=champion_failed_pairs,
-        runtime_budget_diagnostic=runtime_budget_diagnostic_summary,
     )
-
-    # Persist final raw metrics snapshot.
-    _write_metrics_snapshot(complete=True)
     protocol._emit_progress(
         stage=stage.value,
         complete=True,
+        gate_outcome=gate.outcome,
+        reason_codes=list(gate.reason_codes),
         attempted_pairs=attempted_pairs,
         completed_pairs=valid_pairs,
         valid_pairs=valid_pairs,
@@ -1148,7 +1003,11 @@ def run_experiment(
         ),
         runtime_confidence=runtime_confidence,
         runtime_evidence_status=runtime_evidence_status,
-        runtime_gate_visibility=runtime_gate_visibility,
+        runtime_model=runtime_model,
+        runtime_ratio_median=stats.runtime_ratio_median,
+        runtime_delta_median_ms=stats.runtime_delta_median_ms,
+        runtime_regression_rate=stats.runtime_regression_rate,
+        runtime_pairs=stats.runtime_pairs,
     )
     pair_counts = _pair_feedback_counts(all_pair_feedback)
     runtime_summary = _format_runtime_summary(stats)
@@ -1169,45 +1028,10 @@ def run_experiment(
     runtime_budget_summary = format_runtime_budget_diagnostic(
         runtime_budget_diagnostic_summary
     )
-    champion_cache_summary = (
-        f" champion_cache_hits={champion_cache_hits}"
-        f" champion_cache_misses={champion_cache_misses}"
-        f" champion_cached_runtime_pairs={champion_cached_runtime_pairs}"
+    runtime_evidence_summary = (
         f" runtime_confidence={runtime_confidence}"
         f" runtime_evidence_status={runtime_evidence_status}"
     )
-    runtime_aggregate_excluded = (
-        champion_cached_runtime_pairs > 0 and stats.runtime_pairs <= 0
-    )
-    runtime_evidence_policy = runtime_evidence_policy_summary(
-        runtime_confidence=runtime_confidence,
-        runtime_evidence_status=runtime_evidence_status,
-        runtime_model=runtime_model,
-        runtime_pairs=stats.runtime_pairs,
-        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
-        runtime_aggregate_excluded=runtime_aggregate_excluded,
-        candidate_runtime_pair_evidence_count=(
-            candidate_surface_runtime_summary.get("candidate_pairs", 0)
-            if runtime_aggregate_excluded
-            else 0
-        ),
-    )
-    champion_cache_summary += (
-        " runtime_signal_role="
-        f"{runtime_evidence_policy.get('runtime_signal_role', 'unknown')}"
-        " runtime_standalone_optimization_signal="
-        f"{str(runtime_evidence_policy.get('standalone_optimization_signal')).lower()}"
-    )
-    if runtime_evidence_policy.get("fresh_champion_required"):
-        champion_cache_summary += " fresh_champion_required=true"
-    if runtime_gate_visibility:
-        champion_cache_summary += (
-            " runtime_gate_reason_semantics="
-            f"{','.join(runtime_gate_visibility.get('reason_semantics') or ())}"
-            " runtime_rerun_recommendation="
-            f"{runtime_gate_visibility.get('rerun_recommendation', 'none')}"
-        )
-
     # Exposure control
     if stage == ExperimentStage.SCREENING:
         exposed = (
@@ -1226,7 +1050,7 @@ def run_experiment(
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
             f"{phase_telemetry_summary}"
             f"{runtime_budget_summary}"
-            f"{champion_cache_summary}"
+            f"{runtime_evidence_summary}"
         )
     else:
         # Validation / Frozen: aggregate summary only, no per-case data
@@ -1240,7 +1064,7 @@ def run_experiment(
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
             f"{phase_telemetry_summary}"
             f"{runtime_budget_summary}"
-            f"{champion_cache_summary}"
+            f"{runtime_evidence_summary}"
         )
 
     # Build case-level feedback for screening only
@@ -1304,11 +1128,7 @@ def run_experiment(
         ),
         candidate_portfolio_errors=candidate_runtime_counters["portfolio_errors"],
         candidate_runtime_stop_reasons=dict(candidate_runtime_stop_reasons),
-        champion_cache_hits=champion_cache_hits,
-        champion_cache_misses=champion_cache_misses,
-        champion_cached_runtime_pairs=champion_cached_runtime_pairs,
         runtime_confidence=runtime_confidence,
-        runtime_evidence_status=runtime_evidence_status,
         runtime_model=runtime_model,
         mechanism_evidence=problem_mechanism_evidence,
     )
@@ -1387,17 +1207,6 @@ def _paired_raw(spec, case_ordinal, seed_ordinal, order, actual, results,
             "seed_ordinal": seed_ordinal,
             "scheduled_order": "".join(order), "actual_order": "".join(actual),
             "A": side("A"), "B": side("B")}
-
-
-def _runtime_evidence_status(
-    *,
-    champion_cached_runtime_pairs: int,
-    runtime_pairs: int,
-    min_runtime_pairs: int,
-) -> str:
-    if champion_cached_runtime_pairs > 0 and runtime_pairs < min_runtime_pairs:
-        return "insufficient"
-    return "sufficient"
 
 
 def _screening_evidence_status(

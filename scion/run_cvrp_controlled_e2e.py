@@ -31,7 +31,6 @@ from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
-from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
@@ -123,7 +122,6 @@ def _baseline_algorithm_solve_patch(new_solve: str) -> dict[str, Any]:
         "file_path": "policies/baseline_algorithm.py",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": source_digest_for_content(source + "\n"),
         "old_string": old_solve,
         "new_string": new_solve if new_solve.endswith("\n") else new_solve + "\n",
         "replace_all": False,
@@ -199,9 +197,7 @@ def _make_campaign(output_dir: Path) -> CampaignManager:
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="cvrp-controlled-e2e",
         code_snapshot_path=str(CVRP_DIR),
-        code_snapshot_hash="cvrp-controlled-baseline",
     )
     gate = VerificationGate(
         problem_spec=bridge.problem_spec,

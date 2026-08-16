@@ -16,7 +16,6 @@ class CoordinatedDecision:
     decision: Decision
     reason_codes: Tuple[str, ...]
     rule: str
-    features_snapshot: DecisionFeatures
 
 
 class DecisionCoordinator:
@@ -42,7 +41,6 @@ class DecisionCoordinator:
             decision=outcome.decision,
             reason_codes=reason_codes,
             rule=_rule_name(features, outcome.decision, reason_codes),
-            features_snapshot=outcome.features_snapshot,
         )
 
 

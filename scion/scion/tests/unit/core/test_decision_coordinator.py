@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import uuid
-
 from scion.config.problem import ProtocolConfig
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.models import Decision, DecisionFeatures, DecisionOutcome
@@ -9,7 +7,6 @@ from scion.core.models import Decision, DecisionFeatures, DecisionOutcome
 
 def _features(**overrides) -> DecisionFeatures:
     data = {
-        "branch_id": str(uuid.uuid4()),
         "hypothesis_action": "modify",
         "stage": "screening",
         "contract_passed": True,
@@ -46,7 +43,6 @@ def test_coordinator_normalizes_empty_reason_codes() -> None:
             return DecisionOutcome(
                 decision=Decision.CONTINUE_EXPLORE,
                 reason_codes=(),
-                features_snapshot=features,
             )
 
     result = DecisionCoordinator(engine=EmptyReasonEngine()).decide(  # type: ignore[arg-type]

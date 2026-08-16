@@ -63,7 +63,7 @@ def normalize_canary_result(result: CanaryResult) -> CanaryResult:
 
 
 def public_canary_reason_codes(result: CanaryResult | None) -> tuple[str, ...]:
-    """Return reason codes suitable for branch evidence and lifecycle memory.
+    """Return reason codes suitable for ordinary branch failure history.
 
     DecisionEngine stays intentionally blind to canary diagnostic text. This
     helper is used after DecisionFeatures have been evaluated so infrastructure

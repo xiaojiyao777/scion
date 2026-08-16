@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Mapping, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.contract.patch_paths import matches_config_pattern
@@ -23,10 +23,6 @@ from scion.core.models import (
     patch_file_changes,
 )
 from scion.core.paths import normalize_relative_patch_path
-from scion.core.research_rejection_feedback import (
-    sanitize_research_rejection_feedback,
-)
-from scion.core.screening_visibility import runtime_evidence_policy_for_protocol
 from scion.measurement.consumer_view import measurement_consumer_view
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
@@ -49,7 +45,6 @@ from scion.proposal.context.surfaces import (
     surface_action_allowed,
     surface_target_files,
 )
-from scion.proposal.prompt_manifest import stable_digest
 from scion.proposal.solver_design_guidance import (
     RENDERER_INPUTS_KEY,
     SOLVER_DESIGN_GUIDANCE_KEY,
@@ -57,16 +52,11 @@ from scion.proposal.solver_design_guidance import (
 )
 
 from .code_context import (
-    DURABLE_BRANCH_CREATED_FILES_KEY,
-    DURABLE_BRANCH_TOUCHED_FILES_KEY,
     EDITABLE_SOURCE_CONTEXT_KEY,
     _build_editable_source_context,
     _read_champion_research_code,
-    branch_created_files,
-    branch_current_file_sources,
-    branch_touched_files,
 )
-from .history_projection import proposal_screening_history
+from .history_projection import proposal_screening_history, screening_eval_stats
 from .io import (
     _expand_surface_targets_for_champion,
     _expand_surface_targets_for_root,
@@ -76,12 +66,6 @@ from .io import (
     _read_branch_code_projection,
 )
 
-_MEASUREMENT_VISIBLE_FIELDS_KEY = "proposal_visible_fields"
-_MEASUREMENT_VISIBLE_ENVELOPE_FIELDS = (
-    "schema_version",
-    "proposal_visibility_only",
-    "decision_features_excluded",
-)
 _MEASUREMENT_PRIVATE_FIELDS = frozenset(
     {
         "pair_evidence",
@@ -98,15 +82,13 @@ _MEASUREMENT_PRIVATE_FIELDS = frozenset(
         "holdout_rows",
         "prompt_ratios",
         "llm_text",
+        "phase_telemetry",
     }
 )
-CANONICAL_SCREENING_HISTORY_KEY = "canonical_screening_history"
-
-
 def _filter_hypothesis_prompt_steps(
     step_history: list[StepRecord],
 ) -> list[StepRecord]:
-    """Expose one canonical evidence record per completed screening experiment."""
+    """Expose each completed screening experiment once."""
 
     return [
         step
@@ -134,9 +116,7 @@ class ContextManager:
         champion: ChampionState,
         problem_spec: ProblemSpec,
         step_history: Optional[list[StepRecord]] = None,
-        campaign_branches: Optional[Sequence[Branch]] = None,
         branch_workspace: Optional[str] = None,
-        last_research_rejection: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Return the V3 round-one research context.
 
@@ -192,14 +172,10 @@ class ContextManager:
         )
         history_steps = step_history or []
         experiment_history = proposal_screening_history(
-            campaign_canonical_screening_history(
+            campaign_screening_history(
                 branch,
-                campaign_branches,
                 _filter_hypothesis_prompt_steps(history_steps),
             )
-        )
-        rejection_feedback = sanitize_research_rejection_feedback(
-            last_research_rejection
         )
         provider = (
             resolve_solver_design_prompt_provider(
@@ -234,8 +210,6 @@ class ContextManager:
         }
         if branch_source:
             context["branch_current_code"] = branch_source
-        if rejection_feedback:
-            context["last_research_rejection"] = rejection_feedback
 
         measurement = _problem_measurement_diagnostics(
             problem_spec,
@@ -280,12 +254,6 @@ class ContextManager:
             if branch_workspace and os.path.isdir(branch_workspace)
             else champion.code_snapshot_path
         )
-        branch_file_sources = branch_current_file_sources(
-            branch,
-            step_history or [],
-        )
-        created = branch_created_files(branch, step_history or [])
-        touched = branch_touched_files(branch, step_history or [])
         provider = (
             resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,
@@ -304,9 +272,6 @@ class ContextManager:
             target_file=hypothesis.target_file,
             target_action=hypothesis.action,
             provider=provider,
-            branch_created_files=created,
-            branch_touched_files=touched,
-            branch_current_file_sources=branch_file_sources,
         )
         operator_interface_spec = _build_operator_interface_spec(
             problem_spec,
@@ -595,10 +560,12 @@ def _hypothesis_projection(hypothesis: HypothesisProposal) -> dict[str, Any]:
     }
 
 
-def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
+def screening_record(step: StepRecord) -> dict[str, Any]:
+    """Project one in-process screening step into proposal memory."""
+
     protocol = step.protocol_result
     if protocol is None or protocol.stage != ExperimentStage.SCREENING:
-        raise ValueError("canonical hypothesis evidence requires screening result")
+        raise ValueError("hypothesis evidence requires a screening result")
     experiment_evidence = _screening_projection(protocol)
     if step.decision is not None:
         experiment_evidence["decision_outcome"] = _drop_empty(
@@ -609,7 +576,6 @@ def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
         )
     proposal_changes = patch_file_changes(step.patch) if step.patch is not None else ()
     current_step = {
-        "hypothesis_id": step.hypothesis_id,
         "target_files": sorted(
             {
                 normalize_relative_patch_path(change.file_path)
@@ -640,18 +606,7 @@ def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
         "incremental_effect_isolated": clean_current_step_candidate,
         "current_step": _drop_empty(current_step),
     }
-    screening_attempt_id = stable_digest(
-        {
-            "branch_id": step.branch_id,
-            "hypothesis_id": step.hypothesis_id,
-            "round_num": step.round_num,
-            "raw_metrics_ref": protocol.raw_metrics_ref,
-        },
-        length=32,
-    )
     return {
-        "screening_attempt_id": screening_attempt_id,
-        "attempt_id": step.hypothesis_id or f"{step.branch_id}:{step.round_num}",
         "round_num": step.round_num,
         "hypothesis": _hypothesis_projection(step.hypothesis),
         "candidate_composition": candidate_composition,
@@ -659,243 +614,19 @@ def canonical_screening_record(step: StepRecord) -> dict[str, Any]:
     }
 
 
-def canonical_screening_history(
-    branch: Branch,
-    steps: list[StepRecord],
-) -> list[dict[str, Any]]:
-    """Merge durable and current screening facts without dropping evidence."""
-
-    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
-    durable = summary.get(CANONICAL_SCREENING_HISTORY_KEY, [])
-    if not isinstance(durable, list) or not all(
-        isinstance(item, Mapping) for item in durable
-    ):
-        raise ValueError("branch canonical screening history is invalid")
-    records = [dict(item) for item in durable]
-    positions: dict[str, int] = {}
-    for index, record in enumerate(records):
-        natural_key = _screening_record_natural_key(record)
-        if natural_key in positions:
-            raise ValueError("branch canonical screening history identity is invalid")
-        positions[natural_key] = index
-    for step in steps:
-        record = canonical_screening_record(step)
-        natural_key = _screening_record_natural_key(record)
-        previous = positions.get(natural_key)
-        if previous is not None:
-            if records[previous] != record:
-                if _legacy_screening_record_can_upgrade(
-                    records[previous],
-                    record,
-                ):
-                    records[previous] = record
-                    continue
-                raise ValueError(
-                    "canonical screening history conflicts with current step"
-                )
-            continue
-        positions[natural_key] = len(records)
-        records.append(record)
-    return records
-
-
-def campaign_canonical_screening_history(
+def campaign_screening_history(
     current_branch: Branch,
-    campaign_branches: Optional[Sequence[Branch]],
     steps: list[StepRecord],
 ) -> list[dict[str, Any]]:
-    """Return every safe screening record owned by this campaign.
+    """Return every in-process screening step in ordinary round order."""
 
-    Durable records remain branch-owned and unchanged.  Source provenance is
-    added only to the proposal-context projection so a new branch can
-    distinguish its own evidence from sibling evidence without seeing branch
-    state, validation/frozen outcomes, or other lifecycle mirrors.
-    """
-
-    complete_campaign_scope = campaign_branches is not None
-    sources: dict[str, Branch] = {}
-    for source in campaign_branches or ():
-        source_id = str(getattr(source, "branch_id", "") or "").strip()
-        if not source_id:
-            raise ValueError("campaign screening source branch identity is invalid")
-        if source_id in sources:
-            raise ValueError("campaign screening source branch identity is duplicated")
-        sources[source_id] = source
-    # The in-memory current branch is authoritative over a persisted snapshot.
-    sources[current_branch.branch_id] = current_branch
-
-    steps_by_branch: dict[str, list[StepRecord]] = {}
+    records: list[dict[str, Any]] = []
     for step in steps:
-        source_id = str(step.branch_id or "").strip()
-        if not source_id:
-            raise ValueError("campaign screening step branch identity is invalid")
-        steps_by_branch.setdefault(source_id, []).append(step)
-
-    merged: list[tuple[dict[str, Any], str]] = []
-    positions: dict[str, int] = {}
-
-    def merge_record(record: Mapping[str, Any], source_id: str) -> None:
-        projected = dict(record)
-        if {"source_branch_id", "relation"}.intersection(projected):
-            raise ValueError("canonical screening record provenance is reserved")
-        natural_key = _screening_record_natural_key(projected)
-        previous = positions.get(natural_key)
-        if previous is None:
-            positions[natural_key] = len(merged)
-            merged.append((projected, source_id))
-            return
-        existing, existing_source = merged[previous]
-        if existing_source != source_id:
-            raise ValueError("campaign canonical screening ownership is invalid")
-        if existing == projected:
-            return
-        if _legacy_screening_record_can_upgrade(existing, projected):
-            merged[previous] = (projected, source_id)
-            return
-        raise ValueError("campaign canonical screening history conflicts")
-
-    for source_id, source in sources.items():
-        for record in canonical_screening_history(
-            source,
-            steps_by_branch.pop(source_id, []),
-        ):
-            merge_record(record, source_id)
-
-    if steps_by_branch and complete_campaign_scope:
-        raise ValueError("campaign screening step owner is unknown")
-    # Compatibility for legacy/injected ContextManager callers that do not
-    # provide campaign ownership: retain only current-branch evidence.  Sibling
-    # steps cannot be attributed safely without the complete owner set.
-    steps_by_branch.clear()
-
-    merged.sort(
-        key=lambda item: (
-            int(item[0]["round_num"]),
-            item[1],
-            _screening_record_natural_key(item[0]),
+        relation = (
+            "current" if step.branch_id == current_branch.branch_id else "sibling"
         )
-    )
-    return [
-        {
-            **record,
-            "source_branch_id": source_id,
-            "relation": (
-                "current" if source_id == current_branch.branch_id else "sibling"
-            ),
-        }
-        for record, source_id in merged
-    ]
-
-
-def persist_canonical_screening_record(
-    branch: Branch,
-    step: StepRecord,
-) -> bool:
-    """Append one lossless screening record to the durable branch owner."""
-
-    protocol = step.protocol_result
-    if protocol is None or protocol.stage != ExperimentStage.SCREENING:
-        return False
-    records = canonical_screening_history(branch, [])
-    record = canonical_screening_record(step)
-    natural_key = _screening_record_natural_key(record)
-    for index, existing in enumerate(records):
-        if _screening_record_natural_key(existing) != natural_key:
-            continue
-        if existing == record:
-            return False
-        if _legacy_screening_record_can_upgrade(existing, record):
-            records[index] = record
-            break
-        raise ValueError("durable canonical screening record conflict")
-    else:
-        records.append(record)
-    summary = dict(getattr(branch, "branch_evidence_summary", {}) or {})
-    summary[CANONICAL_SCREENING_HISTORY_KEY] = records
-    created = list(summary.get(DURABLE_BRANCH_CREATED_FILES_KEY, []) or [])
-    touched = list(summary.get(DURABLE_BRANCH_TOUCHED_FILES_KEY, []) or [])
-    if not all(isinstance(path, str) for path in [*created, *touched]):
-        raise ValueError("durable branch source footprint is invalid")
-    if step.verification_passed and step.patch is not None:
-        for change in patch_file_changes(step.patch):
-            path = str(getattr(change, "file_path", "") or "").strip()
-            if path and path not in touched:
-                touched.append(path)
-            if (
-                path
-                and str(getattr(change, "action", "") or "") == "create"
-                and path not in created
-            ):
-                created.append(path)
-    summary[DURABLE_BRANCH_CREATED_FILES_KEY] = created
-    summary[DURABLE_BRANCH_TOUCHED_FILES_KEY] = touched
-    branch.branch_evidence_summary = summary
-    return True
-
-
-def _screening_record_natural_key(record: Mapping[str, Any]) -> str:
-    attempt_id = str(record.get("attempt_id") or "").strip()
-    round_num = record.get("round_num")
-    if not attempt_id or isinstance(round_num, bool):
-        raise ValueError("branch canonical screening history identity is invalid")
-    try:
-        normalized_round = int(round_num)
-    except (TypeError, ValueError) as exc:
-        raise ValueError(
-            "branch canonical screening history identity is invalid"
-        ) from exc
-    if normalized_round <= 0:
-        raise ValueError("branch canonical screening history identity is invalid")
-    return f"{attempt_id}:{normalized_round}"
-
-
-def _legacy_screening_record_needs_upgrade(record: Mapping[str, Any]) -> bool:
-    composition = record.get("candidate_composition")
-    evidence = record.get("experiment_evidence")
-    if not isinstance(composition, Mapping) or not isinstance(evidence, Mapping):
-        return True
-    objective = evidence.get("objective_outcome")
-    return (
-        "protocol_outcome" not in evidence
-        or "decision_outcome" not in evidence
-        or not isinstance(objective, Mapping)
-        or not isinstance(objective.get("aggregation"), Mapping)
-    )
-
-
-def _legacy_screening_record_can_upgrade(
-    existing: Mapping[str, Any],
-    current: Mapping[str, Any],
-) -> bool:
-    """Upgrade only a schema-old row whose pre-existing facts still match."""
-
-    if not _legacy_screening_record_needs_upgrade(existing):
-        return False
-    return _legacy_screening_comparable_projection(
-        existing
-    ) == _legacy_screening_comparable_projection(current)
-
-
-def _legacy_screening_comparable_projection(
-    record: Mapping[str, Any],
-) -> dict[str, Any]:
-    """Remove only fields introduced by the current display schema."""
-
-    comparable = dict(record)
-    comparable.pop("screening_attempt_id", None)
-    comparable.pop("candidate_composition", None)
-    evidence = comparable.get("experiment_evidence")
-    if isinstance(evidence, Mapping):
-        evidence_copy = dict(evidence)
-        evidence_copy.pop("protocol_outcome", None)
-        evidence_copy.pop("decision_outcome", None)
-        objective = evidence_copy.get("objective_outcome")
-        if isinstance(objective, Mapping):
-            objective_copy = dict(objective)
-            objective_copy.pop("aggregation", None)
-            evidence_copy["objective_outcome"] = objective_copy
-        comparable["experiment_evidence"] = evidence_copy
-    return comparable
+        records.append({**screening_record(step), "relation": relation})
+    return records
 
 
 def _screening_projection(protocol: Any) -> dict[str, Any]:
@@ -949,9 +680,10 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
             "gate_outcome": protocol.gate_outcome,
             "reason_codes": list(protocol.reason_codes or ()),
         },
+        "runtime_model": protocol.runtime_model,
         "objective_outcome": {
             "semantics": protocol.objective_semantics,
-            "aggregate": _primitive(stats),
+            "aggregate": _screening_stats_projection(stats),
             "aggregation": aggregation,
         },
         "case_outcomes": {
@@ -962,7 +694,6 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
         },
         "runtime_errors": {
             "categories": _primitive(protocol.candidate_runtime_failure_categories),
-            "first_error": _primitive(protocol.candidate_first_runtime_failure),
         },
     }
     from scion.protocol.experiment.proposal_evidence import (
@@ -973,16 +704,21 @@ def _screening_projection(protocol: Any) -> dict[str, Any]:
     if is_proposal_mechanism_evidence_envelope(protocol.mechanism_evidence):
         mechanism_evidence = _primitive(protocol.mechanism_evidence)
     projected = _drop_empty(payload)
-    if getattr(protocol, "runtime_model", None):
-        projected["runtime_evidence_policy"] = runtime_evidence_policy_for_protocol(
-            protocol
-        )
     if mechanism_evidence is not None:
         # The verified generic envelope is already the visibility boundary.
         # Keep unavailable/empty problem-owned observations byte-for-byte;
         # interpreting them here would acquire problem semantics in core.
         projected["mechanism_evidence"] = mechanism_evidence
     return projected
+
+
+def _screening_stats_projection(stats: Any) -> dict[str, Any]:
+    """Expose measured aggregates without runtime qualification advice."""
+
+    projected = _primitive(stats)
+    if not isinstance(projected, Mapping):
+        return {}
+    return screening_eval_stats(projected)
 
 
 def _problem_measurement_diagnostics(
@@ -1019,19 +755,12 @@ def _problem_measurement_diagnostics(
 
 
 def _project_measurement_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
-    declared_fields = payload.get(_MEASUREMENT_VISIBLE_FIELDS_KEY, ())
-    if not isinstance(declared_fields, (list, tuple)) or not all(
-        isinstance(field, str) and field.strip() for field in declared_fields
-    ):
-        declared_fields = ()
-    visible_fields = tuple(
-        dict.fromkeys(str(field).strip() for field in declared_fields)
-    )
     projected: dict[str, Any] = {}
-    for key in (*_MEASUREMENT_VISIBLE_ENVELOPE_FIELDS, *visible_fields):
-        if key in _MEASUREMENT_PRIVATE_FIELDS or key not in payload:
+    for raw_key, value in payload.items():
+        key = str(raw_key)
+        if key in _MEASUREMENT_PRIVATE_FIELDS:
             continue
-        projected[key] = _project_measurement_value(payload[key])
+        projected[key] = _project_measurement_value(value)
     return projected
 
 
@@ -1084,9 +813,7 @@ def _drop_empty(value: Any) -> Any:
 
 
 __all__ = [
-    "CANONICAL_SCREENING_HISTORY_KEY",
     "ContextManager",
-    "canonical_screening_history",
-    "canonical_screening_record",
-    "persist_canonical_screening_record",
+    "campaign_screening_history",
+    "screening_record",
 ]

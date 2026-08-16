@@ -1,11 +1,10 @@
 """Focused tests split from test_decision.py."""
 
 import json
-from dataclasses import fields, replace
+from dataclasses import asdict, fields, replace
 from types import SimpleNamespace
 
 from .decision_test_support import *  # noqa: F401,F403
-from scion.core.decision_features_serialization import decision_features_to_payload
 from scion.core.features import (
     RUNTIME_EVIDENCE_CONFIDENCE_VALUES,
     RUNTIME_EVIDENCE_STATUS_VALUES,
@@ -21,7 +20,6 @@ from scion.protocol.experiment.proposal_evidence import (
 
 def test_decision_features_field_set_preserves_v3_boundary():
     expected_fields = {
-        "branch_id",
         "hypothesis_action",
         "stage",
         "contract_passed",
@@ -96,7 +94,7 @@ def test_decision_features_field_set_preserves_v3_boundary():
 
 def test_extract_basic():
     branch = _branch()
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -113,7 +111,7 @@ def test_extract_basic():
 
 def test_extract_no_protocol():
     branch = _branch()
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -127,7 +125,7 @@ def test_extract_no_protocol():
 
 def test_extract_stale_flag():
     branch = _branch(state=BranchState.STALE)
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -140,7 +138,7 @@ def test_extract_stale_flag():
 
 def test_extract_validation_stage():
     branch = _branch(state=BranchState.VALIDATING)
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -157,7 +155,7 @@ def test_extract_expand_counters_propagate():
     branch = _branch()
     branch.screening_expand_count = 2
     branch.validation_expand_count = 1
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -188,7 +186,7 @@ def test_extract_runtime_guard_facts_without_free_text():
             ),
         ),
     )
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -204,7 +202,7 @@ def test_extract_runtime_guard_facts_without_free_text():
 
 def test_extract_protocol_runtime_facts_without_free_text():
     branch = _branch()
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -247,7 +245,7 @@ def test_extract_ignores_telemetry_free_text_from_exposed_summary():
         ),
     )
 
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -295,7 +293,7 @@ def test_problem_proposal_evidence_leaves_safe_features_and_decision_byte_stable
     with_evidence = replace(without_evidence, mechanism_evidence=envelope)
 
     def extract(protocol):
-        return _extractor.extract(
+        return _extract(
             branch=branch,
             hypothesis_action="modify",
             contract=_contract(),
@@ -307,12 +305,12 @@ def test_problem_proposal_evidence_leaves_safe_features_and_decision_byte_stable
     without_features = extract(without_evidence)
     with_features = extract(with_evidence)
     without_bytes = json.dumps(
-        decision_features_to_payload(without_features),
+        asdict(without_features),
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
     with_bytes = json.dumps(
-        decision_features_to_payload(with_features),
+        asdict(with_features),
         sort_keys=True,
         separators=(",", ":"),
     ).encode()
@@ -323,30 +321,9 @@ def test_problem_proposal_evidence_leaves_safe_features_and_decision_byte_stable
     ).encode()
 
 
-def test_extract_protocol_runtime_confidence_from_cached_champion():
-    branch = _branch()
-    features = _extractor.extract(
-        branch=branch,
-        hypothesis_action="modify",
-        contract=_contract(),
-        verification=_verification(),
-        canary=_canary(),
-        protocol=_protocol(
-            runtime_ratio_median=1.42,
-            runtime_delta_median_ms=37.5,
-            runtime_regression_rate=0.75,
-            runtime_pairs=8,
-            runtime_confidence="low_cached_champion",
-        ),
-    )
-
-    assert features.runtime_evidence_confidence == "low_cached_champion"
-    _validate_no_free_text(features)
-
-
 def test_extract_protocol_declared_low_runtime_confidence_passes_guard():
     branch = _branch()
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -361,7 +338,7 @@ def test_extract_protocol_declared_low_runtime_confidence_passes_guard():
 
 def test_extract_protocol_low_sample_runtime_confidence_passes_guard():
     branch = _branch()
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -381,7 +358,7 @@ def test_extract_protocol_low_sample_runtime_confidence_passes_guard():
 
 def test_extract_protocol_runtime_status_values_pass_guard():
     for status in RUNTIME_EVIDENCE_STATUS_VALUES:
-        features = _extractor.extract(
+        features = _extract(
             branch=_branch(),
             hypothesis_action="modify",
             contract=_contract(),
@@ -396,7 +373,7 @@ def test_extract_protocol_runtime_status_values_pass_guard():
 
 def test_extract_legacy_continue_protocol_gate_outcome():
     branch = _branch()
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -416,7 +393,7 @@ def test_extractor_rejects_unknown_protocol_reason_code():
     )
 
     with pytest.raises(DecisionInputGuardError, match="Unknown protocol reason code"):
-        _extractor.extract(
+        _extract(
             branch=_branch(),
             hypothesis_action="modify",
             contract=_contract(),
@@ -428,7 +405,7 @@ def test_extractor_rejects_unknown_protocol_reason_code():
 
 def test_validate_no_free_text_valid():
     branch = _branch()
-    features = _extractor.extract(
+    features = _extract(
         branch=branch,
         hypothesis_action="modify",
         contract=_contract(),
@@ -440,32 +417,9 @@ def test_validate_no_free_text_valid():
     _validate_no_free_text(features)
 
 
-def test_validate_invalid_uuid_raises():
-    from scion.core.models import DecisionFeatures
-    import dataclasses
-    features = DecisionFeatures(
-        branch_id="not-a-uuid",
-        hypothesis_action="modify",
-        stage="screening",
-        contract_passed=True,
-        verification_passed=True,
-        canary_passed=True,
-        n_cases=0,
-        win_rate=None,
-        median_delta=None,
-        ci_low=None,
-        ci_high=None,
-        stale=False,
-        recent_failure_codes=(),
-    )
-    with pytest.raises(DecisionInputGuardError):
-        _validate_no_free_text(features)
-
-
 def test_validate_unknown_failure_code_raises():
     from scion.core.models import DecisionFeatures
     features = DecisionFeatures(
-        branch_id=str(uuid.uuid4()),
         hypothesis_action="modify",
         stage="screening",
         contract_passed=True,
@@ -487,7 +441,6 @@ def test_validate_statistical_metric_rejects_free_text_prose():
     from scion.core.models import DecisionFeatures
 
     features = DecisionFeatures(
-        branch_id=str(uuid.uuid4()),
         hypothesis_action="modify",
         stage="validation",
         contract_passed=True,
@@ -509,7 +462,7 @@ def test_validate_statistical_metric_rejects_free_text_prose():
 
 @pytest.mark.parametrize("confidence", sorted(RUNTIME_EVIDENCE_CONFIDENCE_VALUES))
 def test_validate_runtime_evidence_confidence_known_values(confidence):
-    features = _extractor.extract(
+    features = _extract(
         branch=_branch(),
         hypothesis_action="modify",
         contract=_contract(),
@@ -525,7 +478,7 @@ def test_validate_runtime_evidence_confidence_known_values(confidence):
 
 @pytest.mark.parametrize("status", sorted(RUNTIME_EVIDENCE_STATUS_VALUES))
 def test_validate_runtime_evidence_status_known_values(status):
-    features = _extractor.extract(
+    features = _extract(
         branch=_branch(),
         hypothesis_action="modify",
         contract=_contract(),
@@ -550,7 +503,7 @@ def test_validate_runtime_evidence_status_known_values(status):
     ],
 )
 def test_validate_runtime_evidence_unknown_values_fail_closed(field_name, value):
-    features = _extractor.extract(
+    features = _extract(
         branch=_branch(),
         hypothesis_action="modify",
         contract=_contract(),
@@ -588,7 +541,7 @@ def test_extractor_rejects_statistical_metric_not_declared_in_metric_stats():
     )
 
     with pytest.raises(DecisionInputGuardError):
-        _extractor.extract(
+        _extract(
             branch=_branch(),
             hypothesis_action="modify",
             contract=_contract(),

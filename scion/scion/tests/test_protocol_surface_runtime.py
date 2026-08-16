@@ -77,7 +77,7 @@ def test_run_experiment_records_champion_only_runtime_budget_saturation(tmp_path
     ] == diagnostic
 
 
-def test_budget_exhausting_runtime_evidence_is_observational_in_raw_and_exposed(
+def test_budget_exhausting_runtime_model_is_recorded_as_a_raw_fact(
     tmp_path,
 ):
     runner = MagicMock()
@@ -98,20 +98,11 @@ def test_budget_exhausting_runtime_evidence_is_observational_in_raw_and_exposed(
     assert result.gate_outcome == "pass"
     assert result.reason_codes == ("SCREENING_PASS",)
     assert result.runtime_model == "budget_exhausting"
-    assert "runtime_signal_role=audit_or_proposal_guidance_only" in (
-        result.exposed_summary
-    )
     raw = json.loads(open(result.raw_metrics_ref).read())
-    policy = raw["runtime_evidence_policy"]
-    assert policy["runtime_model"] == "budget_exhausting"
-    assert policy["runtime_model_interpretation"] == (
-        "budget_exhausting_runtime_aggregates_observational_not_standalone"
-    )
-    assert policy["runtime_signal_role"] == "audit_or_proposal_guidance_only"
-    assert "RUNTIME_BUDGET_EXHAUSTING_OBSERVATIONAL" in policy[
-        "policy_reason_codes"
-    ]
-    assert policy["decision_features_excluded"] is True
+    assert raw["runtime_model"] == "budget_exhausting"
+    assert raw["gate_outcome"] == "pass"
+    assert raw["reason_codes"] == ["SCREENING_PASS"]
+    assert raw["runtime_stats"]["runtime_pairs"] == 4
 
 
 def test_run_experiment_selected_surface_runtime_fields_are_diagnostic(tmp_path):

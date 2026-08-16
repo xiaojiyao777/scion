@@ -1,21 +1,23 @@
 """Tests for scion/core/branch.py — BranchController."""
+
 from __future__ import annotations
-import uuid
+
 import pytest
 
-from scion.core.models import (
-    Branch, BranchState, ChampionState, Decision, ExperimentStage, OperatorConfig,
-)
 from scion.core.branch import BranchController, StateTransitionError
+from scion.core.models import (
+    BranchState,
+    ChampionState,
+    Decision,
+    ExperimentStage,
+)
 
 
 def _champion(version: int = 0) -> ChampionState:
     return ChampionState(
         version=version,
         operator_pool={},
-        solver_config_hash="cfg_hash",
         code_snapshot_path="/snap",
-        code_snapshot_hash=f"hash_v{version}",
     )
 
 
@@ -132,49 +134,38 @@ def test_reconcile_stale_failure():
 # get_code_base
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_get_code_base_no_clean_hash():
+def test_get_code_base_without_accepted_hash():
     ctrl = _ctrl()
     b = ctrl.create_branch(_champion())
     assert ctrl.get_code_base(b.branch_id) == "champion"
 
 
-def test_get_code_base_with_clean_hash():
+def test_get_code_base_with_accepted_hash():
     ctrl = _ctrl()
     b = ctrl.create_branch(_champion())
-    ctrl.record_verification_result(b.branch_id, passed=True, code_hash="abc123")
-    # Both current_code_hash and last_clean_code_hash are set → caller should
-    # reuse the existing branch workspace rather than copying from champion.
+    ctrl.accept_verified_code(b.branch_id, "abc123")
     assert ctrl.get_code_base(b.branch_id) == "branch_workspace"
 
 
 def test_get_code_base_stale_returns_champion():
     ctrl = _ctrl()
     b = ctrl.create_branch(_champion())
-    ctrl.record_verification_result(b.branch_id, passed=True, code_hash="abc123")
+    ctrl.accept_verified_code(b.branch_id, "abc123")
     ctrl.mark_all_stale(new_champion_id=1)
     assert ctrl.get_code_base(b.branch_id) == "champion"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# record_verification_result
+# accept_verified_code
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_record_verification_result_passed():
+def test_accept_verified_code_sets_only_branch_source_digest():
     ctrl = _ctrl()
     b = ctrl.create_branch(_champion())
-    ctrl.record_verification_result(b.branch_id, passed=True, code_hash="good_hash")
+    assert b.current_code_hash is None
+    ctrl.accept_verified_code(b.branch_id, "good_hash")
     branch = ctrl.get_branch(b.branch_id)
     assert branch.current_code_hash == "good_hash"
-    assert branch.last_clean_code_hash == "good_hash"
-
-
-def test_record_verification_result_failed():
-    ctrl = _ctrl()
-    b = ctrl.create_branch(_champion())
-    ctrl.record_verification_result(b.branch_id, passed=False, code_hash="bad_hash")
-    branch = ctrl.get_branch(b.branch_id)
-    assert branch.current_code_hash == "bad_hash"
-    assert branch.last_clean_code_hash is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -216,7 +207,6 @@ def test_get_active_branches():
     b3 = ctrl.create_branch(_champion())
     ctrl.apply_decision(b2.branch_id, Decision.ABANDON)
     b3.state = BranchState.PARKED_LINEAGE
-    b3.branch_code_status = "parked_lineage"
     active = ctrl.get_active_branches()
     ids = {b.branch_id for b in active}
     assert b1.branch_id in ids

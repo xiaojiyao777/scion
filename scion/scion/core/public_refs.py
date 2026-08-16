@@ -1,12 +1,11 @@
 """Public reference helpers for status, summaries, and reports.
 
 Internal execution objects often need absolute filesystem paths so tests and
-audit tools can reopen artifacts.  Public status/report payloads should expose
+audit tools can read artifacts.  Public status/report payloads should expose
 only stable relative refs or opaque artifact ids.
 """
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 from pathlib import Path, PurePosixPath
@@ -17,7 +16,6 @@ from urllib.parse import unquote, urlsplit
 _PATH_REF_KEYS = {
     "artifact_path",
     "artifact_ref",
-    "code_archive_ref",
     "observations_ref",
     "protocol_raw_metrics_ref",
     "raw_metrics_path",
@@ -334,8 +332,7 @@ def _opaque_ref(value: str, *, kind: str) -> str:
     ).strip("._")
     if not basename:
         basename = kind
-    digest = hashlib.sha256(value.encode("utf-8")).hexdigest()[:12]
-    return f"{kind}:{basename}#{digest}"
+    return f"{kind}:{basename}"
 
 
 __all__ = [

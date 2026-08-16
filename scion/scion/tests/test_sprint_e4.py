@@ -1,11 +1,10 @@
 """Sprint E4 tests: T22, T27, and T28."""
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -13,14 +12,13 @@ from scion.proposal.llm_client import (
     LLMClient,
     LLMFormatError,
     LLMRateLimitError,
-    LLMTimeoutError,
 )
 from scion.runtime.subprocess_runner import (
     LocalSubprocessRunner,
     MAX_INLINE_OUTPUT_BYTES,
-    resolve_offloaded,
     _OFFLOAD_PREFIX,
 )
+from scion.runtime.runner import resolve_offloaded
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +190,8 @@ class TestCampaignTypedProviderTermination:
         from scion.config.problem import (
             ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
         )
-        import tempfile
+        from scion.problem.spec import ObjectiveMetricSpec
+        from types import SimpleNamespace
 
         tmpdir = tempfile.mkdtemp()
         spec = ProblemSpec(
@@ -206,14 +205,16 @@ class TestCampaignTypedProviderTermination:
             ),
         )
         protocol = ProtocolConfig()
-        split = SplitManifest(screening=["c1"], validation=["c2"], frozen=["c3"])
-        seed_ledger = SeedLedgerConfig(screening=[1], validation=[2], frozen=[3])
+        split = SplitManifest(
+            screening=["c1"], validation=["c2"], frozen=["c3"], canary=["c4"]
+        )
+        seed_ledger = SeedLedgerConfig(
+            screening=[1], validation=[2], frozen=[3], canary=[4]
+        )
         champion = ChampionState(
             version=0,
             operator_pool={},
-            solver_config_hash="abc",
             code_snapshot_path=tmpdir,
-            code_snapshot_hash="def",
         )
         campaign = CampaignManager(
             problem_spec=spec,
@@ -223,6 +224,17 @@ class TestCampaignTypedProviderTermination:
             llm_client=llm_client,
             champion=champion,
             campaign_dir=tmpdir,
+            experiment_protocol=SimpleNamespace(
+                runner=object(),
+                config=protocol,
+                _metric_specs=(
+                    ObjectiveMetricSpec(
+                        name="cost", direction="minimize", priority=1
+                    ),
+                ),
+                _problem_spec=spec,
+            ),
+            adapter=SimpleNamespace(spec=spec),
         )
         return campaign
 

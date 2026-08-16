@@ -1,116 +1,118 @@
 """Focused direct-V3 proposal-call behavior without attempt identities."""
-from __future__ import annotations
 
-import json
+from __future__ import annotations
 
 import pytest
 
-from scion.core.execution_outcome import (
-    ExecutionOutcome,
-    ExecutionOutcomeRecord,
-    branch_execution_hold,
-)
-from scion.core.models import HypothesisProposal
-from scion.lineage.registry import LineageRegistry
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.core.models import BranchState, HypothesisProposal, StepRecord
 from scion.proposal.engine import ProposalValidationError
 from scion.proposal.llm_client import LLMFormatError
 
 from .proposal_pipeline_test_support import FakeCreative, _pipeline
 
 
-def test_fresh_sibling_h_reads_latest_durable_rejection_after_restart(
-    tmp_path,
-) -> None:
-    db_path = str(tmp_path / "scion.db")
-    writer = LineageRegistry(db_path)
-    writer.record_execution_outcome(
-        campaign_id="camp-1",
-        branch_id="rejected-sibling",
-        hypothesis_id="private-hypothesis",
-        record=ExecutionOutcomeRecord(
-            outcome=ExecutionOutcome.RESEARCH_REJECTED,
-            reason_code="VERIFICATION_HEAVY_REJECTED",
-            detail="FORBIDDEN_PROVIDER_PROSE",
-            provenance={
-                "stage": "verification",
-                "verification_checks": [
-                    {
-                        "name": "V5_solution_consistency",
-                        "passed": False,
-                        "detail": "FORBIDDEN_RAW_TRACEBACK",
-                        "metadata": {
-                            "failing_symbol": "_SimulatedAnnealing.cool",
-                            "callsite": (
-                                "policies/baseline_modules/scheduler.py:229"
-                            ),
-                        },
-                    }
-                ],
-            },
-        ),
-        event_kind="research_rejection_execution_outcome",
-        stage="verification",
-    )
-    reopened = LineageRegistry(db_path)
-    pipeline, fresh_branch, runtime, _failures, _balance = _pipeline(
-        lineage_registry=reopened
+def test_fresh_sibling_h_does_not_use_rejection_as_repair_steering() -> None:
+    pipeline, fresh_branch, runtime, _balance = _pipeline()
+    pipeline.step_history.append(
+        StepRecord(
+            round_num=1,
+            branch_id="rejected-sibling",
+            hypothesis=HypothesisProposal(
+                hypothesis_text="Rejected mechanism",
+                change_locus="local_search",
+                action="modify",
+                target_file="operators/local_search.py",
+            ),
+            patch=None,
+            contract_passed=True,
+            verification_passed=False,
+            protocol_result=None,
+            decision=None,
+            failure_stage="verification",
+            failure_detail="V5_solution_consistency",
+            execution_outcome=ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                reason_code="VERIFICATION_HEAVY_REJECTED",
+                detail="FORBIDDEN_PROVIDER_PROSE",
+                provenance={
+                    "stage": "verification",
+                    "verification_checks": [
+                        {
+                            "name": "V5_solution_consistency",
+                            "passed": False,
+                            "detail": "FORBIDDEN_RAW_TRACEBACK",
+                            "metadata": {
+                                "failing_symbol": "_SimulatedAnnealing.cool",
+                                "callsite": (
+                                    "policies/baseline_modules/scheduler.py:229"
+                                ),
+                            },
+                        }
+                    ],
+                },
+            ),
+        )
     )
 
-    hypothesis, record = pipeline.generate_hypothesis(fresh_branch)
+    attempt = pipeline.generate_hypothesis(fresh_branch)
 
-    assert hypothesis is not None
-    assert record is not None
+    assert isinstance(attempt.proposal, HypothesisProposal)
+    assert attempt.execution_outcome is None
     assert fresh_branch.branch_id != "rejected-sibling"
-    assert runtime.hypothesis_kwargs["last_research_rejection"] == {
-        "failure_stage": "verification",
-        "failure_detail": "V5_solution_consistency",
-        "failing_symbol": "_SimulatedAnnealing.cool",
-        "callsite": "policies/baseline_modules/scheduler.py:229",
-    }
+    assert "last_research_rejection" not in runtime.hypothesis_kwargs
+    assert pipeline.step_history[-1].execution_outcome is not None
+    assert (
+        pipeline.step_history[-1].execution_outcome.outcome
+        is ExecutionOutcome.RESEARCH_REJECTED
+    )
 
 
-def test_normal_h_c_path_calls_provider_once_and_appends_one_event_each() -> None:
+def test_normal_h_c_path_passes_same_proposal_and_calls_each_provider_once() -> None:
     creative = FakeCreative()
-    pipeline, branch, _runtime, _failures, _balance = _pipeline(creative=creative)
+    pipeline, branch, runtime, _balance = _pipeline(creative=creative)
 
-    hypothesis, record = pipeline.generate_hypothesis(branch)
+    hypothesis_attempt = pipeline.generate_hypothesis(branch)
+    hypothesis = hypothesis_attempt.proposal
     assert hypothesis is not None
-    assert record is not None
-    patch = pipeline.generate_code(branch, hypothesis)
+    patch_attempt = pipeline.generate_code(branch, hypothesis)
 
-    assert patch is not None
+    assert patch_attempt.proposal is not None
+    assert patch_attempt.execution_outcome is None
     assert creative.hypothesis_calls == 1
     assert creative.code_calls == 1
-    events = pipeline.lineage_registry.events
-    assert [event["stage"] for event in events] == [
-        "proposal_hypothesis",
-        "proposal_code",
-    ]
-    assert all(event["event_kind"] == "proposal_call" for event in events)
-    serialized = json.dumps(events)
-    for forbidden in ("attempt_id", "continuation", "capability", "lease"):
-        assert forbidden not in serialized
+    assert runtime.code_kwargs["hypothesis"] is hypothesis
 
 
-def test_approved_h_is_consumed_before_the_single_code_call() -> None:
+def test_each_h_call_returns_one_typed_success_attempt() -> None:
+    pipeline, branch, _runtime, _balance = _pipeline()
+
+    first_h = pipeline.generate_hypothesis(branch)
+    second_h = pipeline.generate_hypothesis(branch)
+
+    assert isinstance(first_h.proposal, HypothesisProposal)
+    assert first_h.execution_outcome is None
+    assert isinstance(second_h.proposal, HypothesisProposal)
+    assert second_h.execution_outcome is None
+
+
+def test_h_enters_one_direct_code_call() -> None:
     creative = FakeCreative()
-    pipeline, branch, _runtime, _failures, _balance = _pipeline(creative=creative)
-    hypothesis, _record = pipeline.generate_hypothesis(branch)
+    pipeline, branch, runtime, _balance = _pipeline(creative=creative)
+    hypothesis = pipeline.generate_hypothesis(branch).proposal
     assert hypothesis is not None
 
-    assert pipeline.generate_code(branch, hypothesis) is not None
-    assert pipeline.generate_code(branch, hypothesis) is None
+    code_attempt = pipeline.generate_code(branch, hypothesis)
+    assert code_attempt.proposal is not None
+    assert code_attempt.execution_outcome is None
     assert creative.code_calls == 1
-    outcome = pipeline.pop_execution_outcome(branch.branch_id)
-    assert outcome is not None
-    assert outcome.outcome is ExecutionOutcome.NOT_EVALUATED
-    assert outcome.reason_code == "CODE_CALL_ALREADY_CONSUMED"
+    assert runtime.code_kwargs["hypothesis"] is hypothesis
 
 
-def test_changed_h_is_rejected_before_the_code_provider() -> None:
+def test_code_generation_uses_the_supplied_proposal_directly() -> None:
     creative = FakeCreative()
-    pipeline, branch, _runtime, _failures, _balance = _pipeline(creative=creative)
-    hypothesis, _record = pipeline.generate_hypothesis(branch)
+    pipeline, branch, runtime, _balance = _pipeline(creative=creative)
+    hypothesis = pipeline.generate_hypothesis(branch).proposal
     assert hypothesis is not None
     changed = HypothesisProposal(
         **{
@@ -119,12 +121,11 @@ def test_changed_h_is_rejected_before_the_code_provider() -> None:
         }
     )
 
-    assert pipeline.generate_code(branch, changed) is None
-    assert creative.code_calls == 0
-    outcome = pipeline.pop_execution_outcome(branch.branch_id)
-    assert outcome is not None
-    assert outcome.outcome is ExecutionOutcome.NOT_EVALUATED
-    assert outcome.reason_code == "APPROVED_HYPOTHESIS_BINDING_MISSING"
+    code_attempt = pipeline.generate_code(branch, changed)
+    assert code_attempt.proposal is not None
+    assert code_attempt.execution_outcome is None
+    assert creative.code_calls == 1
+    assert runtime.code_kwargs["hypothesis"] is changed
 
 
 @pytest.mark.parametrize(
@@ -139,23 +140,26 @@ def test_invalid_code_response_is_research_rejected_after_one_call(
     error: Exception,
 ) -> None:
     creative = FakeCreative(code_error=error)
-    pipeline, branch, _runtime, _failures, _balance = _pipeline(creative=creative)
-    hypothesis, _record = pipeline.generate_hypothesis(branch)
+    pipeline, branch, _runtime, _balance = _pipeline(creative=creative)
+    hypothesis = pipeline.generate_hypothesis(branch).proposal
     assert hypothesis is not None
 
-    assert pipeline.generate_code(branch, hypothesis) is None
+    code_attempt = pipeline.generate_code(branch, hypothesis)
+    assert code_attempt.proposal is None
     assert creative.code_calls == 1
-    assert len(pipeline.lineage_registry.events) == 2
-    event = pipeline.lineage_registry.events[-1]
-    payload = json.loads(event["audit_payload_json"])
-    assert payload["phase"] == "code"
-    assert payload["status"] == "failed"
-    assert payload["execution_outcome"]["outcome"] == "research_rejected"
-    assert (
-        payload["execution_outcome"]["reason_code"]
-        == "PROPOSAL_RESPONSE_INVALID"
-    )
-    outcome = pipeline.pop_execution_outcome(branch.branch_id)
+    outcome = code_attempt.execution_outcome
     assert outcome is not None
     assert outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
-    assert branch_execution_hold(branch) is None
+    assert branch.state is not BranchState.BLOCKED_INFRA
+
+
+def test_keyboard_interrupt_propagates_without_a_side_channel_outcome() -> None:
+    creative = FakeCreative(code_error=KeyboardInterrupt("operator stop"))  # type: ignore[arg-type]
+    pipeline, branch, _runtime, _balance = _pipeline(creative=creative)
+    hypothesis = pipeline.generate_hypothesis(branch).proposal
+    assert hypothesis is not None
+
+    with pytest.raises(KeyboardInterrupt, match="operator stop"):
+        pipeline.generate_code(branch, hypothesis)
+
+    assert not hasattr(pipeline, "_execution_outcomes")

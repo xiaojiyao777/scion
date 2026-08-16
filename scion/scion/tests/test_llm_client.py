@@ -5,7 +5,7 @@ import json
 import inspect
 import time
 from types import SimpleNamespace
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 import pytest
 
 from scion.proposal.llm_client import (
@@ -20,9 +20,7 @@ from scion.proposal.llm_client import (
     LLMTransportError,
     _parse_retry_after,
 )
-from scion.proposal.engine import CreativeLayer
 from scion.proposal.mock_client import MockLLMClient
-from scion.proposal.llm.cache import _kind_short
 from scion.proposal.schemas import (
     HYPOTHESIS_TOOL,
     PATCH_TOOL,
@@ -34,27 +32,6 @@ from scion.proposal.schemas import (
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    ("removed_kind", "removed_alias"),
-    (
-        ("hypothesis_target_intent", "hti"),
-        ("tool_selection", "tsel"),
-        ("llm_call", "call"),
-    ),
-)
-def test_prompt_cache_removed_request_kinds_use_generic_shortening(
-    removed_kind: str,
-    removed_alias: str,
-) -> None:
-    assert _kind_short(removed_kind) != removed_alias
-
-
-def test_prompt_cache_has_no_raw_or_fix_kind_aliases() -> None:
-    source = inspect.getsource(_kind_short)
-    assert '"llm_call":' not in source
-    assert '"fix":' not in source
-
-
 def test_failed_call_clears_previous_response_usage() -> None:
     client = LLMClient(model="gpt-5.6-terra")
     client._last_usage_metadata = {
@@ -62,7 +39,6 @@ def test_failed_call_clears_previous_response_usage() -> None:
         "input_tokens": 123,
     }
     client._last_response_diagnostics = {"finish_reason": "stale"}
-    client._last_prompt_cache_key = "stale-code-cache-key"
 
     def fail_call(*_args, **_kwargs):
         raise LLMProviderError("synthetic hypothesis failure")
@@ -78,14 +54,12 @@ def test_failed_call_clears_previous_response_usage() -> None:
 
     assert client.get_last_usage_metadata() is None
     assert client.get_last_response_diagnostics() is None
-    assert client._last_prompt_cache_key is None
 
 
 def test_policy_failure_clears_previous_response_observations() -> None:
     client = LLMClient(model="gpt-5.6-sol")
     client._last_usage_metadata = {"input_tokens": 123}
     client._last_response_diagnostics = {"finish_reason": "stale"}
-    client._last_prompt_cache_key = "stale-cache-key"
 
     with (
         patch.object(
@@ -102,7 +76,6 @@ def test_policy_failure_clears_previous_response_observations() -> None:
 
     assert client.get_last_usage_metadata() is None
     assert client.get_last_response_diagnostics() is None
-    assert client._last_prompt_cache_key is None
 
 
 class TestMockLLMClient:
@@ -416,7 +389,7 @@ def test_deepseek_tool_call_kwargs_omit_named_tool_choice(monkeypatch):
     assert kwargs["reasoning_effort"] == "max"
 
 
-def test_gpt_codex_chat_kwargs_include_prompt_cache_key_without_retention() -> None:
+def test_gpt_chat_kwargs_use_provider_managed_prefix_cache() -> None:
     client = LLMClient(model="gpt-5.5")
     tool = {
         "type": "function",
@@ -431,17 +404,9 @@ def test_gpt_codex_chat_kwargs_include_prompt_cache_key_without_retention() -> N
         messages=[{"role": "user", "content": "branch=session user prompt"}],
         timeout_sec=10,
         tools=[tool],
-        request_kind="code",
-        system_blocks=[
-            {
-                "type": "text",
-                "text": "stable code-generation system context",
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
     )
 
-    assert kwargs["prompt_cache_key"].startswith("scion:v3:gpt:code:")
+    assert "prompt_cache_key" not in kwargs
     assert "prompt_cache_retention" not in kwargs
 
 
@@ -452,14 +417,6 @@ def test_prompt_cache_key_omitted_for_deepseek_chat_kwargs() -> None:
         model=client.model,
         messages=[{"role": "user", "content": "hi"}],
         timeout_sec=10,
-        request_kind="code",
-        system_blocks=[
-            {
-                "type": "text",
-                "text": "stable system context",
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
     )
 
     assert "prompt_cache_key" not in kwargs
@@ -497,119 +454,6 @@ def test_prompt_cache_key_omitted_for_anthropic_tool_call() -> None:
     kwargs = fake_anthropic_client.messages.create.call_args.kwargs
     assert "prompt_cache_key" not in kwargs
     assert "prompt_cache_retention" not in kwargs
-
-
-def test_prompt_cache_key_ignores_user_prompt_branch_and_session() -> None:
-    client = LLMClient(model="gpt-5.5")
-    system_blocks = [
-        {
-            "type": "text",
-            "text": "stable planner context",
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
-    tools = [
-        {
-            "type": "function",
-            "function": {
-                "name": "plan_proposal_tool_call",
-                "parameters": {"type": "object", "required": ["tool_name"]},
-            },
-        }
-    ]
-
-    first = client._openai_chat_kwargs(
-        model=client.model,
-        messages=[
-            {"role": "user", "content": "branch_id=a session_id=a choose tool"}
-        ],
-        timeout_sec=10,
-        tools=tools,
-        request_kind="code",
-        system_blocks=system_blocks,
-    )["prompt_cache_key"]
-    second = client._openai_chat_kwargs(
-        model=client.model,
-        messages=[
-            {
-                "role": "user",
-                "content": "branch_id=b session_id=b different hypothesis prompt",
-            }
-        ],
-        timeout_sec=10,
-        tools=tools,
-        request_kind="code",
-        system_blocks=system_blocks,
-    )["prompt_cache_key"]
-
-    assert first == second
-
-
-def test_prompt_cache_key_changes_when_cacheable_system_or_tool_schema_changes() -> None:
-    client = LLMClient(model="gpt-5.5")
-    base_system = [
-        {
-            "type": "text",
-            "text": "stable system context",
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
-    changed_system = [
-        {
-            "type": "text",
-            "text": "changed stable system context",
-            "cache_control": {"type": "ephemeral"},
-        }
-    ]
-    base_tool = [
-        {
-            "type": "function",
-            "function": {
-                "name": "generate_patch",
-                "parameters": {"type": "object", "required": ["file_path"]},
-            },
-        }
-    ]
-    changed_tool = [
-        {
-            "type": "function",
-            "function": {
-                "name": "generate_patch",
-                "parameters": {
-                    "type": "object",
-                    "required": ["file_path", "action"],
-                },
-            },
-        }
-    ]
-
-    base_key = client._openai_chat_kwargs(
-        model=client.model,
-        messages=[{"role": "user", "content": "same prompt"}],
-        timeout_sec=10,
-        tools=base_tool,
-        request_kind="code",
-        system_blocks=base_system,
-    )["prompt_cache_key"]
-    system_key = client._openai_chat_kwargs(
-        model=client.model,
-        messages=[{"role": "user", "content": "same prompt"}],
-        timeout_sec=10,
-        tools=base_tool,
-        request_kind="code",
-        system_blocks=changed_system,
-    )["prompt_cache_key"]
-    tool_key = client._openai_chat_kwargs(
-        model=client.model,
-        messages=[{"role": "user", "content": "same prompt"}],
-        timeout_sec=10,
-        tools=changed_tool,
-        request_kind="code",
-        system_blocks=base_system,
-    )["prompt_cache_key"]
-
-    assert system_key != base_key
-    assert tool_key != base_key
 
 
 def test_tool_call_hard_timeout_interrupts_blocking_provider_call() -> None:
@@ -740,7 +584,7 @@ def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
 
     usage = client.get_last_usage_metadata()
     assert usage["provider"] == "openai_compatible"
-    assert usage["cache_mode"] == "prompt_cache_key_observed"
+    assert usage["cache_mode"] == "automatic_prefix_cache_observed"
     assert usage["cache_accounting_mode"] == "provider_prompt_tokens_include_cache_read"
     assert usage["input_tokens"] == 120
     assert usage["prompt_tokens_total"] == 120
@@ -752,8 +596,8 @@ def test_openai_tool_call_records_prompt_cache_usage_metadata() -> None:
     assert usage["prompt_cache_miss"] is True
     assert usage["prompt_cache_hit_tokens"] == 80
     assert usage["prompt_cache_miss_tokens"] == 40
-    assert usage["prompt_cache_key"].startswith("scion:v3:gpt:code:")
-    assert usage["prompt_cache_key_digest"] == usage["prompt_cache_key"].rsplit(":", 1)[-1]
+    assert "prompt_cache_key" not in usage
+    assert "prompt_cache_key_digest" not in usage
 
 
 def test_openai_provider_managed_output_omits_max_completion_tokens() -> None:
@@ -1191,17 +1035,22 @@ def test_connection_failure_is_typed_transport_error() -> None:
         LLMClient._raise_classified(ConnectionError("connection reset"))
 
 
-def test_direct_trace_records_request_policy_without_retry_fields(tmp_path):
+def test_terminal_trace_atomically_records_request_policy_without_retry_fields(
+    tmp_path,
+):
     from scion.proposal.engine.trace import _TraceWriter
 
     writer = _TraceWriter(str(tmp_path))
-    path = writer.write_start(
+    path = writer.write_terminal(
         request_kind="code",
         model="claude-test",
         tool={"name": "generate_patch", "input_schema": {"type": "object"}},
         prompt="generate one patch",
         system_blocks=[{"type": "text", "text": "system"}],
         context={"branch_id": "branch-policy"},
+        ok=True,
+        started_at="2026-08-16T00:00:00",
+        response={"file_path": "x.py"},
         request_policy={
             "request_kind": "code",
             "timeout_sec": 180.0,
@@ -1209,11 +1058,13 @@ def test_direct_trace_records_request_policy_without_retry_fields(tmp_path):
             "output_token_policy": "provider_native_required",
         },
     )
-    writer.write_finish(path, ok=True, response={"file_path": "x.py"})
 
+    assert path is not None
     payload = json.loads(next(tmp_path.glob("*.json")).read_text())
+    assert payload["ok"] is True
     assert payload["request_kind"] == "code"
     assert payload["request_policy"]["timeout_sec"] == 180.0
     assert payload["request_policy"]["provider"] == "anthropic"
     assert not any("retri" in key for key in payload["request_policy"])
     assert payload["response"] == {"file_path": "x.py"}
+    assert not list(tmp_path.glob("*.tmp"))

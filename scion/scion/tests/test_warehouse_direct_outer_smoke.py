@@ -1,23 +1,22 @@
 """Lossless direct-v3 outer smoke over the real warehouse runtime."""
 from __future__ import annotations
 
-import json
 from dataclasses import fields
 from pathlib import Path
 
 import yaml
-
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
-from scion.core.execution_outcome import (
-    ExecutionOutcome,
-    branch_execution_hold,
+from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.models import (
+    BranchState,
+    ChampionState,
+    DecisionFeatures,
+    ExperimentStage,
 )
-from scion.core.models import ChampionState, DecisionFeatures, ExperimentStage
 from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
-from scion.proposal.edit_protocol.normalization import source_digest_for_content
 from scion.proposal.mock_client import MockLLMClient
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.runtime.runner import ResourceLimits
@@ -72,7 +71,6 @@ def _patch_response() -> dict[str, object]:
         "file_path": "operators/change_vehicle_type.py",
         "action": "modify",
         "edit_intent": "exact_replace",
-        "source_digest": source_digest_for_content(source),
         "old_string": old,
         "new_string": new,
         "replace_all": False,
@@ -134,7 +132,6 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
         metrics_dir=str(tmp_path / "metrics"),
         metric_specs=bridge.metric_specs,
         objective_policy=bridge.objective_policy,
-        require_metric_specs=True,
         problem_spec=bridge.problem_spec,
     )
     gate = VerificationGate(
@@ -161,9 +158,7 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
         champion=ChampionState(
             version=1,
             operator_pool={},
-            solver_config_hash="warehouse-direct-outer-reject",
             code_snapshot_path=str(WAREHOUSE_WORKSPACE),
-            code_snapshot_hash="warehouse-baseline",
         ),
         campaign_dir=str(tmp_path / "campaign"),
         verification_gate=gate,
@@ -186,28 +181,17 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
     result = campaign.run_one_step()
 
     assert "must exactly match one provider-visible research surface" in result.reason
-    assert result.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
-    assert result.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
+    assert result.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+    assert result.execution_outcome.reason_code == "PROPOSAL_RESPONSE_INVALID"
     assert result.decision is None
     assert llm.call_count == 1
     assert counts.get("contract_hypothesis", 0) == 0
     assert counts.get("verification", 0) == 0
-    step = campaign._step_history[-1]
-    assert step.failure_stage == "proposal_hypothesis"
-    assert step.contract_passed is False
-    assert step.verification_passed is False
-    assert step.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
-    assert step.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
-    assert step.decision is None
-    assert step.protocol_result is None
-    assert "must exactly match one provider-visible research surface" in (
-        step.failure_detail or ""
-    )
+    assert campaign._step_history == []
     branch = campaign._branch_ctrl.get_branch(result.branch_id)
-    assert branch_execution_hold(branch) is None
+    assert branch.state is not BranchState.BLOCKED_INFRA
     assert "CONTRACT" not in branch.failure_codes
-    records = campaign._hyp_store.get_by_branch(result.branch_id)
-    assert records == []
+    assert branch.hypothesis is None
     outcome_events = [
         event
         for event in campaign._registry.query_by_branch(result.branch_id)
@@ -216,12 +200,11 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
     assert len(outcome_events) == 1
     assert outcome_events[0]["event_kind"] == "proposal_execution_outcome"
     assert outcome_events[0]["decision"] is None
-    durable = campaign._registry.get_latest_execution_outcome(
+    durable = campaign._registry.query_execution_outcomes(
         branch_id=result.branch_id
-    )
-    assert durable is not None
+    )[0]
     assert durable["reason_code"] == "PROPOSAL_RESPONSE_INVALID"
-    assert durable["provenance"]["owner"] == "proposal_pipeline"
+    assert "owner" not in durable["provenance"]
     assert durable["provenance"]["stage"] == "proposal_hypothesis"
 
 
@@ -245,7 +228,6 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
         metrics_dir=str(tmp_path / "metrics"),
         metric_specs=bridge.metric_specs,
         objective_policy=bridge.objective_policy,
-        require_metric_specs=True,
         problem_spec=bridge.problem_spec,
     )
     gate = VerificationGate(
@@ -272,9 +254,7 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
         champion=ChampionState(
             version=1,
             operator_pool={},
-            solver_config_hash="warehouse-direct-outer-smoke",
             code_snapshot_path=str(WAREHOUSE_WORKSPACE),
-            code_snapshot_hash="warehouse-baseline",
         ),
         campaign_dir=str(campaign_dir),
         verification_gate=gate,
@@ -328,25 +308,15 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
     assert step.protocol_result.stage == ExperimentStage.SCREENING
     assert step.decision is not None
 
-    call_ref = step.proposal_session_ref
-    assert call_ref is not None
-    assert call_ref["phase"] == "code"
-    assert call_ref["status"] == "generated"
-    assert call_ref["hypothesis_id"] == step.hypothesis_id
-
     events = campaign._registry.query_by_branch(step.branch_id)
-    call_rows = [
-        (row, json.loads(row["audit_payload_json"]))
-        for row in reversed(events)
-        if row["event_kind"] == "proposal_call"
+    experiment_events = [
+        row for row in events if row["event_kind"] == "experiment"
     ]
-    calls = [payload for _row, payload in call_rows]
-    assert [event["phase"] for event in calls] == ["hypothesis", "code"]
-    assert [event["status"] for event in calls] == ["generated", "generated"]
-    assert all(event["hypothesis_id"] == step.hypothesis_id for event in calls)
-    assert call_rows[1][0]["event_id"] == call_ref["lineage_event_id"]
-    assert all("attempt_id" not in event for event in calls)
-    assert all("continuation" not in key for event in calls for key in event)
+    assert len(experiment_events) == 1
+    assert experiment_events[0]["stage"] == "screening"
+    assert experiment_events[0]["hypothesis_text"] == (
+        _hypothesis_response()["hypothesis_text"]
+    )
 
     # Active research keeps the evaluated source in the branch workspace and
     # the result in ordinary step/protocol evidence. It does not build a
@@ -362,33 +332,7 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
     decision_field_names = {field.name for field in fields(DecisionFeatures)}
     assert all("proposal_attempt" not in name for name in decision_field_names)
     assert "proposal_runtime_mode" not in decision_field_names
-    assert step.decision_features_snapshot is not None
-    assert all(
-        "proposal_attempt" not in key
-        for key in vars(step.decision_features_snapshot)
-    )
-    decision_rows = [row for row in events if row["decision_features_json"]]
-    assert decision_rows
-    for row in decision_rows:
-        persisted_decision_features = json.loads(row["decision_features_json"])
-        assert all(
-            "proposal_attempt" not in key for key in persisted_decision_features
-        )
-        assert "proposal_runtime_mode" not in persisted_decision_features
 
-    # Verification's real warehouse V8 run retains the solver's full runtime
-    # payload; protocol pair summaries intentionally project only declared fields.
-    v8_metrics = list((tmp_path / "metrics").glob("v8_run1_*.json"))
-    assert len(v8_metrics) == 1
-    runtime = json.loads(v8_metrics[0].read_text(encoding="utf-8"))["runtime"]
-    typed_events = runtime["typed_telemetry_events"]
-    registry_events = [
-        event
-        for event in typed_events
-        if event["mechanism_id"] == "warehouse_operator_registry"
-    ]
-    assert len(registry_events) == 1
-    assert registry_events[0]["lane"] == "state_transition"
-    assert registry_events[0]["before_ref"] == "operator_registry:unresolved"
-    assert registry_events[0]["after_ref"].startswith("operator_registry:active:")
-    assert all(event["lane"] != "direct_effect" for event in typed_events)
+    # Successful same-seed Verification keeps comparison data in memory and
+    # writes no V8 telemetry artifacts.
+    assert not list((tmp_path / "metrics").glob("v8_*.json"))

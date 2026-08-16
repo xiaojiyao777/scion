@@ -10,7 +10,7 @@ from scion.opportunity import (
 )
 
 
-def test_problem_opportunity_summary_is_proposal_only_and_redacted() -> None:
+def test_problem_opportunity_summary_is_redacted() -> None:
     summary = ProblemOpportunitySummary(
         problem_family="demo",
         objective="score",
@@ -50,9 +50,6 @@ def test_problem_opportunity_summary_is_proposal_only_and_redacted() -> None:
     payload = summary.to_payload()
 
     assert payload["schema_version"] == "scion.problem_opportunity_summary.v1"
-    assert payload["proposal_visibility_only"] is True
-    assert payload["decision_features_excluded"] is True
-    assert payload["decision_input_policy"] == "excluded_from_decision_features"
     assert payload["residual_opportunity"][0]["axis_id"] == "residual_headroom"
     assert payload["mechanism_evidence"][0]["mechanism_family"] == (
         "bounded_operator"

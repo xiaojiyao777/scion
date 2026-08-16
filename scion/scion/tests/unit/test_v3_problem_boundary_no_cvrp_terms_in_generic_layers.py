@@ -58,11 +58,9 @@ FORBIDDEN_PATTERNS = {
 # scion/problems/cvrp.
 LEGACY_ALLOWLIST: dict[tuple[str, str], str] = {
     ("core/campaign.py", "route"): "failure routing verb, not solution route",
-    ("core/campaign_adapters.py", "capacity"): "branch scheduler capacity action",
     ("core/branch_step_runner.py", "capacity"): "branch scheduler capacity action",
     ("core/scheduler.py", "capacity"): "branch portfolio capacity, not problem capacity",
     ("core/scheduling/status.py", "capacity"): "branch scheduler capacity, not problem capacity",
-    ("core/failure_lifecycle.py", "route"): "FailureRouter.route method name",
 }
 
 

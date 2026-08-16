@@ -12,9 +12,9 @@ Sources read: `scion/scion/core/proposal_pipeline.py`, `scion/scion/core/problem
 - `generate_code(branch, hypothesis, prior_failure=None) -> PatchProposal | None`
 - `attempt_fix(branch, patch, verification_result) -> PatchProposal | None`
 
-Inputs come from campaign services: current branch, champion snapshot, active/blacklisted hypotheses, sibling branches, step history, failure streaks, forced locus, search memory, saturation signals, latest weight optimization result, and research log. The pipeline delegates context construction to `ProblemRuntime`, which pre-fills the active `ProblemSpec` and optional adapter.
+Inputs come from campaign services: current branch, champion snapshot, hypotheses, sibling branches, and step history. The pipeline delegates context construction to `ProblemRuntime`, which pre-fills the active `ProblemSpec` and optional adapter.
 
-LLM failures are routed as proposal failures. `LLMBalanceError` marks balance exhausted; retry exhaustion, format errors, timeout, and schema validation errors increment circuit breaker state and call the campaign failure handler. Successful hypothesis generation creates a `HypothesisRecord` with classifier-derived family metadata.
+LLM failures create one `ExecutionOutcomeRecord`; the outer attempt writes the typed event and applies any branch hold once. `LLMBalanceError` also marks balance exhausted. Successful hypothesis generation creates a `HypothesisRecord` with classifier-derived family metadata.
 
 The transient forced-locus path is used for one-shot governance
 diversification. The CLI diagnostic `--force-surface` hook uses a separate

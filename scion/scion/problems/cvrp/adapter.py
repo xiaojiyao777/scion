@@ -31,7 +31,58 @@ from scion.problems.cvrp.surface_policy import (
 
 __all__ = [
     "CvrpAdapter",
+    "CROSS_CAMPAIGN_RESEARCH_PRIOR",
+    "CURRENT_RESEARCH_QUESTION",
 ]
+
+
+CURRENT_RESEARCH_QUESTION = (
+    "What CVRP-owned algorithmic change can improve final total_distance on "
+    "the declared evaluation surface while preserving feasibility and route "
+    "validity, and what observations support attribution of the final result "
+    "to that change?"
+)
+
+CROSS_CAMPAIGN_RESEARCH_PRIOR = (
+    (
+        "Previously evaluated route-segment and cross-route exchanges, "
+        "destroy-size schedules, insertion-cost lookahead, construction-seed "
+        "selection, route-pair overlap targeting, double-bridge moves, and "
+        "adaptive embedded-VNS allocation were neutral or negative on final "
+        "total_distance. Broad removal of VNS was also negative. These are "
+        "observations, not proposal prohibitions."
+    ),
+    (
+        "Historical screening-level evidence around SWAP* and initial-VNS "
+        "budget allocation was mixed and cumulative; it did not isolate a "
+        "causal mechanism. This is a neutral lead, not a required direction."
+    ),
+    (
+        "Recent ejection evidence is mixed and implementation-sensitive. An "
+        "older deeper route-preserving chain was 0W/4L/4T cases with median "
+        "-11.5 and only about 74 ALNS iterations versus 1,631 for B0. In the "
+        "open-research R1 partial run, a bounded completion-aware depth-one "
+        "repair reproduced a sparse positive direction after expansion at "
+        "6W/1L/5T cases, median +3.75 with CI [0,11], but recorded 186 "
+        "aggregate repair errors (8.7% of all ALNS iterations) without an "
+        "exposed operator-local denominator and did not advance; a cumulative "
+        "depth-two variant was negative. These observations neither require "
+        "nor forbid ejection research, depth-one refinement, or a different "
+        "direction."
+    ),
+    (
+        "Corrected R2's strongest result was elapsed-budget simulated "
+        "annealing: its exact 12-case quality screen was 6W/1L/5T cases, "
+        "49W/20L/27T pairs, and median final total_distance improvement +2.75 "
+        "with CI [0,11]. It did not pass the fixed R2 wins/all-cases rule and "
+        "is not a hidden promotion. The implementation removed nearly all "
+        "late worsening acceptances and increased best updates, but its "
+        "progress denominator omitted construction, initial VNS, and the "
+        "tighter outer deadline, while its temperature update lagged one "
+        "iteration. These are neutral source-grounded leads, not a required "
+        "mechanism or host-mandated fix."
+    ),
+)
 
 
 class CvrpAdapter:
@@ -49,12 +100,13 @@ class CvrpAdapter:
 
         return CvrpSolverDesignProvider()
 
-    def research_guidance_provider(self) -> Any:
-        from scion.problems.cvrp.research_guidance import (
-            CvrpResearchGuidanceProvider,
-        )
+    def research_question_payload(self) -> Mapping[str, Any]:
+        """Return ordinary safe research context without a contract graph."""
 
-        return CvrpResearchGuidanceProvider()
+        return {
+            "current_question": CURRENT_RESEARCH_QUESTION,
+            "research_prior": list(CROSS_CAMPAIGN_RESEARCH_PRIOR),
+        }
 
     def proposal_mechanism_evidence_provider(self) -> Any:
         from scion.problems.cvrp.proposal_mechanism_evidence import (
@@ -102,15 +154,6 @@ class CvrpAdapter:
 
         return {
             "schema_version": "scion.cvrp_measurement_guidance.v3",
-            "taint": "problem_owned_proposal_guidance",
-            "proposal_visibility_only": True,
-            "decision_features_excluded": True,
-            "proposal_visible_fields": [
-                "taint",
-                "measurement_context",
-                "feasibility",
-                "typed_attribution",
-            ],
             "measurement_context": {
                 "metric": "total_distance",
                 "objective": "minimize",

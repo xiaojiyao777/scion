@@ -27,17 +27,6 @@ where = ["."]
 include = ["scion*"]
 exclude = ["scion.tests*"]
 
-[[tool.setuptools.ext-modules]]
-name = "scion.runtime.native._spawn_into_cgroup"
-sources = ["scion/runtime/native/spawn_into_cgroup.c"]
-extra-compile-args = [
-    "-std=c11",
-    "-Wall",
-    "-Wextra",
-    "-Werror=implicit-function-declaration",
-    "-Werror=return-type",
-]
-
 [tool.pytest.ini_options]
 testpaths = ["scion/tests"]
 python_files = ["test_*.py"]

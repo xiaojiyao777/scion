@@ -6,13 +6,7 @@ from typing import Any, Callable, List, Optional, Sequence, TYPE_CHECKING
 
 from scion.config.problem import ProtocolConfig
 from scion.core.models import CanaryResult, ExperimentStage, ProtocolResult
-from scion.protocol.evaluation import (
-    compute_delta,
-    lexicographic_compare,
-    metric_order_from_objectives,
-)
 from scion.runtime.runner import Runner
-from .cache import ChampionResultCache
 from .selection import (
     CasePathResolution,
     SeedLedger,
@@ -42,12 +36,7 @@ class ExperimentProtocol:
         *,
         metric_specs: Optional[Sequence[ObjectiveMetricSpec]] = None,
         objective_policy: "ObjectivePolicySpec | None" = None,
-        require_metric_specs: bool = False,
-        allow_legacy_objective_fallback: bool | None = None,
         problem_spec: Any | None = None,
-        champion_result_cache_enabled: bool = True,
-        champion_result_cache_dir: str | None = None,
-        strict_case_paths: bool | None = None,
     ) -> None:
         self.config = protocol_config
         self.split_manager = split_manager
@@ -57,43 +46,12 @@ class ExperimentProtocol:
         self.metrics_dir = metrics_dir
         self._metric_specs = _hydrate_metric_specs(metric_specs, problem_spec)
         self._objective_policy = objective_policy or _hydrate_objective_policy(problem_spec)
-        self._require_metric_specs = require_metric_specs
-        self._allow_legacy_objective_fallback = allow_legacy_objective_fallback
         self._problem_spec = problem_spec
         self._problem_adapter: Any | None = None
-        self._strict_case_paths = (
-            bool(require_metric_specs)
-            if strict_case_paths is None
-            else bool(strict_case_paths)
-        )
+        self._strict_case_paths = True
         self._progress_callback: Optional[Callable[..., None]] = None
-        self._champion_result_cache_enabled = champion_result_cache_enabled
-        self._champion_result_cache = (
-            ChampionResultCache(
-                champion_result_cache_dir
-                or os.path.join(metrics_dir, "champion_result_cache")
-            )
-            if champion_result_cache_enabled
-            else None
-        )
         if not _has_metric_specs(self._metric_specs):
-            if self._require_metric_specs:
-                raise ValueError("metric_specs are required for production ExperimentProtocol")
-            if _requires_declared_objective_semantics(problem_spec):
-                if allow_legacy_objective_fallback is not True:
-                    raise ValueError(
-                        "metric_specs are required for adapter-backed or problem-v1 "
-                        "ExperimentProtocol unless allow_legacy_objective_fallback=True"
-                    )
-            elif allow_legacy_objective_fallback is False:
-                raise ValueError(
-                    "metric_specs are required unless allow_legacy_objective_fallback=True"
-                )
-            self._metric_specs = None
-            logger.warning(
-                "ExperimentProtocol initialized without metric_specs; using legacy "
-                "objective fallback"
-            )
+            raise ValueError("metric_specs are required for ExperimentProtocol")
         os.makedirs(metrics_dir, exist_ok=True)
 
     def set_problem_adapter(self, adapter: Any | None) -> None:
@@ -125,80 +83,37 @@ class ExperimentProtocol:
         champion_objective: dict,
     ) -> tuple:
         """Return (comparison_str, ObjectiveComparison)."""
-        if self._metric_specs is not None:
-            if getattr(self._objective_policy, "mode", None) == "weighted_sum":
-                from scion.problem.objectives import compare_weighted_sum
-                result = compare_weighted_sum(
-                    self._metric_specs, candidate_objective, champion_objective,
-                )
-            else:
-                from scion.problem.objectives import compare_lexicographic
-                result = compare_lexicographic(
-                    self._metric_specs, candidate_objective, champion_objective,
-                )
-            return result.outcome, result
-        if self._require_metric_specs:
-            raise RuntimeError("metric_specs are required for objective comparison")
-        # Legacy compatibility path: build an ObjectiveComparison from generic
-        # lexicographic-minimize fallback semantics.
-        from scion.problem.objectives import ObjectiveComparison, MetricComparison
-        metric_order = metric_order_from_objectives(candidate_objective, champion_objective)
-        cmp = lexicographic_compare(
-            candidate_objective,
-            champion_objective,
-            metric_order=metric_order,
-        )
-        metrics = []
-        decisive_seen = False
-        for name in metric_order:
-            cv = candidate_objective.get(name, 0)
-            hv = champion_objective.get(name, 0)
-            sd = float(hv) - float(cv)
-            decisive = (not decisive_seen) and cv != hv
-            decisive_seen = decisive_seen or decisive
-            metrics.append(MetricComparison(
-                name=name, candidate_value=cv, champion_value=hv,
-                signed_delta=sd, relation="candidate" if sd > 0 else ("champion" if sd < 0 else "tie"),
-                decisive=decisive,
-            ))
-        decisive_metric = next((m.name for m in metrics if m.decisive), None)
-        result = ObjectiveComparison(
-            outcome=cmp,
-            decisive_metric=decisive_metric,
-            scalar_delta=compute_delta(
-                candidate_objective,
-                champion_objective,
-                metric_order=metric_order,
-            ),
-            metrics=tuple(metrics),
-        )
-        return cmp, result
+        if getattr(self._objective_policy, "mode", None) == "weighted_sum":
+            from scion.problem.objectives import compare_weighted_sum
+            result = compare_weighted_sum(
+                self._metric_specs, candidate_objective, champion_objective,
+            )
+        else:
+            from scion.problem.objectives import compare_lexicographic
+            result = compare_lexicographic(
+                self._metric_specs, candidate_objective, champion_objective,
+            )
+        return result.outcome, result
 
     def _compute_delta(
         self,
         candidate_objective: dict,
         champion_objective: dict,
     ) -> float:
-        if self._metric_specs is not None:
-            if getattr(self._objective_policy, "mode", None) == "weighted_sum":
-                from scion.problem.objectives import compare_weighted_sum
-                result = compare_weighted_sum(
-                    self._metric_specs, candidate_objective, champion_objective,
-                )
-            else:
-                from scion.problem.objectives import compare_lexicographic
-                result = compare_lexicographic(
-                    self._metric_specs, candidate_objective, champion_objective,
-                )
-            return result.scalar_delta
-        if self._require_metric_specs:
-            raise RuntimeError("metric_specs are required for objective delta")
-        return compute_delta(candidate_objective, champion_objective)
+        if getattr(self._objective_policy, "mode", None) == "weighted_sum":
+            from scion.problem.objectives import compare_weighted_sum
+            result = compare_weighted_sum(
+                self._metric_specs, candidate_objective, champion_objective,
+            )
+        else:
+            from scion.problem.objectives import compare_lexicographic
+            result = compare_lexicographic(
+                self._metric_specs, candidate_objective, champion_objective,
+            )
+        return result.scalar_delta
 
     @property
     def objective_semantics(self) -> str:
-        if self._metric_specs is None:
-            return "legacy_all_minimize"
         mode = getattr(self._objective_policy, "mode", None) or "lexicographic"
         return f"declared_objectives_{mode}"
 
@@ -376,14 +291,3 @@ def _hydrate_objective_policy(problem_spec: Any | None) -> Any | None:
         return policy
     spec_v1 = getattr(problem_spec, "spec_v1", None)
     return getattr(spec_v1, "objective_policy", None)
-
-
-def _requires_declared_objective_semantics(problem_spec: Any | None) -> bool:
-    if problem_spec is None:
-        return False
-    if getattr(problem_spec, "spec_version", None) == "problem-v1":
-        return True
-    spec_v1 = getattr(problem_spec, "spec_v1", None)
-    if getattr(spec_v1, "spec_version", None) == "problem-v1":
-        return True
-    return bool(getattr(problem_spec, "requires_adapter_for_runtime", False))

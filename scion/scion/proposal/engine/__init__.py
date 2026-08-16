@@ -6,7 +6,6 @@ from .code_prompts import _split_code_context
 from .exceptions import ProposalValidationError
 from .facade import (
     CreativeLayer,
-    ProviderCallDiagnostics,
     PromptTurnSnapshot,
     build_prompt_turn_snapshot,
 )
@@ -14,12 +13,10 @@ from .hypothesis_prompts import (
     _split_direct_v3_hypothesis_context,
     _split_hypothesis_context,
 )
-from .parsing import _parse_hypothesis, _parse_patch, _to_float_or_none
-from .provider_call import provider_call_diagnostics_from_error
+from .parsing import _parse_hypothesis, _parse_patch
 
 __all__ = [
     "CreativeLayer",
-    "ProviderCallDiagnostics",
     "PromptTurnSnapshot",
     "ProposalValidationError",
     "_parse_hypothesis",
@@ -27,7 +24,5 @@ __all__ = [
     "_split_code_context",
     "_split_direct_v3_hypothesis_context",
     "_split_hypothesis_context",
-    "_to_float_or_none",
     "build_prompt_turn_snapshot",
-    "provider_call_diagnostics_from_error",
 ]

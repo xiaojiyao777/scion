@@ -117,18 +117,14 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Campaign Manager                         │
-│  (Branch lifecycle, round scheduling, budget control)       │
+│  (direct values, round scheduling, budget control)          │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  Creative Layer    Contract Gate    Verification Gate       │
-│  (LLM, tainted) ──> (C1-C10,     ──> (V3-V8,         ──>  │
-│                      static)          dynamic)              │
-│                                                             │
-│  Experiment Protocol (Screening → Validation → Frozen)      │
-│  Decision Layer (Oracle, numerical features only)           │
-│  Weight Optimization (on promote, 25 evals)    ← v0.2 新增  │
+│  Hypothesis → H Contract → Code → Patch Contract          │
+│       → CandidateWorkspace → Verification                    │
+│       → Experiment Protocol → Safe Features → Decision    │
 ├─────────────────────────────────────────────────────────────┤
-│  Lineage (SQLite) │ Runtime (subprocess) │ Config (Pydantic)│
+│ Scientific events │ Local subprocesses │ Problem runtime │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -171,21 +167,19 @@ CVRP baseline 报告：
 
 ## ⚙️ Scion Framework
 
-`scion/` 是核心框架实现，包含 campaign lifecycle、protocol gates、objective policy、lineage、runtime isolation、LLM context 和 parameter search。
+`scion/` 是核心框架实现，当前 v0.4 仅保留 V3 直接研究路径、科学协议、最小事件记录和本地子进程隔离。
 
 | 模块 | 职责 |
 |------|------|
-| `core/` | Campaign 主循环、Branch 状态机、Decision Engine、Scheduler、Termination |
+| `core/` | Campaign 直接流、WorkspaceService、Scheduler、Safe Features、Decision、typed outcome |
 | `config/` | ProblemSpec、ProtocolConfig、SplitManifest、SeedLedger（Pydantic v2） |
-| `contract/` | ContractGate — C1-C10 静态检查（语法、接口、import 白名单、novelty） |
+| `contract/` | Hypothesis/Patch Contract 的静态安全边界 |
 | `verification/` | VerificationGate — V3-V8 动态校验（feasibility、objective、state mutation、nondeterminism） |
 | `protocol/` | ExperimentProtocol — 三级实验、Case-level 统计、Bootstrap CI |
-| `proposal/` | LLMClient、CreativeLayer、ContextManager、SearchMemory、SaturationSignal |
-| `parameter/` | WeightOptimizer、Evaluator — 算子权重优化（v0.2 新增） |
-| `runtime/` | SubprocessRunner（隔离执行）、WorkspaceMaterializer、PoolManager |
-| `failure/` | FailureRouter — 四层故障分类 + escalation + infra 检测 |
-| `lineage/` | SQLite Registry、BranchStore、ChampionStore、HypothesisStore |
-| `cli/` | Typer CLI（init / run / inspect / report） |
+| `proposal/` | LLMClient、CreativeLayer、ContextManager 与普通 H/C 值 |
+| `runtime/` | LocalSubprocessRunner、WorkspaceMaterializer、PoolManager |
+| `lineage/` | 最小 append-only SQLite 科学事件 |
+| `cli/` | Typer CLI（run / inspect / report） |
 
 > 📖 当前文档索引：[`scion/docs/README.md`](scion/docs/README.md)
 

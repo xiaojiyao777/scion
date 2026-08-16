@@ -1,4 +1,4 @@
-"""Research-surface identity helpers shared by generic Scion core code."""
+"""Research-surface file selectors shared by generic Scion core code."""
 from __future__ import annotations
 
 from collections.abc import Iterable
@@ -7,8 +7,8 @@ from typing import Any
 from scion.core.path_match import normalize_relative_glob_pattern
 
 
-def editable_identity_patterns(problem_spec: Any | None) -> tuple[str, ...]:
-    """Return normalized editable identity patterns for a problem spec.
+def editable_patterns(problem_spec: Any | None) -> tuple[str, ...]:
+    """Return normalized editable file patterns for a problem spec.
 
     Surface declarations are the preferred source of truth.  Older specs that
     do not declare research surfaces fall back to ``search_space.editable``.
@@ -19,15 +19,15 @@ def editable_identity_patterns(problem_spec: Any | None) -> tuple[str, ...]:
         patterns = list(_field(search_space, "editable", []) or [])
         if not patterns:
             patterns = list(_field(problem_spec, "search_space_editable", []) or [])
-    return normalize_editable_identity_patterns(patterns)
+    return normalize_editable_patterns(patterns)
 
 
-def normalize_editable_identity_patterns(patterns: Iterable[Any]) -> tuple[str, ...]:
-    """Normalize and deduplicate editable identity glob patterns."""
+def normalize_editable_patterns(patterns: Iterable[Any]) -> tuple[str, ...]:
+    """Normalize and deduplicate editable glob patterns."""
     normalized: list[str] = []
     seen: set[str] = set()
     for pattern in patterns:
-        value = _normalize_identity_pattern(pattern)
+        value = _normalize_editable_pattern(pattern)
         if value in seen:
             continue
         normalized.append(value)
@@ -46,7 +46,7 @@ def _research_surface_target_patterns(problem_spec: Any | None) -> Iterable[Any]
         yield from (_field(surface, "target_files", []) or [])
 
 
-def _normalize_identity_pattern(pattern: Any) -> str:
+def _normalize_editable_pattern(pattern: Any) -> str:
     if not isinstance(pattern, str):
         pattern = str(pattern)
     if (

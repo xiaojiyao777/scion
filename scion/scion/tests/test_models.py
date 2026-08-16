@@ -1,16 +1,9 @@
 import pytest
-import uuid
-import re
 import dataclasses
 
-from scion.core.decision_features_serialization import decision_features_to_payload
 from scion.core.models import (
-    Branch,
-    Decision,
     DecisionFeatures,
-    DecisionOutcome,
     BranchState,
-    HypothesisProposal,
 )
 
 DECISION_FEATURES_REPORT_METADATA_DENYLIST = {
@@ -59,7 +52,6 @@ DECISION_FEATURES_REPORT_METADATA_DENYLIST = {
 def test_decision_features_immutability():
     """验证 DecisionFeatures 是 frozen 的。"""
     features = DecisionFeatures(
-        branch_id=str(uuid.uuid4()),
         hypothesis_action="modify",
         stage="screening",
         contract_passed=True,
@@ -80,7 +72,6 @@ def test_decision_features_no_free_text_guard():
     """验证 DecisionFeatures 的字段符合无自由文本的约束（通过简单的类型检查实现 MVP）。"""
     # 允许的字段列表及对应的合法类型
     allowed_fields = {
-        "branch_id": str,
         "hypothesis_action": str, # Literal
         "stage": str,             # Literal
         "contract_passed": bool,
@@ -117,9 +108,8 @@ def test_decision_features_no_free_text_guard():
         # 注意：这里只是静态定义检查，真正的运行时 guard 在 SafeFeatureExtractor 实现
 
 
-def test_decision_features_serialization_excludes_measurement_diagnostics():
+def test_decision_features_exclude_measurement_diagnostics():
     features = DecisionFeatures(
-        branch_id=str(uuid.uuid4()),
         hypothesis_action="modify",
         stage="screening",
         contract_passed=True,
@@ -134,7 +124,7 @@ def test_decision_features_serialization_excludes_measurement_diagnostics():
         recent_failure_codes=(),
     )
 
-    payload = decision_features_to_payload(features)
+    payload = dataclasses.asdict(features)
     serialized_keys = set(_walk_mapping_keys(payload))
     denied_keys = DECISION_FEATURES_REPORT_METADATA_DENYLIST | {"BKS", "bks"}
 

@@ -7,7 +7,7 @@ import random
 import statistics
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from typing import Any, Iterable, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence
 
 _CALIBRATION_RUNNER_TIMEOUT_GRACE_SEC = 15
 _RUNTIME_BUDGET_HIT_RATIO = 0.98
@@ -196,7 +196,6 @@ def estimate_combined_case_rule_null(
         "null_pass_rate_wilson_upper_95": round(
             _wilson_upper_95(null_passes, n_permutations), 6
         ),
-        "decision_features_excluded": True,
     }
 
 
@@ -324,12 +323,10 @@ def build_aa_noise_floor_payload(
             "selected_surface": selected_surface,
             "runtime_policy": runtime_policy_payload,
             "safe_data_roots": safe_data_roots_payload,
-            "decision_features_excluded": True,
         },
         "pair_evidence": [_pair_record_payload(record) for record in records],
         "per_case": summarize_aa_records(records),
         "protocol_power": power,
-        "decision_features_excluded": True,
         "policy": "problem_owned_measurement_diagnostic",
     }
     if combined_case_rule is not None:
@@ -489,8 +486,6 @@ def _bootstrap_pass_rate(
         sample = [records[rng.randrange(n)] for _ in range(n)]
         deltas = [record.delta + injected_effect for record in sample]
         wins = sum(1 for value in deltas if value > 0)
-        losses = sum(1 for value in deltas if value < 0)
-        ties = n - wins - losses
         win_rate = wins / n if n else 0.0
         median_delta = statistics.median(deltas) if deltas else 0.0
         if win_rate >= win_rate_min and median_delta >= practical_delta:

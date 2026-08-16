@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-from typing import Any, Callable, Optional, Protocol
+from typing import Any, Optional, Protocol
 
 from scion.core.canary_failure import (
     canary_configuration_error,
@@ -11,15 +11,12 @@ from scion.core.canary_failure import (
 )
 from scion.core.features import SafeFeatureExtractor
 from scion.core.models import (
-    Branch,
     BranchState,
     CanaryResult,
-    ContractResult,
     DecisionFeatures,
     ExperimentStage,
     PatchProposal,
     ProtocolResult,
-    VerificationResult,
 )
 from scion.core.runtime_budget_diagnostics import (
     format_runtime_budget_diagnostic,
@@ -29,7 +26,6 @@ from scion.core.runtime_budget_diagnostics import (
 
 @dataclass(frozen=True)
 class EvaluationRequest:
-    branch_id: str
     branch_state: BranchState
     candidate_workspace: str
     champion_workspace: str
@@ -41,17 +37,15 @@ class EvaluationRequest:
     screening_expand_count: int = 0
     validation_expand_count: int = 0
     failure_codes: tuple[str, ...] = ()
-    force_fresh_champion: bool = False
+    contract_passed: bool = True
+    verification_passed: bool = True
 
 
 @dataclass(frozen=True)
 class EvaluationOutcome:
     protocol_result: ProtocolResult | None
     decision_features: DecisionFeatures
-    verification_detail: str | None
     raw_metrics_ref: str | None
-    contract_result: ContractResult
-    verification_result: VerificationResult
     canary_result: CanaryResult
 
 
@@ -78,8 +72,6 @@ class ExperimentProtocolLike(Protocol):
         ...
 
 
-ContractEvaluator = Callable[[EvaluationRequest], ContractResult]
-VerificationEvaluator = Callable[[EvaluationRequest], VerificationResult]
 class EvaluationPipeline:
     """Service shell for evaluation-stage orchestration.
 
@@ -92,77 +84,49 @@ class EvaluationPipeline:
     def __init__(
         self,
         *,
-        contract_evaluator: ContractEvaluator | None = None,
-        verification_evaluator: VerificationEvaluator | None = None,
-        experiment_protocol: ExperimentProtocolLike | None = None,
-        require_experiment_protocol: bool = False,
+        experiment_protocol: ExperimentProtocolLike,
         feature_extractor: SafeFeatureExtractor | None = None,
     ) -> None:
-        self._contract_evaluator = contract_evaluator or _default_contract_evaluator
-        self._verification_evaluator = verification_evaluator or _default_verification_evaluator
         self._experiment_protocol = experiment_protocol
-        self._require_experiment_protocol = require_experiment_protocol
         self._feature_extractor = feature_extractor or SafeFeatureExtractor()
 
     def evaluate(self, request: EvaluationRequest) -> EvaluationOutcome:
-        branch = _request_to_branch(request)
-
-        contract_result = self._contract_evaluator(request)
-        verification_result = _passed_verification()
         canary_result = CanaryResult(passed=True, reason="not run")
         protocol_result: ProtocolResult | None = None
 
-        if contract_result.passed:
-            verification_result = self._verification_evaluator(request)
+        if request.contract_passed and request.verification_passed:
+            try:
+                canary_result = _run_protocol_canary(
+                    self._experiment_protocol,
+                    request.candidate_workspace,
+                    request.champion_workspace,
+                    selected_surface=request.selected_surface,
+                )
+            except (ValueError, NotImplementedError) as exc:
+                canary_result = canary_configuration_error(exc)
+            canary_result = normalize_canary_result(canary_result)
 
-        if contract_result.passed and verification_result.passed:
-            if self._experiment_protocol is not None:
-                try:
-                    canary_result = _run_protocol_canary(
-                        self._experiment_protocol,
-                        request.candidate_workspace,
-                        request.champion_workspace,
-                        selected_surface=request.selected_surface,
-                    )
-                except (ValueError, NotImplementedError) as exc:
-                    canary_result = canary_configuration_error(exc)
-                canary_result = normalize_canary_result(canary_result)
-
-                if canary_result.passed:
-                    protocol_result = _run_protocol_experiment(
-                        self._experiment_protocol,
-                        stage=_stage_for_state(request.branch_state),
-                        candidate_ws=request.candidate_workspace,
-                        champion_ws=request.champion_workspace,
-                        hypothesis_action=request.hypothesis_action,
-                        expand=request.expand,
-                        expand_round=request.expand_round,
-                        selected_surface=request.selected_surface,
-                        force_fresh_champion=request.force_fresh_champion,
-                    )
-                    protocol_result = _sanitize_protocol_exposure(protocol_result)
-            else:
-                if self._require_experiment_protocol:
-                    canary_result = normalize_canary_result(
-                        CanaryResult(
-                            passed=False,
-                            reason=(
-                                "experiment_protocol is required for production "
-                                "campaign; skeleton fallback disabled"
-                            ),
-                        )
-                    )
-                else:
-                    canary_result = CanaryResult(
-                        passed=True,
-                        reason="no protocol - auto-pass",
-                    )
+            if canary_result.passed:
+                protocol_result = _run_protocol_experiment(
+                    self._experiment_protocol,
+                    stage=_stage_for_state(request.branch_state),
+                    candidate_ws=request.candidate_workspace,
+                    champion_ws=request.champion_workspace,
+                    hypothesis_action=request.hypothesis_action,
+                    expand=request.expand,
+                    expand_round=request.expand_round,
+                    selected_surface=request.selected_surface,
+                )
+                protocol_result = _sanitize_protocol_exposure(protocol_result)
 
         features = self._feature_extractor.extract(
-            branch=branch,
+            branch_state=request.branch_state,
+            screening_expand_count=request.screening_expand_count,
+            validation_expand_count=request.validation_expand_count,
+            failure_codes=request.failure_codes,
             hypothesis_action=request.hypothesis_action,
-            contract=contract_result,
-            verification=verification_result,
+            contract=request.contract_passed,
+            verification=request.verification_passed,
             canary=canary_result,
             protocol=protocol_result,
         )
@@ -170,26 +134,9 @@ class EvaluationPipeline:
         return EvaluationOutcome(
             protocol_result=protocol_result,
             decision_features=features,
-            verification_detail=_build_verification_detail(verification_result),
             raw_metrics_ref=protocol_result.raw_metrics_ref if protocol_result else None,
-            contract_result=contract_result,
-            verification_result=verification_result,
             canary_result=canary_result,
         )
-
-
-def _request_to_branch(request: EvaluationRequest) -> Branch:
-    branch = Branch(
-        branch_id=request.branch_id,
-        state=request.branch_state,
-        base_champion_id=0,
-        base_champion_hash="",
-        screening_expand_count=request.screening_expand_count,
-        validation_expand_count=request.validation_expand_count,
-    )
-    branch.failure_codes = list(request.failure_codes)
-    return branch
-
 
 def _stage_for_state(state: BranchState) -> ExperimentStage:
     if state in (BranchState.VALIDATING, BranchState.VALIDATING_EXPAND):
@@ -220,9 +167,6 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         f"{_fmt_category_counts(result.candidate_runtime_failure_categories)} "
         f"candidate_operator_attempts={result.candidate_operator_attempts} "
         f"candidate_operator_accepted={result.candidate_operator_accepted}"
-        f" champion_cache_hits={result.champion_cache_hits}"
-        f" champion_cache_misses={result.champion_cache_misses}"
-        f" champion_cached_runtime_pairs={result.champion_cached_runtime_pairs}"
         f" runtime_confidence={result.runtime_confidence}"
         f"{runtime_budget_suffix}"
     )
@@ -256,35 +200,13 @@ def _run_protocol_experiment(
     **kwargs: object,
 ) -> ProtocolResult:
     selected_surface = kwargs.pop("selected_surface", None)
-    force_fresh_champion = bool(kwargs.pop("force_fresh_champion", False))
     if _should_forward_selected_surface(
         protocol,
         "run_experiment",
         selected_surface,
     ):
         kwargs["selected_surface"] = selected_surface
-    if force_fresh_champion:
-        return _run_with_fresh_champion_policy(protocol, kwargs)
     return protocol.run_experiment(**kwargs)
-
-
-def _run_with_fresh_champion_policy(
-    protocol: ExperimentProtocolLike,
-    kwargs: dict[str, object],
-) -> ProtocolResult:
-    config = getattr(protocol, "config", None)
-    runtime = getattr(config, "runtime", None)
-    if runtime is None or not hasattr(runtime, "champion_runtime_policy"):
-        return protocol.run_experiment(**kwargs)
-    previous = getattr(runtime, "champion_runtime_policy")
-    try:
-        setattr(runtime, "champion_runtime_policy", "fresh_always")
-        return protocol.run_experiment(**kwargs)
-    finally:
-        try:
-            setattr(runtime, "champion_runtime_policy", previous)
-        except Exception:
-            pass
 
 
 def _should_forward_selected_surface(
@@ -331,10 +253,6 @@ def _get_field(obj: Any, name: str) -> Any:
     return getattr(obj, name, None)
 
 
-def _default_contract_evaluator(request: EvaluationRequest) -> ContractResult:
-    return ContractResult(passed=True, checks=())
-
-
 def _fmt_optional(value: float | None) -> str:
     if value is None:
         return "NA"
@@ -349,26 +267,3 @@ def _fmt_category_counts(categories: dict[str, int]) -> str:
         for key, value in sorted(categories.items())
         if value > 0
     ) or "none"
-
-
-def _default_verification_evaluator(request: EvaluationRequest) -> VerificationResult:
-    return _passed_verification()
-
-
-def _passed_verification() -> VerificationResult:
-    return VerificationResult(passed=True, checks=())
-
-
-def _build_verification_detail(vresult: VerificationResult) -> Optional[str]:
-    if not vresult or vresult.passed:
-        return None
-    failed = [c for c in vresult.checks if not c.passed]
-    if not failed:
-        return vresult.first_failure
-    lines = [
-        f"severity={vresult.failure_severity or 'unknown'}  "
-        f"first_failure={vresult.first_failure or 'N/A'}"
-    ]
-    for check in failed:
-        lines.append(f"  [{check.name}] ({check.severity}) {check.detail}")
-    return "\n".join(lines)

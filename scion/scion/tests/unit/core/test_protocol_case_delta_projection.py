@@ -53,10 +53,7 @@ def test_protocol_case_level_deltas_projects_public_metric_pairs(
     )
 
     projection = protocol_case_level_deltas(
-        {
-            "raw_metrics_public_ref": "metrics/screening.json",
-            "raw_metrics_ref": "/private/internal.json",
-        },
+        {"raw_metrics_ref": "metrics/screening.json"},
         campaign_path=campaign,
     )
 
@@ -96,7 +93,7 @@ def test_protocol_case_level_deltas_ignores_private_or_unsafe_refs(
     )
     assert (
         protocol_case_level_deltas(
-            {"raw_metrics_public_ref": "../outside.json"},
+            {"raw_metrics_ref": "../outside.json"},
             campaign_path=campaign,
         )
         == {}

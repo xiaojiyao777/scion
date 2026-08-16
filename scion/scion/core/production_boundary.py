@@ -2,29 +2,32 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
-from scion.core.problem_identity import problem_id_anchor
-from scion.verification.requirements import requires_adapter_for_runtime
+from scion.core.problem_reference import problem_reference
 
 
-def is_adapter_backed_production_spec(problem_spec: Any | None) -> bool:
-    """Return whether *problem_spec* requires production adapter semantics."""
+def validate_fresh_campaign_output(
+    campaign_dir: str | Path,
+) -> None:
+    """Reject any output value from a prior campaign invocation."""
 
-    return requires_adapter_for_runtime(problem_spec)
-
-
-def is_adapter_backed_production_campaign(
-    *,
-    problem_spec: Any | None,
-    adapter: Any | None,
-    allow_skeleton: bool = False,
-) -> bool:
-    """Return whether a campaign must use production adapter boundaries."""
-
-    if allow_skeleton:
-        return False
-    return adapter is not None or is_adapter_backed_production_spec(problem_spec)
+    path = Path(campaign_dir)
+    if not path.exists():
+        return
+    if not path.is_dir():
+        raise ValueError(f"campaign output is not a directory: {path}")
+    unexpected = sorted(entry.name for entry in path.iterdir())
+    if not unexpected:
+        return
+    names = ", ".join(unexpected[:8])
+    if len(unexpected) > 8:
+        names += f", ... ({len(unexpected)} entries)"
+    raise ValueError(
+        "campaign output must be fresh; choose a new directory "
+        f"(found: {names})"
+    )
 
 
 def validate_production_campaign_boundary(
@@ -35,22 +38,8 @@ def validate_production_campaign_boundary(
     split_manifest: Any | None,
     seed_ledger: Any | None,
     verification_gate: Any | None = None,
-    allow_skeleton: bool = False,
 ) -> None:
-    """Fail closed before running adapter-backed production campaigns.
-
-    Legacy skeleton/demo callers can opt into the old fallback path with
-    ``allow_skeleton=True``. Without that explicit opt-in, ProblemSpecV1 and
-    specs declaring adapter-backed runtime must have the protocol evidence
-    needed by the campaign loop.
-    """
-
-    if not is_adapter_backed_production_campaign(
-        problem_spec=problem_spec,
-        adapter=adapter,
-        allow_skeleton=allow_skeleton,
-    ):
-        return
+    """Fail closed unless the complete direct-V3 campaign boundary exists."""
 
     errors = production_boundary_errors(
         problem_spec=problem_spec,
@@ -97,9 +86,7 @@ def production_boundary_errors(
             errors.append("metric_specs are required")
         else:
             errors.extend(_metric_spec_shape_errors(protocol_metrics))
-            errors.extend(_metric_spec_identity_errors(problem_spec, protocol_metrics))
-        if _attr(experiment_protocol, "_require_metric_specs", True) is False:
-            errors.append("ExperimentProtocol must require metric_specs")
+            errors.extend(_metric_spec_consistency_errors(problem_spec, protocol_metrics))
         protocol_problem_spec = _attr(experiment_protocol, "_problem_spec", None)
         errors.extend(
             _problem_spec_match_errors(
@@ -146,7 +133,7 @@ def _adapter_spec_errors(
     adapter_spec = _visible_adapter_spec(adapter)
     if adapter_spec is None:
         return ("adapter.spec is required",)
-    return _adapter_identity_compatibility_errors(problem_spec, adapter_spec)
+    return _adapter_problem_compatibility_errors(problem_spec, adapter_spec)
 
 
 def _problem_spec_match_errors(
@@ -160,8 +147,8 @@ def _problem_spec_match_errors(
         if require_candidate:
             return (f"{label} is required",)
         return ()
-    campaign_id = _problem_identity(campaign_spec)
-    candidate_id = _problem_identity(candidate_spec)
+    campaign_id = _problem_reference(campaign_spec)
+    candidate_id = _problem_reference(candidate_spec)
     errors: list[str] = []
     if (
         campaign_id is not None
@@ -169,28 +156,28 @@ def _problem_spec_match_errors(
         and campaign_id != candidate_id
     ):
         errors.append(
-            f"{label} must match campaign problem_spec identity "
+            f"{label} must match campaign problem "
             f"{campaign_id!r}; got {candidate_id!r}"
         )
     return tuple(errors)
 
 
-def _adapter_identity_compatibility_errors(
+def _adapter_problem_compatibility_errors(
     campaign_spec: Any | None,
     adapter_spec: Any | None,
 ) -> tuple[str, ...]:
-    """Validate adapter-visible problem identity without requiring full hash parity."""
+    """Validate that the adapter and campaign name the same problem."""
 
-    campaign_id = _problem_identity(campaign_spec)
-    adapter_id = _problem_identity(adapter_spec)
+    campaign_id = _problem_reference(campaign_spec)
+    adapter_id = _problem_reference(adapter_spec)
     errors: list[str] = []
     if campaign_id is None:
-        errors.append("campaign problem_spec identity is required")
+        errors.append("campaign problem reference is required")
     if adapter_id is None:
-        errors.append("adapter.spec identity is required")
+        errors.append("adapter.spec problem reference is required")
     elif campaign_id is not None and adapter_id != campaign_id:
         errors.append(
-            "adapter.spec must match campaign problem_spec identity "
+            "adapter.spec must match campaign problem "
             f"{campaign_id!r}; got {adapter_id!r}"
         )
 
@@ -218,7 +205,7 @@ def _adapter_identity_compatibility_errors(
     return tuple(errors)
 
 
-def _metric_spec_identity_errors(
+def _metric_spec_consistency_errors(
     problem_spec: Any | None,
     metric_specs: tuple[Any, ...],
 ) -> tuple[str, ...]:
@@ -304,10 +291,10 @@ def _visible_adapter_spec(adapter: Any) -> Any | None:
     return spec
 
 
-def _problem_identity(problem_spec: Any | None) -> str | None:
+def _problem_reference(problem_spec: Any | None) -> str | None:
     if problem_spec is None:
         return None
-    return problem_id_anchor(problem_spec)
+    return problem_reference(problem_spec)
 
 
 def _non_empty_sequence(value: Any) -> bool:
@@ -326,8 +313,6 @@ def _attr(obj: Any, name: str, default: Any = None) -> Any:
 
 
 __all__ = [
-    "is_adapter_backed_production_campaign",
-    "is_adapter_backed_production_spec",
     "production_boundary_errors",
     "validate_production_campaign_boundary",
 ]

@@ -26,8 +26,6 @@ def test_cvrp_adapter_renders_current_measurement_and_attribution() -> None:
     payload = adapter.render_problem_measurement_diagnostics()
 
     assert payload["schema_version"] == "scion.cvrp_measurement_guidance.v3"
-    assert payload["proposal_visibility_only"] is True
-    assert payload["decision_features_excluded"] is True
     assert payload["measurement_context"]["metric"] == "total_distance"
     assert payload["measurement_context"]["objective"] == "minimize"
     assert payload["measurement_context"]["screening_mde_at_power_80"] is None
@@ -101,23 +99,11 @@ def test_adapter_projection_redacts_raw_or_hidden_measurement_rows() -> None:
         def render_problem_measurement_diagnostics(self) -> dict[str, object]:
             return {
                 "schema_version": "test.measurement.v1",
-                "proposal_visibility_only": True,
-                "decision_features_excluded": True,
-                "proposal_visible_fields": [
-                    "safe_note",
-                    "operator_telemetry",
-                    "raw_pair_rows",
-                    "validation_case_details",
-                    "frozen_case_details",
-                    "holdout_rows",
-                    "bks_gap_details",
-                    "llm_text",
-                ],
                 "safe_note": "keep",
                 "operator_telemetry": {
                     "mechanism_activation": "keep structured diagnostic"
                 },
-                "unlisted_note": "must stay hidden",
+                "unlisted_note": "keep ordinary provider content",
                 "raw_pair_rows": [{"case": "hidden"}],
                 "pair_evidence": [{"case": "hidden"}],
                 "validation_case_details": "hidden",
@@ -136,8 +122,8 @@ def test_adapter_projection_redacts_raw_or_hidden_measurement_rows() -> None:
     assert "operator_telemetry" in rendered
     assert "mechanism_activation" in rendered
     assert "keep structured diagnostic" in rendered
-    assert "unlisted_note" not in rendered
-    assert "must stay hidden" not in rendered
+    assert "unlisted_note" in rendered
+    assert "keep ordinary provider content" in rendered
     for forbidden in (
         "raw_pair_rows",
         "pair_evidence",

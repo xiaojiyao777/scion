@@ -21,6 +21,16 @@ def test_cvrp_adapter_rendering_facade_delegates_to_surface_module(
         ) == surface_rendering.render_research_surface_interface(surface_name)
 
 
+def test_cvrp_solver_mechanics_prompts_smallest_causal_edit() -> None:
+    rendered = surface_rendering.render_solver_mechanics()
+
+    assert "smallest complete causal implementation" in rendered
+    assert "preserve unrelated code" in rendered
+    assert (
+        "multiple owner files only when the same mechanism requires them" in rendered
+    )
+
+
 def test_cvrp_adapter_solution_checks_facade_delegates_to_solution_module(
     cvrp_adapter: ProblemAdapter,
 ) -> None:

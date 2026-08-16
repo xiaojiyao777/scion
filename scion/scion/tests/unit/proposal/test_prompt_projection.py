@@ -6,7 +6,7 @@ import json
 import pytest
 
 from scion.proposal import prompt_projection as subject
-from scion.proposal.context_owner_maps import proposal_context_snapshot
+from scion.proposal.context_snapshot import freeze_proposal_context
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
 from scion.tests.unit.editable_source_context_test_support import editable_code_context
 
@@ -59,11 +59,11 @@ def test_project_prompt_is_a_pure_value_projection(
     kind: str,
     context: dict,
 ) -> None:
-    snapshot = proposal_context_snapshot(kind, context)
+    snapshot = freeze_proposal_context(kind, context)
 
     projection = subject.project_prompt(kind, snapshot)
 
-    expected = snapshot.inputs.provider_context(include_renderer_inputs=True)
+    expected = snapshot.provider_context(include_renderer_inputs=True)
     assert projection.structured_context == expected
     assert projection.system_blocks
     assert projection.user_prompt
@@ -149,7 +149,7 @@ def test_code_canonical_block_contains_only_research_core() -> None:
 
 
 def test_project_prompt_rejects_phase_mismatch_and_unknown_kind() -> None:
-    snapshot = proposal_context_snapshot("hypothesis", _hypothesis_context())
+    snapshot = freeze_proposal_context("hypothesis", _hypothesis_context())
 
     with pytest.raises(ValueError, match="requires a code context snapshot"):
         subject.project_prompt("code", snapshot)
@@ -158,7 +158,7 @@ def test_project_prompt_rejects_phase_mismatch_and_unknown_kind() -> None:
 
 
 def test_hypothesis_prompt_requests_material_evidence_grounded_refinement() -> None:
-    snapshot = proposal_context_snapshot("hypothesis", _hypothesis_context())
+    snapshot = freeze_proposal_context("hypothesis", _hypothesis_context())
 
     projection = subject.project_prompt("hypothesis", snapshot)
     system_text = "\n".join(block["text"] for block in projection.system_blocks)

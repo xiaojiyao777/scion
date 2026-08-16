@@ -60,7 +60,7 @@ def project_prompt(
     if snapshot.phase != kind:
         raise ValueError(f"{kind} prompt requires a {kind} context snapshot")
 
-    structured = snapshot.inputs.provider_context(include_renderer_inputs=True)
+    structured = snapshot.provider_context(include_renderer_inputs=True)
     if kind == "hypothesis":
         from scion.proposal.engine.hypothesis_prompts import (
             _split_direct_v3_hypothesis_context,

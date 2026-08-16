@@ -72,7 +72,6 @@ def _write_artifact(
                 "selected_seeds": [11],
                 "replicate_count": 1,
                 "runtime_policy": {"selected_policy": "protocol_time_limits"},
-                "decision_features_excluded": True,
             }
         ),
         encoding="utf-8",
@@ -104,7 +103,6 @@ def test_measurement_consumer_view_reduces_problem_declaration(tmp_path) -> None
     assert view.effect_to_mde_ratio == 0.5
     assert view.calibration_freshness == "fresh"
     assert view.evidence_depth == "full_replay"
-    assert view.decision_features_excluded is True
 
 
 def test_consumer_payload_excludes_raw_problem_and_calibration_fields(tmp_path) -> None:
@@ -210,7 +208,6 @@ def test_reduced_readiness_accepts_consumer_view() -> None:
     assert payload is not None
     assert payload["status"] == "not_ready"
     assert payload["reason_code"] == "missing_measurement"
-    assert payload["decision_features_excluded"] is True
 
 
 def test_decision_features_stay_free_of_measurement_consumer_raw_fields() -> None:

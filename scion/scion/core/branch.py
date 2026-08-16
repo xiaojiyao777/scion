@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from scion.core.models import (
     Branch,
@@ -16,18 +16,6 @@ class StateTransitionError(Exception):
     pass
 
 
-def _infra_resume_state(marker: object) -> BranchState | None:
-    if not isinstance(marker, dict):
-        return None
-    if marker.get("schema_version") != "infra-resume-state.v1":
-        return None
-    try:
-        state = BranchState(str(marker.get("state") or ""))
-    except ValueError:
-        return None
-    return state if state in _ACTIVE_STATES else None
-
-
 _ACTIVE_STATES = frozenset(
     {
         BranchState.EXPLORE,
@@ -39,8 +27,6 @@ _ACTIVE_STATES = frozenset(
         BranchState.FROZEN_TESTING,
     }
 )
-
-_INFRA_RESUME_STATE_KEY = "infra_resume_state"
 
 # Maps (Decision, current_state) → new_state
 # ABANDON is allowed from any state
@@ -57,12 +43,6 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
         BranchState.VALIDATING: BranchState.EXPLORE,
         BranchState.VALIDATING_EXPAND: BranchState.EXPLORE,
         BranchState.FROZEN_TESTING: BranchState.EXPLORE,
-    },
-    Decision.VALIDATION_REPAIR_REQUIRED: {
-        # Historical resume compatibility for already-durable campaigns. The
-        # current direct-v3 Decision mapper cannot produce this transition.
-        BranchState.VALIDATING: BranchState.EXPLORE,
-        BranchState.VALIDATING_EXPAND: BranchState.EXPLORE,
     },
     Decision.EXPAND_SCREENING: {
         BranchState.EXPLORE: BranchState.EXPLORE_EXPAND,
@@ -97,8 +77,6 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
 class BranchController:
     def __init__(self) -> None:
         self._branches: Dict[str, Branch] = {}
-        # Stores previous state for BLOCKED_INFRA recovery
-        self._pre_infra_state: Dict[str, BranchState] = {}
 
     def create_branch(self, champion: ChampionState) -> Branch:
         branch_id = str(uuid.uuid4())
@@ -106,16 +84,10 @@ class BranchController:
             branch_id=branch_id,
             state=BranchState.EXPLORE,
             base_champion_id=champion.version,
-            base_champion_hash=champion.code_snapshot_hash,
-            lineage_id=branch_id,
             weight_revision=champion.weight_revision,
         )
         self._branches[branch_id] = branch
         return branch
-
-    def restore_branch(self, branch: Branch) -> None:
-        """Install a persisted branch into the in-memory scheduling set."""
-        self._branches[branch.branch_id] = branch
 
     def apply_decision(self, branch_id: str, decision: Decision) -> None:
         """Apply a Decision to a branch, performing the appropriate state transition."""
@@ -216,111 +188,29 @@ class BranchController:
         if success:
             branch.state = BranchState.EXPLORE
             branch.base_champion_id = new_champion.version
-            branch.base_champion_hash = new_champion.code_snapshot_hash
             branch.weight_revision = new_champion.weight_revision
         else:
             branch.state = BranchState.ABANDONED
         branch.updated_at = datetime.now()
 
-    def is_blocked(self, branch_id: str) -> bool:
-        """Return True if the branch is in BLOCKED_INFRA state."""
-        return self._get(branch_id).state == BranchState.BLOCKED_INFRA
-
-    def block_infra(self, branch_id: str) -> None:
-        """Transition an active branch to BLOCKED_INFRA, saving prior state."""
-        branch = self._get(branch_id)
-        if branch.state not in _ACTIVE_STATES:
-            raise StateTransitionError(
-                f"Cannot block_infra from state {branch.state.value}"
-            )
-        self._pre_infra_state[branch_id] = branch.state
-        branch.branch_evidence_summary[_INFRA_RESUME_STATE_KEY] = {
-            "schema_version": "infra-resume-state.v1",
-            "state": branch.state.value,
-        }
-        branch.state = BranchState.BLOCKED_INFRA
-        branch.updated_at = datetime.now()
-
-    def resume_infra_after_operator_event(self, branch_id: str) -> None:
-        """Restore BLOCKED_INFRA after its operator event was durably written.
-
-        This is the controller primitive for FailureLifecycleService only; it
-        does not itself authorize or record an operator resume.
-        """
-        branch = self._get(branch_id)
-        if branch.state != BranchState.BLOCKED_INFRA:
-            raise StateTransitionError(f"Branch {branch_id} is not BLOCKED_INFRA")
-        persisted_marker = branch.branch_evidence_summary.get(_INFRA_RESUME_STATE_KEY)
-        persisted_state = _infra_resume_state(persisted_marker)
-        if persisted_marker is not None and persisted_state is None:
-            raise StateTransitionError(
-                f"Branch {branch_id} has invalid persisted infra resume state"
-            )
-        cached_state = self._pre_infra_state.get(branch_id)
-        if (
-            cached_state is not None
-            and persisted_state is not None
-            and cached_state is not persisted_state
-        ):
-            raise StateTransitionError(
-                f"Branch {branch_id} has conflicting infra resume state"
-            )
-        # EXPLORE is retained only for legacy blocked branches created before
-        # the durable resume-state marker existed.
-        prev = cached_state or persisted_state or BranchState.EXPLORE
-        self._pre_infra_state.pop(branch_id, None)
-        branch.branch_evidence_summary.pop(_INFRA_RESUME_STATE_KEY, None)
-        branch.state = prev
-        branch.updated_at = datetime.now()
-
     def get_code_base(self, branch_id: str) -> str:
         """
         Return the code-base identifier for the branch (§4.5):
-        - "champion"          if branch is STALE, or current_code_hash is None,
-                              or last_clean_code_hash is None (never passed verification)
-        - "branch_workspace"  if both hashes are set — caller should reuse the
-                              existing branch workspace rather than copying from champion
+        - "champion"          if branch is STALE or has no accepted branch source
+        - "branch_workspace"  if current_code_hash identifies a verified, accepted
+                              durable branch workspace
         """
         branch = self._get(branch_id)
         if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
             return "champion"
         if branch.current_code_hash is None:
             return "champion"
-        if branch.last_clean_code_hash is None:
-            return "champion"
         return "branch_workspace"
 
-    def record_verification_result(
-        self, branch_id: str, passed: bool, code_hash: str
-    ) -> None:
-        """Record the outcome of a verification run, updating code hashes."""
+    def accept_verified_code(self, branch_id: str, code_hash: str) -> None:
+        """Record one verified candidate after it becomes the durable branch source."""
         branch = self._get(branch_id)
         branch.current_code_hash = code_hash
-        if passed:
-            branch.last_clean_code_hash = code_hash
-            branch.branch_code_status = "clean"
-        branch.updated_at = datetime.now()
-
-    def record_candidate_code(self, branch_id: str, code_hash: str) -> None:
-        """Record that a candidate patch has been applied (before verification).
-
-        Only updates current_code_hash. last_clean_code_hash is NOT updated
-        until verification actually passes (call record_verification_pass).
-        """
-        branch = self._get(branch_id)
-        branch.current_code_hash = code_hash
-        branch.updated_at = datetime.now()
-
-    def record_verification_pass(self, branch_id: str, code_hash: str) -> None:
-        """Record that verification passed for the current candidate code.
-
-        Updates both current_code_hash and last_clean_code_hash. Call this
-        only after VerificationGate.run() returns passed=True.
-        """
-        branch = self._get(branch_id)
-        branch.current_code_hash = code_hash
-        branch.last_clean_code_hash = code_hash
-        branch.branch_code_status = "clean"
         branch.updated_at = datetime.now()
 
     def next_stage(self, branch_id: str) -> ExperimentStage:

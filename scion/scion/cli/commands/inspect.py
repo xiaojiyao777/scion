@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
-
 import typer
 
 from scion.cli.commands.common import get_registry
@@ -14,51 +12,16 @@ from scion.cli.commands.common import get_registry
 def register_inspect_commands(inspect_app: typer.Typer) -> None:
     @inspect_app.command("weights")
     def inspect_weights(
-        campaign_dir: str = typer.Option(
-            "campaign_out",
-            "--campaign-dir",
-            help="Campaign directory",
+        registry: str = typer.Option(
+            ...,
+            "--registry",
+            help="Exact registry.yaml to inspect",
         ),
     ) -> None:
-        """Show current champion operator weights from registry.yaml."""
-        campaign_path = Path(campaign_dir).resolve()
-        state_file = campaign_path / ".scion_state.json"
-        registry_path: Optional[Path] = None
-
-        db_path = campaign_path / "scion.db"
-        if db_path.exists():
-            import sqlite3 as _sqlite3
-
-            try:
-                with _sqlite3.connect(str(db_path)) as conn:
-                    row = conn.execute(
-                        "SELECT code_snapshot_path FROM champions "
-                        "ORDER BY version DESC LIMIT 1"
-                    ).fetchone()
-                    if row and row[0]:
-                        candidate = Path(row[0]) / "registry.yaml"
-                        if candidate.exists():
-                            registry_path = candidate
-            except Exception:
-                pass
-
-        if registry_path is None and state_file.exists():
-            try:
-                state = json.loads(state_file.read_text())
-                problem_yaml = state.get("problem_yaml", "")
-                if problem_yaml:
-                    candidate = Path(problem_yaml).parent / "registry.yaml"
-                    if candidate.exists():
-                        registry_path = candidate
-            except Exception:
-                pass
-
-        if registry_path is None:
-            typer.echo(
-                "ERROR: no registry.yaml found "
-                "(run 'scion init' and ensure registry.yaml exists)",
-                err=True,
-            )
+        """Show operator weights from one explicit registry value."""
+        registry_path = Path(registry).resolve()
+        if not registry_path.is_file():
+            typer.echo(f"ERROR: registry.yaml not found: {registry_path}", err=True)
             raise typer.Exit(code=1)
 
         try:
@@ -86,7 +49,7 @@ def register_inspect_commands(inspect_app: typer.Typer) -> None:
             help="Campaign directory",
         ),
     ) -> None:
-        """Campaign overview: total events, branches, champions, gate stats."""
+        """Campaign overview from ordinary experiment events."""
         registry = get_registry(campaign_dir)
         summary = registry.get_campaign_summary()
 
@@ -120,84 +83,24 @@ def register_inspect_commands(inspect_app: typer.Typer) -> None:
             help="Campaign directory",
         ),
     ) -> None:
-        """Branch details: all experiment events and hypotheses for a branch."""
+        """Branch details and ordinary experiment events for a branch."""
         registry = get_registry(campaign_dir)
-        from scion.lineage.branch_store import BranchStore, HypothesisStore
-
-        branch_store = BranchStore(registry)
-        hyp_store = HypothesisStore(registry)
-
-        branch = branch_store.load(branch_id)
-        if branch is None:
+        events = [
+            event
+            for event in registry.query_by_branch(branch_id)
+            if str(event.get("event_kind") or "experiment") == "experiment"
+        ]
+        if not events:
             typer.echo(
-                f"WARNING: branch {branch_id!r} not found in branches table",
+                f"WARNING: no experiment events for branch {branch_id!r}",
                 err=True,
             )
 
-        events = registry.query_by_branch(branch_id)
-        hypotheses = hyp_store.get_by_branch(branch_id)
-
         output = {
             "branch_id": branch_id,
-            "branch": {
-                "state": branch.state.value if branch else None,
-                "base_champion_id": branch.base_champion_id if branch else None,
-                "created_at": branch.created_at.isoformat() if branch else None,
-            },
             "experiment_events": events,
-            "hypotheses": [
-                {
-                    "hypothesis_id": h.hypothesis_id,
-                    "action": h.action,
-                    "change_locus": h.change_locus,
-                    "target_file": h.target_file,
-                    "status": h.status,
-                    "hypothesis_text": h.hypothesis_text or "",
-                    "created_at": h.created_at.isoformat(),
-                }
-                for h in hypotheses
-            ],
         }
         typer.echo(json.dumps(output, indent=2, default=str))
-
-    @inspect_app.command("hypothesis")
-    def inspect_hypothesis(
-        hyp_id: str = typer.Argument(..., help="Hypothesis ID to inspect"),
-        campaign_dir: str = typer.Option(
-            "campaign_out",
-            "--campaign-dir",
-            help="Campaign directory",
-        ),
-    ) -> None:
-        """Hypothesis details: full record for a single hypothesis."""
-        registry = get_registry(campaign_dir)
-        from scion.lineage.branch_store import HypothesisStore
-
-        store = HypothesisStore(registry)
-        hyp = store.get_one(hyp_id)
-        if hyp is None:
-            typer.echo(f"ERROR: hypothesis {hyp_id!r} not found", err=True)
-            raise typer.Exit(code=1)
-
-        output = {
-            "hypothesis_id": hyp.hypothesis_id,
-            "branch_id": hyp.branch_id,
-            "action": hyp.action,
-            "change_locus": hyp.change_locus,
-            "target_file": hyp.target_file,
-            "status": hyp.status,
-            "hypothesis_text": hyp.hypothesis_text,
-            "suggested_weight": hyp.suggested_weight,
-            "parent_hypothesis_id": hyp.parent_hypothesis_id,
-            "created_at": hyp.created_at.isoformat(),
-        }
-        typer.echo(json.dumps(output, indent=2))
-
-        events = registry.query_by_branch(hyp.branch_id)
-        hyp_events = [e for e in events if e.get("hypothesis_id") == hyp_id]
-        if hyp_events:
-            typer.echo("\nRelated experiment events:")
-            typer.echo(json.dumps(hyp_events, indent=2, default=str))
 
 
 __all__ = ["register_inspect_commands"]

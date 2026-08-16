@@ -43,7 +43,6 @@ class MeasurementReadiness:
     effect_to_mde_ratio: float | None = None
     signal_to_noise_tier: SignalToNoiseTier = "unknown"
     calibration_evidence_level: CalibrationEvidenceLevel = "none"
-    decision_features_excluded: bool = True
     calibration_ref: str = ""
 
     def to_status_payload(self) -> dict[str, Any]:
@@ -60,7 +59,6 @@ class MeasurementReadiness:
             "effect_to_mde_ratio": self.effect_to_mde_ratio,
             "signal_to_noise_tier": self.signal_to_noise_tier,
             "calibration_evidence_level": self.calibration_evidence_level,
-            "decision_features_excluded": self.decision_features_excluded,
         }
 
     def to_diagnostic_payload(self) -> dict[str, Any]:
@@ -224,7 +222,7 @@ def _compatible(
         return False
     if unit and str(artifact.get("measurement_unit") or "") != unit:
         return False
-    return bool(artifact.get("decision_features_excluded") is True)
+    return True
 
 
 def _artifact_summary(artifact: Mapping[str, Any]) -> dict[str, Any]:

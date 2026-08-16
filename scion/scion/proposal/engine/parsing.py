@@ -15,7 +15,6 @@ from scion.proposal.schemas import (
     HypothesisProposalInput,
     PatchSchemaPreflightError,
     PatchProposalInput,
-    normalize_patch_output_with_repair_attribution,
     preflight_patch_exact_replace_shape,
 )
 from scion.proposal.edit_protocol import (
@@ -29,7 +28,6 @@ _PATCH_TOP_LEVEL_FIELDS = frozenset(
         "file_path",
         "action",
         "edit_intent",
-        "source_digest",
         "old_string",
         "new_string",
         "replace_all",
@@ -45,7 +43,6 @@ _PATCH_ADDITIONAL_CHANGE_FIELDS = frozenset(
         "file_path",
         "action",
         "edit_intent",
-        "source_digest",
         "old_string",
         "new_string",
         "replace_all",
@@ -95,19 +92,13 @@ def _parse_patch(
 ) -> PatchProposal:
     """Convert a validated LLM response dict into a PatchProposal."""
     _preflight_patch_output_shape(raw)
-    normalized_raw, repair_attribution = normalize_patch_output_with_repair_attribution(
-        raw
-    )
     try:
-        edit_context = dict(context or {})
-        edit_context.setdefault("reject_legacy_code_content_full_file_modify", True)
-        normalized_raw, edit_attribution = normalize_patch_typed_edits(
-            normalized_raw,
-            context=edit_context,
+        normalized_raw = normalize_patch_typed_edits(
+            raw,
+            context=context,
         )
     except PatchEditProtocolError as exc:
         raise ProposalValidationError(str(exc)) from exc
-    repair_attribution = (*repair_attribution, *edit_attribution)
     try:
         validated = PatchProposalInput(**normalized_raw)
     except ValidationError as exc:
@@ -126,17 +117,7 @@ def _parse_patch(
             )
             for change in validated.additional_changes
         ),
-        repair_attribution=repair_attribution,
     )
-
-
-def _to_float_or_none(v: Any) -> "float | None":
-    if v is None:
-        return None
-    try:
-        return float(v)
-    except (TypeError, ValueError):
-        return None
 
 
 def _preflight_patch_output_shape(raw: Dict[str, Any]) -> None:
@@ -177,9 +158,6 @@ def _unknown_patch_fields_message(
         f"Unsupported patch field(s) at {pointer}: {rendered}. "
         "Do not emit ad hoc edit fields such as old_string2/new_string2. "
         "For extra file edits, put each edit object in additional_changes[]. "
-        "When one existing file needs multiple non-contiguous edits, emit "
-        "multiple ordered exact_replace change objects for the same file_path "
-        "in source order. The host binds, applies, and composes them serially. "
-        "Do not mix same-file exact_replace edits "
-        "with create, delete, or full_file; use one full_file change instead."
+        "Each file_path may appear once; express all changes to that file in "
+        "one explicit typed edit."
     )

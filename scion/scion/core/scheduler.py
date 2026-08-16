@@ -5,29 +5,16 @@ admission.  Research conclusions remain owned by the formal Decision layer.
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Iterable
+from dataclasses import dataclass
 from typing import Any, Literal
 
-from scion.core.execution_outcome import branch_has_execution_hold
 from scion.core.models import Branch, BranchState
 from scion.core.scheduling.active_slots import (
     active_slot_branches as _active_slot_branches,
 )
 from scion.core.scheduling.active_slots import (
-    active_slot_capacity_block_metadata as _active_slot_capacity_block_metadata,
-)
-from scion.core.scheduling.active_slots import (
     active_slot_inventory as _active_slot_inventory,
-)
-from scion.core.scheduling.active_slots import (
-    branch_active_slot_release_reason as _branch_active_slot_release_reason,
-)
-from scion.core.scheduling.active_slots import (
-    branch_counts_toward_active_slots as _branch_counts_toward_active_slots,
-)
-from scion.core.scheduling.active_slots import (
-    branch_scheduling_status as _branch_scheduling_status,
 )
 
 
@@ -37,7 +24,6 @@ class SchedulerAction:
     branch: Branch | None = None
     reason: str = ""
     slot: Literal["existing", "explore_new", "capacity_blocked"] = "existing"
-    audit_metadata: Mapping[str, Any] = field(default_factory=dict)
 
 
 # V3 section 12.1: state priority is lexicographic.  Queued evaluation stages
@@ -78,11 +64,7 @@ class Scheduler:
 
         active = [branch for branch in branches if branch.state not in _TERMINAL_STATES]
         schedulable = [
-            branch
-            for branch in active
-            if branch.state != BranchState.BLOCKED_INFRA
-            and not branch_has_execution_hold(branch)
-            and branch_scheduling_status(branch).schedulable
+            branch for branch in active if branch.state != BranchState.BLOCKED_INFRA
         ]
 
         for tier_index, tier in enumerate(_PRIORITY_TIERS, start=1):
@@ -121,10 +103,6 @@ class Scheduler:
             action="at_capacity",
             reason="active_branch_limit_reached",
             slot="capacity_blocked",
-            audit_metadata=active_slot_capacity_block_metadata(
-                active,
-                max_active_branches=self._max_active_branches,
-            ),
         )
 
 
@@ -137,18 +115,6 @@ def _select_least_recently_served(candidates: list[Branch]) -> Branch:
         candidates,
         key=lambda branch: (branch.updated_at, branch.created_at, branch.branch_id),
     )
-
-
-def branch_counts_toward_active_slots(branch: Branch) -> bool:
-    return _branch_counts_toward_active_slots(branch)
-
-
-def branch_active_slot_release_reason(branch: Branch | None) -> str:
-    return _branch_active_slot_release_reason(branch)
-
-
-def branch_scheduling_status(branch: Branch | None):
-    return _branch_scheduling_status(branch)
 
 
 def active_slot_branches(branches: Iterable[Branch]) -> list[Branch]:
@@ -166,25 +132,10 @@ def active_slot_inventory(
     )
 
 
-def active_slot_capacity_block_metadata(
-    branches: Iterable[Branch],
-    *,
-    max_active_branches: int,
-) -> dict[str, Any]:
-    return _active_slot_capacity_block_metadata(
-        branches,
-        max_active_branches=max_active_branches,
-    )
-
-
 __all__ = [
     "_PRIORITY_TIERS",
     "Scheduler",
     "SchedulerAction",
     "active_slot_branches",
-    "active_slot_capacity_block_metadata",
     "active_slot_inventory",
-    "branch_active_slot_release_reason",
-    "branch_counts_toward_active_slots",
-    "branch_scheduling_status",
 ]

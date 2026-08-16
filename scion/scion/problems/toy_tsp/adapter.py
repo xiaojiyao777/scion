@@ -1,12 +1,9 @@
 """ToyTspAdapter — ProblemAdapter implementation for toy TSP MWE."""
 from __future__ import annotations
 
-import os
-import random
 from typing import Any, Mapping, Sequence
 
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
-from scion.problem.objectives import ObjectiveComparison, compare_lexicographic
 from scion.problem.spec import ProblemSpecV1
 from scion.problems.toy_tsp.models import TspInstance, TspSolution
 from scion.problems.toy_tsp import oracle

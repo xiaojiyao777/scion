@@ -2,38 +2,15 @@
 
 from __future__ import annotations
 
-import hashlib
-from dataclasses import dataclass
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from scion.core.paths import normalize_relative_patch_path
 
 
-@dataclass(frozen=True)
-class SourceRecord:
-    content: str
-
-    @property
-    def digest(self) -> str:
-        return source_digest_for_content(self.content)
-
-
-def source_digest_for_content(content: str) -> str:
-    """Return the canonical per-file source digest for typed edit checks."""
-
-    return hashlib.sha256(str(content).encode("utf-8")).hexdigest()
-
-
 def source_files_from_context(context: Mapping[str, Any] | None) -> dict[str, str]:
-    return {
-        path: record.content
-        for path, record in source_records_from_context(context).items()
-    }
+    """Return the frozen host-visible source text keyed by canonical path."""
 
-
-def source_records_from_context(
-    context: Mapping[str, Any] | None,
-) -> dict[str, SourceRecord]:
     if not context:
         return {}
     source_context = context.get("editable_source_context")
@@ -51,7 +28,7 @@ def source_records_from_context(
     sources = source_context.get("sources")
     if not isinstance(sources, list):
         raise ValueError("editable source context sources must be a list")
-    records: dict[str, SourceRecord] = {}
+    records: dict[str, str] = {}
     seen: set[str] = set()
     for entry in sources:
         if not isinstance(entry, Mapping) or set(entry) != {"path", "content"}:
@@ -64,7 +41,7 @@ def source_records_from_context(
         if content is not None and not isinstance(content, str):
             raise ValueError(f"editable source content must be text or null: {path}")
         if isinstance(content, str):
-            records[path] = SourceRecord(content=content)
+            records[path] = content
     if target not in seen:
         raise ValueError("editable source approved target is missing")
     return records

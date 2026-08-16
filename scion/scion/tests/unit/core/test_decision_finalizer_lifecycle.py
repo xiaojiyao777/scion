@@ -5,37 +5,21 @@ from __future__ import annotations
 import pytest
 
 from scion.core.branch import BranchController
-from scion.core.candidate_evaluation import (
-    candidate_evaluation,
-    mark_candidate_evaluation_pending,
-)
 from scion.core.decision_finalizer import DecisionFinalizer
-from scion.core.decision_lifecycle_actions import (
-    update_branch_screening_evidence_summary,
-)
 from scion.core.models import (
     BranchState,
     CanaryResult,
     ChampionState,
     ContractResult,
     Decision,
-    DecisionFeatures,
     EvalStats,
     ExperimentStage,
     HypothesisProposal,
-    HypothesisRecord,
     PatchProposal,
     ProtocolResult,
     VerificationResult,
 )
-
-
-class _HypothesisStore:
-    def __init__(self) -> None:
-        self.statuses: list[tuple[str, str]] = []
-
-    def mark_status(self, hypothesis_id: str, status: str) -> None:
-        self.statuses.append((hypothesis_id, status))
+from scion.core.workspace_service import CandidateWorkspace
 
 
 def _fixture():
@@ -44,9 +28,7 @@ def _fixture():
         ChampionState(
             version=1,
             operator_pool={},
-            solver_config_hash="solver",
             code_snapshot_path="/tmp/champion",
-            code_snapshot_hash="champion",
         )
     )
     hypothesis = HypothesisProposal(
@@ -55,54 +37,33 @@ def _fixture():
         action="modify",
         target_file="solver.py",
     )
-    record = HypothesisRecord(
-        hypothesis_id="hypothesis-1",
-        branch_id=branch.branch_id,
-        change_locus="algorithm",
-        action="modify",
-        status="running",
-    )
     workspaces = {branch.branch_id: "/tmp/workspace"}
-    hypotheses = {branch.branch_id: hypothesis}
-    patches = {
-        branch.branch_id: PatchProposal(
-            file_path="solver.py",
-            action="modify",
-            code_content="# candidate\n",
-        )
-    }
-    current = {branch.branch_id: record}
-    store = _HypothesisStore()
-    persisted: list[str] = []
+    patches = {}
+    candidate_patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="# candidate\n",
+    )
     lineage: list[Decision] = []
 
     def discard(branch_id: str) -> None:
         workspaces.pop(branch_id, None)
 
-    def accept(branch, code_hash: str, workspace: str) -> str:
-        branch.current_code_hash = code_hash
-        branch.last_clean_code_hash = code_hash
-        return workspace
+    def accept(branch, candidate) -> str:
+        branch.current_code_hash = candidate.source_digest
+        workspaces[branch.branch_id] = candidate.workspace
+        return candidate.workspace
 
-    def reject(branch, _workspace: str) -> None:
-        branch.current_code_hash = branch.last_clean_code_hash
+    def reject(candidate) -> None:
+        del candidate
 
     finalizer = DecisionFinalizer(
         branch_controller=controller,
-        branch_store=None,
-        hypothesis_store=store,
-        branch_workspaces=workspaces,
-        branch_hypotheses=hypotheses,
         branch_patches=patches,
-        branch_current_hypothesis=current,
-        prepare_promoted_champion=lambda _branch: None,  # type: ignore[arg-type]
         require_promotable_branch=lambda _branch: None,
-        commit_promote_plan=lambda _plan: None,
-        handle_failure=lambda *_args, **_kwargs: None,
-        record_step_lineage=lambda *args, **_kwargs: lineage.append(args[7]),
-        decision_reason_codes_for=lambda *_args: ("FORMAL_REASON",),
+        promote_branch=lambda _branch: None,
+        record_step_lineage=lambda *args, **_kwargs: lineage.append(args[8]),
         discard_branch_workspace=discard,
-        persist_branch_state=persisted.append,
         accept_candidate=accept,
         reject_candidate=reject,
     )
@@ -111,21 +72,18 @@ def _fixture():
         controller,
         branch,
         hypothesis,
-        record,
-        store,
         workspaces,
-        hypotheses,
         patches,
         lineage,
+        candidate_patch,
     )
 
 
-def _apply(finalizer, branch, hypothesis, record, decision: Decision):
+def _apply(finalizer, branch, hypothesis, decision: Decision):
     return finalizer.apply(
         branch=branch,
         decision=decision,
         hypothesis=hypothesis,
-        h_record=record,
         protocol_result=None,
         canary_result=CanaryResult(passed=True),
         contract_result=ContractResult(passed=True, checks=()),
@@ -136,44 +94,29 @@ def _apply(finalizer, branch, hypothesis, record, decision: Decision):
 
 
 def test_queue_validate_applies_formal_transition_without_advisory_override() -> None:
-    finalizer, controller, branch, hypothesis, record, store, *_rest = _fixture()
-    result = _apply(finalizer, branch, hypothesis, record, Decision.QUEUE_VALIDATE)
+    finalizer, controller, branch, hypothesis, *_rest = _fixture()
+    result = _apply(finalizer, branch, hypothesis, Decision.QUEUE_VALIDATE)
     assert result.decision is Decision.QUEUE_VALIDATE
     assert controller.get_branch(branch.branch_id).state is BranchState.READY_VALIDATE
     assert "FORMAL_REASON" in result.reason
-    assert store.statuses == []
 
 
-def test_legacy_branch_without_pending_typed_marker_bypasses_transaction() -> None:
-    finalizer, controller, branch, hypothesis, record, store, *_rest = _fixture()
-    result = _apply(finalizer, branch, hypothesis, record, Decision.QUEUE_VALIDATE)
+def test_protocol_without_candidate_workspace_uses_regular_transition() -> None:
+    finalizer, controller, branch, hypothesis, *_rest = _fixture()
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.QUEUE_VALIDATE,
+        hypothesis=hypothesis,
+        protocol_result=_screening_protocol("pass"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+    )
 
     assert result.decision is Decision.QUEUE_VALIDATE
     assert controller.get_branch(branch.branch_id).state is BranchState.READY_VALIDATE
-    assert store.statuses == []
-
-
-def _screening_features(
-    branch_id: str,
-    *,
-    gate_outcome: str,
-) -> DecisionFeatures:
-    return DecisionFeatures(
-        branch_id=branch_id,
-        hypothesis_action="modify",
-        stage="screening",
-        contract_passed=True,
-        verification_passed=True,
-        canary_passed=True,
-        n_cases=2,
-        win_rate=0.0,
-        median_delta=-1.0,
-        ci_low=-2.0,
-        ci_high=-0.5,
-        stale=False,
-        recent_failure_codes=(),
-        protocol_gate_outcome=gate_outcome,  # type: ignore[arg-type]
-    )
 
 
 def _screening_protocol(gate_outcome: str) -> ProtocolResult:
@@ -196,365 +139,262 @@ def _screening_protocol(gate_outcome: str) -> ProtocolResult:
     )
 
 
-def test_pending_screening_fail_retains_verified_candidate_for_iteration() -> None:
-    fixture = _fixture()
-    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
-    branch.current_code_hash = "candidate"
-    branch.last_clean_code_hash = "parent"
-    mark_candidate_evaluation_pending(
-        branch,
-        hypothesis_id=record.hypothesis_id,
-        kind="explore",
-    )
-    finalizer.decision_features_for = lambda bid: _screening_features(
-        bid,
-        gate_outcome="fail",
-    )
+def _candidate_kwargs(fixture) -> dict[str, object]:
+    return {
+        "patch": fixture[7],
+        "candidate": CandidateWorkspace(
+            workspace="/tmp/candidate",
+            source_digest="candidate",
+        ),
+    }
 
+
+def test_screening_fail_retains_verified_candidate_for_iteration() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis = fixture[:4]
+    branch.current_code_hash = "parent"
     result = finalizer.apply(
         branch=branch,
         decision=Decision.CONTINUE_EXPLORE,
         hypothesis=hypothesis,
-        h_record=record,
         protocol_result=_screening_protocol("fail"),
         canary_result=CanaryResult(passed=True),
         contract_result=ContractResult(passed=True, checks=()),
         verification_result=VerificationResult(passed=True, checks=()),
         action_label="explore",
         decision_reason_codes=("SCREENING_RESULT",),
+        **_candidate_kwargs(fixture),
     )
 
     assert result.decision is Decision.CONTINUE_EXPLORE
     assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
-    assert branch.current_code_hash == branch.last_clean_code_hash == "candidate"
-    assert branch.branch_code_status == "provisional"
+    assert branch.current_code_hash == "candidate"
     assert branch.direction == "algorithm: Change the selected algorithm surface."
-    assert candidate_evaluation(branch) == {
-        "status": "completed",
-        "hypothesis_id": record.hypothesis_id,
-        "kind": "explore",
-    }
-    assert branch.branch_evidence_summary["candidate_disposition"]["disposition"] == (
-        "provisional_head"
-    )
-    assert store.statuses == [(record.hypothesis_id, "provisional")]
+    assert fixture[5][branch.branch_id] is fixture[7]
+    assert branch.hypothesis is None
 
 
-def test_pending_screening_pass_keeps_exact_candidate_for_validation() -> None:
+def test_screening_pass_keeps_exact_candidate_for_validation() -> None:
     fixture = _fixture()
-    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
-    mark_candidate_evaluation_pending(
-        branch,
-        hypothesis_id=record.hypothesis_id,
-        kind="explore",
-    )
-    finalizer.decision_features_for = lambda bid: _screening_features(
-        bid,
-        gate_outcome="pass",
-    )
-    branch.current_code_hash = "candidate"
+    finalizer, controller, branch, hypothesis = fixture[:4]
 
     result = finalizer.apply(
         branch=branch,
         decision=Decision.QUEUE_VALIDATE,
         hypothesis=hypothesis,
-        h_record=record,
         protocol_result=_screening_protocol("pass"),
         canary_result=CanaryResult(passed=True),
         contract_result=ContractResult(passed=True, checks=()),
         verification_result=VerificationResult(passed=True, checks=()),
         action_label="explore",
         decision_reason_codes=("SCREENING_RESULT",),
+        **_candidate_kwargs(fixture),
     )
 
     assert result.decision is Decision.QUEUE_VALIDATE
     assert controller.get_branch(branch.branch_id).state is BranchState.READY_VALIDATE
-    assert branch.branch_code_status == "clean"
+    assert branch.current_code_hash == "candidate"
     assert branch.direction == "algorithm: Change the selected algorithm surface."
-    assert candidate_evaluation(branch)["status"] == "completed"
-    assert branch.branch_evidence_summary["candidate_disposition"]["disposition"] == (
-        "exact_reuse"
-    )
-    assert store.statuses == [(record.hypothesis_id, "advanced")]
+    assert fixture[5][branch.branch_id] is fixture[7]
+    assert branch.hypothesis == hypothesis
 
 
 def test_screening_fail_lineage_and_branch_keep_candidate_hash() -> None:
     fixture = _fixture()
-    finalizer, _controller, branch, hypothesis, record = fixture[:5]
-    pending_patch = fixture[8][branch.branch_id]
-    finalizer.branch_patches.clear()
-    finalizer.pending_candidate_patch = lambda _branch: pending_patch
+    finalizer, _controller, branch, hypothesis = fixture[:4]
+    candidate_patch = fixture[7]
     lineage_args: list[tuple[object, ...]] = []
     finalizer.record_step_lineage = lambda *args, **_kwargs: lineage_args.append(args)
-    branch.current_code_hash = "candidate"
-    branch.last_clean_code_hash = "parent"
-    mark_candidate_evaluation_pending(
-        branch,
-        hypothesis_id=record.hypothesis_id,
-        kind="explore",
-    )
-    finalizer.decision_features_for = lambda bid: _screening_features(
-        bid,
-        gate_outcome="fail",
-    )
-
+    branch.current_code_hash = "parent"
     finalizer.apply(
         branch=branch,
         decision=Decision.CONTINUE_EXPLORE,
         hypothesis=hypothesis,
-        h_record=record,
         protocol_result=_screening_protocol("fail"),
         canary_result=CanaryResult(passed=True),
         contract_result=ContractResult(passed=True, checks=()),
         verification_result=VerificationResult(passed=True, checks=()),
         action_label="explore",
         decision_reason_codes=("SCREENING_RESULT",),
+        **_candidate_kwargs(fixture),
     )
 
     assert len(lineage_args) == 1
     assert lineage_args[0][0].current_code_hash == "candidate"
-    assert lineage_args[0][2] is pending_patch
+    assert lineage_args[0][1] == "candidate"
+    assert lineage_args[0][3] is candidate_patch
     assert branch.current_code_hash == "candidate"
 
 
-def test_lineage_failure_leaves_pending_candidate_unconsumed() -> None:
+def test_lineage_failure_blocks_after_applied_candidate() -> None:
     fixture = _fixture()
-    finalizer, controller, branch, hypothesis, record = fixture[:5]
-    pending_patch = fixture[8][branch.branch_id]
-    finalizer.branch_patches.clear()
-    finalizer.pending_candidate_patch = lambda _branch: pending_patch
-    branch.current_code_hash = "candidate"
-    branch.last_clean_code_hash = "parent"
-    mark_candidate_evaluation_pending(
-        branch,
-        hypothesis_id=record.hypothesis_id,
-        kind="explore",
-    )
-    finalizer.decision_features_for = lambda bid: _screening_features(
-        bid,
-        gate_outcome="fail",
-    )
+    finalizer, controller, branch, hypothesis = fixture[:4]
+    branch.current_code_hash = "parent"
 
     def fail_lineage(*_args, **_kwargs):
         raise OSError("lineage unavailable")
 
     finalizer.record_step_lineage = fail_lineage
 
-    with pytest.raises(OSError, match="lineage unavailable"):
-        finalizer.apply(
-            branch=branch,
-            decision=Decision.CONTINUE_EXPLORE,
-            hypothesis=hypothesis,
-            h_record=record,
-            protocol_result=_screening_protocol("fail"),
-            canary_result=CanaryResult(passed=True),
-            contract_result=ContractResult(passed=True, checks=()),
-            verification_result=VerificationResult(passed=True, checks=()),
-            action_label="explore",
-            decision_reason_codes=("SCREENING_RESULT",),
-        )
-
-    assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
-    assert branch.current_code_hash == "candidate"
-    assert branch.last_clean_code_hash == "parent"
-    assert candidate_evaluation(branch) == {
-        "status": "pending",
-        "hypothesis_id": record.hypothesis_id,
-        "kind": "explore",
-    }
-
-
-def test_pending_unclear_screening_keeps_a_provisional_candidate() -> None:
-    fixture = _fixture()
-    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
-    mark_candidate_evaluation_pending(
-        branch,
-        hypothesis_id=record.hypothesis_id,
-        kind="explore",
-    )
-    finalizer.decision_features_for = lambda bid: _screening_features(
-        bid,
-        gate_outcome="unclear",
-    )
-    branch.current_code_hash = "candidate"
-
     result = finalizer.apply(
         branch=branch,
         decision=Decision.CONTINUE_EXPLORE,
         hypothesis=hypothesis,
-        h_record=record,
-        protocol_result=_screening_protocol("unclear"),
-        canary_result=CanaryResult(passed=True),
-        contract_result=ContractResult(passed=True, checks=()),
-        verification_result=VerificationResult(passed=True, checks=()),
-        action_label="explore",
-        decision_reason_codes=("SCREENING_RESULT",),
-    )
-
-    assert result.decision is Decision.CONTINUE_EXPLORE
-    assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
-    assert branch.branch_code_status == "provisional"
-    assert branch.branch_evidence_summary["candidate_disposition"]["disposition"] == (
-        "provisional_head"
-    )
-    assert store.statuses == [(record.hypothesis_id, "provisional")]
-
-
-def test_pending_abandon_cleans_workspace_without_a_completion_intent() -> None:
-    fixture = _fixture()
-    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
-    workspaces = fixture[6]
-    mark_candidate_evaluation_pending(
-        branch,
-        hypothesis_id=record.hypothesis_id,
-        kind="explore",
-    )
-    finalizer.decision_features_for = lambda bid: _screening_features(
-        bid,
-        gate_outcome="fail",
-    )
-    branch.current_code_hash = "candidate"
-
-    result = finalizer.apply(
-        branch=branch,
-        decision=Decision.ABANDON,
-        hypothesis=hypothesis,
-        h_record=record,
         protocol_result=_screening_protocol("fail"),
         canary_result=CanaryResult(passed=True),
         contract_result=ContractResult(passed=True, checks=()),
         verification_result=VerificationResult(passed=True, checks=()),
         action_label="explore",
         decision_reason_codes=("SCREENING_RESULT",),
+        **_candidate_kwargs(fixture),
+    )
+
+    assert result.execution_outcome is not None
+    assert result.decision is None
+    assert result.protocol_result is None
+    assert controller.get_branch(branch.branch_id).state is BranchState.BLOCKED_INFRA
+    assert branch.current_code_hash == "candidate"
+    assert fixture[5][branch.branch_id] is fixture[7]
+
+
+def test_accept_failure_writes_no_experiment_event() -> None:
+    fixture = _fixture()
+    finalizer, _controller, branch, hypothesis = fixture[:4]
+
+    def fail_accept(_branch, _candidate) -> str:
+        raise OSError("candidate acceptance unavailable")
+
+    finalizer.accept_candidate = fail_accept
+
+    with pytest.raises(OSError, match="candidate acceptance unavailable"):
+        finalizer.apply(
+            branch=branch,
+            decision=Decision.QUEUE_VALIDATE,
+            hypothesis=hypothesis,
+            protocol_result=_screening_protocol("pass"),
+            canary_result=CanaryResult(passed=True),
+            contract_result=ContractResult(passed=True, checks=()),
+            verification_result=VerificationResult(passed=True, checks=()),
+            action_label="explore",
+            decision_reason_codes=("SCREENING_RESULT",),
+            **_candidate_kwargs(fixture),
+        )
+
+    assert fixture[6] == []
+    assert branch.current_code_hash is None
+
+
+def test_accept_callback_binds_the_direct_candidate_value() -> None:
+    fixture = _fixture()
+    finalizer, _controller, branch, hypothesis = fixture[:4]
+
+    def accept_direct_candidate(branch, candidate) -> str:
+        branch.current_code_hash = candidate.source_digest
+        return candidate.workspace
+
+    finalizer.accept_candidate = accept_direct_candidate
+    finalizer.apply(
+        branch=branch,
+        decision=Decision.QUEUE_VALIDATE,
+        hypothesis=hypothesis,
+        protocol_result=_screening_protocol("pass"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=None,
+        verification_result=None,
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+        **_candidate_kwargs(fixture),
+    )
+
+    assert branch.current_code_hash == "candidate"
+
+
+def test_unclear_screening_keeps_the_candidate() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis = fixture[:4]
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.CONTINUE_EXPLORE,
+        hypothesis=hypothesis,
+        protocol_result=_screening_protocol("unclear"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+        **_candidate_kwargs(fixture),
+    )
+
+    assert result.decision is Decision.CONTINUE_EXPLORE
+    assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
+    assert branch.current_code_hash == "candidate"
+    assert branch.hypothesis is None
+
+
+def test_abandon_cleans_candidate_without_a_completion_intent() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis = fixture[:4]
+    workspaces = fixture[4]
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.ABANDON,
+        hypothesis=hypothesis,
+        protocol_result=_screening_protocol("fail"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+        **_candidate_kwargs(fixture),
     )
 
     assert result.decision is Decision.ABANDON
     assert controller.get_branch(branch.branch_id).state is BranchState.ABANDONED
-    assert branch.branch_code_status == "abandoned"
+    assert branch.current_code_hash is None
     assert workspaces == {}
-    assert store.statuses == [(record.hypothesis_id, "rejected")]
+    assert branch.hypothesis is None
 
 
 def test_continue_explore_retains_verified_codebase_and_clears_attempt() -> None:
     fixture = _fixture()
-    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
-    workspaces, hypotheses, patches = fixture[6:9]
-    result = _apply(finalizer, branch, hypothesis, record, Decision.CONTINUE_EXPLORE)
+    finalizer, controller, branch, hypothesis = fixture[:4]
+    workspaces, patches = fixture[4:6]
+    result = _apply(finalizer, branch, hypothesis, Decision.CONTINUE_EXPLORE)
     assert result.decision is Decision.CONTINUE_EXPLORE
     assert controller.get_branch(branch.branch_id).state is BranchState.EXPLORE
     assert workspaces[branch.branch_id] == "/tmp/workspace"
-    assert branch.branch_id not in hypotheses
     assert branch.branch_id not in patches
-    assert store.statuses == [(record.hypothesis_id, "rejected")]
+    assert branch.hypothesis is None
 
 
 def test_abandon_is_terminal_and_records_only_formal_decision() -> None:
     fixture = _fixture()
-    finalizer, controller, branch, hypothesis, record, store = fixture[:6]
-    lineage = fixture[9]
-    result = _apply(finalizer, branch, hypothesis, record, Decision.ABANDON)
+    finalizer, controller, branch, hypothesis = fixture[:4]
+    lineage = fixture[6]
+    result = _apply(finalizer, branch, hypothesis, Decision.ABANDON)
     assert result.decision is Decision.ABANDON
     assert controller.get_branch(branch.branch_id).state is BranchState.ABANDONED
     assert lineage == [Decision.ABANDON]
-    assert store.statuses == [(record.hypothesis_id, "rejected")]
+    assert branch.hypothesis is None
 
 
-def test_screening_summary_retains_statistical_status_metric_and_ci() -> None:
-    _finalizer, _controller, branch, *_rest = _fixture()
-    protocol = ProtocolResult(
-        stage=ExperimentStage.SCREENING,
-        stats=EvalStats(
-            n_cases=8,
-            wins=0,
-            losses=3,
-            ties=5,
-            win_rate=0.0,
-            median_delta=-4.0,
-            ci_low=-10.25,
-            ci_high=-0.5,
-            statistical_status="negative",
-            statistical_metric="total_distance",
-        ),
-        gate_outcome="fail",
-        reason_codes=("SCREENING_FAIL_WIN_RATE",),
-        exposed_summary="screening failed",
-        raw_metrics_ref="private/metrics.json",
-    )
-
-    update_branch_screening_evidence_summary(
-        branch,
-        protocol_result=protocol,
-        decision_reason_codes=("SCREENING_FAIL_WIN_RATE",),
-    )
-
-    summary = branch.branch_evidence_summary
-    assert summary["statistical_status"] == "negative"
-    assert summary["statistical_metric"] == "total_distance"
-    assert (summary["ci_low"], summary["ci_high"]) == (-10.25, -0.5)
-    assert summary["decision_reason_codes"] == ["SCREENING_FAIL_WIN_RATE"]
-
-
-def test_validation_atomically_replaces_screening_projection_and_retains_history() -> (
-    None
-):
+def test_validation_transition_does_not_require_branch_summary() -> None:
     fixture = _fixture()
-    finalizer, _controller, branch, hypothesis, record = fixture[:5]
-    branch.branch_evidence_summary = {
-        "canonical_screening_history": [{"round": 1}, {"round": 2}],
-    }
-    screening = ProtocolResult(
-        stage=ExperimentStage.SCREENING,
-        stats=EvalStats(
-            n_cases=8,
-            wins=5,
-            losses=1,
-            ties=2,
-            win_rate=0.625,
-            median_delta=3.5,
-            ci_low=-11.0,
-            ci_high=12.0,
-            statistical_status="uncertain",
-            statistical_metric="total_distance",
-            runtime_pairs=0,
-            total_pairs=32,
-            valid_pairs=32,
-            pair_wins=20,
-            pair_losses=11,
-            pair_ties=1,
-            runtime_evidence_status="insufficient",
-        ),
-        gate_outcome="pass",
-        reason_codes=("SCREENING_PASS",),
-        exposed_summary="screening passed",
-        raw_metrics_ref="metrics/screening.json",
-        case_ids=("cases/screening.vrp",),
-        seed_set=(11, 29, 43, 59),
-        champion_cache_hits=32,
-        champion_cached_runtime_pairs=32,
-        runtime_confidence="low_cached_champion",
-        runtime_evidence_status="insufficient",
-    )
-    update_branch_screening_evidence_summary(
-        branch,
-        protocol_result=screening,
-        decision_reason_codes=("SCREENING_PASS",),
-    )
-    branch.branch_evidence_summary.update(
-        {
-            "formal_candidate_patch_artifact_ref": "artifacts/candidate.json",
-            "formal_replay_identity_ref": "artifacts/candidate.json#/replay_identity",
-            "formal_candidate_artifact_report": {"artifact_status": "recorded"},
-            "formal_replay_identity": {"identity_status": "complete"},
-            "replay_identity": {"identity_status": "complete"},
-            "replay_metadata": {"replay_identity_status": "complete"},
-            "candidate_code_hash": "candidate-hash",
-            "code_hash": "candidate-hash",
-            "current_code_hash": "candidate-hash",
-            "patch_digest": "patch-digest",
-            "patch_hash": "patch-digest",
-        }
-    )
+    finalizer, controller, branch, hypothesis = fixture[:4]
     branch.state = BranchState.VALIDATING
+    lineage_observations: list[tuple[BranchState, bool]] = []
+
+    def record_after_state(*_args, **kwargs) -> None:
+        lineage_observations.append(
+            (
+                controller.get_branch(branch.branch_id).state,
+                kwargs.get("strict") is True,
+            )
+        )
+
+    finalizer.record_step_lineage = record_after_state
 
     validation = ProtocolResult(
         stage=ExperimentStage.VALIDATION,
@@ -586,15 +426,12 @@ def test_validation_atomically_replaces_screening_projection_and_retains_history
         raw_metrics_ref="metrics/validation.json",
         case_ids=("cases/validation.vrp",),
         seed_set=(47, 53, 71, 83),
-        champion_cache_misses=32,
         runtime_confidence="high",
-        runtime_evidence_status="sufficient",
     )
     result = finalizer.apply(
         branch=branch,
         decision=Decision.EXPAND_VALIDATION,
         hypothesis=hypothesis,
-        h_record=record,
         protocol_result=validation,
         canary_result=CanaryResult(passed=True),
         contract_result=ContractResult(passed=True, checks=()),
@@ -605,58 +442,7 @@ def test_validation_atomically_replaces_screening_projection_and_retains_history
 
     assert result.decision is Decision.EXPAND_VALIDATION
     assert branch.state is BranchState.VALIDATING_EXPAND
-    summary = branch.branch_evidence_summary
-    assert summary["stage"] == summary["protocol_stage"] == "validation"
-    assert summary["gate_outcome"] == "expand"
-    assert (summary["wins"], summary["losses"], summary["ties"]) == (6, 1, 1)
-    assert (summary["pair_wins"], summary["pair_losses"], summary["pair_ties"]) == (
-        25,
-        5,
-        2,
-    )
-    assert summary["median_delta"] == 7.75
-    assert (summary["ci_low"], summary["ci_high"]) == (0.0, 77.0)
-    assert summary["raw_metrics_ref"] == "metrics/validation.json"
-    assert summary["runtime_pairs"] == 32
-    assert summary["runtime_evidence_status"] == "sufficient"
-    assert summary["runtime_cache"]["champion_cache_misses"] == 32
-    assert summary["reason_codes"] == ["VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN"]
-    assert summary["why_not_promoted_reason_codes"] == [
-        "VALIDATION_EXPAND_HIERARCHICAL_UNCERTAIN"
-    ]
-    assert summary["canonical_screening_history"] == [
-        {"round": 1},
-        {"round": 2},
-    ]
-    assert summary["formal_candidate_patch_artifact_ref"] == (
-        "artifacts/candidate.json"
-    )
-    assert summary["formal_replay_identity"] == {"identity_status": "complete"}
-    assert summary["formal_replay_identity_ref"] == (
-        "artifacts/candidate.json#/replay_identity"
-    )
-    assert summary["formal_candidate_artifact_report"] == {
-        "artifact_status": "recorded"
-    }
-    assert summary["replay_identity"] == {"identity_status": "complete"}
-    assert summary["replay_metadata"] == {"replay_identity_status": "complete"}
-    assert summary["candidate_code_hash"] == "candidate-hash"
-    assert summary["code_hash"] == summary["current_code_hash"] == "candidate-hash"
-    assert summary["patch_digest"] == summary["patch_hash"] == "patch-digest"
-    assert set(summary["protocol_evidence_by_stage"]) == {
-        "screening",
-        "validation",
-    }
-    assert summary["protocol_evidence_by_stage"]["screening"]["raw_metrics_ref"] == (
-        "metrics/screening.json"
-    )
-    assert (
-        summary["protocol_evidence_by_stage"]["validation"]["raw_metrics_ref"]
-        == "metrics/validation.json"
-    )
-    assert summary["latest_protocol_evidence"]["raw_metrics_ref"] == (
-        "metrics/validation.json"
-    )
+    assert lineage_observations == [(BranchState.VALIDATING_EXPAND, True)]
 
 
 @pytest.mark.parametrize(
@@ -668,30 +454,20 @@ def test_validation_atomically_replaces_screening_projection_and_retains_history
             Decision.CONTINUE_EXPLORE,
         ),
         (
-            BranchState.VALIDATING_EXPAND,
-            ExperimentStage.VALIDATION,
-            Decision.VALIDATION_REPAIR_REQUIRED,
-        ),
-        (
             BranchState.FROZEN_TESTING,
             ExperimentStage.FROZEN,
             Decision.CONTINUE_EXPLORE,
         ),
     ),
 )
-def test_later_stage_continue_projects_evidence_before_reentering_explore(
+def test_later_stage_continue_does_not_copy_protocol_before_reentering_explore(
     branch_state: BranchState,
     protocol_stage: ExperimentStage,
     decision: Decision,
 ) -> None:
     fixture = _fixture()
-    finalizer, _controller, branch, hypothesis, record = fixture[:5]
+    finalizer, _controller, branch, hypothesis = fixture[:4]
     branch.state = branch_state
-    branch.branch_evidence_summary = {
-        "stage": "screening",
-        "raw_metrics_ref": "metrics/screening.json",
-        "formal_candidate_patch_artifact_ref": "artifacts/candidate.json",
-    }
     protocol = ProtocolResult(
         stage=protocol_stage,
         stats=EvalStats(
@@ -716,7 +492,6 @@ def test_later_stage_continue_projects_evidence_before_reentering_explore(
         branch=branch,
         decision=decision,
         hypothesis=hypothesis,
-        h_record=record,
         protocol_result=protocol,
         canary_result=CanaryResult(passed=True),
         contract_result=ContractResult(passed=True, checks=()),
@@ -727,45 +502,3 @@ def test_later_stage_continue_projects_evidence_before_reentering_explore(
 
     assert result.decision is decision
     assert branch.state is BranchState.EXPLORE
-    assert branch.branch_evidence_summary["stage"] == protocol_stage.value
-    assert branch.branch_evidence_summary["raw_metrics_ref"] == (
-        f"metrics/{protocol_stage.value}.json"
-    )
-    assert (
-        branch.branch_evidence_summary["formal_candidate_patch_artifact_ref"]
-        == "artifacts/candidate.json"
-    )
-
-
-def test_protocol_stage_projection_replaces_missing_ref_with_latest_evidence() -> None:
-    from scion.core.decision_lifecycle_actions import (
-        update_branch_protocol_evidence_summary,
-    )
-
-    _finalizer, _controller, branch, *_rest = _fixture()
-    for median_delta in (1.0, 2.0):
-        update_branch_protocol_evidence_summary(
-            branch,
-            protocol_result=ProtocolResult(
-                stage=ExperimentStage.VALIDATION,
-                stats=EvalStats(
-                    n_cases=1,
-                    wins=1,
-                    losses=0,
-                    ties=0,
-                    win_rate=1.0,
-                    median_delta=median_delta,
-                    ci_low=0.0,
-                    ci_high=median_delta,
-                ),
-                gate_outcome="pass",
-                reason_codes=("VALIDATION_PASS",),
-                exposed_summary="validation passed",
-                raw_metrics_ref="",
-            ),
-            decision_reason_codes=("VALIDATION_PASS",),
-        )
-
-    by_stage = branch.branch_evidence_summary["protocol_evidence_by_stage"]
-    assert set(by_stage) == {"validation"}
-    assert by_stage["validation"]["median_delta"] == 2.0

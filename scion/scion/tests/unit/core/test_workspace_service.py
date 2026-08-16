@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import stat
 import threading
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from scion.core.models import (
     PatchFileChange,
     PatchProposal,
 )
-from scion.core.workspace_lifecycle import WorkspaceLifecycleService
+from scion.core.workspace_service import WorkspaceService
 from scion.runtime.workspace import WorkspaceMaterializer
 
 
@@ -52,9 +53,7 @@ def _champion(*, with_pool: bool = False) -> ChampionState:
     return ChampionState(
         version=1,
         operator_pool={"ls": operator} if with_pool else {},
-        solver_config_hash="solver",
         code_snapshot_path="/tmp/champion",
-        code_snapshot_hash="hash",
     )
 
 
@@ -65,11 +64,10 @@ def _service(tmp_path: Path, *, champion: ChampionState | None = None):
     materializer = FakeMaterializer(tmp_path)
     workspaces: dict[str, str] = {}
     patches: dict[str, PatchProposal] = {}
-    service = WorkspaceLifecycleService(
+    service = WorkspaceService(
         materializer=materializer,
         branch_controller=controller,
         branch_workspaces=workspaces,
-        branch_patches=patches,
         champion_lock=threading.Lock(),
         get_champion=lambda: champion,
     )
@@ -104,9 +102,7 @@ def _registry_service(tmp_path: Path):
     champion = ChampionState(
         version=1,
         operator_pool={"ls": operator},
-        solver_config_hash="solver",
         code_snapshot_path=str(champion_dir),
-        code_snapshot_hash="champion",
     )
     controller = BranchController()
     branch = controller.create_branch(champion)
@@ -115,11 +111,10 @@ def _registry_service(tmp_path: Path):
         str(tmp_path / "campaign"),
         editable_patterns=("operators/*.py",),
     )
-    service = WorkspaceLifecycleService(
+    service = WorkspaceService(
         materializer=materializer,
         branch_controller=controller,
         branch_workspaces=workspaces,
-        branch_patches={},
         champion_lock=threading.Lock(),
         get_champion=lambda: champion,
     )
@@ -135,7 +130,10 @@ def test_setup_workspace_reuses_existing_verified_branch_workspace(
     existing = tmp_path / "existing"
     existing.mkdir()
     workspaces[branch.branch_id] = str(existing)
-    controller.record_verification_pass(branch.branch_id, "candidate-hash")
+    controller.accept_verified_code(branch.branch_id, "candidate-hash")
+    materializer.compute_code_hash = lambda _workspace: (_ for _ in ()).throw(
+        AssertionError("accepted source reuse must not rehash")
+    )
     assert service.setup_workspace(branch) == str(existing)
     assert materializer.created == []
 
@@ -146,43 +144,17 @@ def test_missing_verified_branch_workspace_refuses_champion_fallback(
     service, branch, controller, materializer, workspaces, _ = _service(tmp_path)
     missing = tmp_path / "missing-verified-workspace"
     workspaces[branch.branch_id] = str(missing)
-    controller.record_verification_pass(branch.branch_id, "candidate-hash")
+    controller.accept_verified_code(branch.branch_id, "candidate-hash")
 
     assert service.setup_workspace(branch) is None
     assert materializer.created == []
     assert materializer.cleaned == []
 
 
-def test_force_champion_discards_existing_workspace(tmp_path: Path) -> None:
-    service, branch, _, materializer, workspaces, _ = _service(tmp_path)
-    existing = tmp_path / "existing"
-    existing.mkdir()
-    workspaces[branch.branch_id] = str(existing)
-    workspace = service.setup_workspace(branch, force_champion=True)
-    assert workspace != str(existing)
-    assert materializer.cleaned == [str(existing)]
-    assert materializer.created == [(branch.branch_id, "/tmp/champion")]
-
-
-def test_apply_patch_records_candidate_hash_and_optional_patch(tmp_path: Path) -> None:
-    service, branch, controller, materializer, _, patches = _service(tmp_path)
-    patch = PatchProposal(
-        file_path="operators/new.py",
-        action="create",
-        code_content="class New: pass\n",
-    )
-    applied = service.apply_patch(branch, str(tmp_path), patch, remember_patch=True)
-    assert applied.code_hash == "hash-1"
-    assert patches[branch.branch_id] is patch
-    stored = controller.get_branch(branch.branch_id)
-    assert stored.current_code_hash == "hash-1"
-    assert stored.last_clean_code_hash is None
-
-
-def test_modify_with_unchanged_registry_semantics_preserves_registry_bytes(
+def test_modify_exports_candidate_registry_without_touching_source(
     tmp_path: Path,
 ) -> None:
-    service, branch, durable, registry_bytes = _registry_service(tmp_path)
+    service, _branch, durable, registry_bytes = _registry_service(tmp_path)
     hypothesis = HypothesisProposal(
         hypothesis_text="Improve the existing local-search implementation.",
         change_locus="local_search",
@@ -190,7 +162,6 @@ def test_modify_with_unchanged_registry_semantics_preserves_registry_bytes(
         target_file="operators/ls.py",
     )
     applied = service.apply_candidate_patch(
-        branch,
         str(durable),
         PatchProposal(
             file_path="operators/ls.py",
@@ -201,16 +172,19 @@ def test_modify_with_unchanged_registry_semantics_preserves_registry_bytes(
         sync_registry=True,
     )
 
-    assert (Path(applied.workspace) / "registry.yaml").read_bytes() == registry_bytes
+    from scion.runtime.pool_manager import read_registry
+
+    pool = read_registry(str(Path(applied.workspace) / "registry.yaml"))
+    assert set(pool) == {"ls"}
     assert (durable / "registry.yaml").read_bytes() == registry_bytes
-    service.reject_candidate(branch, applied.workspace)
+    service.reject_candidate(applied)
 
 
 def test_create_operator_uses_only_pool_registry_writer(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    service, branch, durable, _ = _registry_service(tmp_path)
+    service, _branch, durable, _ = _registry_service(tmp_path)
     from scion.runtime.pool_manager import PoolManager, read_registry
 
     export_calls: list[str] = []
@@ -229,7 +203,6 @@ def test_create_operator_uses_only_pool_registry_writer(
         suggested_weight=0.2,
     )
     applied = service.apply_candidate_patch(
-        branch,
         str(durable),
         PatchProposal(
             file_path="operators/new_move.py",
@@ -245,13 +218,47 @@ def test_create_operator_uses_only_pool_registry_writer(
     assert export_calls == [applied.workspace]
     assert set(pool) == {"ls", "new_move"}
     assert sum(operator.weight for operator in pool.values()) == pytest.approx(1.0)
-    service.reject_candidate(branch, applied.workspace)
+    service.reject_candidate(applied)
+
+
+def test_registry_export_failure_rejects_candidate_materialization(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    service, _branch, durable, _ = _registry_service(tmp_path)
+    from scion.runtime.pool_manager import PoolManager
+
+    def fail_export(_self, _pool, _target_dir):
+        raise OSError("registry export unavailable")
+
+    monkeypatch.setattr(PoolManager, "export_registry", fail_export)
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Modify the selected local-search implementation.",
+        change_locus="local_search",
+        action="modify",
+        target_file="operators/ls.py",
+    )
+
+    with pytest.raises(OSError, match="registry export unavailable"):
+        service.apply_candidate_patch(
+            str(durable),
+            PatchProposal(
+                file_path="operators/ls.py",
+                action="modify",
+                code_content="class LocalSearch:\n    version = 2\n",
+            ),
+            hypothesis=hypothesis,
+            sync_registry=True,
+        )
+
+    candidate_root = tmp_path / "campaign" / "candidate_workspaces"
+    assert not any(candidate_root.iterdir())
 
 
 def test_rejected_created_operator_preserves_durable_registry_and_source(
     tmp_path: Path,
 ) -> None:
-    service, branch, durable, registry_bytes = _registry_service(tmp_path)
+    service, _branch, durable, registry_bytes = _registry_service(tmp_path)
     hypothesis = HypothesisProposal(
         hypothesis_text="Try one new local-search operator.",
         change_locus="local_search",
@@ -259,7 +266,6 @@ def test_rejected_created_operator_preserves_durable_registry_and_source(
         target_file="operators/rejected_move.py",
     )
     applied = service.apply_candidate_patch(
-        branch,
         str(durable),
         PatchProposal(
             file_path="operators/rejected_move.py",
@@ -271,7 +277,7 @@ def test_rejected_created_operator_preserves_durable_registry_and_source(
     )
     assert (Path(applied.workspace) / "operators" / "rejected_move.py").is_file()
 
-    service.reject_candidate(branch, applied.workspace)
+    service.reject_candidate(applied)
 
     assert (durable / "registry.yaml").read_bytes() == registry_bytes
     assert not (durable / "operators" / "rejected_move.py").exists()
@@ -285,9 +291,7 @@ def _staging_service(tmp_path: Path):
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="solver",
         code_snapshot_path=str(champion_dir),
-        code_snapshot_hash="champion",
     )
     controller = BranchController()
     branch = controller.create_branch(champion)
@@ -297,11 +301,10 @@ def _staging_service(tmp_path: Path):
         str(tmp_path / "campaign"),
         editable_patterns=("operators/*.py",),
     )
-    service = WorkspaceLifecycleService(
+    service = WorkspaceService(
         materializer=materializer,
         branch_controller=controller,
         branch_workspaces=workspaces,
-        branch_patches=patches,
         champion_lock=threading.Lock(),
         get_champion=lambda: champion,
     )
@@ -326,12 +329,12 @@ def _candidate_patch(value: int = 1) -> PatchProposal:
     )
 
 
-def test_staging_keeps_base_untouched_and_retry_points_to_candidate(
+def test_staging_keeps_branch_and_durable_workspace_untouched(
     tmp_path: Path,
 ) -> None:
     service, branch, _, _, workspaces, _, base_workspace = _staging_service(tmp_path)
 
-    applied = service.apply_candidate_patch(branch, base_workspace, _candidate_patch())
+    applied = service.apply_candidate_patch(base_workspace, _candidate_patch())
 
     assert (
         Path(base_workspace) / "operators" / "solver.py"
@@ -339,14 +342,13 @@ def test_staging_keeps_base_untouched_and_retry_points_to_candidate(
     assert (
         Path(applied.workspace) / "operators" / "solver.py"
     ).read_text() == "VALUE = 1\n"
-    assert workspaces[branch.branch_id] == applied.workspace
-    assert service.setup_workspace(branch) == applied.workspace
-    pending = service.pending_candidates[branch.branch_id]
-    assert pending.base_workspace == base_workspace
-    assert pending.previous_branch_workspace == base_workspace
+    assert workspaces[branch.branch_id] == base_workspace
+    assert branch.current_code_hash is None
+    assert service.setup_workspace(branch) == base_workspace
+    assert set(vars(applied)) == {"workspace", "source_digest"}
 
 
-def test_accept_candidate_adopts_exact_staging_content_at_durable_path(
+def test_accept_candidate_binds_exact_staging_value_as_branch_source(
     tmp_path: Path,
 ) -> None:
     service, branch, _, _, workspaces, patches, base_workspace = _staging_service(
@@ -354,98 +356,115 @@ def test_accept_candidate_adopts_exact_staging_content_at_durable_path(
     )
     patch = _candidate_patch()
     applied = service.apply_candidate_patch(
-        branch,
         base_workspace,
         patch,
-        remember_patch=True,
     )
 
-    accepted = service.accept_candidate(branch, applied.code_hash, applied.workspace)
+    assert branch.current_code_hash is None
+    assert workspaces[branch.branch_id] == base_workspace
+    assert service.verify_candidate(applied) == applied
+    accepted = service.accept_candidate(branch, applied)
 
-    expected = tmp_path / "campaign" / "workspaces" / branch.branch_id
-    assert Path(accepted) == expected
-    assert workspaces[branch.branch_id] == str(expected)
+    assert accepted == applied.workspace
+    assert workspaces[branch.branch_id] == applied.workspace
     assert Path(accepted).is_dir()
-    assert not Path(applied.workspace).exists()
-    assert (expected / "operators" / "solver.py").read_text() == "VALUE = 1\n"
-    assert service.pending_candidates == {}
-    assert patches[branch.branch_id] is patch
-    assert branch.current_code_hash == applied.code_hash
-    assert branch.last_clean_code_hash == applied.code_hash
+    assert (Path(accepted) / "operators" / "solver.py").read_text() == "VALUE = 1\n"
+    assert not (
+        (Path(accepted) / "operators" / "solver.py").stat().st_mode
+        & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
+    )
+    assert not Path(base_workspace).exists()
+    assert patches == {}
+    assert branch.current_code_hash == applied.source_digest
 
 
-def test_reject_candidate_restores_prior_branch_workspace_and_parent_hash(
+def test_reject_candidate_leaves_prior_branch_workspace_and_hash_untouched(
     tmp_path: Path,
 ) -> None:
     service, branch, controller, materializer, workspaces, _, base_workspace = (
         _staging_service(tmp_path)
     )
-    controller.record_verification_pass(
+    controller.accept_verified_code(
         branch.branch_id,
         materializer.compute_code_hash(base_workspace),
     )
-    parent_hash = branch.last_clean_code_hash
-    applied = service.apply_candidate_patch(branch, base_workspace, _candidate_patch())
+    parent_hash = branch.current_code_hash
+    applied = service.apply_candidate_patch(base_workspace, _candidate_patch())
 
-    report = service.reject_candidate(branch, applied.workspace)
+    service.reject_candidate(applied)
 
-    assert report.cleaned is True
     assert workspaces[branch.branch_id] == base_workspace
     assert not Path(applied.workspace).exists()
     assert branch.current_code_hash == parent_hash
-    assert branch.last_clean_code_hash == parent_hash
     assert (
         Path(base_workspace) / "operators" / "solver.py"
     ).read_text() == "VALUE = 0\n"
 
 
-def test_reject_candidate_restores_provisional_base_status(tmp_path: Path) -> None:
-    service, branch, controller, materializer, workspaces, _, base_workspace = (
-        _staging_service(tmp_path)
-    )
-    controller.record_verification_pass(
-        branch.branch_id,
-        materializer.compute_code_hash(base_workspace),
-    )
-    branch.branch_code_status = "provisional"
-    parent_hash = branch.last_clean_code_hash
-    applied = service.apply_candidate_patch(branch, base_workspace, _candidate_patch())
-
-    service.reject_candidate(branch, applied.workspace)
-
-    assert workspaces[branch.branch_id] == base_workspace
-    assert branch.current_code_hash == parent_hash
-    assert branch.last_clean_code_hash == parent_hash
-    assert branch.branch_code_status == "provisional"
-
-
-def test_record_candidate_code_failure_restores_prior_workspace_mapping(
+def test_freeze_failure_leaves_branch_and_source_mapping_untouched(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
     service, branch, controller, materializer, workspaces, _, base_workspace = (
         _staging_service(tmp_path)
     )
-    controller.record_verification_pass(
+    controller.accept_verified_code(
         branch.branch_id,
         materializer.compute_code_hash(base_workspace),
     )
-    parent_hash = branch.last_clean_code_hash
+    parent_hash = branch.current_code_hash
+    applied = service.apply_candidate_patch(base_workspace, _candidate_patch())
 
-    def fail_record_candidate(_branch_id: str, _code_hash: str) -> None:
-        raise OSError("branch persistence unavailable")
+    def fail_freeze(_workspace: str) -> None:
+        raise OSError("freeze unavailable")
 
-    monkeypatch.setattr(controller, "record_candidate_code", fail_record_candidate)
-    with pytest.raises(OSError, match="branch persistence unavailable"):
-        service.apply_candidate_patch(branch, base_workspace, _candidate_patch())
+    monkeypatch.setattr(materializer, "freeze_snapshot", fail_freeze)
+    assert service.verify_candidate(applied) == applied
+    with pytest.raises(OSError, match="freeze unavailable"):
+        service.accept_candidate(branch, applied)
 
-    assert service.pending_candidates == {}
     assert workspaces[branch.branch_id] == base_workspace
     assert branch.current_code_hash == parent_hash
-    assert branch.last_clean_code_hash == parent_hash
     assert (
         Path(base_workspace) / "operators" / "solver.py"
     ).read_text() == "VALUE = 0\n"
+
+
+def test_verification_boundary_rejects_candidate_hash_drift(
+    tmp_path: Path,
+) -> None:
+    service, branch, _, _, workspaces, _, base_workspace = _staging_service(tmp_path)
+    applied = service.apply_candidate_patch(base_workspace, _candidate_patch())
+    candidate_source = Path(applied.workspace) / "operators" / "solver.py"
+    candidate_source.write_text("VALUE = 99\n")
+
+    with pytest.raises(RuntimeError, match="between Verification and Protocol"):
+        service.verify_candidate(applied)
+
+    assert workspaces[branch.branch_id] == base_workspace
+    assert branch.current_code_hash is None
+    assert candidate_source.read_text() == "VALUE = 99\n"
+    assert (
+        Path(base_workspace) / "operators" / "solver.py"
+    ).read_text() == "VALUE = 0\n"
+
+
+def test_accept_does_not_rehash_after_verification(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    service, branch, _, materializer, _, _, base_workspace = _staging_service(tmp_path)
+    applied = service.apply_candidate_patch(base_workspace, _candidate_patch())
+    assert service.verify_candidate(applied) == applied
+
+    def unexpected_rehash(_workspace: str) -> str:
+        raise AssertionError("Decision-time candidate rehash is forbidden")
+
+    monkeypatch.setattr(materializer, "compute_code_hash", unexpected_rehash)
+    accepted = service.accept_candidate(branch, applied)
+
+    assert Path(accepted).is_dir()
+    assert branch.current_code_hash == applied.source_digest
 
 
 def test_reject_candidate_does_not_cleanup_champion_reconcile_source(
@@ -458,35 +477,29 @@ def test_reject_candidate_does_not_cleanup_champion_reconcile_source(
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="solver",
         code_snapshot_path=str(champion_dir),
-        code_snapshot_hash="champion",
     )
     controller = BranchController()
-    branch = controller.create_branch(champion)
     workspaces: dict[str, str] = {}
-    service = WorkspaceLifecycleService(
+    service = WorkspaceService(
         materializer=WorkspaceMaterializer(
             str(tmp_path / "campaign"),
             editable_patterns=("operators/*.py",),
         ),
         branch_controller=controller,
         branch_workspaces=workspaces,
-        branch_patches={},
         champion_lock=threading.Lock(),
         get_champion=lambda: champion,
     )
 
-    applied = service.apply_candidate_patch(
-        branch, str(champion_dir), _candidate_patch()
-    )
-    service.reject_candidate(branch, applied.workspace)
+    applied = service.apply_candidate_patch(str(champion_dir), _candidate_patch())
+    service.reject_candidate(applied)
 
     assert source.read_text() == "VALUE = 0\n"
     assert workspaces == {}
 
 
-def test_rejected_candidate_restores_accepted_workspace_identity(
+def test_rejected_candidate_preserves_accepted_workspace(
     tmp_path: Path,
 ) -> None:
     champion_dir = tmp_path / "champion"
@@ -495,24 +508,19 @@ def test_rejected_candidate_restores_accepted_workspace_identity(
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="solver",
         code_snapshot_path=str(champion_dir),
-        code_snapshot_hash="champion",
     )
     controller = BranchController()
     branch = controller.create_branch(champion)
-    workspaces: dict[str, str] = {}
     materializer = WorkspaceMaterializer(
         str(tmp_path / "campaign"),
         editable_patterns=("operators/*.py",),
     )
     workspaces: dict[str, str] = {}
-    patches: dict[str, PatchProposal] = {}
-    service = WorkspaceLifecycleService(
+    service = WorkspaceService(
         materializer=materializer,
         branch_controller=controller,
         branch_workspaces=workspaces,
-        branch_patches=patches,
         champion_lock=threading.Lock(),
         get_champion=lambda: champion,
     )
@@ -537,21 +545,15 @@ def test_rejected_candidate_restores_accepted_workspace_identity(
         ),
     )
     first = service.apply_candidate_patch(
-        branch,
         durable,
         first_patch,
         hypothesis=hypothesis,
-        remember_patch=True,
     )
     assert (Path(durable) / "operators" / "solver.py").read_text() == "VALUE = 0\n"
-    durable = service.accept_candidate(
-        branch,
-        first.code_hash,
-        first.workspace,
-    )
+    assert service.verify_candidate(first) == first
+    durable = service.accept_candidate(branch, first)
     clean_hash = materializer.compute_code_hash(durable)
-    assert clean_hash == branch.current_code_hash == branch.last_clean_code_hash
-    assert patches[branch.branch_id] is first_patch
+    assert clean_hash == branch.current_code_hash
 
     rejected_patch = PatchProposal(
         file_path="operators/solver.py",
@@ -566,27 +568,23 @@ def test_rejected_candidate_restores_accepted_workspace_identity(
         ),
     )
     rejected = service.apply_candidate_patch(
-        branch,
         durable,
         rejected_patch,
         hypothesis=hypothesis,
-        remember_patch=True,
     )
-    assert rejected.code_hash != clean_hash
+    assert rejected.source_digest != clean_hash
     assert (Path(durable) / "operators" / "solver.py").read_text() == "VALUE = 1\n"
 
-    service.reject_candidate(branch, rejected.workspace)
+    service.reject_candidate(rejected)
 
     assert not Path(rejected.workspace).exists()
     assert (Path(durable) / "operators" / "solver.py").read_text() == "VALUE = 1\n"
     assert (Path(durable) / "operators" / "helper.py").exists()
     assert materializer.compute_code_hash(durable) == clean_hash
     assert branch.current_code_hash == clean_hash
-    assert branch.last_clean_code_hash == clean_hash
-    assert patches[branch.branch_id] is first_patch
 
 
-def test_reject_cleanup_failure_leaves_debris_but_clears_pending_state(
+def test_reject_cleanup_failure_propagates_without_changing_branch_source(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -596,9 +594,7 @@ def test_reject_cleanup_failure_leaves_debris_but_clears_pending_state(
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="solver",
         code_snapshot_path=str(champion_dir),
-        code_snapshot_hash="champion",
     )
     controller = BranchController()
     branch = controller.create_branch(champion)
@@ -607,18 +603,16 @@ def test_reject_cleanup_failure_leaves_debris_but_clears_pending_state(
         str(tmp_path / "campaign"),
         editable_patterns=("operators/*.py",),
     )
-    service = WorkspaceLifecycleService(
+    service = WorkspaceService(
         materializer=materializer,
         branch_controller=controller,
         branch_workspaces=workspaces,
-        branch_patches={},
         champion_lock=threading.Lock(),
         get_champion=lambda: champion,
     )
     durable = service.setup_workspace(branch)
     assert durable is not None
     applied = service.apply_candidate_patch(
-        branch,
         durable,
         PatchProposal(
             file_path="operators/solver.py",
@@ -631,18 +625,13 @@ def test_reject_cleanup_failure_leaves_debris_but_clears_pending_state(
         raise OSError("cleanup unavailable")
 
     monkeypatch.setattr(materializer, "cleanup_candidate_workspace", fail_cleanup)
-    report = service.reject_candidate(branch, applied.workspace)
+    with pytest.raises(OSError, match="cleanup unavailable"):
+        service.reject_candidate(applied)
 
-    assert report.cleaned is False
-    assert report.cleanup_error == "OSError: cleanup unavailable"
     assert Path(applied.workspace).is_dir()
-    assert service.pending_candidates == {}
     assert workspaces[branch.branch_id] == durable
-    assert branch.current_code_hash == materializer.compute_code_hash(durable)
-    assert branch.last_clean_code_hash == materializer.compute_code_hash(durable)
-    assert branch.branch_code_status == "clean"
+    assert branch.current_code_hash is None
     next_applied = service.apply_candidate_patch(
-        branch,
         durable,
         PatchProposal(
             file_path="operators/solver.py",

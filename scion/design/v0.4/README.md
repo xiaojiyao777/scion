@@ -2,13 +2,22 @@
 
 *Last updated: 2026-05-10*
 
-These are active v0.4 design-source documents. Current implementation status is
-tracked in [docs/status/current-state.md](../../docs/status/current-state.md).
+These are historical and problem-design sources from the v0.4 development
+line. They are not a second architecture authority. Current implementation
+status is tracked in
+[docs/status/current-state.md](../../docs/status/current-state.md), current work
+in [TASK.md](../../TASK.md), and every architecture/boundary question is
+controlled by [Architecture V3](../scion-architecture-v3.md). The
+[direct-runtime addendum](../scion-architecture-v3-v0.4-direct-runtime-addendum.md)
+records the smaller current implementation. Older AgenticProposalSession,
+readiness, owner, identity, lease, receipt/hash or closure designs must not be
+restored from this index.
+
 For onboarding, do not read every file here by default. Start from
 [docs/READING_PROFILES.md](../../docs/READING_PROFILES.md) and choose the one
 or two design sources that match the task.
 
-## Core Design Sources
+## Historical and problem design sources
 
 - [v0.4 design baseline](v0.4-design.md) - performance-aware Scion, CVRP generalization, and campaign framework cleanup.
 - [Algorithm design-space upgrade](v0.4-algorithm-design-space-upgrade.md) - integrated design source for research surfaces v2 and AgenticProposalSession.

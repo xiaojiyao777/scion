@@ -8,7 +8,6 @@ import logging
 import re
 from typing import Any, Dict
 
-from .cache import gpt_prompt_cache_key
 from .config import (
     _ANTHROPIC_REQUIRED_MAX_TOKENS,
     _is_deepseek_model,
@@ -163,28 +162,11 @@ class TransportMixin:
 
         usage = getattr(response, "usage", None)
         if usage:
-            cache_create = getattr(usage, "cache_creation_input_tokens", 0)
-            cache_read = getattr(usage, "cache_read_input_tokens", 0)
-            input_tokens = getattr(usage, "input_tokens", 0)
-            output_tokens = getattr(usage, "output_tokens", 0)
-            self._cache_stats["calls"] += 1
-            self._cache_stats["cache_read_tokens"] += cache_read
-            self._cache_stats["cache_create_tokens"] += cache_create
-            self._cache_stats["uncached_tokens"] += input_tokens
             self._record_anthropic_usage(
                 usage,
                 model=model,
                 request_kind=_normalize_request_kind(tool=tool) or "tool_call",
             )
-            if self._token_tracker is not None:
-                self._token_tracker.record(
-                    request_kind=_normalize_request_kind(tool=tool) or "tool_call",
-                    model_id=model,
-                    prompt_tokens=input_tokens,
-                    completion_tokens=output_tokens,
-                    cache_read_tokens=cache_read,
-                    cache_create_tokens=cache_create,
-                )
 
         for tool_call_index, block in enumerate(tool_blocks):
             if block.name == tool["name"]:
@@ -246,8 +228,6 @@ class TransportMixin:
                 timeout_sec=timeout_sec,
                 tools=[openai_tool],
                 tool_choice={"type": "function", "function": {"name": tool_name}},
-                request_kind=_normalize_request_kind(tool=tool) or "tool_call",
-                system_blocks=system_blocks,
             )
         )
 
@@ -261,26 +241,11 @@ class TransportMixin:
 
         usage = response.usage
         if usage:
-            cache_read, cache_miss = self._openai_cache_usage(usage)
-            uncached = cache_miss if cache_read or cache_miss else usage.prompt_tokens or 0
-            self._cache_stats["calls"] += 1
-            self._cache_stats["cache_read_tokens"] += cache_read
-            self._cache_stats["uncached_tokens"] += uncached
             self._record_openai_usage(
                 usage,
                 model=model,
                 request_kind=_normalize_request_kind(tool=tool) or "tool_call",
-                prompt_cache_key=self._last_prompt_cache_key,
             )
-            if self._token_tracker is not None:
-                self._token_tracker.record(
-                    request_kind=_normalize_request_kind(tool=tool) or "llm_call",
-                    model_id=model,
-                    prompt_tokens=uncached,
-                    completion_tokens=usage.completion_tokens or 0,
-                    cache_read_tokens=cache_read,
-                    cache_create_tokens=0,
-                )
 
         choice = choices[0]
         tool_calls = getattr(choice.message, "tool_calls", None)
@@ -332,8 +297,6 @@ class TransportMixin:
         timeout_sec: float,
         tools: list[Dict[str, Any]] | None = None,
         tool_choice: Dict[str, Any] | None = None,
-        request_kind: str | None = None,
-        system_blocks: list[dict] | None = None,
     ) -> Dict[str, Any]:
         kwargs: Dict[str, Any] = {
             "model": model,
@@ -344,19 +307,6 @@ class TransportMixin:
             kwargs["tools"] = tools
         if tool_choice is not None and not _is_deepseek_model(str(model or "")):
             kwargs["tool_choice"] = tool_choice
-        normalized_kind = _normalize_request_kind(
-            request_kind=request_kind,
-            tool=tools[0] if tools else None,
-        ) or "llm_call"
-        prompt_cache_key = gpt_prompt_cache_key(
-            model=model,
-            request_kind=normalized_kind,
-            system_blocks=system_blocks,
-            tool_schema=tools or {},
-        )
-        self._last_prompt_cache_key = prompt_cache_key
-        if prompt_cache_key:
-            kwargs["prompt_cache_key"] = prompt_cache_key
         reasoning_effort = self._openai_reasoning_effort(model)
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
@@ -459,7 +409,6 @@ class TransportMixin:
         *,
         model: str,
         request_kind: str,
-        prompt_cache_key: str | None = None,
     ) -> None:
         cache_read, cache_miss = self._openai_cache_usage(usage)
         prompt_tokens_total = self._get_usage_int(usage, "prompt_tokens")
@@ -471,18 +420,11 @@ class TransportMixin:
         )
         if cache_read and not cache_miss and prompt_tokens_total > cache_read:
             cache_miss = prompt_tokens_total - cache_read
-        if prompt_cache_key:
-            cache_mode = (
-                "prompt_cache_key_observed"
-                if cache_read or cache_miss
-                else "prompt_cache_key_attempted"
-            )
-        else:
-            cache_mode = (
-                "automatic_prefix_cache_observed"
-                if cache_read or cache_miss
-                else "automatic_prefix_cache_attempted"
-            )
+        cache_mode = (
+            "automatic_prefix_cache_observed"
+            if cache_read or cache_miss
+            else "automatic_prefix_cache_attempted"
+        )
         self._last_usage_metadata = {
             "provider": "openai_compatible",
             "model": model,
@@ -501,12 +443,6 @@ class TransportMixin:
             "prompt_cache_hit_tokens": cache_read,
             "prompt_cache_miss_tokens": cache_miss,
         }
-        if prompt_cache_key:
-            self._last_usage_metadata["prompt_cache_key"] = prompt_cache_key
-            self._last_usage_metadata["prompt_cache_key_digest"] = (
-                prompt_cache_key.rsplit(":", 1)[-1]
-            )
-
     @staticmethod
     def _raise_classified(exc: Exception) -> None:
         """Classify one raw SDK exception at the transport boundary."""
@@ -538,13 +474,6 @@ class TransportMixin:
         ):
             raise LLMProviderError(f"Provider request failed: {exc}") from exc
         raise LLMError(f"API error: {exc}") from exc
-
-    def get_cache_stats(self) -> dict:
-        """Return cache hit statistics."""
-        s = self._cache_stats
-        total_in = s["cache_read_tokens"] + s["cache_create_tokens"] + s["uncached_tokens"]
-        hit_rate = s["cache_read_tokens"] / total_in if total_in > 0 else 0
-        return {"hit_rate": f"{hit_rate:.1%}", **s}
 
     def _get_anthropic_client(self) -> Any:
         if self._anthropic_client is not None:

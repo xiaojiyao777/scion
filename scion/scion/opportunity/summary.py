@@ -155,8 +155,6 @@ class ProblemOpportunitySummary:
     measurement: MeasurementConsumerView | None = None
     default_avoid: tuple[AvoidedMechanismSummary, ...] = ()
     schema_version: str = "scion.problem_opportunity_summary.v1"
-    proposal_visibility_only: bool = True
-    decision_features_excluded: bool = True
 
     def to_payload(self) -> dict[str, Any]:
         payload = {
@@ -179,9 +177,6 @@ class ProblemOpportunitySummary:
                 else None
             ),
             "default_avoid": [item.to_payload() for item in self.default_avoid],
-            "proposal_visibility_only": self.proposal_visibility_only,
-            "decision_features_excluded": self.decision_features_excluded,
-            "decision_input_policy": "excluded_from_decision_features",
         }
         return redact_problem_opportunity_payload(_drop_empty(payload))
 

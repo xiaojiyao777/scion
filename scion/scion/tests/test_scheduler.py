@@ -3,16 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-from scion.core.execution_outcome import (
-    ExecutionOutcome,
-    ExecutionOutcomeRecord,
-    install_branch_execution_hold,
-)
 from scion.core.models import Branch, BranchState
 from scion.core.scheduler import (
     Scheduler,
     active_slot_inventory,
-    branch_scheduling_status,
 )
 
 
@@ -22,7 +16,6 @@ def _branch(state: BranchState, name: str, offset: int = 0) -> Branch:
         branch_id=name,
         state=state,
         base_champion_id=0,
-        base_champion_hash="champion",
         created_at=timestamp,
         updated_at=timestamp,
     )
@@ -74,14 +67,9 @@ def test_same_state_uses_created_at_then_branch_id_fifo() -> None:
     assert second.branch is branches[1]
 
 
-def test_free_slot_admission_does_not_read_research_evidence() -> None:
+def test_free_slot_admission_depends_only_on_branch_state() -> None:
     branch = _branch(BranchState.EXPLORE, "existing")
     branch.direction = "ignored"
-    branch.branch_evidence_summary = {
-        "median_delta": -100,
-        "runtime_ratio_median": 9,
-        "telemetry_outcome": "ignored",
-    }
     action = Scheduler(max_active_branches=2).select_next([branch])
     assert action.action == "create_new"
     assert action.branch is None
@@ -111,22 +99,12 @@ def test_explore_service_time_moves_branch_behind_older_waiting_sibling() -> Non
     assert action.branch is branches[1]
 
 
-def test_blocked_infra_and_execution_hold_are_not_schedulable_but_hold_slots() -> None:
+def test_blocked_branches_do_not_use_active_slots() -> None:
     blocked = _branch(BranchState.BLOCKED_INFRA, "blocked")
-    held = _branch(BranchState.EXPLORE, "held")
-    install_branch_execution_hold(
-        held,
-        ExecutionOutcomeRecord(
-            outcome=ExecutionOutcome.NOT_EVALUATED,
-            reason_code="OPERATOR_RESUME_REQUIRED",
-        ),
-    )
+    held = _branch(BranchState.BLOCKED_INFRA, "held")
     action = Scheduler(max_active_branches=2).select_next([blocked, held])
-    assert action.action == "at_capacity"
-    assert action.slot == "capacity_blocked"
-    assert action.audit_metadata["branch_ids"] == ["blocked", "held"]
-    assert branch_scheduling_status(blocked).lane == "blocked_infra"
-    assert branch_scheduling_status(held).lane == "execution_hold"
+    assert action.action == "create_new"
+    assert action.slot == "explore_new"
 
 
 def test_terminal_states_release_slots() -> None:
@@ -136,17 +114,11 @@ def test_terminal_states_release_slots() -> None:
         _branch(BranchState.PARKED_LINEAGE, "historical-parked"),
     ]
     inventory = active_slot_inventory(branches, max_active_branches=1)
-    assert inventory["used"] == 0
-    assert inventory["available"] == 1
-    assert inventory["released_active_slot_ids"] == [
-        "promoted",
-        "abandoned",
-        "historical-parked",
-    ]
+    assert inventory == {"used": 0, "max": 1, "available": 1, "branch_ids": []}
 
 
 def test_scheduler_selection_is_pure() -> None:
     branch = _branch(BranchState.READY_VALIDATE, "candidate")
-    before = (branch.state, branch.updated_at, dict(branch.branch_evidence_summary))
+    before = (branch.state, branch.updated_at)
     Scheduler(max_active_branches=1).select_next([branch])
-    assert (branch.state, branch.updated_at, branch.branch_evidence_summary) == before
+    assert (branch.state, branch.updated_at) == before

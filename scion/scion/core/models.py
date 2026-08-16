@@ -1,14 +1,13 @@
 from __future__ import annotations
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Literal, Any, Dict, List, Tuple
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from scion.core.execution_outcome import (
     ExecutionOutcome,
-    ResearchRejectionDisposition,
-    validate_research_rejection_disposition,
-    validate_execution_outcome_projection,
+    ExecutionOutcomeRecord,
 )
 
 # --- Branch & Campaign Enums ---
@@ -43,9 +42,6 @@ class ExperimentStage(Enum):
 
 class Decision(Enum):
     CONTINUE_EXPLORE = "continue_explore"
-    # Historical campaign-resume compatibility only. The direct-v3 Decision
-    # mapper has no producer for this value and never requests model repair.
-    VALIDATION_REPAIR_REQUIRED = "validation_repair_required"
     EXPAND_SCREENING = "expand_screening"
     QUEUE_VALIDATE = "queue_validate"
     EXPAND_VALIDATION = "expand_validation"
@@ -82,7 +78,6 @@ class PatchProposal:
     code_content: str
     test_hint: Optional[str] = None
     additional_changes: Tuple[PatchFileChange, ...] = ()
-    repair_attribution: Tuple[Dict[str, Any], ...] = ()
 
     def iter_file_changes(self) -> Tuple[PatchFileChange, ...]:
         return patch_file_changes(self)
@@ -182,14 +177,12 @@ class EvalStats:
     failed_pairs: int = 0
     candidate_failed_pairs: int = 0
     champion_failed_pairs: int = 0
-    champion_cached_runtime_pairs: int = 0
     pair_wins: int = 0
     pair_losses: int = 0
     pair_ties: int = 0
     runtime_evidence_status: Literal[
         "sufficient",
         "insufficient",
-        "fresh_champion_required",
     ] = "sufficient"
 
 @dataclass(frozen=True)
@@ -220,11 +213,7 @@ class ProtocolResult:
     candidate_construction_errors: int = 0
     candidate_portfolio_errors: int = 0
     candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
-    champion_cache_hits: int = 0
-    champion_cache_misses: int = 0
-    champion_cached_runtime_pairs: int = 0
     runtime_confidence: str = "high"
-    runtime_evidence_status: str = "sufficient"
     runtime_model: Optional[Literal["comparative", "budget_exhausting"]] = None
     opportunity_status: str = "unknown"
     opportunity_diagnostics: Tuple[str, ...] = ()
@@ -263,10 +252,6 @@ class CaseAggregateFeedback:
     seed_consistency: float = 0.0
     seed_pattern: Literal["uniform", "heterogeneous"] = "uniform"
     case_features: Dict[str, Any] = field(default_factory=dict)
-    # DEPRECATED aliases for backward compat
-    dominant_decisive_objective: str = ""
-    median_delta_total_cost: Optional[float] = None
-    median_delta_subcategory_splits: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -291,22 +276,23 @@ DecisionRuntimeEvidenceConfidence = Literal[
     "high",
     "sufficient",
     "low",
-    "low_cached_champion",
     "low_sample_diagnostic",
     "missing",
 ]
 DecisionRuntimeEvidenceStatus = Literal[
     "sufficient",
     "insufficient",
-    "fresh_champion_required",
 ]
+
+
 @dataclass(frozen=True)
 class DecisionFeatures:
-    branch_id: str
     hypothesis_action: Literal["modify", "create_new", "remove"]
     stage: Literal["screening", "validation", "frozen"]
-    contract_passed: bool
-    verification_passed: bool
+    # None means the gate was not run for this invocation (for example a
+    # validation/frozen Protocol call over an already accepted source).
+    contract_passed: Optional[bool]
+    verification_passed: Optional[bool]
     canary_passed: bool
     n_cases: int
     win_rate: Optional[float]
@@ -349,7 +335,6 @@ class DecisionFeatures:
 class DecisionOutcome:
     decision: Decision
     reason_codes: Tuple[str, ...]
-    features_snapshot: DecisionFeatures
 
 # --- Campaign & Branch State ---
 
@@ -365,12 +350,8 @@ class OperatorConfig:
 class ChampionState:
     version: int
     operator_pool: Dict[str, OperatorConfig]
-    solver_config_hash: str
     code_snapshot_path: str
-    code_snapshot_hash: str
-    promotion_experiment_id: Optional[str] = None
     promoted_at: Optional[str] = None
-    promotion_dossier_ref: Optional[str] = None
     weight_revision: int = 0
 
 @dataclass
@@ -378,10 +359,10 @@ class Branch:
     branch_id: str
     state: BranchState
     base_champion_id: int
-    base_champion_hash: str
-    lineage_id: Optional[str] = None
+    # Content digest of the accepted read-only branch workspace.
     current_code_hash: Optional[str] = None
-    last_clean_code_hash: Optional[str] = None
+    # Current ordinary H value for in-process validation/frozen/stale work.
+    hypothesis: Optional[HypothesisProposal] = None
     # Stage-specific counts for preregistered Protocol sample expansion. A new
     # hypothesis resets them; evaluation increments the active stage count.
     screening_expand_count: int = 0
@@ -391,31 +372,6 @@ class Branch:
     updated_at: datetime = field(default_factory=datetime.now)
     direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text}'
     weight_revision: int = 0  # weight revision this branch was last evaluated against
-    branch_code_status: str = "clean"
-    branch_evidence_summary: Dict[str, Any] = field(default_factory=dict)
-    infra_block_count: int = 0          # Observational count only; never drives an infra decision
-
-@dataclass
-class HypothesisRecord:
-    hypothesis_id: str
-    branch_id: str
-    change_locus: str
-    action: str
-    status: str
-    target_file: Optional[str] = None
-    parent_hypothesis_id: Optional[str] = None
-    suggested_weight: Optional[float] = None
-    hypothesis_text: Optional[str] = None
-    family_id: Optional[str] = None
-    family_source: Optional[str] = None  # "classifier" | "keyword" | "manual"
-    taxonomy_version: Optional[str] = None  # e.g. "v1"
-    created_at: datetime = field(default_factory=datetime.now)
-    base_champion_version: int = 0      # champion version at hypothesis creation time
-    predicted_direction: Literal["improve", "tradeoff", "exploratory"] = "exploratory"
-    # Canonical digest of the complete provider HypothesisProposal.  This is
-    # persisted because HypothesisRecord intentionally does not duplicate every
-    # proposal field (for example target_weakness and expected_effect).
-    proposal_digest: Optional[str] = None
 
 # --- Solver Output ---
 
@@ -450,13 +406,6 @@ class RunResult:
     elapsed_ms: int
     output: Optional[SolverOutput] = None
     error_category: Optional[Literal["timeout", "oom", "crash"]] = None
-
-@dataclass(frozen=True)
-class FailureEvent:
-    category: Literal["proposal", "contract", "verification_light", "verification_heavy", "infra", "evaluation"]
-    detail: str
-    timestamp: datetime = field(default_factory=datetime.now)
-
 
 @dataclass(frozen=True)
 class WeightConfig:
@@ -496,7 +445,6 @@ class StepRecord:
 
     decision: None means the step did not reach the Decision Engine (early failure).
               Only set to a real Decision value when the Decision Engine actually ran.
-    hypothesis_id: the original HypothesisRecord.hypothesis_id for lifecycle tracking.
     decision_reason_codes: formal Decision outcome reason codes.
     candidate_parent_scope: host-owned source fact captured before applying the
                             current patch; None preserves conservative legacy output.
@@ -505,59 +453,33 @@ class StepRecord:
     branch_id: str
     hypothesis: HypothesisProposal
     patch: Optional[PatchProposal]
-    contract_passed: bool
-    verification_passed: bool
+    contract_passed: Optional[bool]
+    verification_passed: Optional[bool]
     protocol_result: Optional[ProtocolResult]
     decision: Optional[Decision]
     failure_stage: Optional[str]
     failure_detail: Optional[str]
-    verification_detail: Optional[str] = None  # Complete verification failure evidence
-    code_archive_ref: Optional[str] = None  # 归档目录路径
-    cache_stats: Optional[Dict[str, int]] = None  # {"total": N, "cache_read": M, "cache_create": K}
-    hypothesis_id: Optional[str] = None  # Original HypothesisRecord.hypothesis_id (T04)
     decision_reason_codes: Optional[Tuple[str, ...]] = None
     decision_engine_reason_codes: Tuple[str, ...] = ()
     diagnostic_reason_codes: Tuple[str, ...] = ()
     bypass_reason_codes: Tuple[str, ...] = ()
-    decision_features_snapshot: Optional[DecisionFeatures] = None
     contract_diagnostics: Tuple[Dict[str, Any], ...] = ()
-    proposal_session_ref: Optional[Dict[str, Any]] = None  # Compact APS artifact/session reference only
     canary_result: Optional[CanaryResult] = None
-    attempt_kind: str = "screening"
-    repair_policy_reason: Optional[str] = None
-    repair_mechanism_ids: Tuple[str, ...] = ()
-    candidate_runtime_failure_categories: Dict[str, int] = field(default_factory=dict)
-    candidate_first_runtime_failure: Optional[Dict[str, Any]] = None
-    candidate_operator_attempts: int = 0
-    candidate_operator_accepted: int = 0
-    candidate_operator_errors: int = 0
-    candidate_operator_invalid_outputs: int = 0
-    candidate_policy_errors: int = 0
-    candidate_construction_errors: int = 0
-    candidate_portfolio_errors: int = 0
-    candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
     candidate_parent_scope: Optional[
         Literal["declared_champion", "retained_branch_head"]
     ] = None
-    scheduler_slot: str = ""
-    scheduler_reason: str = ""
-    scheduler_audit_metadata: Dict[str, Any] = field(default_factory=dict)
-    execution_outcome: ExecutionOutcome | None = None
-    execution_outcome_reason_code: str = ""
-    execution_outcome_detail: str = ""
-    execution_outcome_provenance: Dict[str, Any] = field(default_factory=dict)
-    attempt_disposition: ResearchRejectionDisposition | None = None
+    execution_outcome: ExecutionOutcomeRecord | None = None
 
     def __post_init__(self) -> None:
-        validate_execution_outcome_projection(
-            execution_outcome=self.execution_outcome,
-            reason_code=self.execution_outcome_reason_code,
-            detail=self.execution_outcome_detail,
-            provenance=self.execution_outcome_provenance,
-            decision=self.decision,
-            protocol_result=self.protocol_result,
-        )
-        validate_research_rejection_disposition(
-            self.attempt_disposition,
-            execution_outcome=self.execution_outcome,
-        )
+        record = self.execution_outcome
+        if record is not None and not isinstance(record, ExecutionOutcomeRecord):
+            raise TypeError("execution_outcome must be an ExecutionOutcomeRecord")
+        if record is not None and record.outcome is not ExecutionOutcome.EVALUATED:
+            if self.decision is not None:
+                raise ValueError(
+                    "non-evaluated execution outcome cannot carry a Decision"
+                )
+            if self.protocol_result is not None:
+                raise ValueError(
+                    "non-evaluated execution outcome cannot carry a ProtocolResult"
+                )

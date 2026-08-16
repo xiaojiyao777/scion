@@ -3,14 +3,9 @@
 import json
 import sqlite3
 from dataclasses import replace
-from pathlib import Path
 
-from scion.core.execution_outcome import (
-    ExecutionOutcome,
-    ExecutionOutcomeRecord,
-    branch_execution_hold,
-    install_branch_execution_hold,
-)
+from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.models import BranchState
 from scion.core.scheduler import Scheduler
 
 from .campaign_test_support import *
@@ -21,6 +16,7 @@ class TestCodeFailureDirect:
 
     def _make_invalid_patch_then_succeed_llm(self):
         """Return one source-invalid C, then a valid C after a fresh H."""
+
         class _LLM:
             def __init__(self):
                 self._code_calls = 0
@@ -47,7 +43,9 @@ class TestCodeFailureDirect:
                 request_kind=None,
             ):
                 self.request_kinds.append(request_kind)
-                return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
+                return self.call(
+                    prompt, tool.get("input_schema", {}), model, system_blocks
+                )
 
         return _LLM()
 
@@ -70,66 +68,51 @@ class TestCodeFailureDirect:
         r1 = cm.run_one_step()
         assert r1.branch_id is not None
         bid = r1.branch_id
-        assert r1.execution_outcome is ExecutionOutcome.RESEARCH_REJECTED
-        assert r1.execution_outcome_reason_code == "PROPOSAL_RESPONSE_INVALID"
-        assert r1.attempt_disposition is not None
-        assert r1.attempt_disposition.rejection_phase == "proposal_code"
+        assert r1.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+        assert r1.execution_outcome.reason_code == "PROPOSAL_RESPONSE_INVALID"
+        assert not hasattr(r1, "attempt_disposition")
         assert r1.decision is None
         durable = cm._registry.query_execution_outcomes(branch_id=bid)
         assert len(durable) == 1
         assert durable[0]["outcome"] == "research_rejected"
-        first_records = cm._hyp_store.get_by_branch(bid)
-        assert len(first_records) == 1
-        first_hypothesis_id = first_records[0].hypothesis_id
-        assert first_records[0].status == "research_rejected"
-        assert branch_execution_hold(cm._branch_ctrl.get_branch(bid)) is None
+        assert cm._branch_ctrl.get_branch(bid).state is not BranchState.BLOCKED_INFRA
+        assert cm._branch_ctrl.get_branch(bid).hypothesis is None
         assert bid not in cm._branch_patches
-        assert cm._workspace_lifecycle.pending_candidates == {}
+        step = cm._step_history[-1]
+        assert step.failure_stage == "proposal_code"
+        assert step.hypothesis.hypothesis_text == (
+            _VALID_HYPOTHESIS["hypothesis_text"]
+        )
         with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
             rejection = conn.execute(
-                "SELECT audit_payload_json FROM experiment_events "
+                "SELECT execution_outcome_provenance_json FROM experiment_events "
                 "WHERE event_kind = 'research_rejection'"
             ).fetchone()
         assert rejection is not None
-        assert json.loads(rejection[0])["rejection_phase"] == "proposal_code"
+        assert json.loads(rejection[0])["stage"] == "proposal_code"
 
         r2 = cm.run_one_step()
 
         assert r2.branch_id == bid
-        assert r2.execution_outcome is ExecutionOutcome.EVALUATED
+        assert r2.execution_outcome.outcome is ExecutionOutcome.EVALUATED
         assert llm.request_kinds == ["hypothesis", "code", "hypothesis", "code"]
-        records = cm._hyp_store.get_by_branch(bid)
-        assert len(records) == 2
-        assert records[0].hypothesis_id == first_hypothesis_id
-        assert records[0].status == "research_rejected"
-        assert records[1].hypothesis_id != first_hypothesis_id
+        attempt_events = [
+            event
+            for event in cm._registry.query_by_branch(bid)
+            if event["event_kind"] == "experiment"
+            or event["execution_outcome"] is not None
+        ]
+        assert [event["event_kind"] for event in reversed(attempt_events)] == [
+            "research_rejection",
+            "experiment",
+        ]
+        assert attempt_events[0]["execution_outcome"] is None
         with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
-            rows = conn.execute(
-                "SELECT audit_payload_json FROM experiment_events "
-                "WHERE event_kind = 'proposal_call' ORDER BY rowid"
-            ).fetchall()
-        transitions = [json.loads(row[0]) for row in rows]
-        assert [item["phase"] for item in transitions] == [
-            "hypothesis",
-            "code",
-            "hypothesis",
-            "code",
-        ]
-        assert [item["status"] for item in transitions] == [
-            "generated",
-            "failed",
-            "generated",
-            "generated",
-        ]
-        code_hypothesis_ids = [
-            item["hypothesis_id"]
-            for item in transitions
-            if item["phase"] == "code"
-        ]
-        assert code_hypothesis_ids == [
-            first_hypothesis_id,
-            records[1].hypothesis_id,
-        ]
+            proposal_call_count = conn.execute(
+                "SELECT COUNT(*) FROM experiment_events "
+                "WHERE event_kind = 'proposal_call'"
+            ).fetchone()[0]
+        assert proposal_call_count == 0
 
     def test_next_tick_does_not_build_code_continuation_context(self, tmp_path):
         """No prior code failure is injected into a hidden continuation."""
@@ -147,10 +130,15 @@ class TestCodeFailureDirect:
             branch_workspace=None,
             step_history=None,
         ):
-            ctx = original_build(self_ctx, branch=branch, hypothesis=hypothesis,
-                                 champion=champion, problem_spec=problem_spec,
-                                 branch_workspace=branch_workspace,
-                                 step_history=step_history)
+            ctx = original_build(
+                self_ctx,
+                branch=branch,
+                hypothesis=hypothesis,
+                champion=champion,
+                problem_spec=problem_spec,
+                branch_workspace=branch_workspace,
+                step_history=step_history,
+            )
             captured_contexts.append(ctx)
             return ctx
 
@@ -162,27 +150,22 @@ class TestCodeFailureDirect:
                 results=[_make_protocol_result(ExperimentStage.SCREENING)]
             ),
         )
-        cm._ctx_manager.build_code_context = lambda **kw: capturing_build(
-            cm._ctx_manager, **kw
+        context_manager = cm._problem_runtime.ctx_manager
+        context_manager.build_code_context = lambda **kw: capturing_build(
+            context_manager, **kw
         )
 
         cm.run_one_step()
         assert captured_contexts
-        assert all(
-            "prior_code_failure" not in context
-            for context in captured_contexts
-        )
+        assert all("prior_code_failure" not in context for context in captured_contexts)
 
         cm.run_one_step()
         assert llm.request_kinds == ["hypothesis", "code", "hypothesis", "code"]
         assert captured_contexts
-        assert all(
-            "prior_code_failure" not in context
-            for context in captured_contexts
-        )
+        assert all("prior_code_failure" not in context for context in captured_contexts)
 
-    def test_changed_h_binding_remains_not_evaluated_and_holds(self, tmp_path):
-        """Local H/C binding faults stay fail-closed, unlike tainted C rejection."""
+    def test_changed_h_input_is_an_ordinary_invalid_response_rejection(self, tmp_path):
+        """There is no durable H-binding lookup outside direct response validation."""
         llm = self._make_invalid_patch_then_succeed_llm()
         cm = _campaign(tmp_path, llm_client=llm)
 
@@ -197,17 +180,16 @@ class TestCodeFailureDirect:
 
         result = cm.run_one_step()
 
-        assert result.execution_outcome is ExecutionOutcome.NOT_EVALUATED
-        assert (
-            result.execution_outcome_reason_code
-            == "APPROVED_HYPOTHESIS_BINDING_MISSING"
+        assert result.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+        assert result.execution_outcome.reason_code == "PROPOSAL_RESPONSE_INVALID"
+        assert "APPROVED_HYPOTHESIS_BINDING_MISSING" not in (
+            result.execution_outcome.reason_code,
+            *result.execution_outcome.provenance.values(),
         )
-        assert llm.request_kinds == ["hypothesis"]
+        assert llm.request_kinds == ["hypothesis", "code"]
         branch = cm._branch_ctrl.get_branch(result.branch_id)
-        assert branch_execution_hold(branch) is not None
-        records = cm._hyp_store.get_by_branch(result.branch_id)
-        assert len(records) == 1
-        assert records[0].status == "not_evaluated"
+        assert branch.state is not BranchState.BLOCKED_INFRA
+        assert branch.hypothesis is None
 
     def test_successful_code_reaches_evaluation(self, tmp_path):
         """A successful direct H/C path reaches formal evaluation."""
@@ -219,7 +201,7 @@ class TestCodeFailureDirect:
         )
         result = cm.run_one_step()
         assert result.branch_id is not None
-        assert result.execution_outcome is ExecutionOutcome.EVALUATED
+        assert result.execution_outcome.outcome is ExecutionOutcome.EVALUATED
 
 
 def test_provider_auth_failure_blocks_branch_with_one_typed_outcome(tmp_path):
@@ -233,62 +215,30 @@ def test_provider_auth_failure_blocks_branch_with_one_typed_outcome(tmp_path):
 
     result = cm.run_one_step()
 
-    assert result.execution_outcome is ExecutionOutcome.BLOCKED_INFRA
+    assert result.branch_id is not None
+    record = result.execution_outcome
+    assert record is not None
+    assert record.outcome is ExecutionOutcome.BLOCKED_INFRA
+    assert record.reason_code == "PROVIDER_CALL_BLOCKED_INFRA"
+    assert record.provenance["stage"] == "proposal_hypothesis"
+    assert result.failure_stage == "proposal_hypothesis"
+    assert result.failure_category == ExecutionOutcome.BLOCKED_INFRA.value
     assert result.decision is None
+    assert result.protocol_result is None
     branch = cm._branch_ctrl.get_branch(result.branch_id)
     assert branch.state == BranchState.BLOCKED_INFRA
     outcomes = cm._registry.query_execution_outcomes(branch_id=result.branch_id)
     assert len(outcomes) == 1
-    assert outcomes[0]["outcome"] == "blocked_infra"
-    step = cm._step_history[-1]
-    assert step.protocol_result is None
-    assert step.decision is None
-
-    def test_direct_hypothesis_is_saved_once_with_original_champion_anchor(
-        self,
-        tmp_path,
-    ):
-        cm = _campaign(
-            tmp_path,
-            experiment_protocol=MockExperimentProtocol(
-                results=[_make_protocol_result(ExperimentStage.SCREENING)]
-            ),
-        )
-        original_save = cm._hyp_store.save
-        saved_ids = []
-
-        def counting_save(record):
-            saved_ids.append(record.hypothesis_id)
-            original_save(record)
-
-        cm._hyp_store.save = counting_save
-        cm._explore_step_pipeline.get_champion = lambda: replace(
-            cm._champion,
-            version=2,
-        )
-
-        result = cm.run_one_step()
-
-        records = cm._hyp_store.get_by_branch(result.branch_id)
-        assert len(saved_ids) == 1
-        assert len(records) == 1
-        assert records[0].base_champion_version == 1
-        with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
-            row = conn.execute(
-                "SELECT audit_payload_json FROM experiment_events "
-                "WHERE event_kind = 'proposal_attempt_transition' "
-                "AND stage = 'proposal_hypothesis' "
-                "AND json_extract(audit_payload_json, '$.status') = 'generated' "
-                "ORDER BY rowid LIMIT 1"
-            ).fetchone()
-        payload = json.loads(row[0])
-        assert payload["anchors"]["champion_version"] == 1
-        assert payload["hypothesis_id"] == records[0].hypothesis_id
+    assert outcomes[0]["event_kind"] == "proposal_execution_outcome"
+    assert outcomes[0]["stage"] == "proposal_hypothesis"
+    assert outcomes[0]["outcome"] == ExecutionOutcome.BLOCKED_INFRA.value
+    assert outcomes[0]["reason_code"] == "PROVIDER_CALL_BLOCKED_INFRA"
+    assert cm._step_history == []
 
 
-class TestNoFakeHypothesisRecordFallback:
-    def test_missing_canonical_record_holds_without_abandon(self, tmp_path):
-        """Missing durable metadata is not converted into a research decision."""
+class TestMissingOrdinaryHypothesis:
+    def test_missing_branch_hypothesis_is_a_typed_non_evaluation(self, tmp_path):
+        """Evaluation cannot synthesize a hypothesis absent from branch state."""
         protocol = MockExperimentProtocol(
             results=[_make_protocol_result(ExperimentStage.SCREENING)]
         )
@@ -299,66 +249,93 @@ class TestNoFakeHypothesisRecordFallback:
         bid = r1.branch_id
         assert bid is not None
 
-        # Manually delete the canonical hypothesis record to simulate the lost-record scenario
-        cm._branch_current_hypothesis.pop(bid, None)
+        branch = cm._branch_ctrl.get_branch(bid)
+        branch.hypothesis = None
 
         # Run next step — the campaign will schedule READY_VALIDATE → VALIDATING
         # and call _run_eval_step, which must stop without synthesizing ABANDON.
         result = cm.run_one_step()
         assert result.branch_id == bid
 
-        from scion.core.models import BranchState
         branch = cm._branch_ctrl.get_branch(bid)
-        assert branch.state == BranchState.VALIDATING
+        assert branch.state is BranchState.BLOCKED_INFRA
         assert result.decision is None
-        assert result.execution_outcome is ExecutionOutcome.NOT_EVALUATED
-        assert branch.branch_evidence_summary["execution_hold"]["active"] is True
+        assert result.execution_outcome.outcome is ExecutionOutcome.NOT_EVALUATED
+        assert result.execution_outcome.reason_code == "EVAL_HYPOTHESIS_MISSING"
+        assert "EVAL_HYPOTHESIS_MISSING" in branch.failure_codes
         assert protocol.canary_call_count == 1
         assert protocol.experiment_call_count == 1
 
 
-class TestExecutionHoldResume:
-    def test_branch_state_write_failure_is_not_silenced(
+class TestProviderFailClosedTerminals:
+    @staticmethod
+    def _assert_blocked_once(cm, branch_id, reason_code):
+        branch = cm._branch_ctrl.get_branch(branch_id)
+        assert branch.state is BranchState.BLOCKED_INFRA
+        outcomes = cm._registry.query_execution_outcomes(branch_id=branch_id)
+        assert len(outcomes) == 1
+        assert outcomes[0]["event_kind"] == "proposal_execution_outcome"
+        assert outcomes[0]["reason_code"] == reason_code
+
+    def test_unexpected_provider_exception_returns_one_typed_terminal(self, tmp_path):
+        class UnexpectedFailureLLM:
+            def call_with_tool(self, *_args, **_kwargs):
+                raise RuntimeError("unexpected provider failure")
+
+        cm = _campaign(tmp_path, llm_client=UnexpectedFailureLLM())
+        result = cm.run_one_step()
+
+        assert result.branch_id is not None
+        assert result.execution_outcome is not None
+        assert result.execution_outcome.outcome is ExecutionOutcome.BLOCKED_INFRA
+        assert result.execution_outcome.reason_code == "PROPOSAL_UNEXPECTED_FAILURE"
+        assert result.decision is None
+        assert result.protocol_result is None
+        assert cm._step_history == []
+        self._assert_blocked_once(
+            cm,
+            result.branch_id,
+            "PROPOSAL_UNEXPECTED_FAILURE",
+        )
+
+    def test_keyboard_interrupt_reaches_outer_terminal_without_step_event(
         self,
         tmp_path,
-        monkeypatch,
     ):
-        cm = _campaign(tmp_path)
-        branch = cm._branch_ctrl.create_branch(cm._champion)
+        class InterruptedLLM:
+            def call_with_tool(self, *_args, **_kwargs):
+                raise KeyboardInterrupt()
 
-        def fail_save(_branch):
-            raise RuntimeError("branch store unavailable")
+        cm = _campaign(tmp_path, llm_client=InterruptedLLM())
 
-        monkeypatch.setattr(cm._branch_store, "save", fail_save)
-        with pytest.raises(RuntimeError, match="branch store unavailable"):
-            cm._persist_branch_state(branch.branch_id)
+        with pytest.raises(KeyboardInterrupt):
+            cm.run_one_step()
 
-    def test_resume_requires_durable_operator_event(self, tmp_path):
-        cm = _campaign(tmp_path)
-        branch = cm._branch_ctrl.create_branch(cm._champion)
-        install_branch_execution_hold(
-            branch,
-            ExecutionOutcomeRecord(
-                outcome=ExecutionOutcome.NOT_EVALUATED,
-                reason_code="PROVIDER_RESPONSE_INVALID",
-            ),
-        )
-        cm._persist_branch_state(branch.branch_id)
+        branches = cm._branch_ctrl.get_reportable_branches()
+        assert len(branches) == 1
+        branch = branches[0]
+        assert branch.state is BranchState.EXPLORE
+        assert cm._registry.query_execution_outcomes(branch_id=branch.branch_id) == []
 
-        assert cm.operator_resume_execution_hold(
-            branch.branch_id,
-            operator_reason="provider response contract corrected",
-            operator_ack="reviewed attempt evidence",
-        )
+    def test_code_interrupt_reaches_outer_terminal_without_step_event(self, tmp_path):
+        class CodeInterruptedLLM(MockLLMClient):
+            def call_with_tool(self, *args, request_kind=None, **kwargs):
+                if request_kind == "code":
+                    raise KeyboardInterrupt()
+                return super().call_with_tool(
+                    *args,
+                    request_kind=request_kind,
+                    **kwargs,
+                )
 
-        assert branch_execution_hold(branch) is None
-        with sqlite3.connect(Path(cm._campaign_dir) / "scion.db") as conn:
-            row = conn.execute(
-                "SELECT event_kind, audit_payload_json "
-                "FROM experiment_events WHERE branch_id = ? "
-                "ORDER BY rowid DESC LIMIT 1",
-                (branch.branch_id,),
-            ).fetchone()
-        assert row is not None
-        assert row[0] == "operator_resume_execution_hold"
-        assert json.loads(row[1])["operator_ack"] == "reviewed attempt evidence"
+        cm = _campaign(tmp_path, llm_client=CodeInterruptedLLM())
+
+        with pytest.raises(KeyboardInterrupt):
+            cm.run_one_step()
+
+        branches = cm._branch_ctrl.get_reportable_branches()
+        assert len(branches) == 1
+        branch = branches[0]
+        assert branch.state is BranchState.EXPLORE
+        assert cm._registry.query_execution_outcomes(branch_id=branch.branch_id) == []
+        assert branch.hypothesis is None

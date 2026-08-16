@@ -1,11 +1,8 @@
 """Lightweight campaign composition boundary tests."""
 from __future__ import annotations
 
-from pathlib import Path
+from types import SimpleNamespace
 
-from typer.testing import CliRunner
-
-from scion.cli.main import app
 from scion.config.problem import (
     ProblemSpec,
     ProtocolConfig,
@@ -16,11 +13,24 @@ from scion.config.problem import (
 from scion.core.campaign import CampaignManager
 from scion.core.campaign_composition import required_service_names
 from scion.core.models import ChampionState
-from scion.core.problem_identity import problem_id_anchor
 from scion.proposal.mock_client import MockLLMClient
+from scion.problem.spec import ObjectiveMetricSpec
+from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 
 
-runner = CliRunner()
+def _v3_runtime(spec, split_manifest, seed_ledger, tmp_path):
+    protocol = ExperimentProtocol(
+        ProtocolConfig(),
+        SplitManager(split_manifest),
+        SeedLedger(seed_ledger),
+        runner=object(),
+        metrics_dir=str(tmp_path / "metrics"),
+        metric_specs=(
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        ),
+        problem_spec=spec,
+    )
+    return protocol, SimpleNamespace(spec=spec)
 
 
 def test_campaign_composition_installs_key_services(tmp_path):
@@ -37,27 +47,42 @@ def test_campaign_composition_installs_key_services(tmp_path):
         ),
     )
     protocol = ProtocolConfig()
+    split_manifest = SplitManifest(
+        screening=["case-a"],
+        validation=["case-b"],
+        frozen=["case-c"],
+        canary=["case-d"],
+    )
+    seed_ledger = SeedLedgerConfig(
+        screening=[11],
+        validation=[17],
+        frozen=[23],
+        canary=[29],
+    )
+    experiment_protocol, adapter = _v3_runtime(
+        spec, split_manifest, seed_ledger, tmp_path
+    )
     manager = CampaignManager(
         problem_spec=spec,
         protocol_config=protocol,
-        split_manifest=SplitManifest(),
-        seed_ledger=SeedLedgerConfig(),
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
         llm_client=MockLLMClient(),
         champion=ChampionState(
             version=1,
             operator_pool={},
-            solver_config_hash="x",
             code_snapshot_path=str(code_dir),
-            code_snapshot_hash="y",
         ),
         campaign_dir=str(tmp_path / "campaign"),
+        experiment_protocol=experiment_protocol,
+        adapter=adapter,
     )
 
     for name in required_service_names():
         assert getattr(manager, name) is not None
 
 
-def test_campaign_composition_passes_problem_id_anchor_to_proposal_pipeline(
+def test_campaign_composition_passes_only_live_campaign_context_to_proposal_pipeline(
     tmp_path,
 ):
     code_dir = tmp_path / "code"
@@ -76,11 +101,16 @@ def test_campaign_composition_passes_problem_id_anchor_to_proposal_pipeline(
         screening=["case-a"],
         validation=["case-b"],
         frozen=["case-c"],
+        canary=["case-d"],
     )
     seed_ledger = SeedLedgerConfig(
         screening=[11],
         validation=[17],
         frozen=[23],
+        canary=[29],
+    )
+    experiment_protocol, adapter = _v3_runtime(
+        spec, split_manifest, seed_ledger, tmp_path
     )
 
     manager = CampaignManager(
@@ -92,92 +122,15 @@ def test_campaign_composition_passes_problem_id_anchor_to_proposal_pipeline(
         champion=ChampionState(
             version=1,
             operator_pool={},
-            solver_config_hash="x",
             code_snapshot_path=str(code_dir),
-            code_snapshot_hash="y",
         ),
         campaign_dir=str(tmp_path / "campaign"),
+        experiment_protocol=experiment_protocol,
+        adapter=adapter,
     )
 
     pipeline = manager._proposal_pipeline
-    assert manager._campaign_id
-    assert pipeline.campaign_id == manager._campaign_id
-    assert pipeline.problem_id == problem_id_anchor(spec)
+    assert not hasattr(pipeline, "problem_id")
     assert not hasattr(pipeline, "problem_spec_hash")
     assert not hasattr(pipeline, "split_manifest_hash")
     assert not hasattr(pipeline, "seed_ledger_hash")
-
-
-def test_campaign_composition_persists_initial_champion(tmp_path):
-    code_dir = tmp_path / "code"
-    (code_dir / "operators").mkdir(parents=True)
-    (code_dir / "registry.yaml").write_text("operators: []\n", encoding="utf-8")
-    spec = ProblemSpec(
-        name="composition_test",
-        root_dir=str(code_dir),
-        operator_categories=["local_search"],
-        search_space=SearchSpace(
-            editable=["operators/*.py"],
-            frozen=["solver.py"],
-            import_whitelist=["math", "random"],
-        ),
-    )
-    campaign_dir = tmp_path / "campaign"
-
-    manager = CampaignManager(
-        problem_spec=spec,
-        protocol_config=ProtocolConfig(),
-        split_manifest=SplitManifest(),
-        seed_ledger=SeedLedgerConfig(),
-        llm_client=MockLLMClient(),
-        champion=ChampionState(
-            version=1,
-            operator_pool={},
-            solver_config_hash="x",
-            code_snapshot_path=str(code_dir),
-            code_snapshot_hash="y",
-        ),
-        campaign_dir=str(campaign_dir),
-    )
-
-    current = manager._champion_store.get_current()
-    assert current is not None
-    assert current.version == 1
-    assert Path(current.code_snapshot_path).exists()
-    assert Path(current.code_snapshot_path).parent == campaign_dir / "champions"
-    assert manager._champion.code_snapshot_path == current.code_snapshot_path
-
-
-def test_initial_champion_persistence_accepts_legacy_weight_pool(tmp_path):
-    code_dir = tmp_path / "code"
-    (code_dir / "operators").mkdir(parents=True)
-    spec = ProblemSpec(
-        name="composition_test",
-        root_dir=str(code_dir),
-        operator_categories=["local_search"],
-        search_space=SearchSpace(
-            editable=["operators/*.py"],
-            frozen=["solver.py"],
-            import_whitelist=["math", "random"],
-        ),
-    )
-
-    manager = CampaignManager(
-        problem_spec=spec,
-        protocol_config=ProtocolConfig(),
-        split_manifest=SplitManifest(),
-        seed_ledger=SeedLedgerConfig(),
-        llm_client=MockLLMClient(),
-        champion=ChampionState(
-            version=1,
-            operator_pool={"local_search": 1.0},
-            solver_config_hash="x",
-            code_snapshot_path=str(code_dir),
-            code_snapshot_hash="y",
-        ),
-        campaign_dir=str(tmp_path / "campaign"),
-    )
-
-    current = manager._champion_store.get_current()
-    assert current is not None
-    assert current.operator_pool["local_search"].weight == 1.0

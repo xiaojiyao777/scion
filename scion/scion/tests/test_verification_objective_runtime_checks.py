@@ -39,7 +39,7 @@ class TestObjectiveCheck:
         assert r.passed is False
         assert "solver runtime audit failed" in r.detail
 
-    def test_adapter_required_spec_without_adapter_fails_before_legacy_fallback(
+    def test_adapter_required_spec_without_adapter_fails_closed(
         self,
         tmp_path,
     ):
@@ -59,7 +59,6 @@ class TestObjectiveCheck:
         assert r.passed is False
         assert r.name == "V7_objective"
         assert "problem adapter is required" in r.detail
-        assert "legacy objective fallback disabled" in r.detail
 
     def test_adapter_declared_objective_missing_from_solver_output_fails(
         self,
@@ -183,57 +182,6 @@ class TestStateleakCheck:
         assert r.passed is True
         assert "skipped" in r.detail
 
-    def test_deterministic_runs_pass(self, tmp_path):
-        canary = str(tmp_path / "small.json")
-        Path(canary).write_text("{}")
-        spec = _make_spec(canary=canary)
-        # Both runs return same objective.
-        runner = _mock_runner(output_dict=_solver_output_dict(splits=2, cost=6600))
-        r = check_nondeterminism(spec, runner, str(tmp_path))
-        # Check passes (even if oracle isn't available — we compare raw JSON objects).
-        assert r.name == "V8_nondeterminism"
-        assert r.passed is True
-        assert r.metadata["comparison_mode"] == "legacy_objective"
-        assert r.metadata["adapter_backed"] is False
-        assert r.metadata["comparison_equal"] is True
-
-    def test_non_deterministic_runs_fail(self, tmp_path):
-        canary = str(tmp_path / "small.json")
-        Path(canary).write_text("{}")
-        spec = _make_spec(canary=canary)
-
-        call_count = [0]
-
-        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
-            call_count[0] += 1
-            # Return different objective on second call.
-            splits = 2 if call_count[0] == 1 else 5
-            data = _solver_output_dict(splits=splits)
-            sol = SolverOutput(
-                objective=data["objective"],
-                feasible=True,
-                solution_payload={
-                    key: value
-                    for key, value in data.items()
-                    if key not in {"objective", "feasible", "runtime"}
-                },
-            )
-            return RunResult(
-                success=True, exit_code=0, stdout="", stderr="",
-                elapsed_ms=100, output=sol, error_category=None,
-            )
-
-        runner = MagicMock()
-        runner.run_solver.side_effect = run_solver
-
-        r = check_nondeterminism(spec, runner, str(tmp_path))
-        assert r.passed is False
-        assert r.name == "V8_nondeterminism"
-        # detail is now a JSON string with diff_keys
-        detail = json.loads(r.detail)
-        assert "diff_keys" in detail
-        assert len(detail["diff_keys"]) > 0
-
     def test_adapter_required_spec_without_adapter_fails_closed(self, tmp_path):
         canary = str(tmp_path / "small.json")
         Path(canary).write_text("{}")
@@ -248,7 +196,6 @@ class TestStateleakCheck:
         assert detail["comparison_mode"] == "adapter_required_missing"
         assert detail["selected_surface"] is None
         assert "problem adapter is required" in detail["error"]
-        assert "legacy nondeterminism fallback disabled" in detail["error"]
 
     def test_adapter_backed_fails_when_normalized_artifacts_differ(
         self,
@@ -257,10 +204,29 @@ class TestStateleakCheck:
         canary = str(tmp_path / "small.json")
         Path(canary).write_text("{}")
         spec = _make_spec(canary=canary)
+        metrics_dir = tmp_path / "metrics"
+        metrics_dir.mkdir()
+        runtime_summary = {
+            "solver_algorithm_actionability_summary": {
+                "schema": "scion.cvrp.solver_actionability.v1",
+                "attempted": True,
+                "accepted_moves": 1,
+            }
+        }
         runner = _sequential_runner(
             [
-                {"routes": [[0, 1, 0]], "objective": {"cost": 10}, "feasible": True},
-                {"routes": [[0, 2, 0]], "objective": {"cost": 10}, "feasible": True},
+                {
+                    "routes": [[0, 1, "run1-solution-secret", 0]],
+                    "objective": {"cost": 10},
+                    "feasible": True,
+                    "runtime": runtime_summary,
+                },
+                {
+                    "routes": [[0, 2, "run2-solution-secret", 0]],
+                    "objective": {"cost": 10},
+                    "feasible": True,
+                    "runtime": runtime_summary,
+                },
             ]
         )
 
@@ -281,14 +247,26 @@ class TestStateleakCheck:
             runner,
             str(tmp_path),
             adapter=RouteAdapter(),
+            metrics_dir=str(metrics_dir),
         )
 
         assert r.passed is False
         detail = json.loads(r.detail)
         assert detail["comparison_mode"] == "adapter_canonical_signature"
         assert detail["diff_keys"] == ["normalized_solution"]
-        assert detail["run1_signature"]["objective"] == {"cost": 10}
-        assert detail["run2_signature"]["objective"] == {"cost": 10}
+        assert len(detail["run1_signature_digest"]) == 16
+        assert len(detail["run2_signature_digest"]) == 16
+        assert detail["run1_signature_digest"] != detail["run2_signature_digest"]
+        assert "run1_signature" not in detail
+        assert "run2_signature" not in detail
+        assert "run1-solution-secret" not in r.detail
+        assert "run2-solution-secret" not in r.detail
+        assert len(r.detail.encode("utf-8")) <= 8 * 1024
+        diagnostics = list(metrics_dir.glob("v8_failure_*.json"))
+        assert len(diagnostics) == 1
+        assert diagnostics[0].stat().st_size <= 8 * 1024
+        assert json.loads(diagnostics[0].read_text(encoding="utf-8")) == detail
+        assert r.metadata == {"diagnostic_ref": str(diagnostics[0])}
 
     def test_adapter_backed_passes_when_raw_output_differs_but_signature_equal(
         self,
@@ -297,6 +275,8 @@ class TestStateleakCheck:
         canary = str(tmp_path / "small.json")
         Path(canary).write_text("{}")
         spec = _make_spec(canary=canary)
+        metrics_dir = tmp_path / "metrics"
+        metrics_dir.mkdir()
         runner = _sequential_runner(
             [
                 {
@@ -304,12 +284,14 @@ class TestStateleakCheck:
                     "objective": {"cost": 10},
                     "feasible": True,
                     "diagnostics": {"nonce": "a"},
+                    "runtime": {"large_sequence": ["run1"]},
                 },
                 {
                     "routes": [[0, 1, 0]],
                     "objective": {"cost": 10},
                     "feasible": True,
                     "diagnostics": {"nonce": "b"},
+                    "runtime": {"large_sequence": ["run2"] * 100_000},
                 },
             ]
         )
@@ -331,6 +313,7 @@ class TestStateleakCheck:
             runner,
             str(tmp_path),
             adapter=RouteAdapter(),
+            metrics_dir=str(metrics_dir),
         )
 
         assert r.passed is True
@@ -338,6 +321,42 @@ class TestStateleakCheck:
         assert r.metadata["comparison_mode"] == "adapter_canonical_signature"
         assert r.metadata["adapter_backed"] is True
         assert r.metadata["comparison_equal"] is True
+        assert not list(metrics_dir.iterdir())
+
+    def test_adapter_exception_failure_detail_is_hard_bounded(self, tmp_path):
+        canary = str(tmp_path / "small.json")
+        Path(canary).write_text("{}")
+        spec = _make_spec(canary=canary)
+        runner = _mock_runner(output_dict=_solver_output_dict())
+        metrics_dir = tmp_path / "metrics"
+        metrics_dir.mkdir()
+
+        class FailingAdapter:
+            def load_instance(self, instance_path):
+                return {"path": instance_path}
+
+            def deserialize_solver_output(self, raw_output, instance):
+                raise ValueError("adapter-secret-" * 10_000)
+
+        result = check_nondeterminism(
+            spec,
+            runner,
+            str(tmp_path),
+            adapter=FailingAdapter(),
+            metrics_dir=str(metrics_dir),
+        )
+
+        assert result.passed is False
+        detail = json.loads(result.detail)
+        assert detail["comparison_mode"] == "adapter_deserialize"
+        assert detail["error"].startswith("adapter deserialize error:")
+        assert len(detail["error"]) <= 1024
+        assert len(result.detail.encode("utf-8")) <= 8 * 1024
+        diagnostic = Path(result.metadata["diagnostic_ref"])
+        assert diagnostic.is_file()
+        assert diagnostic.stat().st_size <= 8 * 1024
+        assert json.loads(diagnostic.read_text(encoding="utf-8")) == detail
+        assert "diagnostic_persistence_error" not in result.metadata
 
     @pytest.mark.parametrize(
         ("bad_run", "expected_run"),

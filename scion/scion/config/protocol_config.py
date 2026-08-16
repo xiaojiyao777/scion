@@ -126,13 +126,6 @@ class RuntimeGovernanceConfig(BaseModel):
     tie_min_runtime_pairs: int = Field(gt=0, default=1)
     """Minimum paired runtime samples required for tie-preserving speedup decisions."""
 
-    champion_runtime_policy: Literal[
-        "allow_cached",
-        "fresh_required_for_runtime_tie",
-        "fresh_always",
-    ] = "fresh_required_for_runtime_tie"
-    """Champion runtime freshness policy for runtime-sensitive promotion evidence."""
-
     time_limits: "RuntimeTimeLimitConfig" = Field(
         default_factory=lambda: RuntimeTimeLimitConfig()
     )
@@ -486,7 +479,6 @@ class MeasurementReadinessConfig(BaseModel):
         "pair_evidence",
         "full_replay",
     ] = "none"
-    decision_features_excluded: bool = True
 
 
 class ProtocolConfig(BaseModel):
@@ -538,7 +530,7 @@ class ProtocolConfig(BaseModel):
     pairing_validity: Literal["trajectory_stable", "trajectory_divergent"] = (
         "trajectory_stable"
     )
-    """Problem-declared solver trajectory pairing model for gate/lifecycle policy."""
+    """Problem-declared solver trajectory pairing model for stage-gate policy."""
 
     measurement_governance: MeasurementGovernanceMode = "on"
     """Whether problem measurement governs protocol behavior or is status-only."""

@@ -52,6 +52,7 @@ class SolverDesignPromptProvider(Protocol):
     def solver_design_target_api_guidance(self, target_file: str) -> str:
         """Return problem-owned target-specific code-stage API guidance."""
 
+
 class ActiveSubjectPolicyProvider(Protocol):
     """Optional problem-owned active algorithm subject policy."""
 
@@ -157,8 +158,8 @@ def active_subject_policy_payload_from_provider(
 ) -> dict[str, Any]:
     """Materialize policy from an already-resolved provider.
 
-    Contract uses this entry point so one capability owner resolves a provider
-    once and every static check consumes the same immutable policy snapshot.
+    Contract resolves the provider once so every static check consumes the
+    same immutable policy value.
     """
 
     if provider is None:
@@ -191,7 +192,9 @@ def active_subject_policy_payload_from_provider(
         return {}
     normalized = _normalize_active_subject_policy(raw)
     if strict and not normalized:
-        raise ProblemProviderError("active subject policy provider returned empty policy")
+        raise ProblemProviderError(
+            "active subject policy provider returned empty policy"
+        )
     return normalized
 
 
@@ -311,26 +314,15 @@ def _active_subject_code_constraint_providers(
     strict: bool = False,
 ) -> tuple[Any, ...]:
     providers: list[Any] = []
-    seen: set[int] = set()
-    factory_groups = (
-        ("active_subject_code_constraints_provider",),
-        ("active_subject_policy_provider",),
-        ("solver_design_prompt_provider",),
-        ("proposal_prompt_provider",),
-        ("prompt_provider",),
+    factory_names = (
+        "active_subject_code_constraints_provider",
+        "active_subject_policy_provider",
+        "solver_design_prompt_provider",
+        "proposal_prompt_provider",
+        "prompt_provider",
     )
-    owners = (adapter, problem_spec)
-    _validate_adapter_identity(adapter=adapter, problem_spec=problem_spec)
-    for owner in owners:
-        for factory_names in factory_groups:
-            provider = _provider_from_factory(owner, factory_names)
-            if provider is None:
-                continue
-            marker = id(provider)
-            if marker in seen:
-                continue
-            seen.add(marker)
-            providers.append(provider)
+    owners = [adapter, problem_spec]
+    _validate_adapter_consistency(adapter=adapter, problem_spec=problem_spec)
 
     adapter_import_path = _adapter_import_path(problem_spec)
     if adapter_import_path and adapter is None:
@@ -341,15 +333,12 @@ def _active_subject_code_constraint_providers(
                 raise
             loaded_adapter = None
         if loaded_adapter is not None:
-            for factory_names in factory_groups:
-                provider = _provider_from_factory(loaded_adapter, factory_names)
-                if provider is None:
-                    continue
-                marker = id(provider)
-                if marker in seen:
-                    continue
-                seen.add(marker)
-                providers.append(provider)
+            owners.append(loaded_adapter)
+
+    for owner in owners:
+        provider = _provider_from_factory(owner, factory_names)
+        if provider is not None:
+            providers.append(provider)
     return tuple(providers)
 
 
@@ -390,44 +379,30 @@ def typed_research_question_payload(
     problem_spec: Any = None,
     adapter: Any = None,
 ) -> dict[str, Any]:
-    """Return the current typed question and any problem-owned research prior."""
+    """Return one ordinary question value and optional prior evidence."""
 
-    provider = _resolve_provider(
+    raw = _resolve_provider(
         problem_spec=problem_spec,
         adapter=adapter,
-        factory_names=("research_guidance_provider",),
+        factory_names=("research_question_payload",),
     )
-    if provider is None:
+    if raw is None:
         return {}
-    build = getattr(provider, "build_guidance_contract", None)
-    if not callable(build):
-        return {}
-    from scion.research_guidance import (
-        GuidanceContext,
-        ResearchGuidanceContract,
-        validate_research_guidance_contract,
-    )
-
-    problem_family = _problem_id(problem_spec)
-    if not problem_family:
-        return {}
-    contract = build(GuidanceContext(problem_family=problem_family))
-    if not isinstance(contract, ResearchGuidanceContract):
+    if not isinstance(raw, Mapping):
         raise ProblemProviderError(
-            "research guidance provider returned an untyped contract"
+            "research_question_payload must return a mapping"
         )
-    validate_research_guidance_contract(contract)
+    current_question = str(raw.get("current_question") or "").strip()
+    if not current_question:
+        raise ProblemProviderError("research_question_payload requires current_question")
+    raw_prior = raw.get("research_prior", ())
+    if not isinstance(raw_prior, Sequence) or isinstance(raw_prior, (str, bytes)):
+        raise ProblemProviderError("research_prior must be a sequence of strings")
+    research_prior = [str(line).strip() for line in raw_prior if str(line).strip()]
     payload: dict[str, Any] = {
-        "schema_version": "scion.typed_research_question.v2",
-        "problem_family": contract.problem_family,
-        "current_question": contract.current_question,
+        "problem_family": _problem_id(problem_spec),
+        "current_question": current_question,
     }
-    research_prior = [
-        line
-        for block in contract.guidance_blocks
-        if block.category == "research_prior"
-        for line in block.lines
-    ]
     if research_prior:
         payload["research_prior"] = research_prior
     return payload
@@ -439,7 +414,7 @@ def _resolve_provider(
     adapter: Any = None,
     factory_names: Sequence[str],
 ) -> Any | None:
-    _validate_adapter_identity(adapter=adapter, problem_spec=problem_spec)
+    _validate_adapter_consistency(adapter=adapter, problem_spec=problem_spec)
     direct = _provider_from_factory(adapter, factory_names)
     if direct is not None:
         return direct
@@ -507,9 +482,7 @@ def _normalize_active_subject_taxonomy(raw: Mapping[str, Any]) -> dict[str, Any]
         "telemetry_activation_refs": _string_tuple(
             policy.get("telemetry_activation_refs")
         ),
-        "target_module_examples": _string_tuple(
-            policy.get("target_module_examples")
-        ),
+        "target_module_examples": _string_tuple(policy.get("target_module_examples")),
     }
     return {key: value for key, value in normalized.items() if value}
 
@@ -581,7 +554,9 @@ def _string_tuple(value: Any) -> tuple[str, ...]:
         except TypeError:
             items = ()
     return tuple(
-        dict.fromkeys(str(item).replace("\\", "/").lstrip("/").strip() for item in items)
+        dict.fromkeys(
+            str(item).replace("\\", "/").lstrip("/").strip() for item in items
+        )
     )
 
 
@@ -683,7 +658,7 @@ def _problem_id(problem_spec: Any) -> str:
     return ""
 
 
-def _validate_adapter_identity(
+def _validate_adapter_consistency(
     *,
     adapter: Any = None,
     problem_spec: Any = None,

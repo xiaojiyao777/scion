@@ -63,17 +63,17 @@ For v0.4:
 | §10.4, §13 | LLM repair after light Contract/Verification failure | No automatic repair or second call for the same H/C. A terminal provider response that is malformed, fails the H/C schema, or contains a typed edit that cannot be applied to the provider-visible source is tainted proposal input and becomes `RESEARCH_REJECTED`: it ends that H/C, does not count as a formal round, and scheduler-forward schedules a fresh H on the exact clean base. Contract/Verification rejection follows the same attempt-terminal rule. Missing provider terminal response, transport/auth/timeout/resource failure, missing or invalid local proposal context, missing typed outcome, and interruption remain invocation-terminal. |
 | §11.5, §12.2 | candidate fix budgets and campaign budget termination | v0.4 does not impose Scion-semantic prompt/session/tool/file/item/token/retry budgets. An operator-selected formal-round target and scientific subprocess/solver timeouts remain explicit experiment boundaries. A provider-required `max_tokens` parameter is an explicit transport ceiling, not a Scion stopping or research policy. |
 | §11.1, §11.5 | one branch is one iterative direction; `max_active_branches = 3` is configurable | The v0.4 production default admits at most three active branches. State priority and FIFO choose runnable work; each branch deepens its own natural research direction without a host-authored diversity or mechanism gate. |
-| §15.1–15.3 | recent-N context, compression, blacklist | H receives complete safe current context plus one canonical record per visible screening attempt. C receives the approved H and complete `SourceLedger`. There is no compact-to-fit, top-N, blacklist steering, or summary substitution. |
+| §15.1–15.3 | recent-N context, compression, blacklist | H receives complete safe current context plus one canonical record per visible screening attempt. C receives the approved H and a complete ordinary path/content source mapping. There is no compact-to-fit, top-N, blacklist steering, or summary substitution. |
 | §18 | `continue` after proposal/verification failure, possibly returning to Code | A finalized malformed H/C response, typed-edit invalid result, or Contract/Verification `RESEARCH_REJECTED` is attempt-terminal but scheduler-forward: no same-H/C repair, no formal-round count, then a new H on the exact clean base. Provider calls without a terminal response and local/infrastructure outcomes stop/hold the invocation. |
 
 ## Direct v0.4 control flow
 
 ```text
 ProblemRuntime + complete safe source
-  -> immutable ProposalContextSnapshot
+  -> one validated immutable proposal-context value
   -> one durable Hypothesis provider call
   -> Hypothesis Contract
-  -> approved H + complete SourceLedger
+  -> approved H + complete ordinary path/content source mapping
   -> one durable Code provider call
   -> Patch Contract
   -> transactional Workspace
@@ -171,8 +171,9 @@ screening evidence and the next C receives that branch-current source.
 Verification failure restores the last clean branch source, or champion when
 the branch has never produced verified code. A provisional head is not a
 champion and cannot bypass validation, frozen holdout, or promotion. Code that
-fails Contract or Verification remains evidence only and cannot enter current
-SourceLedger, promotion ancestry, or the next executable base.
+fails Contract or Verification remains evidence only and cannot enter the
+current executable source mapping, promotion ancestry, or the next executable
+base.
 
 The completed Decision applies candidate disposition, branch state, hypothesis
 status, evidence projection, and existing lineage synchronously. Workspace
@@ -234,6 +235,8 @@ and independent replay outcomes stated in `TASK.md`.
 
 Retry, budget, compaction, blacklist, novelty, telemetry, or host-steering
 mechanisms may not be reintroduced as compatibility fixes. A future version
-must provide new experiment evidence, identify one authoritative owner, prove
-that the mechanism cannot alter Decision or suppress valid algorithm research,
-and update the foundation/addendum explicitly before implementation.
+must provide new experiment evidence, identify one implementation
+responsibility and prove that the mechanism cannot alter Decision or suppress
+valid algorithm research, then update the foundation/addendum explicitly before
+implementation. “Responsibility” here never means an identity, capability,
+lease, issuer, registry or receipt authority.

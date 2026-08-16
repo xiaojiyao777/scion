@@ -9,7 +9,6 @@ from scion.problem.bridge import legacy_problem_spec_from_v1
 from scion.problem.spec import ProblemSpecV1
 from scion.core.models import Branch, BranchState, ChampionState
 from scion.proposal.context.problem_adapter import _build_operator_interface_spec
-from scion.proposal.context.surfaces import _build_research_surfaces_block
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import build_prompt_turn_snapshot
 from scion.tests.unit.research_surface_helpers import _problem_payload
@@ -195,12 +194,6 @@ def test_problem_spec_accepts_v2_research_surface_and_exposes_legacy_fields(
     assert "novelty.strategy" not in rendered
     assert "novelty.signature_fields" not in rendered
 
-    hypothesis_context = _build_research_surfaces_block([surface])
-    assert "evidence.mechanism_telemetry" in hypothesis_context
-    assert '"activation_runtime_fields"' in hypothesis_context
-    assert '"mechanisms.{mechanism}.active"' in hypothesis_context
-
-
 def test_problem_spec_rejects_invalid_mechanism_telemetry_declaration(
     tmp_path: Path,
 ) -> None:
@@ -360,15 +353,12 @@ def test_legacy_categories_bind_structured_hypothesis_surface_enum(
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="legacy-config",
         code_snapshot_path=str(tmp_path),
-        code_snapshot_hash="legacy-code",
     )
     branch = Branch(
         branch_id="legacy-surface-binding",
         state=BranchState.EXPLORE,
         base_champion_id=1,
-        base_champion_hash="legacy-code",
     )
 
     context = ContextManager().build_hypothesis_context(

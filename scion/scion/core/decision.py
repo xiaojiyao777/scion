@@ -34,8 +34,7 @@ class DecisionEngine:
 
     Scientific thresholds, confidence intervals, runtime comparisons, and
     statistical expansion policy belong to Protocol. Numeric aggregates remain
-    in ``DecisionFeatures`` for a safe, auditable snapshot, but they do not
-    participate in this mapping.
+    ordinary Decision inputs but do not participate in this mapping.
     """
 
     def __init__(self, config: ProtocolConfig) -> None:
@@ -114,5 +113,4 @@ class DecisionEngine:
         return DecisionOutcome(
             decision=decision,
             reason_codes=tuple(reason_codes),
-            features_snapshot=features,
         )

@@ -1,19 +1,10 @@
 """Tests for scion.cli.main — inspect and report subcommands."""
 from __future__ import annotations
 
-import json
-import sys
 import uuid
 from pathlib import Path
 
-import pytest
-from typer.testing import CliRunner
-
-from scion.cli.main import app
-from scion.core.models import Branch, BranchState, HypothesisRecord
 from scion.lineage.registry import LineageRegistry
-from scion.lineage.branch_store import BranchStore, HypothesisStore
-runner = CliRunner()
 
 
 
@@ -165,53 +156,26 @@ _FORCE_SURFACE_BLOCK = "\n".join(
 
 
 
-def _make_campaign(tmp_path: Path) -> Path:
-    """Set up a minimal campaign dir with scion.db and .scion_state.json."""
+def _make_campaign(tmp_path: Path) -> tuple[Path, str]:
+    """Set up a minimal campaign dir with an ordinary lineage database."""
     campaign_dir = tmp_path / "campaign"
     campaign_dir.mkdir()
-
-    # Write state file
-    state = {"problem_name": "test_problem", "campaign_dir": str(campaign_dir), "problem_yaml": "/fake/problem.yaml"}
-    (campaign_dir / ".scion_state.json").write_text(json.dumps(state))
 
     # Create scion.db with some records
     registry = LineageRegistry(str(campaign_dir / "scion.db"))
 
-    branch_store = BranchStore(registry)
-    hyp_store = HypothesisStore(registry)
-
     branch_id = str(uuid.uuid4())
-    branch = Branch(
-        branch_id=branch_id,
-        state=BranchState.EXPLORE,
-        base_champion_id=1,
-        base_champion_hash="abc123",
-    )
-    branch_store.save(branch)
-
-    hyp_id = str(uuid.uuid4())
-    hyp = HypothesisRecord(
-        hypothesis_id=hyp_id,
-        branch_id=branch_id,
-        change_locus="order_level",
-        action="modify",
-        status="active",
-        target_file="operators/move.py",
-        hypothesis_text="Test hypothesis text",
-    )
-    hyp_store.save(hyp)
-
     # Record an event
     registry.record_event({
         "branch_id": branch_id,
-        "hypothesis_id": hyp_id,
+        "hypothesis_text": "Test hypothesis text",
         "contract_result": "passed",
         "verification_result": "passed",
         "decision": "continue_explore",
         "decision_reason": "low win rate",
     })
 
-    return campaign_dir, branch_id, hyp_id
+    return campaign_dir, branch_id
 
 
 

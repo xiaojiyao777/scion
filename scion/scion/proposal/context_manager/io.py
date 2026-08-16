@@ -1,7 +1,6 @@
 """File and code-reading helpers for proposal context assembly."""
 from __future__ import annotations
 
-import ast
 import os
 from pathlib import Path
 from typing import Any, List, Mapping, Optional
@@ -53,20 +52,6 @@ def _read_surface_file(champion: ChampionState, file_rel: str, *, label: str) ->
         return f"### {file_rel} ({label})\n```python\n{content}\n```"
     except OSError as exc:
         return f"### {file_rel}\n(unreadable: {exc})"
-
-def _build_champion_stats(champion: ChampionState) -> str:
-    """Return hypothesis-facing champion baseline summary."""
-    lines = ["Champion baseline: current selected solver state"]
-    if champion.operator_pool:
-        lines.append("Operator pool:")
-        for name, op in champion.operator_pool.items():
-            w = getattr(op, "weight", "?")
-            cat = getattr(op, "category", "?")
-            fp = getattr(op, "file_path", "?")
-            lines.append(f"  - {name} [{cat}] weight={w}  file={fp}")
-    else:
-        lines.append("Operator pool: (not yet loaded from registry)")
-    return "\n".join(lines)
 
 def _list_champion_operator_files(champion: ChampionState) -> list[str]:
     files: set[str] = set()
@@ -183,23 +168,6 @@ def _append_unique(items: list[str], value: str) -> None:
     if value not in items:
         items.append(value)
 
-def _read_target_file(champion: ChampionState, target_file: Optional[str]) -> str:
-    """Read the target file from the champion snapshot."""
-    if not target_file or not champion.code_snapshot_path:
-        return "(no target file specified)"
-    return _read_target_file_from_root(champion.code_snapshot_path, target_file)
-
-def _read_target_file_from_root(root: str, target_file: Optional[str]) -> str:
-    if not target_file or not root:
-        return "(no target file specified)"
-    candidate = os.path.join(root, target_file.lstrip("/"))
-    try:
-        with open(candidate, encoding="utf-8") as fh:
-            content = fh.read()
-        return f"File: {target_file}\n```python\n{content}\n```"
-    except OSError as exc:
-        return f"(could not read {target_file}: {exc})"
-
 def _read_solver_design_context_artifact(
     rel: str,
     *,
@@ -264,100 +232,6 @@ def _read_solver_design_context_artifact(
         "reason": "not_found",
         "content": f"# could not read {normalized}",
     }
-
-def _python_api_manifest_for_file(path: Path) -> str:
-    try:
-        content = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
-        return ""
-    return _python_api_manifest_for_content(content)
-
-
-def _python_api_manifest_for_content(content: str) -> str:
-    try:
-        tree = ast.parse(content)
-    except SyntaxError:
-        return ""
-    exports: list[str] = []
-    imports: list[str] = []
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            exports.append("def " + _python_signature_text(node))
-        elif isinstance(node, ast.ClassDef):
-            methods = [
-                _python_signature_text(child)
-                for child in node.body
-                if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
-            ]
-            if methods:
-                exports.append(f"class {node.name}: " + "; ".join(methods))
-            else:
-                exports.append(f"class {node.name}")
-        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-            targets = list(node.targets) if isinstance(node, ast.Assign) else [node.target]
-            for target in targets:
-                exports.extend(sorted(_assigned_names_for_manifest(target)))
-        elif isinstance(node, ast.ImportFrom) and node.level > 0:
-            imported = ", ".join(
-                alias.asname or alias.name
-                for alias in node.names
-                if alias.name != "*"
-            )
-            if imported:
-                dots = "." * int(node.level or 0)
-                imports.append(f"from {dots}{node.module or ''} import {imported}")
-    parts: list[str] = []
-    if exports:
-        parts.append("exports " + "; ".join(exports))
-    if imports:
-        parts.append("current imports " + "; ".join(imports))
-    return " | ".join(parts)
-
-def _python_signature_text(node: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
-    args = node.args
-    parts: list[str] = []
-    for arg in [*args.posonlyargs, *args.args]:
-        parts.append(arg.arg)
-    if args.vararg is not None:
-        parts.append("*" + args.vararg.arg)
-    elif args.kwonlyargs:
-        parts.append("*")
-    for arg in args.kwonlyargs:
-        parts.append(arg.arg)
-    if args.kwarg is not None:
-        parts.append("**" + args.kwarg.arg)
-    return f"{node.name}({', '.join(parts)})"
-
-def _assigned_names_for_manifest(node: ast.AST) -> set[str]:
-    if isinstance(node, ast.Name):
-        return {node.id}
-    if isinstance(node, (ast.Tuple, ast.List)):
-        names: set[str] = set()
-        for item in node.elts:
-            names.update(_assigned_names_for_manifest(item))
-        return names
-    return set()
-
-def _read_branch_code(
-    branch_workspace: str,
-    champion: ChampionState,
-    *,
-    research_surfaces: Optional[list[Any]] = None,
-    include_operator_files: bool = True,
-) -> Optional[str]:
-    """Read branch research-surface files that differ from champion.
-
-    Returns a formatted string showing modified files, or None if no
-    differences are found or the workspace is unavailable.
-    """
-    rendered, _ = _read_branch_code_projection(
-        branch_workspace,
-        champion,
-        research_surfaces=research_surfaces,
-        include_operator_files=include_operator_files,
-    )
-    return rendered
-
 
 def _read_branch_code_projection(
     branch_workspace: str,

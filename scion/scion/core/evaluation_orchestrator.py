@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, MutableMapping, Optional, Tuple
 
 from scion.core.canary_failure import (
@@ -13,12 +13,11 @@ from scion.core.canary_failure import (
 )
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_pipeline import EvaluationPipeline, EvaluationRequest
-from scion.core.features import SafeFeatureExtractor
 from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
-    validate_execution_outcome_projection,
 )
+from scion.core.features import SafeFeatureExtractor
 from scion.core.models import (
     Branch,
     BranchState,
@@ -28,7 +27,6 @@ from scion.core.models import (
     DecisionFeatures,
     ExperimentStage,
     HypothesisProposal,
-    HypothesisRecord,
     PatchProposal,
     ProtocolResult,
 )
@@ -57,16 +55,28 @@ class EvaluationExecutionResult:
     decision: Optional[Decision] = None
     protocol_result: Optional[ProtocolResult] = None
     canary_result: Optional[CanaryResult] = None
+    decision_features: Optional[DecisionFeatures] = None
+    decision_reason_codes: Tuple[str, ...] = ()
+    decision_engine_reason_codes: Tuple[str, ...] = ()
+    diagnostic_reason_codes: Tuple[str, ...] = ()
+    bypass_reason_codes: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        validate_execution_outcome_projection(
-            execution_outcome=self.execution_outcome.outcome,
-            reason_code=self.execution_outcome.reason_code,
-            detail=self.execution_outcome.detail,
-            provenance=self.execution_outcome.provenance,
-            decision=self.decision,
-            protocol_result=self.protocol_result,
-        )
+        if not isinstance(self.execution_outcome, ExecutionOutcomeRecord):
+            raise TypeError("execution_outcome must be an ExecutionOutcomeRecord")
+        if self.execution_outcome.outcome is not ExecutionOutcome.EVALUATED:
+            if self.decision is not None:
+                raise ValueError(
+                    "non-evaluated execution outcome cannot carry a Decision"
+                )
+            if self.protocol_result is not None:
+                raise ValueError(
+                    "non-evaluated execution outcome cannot carry a ProtocolResult"
+                )
+            if self.decision_features is not None:
+                raise ValueError(
+                    "non-evaluated execution outcome cannot carry DecisionFeatures"
+                )
         if (
             self.execution_outcome.outcome is ExecutionOutcome.EVALUATED
             and self.decision is None
@@ -83,68 +93,56 @@ class EvaluationOrchestrator:
     get_champion: Callable[[], ChampionState]
     branch_patches: MutableMapping[str, PatchProposal]
     branch_workspaces: MutableMapping[str, str]
-    branch_hypotheses: MutableMapping[str, HypothesisProposal]
-    branch_current_hypothesis: MutableMapping[str, HypothesisRecord]
     experiment_protocol_provider: Callable[[], Any]
     feature_extractor: SafeFeatureExtractor
     decision_coordinator: DecisionCoordinator
-    decision_reason_codes: MutableMapping[str, Tuple[str, ...]]
     campaign_id: str
     registry: Any
     materializer: Any
-    hypothesis_store: Any
-    persist_branch_state: Callable[[str], None]
     begin_status_progress: Callable[..., None]
     end_status_progress: Callable[[], None]
     increment_experiment_count: Callable[[], None]
-    require_experiment_protocol: bool = False
-    decision_engine_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
-        default_factory=dict
-    )
-    diagnostic_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
-        default_factory=dict
-    )
-    bypass_reason_codes: MutableMapping[str, Tuple[str, ...]] = field(
-        default_factory=dict
-    )
-    decision_feature_snapshots: MutableMapping[str, DecisionFeatures] = field(
-        default_factory=dict
-    )
-
     def evaluate(
         self,
         branch: Branch,
         workspace: str,
         hypothesis: HypothesisProposal,
+        *,
+        branch_state: BranchState | None = None,
+        screening_expand_count: int | None = None,
+        validation_expand_count: int | None = None,
     ) -> EvaluationExecutionResult:
         bid = branch.branch_id
-        self.decision_feature_snapshots.pop(bid, None)
-        self._set_reason_provenance(
-            bid,
-            decision_engine=(),
-            diagnostics=(),
-            bypass=(),
-        )
-        stage = self.branch_controller.next_stage(bid)
+        effective_state = branch_state or branch.state
+        stage = _stage_for_state(effective_state)
 
         with self.champion_lock:
             champion_for_eval = self.get_champion()
         champion_workspace = champion_for_eval.code_snapshot_path
-        branch.weight_revision = getattr(champion_for_eval, "weight_revision", 0)
-        self.persist_branch_state(bid)
-
         protocol = self.experiment_protocol_provider()
 
-        expand, expand_round = self._prepare_expand(branch, protocol)
-        effective_screening_expand_count = branch.screening_expand_count
-        effective_validation_expand_count = branch.validation_expand_count
-        if expand and branch.state == BranchState.EXPLORE_EXPAND:
+        effective_screening_expand_count = (
+            branch.screening_expand_count
+            if screening_expand_count is None
+            else screening_expand_count
+        )
+        effective_validation_expand_count = (
+            branch.validation_expand_count
+            if validation_expand_count is None
+            else validation_expand_count
+        )
+        expand, expand_round = self._prepare_expand(
+            effective_state,
+            effective_screening_expand_count,
+            effective_validation_expand_count,
+            protocol,
+        )
+        if expand and effective_state == BranchState.EXPLORE_EXPAND:
             effective_screening_expand_count = expand_round
-        elif expand and branch.state == BranchState.VALIDATING_EXPAND:
+        elif expand and effective_state == BranchState.VALIDATING_EXPAND:
             effective_validation_expand_count = expand_round
         request = EvaluationRequest(
-            branch_id=bid,
-            branch_state=branch.state,
+            branch_state=effective_state,
             candidate_workspace=workspace,
             champion_workspace=champion_workspace,
             hypothesis_action=hypothesis.action,
@@ -155,52 +153,43 @@ class EvaluationOrchestrator:
             screening_expand_count=effective_screening_expand_count,
             validation_expand_count=effective_validation_expand_count,
             failure_codes=tuple(branch.failure_codes),
-            force_fresh_champion=False,
         )
         pipeline = EvaluationPipeline(
             experiment_protocol=protocol,
-            require_experiment_protocol=self.require_experiment_protocol,
             feature_extractor=self.feature_extractor,
         )
 
         try:
-            if protocol is not None:
-                self.begin_status_progress(
-                    branch=branch,
-                    stage=stage,
-                    hypothesis=hypothesis,
-                    expand=expand,
-                    expand_round=expand_round,
-                )
-                try:
-                    evaluation = pipeline.evaluate(request)
-                finally:
-                    self.end_status_progress()
-            else:
+            self.begin_status_progress(
+                branch=branch,
+                stage=stage,
+                hypothesis=hypothesis,
+                expand=expand,
+                expand_round=expand_round,
+            )
+            try:
                 evaluation = pipeline.evaluate(request)
+            finally:
+                self.end_status_progress()
             if evaluation.protocol_result is not None:
                 self.increment_experiment_count()
         except Exception as exc:
             logger.error("Branch %s: experiment failed: %s", bid, exc)
             outcome, reason_code = _execution_outcome_for_exception(exc)
-            self.decision_reason_codes[bid] = (reason_code,)
-            self._set_reason_provenance(
-                bid,
-                bypass=(reason_code,),
-            )
             return EvaluationExecutionResult(
                 execution_outcome=ExecutionOutcomeRecord(
                     outcome=outcome,
                     reason_code=reason_code,
                     detail=str(exc),
                     provenance={
-                        "owner": "evaluation_orchestrator",
                         "stage": stage.value,
                         "exception_type": (
                             f"{type(exc).__module__}.{type(exc).__qualname__}"
                         ),
                     },
-                )
+                ),
+                decision_reason_codes=(reason_code,),
+                bypass_reason_codes=(reason_code,),
             )
 
         protocol_result = evaluation.protocol_result
@@ -209,21 +198,15 @@ class EvaluationOrchestrator:
             assert protocol_result is not None
             reason_code = "EVALUATION_CHAMPION_EVIDENCE_BLOCKED"
             stats = protocol_result.stats
-            self.decision_reason_codes[bid] = (reason_code,)
-            self._set_reason_provenance(
-                bid,
-                bypass=(reason_code,),
-            )
             return EvaluationExecutionResult(
                 execution_outcome=ExecutionOutcomeRecord(
                     outcome=ExecutionOutcome.BLOCKED_INFRA,
                     reason_code=reason_code,
                     detail=(
                         "champion/shared evidence acquisition failed; "
-                        "explicit operator review is required"
+                        "this invocation is blocked"
                     ),
                     provenance={
-                        "owner": "evaluation_orchestrator",
                         "stage": protocol_result.stage.value,
                         "failure_scope": "champion_or_shared",
                         "raw_metrics_ref": protocol_result.raw_metrics_ref,
@@ -234,36 +217,33 @@ class EvaluationOrchestrator:
                         "failed_pairs": stats.failed_pairs,
                         "candidate_failed_pairs": stats.candidate_failed_pairs,
                         "champion_failed_pairs": stats.champion_failed_pairs,
-                        "operator_resume_required": True,
                     },
                 ),
                 decision=None,
                 protocol_result=None,
                 canary_result=canary_result,
+                decision_reason_codes=(reason_code,),
+                bypass_reason_codes=(reason_code,),
             )
         features = evaluation.decision_features
         coordinated = self.decision_coordinator.decide(features)
-        self.decision_feature_snapshots[bid] = coordinated.features_snapshot
-        self.decision_reason_codes[bid] = coordinated.reason_codes
-        self._set_reason_provenance(
-            bid,
-            decision_engine=coordinated.reason_codes,
-        )
+        decision_reason_codes = coordinated.reason_codes
+        diagnostic_reason_codes: Tuple[str, ...] = ()
         canary_reason_codes = public_canary_reason_codes(canary_result)
         if canary_reason_codes and not canary_result.passed:
-            self.decision_reason_codes[bid] = decision_reason_codes_for_canary(
-                self.decision_reason_codes.get(bid, ()),
+            decision_reason_codes = decision_reason_codes_for_canary(
+                decision_reason_codes,
                 canary_result,
             )
             if is_canary_config_error(canary_result):
-                self.diagnostic_reason_codes[bid] = _merge_reason_codes(
-                    self.diagnostic_reason_codes.get(bid, ()),
+                diagnostic_reason_codes = _merge_reason_codes(
+                    diagnostic_reason_codes,
                     canary_reason_codes,
                 )
         runtime_budget_codes = runtime_budget_diagnostic_reason_codes(protocol_result)
         if runtime_budget_codes:
-            self.diagnostic_reason_codes[bid] = _merge_reason_codes(
-                self.diagnostic_reason_codes.get(bid, ()),
+            diagnostic_reason_codes = _merge_reason_codes(
+                diagnostic_reason_codes,
                 runtime_budget_codes,
             )
         logger.info(
@@ -283,44 +263,40 @@ class EvaluationOrchestrator:
                 outcome=ExecutionOutcome.EVALUATED,
                 reason_code="EVALUATION_COMPLETED",
                 provenance={
-                    "owner": "evaluation_orchestrator",
                     "stage": stage.value,
                 },
             ),
             decision=decision,
             protocol_result=protocol_result,
             canary_result=canary_result,
+            decision_features=features,
+            decision_reason_codes=decision_reason_codes,
+            decision_engine_reason_codes=coordinated.reason_codes,
+            diagnostic_reason_codes=diagnostic_reason_codes,
         )
 
-    def _set_reason_provenance(
-        self,
-        branch_id: str,
-        *,
-        decision_engine: Tuple[str, ...] | tuple[str, ...] = (),
-        diagnostics: Tuple[str, ...] | tuple[str, ...] = (),
-        bypass: Tuple[str, ...] | tuple[str, ...] = (),
-    ) -> None:
-        self.decision_engine_reason_codes[branch_id] = tuple(decision_engine)
-        self.diagnostic_reason_codes[branch_id] = tuple(diagnostics)
-        self.bypass_reason_codes[branch_id] = tuple(bypass)
-
     @staticmethod
-    def _prepare_expand(branch: Branch, protocol: Any) -> tuple[bool, int]:
-        """Compute the effective round without consuming persisted ownership."""
+    def _prepare_expand(
+        state: BranchState,
+        screening_expand_count: int,
+        validation_expand_count: int,
+        protocol: Any,
+    ) -> tuple[bool, int]:
+        """Compute the effective round from the current branch value."""
 
         expand = False
         expand_round = 1
         if protocol is None:
             return expand, expand_round
 
-        expand = branch.state in (
+        expand = state in (
             BranchState.EXPLORE_EXPAND,
             BranchState.VALIDATING_EXPAND,
         )
-        if branch.state == BranchState.EXPLORE_EXPAND:
-            expand_round = branch.screening_expand_count + 1
-        elif branch.state == BranchState.VALIDATING_EXPAND:
-            expand_round = branch.validation_expand_count + 1
+        if state == BranchState.EXPLORE_EXPAND:
+            expand_round = screening_expand_count + 1
+        elif state == BranchState.VALIDATING_EXPAND:
+            expand_round = validation_expand_count + 1
         return expand, expand_round
 
 
@@ -329,6 +305,14 @@ def _merge_reason_codes(
     second: tuple[str, ...],
 ) -> tuple[str, ...]:
     return tuple(dict.fromkeys([*first, *second]))
+
+
+def _stage_for_state(state: BranchState) -> ExperimentStage:
+    if state in (BranchState.VALIDATING, BranchState.VALIDATING_EXPAND):
+        return ExperimentStage.VALIDATION
+    if state is BranchState.FROZEN_TESTING:
+        return ExperimentStage.FROZEN
+    return ExperimentStage.SCREENING
 
 
 def _champion_evidence_acquisition_blocked(

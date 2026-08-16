@@ -119,37 +119,24 @@ chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Campaign Manager                         │
-│  (Branch lifecycle, round scheduling, budget control)       │
+│  (direct values, round scheduling, budget control)          │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌─────────┐│
-│  │ Creative │   │ Contract │   │  Verify  │   │Decision ││
-│  │  Layer   │──>│   Gate   │──>│   Gate   │──>│  Layer  ││
-│  │  (LLM)   │   │ (Static) │   │(Dynamic) │   │(Oracle) ││
-│  └──────────┘   └──────────┘   └──────────┘   └─────────┘│
-│       │                                            │       │
-│       │         ┌──────────────────┐               │       │
-│       └────────>│  Experiment      │<──────────────┘       │
-│                 │  Protocol        │                        │
-│                 │  (3-stage eval)  │                        │
-│                 └──────────────────┘                        │
-│                         │                                   │
-│                 ┌───────┴────────┐                          │
-│                 │  Weight Opt    │  ← v0.2 新增             │
-│                 │  (on promote)  │                          │
-│                 └────────────────┘                          │
+│  Hypothesis → H Contract → Code → Patch Contract          │
+│       → CandidateWorkspace → Verification                    │
+│       → Experiment Protocol → Safe Features → Decision    │
 ├─────────────────────────────────────────────────────────────┤
-│  Lineage (SQLite) │ Runtime (subprocess) │ Config (Pydantic)│
+│ Scientific events │ Local subprocesses │ Problem runtime │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 分层控制
 
-1. **Creative Layer (LLM, Tainted)**：Hypothesis 提出 + Code 生成 + Saturation Signal + Search Memory
-2. **Gate Layer (Static & Dynamic)**：Contract Gate (C1-C10) + Verification Gate (V3-V8) + FailureRouter (四层分类)
-3. **Protocol Layer (Statistical)**：三级实验协议 + Case-level 统计 + Bootstrap CI
-4. **Decision Layer (Oracle)**：DecisionFeatures（纯数值） + 字典序多目标
-5. **Parameter Layer (v0.2)**：Weight Optimization（promote 后触发，25 次 random search 评估）
+1. **Proposal**：同一调用链中产生 Hypothesis，通过 Contract 后直接用于 Code
+2. **Workspace / Verification**：普通 `CandidateWorkspace` 经动态校验后才进入协议
+3. **Protocol**：三级实验协议 + Case-level 统计 + Bootstrap CI
+4. **Decision**：`SafeFeatures` 的纯数值确定性决策
+5. **Evidence**：只保留普通科学事件、typed outcome 和必要 artifact 引用
 
 ### 关键设计决策
 
@@ -158,7 +145,7 @@ chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
 - **分支内迭代演化**：方案在分支内迭代，不是每次从 champion 重新分叉
 - **Champion 是池级别**：不是单个算子，而是整个 operator pool + weights 的快照
 - **字典序多目标**：业务聚合（subcategory splits）> 成本（total cost）> 效率（solve time）
-- **两层嵌套搜索**：外层 LLM 搜结构（发现算子），内层算法搜参数（优化权重）
+- **直接值语义**：H、CandidateWorkspace、ProtocolResult 和 Decision 沿同一调用链传递，不构建自证生命周期
 
 ## 快速开始
 
@@ -210,12 +197,10 @@ scion/
 │   ├── contract/             # ContractGate (C1-C10 静态检查)
 │   ├── verification/         # VerificationGate (V3-V8: feasibility, objective, state, nondeterminism, perf)
 │   ├── protocol/             # ExperimentProtocol (三级实验), Evaluation (字典序), Stats (bootstrap CI)
-│   ├── proposal/             # LLMClient, CreativeLayer, ContextManager, SearchMemory, Saturation
-│   ├── parameter/            # WeightOptimizer, Evaluator (v0.2 新增)
+│   ├── proposal/             # LLMClient, CreativeLayer, ContextManager, ordinary H/C values
 │   ├── runtime/              # SubprocessRunner, WorkspaceMaterializer, PoolManager
-│   ├── failure/              # FailureRouter (四层分类 + escalation + infra detection)
-│   ├── lineage/              # SQLite Registry, BranchStore, ChampionStore, HypothesisStore
-│   ├── cli/                  # Typer CLI (init/run/inspect/report)
+│   ├── lineage/              # minimal append-only scientific events
+│   ├── cli/                  # Typer CLI (run/inspect/report)
 │   └── tests/                # unit / integration tests
 ├── problems/                 # 问题配置 (YAML)
 │   └── warehouse_delivery/   # 仓配协同 VNS：protocol + split_manifest + instances

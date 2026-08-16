@@ -92,23 +92,6 @@ class LLMRateLimitError(LLMError):
         self.retry_after = retry_after
 
 
-def is_llm_infra_error(exc: BaseException | None) -> bool:
-    """Return true only for typed provider/transport infrastructure faults."""
-    if exc is None:
-        return False
-    return isinstance(
-        exc,
-        (
-            LLMAuthError,
-            LLMBalanceError,
-            LLMTimeoutError,
-            LLMRateLimitError,
-            LLMTransportError,
-            LLMProviderError,
-        ),
-    )
-
-
 def _masked_hard_timeout_error(
     exc: Exception,
     *,

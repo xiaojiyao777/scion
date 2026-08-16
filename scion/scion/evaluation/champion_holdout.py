@@ -156,9 +156,7 @@ def build_champion_heldout_protocol(
         metrics_dir=str(Path(metrics_dir).resolve()),
         metric_specs=bridge.metric_specs,
         objective_policy=bridge.objective_policy,
-        require_metric_specs=True,
         problem_spec=bridge.problem_spec,
-        champion_result_cache_enabled=False,
     )
     selected = (
         protocol._select_cases(ExperimentStage.FROZEN, "modify", 0),

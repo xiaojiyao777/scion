@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from scion.contract.patch_paths import matches_config_pattern
-from scion.core.models import HypothesisProposal, HypothesisRecord
+from scion.core.models import HypothesisProposal
 from scion.core.paths import normalize_relative_patch_path
 from scion.problem.spec import SUPPORTED_RESEARCH_SURFACE_KINDS
 
@@ -38,7 +38,7 @@ class SurfaceAccess:
 
     def surface_for_hypothesis(
         self,
-        h: HypothesisProposal | HypothesisRecord,
+        h: HypothesisProposal,
     ) -> Any | None:
         surface = self.surface_by_name(h.change_locus)
         if surface is not None:

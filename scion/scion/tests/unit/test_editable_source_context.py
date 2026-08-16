@@ -32,9 +32,7 @@ def _champion(root: Path) -> ChampionState:
     return ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="test",
         code_snapshot_path=str(root),
-        code_snapshot_hash="test",
     )
 
 
@@ -43,7 +41,6 @@ def _build(
     *,
     source_root: Path | None = None,
     action: str = "modify",
-    touched: tuple[str, ...] = (),
 ):
     return _build_editable_source_context(
         champion=_champion(champion_root),
@@ -52,7 +49,6 @@ def _build(
         target_file="solver.py",
         target_action=action,
         provider=_SourceProvider(),
-        branch_touched_files=touched,
     )
 
 
@@ -75,7 +71,6 @@ def test_editable_source_context_prefers_branch_workspace_over_champion(
     source_context = _build(
         champion,
         source_root=branch,
-        touched=("solver.py", "helper.py"),
     )
 
     assert _by_path(source_context) == {
@@ -88,7 +83,7 @@ def test_editable_source_context_prefers_branch_workspace_over_champion(
     ]
 
 
-def test_touched_missing_helper_never_falls_back_to_champion(
+def test_current_source_tree_never_falls_back_to_champion(
     tmp_path: Path,
 ) -> None:
     champion = tmp_path / "champion"
@@ -102,7 +97,6 @@ def test_touched_missing_helper_never_falls_back_to_champion(
     source_context = _build(
         champion,
         source_root=branch,
-        touched=("helper.py",),
     )
 
     assert _by_path(source_context)["helper.py"] is None
@@ -110,8 +104,27 @@ def test_touched_missing_helper_never_falls_back_to_champion(
         "solver.py": "VALUE = 2\n"
     }
 
-    reopened_without_workspace = _build(champion, touched=("helper.py",))
-    assert _by_path(reopened_without_workspace)["helper.py"] is None
+    champion_context = _build(champion)
+    assert _by_path(champion_context)["helper.py"] == "STALE = True\n"
+
+
+def test_current_workspace_created_operator_is_discovered_without_history(
+    tmp_path: Path,
+) -> None:
+    champion = tmp_path / "champion"
+    branch = tmp_path / "branch"
+    champion.mkdir()
+    branch.mkdir()
+    (champion / "solver.py").write_text("VALUE = 'champion'\n")
+    (champion / "helper.py").write_text("HELPER = 'champion'\n")
+    (branch / "solver.py").write_text("VALUE = 'branch'\n")
+    (branch / "helper.py").write_text("HELPER = 'branch'\n")
+    (branch / "operators").mkdir()
+    (branch / "operators" / "new_operator.py").write_text("ENABLED = True\n")
+
+    source_context = _build(champion, source_root=branch)
+
+    assert _by_path(source_context)["operators/new_operator.py"] == "ENABLED = True\n"
 
 
 def test_create_target_distinguishes_absent_existing_and_empty(
@@ -174,7 +187,7 @@ def test_full_file_create_succeeds_for_absent_target() -> None:
 
 @pytest.mark.parametrize("content", ["", "VALUE = 1\n"])
 def test_create_rejects_existing_current_source(content: str) -> None:
-    with pytest.raises(ProposalValidationError, match="existing_file_create_rejected"):
+    with pytest.raises(ProposalValidationError, match="already exists"):
         _parse_patch(
             {
                 "file_path": "solver.py",
@@ -199,7 +212,6 @@ def test_modify_rejects_absent_source(edit_intent: str) -> None:
     if edit_intent == "exact_replace":
         change.update(
             {
-                "source_digest": "0" * 64,
                 "old_string": "VALUE = 1\n",
                 "new_string": "VALUE = 2\n",
                 "replace_all": False,
@@ -213,7 +225,7 @@ def test_modify_rejects_absent_source(edit_intent: str) -> None:
                 "full_file_reason": "Implement the approved research change.",
             }
         )
-        error = "existing_file_full_file_modify_source_required"
+        error = "source unavailable"
 
     with pytest.raises(ProposalValidationError, match=error):
         _parse_patch(change, context=_source_context(None))

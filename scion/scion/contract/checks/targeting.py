@@ -11,7 +11,7 @@ from scion.contract.patch_paths import (
 )
 from scion.contract.result_payload import check_result
 from scion.contract.surface_access import SurfaceAccess
-from scion.core.models import CheckResult, HypothesisProposal, HypothesisRecord, PatchProposal
+from scion.core.models import CheckResult, HypothesisProposal, PatchProposal
 from scion.core.paths import normalize_relative_patch_path
 
 
@@ -48,7 +48,7 @@ def check_frozen_files(patch: PatchProposal, problem_spec: ProblemSpec) -> Check
 
 def check_patch_action_target(
     patch: PatchProposal,
-    hypothesis: HypothesisProposal | HypothesisRecord | None,
+    hypothesis: HypothesisProposal | None,
     *,
     surface_access: SurfaceAccess,
     selected_surface: str | None = None,
@@ -179,7 +179,7 @@ def check_patch_action_target(
 
 
 def _selected_surface_name(
-    hypothesis: HypothesisProposal | HypothesisRecord | None,
+    hypothesis: HypothesisProposal | None,
 ) -> str | None:
     if hypothesis is None:
         return None

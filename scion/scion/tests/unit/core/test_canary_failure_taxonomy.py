@@ -17,7 +17,7 @@ def test_canary_configuration_error_replaces_algorithm_failure_code() -> None:
     result = canary_configuration_error(
         ValueError(
             "Unsafe case path in strict ExperimentProtocol: "
-            "'artifact:instance_prod_can_s01.json#64a747f955e8' "
+            "'artifact:instance_prod_can_s01.json' "
             "status=absolute_outside_roots reason=absolute case path is outside "
             "workspace and safe_data_roots"
         )

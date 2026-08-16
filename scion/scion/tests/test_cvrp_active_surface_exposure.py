@@ -51,15 +51,12 @@ def test_cvrp_hypothesis_context_exposes_only_solver_design_as_active_surface(
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="h",
         code_snapshot_path=str(CVRP_DIR),
-        code_snapshot_hash="h",
     )
     branch = Branch(
         branch_id="b-active-cvrp-surface",
         state=BranchState.EXPLORE,
         base_champion_id=1,
-        base_champion_hash="h",
     )
 
     ctx = ContextManager(adapter=cvrp_adapter).build_hypothesis_context(

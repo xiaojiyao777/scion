@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from scion.core.models import RunResult
-from .values import _as_int, _increment_category, _text_value
+from .values import _as_int, _text_value
 
 
 def _candidate_process_failure_category(result: RunResult) -> str:

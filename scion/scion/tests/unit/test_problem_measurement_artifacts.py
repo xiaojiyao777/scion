@@ -76,7 +76,6 @@ def test_checked_in_problem_measurement_artifacts_are_ready(
     assert readiness.signal_to_noise_tier == (
         "unknown" if expected_mde is None else "low_power"
     )
-    assert readiness.decision_features_excluded is True
     assert "calibration_ref" not in status_payload
     assert "pair_evidence" not in status_payload
     if spec_v1.measurement.calibration_ref:
@@ -114,10 +113,7 @@ def test_checked_in_problem_measurement_diagnostics_stay_reduced(
     )
     expected_status = "not_ready" if spec_v1.id == "cvrp" else "ready"
     assert diagnostics["measurement_readiness"]["status"] == expected_status
-    assert diagnostics["measurement_readiness"]["decision_features_excluded"] is True
     assert problem_owned["schema_version"]
-    assert problem_owned["proposal_visibility_only"] is True
-    assert problem_owned["decision_features_excluded"] is True
     _assert_forbidden_raw_measurement_fields_absent(diagnostics)
     assert '"calibration_ref":' not in rendered
     assert "pair_evidence" not in rendered

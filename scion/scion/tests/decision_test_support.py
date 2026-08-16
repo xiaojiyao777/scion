@@ -23,7 +23,6 @@ def _branch(state: BranchState = BranchState.EXPLORE) -> Branch:
         branch_id=str(uuid.uuid4()),
         state=state,
         base_champion_id=0,
-        base_champion_hash="h",
     )
 
 
@@ -87,13 +86,22 @@ def _protocol(
         exposed_summary="ok",
         raw_metrics_ref="/tmp/m.json",
         runtime_confidence=runtime_confidence,
-        runtime_evidence_status=runtime_evidence_status,
     )
 
 
 _extractor = SafeFeatureExtractor()
 _cfg = ProtocolConfig()
 _engine = DecisionEngine(_cfg)
+
+
+def _extract(*, branch: Branch, **kwargs):
+    return _extractor.extract(
+        branch_state=branch.state,
+        screening_expand_count=branch.screening_expand_count,
+        validation_expand_count=branch.validation_expand_count,
+        failure_codes=tuple(branch.failure_codes),
+        **kwargs,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -158,7 +166,6 @@ def _features(
     pair_wins: int = 0,
     pair_losses: int = 0,
     pair_ties: int = 0,
-    branch_id: str = None,
     statistical_status=None,
     statistical_metric=None,
     runtime_guard_passed=None,
@@ -177,7 +184,6 @@ def _features(
 ):
     from scion.core.models import DecisionFeatures
     return DecisionFeatures(
-        branch_id=branch_id or str(uuid.uuid4()),
         hypothesis_action="modify",
         stage=stage,
         contract_passed=contract_passed,

@@ -11,6 +11,9 @@ class TestT06ObservabilityFields:
         from scion.core.campaign import CampaignManager
         from scion.core.models import ChampionState
         from scion.proposal.mock_client import MockLLMClient
+        from scion.problem.spec import ObjectiveMetricSpec
+        from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
+        from types import SimpleNamespace
 
         op_dir = tmp_path / "operators"
         op_dir.mkdir()
@@ -27,17 +30,39 @@ class TestT06ObservabilityFields:
             ),
         )
         champion = ChampionState(
-            version=1, operator_pool={}, solver_config_hash="abc",
-            code_snapshot_path=str(tmp_path), code_snapshot_hash="xyz",
+            version=1, operator_pool={},
+            code_snapshot_path=str(tmp_path),
+        )
+        split = SplitManifest(
+            screening=["screening-case"],
+            validation=["validation-case"],
+            frozen=["frozen-case"],
+            canary=["canary-case"],
+        )
+        seeds = SeedLedgerConfig(
+            screening=[1], validation=[2], frozen=[3], canary=[4]
+        )
+        experiment_protocol = ExperimentProtocol(
+            ProtocolConfig(),
+            SplitManager(split),
+            SeedLedger(seeds),
+            runner=object(),
+            metrics_dir=str(tmp_path / "protocol-metrics"),
+            metric_specs=(
+                ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+            ),
+            problem_spec=spec,
         )
         mgr = CampaignManager(
             problem_spec=spec,
             protocol_config=ProtocolConfig(),
-            split_manifest=SplitManifest(screening=[], validation=[], frozen=[]),
-            seed_ledger=SeedLedgerConfig(screening=[1], validation=[2], frozen=[3]),
+            split_manifest=split,
+            seed_ledger=seeds,
             llm_client=MockLLMClient(mode="success"),
             champion=champion,
-            campaign_dir=str(tmp_path),
+            campaign_dir=str(tmp_path / "campaign"),
+            experiment_protocol=experiment_protocol,
+            adapter=SimpleNamespace(spec=spec),
         )
         return mgr
 
@@ -50,56 +75,30 @@ class TestT06ObservabilityFields:
                 round_num=1,
                 failure_stage="verification",
                 failure_detail="V8_nondeterminism: uuid used",
-                cache_stats={"total": 1000, "cache_read": 300, "cache_create": 700},
                 hypothesis_text="subcategory consolidation via merging vehicles",
             ),
             _make_step(
                 round_num=2,
                 decision=Decision.QUEUE_VALIDATE,
                 protocol_result=_make_protocol_result("pass", 0.75),
-                cache_stats={"total": 1200, "cache_read": 600, "cache_create": 600},
                 hypothesis_text="destroy rebuild approach",
             ),
         ]
         mgr._write_campaign_summary()
 
-        summary_path = tmp_path / "campaign_summary.json"
+        summary_path = Path(mgr._campaign_dir) / "campaign_summary.json"
         assert summary_path.exists(), "campaign_summary.json not written"
         summary = json.loads(summary_path.read_text())
 
         # Top-level observability fields
-        assert "cache_stats" in summary, "Missing cache_stats"
+        assert "cache_stats" not in summary
         assert "verification_failure_breakdown" in summary, "Missing verification_failure_breakdown"
         assert "action_locus_coverage" in summary, "Missing action_locus_coverage"
         assert "family_coverage" in summary, "Missing family_coverage"
         assert "diagnostics" in summary, "Missing diagnostics"
-
-        # Cache stats correctness
-        cs = summary["cache_stats"]
-        assert cs["total_tokens"] == 2200
-        assert cs["cache_read_tokens"] == 900
-        assert cs["cache_hit_rate"] == pytest.approx(900 / 2200, abs=1e-4)
 
         # Verification failure breakdown has entry
         assert "V8_nondeterminism" in summary["verification_failure_breakdown"]
 
         # Family coverage (mechanism label from hypothesis text)
         assert len(summary["family_coverage"]) > 0
-
-    def test_failed_code_archived_in_steps(self, tmp_path):
-        """Steps with code_archive_ref show public archive refs in summary."""
-        mgr = self._build_mock_campaign(tmp_path)
-        mgr._step_history = [
-            _make_step(
-                round_num=1,
-                failure_stage="verification",
-                failure_detail="V1_syntax: bad syntax",
-                code_archive_ref="/tmp/archive/round_1_abc12345",
-            ),
-        ]
-        mgr._write_campaign_summary()
-        summary = json.loads((tmp_path / "campaign_summary.json").read_text())
-        step = summary["steps"][0]
-        assert not step["code_archive_ref"].startswith("/")
-        assert "round_1_abc12345" in step["code_archive_ref"]
-        assert step["verification_detail"] is None  # no verification_detail was set

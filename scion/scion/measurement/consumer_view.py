@@ -51,7 +51,6 @@ class MeasurementConsumerView:
     n_pairs: int = 0
     calibration_freshness: CalibrationFreshness = "missing"
     evidence_depth: CalibrationEvidenceLevel = "none"
-    decision_features_excluded: bool = True
 
     def to_status_payload(self) -> dict[str, Any]:
         """Return a compact consumer payload with no raw calibration material."""
@@ -78,7 +77,6 @@ class MeasurementConsumerView:
             "n_pairs": self.n_pairs,
             "calibration_freshness": self.calibration_freshness,
             "evidence_depth": self.evidence_depth,
-            "decision_features_excluded": self.decision_features_excluded,
         }
 
     def to_readiness_status_payload(self) -> dict[str, Any]:
@@ -95,7 +93,6 @@ class MeasurementConsumerView:
             "effect_to_mde_ratio": self.effect_to_mde_ratio,
             "signal_to_noise_tier": self.signal_to_noise_tier,
             "calibration_evidence_level": self.evidence_depth,
-            "decision_features_excluded": self.decision_features_excluded,
         }
 
 

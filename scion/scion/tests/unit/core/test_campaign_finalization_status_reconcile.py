@@ -3,411 +3,93 @@ from __future__ import annotations
 from types import SimpleNamespace
 from typing import Any
 
-from scion.core.async_weight_opt import AsyncWeightOptCoordinator
 from scion.core.campaign import CampaignManager
-from scion.core.campaign_loop import CampaignLoop
-from scion.core.evidence_recorder import EvidenceRecorder
-from scion.core.execution_outcome import ExecutionOutcome
-from scion.core.models import CanaryResult, Decision, StepRecord
+from scion.core.campaign_loop import CampaignLoop, CampaignRunResult
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.step_result import StepResult
 
-from .evidence_recorder_test_support import _champion, _hypothesis
 
-
-def test_stopped_status_clears_incomplete_current_progress(tmp_path) -> None:
-    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
-    recorder.current_status_progress = {
-        "branch_id": "branch-1",
-        "stage": "screening",
-        "complete": False,
-        "attempted_pairs": 3,
-        "total_pairs": 16,
-    }
-    recorder.in_flight_protocol = {
-        "branch_id": "branch-1",
-        "phase": "formal_screening",
-        "complete": False,
-        "attempted_pairs": 3,
-        "total_pairs": 16,
-    }
-
-    status = recorder.write_status(stopped_reason="max_rounds_exhausted")
-
-    assert status["stopped"] is True
-    assert status["stopped_reason"] == "max_rounds_exhausted"
-    assert "current_progress" not in status
-    assert "in_flight_protocol" not in status
-    assert recorder.current_status_progress is None
-    assert recorder.in_flight_protocol is None
-    source_counts = status["evidence_scope_reconciliation"]["source_counts"]
-    assert source_counts["current_progress_count"] == 0
-    assert source_counts["in_flight_protocol_count"] == 0
-
-
-def test_campaign_summary_reconciles_weight_opt_and_stopped_progress(tmp_path) -> None:
-    weight_optimization = {
-        "pending_threads": 0,
-        "active": [],
-        "runs": [
-            {
-                "version": 2,
-                "mode": "async",
-                "phase": "completed",
-                "active": False,
-                "improved": False,
-            }
-        ],
-    }
-    recorder = EvidenceRecorder(
-        campaign_id="camp-1",
-        campaign_dir=tmp_path,
-        state_provider=lambda: {
-            "n_experiments": 1,
-            "screened_experiments": 1,
-            "branches": [],
-            "current_progress": {
-                "branch_id": "branch-1",
-                "stage": "screening",
-                "complete": False,
-            },
-            "weight_optimization": weight_optimization,
-        },
-    )
-
-    summary = recorder.write_campaign_summary(
-        step_history=[],
-        round_num=1,
-        champion=_champion(),
-        stopped_reason="max_rounds_exhausted",
-    )
-
-    assert summary["stopped"] is True
-    assert summary["stopped_reason"] == "max_rounds_exhausted"
-    assert "current_progress" not in summary
-    assert summary["weight_optimization"] == weight_optimization
-
-
-def test_canary_vetoed_attempts_are_not_formal_protocol_rows(tmp_path) -> None:
-    canary = CanaryResult(
-        passed=False,
-        reason="Candidate infeasible on canary_x (champion was feasible)",
-        details={
-            "schema_version": "scion.canary_result.v1",
-            "stage": "canary",
-            "case_ids": ["canary_x", "canary_y"],
-            "seed_set": [101],
-            "failed_case_id": "canary_x",
-            "failed_seed": 101,
-            "attempted_pairs": 1,
-            "total_pairs": 2,
-            "raw_metrics_ref": None,
-            "raw_metrics_unavailable_reason": (
-                "canary_veto_before_formal_protocol"
-            ),
-            "candidate_status": "infeasible",
-            "champion_status": "success",
-            "failure_kind": "candidate_infeasible_champion_feasible",
-            "failure_reason": (
-                "Candidate infeasible on canary_x (champion was feasible)"
-            ),
-        },
-    )
-    loop_status = {
-        "requested_rounds": 4,
-        "proposal_attempts_consumed": 4,
-        "effective_rounds_completed": 4,
-        "formal_screened_candidates": 4,
-        "protocol_evaluated_candidates": 4,
-        "protocol_stage_counts": {
-            "screening": 0,
-            "validation": 0,
-            "frozen": 0,
-        },
-        "failure_categories": {},
-    }
-    recorder = EvidenceRecorder(
-        campaign_id="camp-canary",
-        campaign_dir=tmp_path,
-        state_provider=lambda: {
-            "n_experiments": 0,
-            "screened_experiments": 0,
-            "branches": [],
-        },
-    )
-
-    status = recorder.write_status(
-        last_result=StepResult(
-            action="explore",
-            branch_id="branch-1",
-            reason="CANARY_FAILED",
-            canary_result=canary,
-            execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
-            execution_outcome_reason_code="CANARY_FAILED",
+def test_campaign_loop_emits_one_typed_terminal_value() -> None:
+    statuses: list[dict[str, Any]] = []
+    terminals: list[CampaignRunResult] = []
+    attempts = 0
+    result = StepResult(
+        action="explore",
+        branch_id="branch-1",
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code="CONTRACT_REJECTED",
         ),
-        stopped_reason="max_rounds_exhausted",
-        loop_status=loop_status,
     )
 
-    assert status["effective_protocol_rounds"] == 0
-    assert status["screening_protocol_results"] == 0
-    assert status["protocol_metric_results"] == 0
-    assert status["formal_screened_candidates"] == 0
-    assert status["protocol_evaluated_candidates"] == 0
-    assert status["legacy_formal_screened_candidates_reported"] == 4
-    assert status["legacy_protocol_evaluated_candidates_reported"] == 4
-    assert status["run_validity"]["status"] == "invalid"
-    assert status["run_validity"]["reason"] == "invalid_research_rejected_only"
-    status_canary = status["last_result"]["canary_result"]
-    assert status_canary["failed_case_id"] == "canary_x"
-    assert status_canary["failed_seed"] == 101
-    assert status_canary["raw_metrics_ref"] is None
-    assert (
-        status_canary["raw_metrics_unavailable_reason"]
-        == "canary_veto_before_formal_protocol"
-    )
-    assert status_canary["candidate_status"] == "infeasible"
-    assert status_canary["champion_status"] == "success"
-    assert status_canary["failure_reason"]
-
-    summary = recorder.write_campaign_summary(
-        step_history=[
-            StepRecord(
-                round_num=1,
-                branch_id="branch-1",
-                hypothesis=_hypothesis(),
-                patch=None,
-                contract_passed=True,
-                verification_passed=True,
-                protocol_result=None,
-                decision=None,
-                failure_stage=None,
-                failure_detail=None,
-                canary_result=canary,
-                execution_outcome=ExecutionOutcome.RESEARCH_REJECTED,
-                execution_outcome_reason_code="CANARY_FAILED",
-            )
-        ],
-        round_num=4,
-        champion=_champion(),
-        stopped_reason="max_rounds_exhausted",
-    )
-
-    assert summary["effective_protocol_rounds"] == 0
-    assert summary["screening_protocol_results"] == 0
-    assert summary["formal_screened_candidates"] == 0
-    assert summary["run_validity"]["status"] == "invalid"
-    assert summary["steps"][0]["canary_result"]["failed_case_id"] == "canary_x"
-
-
-def test_status_and_summary_state_snapshot_does_not_reconcile_active_slots(
-    tmp_path,
-) -> None:
-    manager = CampaignManager.__new__(CampaignManager)
-    recorder = EvidenceRecorder(
-        campaign_id="camp-read-only",
-        campaign_dir=tmp_path,
-        state_provider=manager.get_state_snapshot,
-    )
-    manager._campaign_id = "camp-read-only"
-    manager._campaign_dir = tmp_path
-    manager._branch_ctrl = SimpleNamespace(get_reportable_branches=lambda: [])
-    manager._scheduler = SimpleNamespace(max_active_branches=1)
-    manager._persist_branch_state = lambda _branch_id: (_ for _ in ()).throw(
-        AssertionError("status snapshot must not persist branch state")
-    )
-    manager._step_history = []
-    manager._n_experiments = 0
-    manager._round_num = 0
-    manager._champion = _champion()
-    manager._balance_exhausted = False
-    manager._evidence_recorder = recorder
-    manager._proposal_pipeline = SimpleNamespace(agentic_artifact_dir=None)
-    manager._weight_opt_coord = SimpleNamespace(
-        status_snapshot=lambda: {"pending_threads": 0, "active": [], "runs": []}
-    )
-    manager._current_status_progress = None
-
-    status = recorder.write_status(stopped_reason="max_rounds_exhausted")
-    summary = recorder.write_campaign_summary(
-        step_history=[],
-        round_num=0,
-        champion=_champion(),
-        stopped_reason="max_rounds_exhausted",
-    )
-
-    assert status["campaign_id"] == "camp-read-only"
-    assert summary["campaign_id"] == "camp-read-only"
-
-
-def test_async_weight_opt_final_wait_timeout_marks_detached_active_run() -> None:
-    manager = _StatusPublishingManager()
-    coordinator = AsyncWeightOptCoordinator(manager)  # type: ignore[arg-type]
-    coordinator._set_status(1, mode="async", phase="running", active=True)
-    coordinator._finish_status(1, phase="completed", improved=False)
-
-    snapshot = coordinator.status_snapshot()
-    assert snapshot["active"] == []
-    assert snapshot["runs"][0]["phase"] == "completed"
-    assert snapshot["runs"][0]["active"] is False
-
-    alive_thread = _AlwaysAliveThread("weight-opt-v2")
-    coordinator._pending_threads.append(alive_thread)  # type: ignore[arg-type]
-    coordinator._set_status(2, mode="async", phase="running", active=True)
-
-    coordinator.wait_all(timeout=0.01)
-
-    timeout_snapshot = coordinator.status_snapshot()
-    active = {run["version"]: run for run in timeout_snapshot["active"]}
-    assert timeout_snapshot["pending_threads"] == 1
-    assert active[2]["phase"] == "final_wait_timeout"
-    assert active[2]["active"] is True
-    assert active[2]["detached"] is True
-    assert active[2]["final_wait_timeout"] is True
-    assert active[2]["final_wait_timeout_sec"] == 0.01
-    assert 0.0 < (alive_thread.join_timeouts[0] or 0.0) <= 0.01
-    assert alive_thread.join_timeouts[1:] == [1.0]
-    assert manager.write_count >= 1
-
-
-def test_async_weight_opt_terminal_wait_is_capped_and_terminates_runner() -> None:
-    runner = _RecordingTerminateRunner()
-    manager = _StatusPublishingManager()
-    manager._experiment_protocol = SimpleNamespace(runner=runner)
-    coordinator = AsyncWeightOptCoordinator(manager)  # type: ignore[arg-type]
-    alive_thread = _AlwaysAliveThread("weight-opt-v2")
-    coordinator._pending_threads.append(alive_thread)  # type: ignore[arg-type]
-    coordinator._set_status(2, mode="async", phase="running", active=True)
-
-    coordinator.wait_all(timeout=600.0)
-
-    assert coordinator.shutdown_requested is True
-    assert runner.terminate_reasons == ["final_wait_timeout"]
-    assert 4.9 < (alive_thread.join_timeouts[0] or 0.0) <= 5.0
-    assert alive_thread.join_timeouts[1:] == [1.0]
-    active = {
-        run["version"]: run
-        for run in coordinator.status_snapshot()["active"]
-    }
-    assert active[2]["detached"] is True
-    assert active[2]["final_wait_timeout_sec"] == 5.0
-
-
-def test_campaign_loop_final_summary_sees_reconciled_stopped_status() -> None:
-    status_state: dict[str, Any] = {
-        "current_progress": {
-            "branch_id": "branch-1",
-            "stage": "screening",
-            "complete": False,
-        }
-    }
-    last_stop_reason: dict[str, str | None] = {"value": None}
-    summaries: list[dict[str, Any]] = []
-    stopped_statuses: list[str] = []
-
-    def write_status(**kwargs: Any) -> None:
-        stopped_reason = kwargs.get("stopped_reason")
-        if stopped_reason is None:
-            return
-        status_state["stopped"] = True
-        status_state["stopped_reason"] = stopped_reason
-        status_state.pop("current_progress", None)
-        stopped_statuses.append(stopped_reason)
-
-    def write_campaign_summary() -> None:
-        summaries.append(
-            {
-                "summary_stopped_reason": last_stop_reason["value"],
-                "status_stopped_reason": status_state.get("stopped_reason"),
-                "current_progress": status_state.get("current_progress"),
-            }
-        )
+    def run_one_step() -> StepResult:
+        nonlocal attempts
+        attempts += 1
+        return result
 
     loop = CampaignLoop(
-        write_status=write_status,
+        write_status=lambda **kwargs: statuses.append(kwargs),
         drain_weight_opt_events=lambda: None,
-        should_stop=lambda: False,
+        should_stop=lambda: attempts >= 1,
         get_last_stop_reason=lambda: None,
-        set_last_stop_reason=lambda reason: last_stop_reason.__setitem__(
-            "value",
-            reason,
-        ),
-        run_one_step=lambda: StepResult(
-            action="explore",
-            branch_id="branch-1",
-            reason="screening complete",
-            execution_outcome=ExecutionOutcome.EVALUATED,
-            execution_outcome_reason_code="PROTOCOL_EVALUATED",
-            protocol_stage="screening",
-            formal_protocol_evaluated=True,
-            screened_experiment_effective=True,
-        ),
-        write_campaign_summary=write_campaign_summary,
+        set_last_stop_reason=lambda _reason: None,
+        run_one_step=run_one_step,
+        write_terminal_artifacts=terminals.append,
         get_final_wait_timeout=lambda: 0.0,
-        wait_weight_opt_all=lambda timeout: None,
+        wait_weight_opt_all=lambda _timeout: None,
     )
 
-    loop.run(requested_rounds=1)
+    terminal = loop.run(1)
 
-    assert stopped_statuses[-1] == "requested_rounds_completed"
-    assert summaries[-1] == {
-        "summary_stopped_reason": "requested_rounds_completed",
-        "status_stopped_reason": "requested_rounds_completed",
-        "current_progress": None,
-    }
+    assert terminals == [terminal]
+    assert terminal is loop.current_result
+    assert terminal.stop_reason == "termination condition met"
+    assert terminal.execution_outcome_counts["research_rejected"] == 1
+    assert all(isinstance(call["run_result"], CampaignRunResult) for call in statuses)
+    assert not any("loop_status" in call for call in statuses)
 
 
-def test_campaign_status_refresh_preserves_final_stop_reason() -> None:
+def test_terminal_status_and_summary_receive_identical_snapshots() -> None:
     manager = CampaignManager.__new__(CampaignManager)
-    recorder = _RecordingEvidenceRecorder()
-    manager._last_stop_reason = "max_rounds_exhausted"
-    manager._current_status_progress = {
-        "branch_id": "branch-1",
-        "complete": False,
-    }
-    manager._last_status_result = None
-    manager._evidence_recorder = recorder
+    terminal = CampaignRunResult.empty(1).terminalized("external_stop_requested")
+    state = {"campaign_id": "camp-1", "run_result": terminal.to_projection()}
+    calls: list[tuple[str, Any, Any]] = []
+    manager._step_history = []
+    manager.get_state = lambda *, run_result=None: state
+    manager._evidence_recorder = SimpleNamespace(
+        write_status=lambda **kwargs: calls.append(
+            ("status", kwargs["state"], kwargs["run_result"])
+        ),
+        write_campaign_summary=lambda **kwargs: calls.append(
+            ("summary", kwargs["state"], kwargs["run_result"])
+        ),
+    )
 
-    CampaignManager._write_status(manager)
+    CampaignManager._write_terminal_artifacts(manager, terminal)
 
-    assert recorder.calls[-1]["stopped_reason"] == "max_rounds_exhausted"
-
-
-class _StatusPublishingManager:
-    def __init__(self) -> None:
-        self.write_count = 0
-        self._experiment_protocol = None
-
-    def _write_status(self) -> None:
-        self.write_count += 1
+    assert [kind for kind, _, _ in calls] == ["status", "summary"]
+    assert calls[0][1] is calls[1][1]
+    assert calls[0][2] is calls[1][2]
 
 
-class _AlwaysAliveThread:
-    def __init__(self, name: str) -> None:
-        self.name = name
-        self.join_timeouts: list[float | None] = []
+def test_summary_is_still_attempted_when_terminal_status_writer_fails() -> None:
+    manager = CampaignManager.__new__(CampaignManager)
+    terminal = CampaignRunResult.empty(1).terminalized("unhandled_exception")
+    state = {"campaign_id": "camp-1", "run_result": terminal.to_projection()}
+    summaries: list[dict[str, Any]] = []
+    manager._step_history = []
+    manager.get_state = lambda *, run_result=None: state
 
-    def join(self, timeout: float | None = None) -> None:
-        self.join_timeouts.append(timeout)
+    def fail_status(**_kwargs: Any) -> None:
+        raise RuntimeError("status unavailable")
 
-    def is_alive(self) -> bool:
-        return True
+    manager._evidence_recorder = SimpleNamespace(
+        write_status=fail_status,
+        write_campaign_summary=lambda **kwargs: summaries.append(kwargs),
+    )
 
+    CampaignManager._write_terminal_artifacts(manager, terminal)
 
-class _RecordingTerminateRunner:
-    def __init__(self) -> None:
-        self.terminate_reasons: list[str] = []
-
-    def terminate_active_processes(self, *, reason: str) -> int:
-        self.terminate_reasons.append(reason)
-        return 1
-
-
-class _RecordingEvidenceRecorder:
-    def __init__(self) -> None:
-        self.current_status_progress = None
-        self.last_status_result = None
-        self.calls: list[dict[str, Any]] = []
-
-    def write_status(self, **kwargs: Any) -> None:
-        self.calls.append(kwargs)
-        self.current_status_progress = None
+    assert len(summaries) == 1
+    assert summaries[0]["state"] is state
+    assert summaries[0]["run_result"] is state["run_result"]

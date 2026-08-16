@@ -12,15 +12,15 @@ from scion.core.models import Branch, BranchState, ChampionState
 class TestWeightRevision:
     def test_champion_default_revision(self) -> None:
         c = ChampionState(
-            version=1, operator_pool={}, solver_config_hash="abc",
-            code_snapshot_path="/tmp", code_snapshot_hash="def",
+            version=1, operator_pool={},
+            code_snapshot_path="/tmp",
         )
         assert c.weight_revision == 0
 
     def test_champion_revision_increments(self) -> None:
         c = ChampionState(
-            version=1, operator_pool={}, solver_config_hash="abc",
-            code_snapshot_path="/tmp", code_snapshot_hash="def",
+            version=1, operator_pool={},
+            code_snapshot_path="/tmp",
             weight_revision=3,
         )
         assert c.weight_revision == 3
@@ -28,7 +28,7 @@ class TestWeightRevision:
     def test_branch_default_revision(self) -> None:
         b = Branch(
             branch_id="test", state=BranchState.EXPLORE,
-            base_champion_id=1, base_champion_hash="abc",
+            base_champion_id=1,
         )
         assert b.weight_revision == 0
 
@@ -41,8 +41,8 @@ class TestStageAwareStale:
     def _make_ctrl_with_branches(self):
         ctrl = BranchController()
         champion = ChampionState(
-            version=1, operator_pool={}, solver_config_hash="x",
-            code_snapshot_path="/tmp", code_snapshot_hash="y",
+            version=1, operator_pool={},
+            code_snapshot_path="/tmp",
         )
         branches = {}
         for state in [
