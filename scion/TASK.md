@@ -229,7 +229,8 @@ document points back to the removed lifecycle.
   screening, then stopped fail-closed in validation with
   `CANDIDATE_SUBJECT_VETO` on candidate `X-n200-k36`, seed 2069. The one-shot is
   consumed: there is no repair, retry, resume or automatic next rung. This
-  negative result is evidence for scientific redesign, not gate repair.
+  negative result is prior evidence for a later autonomous Scion research
+  campaign, not a host-authored gate or VRP repair.
 
 CVRP acceptance remains:
 
@@ -241,7 +242,56 @@ CVRP acceptance remains:
 - an independent final comparison against original B0 confirms retained
   distance improvement and states its exact population scope.
 
-### M8 - Close on solver evidence
+### M8 - Add problem-neutral research-evidence continuity
+
+- [ ] Add one optional ordered ordinary prior-research input to the normal
+  `scion run` path. Record it once; do not create an identity, registry,
+  receipt, hash chain, reopen or authorization lifecycle around it.
+- [ ] Let an optional problem-adapter provider project domain-shaped evidence
+  into a bounded safe H context. Generic Scion code must contain no CVRP,
+  Warehouse, route, fleet, case-specific or repair-specific fields or branches.
+- [ ] Keep Agent ownership complete: the host does not force action, surface,
+  target file, mechanism, patch or fix. C sees the same Contract-approved H
+  value and editable source, not the raw prior observation.
+- [ ] Derive any within-campaign research observations from the existing typed
+  step/outcome path. Do not restore a special rejection-feedback ledger or
+  duplicated branch evidence state.
+- [ ] Prove with provider-/solver-free tests that evidence is exposed once to H,
+  private/current holdout facts do not leak, rejected candidates leave the
+  verified source clean, and differently shaped or absent problem evidence uses
+  the same core path.
+
+Acceptance: Scion can transport problem-owned prior research evidence into the
+normal V3 research loop without learning domain semantics or constraining the
+Agent's proposal.
+
+The exact design and claim boundary are in the
+[autonomous prior-evidence research design](docs/experiments/v0.4/v04-scion-autonomous-prior-evidence-research-design-20260817.md).
+
+### M9 - Run an autonomous CVRP research-effectiveness campaign
+
+- [ ] Prepare a fresh normal `scion run` input that supplies the safe M7-FC1
+  terminal facts through the CVRP adapter, while specifying no patch, target
+  file, action, surface, repair or algorithm mechanism.
+- [ ] Use new development/formal populations whose validation and frozen
+  cases/seeds are disjoint from every M7 fact exposed to H.
+- [ ] Run real H and C, current Contract and Verification, problem Protocol,
+  Safe Features and deterministic Decision. Provider retry, repair and hidden
+  host steering remain zero.
+- [ ] Assess separately whether the framework behaved correctly, whether the
+  Agent used the evidence to conduct grounded research, and whether the solver
+  actually improved.
+
+Acceptance: at least one fresh autonomous attempt reaches a typed outcome with
+the complete V3 decision chain and enough ordinary lineage to reconstruct what
+H saw, proposed and changed. Promotion is not assumed; a valid rejection or
+non-promotion remains evidence about Scion's research effectiveness.
+
+Live provider/solver execution requires a separate explicit one-shot
+authorization after the exact input, populations, budgets, stop conditions and
+claim boundary are prepared.
+
+### M10 - Close on solver evidence
 
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
@@ -272,6 +322,8 @@ had used 311 solver subprocesses and 15,225 nominal subject-seconds; no frozen,
 promotion or retained-B0 stage ran. The complete design and terminal record are
 preserved in its
 [preregistration](docs/experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md).
-CVRP acceptance remains unmet. The next task is scientific redesign from this
-negative evidence, but this record authorizes no repair, retry, resume,
-replacement or automatic next formal rung.
+CVRP acceptance remains unmet. The next task is M8: add a problem-neutral path
+by which a problem adapter can expose safe prior research evidence to H, then
+test the full autonomous Scion loop. It is not a host-authored redesign of the
+VRP candidate. This record authorizes no live provider/solver run, repair,
+retry, resume, replacement or automatic next formal rung.

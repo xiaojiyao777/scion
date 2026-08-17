@@ -8,7 +8,8 @@ referenced, not copied into development prompts.
 
 ## Runs
 
-- [CVRP M7-FC1 cumulative R3 new-population full-funnel preregistration, prepared/not started](v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md)
+- [Scion autonomous prior-evidence research design, design only](v04-scion-autonomous-prior-evidence-research-design-20260817.md)
+- [CVRP M7-FC1 cumulative R3 new-population full-funnel, terminal candidate veto](v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md)
 - [Phase 5 warehouse proposal trajectory compare, 2026-06-12](v04-phase5-warehouse-proposal-trajectory-compare-20260612.md)
 - [Phase 5 warehouse fixed-candidate replay, 2026-06-12](v04-phase5-warehouse-fixed-candidate-replay-postrun-20260612.md)
 - [Phase 5 warehouse measurement-governance ON/OFF shakedown, 2026-06-12](v04-phase5-warehouse-governance-onoff-8r-postrun-20260612.md)

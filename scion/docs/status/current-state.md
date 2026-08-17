@@ -85,9 +85,24 @@ because the runtime audit reported an algorithm error while packing customer
 106 into 36 routes. No validation stage metrics, frozen stage, promotion
 snapshot or retained-B0 result exists.
 
-CVRP remains open. The next work is scientific redesign from this exact
-negative evidence. No repair, retry, resume, replacement, substitution, R67
-recovery or automatic next formal rung is authorized.
+CVRP remains open. The next work is not a host-authored redesign of a VRP
+candidate. It is an M8 Scion framework module: add a problem-neutral ordinary
+input through which a problem adapter can project safe prior research evidence
+to H, while Scion core remains unaware of VRP/Warehouse semantics and the Agent
+retains ownership of action, surface, target, mechanism and patch. The design is
+recorded in the
+[autonomous prior-evidence research design](../experiments/v0.4/v04-scion-autonomous-prior-evidence-research-design-20260817.md).
+
+After M8 passes provider-/solver-free behavioral tests, M9 will prepare a fresh
+normal `scion run` CVRP campaign that exposes the M7 terminal fact through the
+CVRP adapter and exercises real H, C, Contract, Verification, Protocol, Safe
+Features and Decision. Its evaluation populations must be disjoint from the M7
+facts shown to H. No patch, target file, action, surface, repair or algorithm
+mechanism may be forced by the host.
+
+The current state authorizes design and offline implementation checks only. No
+live provider/solver campaign, repair, retry, resume, replacement,
+substitution, R67 recovery or automatic next formal rung is authorized.
 
 ## Current validation rule
 
