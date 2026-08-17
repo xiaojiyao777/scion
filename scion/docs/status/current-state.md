@@ -134,6 +134,14 @@ fix carrier passes independent checks, using a new `rerun1` root under the
 unchanged preregistered envelope. No third attempt, later development stage,
 R67 recovery or formal rung is authorized.
 
+The first post-fix shell preflight stopped before `scion run` because its exact
+diff check used a repository-root-relative pathspec after changing into the
+`scion/` subdirectory. All other checks passed; the rerun root stayed absent
+and provider, solver and campaign observations remained zero. The pathspec is
+now anchored with `git -C "$REPO_ROOT"`. Since the rerun process was never
+invoked, the single authorized rerun remains pending after a new clean docs-only
+carrier check.
+
 ## Current validation rule
 
 Current safe validation collected 1,668 tests and passed a broad 276-test

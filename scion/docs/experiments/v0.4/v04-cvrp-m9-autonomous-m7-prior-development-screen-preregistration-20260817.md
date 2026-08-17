@@ -401,7 +401,7 @@ replaced by this exact four-file fix-and-test check:
 
 ```bash
 EXPECTED_FIX_FILES=$'scion/scion/protocol/experiment/facade.py\nscion/scion/protocol/experiment/stages.py\nscion/scion/tests/test_campaign_control_boundaries.py\nscion/scion/tests/test_protocol_split_runtime.py'
-test "$(git diff --name-only \
+test "$(git -C "$REPO_ROOT" diff --name-only \
   b1d7f6e38c65c99cdc4cb399402a19b2341d8e85 \
   "$AUTHORIZED_M9_CARRIER" -- scion/scion)" = "$EXPECTED_FIX_FILES"
 test ! -e /home/clawd/research/scion-experiments/v04-cvrp-m9-autonomous-m7-prior-development-screen-rerun1-20260817
@@ -413,6 +413,19 @@ test -z "$(find /home/clawd/research/scion-experiments/v04-cvrp-m9-autonomous-m7
 The final `--campaign-dir` argument is replaced by the `rerun1` path above.
 All other environment values, preflights and CLI arguments remain byte-for-byte
 the same.
+
+The first post-fix shell preflight on carrier
+`8960f223ddb01f9313b961c541409d9ae3abfe69` stopped before `scion run`: after
+changing into the `scion/` subdirectory, the new exact-diff check incorrectly
+used the repository-root-relative `scion/scion` pathspec without `git -C
+"$REPO_ROOT"`. That check alone returned nonzero. The carrier, tracked/index
+cleanliness, original root, absent rerun root, module origins, local proxy and
+model checks all passed. The rerun root remained absent and provider
+generations, solver subprocesses and campaign artifacts remained zero. The
+corrected command above anchors the diff at the repository root. Because the
+rerun process was not invoked, the authorized single rerun remains pending;
+this preflight stop is not a campaign attempt and supplies no scientific
+observation.
 
 Any failed fix check, carrier check or preflight stops without launching. Once
 the rerun process is invoked, its first typed or pre-campaign terminal consumes
