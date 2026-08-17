@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Mapping
+from typing import Any, Dict
 
-from .trace import _TraceWriter, _client_request_policy
+from scion.core.resource_envelope import ProviderCallBudget
+
+from .trace import _client_request_policy, _TraceWriter
 
 
 @dataclass(frozen=True)
@@ -40,10 +43,12 @@ class ProviderCaller:
         model: str,
         *,
         trace_dir: str | None,
+        provider_call_budget: ProviderCallBudget | None = None,
     ) -> None:
         self._client = client
         self._model = model
         self._trace_dir = trace_dir
+        self._provider_call_budget = provider_call_budget
 
     def call(
         self,
@@ -54,6 +59,8 @@ class ProviderCaller:
     ) -> Dict[str, Any]:
         """Call once, write one terminal trace, and return the provider value."""
 
+        if self._provider_call_budget is not None:
+            self._provider_call_budget.consume(request_kind=request_kind)
         _reset_client_call_observations(self._client)
         structured_context = snapshot.structured_context
 

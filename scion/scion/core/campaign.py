@@ -33,6 +33,7 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionResult
 from scion.core.proposal_pipeline import ProposalAttempt
+from scion.core.resource_envelope import ResourceEnvelope
 from scion.core.scheduler import (
     active_slot_inventory,
 )
@@ -80,6 +81,7 @@ class CampaignManager:
         verification_gate: Optional[Any] = None,
         operator_execute_signature: Optional[str] = None,
         research_input: Optional[Dict[str, Any]] = None,
+        resource_envelope: ResourceEnvelope | dict[str, Any] | None = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
@@ -97,6 +99,7 @@ class CampaignManager:
             adapter=adapter,
             operator_execute_signature=operator_execute_signature,
             research_input=research_input,
+            resource_envelope=resource_envelope,
         )
 
     # ------------------------------------------------------------------
@@ -137,7 +140,12 @@ class CampaignManager:
         self._external_stop_requested = True
         self._last_stop_reason = reason or "external_stop_requested"
 
-    def finalize_requested_stop(self, reason: str | None = None) -> None:
+    def finalize_requested_stop(
+        self,
+        reason: str | None = None,
+        *,
+        interrupted_override: bool | None = None,
+    ) -> None:
         """Write final artifacts for an externally requested stop."""
         self._external_stop_requested = True
         if reason:
@@ -155,7 +163,11 @@ class CampaignManager:
         )
         terminal = current.terminalized(
             self._last_stop_reason,
-            interrupted=self._campaign_loop.call_in_progress,
+            interrupted=(
+                self._campaign_loop.call_in_progress
+                if interrupted_override is None
+                else interrupted_override
+            ),
         )
         self._campaign_loop.current_result = terminal
         self._campaign_loop.call_in_progress = False

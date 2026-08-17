@@ -60,7 +60,11 @@ class CampaignRunResult:
             outcome_counts[ExecutionOutcome.INTERRUPTED.value] += 1
             last = {
                 "outcome": ExecutionOutcome.INTERRUPTED.value,
-                "reason_code": "EXTERNAL_STOP_REQUESTED",
+                "reason_code": (
+                    "OUTER_HARDWALL_EXCEEDED"
+                    if reason == "OUTER_HARDWALL_EXCEEDED"
+                    else "EXTERNAL_STOP_REQUESTED"
+                ),
                 "stage": "campaign",
             }
         elif unresolved_attempt:

@@ -6,9 +6,11 @@ import json
 import logging
 import os
 import signal
+import threading
+from collections.abc import Callable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Self
 
 import typer
 from scion.cli.commands.data_roots import (
@@ -59,7 +61,61 @@ class _CampaignSignalStop(KeyboardInterrupt):
     def __init__(self, signum: int, reason: str) -> None:
         self.signum = signum
         self.reason = reason
+        self.exit_status = (
+            _OUTER_HARDWALL_EXIT_STATUS
+            if reason == _OUTER_HARDWALL_REASON
+            else 128 + int(signum)
+        )
         super().__init__(reason)
+
+
+_OUTER_HARDWALL_REASON = "OUTER_HARDWALL_EXCEEDED"
+_OUTER_HARDWALL_EXIT_STATUS = 124
+
+
+class _CampaignOuterHardwall:
+    """One watchdog that interrupts the main thread through SIGTERM."""
+
+    def __init__(
+        self,
+        seconds: float | None,
+        *,
+        kill_process: Callable[[int, int], None] = os.kill,
+        process_id: Callable[[], int] = os.getpid,
+    ) -> None:
+        self.seconds = seconds
+        self.expired = threading.Event()
+        self._cancelled = threading.Event()
+        self._kill_process = kill_process
+        self._process_id = process_id
+        self._thread: threading.Thread | None = None
+
+    def __enter__(self) -> Self:
+        if self.seconds is None:
+            return self
+        if self.seconds <= 0:
+            raise ValueError("outer hardwall seconds must be greater than zero")
+        self._thread = threading.Thread(
+            target=self._watch,
+            name="scion-outer-hardwall",
+            daemon=True,
+        )
+        self._thread.start()
+        return self
+
+    def __exit__(self, _exc_type, _exc, _traceback) -> None:
+        self._cancelled.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+
+    def _watch(self) -> None:
+        if self._cancelled.wait(float(self.seconds)):
+            return
+        self.expired.set()
+        try:
+            self._kill_process(self._process_id(), signal.SIGTERM)
+        except OSError:
+            logger.exception("Failed to deliver outer hardwall SIGTERM")
 
 
 def _close_llm_client(llm_client: Any) -> None:
@@ -73,13 +129,20 @@ def _close_llm_client(llm_client: Any) -> None:
 
 
 @contextmanager
-def _campaign_signal_handlers(manager):
+def _campaign_signal_handlers(
+    manager,
+    *,
+    hardwall: _CampaignOuterHardwall | None = None,
+):
     """Install minimal SIGTERM/SIGINT handlers for a running campaign."""
     previous: dict[int, object] = {}
 
     def _handler(signum: int, _frame) -> None:
-        signame = signal.Signals(signum).name
-        reason = f"signal:{signame}"
+        if hardwall is not None and hardwall.expired.is_set():
+            reason = _OUTER_HARDWALL_REASON
+        else:
+            signame = signal.Signals(signum).name
+            reason = f"signal:{signame}"
         manager.request_stop(reason)
         raise _CampaignSignalStop(signum, reason)
 
@@ -94,6 +157,7 @@ def _campaign_signal_handlers(manager):
 
 
 _INCOMPLETE_INFRA_STOP_EXIT_STATUS = 20
+_RESOURCE_EXHAUSTED_EXIT_STATUS = 21
 
 
 def _completion_from_run_result(result: Any) -> tuple[int, str]:
@@ -102,6 +166,12 @@ def _completion_from_run_result(result: Any) -> tuple[int, str]:
     failure_categories = dict(getattr(result, "failure_categories", {}) or {})
     if completed:
         return 0, "command_returned"
+    last_execution_outcome = dict(getattr(result, "last_execution_outcome", None) or {})
+    if last_execution_outcome.get("outcome") == "resource_exhausted":
+        return (
+            _RESOURCE_EXHAUSTED_EXIT_STATUS,
+            "incomplete_resource_stop:resource_exhausted",
+        )
     if stopped_reason == "api_balance_exhausted" or any(
         "infra" in str(category).lower() or "provider" in str(category).lower()
         for category in failure_categories
@@ -143,6 +213,18 @@ def register_run_command(app: typer.Typer) -> None:
                 "Path to bounded JSON containing the current research question "
                 "and ordered prior observations"
             ),
+        ),
+        provider_call_cap: int | None = typer.Option(
+            None,
+            "--provider-call-cap",
+            min=1,
+            help="Maximum actual H/C provider requests for this invocation",
+        ),
+        outer_hardwall_sec: int | None = typer.Option(
+            None,
+            "--outer-hardwall-sec",
+            min=1,
+            help="Outer wall-clock limit for the complete invocation",
         ),
         protocol: Optional[str] = typer.Option(
             None,
@@ -186,6 +268,16 @@ def register_run_command(app: typer.Typer) -> None:
             except (TypeError, ValueError) as exc:
                 typer.echo(f"ERROR: {exc}", err=True)
                 raise typer.Exit(code=1)
+        from scion.core.resource_envelope import ResourceEnvelope
+
+        try:
+            resource_envelope = ResourceEnvelope(
+                provider_call_cap=provider_call_cap,
+                outer_hardwall_sec=outer_hardwall_sec,
+            )
+        except (TypeError, ValueError) as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
         from scion.config.problem import (
             ProblemSpec,
             ProtocolConfig,
@@ -378,6 +470,7 @@ def register_run_command(app: typer.Typer) -> None:
                 adapter=adapter,
                 operator_execute_signature=operator_execute_signature,
                 research_input=research_input_value,
+                resource_envelope=resource_envelope,
             )
 
             requested_rounds = rounds
@@ -386,12 +479,18 @@ def register_run_command(app: typer.Typer) -> None:
                 f"(requested_rounds={requested_rounds}, mock_llm={mock_llm})"
             )
             try:
-                with _campaign_signal_handlers(mgr):
+                hardwall = _CampaignOuterHardwall(resource_envelope.outer_hardwall_sec)
+                with _campaign_signal_handlers(mgr, hardwall=hardwall), hardwall:
                     run_result = mgr.run(requested_rounds=requested_rounds)
             except _CampaignSignalStop as exc:
-                mgr.finalize_requested_stop(exc.reason)
+                mgr.finalize_requested_stop(
+                    exc.reason,
+                    interrupted_override=(
+                        True if exc.reason == _OUTER_HARDWALL_REASON else None
+                    ),
+                )
                 typer.echo(f"Campaign stopped: {exc.reason}", err=True)
-                raise typer.Exit(code=128 + int(exc.signum))
+                raise typer.Exit(code=exc.exit_status)
             else:
                 exit_status, exit_reason = _completion_from_run_result(run_result)
                 if exit_status != 0:
@@ -407,4 +506,8 @@ def register_run_command(app: typer.Typer) -> None:
             _close_llm_client(llm_client)
 
 
-__all__ = ["_load_research_input", "register_run_command"]
+__all__ = [
+    "_CampaignOuterHardwall",
+    "_load_research_input",
+    "register_run_command",
+]

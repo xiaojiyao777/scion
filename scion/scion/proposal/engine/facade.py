@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
-from typing import Any, Mapping
+from typing import Any
 
 from scion.core.models import HypothesisProposal, PatchProposal
+from scion.core.resource_envelope import ProviderCallBudget
 from scion.proposal.context_snapshot import (
     ProposalContextSnapshot,
     freeze_proposal_context,
@@ -66,6 +68,7 @@ class CreativeLayer:
         model: str | None = None,
         *,
         trace_dir: str | None = None,
+        provider_call_budget: ProviderCallBudget | None = None,
     ) -> None:
         self._client = llm_client
         self._model = model or getattr(llm_client, "model", None) or "claude-opus-4-6"
@@ -73,6 +76,7 @@ class CreativeLayer:
             self._client,
             self._model,
             trace_dir=trace_dir,
+            provider_call_budget=provider_call_budget,
         )
 
     def generate_direct_hypothesis(

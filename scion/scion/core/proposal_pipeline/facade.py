@@ -17,6 +17,7 @@ from scion.core.models import (
     PatchProposal,
     StepRecord,
 )
+from scion.core.resource_envelope import ProviderCallCapExhausted
 from scion.proposal.context_snapshot import (
     ProposalContextSnapshot,
     freeze_proposal_context,
@@ -92,6 +93,10 @@ class ProposalPipeline:
 
         try:
             hypothesis = self.creative.generate_direct_hypothesis(prompt_snapshot)
+        except ProviderCallCapExhausted as exc:
+            return ProposalAttempt.failure(
+                self._handle_provider_failure(branch, "hypothesis", exc)
+            )
         except LLMBalanceError as exc:
             return ProposalAttempt.failure(
                 self._handle_provider_failure(branch, "hypothesis", exc, balance=True)
@@ -138,6 +143,10 @@ class ProposalPipeline:
 
         try:
             patch = self.creative.generate_direct_code(prompt_snapshot)
+        except ProviderCallCapExhausted as exc:
+            return ProposalAttempt.failure(
+                self._handle_provider_failure(branch, "code", exc)
+            )
         except LLMBalanceError as exc:
             return ProposalAttempt.failure(
                 self._handle_provider_failure(
@@ -190,10 +199,11 @@ class ProposalPipeline:
         *,
         balance: bool = False,
     ) -> ExecutionOutcomeRecord:
+        call_cap_exhausted = isinstance(error, ProviderCallCapExhausted)
         invalid = isinstance(error, (LLMFormatError, ProposalValidationError))
         outcome_value = (
             ExecutionOutcome.RESOURCE_EXHAUSTED
-            if balance
+            if balance or call_cap_exhausted
             else ExecutionOutcome.RESEARCH_REJECTED
             if invalid
             else ExecutionOutcome.BLOCKED_INFRA
@@ -201,6 +211,8 @@ class ProposalPipeline:
         reason_code = (
             "PROVIDER_BALANCE_EXHAUSTED"
             if balance
+            else "PROVIDER_CALL_CAP_EXHAUSTED"
+            if call_cap_exhausted
             else "PROPOSAL_RESPONSE_INVALID"
             if invalid
             else "PROVIDER_CALL_BLOCKED_INFRA"
@@ -215,6 +227,8 @@ class ProposalPipeline:
         if balance:
             logger.critical("Branch %s: provider balance exhausted", branch.branch_id)
             self.mark_balance_exhausted()
+        elif call_cap_exhausted:
+            logger.error("Branch %s: provider call cap exhausted", branch.branch_id)
         return record
 
     def _record_unexpected_call_failure(

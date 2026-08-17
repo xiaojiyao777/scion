@@ -38,6 +38,11 @@ from scion.core.proposal_pipeline import (
 from scion.core.research_input import write_research_input
 from scion.core.research_rejection_finalizer import ResearchRejectionFinalizer
 from scion.core.research_surface_index import editable_patterns
+from scion.core.resource_envelope import (
+    ProviderCallBudget,
+    normalize_resource_envelope,
+    write_resource_envelope,
+)
 from scion.core.scheduler import Scheduler
 from scion.core.status_reporter import StatusReporter
 from scion.core.verification_factory import CampaignVerificationFactory
@@ -88,6 +93,7 @@ def compose_campaign_services(
     verification_gate: Any | None = None,
     operator_execute_signature: str | None = None,
     research_input: Any | None = None,
+    resource_envelope: Any | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     validate_fresh_campaign_output(campaign_dir)
@@ -99,6 +105,10 @@ def compose_campaign_services(
         research_input=research_input,
     )
     owner._protocol_config = protocol_config
+    owner._resource_envelope = normalize_resource_envelope(resource_envelope)
+    owner._provider_call_budget = ProviderCallBudget(
+        owner._resource_envelope.provider_call_cap
+    )
     owner._split_manifest = split_manifest
     owner._seed_ledger = seed_ledger
     owner._llm_client = llm_client
@@ -130,6 +140,7 @@ def compose_campaign_services(
     owner._creative = CreativeLayer(
         llm_client,
         trace_dir=f"{campaign_dir}/llm_traces",
+        provider_call_budget=owner._provider_call_budget,
     )
 
     family_taxonomy = getattr(owner._problem_runtime.spec, "family_taxonomy", None)
@@ -195,6 +206,7 @@ def compose_campaign_services(
             campaign_dir,
             owner._problem_runtime.research_input,
         )
+    write_resource_envelope(campaign_dir, owner._resource_envelope)
     owner._branch_workspaces = {}
     owner._branch_patches = {}
     owner._step_history = []
