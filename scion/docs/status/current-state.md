@@ -60,6 +60,12 @@ lifecycles.
   [longitudinal mechanism audit](../experiments/v0.4/v0.4-cvrp-longitudinal-mechanism-reopen-audit-20260815.md).
 - R67 is terminal `PREP_INVALID / AUTHORIZED_PREFLIGHT_LIVE_CONTROL_ROOT_COLLISION / KNOWN_ZERO_BEFORE_SCIENTIFIC_DELEGATION`: solver, provider, Protocol and Decision observations are zero, the one-shot was consumed, and no candidate-quality conclusion exists; the complete historical record remains in its
   [preregistration](../experiments/v0.4/v0.4-cvrp-r67-provider-free-r3-cumulative-exact-source-full-funnel-confirmation-preregistration-20260815.md).
+- M7-FC1 is terminal `CANDIDATE_SUBJECT_VETO`. Initial screening expanded and
+  fresh expanded screening passed, but validation stopped on candidate
+  `X-n200-k36`, seed 2069, after the runtime audit reported a solver algorithm
+  error. No validation result, frozen result, promotion or retained-B0 result
+  exists; the exact evidence and claim boundary remain in its
+  [preregistration](../experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md).
 
 ## Active work
 
@@ -71,22 +77,17 @@ passes ordinary values directly: the Contract-approved H enters C in the same
 call, one `CandidateWorkspace` enters Verification and Protocol, Decision
 selects one branch action, and promotion is one operation.
 
-M7 is active. A new fixed-candidate rung is now prepared under label
-`v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816`; it is not
-a repair, retry, resume or renaming of R67. Its
-[ordinary preregistration](../experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md)
-binds exact R3 B0, complete cumulative candidate-06, a fresh 48-case/32-seed
-population, serial cache-disabled order, the current Protocol gates and the
-limited claim boundary. The carrier is commit
-`cd1fcd7ad2a953c505c59ea339c2ff7d27af7fb3`.
+M7-FC1 ran once under explicit authorization and is terminal
+`CANDIDATE_SUBJECT_VETO / ONE_SHOT_CONSUMED`. Initial screening completed 32/32
+valid pairs and expanded; fresh expanded screening completed 96/96 valid pairs
+and passed. Validation then stopped on candidate `X-n200-k36`, seed 2069,
+because the runtime audit reported an algorithm error while packing customer
+106 into 36 routes. No validation stage metrics, frozen stage, promotion
+snapshot or retained-B0 result exists.
 
-The post-commit `--check` passed without creating an output directory or
-invoking a provider or solver, and all 19 fake-only carrier tests passed. State
-is `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_EXECUTION_AUTHORIZATION`.
-Launching requires one new explicit instruction naming this label and its
-one-shot envelope (maximum 840 solver subprocesses and 45,200 nominal
-subject-seconds). No R67 recovery, repair, retry, resume, replacement,
-substitution or automatic next rung is authorized.
+CVRP remains open. The next work is scientific redesign from this exact
+negative evidence. No repair, retry, resume, replacement, substitution, R67
+recovery or automatic next formal rung is authorized.
 
 ## Current validation rule
 

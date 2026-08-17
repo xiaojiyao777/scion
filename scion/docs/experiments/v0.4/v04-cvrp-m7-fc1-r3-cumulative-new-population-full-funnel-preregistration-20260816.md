@@ -4,7 +4,7 @@
 
 *Label: `v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816`*
 
-*State: `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_EXECUTION_AUTHORIZATION`*
+*State: `TERMINAL / CANDIDATE_SUBJECT_VETO / ONE_SHOT_CONSUMED`*
 
 *Execution carrier: Git commit
 `cd1fcd7ad2a953c505c59ea339c2ff7d27af7fb3` (prepared 2026-08-17).*
@@ -250,3 +250,59 @@ is sufficient for one launch. No hash-signing, authorization manifest,
 refreeze, sentinel or second confirmation is required. A failed launch consumes
 that one attempt and cannot be repaired or repeated without a new scientific
 record and new authorization.
+
+## Executed terminal record
+
+The user explicitly authorized this exact label and committed one-shot carrier.
+The unique formal invocation started from carrier commit
+`cd1fcd7ad2a953c505c59ea339c2ff7d27af7fb3` and stopped on 2026-08-17 at
+13:57:08 UTC with exit code 2 and typed terminal
+`CANDIDATE_SUBJECT_VETO`. No retry, repair, resume, replacement, substitution,
+alternate candidate, population extension, R67 recovery or later rung was
+started.
+
+The initial block completed 32/32 valid pairs with no subject failure or fleet
+regression. Its gate was `expand`, Decision was `expand_screening`, and its
+case-level result was 6 wins, 0 losses and 2 ties (`median_delta=6.25`,
+`ci=[0.0,74.0]`). The fresh expanded block then completed 96/96 valid pairs
+with no subject failure or fleet regression. Its gate was `pass`, Decision was
+`queue_validate`, and its case-level result was 7 wins, 2 losses and 3 ties
+(`median_delta=2.0`, `ci=[0.0,27.25]`). These two completed screening blocks
+are valid evidence on their exact populations; neither is validation,
+promotion or retention evidence.
+
+Validation stopped before producing a stage metrics artifact. The failing
+subject was the candidate arm on `cvrplib/X/X-n200-k36.vrp`, seed 2069. The
+runtime audit reported `solver_algorithm_errors=1`, with first detail
+`solve failed: unable to pack customer 106 into 36 routes`. The carrier
+therefore vetoed the candidate immediately. At termination its counters were
+311 solver subprocesses, 15,225 nominal subject-seconds and 19,890 seconds of
+positive-path hard-timeout budget. The completed trace contains only the
+initial and expanded screening blocks; SafeFeature/Decision did not consume a
+validation result, no frozen block ran, and no promotion or retained-B0
+comparison occurred.
+
+The terminal artifact is
+`campaign_out/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816-output/terminal.json`
+(5,518 bytes, SHA-256
+`6488370e8b254d34f0795356bdd0f19438dc133a34120d884b6917503f3a1669`).
+The two completed metrics artifacts are:
+
+- initial screening `705ef25f-67bd-4e11-a397-265082a25d06.json`
+  (5,258,626 bytes, SHA-256
+  `8d3877d7540193485130a08889401a34f4613948161421a366331c4477163970`);
+- expanded screening `9b80c509-2b63-4fac-bca3-9d20257e5d75.json`
+  (11,166,263 bytes, SHA-256
+  `c010584527a51abaabbf143948f05e98469ea9eaf490f2c9b60e777a0ef547fb`).
+
+Post-terminal inspection found no live M7 or solver process, no subject
+workspace, no retained metrics, no output-local temporary file and no
+promotion snapshot. Provider, H, C, patch, current Contract, current
+Verification, current V3 and current V4 calls remained zero.
+
+This is negative evidence against the exact cumulative candidate source on the
+population reached before the stop. It is not an independent-discovery result,
+does not isolate the last route-removal change, and does not support a global
+CVRP, promotion, retained-improvement or production-readiness claim. The
+one-shot is consumed; any new scientific redesign is a new record and requires
+new explicit authorization before formal execution.

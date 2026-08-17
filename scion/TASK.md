@@ -224,10 +224,12 @@ document points back to the removed lifecycle.
   claim boundary. The carrier is commit
   `cd1fcd7ad2a953c505c59ea339c2ff7d27af7fb3`; its read-only check and 19
   provider-/solver-free tests pass.
-- [ ] Run the existing V3 path without a self-proof launch bundle. A negative
-  result remains evidence and triggers scientific redesign, not gate repair.
-  Formal execution first requires separate explicit user authorization naming
-  the prepared M7-FC1 label and its one-shot resource envelope.
+- [x] Run the existing V3 path without a self-proof launch bundle. The
+  explicitly authorized M7-FC1 one-shot completed initial and expanded
+  screening, then stopped fail-closed in validation with
+  `CANDIDATE_SUBJECT_VETO` on candidate `X-n200-k36`, seed 2069. The one-shot is
+  consumed: there is no repair, retry, resume or automatic next rung. This
+  negative result is evidence for scientific redesign, not gate repair.
 
 CVRP acceptance remains:
 
@@ -262,13 +264,14 @@ CVRP acceptance remains:
 
 ## Status
 
-Active work is M7. The new
-`v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816` rung is
-prepared but not started: exact B0 and cumulative candidate-06, a fresh
-48-case/32-seed population, serial cache-disabled execution, at most 840 solver
-subprocesses, 45,200 nominal subject-seconds and the complete Protocol/claim
-boundary are recorded in its
+M7-FC1 is terminal. The
+`v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816` one-shot
+completed initial and expanded screening, then stopped in validation with
+`CANDIDATE_SUBJECT_VETO` on candidate `X-n200-k36`, seed 2069. At termination it
+had used 311 solver subprocesses and 15,225 nominal subject-seconds; no frozen,
+promotion or retained-B0 stage ran. The complete design and terminal record are
+preserved in its
 [preregistration](docs/experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md).
-The committed carrier and read-only preflight are green. Formal execution now
-waits for one separate explicit authorization; no solver/provider launch,
-recovery or automatic next rung is authorized by this task record.
+CVRP acceptance remains unmet. The next task is scientific redesign from this
+negative evidence, but this record authorizes no repair, retry, resume,
+replacement or automatic next formal rung.
