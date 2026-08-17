@@ -6,6 +6,9 @@
 
 *State: `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_EXECUTION_AUTHORIZATION`*
 
+*Execution carrier: Git commit
+`cd1fcd7ad2a953c505c59ea339c2ff7d27af7fb3` (prepared 2026-08-17).*
+
 ## Question
 
 Does the exact, outcome-known cumulative R3 candidate-06 retain a
@@ -54,9 +57,11 @@ dataset. The driver must not import or execute the R67 launcher, manifest,
 frozen-input checker, executor, supervisor, embedded runtime, control root,
 ledger or authorization state.
 
-The execution-carrier commit will be recorded after the driver and its
-provider-/solver-free tests are committed. No framework source may change
-between that carrier commit and the one authorized run.
+The driver, its provider-/solver-free tests and this population were committed
+in the execution carrier above. The post-commit read-only check passed, all 19
+fake-only carrier tests passed, the planned output remained absent, and no
+provider or solver was invoked. No framework source may change between that
+carrier commit and the one authorized run.
 
 ### Population and exposure
 

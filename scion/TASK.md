@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Last updated: 2026-08-16*
+*Last updated: 2026-08-17*
 
 ## Authority and objective
 
@@ -216,14 +216,18 @@ document points back to the removed lifecycle.
 
 ### M7 - Resume the CVRP scientific task
 
-- [ ] Decide the next scientific rung only after M0-M6 close. The terminal
-  preflight attempt is not fixed, retried, resumed or renamed, and this task
-  authorizes no next rung or provider/solver launch.
-- [ ] Any future rung uses a new experiment record and separate explicit user
-  authorization. Freeze only scientific inputs: exact source, comparator,
-  cases, seeds, order, budgets, Protocol and claim boundary.
+- [x] Decide the next scientific rung only after M0-M6 close. M7-FC1 is a new
+  fixed-candidate comparison; the terminal R67 preflight attempt is not fixed,
+  retried, resumed or renamed.
+- [x] Prepare a new ordinary experiment record that freezes only scientific
+  inputs: exact source, comparator, cases, seeds, order, budgets, Protocol and
+  claim boundary. The carrier is commit
+  `cd1fcd7ad2a953c505c59ea339c2ff7d27af7fb3`; its read-only check and 19
+  provider-/solver-free tests pass.
 - [ ] Run the existing V3 path without a self-proof launch bundle. A negative
   result remains evidence and triggers scientific redesign, not gate repair.
+  Formal execution first requires separate explicit user authorization naming
+  the prepared M7-FC1 label and its one-shot resource envelope.
 
 CVRP acceptance remains:
 
@@ -258,7 +262,13 @@ CVRP acceptance remains:
 
 ## Status
 
-Active work is M1-M6, the V3 self-proof subtraction and behavioral validation
-sequence. Warehouse acceptance is complete. CVRP has no Protocol-complete
-promotion. No experiment launch, recovery or next rung is authorized by this
-documentation rewrite.
+Active work is M7. The new
+`v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816` rung is
+prepared but not started: exact B0 and cumulative candidate-06, a fresh
+48-case/32-seed population, serial cache-disabled execution, at most 840 solver
+subprocesses, 45,200 nominal subject-seconds and the complete Protocol/claim
+boundary are recorded in its
+[preregistration](docs/experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md).
+The committed carrier and read-only preflight are green. Formal execution now
+waits for one separate explicit authorization; no solver/provider launch,
+recovery or automatic next rung is authorized by this task record.

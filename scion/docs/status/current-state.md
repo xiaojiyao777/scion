@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-16*
+*Last updated: 2026-08-17*
 
 Read [`../../TASK.md`](../../TASK.md) first. The sole architecture authority is
 [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md).
@@ -71,9 +71,22 @@ passes ordinary values directly: the Contract-approved H enters C in the same
 call, one `CandidateWorkspace` enters Verification and Protocol, Decision
 selects one branch action, and promotion is one operation.
 
-M7 is the only prospective module. It is not authorized: no R67 repair, retry,
-resume, replacement or R68 follows from this cleanup, and any new CVRP rung
-requires a new experiment record and separate explicit user authorization.
+M7 is active. A new fixed-candidate rung is now prepared under label
+`v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816`; it is not
+a repair, retry, resume or renaming of R67. Its
+[ordinary preregistration](../experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md)
+binds exact R3 B0, complete cumulative candidate-06, a fresh 48-case/32-seed
+population, serial cache-disabled order, the current Protocol gates and the
+limited claim boundary. The carrier is commit
+`cd1fcd7ad2a953c505c59ea339c2ff7d27af7fb3`.
+
+The post-commit `--check` passed without creating an output directory or
+invoking a provider or solver, and all 19 fake-only carrier tests passed. State
+is `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_EXECUTION_AUTHORIZATION`.
+Launching requires one new explicit instruction naming this label and its
+one-shot envelope (maximum 840 solver subprocesses and 45,200 nominal
+subject-seconds). No R67 recovery, repair, retry, resume, replacement,
+substitution or automatic next rung is authorized.
 
 ## Current validation rule
 
