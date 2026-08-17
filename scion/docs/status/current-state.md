@@ -111,23 +111,23 @@ kill and unregister an active solver child before terminalization as
 `INTERRUPTED / OUTER_HARDWALL_EXCEEDED`. Configured limits are written once as
 ordinary `resource_envelope.json`; no registry or proof lifecycle was added.
 
-M9 preparation is complete but live execution is not authorized. The prepared
-normal `scion run` campaign exposes the M7 terminal fact through the CVRP
-adapter and allows real H, C, Contract, Verification, Protocol, Safe Features
-and Decision. The host supplies no patch, target file, action, surface, repair
-or algorithm mechanism. The initial development screen is six cases by two
-seeds; reserved development validation and frozen splits are configured but
-cannot execute under `--rounds 1`. All twelve development cases and seven
-seeds are disjoint from M7, R67 and current CVRP package inputs. The future
-formal population is unselected, unwritten and unavailable to the Agent. The
-exact population, resource arithmetic, typed stops and claim limits are in the
+M9 is terminal
+`PRE_MGR_RUN_FRESH_OUTPUT_SELF_COLLISION / ONE_SHOT_CONSUMED`. Its exact
+carrier passed source, input, output-absence and local proxy metadata checks.
+Before `mgr.run`, however, `ExperimentProtocol` created the campaign `metrics/`
+directory and `CampaignManager` then rejected that directory under the fresh
+output invariant. The preserved root contains only that empty directory. H,
+C, Contract, Verification, Protocol, Safe Features, Decision, provider
+generation, solver and scientific observations are all zero; no typed campaign
+terminal exists. This is a framework launch-path finding, not evidence about
+Agent research effectiveness or CVRP algorithm quality. The exact preparation
+and terminal record are in the
 [M9 preregistration](../experiments/v0.4/v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md).
 
-The current state authorizes only M9 offline checks and committing the prepared
-carrier. No live provider/solver campaign, repair, retry, resume, replacement,
-substitution, later development stage, R67 recovery or automatic formal rung
-is authorized. A later instruction must name the exact clean carrier and the
-one-shot M9 envelope before the normal CLI may run.
+The next development task is to correct this generic initialization-order bug
+and validate it offline. The M9 root must remain preserved. No deletion,
+repair, live retry, resume, replacement campaign, later development stage,
+R67 recovery or formal rung is authorized.
 
 ## Current validation rule
 
@@ -145,6 +145,12 @@ companion solution; exact case/seed overlap checks and the 32-subprocess,
 explicit `python -S -B -m scion.cli.main` entry resolves the current repository
 modules and exposes the new CLI flags. These checks made no provider request,
 solver call or campaign directory.
+
+Post-attempt read-only audit found one `0700` root containing one empty `0700`
+`metrics/` directory, with zero files and symlinks and no live related process.
+The tracked worktree and index remained clean and production source still
+matched `9ae49b21`. The bounded proxy metadata checks succeeded, but provider
+generation and solver counts remained zero.
 
 No provider or formal scientific launch ran during this subtraction. Two early
 local smoke/e2e pytest selections were interrupted after being recognized as

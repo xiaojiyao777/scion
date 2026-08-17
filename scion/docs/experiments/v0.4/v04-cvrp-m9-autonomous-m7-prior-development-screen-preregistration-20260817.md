@@ -2,7 +2,7 @@
 
 *Date: 2026-08-17*
 
-*State: `PREPARED_NOT_AUTHORIZED_PENDING_CARRIER_COMMIT / PROVIDER_CALLS=0 / SOLVER_SUBPROCESSES=0 / CAMPAIGN_LAUNCHES=0`*
+*State: `PRE_MGR_RUN_FRESH_OUTPUT_SELF_COLLISION / ONE_SHOT_CONSUMED / PROVIDER_GENERATIONS=0 / SOLVER_SUBPROCESSES=0`*
 
 ## Purpose and research boundary
 
@@ -284,10 +284,9 @@ through `SCION_API_KEY`, never printed or persisted, and unset on shell exit.
 The authenticated `/v1/models` request is a metadata-only preflight confirming
 that `gpt-5.6-terra` is advertised; it sends no research prompt and is not a
 provider generation. Each local HTTP preflight has a five-second connection
-timeout and a fifteen-second total timeout. Neither proxy preflight has been
-run during this preparation. The command must not be run until the user
-explicitly authorizes this exact M9 campaign after provider-/solver-free
-review passes.
+timeout and a fifteen-second total timeout. Neither proxy preflight had been
+run before authorization. Both bounded local metadata checks passed during the
+authorized invocation; neither was a provider generation.
 
 ## Three claim layers
 
@@ -327,10 +326,36 @@ package inputs, all twelve M9 development cases and every seed named above.
 It requires a separate resource envelope, claim boundary and explicit user
 authorization.
 
-## Current authorization state
+## Terminal record
 
-Preparation may run only YAML/JSON loaders, instance parsers, static overlap
-and arithmetic checks, formatting/lint checks and provider-/solver-free tests.
-This document does not authorize a provider call, solver subprocess or
-campaign launch. Any preparation failure leaves the state
-`PREPARED_NOT_AUTHORIZED` and must not be followed by a live attempt.
+The user explicitly authorized one invocation on clean carrier
+`b1d7f6e38c65c99cdc4cb399402a19b2341d8e85` under this complete envelope. The
+tracked worktree and index were clean, production source differed by zero from
+`9ae49b2125ec3d0c49dc6dee047e081ee0487dce`, module origins and CLI flags
+matched the frozen entry, the target output root was absent, and both bounded
+local proxy metadata checks passed.
+
+At `2026-08-17T23:26:13.792156010Z`, before `mgr.run`, provider generation or a
+solver subprocess, CLI construction of `ExperimentProtocol` created the output
+root and its `metrics/` directory. `CampaignManager` then applied the fresh
+output check and rejected that directory as unexpected:
+
+```text
+ValueError: campaign output must be fresh; choose a new directory (found: metrics)
+```
+
+The invocation exited immediately. The durable output tree is mode `0700` and
+contains exactly one empty `metrics/` directory, also mode `0700`: zero files
+and zero symlinks. `resource_envelope.json`, `research_input.json`, database,
+LLM traces, status, summary, terminal and metric artifacts do not exist. No
+H, H Contract, C, C Contract, Verification, Protocol, Safe Features, Decision,
+lineage, formal screening, provider generation, solver or pytest observation
+exists. There is no typed campaign terminal because the campaign object was
+not constructed.
+
+This supports only a framework launch-path finding: output initialization and
+the fresh-output invariant conflict in the normal CLI. It supports no claim
+about Agent research effectiveness or CVRP algorithm quality. The authorized
+one-shot is consumed. The output root is preserved; no deletion, repair,
+retry, resume, replacement run, later development stage or formal rung is
+authorized.

@@ -280,6 +280,13 @@ The exact design and claim boundary are in the
 - [x] Freeze one new development population whose screening, reserved
   validation and reserved frozen cases/seeds are disjoint from every M7 fact
   exposed to H, the R67 plan and current package inputs.
+- [x] Invoke the reviewed M9 carrier once under explicit authorization. The
+  normal CLI stopped before `mgr.run` because `ExperimentProtocol` created
+  `metrics/` before the fresh-output check, so the one-shot produced no H/C or
+  scientific observation and is consumed.
+- [ ] Correct the problem-neutral CLI initialization order so its own metrics
+  setup cannot violate the fresh-output invariant. Validate offline; any new
+  live campaign requires a separately prepared carrier and authorization.
 - [ ] After the development result, select any future formal population by a
   separately reviewed outcome-blind rule. Keep it unavailable to the Agent and
   require a new resource envelope and explicit authorization.
@@ -341,6 +348,11 @@ six-case/two-seed development screen, reserved later development splits,
 provider/process envelope, one-stage stopping rule and three-layer claim
 boundary are now frozen in its
 [preregistration](docs/experiments/v0.4/v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md).
-The future formal population remains unselected and unavailable to the Agent.
-This record authorizes no live provider/solver run, repair, retry, resume,
-replacement, later development stage or formal rung.
+The authorized M9 invocation is terminal
+`PRE_MGR_RUN_FRESH_OUTPUT_SELF_COLLISION / ONE_SHOT_CONSUMED`: CLI Protocol
+construction created an empty `metrics/` directory before `CampaignManager`
+checked output freshness, so the complete V3 chain never started. Provider
+generation, solver, H/C, Contract, Verification, Protocol, Safe Features and
+Decision observations are all zero. The future formal population remains
+unselected and unavailable to the Agent. No repair, retry, resume, replacement,
+later development stage or formal rung is authorized.
