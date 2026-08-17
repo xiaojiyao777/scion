@@ -11,9 +11,13 @@ Also provides thin context-render wrappers (``build_hypothesis_context`` /
 ``problem_spec`` argument when delegating to the underlying ContextManager,
 so campaign-side callers do not thread ``self._spec`` through every call.
 """
+
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Optional
+
+from scion.core.research_input import normalize_research_input
 
 
 class ProblemRuntime:
@@ -26,13 +30,23 @@ class ProblemRuntime:
         adapter: Optional[Any] = None,
         split_manifest: Any | None = None,
         seed_ledger: Any | None = None,
+        research_input: Any | None = None,
     ) -> None:
         self._spec = problem_spec
         self._adapter = adapter
         self._split_manifest = split_manifest
         self._seed_ledger = seed_ledger
+        self._research_input = (
+            normalize_research_input(research_input)
+            if research_input is not None
+            else None
+        )
         from scion.proposal.context_manager import ContextManager
-        self._ctx_manager = ContextManager(adapter=adapter)
+
+        self._ctx_manager = ContextManager(
+            adapter=adapter,
+            research_input=self._research_input,
+        )
 
     # ------------------------------------------------------------------
     # Accessors
@@ -53,6 +67,10 @@ class ProblemRuntime:
     @property
     def seed_ledger(self) -> Any | None:
         return self._seed_ledger
+
+    @property
+    def research_input(self) -> dict[str, Any] | None:
+        return deepcopy(self._research_input)
 
     @property
     def ctx_manager(self) -> Any:

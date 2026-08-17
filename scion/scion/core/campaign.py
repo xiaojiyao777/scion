@@ -7,14 +7,16 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from scion.config.problem import (
-    ProtocolConfig,
     ProblemSpec,
-    SplitManifest,
+    ProtocolConfig,
     SeedLedgerConfig,
+    SplitManifest,
 )
 from scion.core.branch import StateTransitionError
 from scion.core.campaign_loop import CampaignRunResult
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
+from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
+from scion.core.evidence_recording.status import project_last_result
 from scion.core.models import (
     Branch,
     BranchState,
@@ -31,8 +33,6 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionResult
 from scion.core.proposal_pipeline import ProposalAttempt
-from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
-from scion.core.evidence_recording.status import project_last_result
 from scion.core.scheduler import (
     active_slot_inventory,
 )
@@ -79,6 +79,7 @@ class CampaignManager:
         adapter: Any,
         verification_gate: Optional[Any] = None,
         operator_execute_signature: Optional[str] = None,
+        research_input: Optional[Dict[str, Any]] = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
@@ -95,6 +96,7 @@ class CampaignManager:
             experiment_protocol=experiment_protocol,
             adapter=adapter,
             operator_execute_signature=operator_execute_signature,
+            research_input=research_input,
         )
 
     # ------------------------------------------------------------------

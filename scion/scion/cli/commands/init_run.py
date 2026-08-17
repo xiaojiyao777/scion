@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import signal
@@ -10,7 +11,6 @@ from pathlib import Path
 from typing import Any, Optional
 
 import typer
-
 from scion.cli.commands.data_roots import (
     activate_declared_problem_data_root,
     validate_declared_problem_data_cases,
@@ -18,6 +18,39 @@ from scion.cli.commands.data_roots import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _load_research_input(path: Path) -> dict[str, Any]:
+    """Load one bounded ordinary research input before campaign construction."""
+
+    from scion.core.research_input import (
+        MAX_RESEARCH_INPUT_BYTES,
+        normalize_research_input,
+    )
+
+    try:
+        size = path.stat().st_size
+    except OSError as exc:
+        raise ValueError(f"cannot read research input: {path}: {exc}") from exc
+    if size > MAX_RESEARCH_INPUT_BYTES:
+        raise ValueError(
+            "research input file is too large: "
+            f"{size} bytes > {MAX_RESEARCH_INPUT_BYTES}"
+        )
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise ValueError(f"cannot read research input: {path}: {exc}") from exc
+    if len(raw) > MAX_RESEARCH_INPUT_BYTES:
+        raise ValueError(
+            "research input file is too large: "
+            f"{len(raw)} bytes > {MAX_RESEARCH_INPUT_BYTES}"
+        )
+    try:
+        decoded = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError(f"invalid research input JSON: {exc}") from exc
+    return normalize_research_input(decoded)
 
 
 class _CampaignSignalStop(KeyboardInterrupt):
@@ -70,8 +103,7 @@ def _completion_from_run_result(result: Any) -> tuple[int, str]:
     if completed:
         return 0, "command_returned"
     if stopped_reason == "api_balance_exhausted" or any(
-        "infra" in str(category).lower()
-        or "provider" in str(category).lower()
+        "infra" in str(category).lower() or "provider" in str(category).lower()
         for category in failure_categories
     ):
         return (
@@ -104,6 +136,14 @@ def register_run_command(app: typer.Typer) -> None:
             "--problem",
             help="Path to problem.yaml",
         ),
+        research_input: Optional[str] = typer.Option(
+            None,
+            "--research-input",
+            help=(
+                "Path to bounded JSON containing the current research question "
+                "and ordered prior observations"
+            ),
+        ),
         protocol: Optional[str] = typer.Option(
             None,
             "--protocol",
@@ -123,8 +163,7 @@ def register_run_command(app: typer.Typer) -> None:
             None,
             "--time-limit-sec",
             help=(
-                "Per solver run time limit; defaults to problem "
-                "solver.time_limit_sec"
+                "Per solver run time limit; defaults to problem solver.time_limit_sec"
             ),
         ),
     ) -> None:
@@ -138,6 +177,15 @@ def register_run_command(app: typer.Typer) -> None:
         if not problem_yaml.exists():
             typer.echo(f"ERROR: problem.yaml not found: {problem_yaml}", err=True)
             raise typer.Exit(code=1)
+        research_input_value = None
+        if research_input is not None:
+            try:
+                research_input_value = _load_research_input(
+                    Path(research_input).resolve()
+                )
+            except (TypeError, ValueError) as exc:
+                typer.echo(f"ERROR: {exc}", err=True)
+                raise typer.Exit(code=1)
         from scion.config.problem import (
             ProblemSpec,
             ProtocolConfig,
@@ -329,6 +377,7 @@ def register_run_command(app: typer.Typer) -> None:
                 experiment_protocol=experiment_protocol,
                 adapter=adapter,
                 operator_execute_signature=operator_execute_signature,
+                research_input=research_input_value,
             )
 
             requested_rounds = rounds
@@ -344,9 +393,7 @@ def register_run_command(app: typer.Typer) -> None:
                 typer.echo(f"Campaign stopped: {exc.reason}", err=True)
                 raise typer.Exit(code=128 + int(exc.signum))
             else:
-                exit_status, exit_reason = _completion_from_run_result(
-                    run_result
-                )
+                exit_status, exit_reason = _completion_from_run_result(run_result)
                 if exit_status != 0:
                     typer.echo(f"Campaign incomplete: {exit_reason}", err=True)
                     raise typer.Exit(code=exit_status)
@@ -360,4 +407,4 @@ def register_run_command(app: typer.Typer) -> None:
             _close_llm_client(llm_client)
 
 
-__all__ = ["register_run_command"]
+__all__ = ["_load_research_input", "register_run_command"]

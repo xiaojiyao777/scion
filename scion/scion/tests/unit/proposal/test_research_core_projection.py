@@ -55,8 +55,10 @@ def test_h_provider_receives_research_core_while_snapshot_remains_complete() -> 
         ],
         "research_question": {
             "current_question": "How should useful search time be allocated?",
-            "research_prior": ["Inspect current source and paired evidence."],
         },
+        "prior_research_observations": [
+            {"finding": "Inspect current source and paired evidence."}
+        ],
         "proposal_renderer_inputs": {
             "solver_design_prompt_guidance": {
                 "hypothesis_guidance": ["Choose one causal algorithm path."],
@@ -103,8 +105,10 @@ def test_h_provider_receives_research_core_while_snapshot_remains_complete() -> 
     assert provider["experiment_history"][1]["control_distance"] == 225.0
     assert provider["research_question"] == {
         "current_question": "How should useful search time be allocated?",
-        "research_prior": ["Inspect current source and paired evidence."],
     }
+    assert provider["prior_research_observations"] == [
+        {"finding": "Inspect current source and paired evidence."}
+    ]
     assert "last_research_rejection" not in provider
 
 

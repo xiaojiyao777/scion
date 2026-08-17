@@ -7,6 +7,7 @@ without importing a concrete problem package.
 from __future__ import annotations
 
 import importlib
+from copy import deepcopy
 from typing import Any, Mapping, Protocol, Sequence
 
 from scion.problem.loader import ProblemAdapterLoadError, load_problem_adapter
@@ -103,6 +104,17 @@ class ProposalMechanismEvidenceProvider(Protocol):
         runtime_pairs: Sequence[Mapping[str, Any]],
     ) -> Mapping[str, Any]:
         """Return a compact proposal-visible evidence payload."""
+
+
+class PriorResearchObservationProvider(Protocol):
+    """Optional problem-owned projection of an opaque prior observation."""
+
+    def project_prior_research_observation(
+        self,
+        *,
+        observation: Mapping[str, Any],
+    ) -> Mapping[str, Any] | None:
+        """Return a proposal-safe projection, or omit this observation."""
 
 
 def resolve_active_subject_policy_provider(
@@ -374,38 +386,43 @@ def resolve_proposal_mechanism_evidence_provider(
     )
 
 
-def typed_research_question_payload(
+def resolve_prior_research_observation_provider(
     *,
     problem_spec: Any = None,
     adapter: Any = None,
-) -> dict[str, Any]:
-    """Return one ordinary question value and optional prior evidence."""
+) -> Any | None:
+    """Return the optional problem-owned prior-observation projector."""
 
-    raw = _resolve_provider(
+    return _resolve_provider(
         problem_spec=problem_spec,
         adapter=adapter,
-        factory_names=("research_question_payload",),
+        factory_names=("prior_research_observation_provider",),
     )
+
+
+def project_prior_research_observation(
+    provider: Any | None,
+    *,
+    observation: Mapping[str, Any],
+) -> dict[str, Any] | None:
+    """Project one detached observation without interpreting domain fields."""
+
+    if provider is None:
+        return None
+    method = getattr(provider, "project_prior_research_observation", None)
+    if not callable(method):
+        raise ProblemProviderError(
+            "prior research observation provider has no "
+            "project_prior_research_observation method"
+        )
+    raw = method(observation=deepcopy(dict(observation)))
     if raw is None:
-        return {}
+        return None
     if not isinstance(raw, Mapping):
         raise ProblemProviderError(
-            "research_question_payload must return a mapping"
+            "prior research observation provider returned a non-mapping projection"
         )
-    current_question = str(raw.get("current_question") or "").strip()
-    if not current_question:
-        raise ProblemProviderError("research_question_payload requires current_question")
-    raw_prior = raw.get("research_prior", ())
-    if not isinstance(raw_prior, Sequence) or isinstance(raw_prior, (str, bytes)):
-        raise ProblemProviderError("research_prior must be a sequence of strings")
-    research_prior = [str(line).strip() for line in raw_prior if str(line).strip()]
-    payload: dict[str, Any] = {
-        "problem_family": _problem_id(problem_spec),
-        "current_question": current_question,
-    }
-    if research_prior:
-        payload["research_prior"] = research_prior
-    return payload
+    return deepcopy(dict(raw))
 
 
 def _resolve_provider(
@@ -680,14 +697,16 @@ __all__ = [
     "ActiveSubjectPolicyProvider",
     "ActiveSubjectTaxonomyProvider",
     "ProblemProviderError",
+    "PriorResearchObservationProvider",
     "ProposalMechanismEvidenceProvider",
     "SolverDesignPromptProvider",
     "active_subject_policy_matches_path",
     "active_subject_code_constraints_payload",
     "active_subject_policy_payload",
     "active_subject_taxonomy_payload",
+    "project_prior_research_observation",
     "resolve_active_subject_policy_provider",
+    "resolve_prior_research_observation_provider",
     "resolve_proposal_mechanism_evidence_provider",
     "resolve_solver_design_prompt_provider",
-    "typed_research_question_payload",
 ]

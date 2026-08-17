@@ -85,20 +85,27 @@ because the runtime audit reported an algorithm error while packing customer
 106 into 36 routes. No validation stage metrics, frozen stage, promotion
 snapshot or retained-B0 result exists.
 
-CVRP remains open. The next work is not a host-authored redesign of a VRP
-candidate. It is an M8 Scion framework module: add a problem-neutral ordinary
-input through which a problem adapter can project safe prior research evidence
-to H, while Scion core remains unaware of VRP/Warehouse semantics and the Agent
-retains ownership of action, surface, target, mechanism and patch. The design is
-recorded in the
+CVRP remains open. M8 is complete: the normal `scion run` path accepts an
+optional bounded `--research-input`, records it once in a fresh campaign, and
+lets a problem-owned provider project ordered observations into H. Raw evidence
+does not enter C, Protocol or Decision; C still receives the Contract-approved
+H and editable source. Generic Scion has no CVRP/Warehouse evidence fields or
+branches, and no registry, identity, hash, receipt or reopen lifecycle was
+added. The design and implementation boundary are recorded in the
 [autonomous prior-evidence research design](../experiments/v0.4/v04-scion-autonomous-prior-evidence-research-design-20260817.md).
 
-After M8 passes provider-/solver-free behavioral tests, M9 will prepare a fresh
-normal `scion run` CVRP campaign that exposes the M7 terminal fact through the
-CVRP adapter and exercises real H, C, Contract, Verification, Protocol, Safe
-Features and Decision. Its evaluation populations must be disjoint from the M7
-facts shown to H. No patch, target file, action, surface, repair or algorithm
-mechanism may be forced by the host.
+M8 validation collected 1,635 tests. A broad 301-test provider-/solver-free
+selection passed, including a 21-test independent boundary suite covering
+exactly-once H exposure, order, absent/differently-shaped inputs, recursive
+sensitive-field rejection, C isolation, authority isolation and generic-core
+domain neutrality. Production Ruff F/E9, touched-file Ruff import checks,
+in-memory compilation and `git diff --check` passed.
+
+M9 preparation is next: a fresh normal `scion run` CVRP campaign will expose
+the M7 terminal fact through the CVRP adapter and exercise real H, C, Contract,
+Verification, Protocol, Safe Features and Decision. Its evaluation populations
+must be disjoint from the M7 facts shown to H. No patch, target file, action,
+surface, repair or algorithm mechanism may be forced by the host.
 
 The current state authorizes design and offline implementation checks only. No
 live provider/solver campaign, repair, retry, resume, replacement,

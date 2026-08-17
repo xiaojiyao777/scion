@@ -22,7 +22,6 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problems.cvrp.adapter import CvrpAdapter
-from scion.problems.cvrp.adapter import CROSS_CAMPAIGN_RESEARCH_PRIOR
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import (
     CreativeLayer,
@@ -43,6 +42,15 @@ from scion.protocol.experiment.proposal_evidence import (
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
 from .editable_source_context_test_support import editable_code_context
+
+_M7_RESEARCH_INPUT = (
+    Path(__file__).resolve().parents[3]
+    / "docs"
+    / "experiments"
+    / "v0.4"
+    / "inputs"
+    / "v04-cvrp-m9-m7-fc1-research-input.json"
+)
 
 _HYPOTHESIS_RESPONSE = {
     "hypothesis_text": "Try one bounded local improvement move.",
@@ -500,6 +508,7 @@ def test_direct_context_preserves_complete_authoritative_inputs(
             "user_prompt": provider_prompt,
         },
         sort_keys=True,
+        ensure_ascii=False,
     )
     for sentinel in sentinels.values():
         assert sentinel in provider_bytes
@@ -573,7 +582,7 @@ def test_direct_context_preserves_complete_authoritative_inputs(
     assert distinct_provider_bytes.count(distinct_branch_code) == 1
 
 
-def test_cvrp_research_prior_reaches_actual_hypothesis_provider_request(
+def test_external_cvrp_research_input_reaches_actual_hypothesis_provider_request(
     tmp_path: Path,
 ) -> None:
     spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
@@ -588,7 +597,11 @@ def test_cvrp_research_prior_reaches_actual_hypothesis_provider_request(
         state=BranchState.EXPLORE,
         base_champion_id=1,
     )
-    context = ContextManager(adapter=CvrpAdapter(spec)).build_hypothesis_context(
+    research_input = json.loads(_M7_RESEARCH_INPUT.read_text(encoding="utf-8"))
+    context = ContextManager(
+        adapter=CvrpAdapter(spec),
+        research_input=research_input,
+    ).build_hypothesis_context(
         branch=branch,
         champion=champion,
         problem_spec=legacy,
@@ -613,13 +626,20 @@ def test_cvrp_research_prior_reaches_actual_hypothesis_provider_request(
             "user_prompt": provider_prompt,
         },
         sort_keys=True,
+        ensure_ascii=False,
     )
     assert request_kind == "hypothesis"
-    assert context["research_question"]["research_prior"] == list(
-        CROSS_CAMPAIGN_RESEARCH_PRIOR
-    )
-    for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
-        assert provider_bytes.count(line) == 1
+    question = research_input["current_question"]
+    assert context["research_question"] == {"current_question": question}
+    provider_evidence_text = provider_system_blocks[2]["text"].split("\n", 1)[1]
+    provider_evidence = json.loads(provider_evidence_text)
+    assert provider_evidence["research_question"] == {"current_question": question}
+    escaped_question = json.dumps(question, ensure_ascii=True)[1:-1]
+    assert provider_evidence_text.count(escaped_question) == 1
+    projected = context["prior_research_observations"]
+    assert len(projected) == 1
+    assert projected[0]["terminal"]["terminal_code"] == ("CANDIDATE_SUBJECT_VETO")
+    assert projected[0]["terminal"]["case_id"] == "X-n200-k36"
     for hidden_detail in (
         "tai150a",
         "expanded validation",
@@ -641,9 +661,15 @@ def test_cvrp_research_prior_reaches_actual_hypothesis_provider_request(
             "user_prompt": trace["user_prompt"],
         },
         sort_keys=True,
+        ensure_ascii=False,
     )
-    for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
-        assert traced_provider_bytes.count(line) == 1
+    traced_evidence_text = trace["system_blocks"][2]["text"].split("\n", 1)[1]
+    assert json.loads(traced_evidence_text)["research_question"] == {
+        "current_question": question
+    }
+    assert traced_evidence_text.count(escaped_question) == 1
+    assert traced_provider_bytes.count("CANDIDATE_SUBJECT_VETO") == 1
+    assert traced_provider_bytes.count("X-n200-k36") == 1
 
 
 def test_actual_h_provider_gets_latest_cvrp_evidence_once(
@@ -818,14 +844,8 @@ def test_actual_h_provider_gets_latest_cvrp_evidence_once(
         }
     ]
     assert latest["mechanism_evidence"] == _without_provider_host_control(mechanism)
-    ejection_prior = next(
-        line
-        for line in CROSS_CAMPAIGN_RESEARCH_PRIOR
-        if "Recent ejection evidence is mixed" in line
-    )
     provider_bytes = json.dumps(blocks, sort_keys=True)
-    assert "neither require nor forbid ejection research" in ejection_prior
-    assert provider_bytes.count(ejection_prior) == 1
+    assert "prior_research_observations" not in provider_bytes
 
 
 def test_direct_v3_context_fails_closed_for_unsupported_non_json_value() -> None:

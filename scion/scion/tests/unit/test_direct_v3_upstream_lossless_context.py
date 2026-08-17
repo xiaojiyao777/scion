@@ -25,10 +25,6 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problem.loader import load_problem_adapter
-from scion.problems.cvrp.adapter import CROSS_CAMPAIGN_RESEARCH_PRIOR
-from scion.problems.warehouse_delivery.adapter import (
-    WAREHOUSE_PRODUCTION_RESEARCH_PRIOR,
-)
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.history_projection import (
     proposal_screening_history,
@@ -134,11 +130,8 @@ def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
         assert h_rendered.count(surface.prompt.hypothesis_guidance) == 1
         assert surface.prompt.implementation_guidance not in h_rendered
         assert surface.prompt.anti_patterns not in h_rendered
-    assert h_context["research_question"]["research_prior"] == list(
-        WAREHOUSE_PRODUCTION_RESEARCH_PRIOR
-    )
-    for line in WAREHOUSE_PRODUCTION_RESEARCH_PRIOR:
-        assert h_rendered.count(line) == 1
+    assert "research_question" not in h_context
+    assert "prior_research_observations" not in h_context
 
     hypothesis = HypothesisProposal(
         hypothesis_text="Test a vehicle-level structural improvement.",
@@ -177,8 +170,8 @@ def test_warehouse_real_provider_prompts_are_phase_specific() -> None:
     }
     assert surface_specs["order_level"].prompt.hypothesis_guidance not in c_rendered
     assert surface_specs["order_level"].prompt.implementation_guidance not in c_rendered
-    for line in WAREHOUSE_PRODUCTION_RESEARCH_PRIOR:
-        assert line not in c_rendered
+    assert "research_question" not in c_context
+    assert "prior_research_observations" not in c_context
 
 
 @pytest.mark.parametrize("problem_id", ("warehouse_delivery", "cvrp"))
@@ -352,9 +345,7 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     composition = evidence["candidate_composition"]
     assert not composition.get("current_step")
     assert {
-        key: value
-        for key, value in composition.items()
-        if key != "current_step"
+        key: value for key, value in composition.items() if key != "current_step"
     } == {
         "attribution_scope": "cumulative_branch_candidate",
         "protocol_comparison_scope": "candidate_vs_champion",
@@ -393,16 +384,8 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
     assert "raw_pair_rows" not in rendered
     assert "champion-code" not in rendered
     assert "champion-config" not in rendered
-    research_question = context["research_question"]
-    expected_prior = (
-        CROSS_CAMPAIGN_RESEARCH_PRIOR
-        if problem_id == "cvrp"
-        else WAREHOUSE_PRODUCTION_RESEARCH_PRIOR
-    )
-    assert research_question["research_prior"] == list(expected_prior)
-    for line in expected_prior:
-        assert rendered.count(line) == 1
-    assert research_question["current_question"]
+    assert "research_question" not in context
+    assert "prior_research_observations" not in context
     assert "report_only" not in rendered
     assert "branch_direction" not in context
     assert branch.direction not in rendered
@@ -482,19 +465,19 @@ def test_rejection_steps_do_not_become_h_repair_steering() -> None:
                 provenance={
                     "stage": phase,
                     checks_key: [
-                    {
-                        "name": check_code,
-                        "passed": False,
-                        "severity": "heavy",
-                        "detail": check_detail,
-                        "metadata": {
-                            "validation_case_details": "FORBIDDEN_VALIDATION_RAW"
+                        {
+                            "name": check_code,
+                            "passed": False,
+                            "severity": "heavy",
+                            "detail": check_detail,
+                            "metadata": {
+                                "validation_case_details": "FORBIDDEN_VALIDATION_RAW"
+                            },
                         },
-                    },
-                    {
-                        "name": "PASSED_CHECK_MUST_NOT_APPEAR",
-                        "passed": True,
-                    },
+                        {
+                            "name": "PASSED_CHECK_MUST_NOT_APPEAR",
+                            "passed": True,
+                        },
                     ],
                 },
             ),
@@ -1130,9 +1113,7 @@ def test_marked_legacy_mechanism_envelope_round_trips_losslessly() -> None:
     assert _screening_projection(protocol)["mechanism_evidence"] == legacy_envelope
 
 
-def test_step_history_keeps_multiple_screenings_of_one_hypothesis() -> (
-    None
-):
+def test_step_history_keeps_multiple_screenings_of_one_hypothesis() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
     hypothesis = HypothesisProposal(
         hypothesis_text="Expand screening for the same hypothesis.",
@@ -1237,9 +1218,10 @@ def test_provider_history_keeps_every_current_screening_full() -> None:
 
     assert [item["summary_level"] for item in projected] == ["full"] * 4
     assert [item["latest_round"] for item in projected] == [1, 2, 3, 4]
-    assert projected[0]["experiment_evidence"]["objective_outcome"][
-        "aggregate"
-    ] == {"median_delta": 1.0, "runtime_pairs": 1}
+    assert projected[0]["experiment_evidence"]["objective_outcome"]["aggregate"] == {
+        "median_delta": 1.0,
+        "runtime_pairs": 1,
+    }
     assert projected[0]["experiment_evidence"]["mechanism_evidence"] == {
         "signal": "detail-1"
     }

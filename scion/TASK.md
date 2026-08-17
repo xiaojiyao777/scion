@@ -244,19 +244,19 @@ CVRP acceptance remains:
 
 ### M8 - Add problem-neutral research-evidence continuity
 
-- [ ] Add one optional ordered ordinary prior-research input to the normal
+- [x] Add one optional ordered ordinary prior-research input to the normal
   `scion run` path. Record it once; do not create an identity, registry,
   receipt, hash chain, reopen or authorization lifecycle around it.
-- [ ] Let an optional problem-adapter provider project domain-shaped evidence
+- [x] Let an optional problem-adapter provider project domain-shaped evidence
   into a bounded safe H context. Generic Scion code must contain no CVRP,
   Warehouse, route, fleet, case-specific or repair-specific fields or branches.
-- [ ] Keep Agent ownership complete: the host does not force action, surface,
+- [x] Keep Agent ownership complete: the host does not force action, surface,
   target file, mechanism, patch or fix. C sees the same Contract-approved H
   value and editable source, not the raw prior observation.
-- [ ] Derive any within-campaign research observations from the existing typed
+- [x] Derive any within-campaign research observations from the existing typed
   step/outcome path. Do not restore a special rejection-feedback ledger or
   duplicated branch evidence state.
-- [ ] Prove with provider-/solver-free tests that evidence is exposed once to H,
+- [x] Prove with provider-/solver-free tests that evidence is exposed once to H,
   private/current holdout facts do not leak, rejected candidates leave the
   verified source clean, and differently shaped or absent problem evidence uses
   the same core path.
@@ -322,8 +322,11 @@ had used 311 solver subprocesses and 15,225 nominal subject-seconds; no frozen,
 promotion or retained-B0 stage ran. The complete design and terminal record are
 preserved in its
 [preregistration](docs/experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md).
-CVRP acceptance remains unmet. The next task is M8: add a problem-neutral path
-by which a problem adapter can expose safe prior research evidence to H, then
-test the full autonomous Scion loop. It is not a host-authored redesign of the
-VRP candidate. This record authorizes no live provider/solver run, repair,
-retry, resume, replacement or automatic next formal rung.
+CVRP acceptance remains unmet. M8 is complete: normal `scion run` now accepts
+one bounded ordinary `--research-input`; the problem adapter projects ordered
+observations into H only, while C continues from the Contract-approved H and
+editable source. Generic Scion contains no CVRP/Warehouse evidence schema, and
+the input creates no registry, hash, receipt or reopen lifecycle. The next task
+is to prepare M9 as a normal autonomous Scion campaign. This record authorizes
+no live provider/solver run, repair, retry, resume, replacement or automatic
+next formal rung.

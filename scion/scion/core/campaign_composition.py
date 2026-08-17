@@ -26,16 +26,17 @@ from scion.core.decision_finalizer import DecisionFinalizer
 from scion.core.evaluation_orchestrator import EvaluationOrchestrator
 from scion.core.evidence_recording import EvidenceRecorder
 from scion.core.explore_step.pipeline import ExploreStepPipeline
+from scion.core.problem_runtime import ProblemRuntime
 from scion.core.production_boundary import (
     validate_fresh_campaign_output,
     validate_production_campaign_boundary,
 )
-from scion.core.problem_runtime import ProblemRuntime
 from scion.core.promotion_service import PromotionService
-from scion.core.research_rejection_finalizer import ResearchRejectionFinalizer
 from scion.core.proposal_pipeline import (
     ProposalPipeline,
 )
+from scion.core.research_input import write_research_input
+from scion.core.research_rejection_finalizer import ResearchRejectionFinalizer
 from scion.core.research_surface_index import editable_patterns
 from scion.core.scheduler import Scheduler
 from scion.core.status_reporter import StatusReporter
@@ -86,6 +87,7 @@ def compose_campaign_services(
     adapter: Any,
     verification_gate: Any | None = None,
     operator_execute_signature: str | None = None,
+    research_input: Any | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     validate_fresh_campaign_output(campaign_dir)
@@ -94,6 +96,7 @@ def compose_campaign_services(
         adapter=adapter,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
+        research_input=research_input,
     )
     owner._protocol_config = protocol_config
     owner._split_manifest = split_manifest
@@ -187,6 +190,11 @@ def compose_campaign_services(
         protocol_version=getattr(protocol_config, "version", None),
         family_taxonomy=family_taxonomy,
     )
+    if owner._problem_runtime.research_input is not None:
+        write_research_input(
+            campaign_dir,
+            owner._problem_runtime.research_input,
+        )
     owner._branch_workspaces = {}
     owner._branch_patches = {}
     owner._step_history = []
@@ -310,9 +318,7 @@ def compose_campaign_services(
         registry=owner._registry,
         campaign_id=owner._campaign_id,
         apply_reconcile_candidate=(owner._workspace_service.apply_candidate_patch),
-        verify_reconcile_candidate=(
-            owner._workspace_service.verify_candidate
-        ),
+        verify_reconcile_candidate=(owner._workspace_service.verify_candidate),
         reject_reconcile_candidate=(owner._workspace_service.reject_candidate),
     )
     owner._campaign_loop = CampaignLoop(
@@ -322,9 +328,7 @@ def compose_campaign_services(
         get_last_stop_reason=lambda: owner._last_stop_reason,
         set_last_stop_reason=lambda reason: setattr(owner, "_last_stop_reason", reason),
         run_one_step=lambda: owner.run_one_step(),
-        write_terminal_artifacts=lambda result: owner._write_terminal_artifacts(
-            result
-        ),
+        write_terminal_artifacts=lambda result: owner._write_terminal_artifacts(result),
         get_final_wait_timeout=lambda: bounded_terminal_wait_timeout(
             getattr(
                 owner._problem_runtime.spec.parameter_search,

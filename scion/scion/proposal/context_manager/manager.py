@@ -23,11 +23,13 @@ from scion.core.models import (
     patch_file_changes,
 )
 from scion.core.paths import normalize_relative_patch_path
+from scion.core.research_input import normalize_research_input
 from scion.measurement.consumer_view import measurement_consumer_view
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
+    project_prior_research_observation,
+    resolve_prior_research_observation_provider,
     resolve_solver_design_prompt_provider,
-    typed_research_question_payload,
 )
 from scion.proposal.context.problem_adapter import (
     _build_operator_interface_spec,
@@ -85,6 +87,8 @@ _MEASUREMENT_PRIVATE_FIELDS = frozenset(
         "phase_telemetry",
     }
 )
+
+
 def _filter_hypothesis_prompt_steps(
     step_history: list[StepRecord],
 ) -> list[StepRecord]:
@@ -107,8 +111,42 @@ class ContextManager:
         self,
         *,
         adapter: Any | None = None,
+        research_input: Mapping[str, Any] | None = None,
     ) -> None:
         self._adapter = adapter
+        self._research_input = (
+            normalize_research_input(research_input)
+            if research_input is not None
+            else None
+        )
+        self._prior_research_observations = self._project_prior_observations()
+
+    def _project_prior_observations(self) -> tuple[dict[str, Any], ...]:
+        if self._research_input is None or not self._research_input["observations"]:
+            return ()
+        provider = resolve_prior_research_observation_provider(
+            adapter=self._adapter,
+        )
+        if provider is None:
+            raise ValueError(
+                "research input observations require a "
+                "prior_research_observation_provider"
+            )
+        projected: list[dict[str, Any]] = []
+        for observation in self._research_input["observations"]:
+            value = project_prior_research_observation(
+                provider,
+                observation=observation,
+            )
+            if value is not None:
+                projected.append(value)
+        bounded_projection = normalize_research_input(
+            {
+                "current_question": self._research_input["current_question"],
+                "observations": projected,
+            }
+        )
+        return tuple(bounded_projection["observations"])
 
     def build_hypothesis_context(
         self,
@@ -217,12 +255,14 @@ class ContextManager:
         )
         if measurement:
             context["problem_measurement_diagnostics"] = measurement
-        research_question = typed_research_question_payload(
-            problem_spec=problem_spec,
-            adapter=self._adapter,
-        )
-        if research_question:
-            context["research_question"] = research_question
+        if self._research_input is not None:
+            context["research_question"] = {
+                "current_question": self._research_input["current_question"],
+            }
+        if self._prior_research_observations:
+            context["prior_research_observations"] = list(
+                self._prior_research_observations
+            )
         guidance = materialize_solver_design_prompt_guidance(
             provider,
             context,

@@ -2,7 +2,7 @@
 
 *Date: 2026-08-17*
 
-*State: `DESIGN_ONLY / NOT_IMPLEMENTED / NOT_AUTHORIZED_FOR_PROVIDER_OR_SOLVER_EXECUTION`*
+*State: `M8_IMPLEMENTED_AND_OFFLINE_VERIFIED / M9_NOT_AUTHORIZED_FOR_PROVIDER_OR_SOLVER_EXECUTION`*
 
 ## Correction of scope
 
@@ -155,9 +155,40 @@ Use fake providers and runners only. The acceptance tests must show:
 These tests establish transport, isolation and decision-chain behavior. They do
 not claim that an LLM conducts good research.
 
+### M8 result
+
+M8 is implemented in the normal campaign path:
+
+- `scion run --research-input PATH` accepts one bounded ordinary JSON envelope;
+- Scion core validates only generic JSON, size, depth and sensitive-field
+  safety, then preserves observation order;
+- the problem adapter owns the optional observation projector;
+- only the projected value enters H under `prior_research_observations`;
+- C continues from the Contract-approved H and editable source and receives no
+  raw observation;
+- the accepted input is written once as `research_input.json` in the fresh
+  campaign directory, with no identity, registration, receipt, hash or reopen
+  machinery; and
+- static CVRP and Warehouse campaign priors were removed from their adapters.
+
+The concrete M7 observation is an external
+[`v04-cvrp-m9-m7-fc1-research-input.json`](inputs/v04-cvrp-m9-m7-fc1-research-input.json).
+It contains observed stage and terminal facts plus claim limitations, but no
+action, research surface, target file, patch, algorithm mechanism or repair
+instruction. CVRP interprets that schema in its own adapter module; the generic
+Scion path contains none of those domain fields.
+
+Offline verification collected 1,635 tests. A broad 301-test selection and its
+21-test independent boundary subset passed with no provider or solver calls.
+The checks cover order, exactly-once H exposure, no-input compatibility,
+differently-shaped problem input, fail-closed projection, recursive sensitive
+and holdout rejection, C isolation, authority isolation and absence of domain
+branches in generic core. Production Ruff F/E9, touched-file Ruff import
+checks, in-memory compilation and `git diff --check` also passed.
+
 ## M9 live research-effectiveness experiment
 
-After M8 passes, prepare a fresh ordinary `scion run` experiment with:
+With M8 complete, prepare a fresh ordinary `scion run` experiment with:
 
 - the current verified CVRP B0 source as the starting champion;
 - an external CVRP observation file containing the safe M7-FC1 facts;

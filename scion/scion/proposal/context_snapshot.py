@@ -7,14 +7,21 @@ import re
 from dataclasses import dataclass
 from typing import Any, ClassVar, Literal, Mapping, TypeAlias, Union
 
+from scion.core.research_input import is_sensitive_research_key
 from scion.proposal.solver_design_guidance import RENDERER_INPUTS_KEY
-
 
 ProposalPhase = Literal["hypothesis", "code"]
 SafeScalar: TypeAlias = str | int | float | bool | None
 FrozenNode: TypeAlias = Union[SafeScalar, "_FrozenJson"]
 
-_FORBIDDEN_KEYS = frozenset({"frozen", "prompt", "validation"})
+_FORBIDDEN_KEYS = frozenset(
+    {
+        "frozen",
+        "private",
+        "raw",
+        "validation",
+    }
+)
 _FORBIDDEN_PATTERN = re.compile(
     r"(^|_)(bks|decision_features|holdout|llm|raw_metrics|raw_pair)($|_)"
     r"|(^|_)(raw_calibration|calibration_(pair|metrics))($|_)"
@@ -40,6 +47,7 @@ _HYPOTHESIS_KEYS = frozenset(
         "branch_current_code",
         "branch_id",
         "research_question",
+        "prior_research_observations",
         "seed",
         "experiment_history",
         RENDERER_INPUTS_KEY,
@@ -164,9 +172,7 @@ def freeze_proposal_context(
     return ProposalContextSnapshot.create(phase=phase, context=context)
 
 
-def _freeze_and_validate(
-    value: Any, *, path: str, active_ids: set[int]
-) -> FrozenNode:
+def _freeze_and_validate(value: Any, *, path: str, active_ids: set[int]) -> FrozenNode:
     if value is None or isinstance(value, (str, bool, int)):
         return value
     if isinstance(value, float):
@@ -217,7 +223,11 @@ def _validate_key(key: Any, path: str) -> None:
     if not isinstance(key, str):
         raise TypeError(f"proposal context key at {path} must be a string")
     normalized = re.sub(r"[^a-z0-9]+", "_", key.strip().lower()).strip("_")
-    if normalized in _FORBIDDEN_KEYS or _FORBIDDEN_PATTERN.search(normalized):
+    if (
+        is_sensitive_research_key(key)
+        or normalized in _FORBIDDEN_KEYS
+        or _FORBIDDEN_PATTERN.search(normalized)
+    ):
         raise ValueError(f"forbidden proposal context field at {path}.{key}: {key}")
 
 

@@ -20,7 +20,6 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problems.cvrp.adapter import CvrpAdapter
-from scion.problems.cvrp.adapter import CROSS_CAMPAIGN_RESEARCH_PRIOR
 from scion.problems.cvrp.solver_design.manifest import SOLVER_DESIGN_API_MANIFEST_FILES
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
@@ -195,21 +194,8 @@ def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:
     assert "Use MDE only when a matched calibration exists" in rendered
     assert "R3 has no matched MDE or power estimate" in rendered
     assert "same-seed A/A result checks only obvious false-pass" in rendered
-    assert context["research_question"]["research_prior"] == list(
-        CROSS_CAMPAIGN_RESEARCH_PRIOR
-    )
-    for line in CROSS_CAMPAIGN_RESEARCH_PRIOR:
-        assert rendered.count(line) == 1
-    prior_text = "\n".join(context["research_question"]["research_prior"])
-    for hidden_detail in (
-        "tai150a",
-        "validation",
-        "frozen",
-        "8W/2L/2T",
-        "5W/1L/2T",
-        "-22, -210, -90, -21",
-    ):
-        assert hidden_detail.casefold() not in prior_text.casefold()
+    assert "research_question" not in context
+    assert "prior_research_observations" not in context
     assert "smallest complete causal implementation" in rendered
     assert "policies/baseline_algorithm.py" in context["existing_target_files"]
     assert "policies/baseline_modules/*.py" in context["create_path_patterns"]

@@ -4,6 +4,7 @@ Wraps surrogate/oracle.py and surrogate/models.py. All warehouse-specific logic
 (Vehicle/Solution/Instance reconstruction, feasibility checks, objective
 recomputation) is encapsulated here so Scion core never imports surrogate directly.
 """
+
 from __future__ import annotations
 
 import importlib.util
@@ -16,29 +17,6 @@ from typing import Any, Mapping, Sequence
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.spec import ProblemSpecV1
 from scion.runtime.telemetry_events import TypedTelemetryEvent
-
-
-WAREHOUSE_PRODUCTION_RESEARCH_PRIOR = (
-    (
-        "In the preregistered prod-1.1 12-stage campaign, successive verified "
-        "DestroyRebuild refinements on one branch formed a valid research funnel. "
-        "The final candidate completed the five established validation cases at "
-        "5W/0L/0T cases and 14W/1L/0T pairs, with paired-run median total_cost "
-        "improvement +13200 (case-level median +13300)."
-    ),
-    (
-        "That campaign produced no promotion or frozen evidence. The final "
-        "validation runtime median candidate/champion ratio was 1.473 and is "
-        "diagnostic only. Four earlier DestroyRebuild expanded screenings each "
-        "had seven tied cases, hence case win rate 0.5, and did not pass screening."
-    ),
-    (
-        "These observations require neither continuing nor abandoning "
-        "DestroyRebuild and select no research surface, action, target file, or "
-        "mechanism. Choose the next direction from current source and branch "
-        "evidence."
-    ),
-)
 
 
 def typed_events_from_warehouse_operator_diagnostics(
@@ -114,18 +92,6 @@ class WarehouseDeliveryAdapter:
     def spec(self) -> ProblemSpecV1:
         return self._spec
 
-    def research_question_payload(self) -> Mapping[str, Any]:
-        """Return ordinary safe research context without a contract graph."""
-
-        return {
-            "current_question": (
-                "What source-grounded change on the order-level or vehicle-level "
-                "surface can improve the lexicographic warehouse objective while "
-                "preserving feasibility?"
-            ),
-            "research_prior": list(WAREHOUSE_PRODUCTION_RESEARCH_PRIOR),
-        }
-
     # --- lazy import of surrogate modules ---
 
     def _ensure_modules(self) -> None:
@@ -140,16 +106,18 @@ class WarehouseDeliveryAdapter:
     # --- Prompt / context ---
 
     def render_problem_summary(self) -> str:
-        cats = ", ".join(
-            c.name for c in self._spec.operator_interface.categories
-        ) if self._spec.operator_interface else "vehicle_level, order_level"
+        cats = (
+            ", ".join(c.name for c in self._spec.operator_interface.categories)
+            if self._spec.operator_interface
+            else "vehicle_level, order_level"
+        )
         editable = ", ".join(self._spec.search_space.editable)
         objective_policy = _render_objective_policy(self._spec)
         objective_implication = _render_objective_implication(self._spec)
 
         return f"""\
 Name: {self._spec.display_name}
-Description: {self._spec.description or 'Warehouse Delivery Assignment'}
+Description: {self._spec.description or "Warehouse Delivery Assignment"}
 
 ### Objective Function
 {objective_policy}
@@ -191,9 +159,10 @@ idea to investigate."""
             getattr(self._spec.solver, "max_iter", "unknown"),
         )
         no_improve_limit = getattr(config, "no_improve_limit", "unknown")
-        registry_summary = ", ".join(
-            f"{entry['name']}={entry['weight']:g}" for entry in registry
-        ) or "unavailable"
+        registry_summary = (
+            ", ".join(f"{entry['name']}={entry['weight']:g}" for entry in registry)
+            or "unavailable"
+        )
 
         return f"""\
 ### Active Warehouse Solver Mechanics
@@ -670,9 +639,7 @@ def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> s
         return ""
     lines = [f"### Active Surface Prompt Guidance: {surface_name}"]
     hypothesis = str(getattr(prompt, "hypothesis_guidance", "") or "").strip()
-    implementation = str(
-        getattr(prompt, "implementation_guidance", "") or ""
-    ).strip()
+    implementation = str(getattr(prompt, "implementation_guidance", "") or "").strip()
     anti_patterns = str(getattr(prompt, "anti_patterns", "") or "").strip()
     if hypothesis:
         lines.append(f"- hypothesis_guidance: {hypothesis}")
@@ -686,6 +653,7 @@ def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> s
 # ---------------------------------------------------------------------------
 # Module import helper (extracted from verification/feasibility.py)
 # ---------------------------------------------------------------------------
+
 
 def _import_module(directory: str, filename: str, sys_key: str) -> Any:
     path = os.path.join(directory, filename)
