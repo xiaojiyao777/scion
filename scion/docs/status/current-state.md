@@ -124,9 +124,14 @@ Agent research effectiveness or CVRP algorithm quality. The exact preparation
 and terminal record are in the
 [M9 preregistration](../experiments/v0.4/v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md).
 
-The next development task is to correct this generic initialization-order bug
-and validate it offline. The M9 root must remain preserved. No deletion,
-repair, live retry, resume, replacement campaign, later development stage,
+The generic initialization-order bug is now fixed offline: Protocol
+construction has no filesystem side effect, while formal execution lazily
+creates its metrics directory. The strict fresh-output check is unchanged, and
+absent, existing-empty and existing-nonempty roots plus direct Protocol metrics
+creation are covered by regression tests. The original M9 root remains
+preserved. The user has explicitly authorized exactly one rerun after the clean
+fix carrier passes independent checks, using a new `rerun1` root under the
+unchanged preregistered envelope. No third attempt, later development stage,
 R67 recovery or formal rung is authorized.
 
 ## Current validation rule

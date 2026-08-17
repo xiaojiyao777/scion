@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import logging
-import os
-from typing import Any, Callable, List, Optional, Sequence, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence
 
 from scion.config.problem import ProtocolConfig
 from scion.core.models import CanaryResult, ExperimentStage, ProtocolResult
 from scion.runtime.runner import Runner
+
 from .selection import (
     CasePathResolution,
     SeedLedger,
@@ -19,6 +19,7 @@ from .selection import (
 
 if TYPE_CHECKING:
     from scion.problem.spec import ObjectiveMetricSpec, ObjectivePolicySpec
+
     from .types import PairedExecutionSpec
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,6 @@ class ExperimentProtocol:
         self._progress_callback: Optional[Callable[..., None]] = None
         if not _has_metric_specs(self._metric_specs):
             raise ValueError("metric_specs are required for ExperimentProtocol")
-        os.makedirs(metrics_dir, exist_ok=True)
 
     def set_problem_adapter(self, adapter: Any | None) -> None:
         """Attach the campaign adapter for optional problem-owned projections."""

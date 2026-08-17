@@ -134,9 +134,10 @@ def run_experiment(
     attempted_pairs = 0
     valid_pairs = 0
 
-    # Persist a partial metrics file from the start of the stage, then update
-    # it after every attempted pair. Long validation/frozen stages remain
-    # inspectable even if the campaign is interrupted.
+    # Protocol construction is side-effect free so a campaign can enforce its
+    # fresh-output boundary before installing services. Direct protocol users
+    # still receive a metrics directory when an experiment actually starts.
+    os.makedirs(protocol.metrics_dir, exist_ok=True)
     raw_ref = os.path.join(protocol.metrics_dir, f"{_uuid_mod.uuid4()}.json")
 
     # Collect pair feedback grouped by case

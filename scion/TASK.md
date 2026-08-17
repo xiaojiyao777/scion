@@ -284,9 +284,15 @@ The exact design and claim boundary are in the
   normal CLI stopped before `mgr.run` because `ExperimentProtocol` created
   `metrics/` before the fresh-output check, so the one-shot produced no H/C or
   scientific observation and is consumed.
-- [ ] Correct the problem-neutral CLI initialization order so its own metrics
-  setup cannot violate the fresh-output invariant. Validate offline; any new
-  live campaign requires a separately prepared carrier and authorization.
+- [x] Correct the problem-neutral CLI initialization order so Protocol
+  construction cannot create `metrics/` before the fresh-output check. The
+  strict check is unchanged; absent, existing-empty and existing-nonempty
+  roots, direct Protocol metrics creation and provider-zero rejection are
+  covered offline.
+- [ ] Commit and independently verify the clean fix carrier, then execute the
+  single rerun explicitly authorized by the user on the fresh `rerun1` root
+  under the unchanged M9 scientific/resource/stop/claim envelope. Any fix or
+  preflight failure stops; no third attempt is authorized.
 - [ ] After the development result, select any future formal population by a
   separately reviewed outcome-blind rule. Keep it unavailable to the Agent and
   require a new resource envelope and explicit authorization.
@@ -354,5 +360,9 @@ construction created an empty `metrics/` directory before `CampaignManager`
 checked output freshness, so the complete V3 chain never started. Provider
 generation, solver, H/C, Contract, Verification, Protocol, Safe Features and
 Decision observations are all zero. The future formal population remains
-unselected and unavailable to the Agent. No repair, retry, resume, replacement,
-later development stage or formal rung is authorized.
+unselected and unavailable to the Agent. The generic initialization fix is now
+implemented and validated offline without weakening the fresh-output boundary.
+The user has explicitly authorized exactly one rerun after a clean fix carrier
+passes independent checks. It must use a new `rerun1` root and the unchanged
+M9 envelope; the original root remains preserved and no third attempt, later
+development stage or formal rung is authorized.

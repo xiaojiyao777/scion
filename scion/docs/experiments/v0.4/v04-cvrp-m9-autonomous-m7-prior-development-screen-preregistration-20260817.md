@@ -2,7 +2,7 @@
 
 *Date: 2026-08-17*
 
-*State: `PRE_MGR_RUN_FRESH_OUTPUT_SELF_COLLISION / ONE_SHOT_CONSUMED / PROVIDER_GENERATIONS=0 / SOLVER_SUBPROCESSES=0`*
+*State: `ORIGINAL_ONE_SHOT_CONSUMED / GENERIC_FIX_VALIDATED_OFFLINE / RERUN1_AUTHORIZED_PENDING_CLEAN_CARRIER`*
 
 ## Purpose and research boundary
 
@@ -359,3 +359,63 @@ about Agent research effectiveness or CVRP algorithm quality. The authorized
 one-shot is consumed. The output root is preserved; no deletion, repair,
 retry, resume, replacement run, later development stage or formal rung is
 authorized.
+
+## Generic initialization fix and one authorized rerun
+
+After reviewing the terminal finding above, the user explicitly instructed us
+to fix the generic defect and authorized one rerun. That instruction does not
+reinterpret the first invocation or erase its terminal record. The original
+output root remains preserved exactly as observed.
+
+The generic fix makes `ExperimentProtocol` construction side-effect free and
+creates its metrics directory only when `run_experiment` actually begins.
+`CampaignManager` still applies the same strict fresh-output check before it
+installs campaign services; the check is not weakened and an existing nonempty
+root remains invalid. Offline regressions cover absent, existing-empty and
+existing-nonempty roots, provider-zero rejection, ordinary input/resource
+artifacts, constructor-zero-output and direct Protocol metrics creation. No
+CVRP- or Warehouse-specific condition is introduced.
+
+Exactly one rerun is authorized after this fix is committed as a clean
+descendant carrier and independently rechecked. It retains every scientific,
+resource, stopping and claim boundary in this preregistration. The only
+execution changes are the reviewed generic initialization fix, its tests, the
+new exact carrier commit and this fresh output root:
+
+```text
+/home/clawd/research/scion-experiments/v04-cvrp-m9-autonomous-m7-prior-development-screen-rerun1-20260817
+```
+
+The rerun must use the same unique Python/module entry, local proxy, model,
+research input, Protocol, split, seeds, `--rounds 1`, provider-call cap 6 and
+4,500-second `mgr.run` hardwall already frozen above. Before launch, the exact
+new carrier must be `HEAD`, the tracked worktree and index must be clean, the
+new root must be absent, the original root must remain unchanged, and an
+independent check must confirm that production changes from carrier
+`b1d7f6e38c65c99cdc4cb399402a19b2341d8e85` are limited to the two reviewed
+problem-neutral Protocol initialization files.
+
+For the rerun, the original command block remains exact except for the carrier
+diff gate and campaign directory. Its earlier zero-production-diff check is
+replaced by this exact four-file fix-and-test check:
+
+```bash
+EXPECTED_FIX_FILES=$'scion/scion/protocol/experiment/facade.py\nscion/scion/protocol/experiment/stages.py\nscion/scion/tests/test_campaign_control_boundaries.py\nscion/scion/tests/test_protocol_split_runtime.py'
+test "$(git diff --name-only \
+  b1d7f6e38c65c99cdc4cb399402a19b2341d8e85 \
+  "$AUTHORIZED_M9_CARRIER" -- scion/scion)" = "$EXPECTED_FIX_FILES"
+test ! -e /home/clawd/research/scion-experiments/v04-cvrp-m9-autonomous-m7-prior-development-screen-rerun1-20260817
+test "$(find /home/clawd/research/scion-experiments/v04-cvrp-m9-autonomous-m7-prior-development-screen-20260817 -mindepth 1 -maxdepth 1 -printf '%f\n')" = metrics
+test -d /home/clawd/research/scion-experiments/v04-cvrp-m9-autonomous-m7-prior-development-screen-20260817/metrics
+test -z "$(find /home/clawd/research/scion-experiments/v04-cvrp-m9-autonomous-m7-prior-development-screen-20260817/metrics -mindepth 1 -print -quit)"
+```
+
+The final `--campaign-dir` argument is replaced by the `rerun1` path above.
+All other environment values, preflights and CLI arguments remain byte-for-byte
+the same.
+
+Any failed fix check, carrier check or preflight stops without launching. Once
+the rerun process is invoked, its first typed or pre-campaign terminal consumes
+this authorization. There is no deletion of either output root, retry, resume,
+repair run, third attempt, automatic next round, later development stage or
+formal rung under this amendment.
