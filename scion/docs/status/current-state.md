@@ -101,23 +101,50 @@ sensitive-field rejection, C isolation, authority isolation and generic-core
 domain neutrality. Production Ruff F/E9, touched-file Ruff import checks,
 in-memory compilation and `git diff --check` passed.
 
-M9 preparation is next: a fresh normal `scion run` CVRP campaign will expose
-the M7 terminal fact through the CVRP adapter and exercise real H, C, Contract,
-Verification, Protocol, Safe Features and Decision. Its evaluation populations
-must be disjoint from the M7 facts shown to H. No patch, target file, action,
-surface, repair or algorithm mechanism may be forced by the host.
+The M9 resource prerequisite is also complete. Commit `9ae49b21` adds optional
+`--provider-call-cap` and `--outer-hardwall-sec` to the normal CLI. H and C
+share one in-memory pre-dispatch counter; exhaustion produces
+`RESOURCE_EXHAUSTED / PROVIDER_CALL_CAP_EXHAUSTED` without another provider
+request or trace. The outer watchdog uses SIGTERM rather than the provider's
+SIGALRM, interrupts a hung provider, and lets the runner's `BaseException` path
+kill and unregister an active solver child before terminalization as
+`INTERRUPTED / OUTER_HARDWALL_EXCEEDED`. Configured limits are written once as
+ordinary `resource_envelope.json`; no registry or proof lifecycle was added.
 
-The current state authorizes design and offline implementation checks only. No
-live provider/solver campaign, repair, retry, resume, replacement,
-substitution, R67 recovery or automatic next formal rung is authorized.
+M9 preparation is complete but live execution is not authorized. The prepared
+normal `scion run` campaign exposes the M7 terminal fact through the CVRP
+adapter and allows real H, C, Contract, Verification, Protocol, Safe Features
+and Decision. The host supplies no patch, target file, action, surface, repair
+or algorithm mechanism. The initial development screen is six cases by two
+seeds; reserved development validation and frozen splits are configured but
+cannot execute under `--rounds 1`. All twelve development cases and seven
+seeds are disjoint from M7, R67 and current CVRP package inputs. The future
+formal population is unselected, unwritten and unavailable to the Agent. The
+exact population, resource arithmetic, typed stops and claim limits are in the
+[M9 preregistration](../experiments/v0.4/v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md).
+
+The current state authorizes only M9 offline checks and committing the prepared
+carrier. No live provider/solver campaign, repair, retry, resume, replacement,
+substitution, later development stage, R67 recovery or automatic formal rung
+is authorized. A later instruction must name the exact clean carrier and the
+one-shot M9 envelope before the normal CLI may run.
 
 ## Current validation rule
 
-Final isolated validation collected 1,570 tests and passed 512 provider-/formal-
-run-free behavioral tests plus a 24-test stale-fixture recheck. Production Ruff
-F/E9, in-memory compilation of 248 production Python files, CLI help and
-`git diff --check` passed. The checks used an isolated `python -S -B` environment
-with bytecode and pytest caches disabled.
+Current safe validation collected 1,668 tests and passed a broad 276-test
+provider-/solver-free core/proposal/CLI selection; the 44-test resource-envelope
+and signal subset also passed. Production Ruff F/E9, touched-file Ruff import
+checks and formatting, in-memory compilation of 446 Python files, CLI help and
+`git diff --check` passed with bytecode and pytest caches disabled.
+
+M9 preparation additionally passed 139 isolated prior-input, context-boundary,
+provider-cap and hardwall tests. All three YAML files load through production
+config types; the production CVRP parser loads every selected instance and
+companion solution; exact case/seed overlap checks and the 32-subprocess,
+1,100 subject-second and 1,580 guarded-solver-second arithmetic pass. The
+explicit `python -S -B -m scion.cli.main` entry resolves the current repository
+modules and exposes the new CLI flags. These checks made no provider request,
+solver call or campaign directory.
 
 No provider or formal scientific launch ran during this subtraction. Two early
 local smoke/e2e pytest selections were interrupted after being recognized as

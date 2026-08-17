@@ -270,11 +270,19 @@ The exact design and claim boundary are in the
 
 ### M9 - Run an autonomous CVRP research-effectiveness campaign
 
-- [ ] Prepare a fresh normal `scion run` input that supplies the safe M7-FC1
+- [x] Add problem-neutral invocation limits to normal `scion run`: one shared
+  H/C provider-call cap and one outer hardwall. Cap exhaustion and hardwall
+  expiry are typed terminal outcomes; configured limits are written once as an
+  ordinary run input, without a registry, receipt, hash or reopen lifecycle.
+- [x] Prepare a fresh normal `scion run` input that supplies the safe M7-FC1
   terminal facts through the CVRP adapter, while specifying no patch, target
   file, action, surface, repair or algorithm mechanism.
-- [ ] Use new development/formal populations whose validation and frozen
-  cases/seeds are disjoint from every M7 fact exposed to H.
+- [x] Freeze one new development population whose screening, reserved
+  validation and reserved frozen cases/seeds are disjoint from every M7 fact
+  exposed to H, the R67 plan and current package inputs.
+- [ ] After the development result, select any future formal population by a
+  separately reviewed outcome-blind rule. Keep it unavailable to the Agent and
+  require a new resource envelope and explicit authorization.
 - [ ] Run real H and C, current Contract and Verification, problem Protocol,
   Safe Features and deterministic Decision. Provider retry, repair and hidden
   host steering remain zero.
@@ -326,7 +334,13 @@ CVRP acceptance remains unmet. M8 is complete: normal `scion run` now accepts
 one bounded ordinary `--research-input`; the problem adapter projects ordered
 observations into H only, while C continues from the Contract-approved H and
 editable source. Generic Scion contains no CVRP/Warehouse evidence schema, and
-the input creates no registry, hash, receipt or reopen lifecycle. The next task
-is to prepare M9 as a normal autonomous Scion campaign. This record authorizes
-no live provider/solver run, repair, retry, resume, replacement or automatic
-next formal rung.
+the input creates no registry, hash, receipt or reopen lifecycle. Normal runs
+also accept explicit `--provider-call-cap` and `--outer-hardwall-sec`; the
+problem-neutral implementation is commit `9ae49b21`. M9's ordinary
+six-case/two-seed development screen, reserved later development splits,
+provider/process envelope, one-stage stopping rule and three-layer claim
+boundary are now frozen in its
+[preregistration](docs/experiments/v0.4/v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md).
+The future formal population remains unselected and unavailable to the Agent.
+This record authorizes no live provider/solver run, repair, retry, resume,
+replacement, later development stage or formal rung.
