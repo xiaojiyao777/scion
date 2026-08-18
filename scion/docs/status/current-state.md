@@ -124,28 +124,26 @@ Agent research effectiveness or CVRP algorithm quality. The exact preparation
 and terminal record are in the
 [M9 preregistration](../experiments/v0.4/v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md).
 
-The generic initialization-order bug is now fixed offline: Protocol
-construction has no filesystem side effect, while formal execution lazily
-creates its metrics directory. The strict fresh-output check is unchanged, and
-absent, existing-empty and existing-nonempty roots plus direct Protocol metrics
-creation are covered by regression tests. The original M9 root remains
-preserved. The user has explicitly authorized exactly one rerun after the clean
-fix carrier passes independent checks, using a new `rerun1` root under the
-unchanged preregistered envelope. No third attempt, later development stage,
-R67 recovery or formal rung is authorized.
-
-The first post-fix shell preflight stopped before `scion run` because its exact
-diff check used a repository-root-relative pathspec after changing into the
-`scion/` subdirectory. All other checks passed; the rerun root stayed absent
-and provider, solver and campaign observations remained zero. The pathspec is
-now anchored with `git -C "$REPO_ROOT"`. Since the rerun process was never
-invoked, the single authorized rerun remains pending after a new clean docs-only
-carrier check.
+The generic initialization-order bug was fixed without weakening the strict
+fresh-output check. After one corrected, non-scientific shell preflight, the
+authorized rerun on carrier `b558695b` completed normally and stopped at the
+requested single evaluated screening. It used four provider calls and 27
+solver subprocesses. Candidate one was rejected by Verification unit tests;
+candidate two passed Contract, Verification and canary, then completed all 12
+screening pairs. Protocol returned `fail / SCREENING_FAIL_CASE_QUALITY` and
+Decision returned `abandon / CANDIDATE_RUNTIME_FAILURE`. Champion remains v1;
+validation, frozen, promotion and a third candidate are zero. The result is
+positive evidence for the bounded autonomous V3 framework chain, negative/mixed
+evidence for this research attempt, and no evidence of algorithm improvement
+or generalization. The original failed root and terminal rerun root are both
+preserved; no retry, later development stage, R67 recovery or formal rung is
+authorized. Full facts and claim limits are in the M9 preregistration.
 
 ## Current validation rule
 
-Current safe validation collected 1,668 tests and passed a broad 276-test
-provider-/solver-free core/proposal/CLI selection; the 44-test resource-envelope
+Current safe validation collected 1,672 tests and passed a 240-test
+provider-/solver-free core/proposal selection plus 136 focused Protocol,
+campaign, resource-envelope and signal tests. The 44-test resource-envelope
 and signal subset also passed. Production Ruff F/E9, touched-file Ruff import
 checks and formatting, in-memory compilation of 446 Python files, CLI help and
 `git diff --check` passed with bytecode and pytest caches disabled.

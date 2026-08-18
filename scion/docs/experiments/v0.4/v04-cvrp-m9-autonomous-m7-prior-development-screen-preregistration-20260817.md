@@ -2,7 +2,7 @@
 
 *Date: 2026-08-17*
 
-*State: `ORIGINAL_ONE_SHOT_CONSUMED / GENERIC_FIX_VALIDATED_OFFLINE / RERUN1_AUTHORIZED_PENDING_CLEAN_CARRIER`*
+*State: `RERUN1_COMPLETED_VALID / DEVELOPMENT_SCREEN_FAIL / DECISION_ABANDON / NO_PROMOTION`*
 
 ## Purpose and research boundary
 
@@ -432,3 +432,53 @@ the rerun process is invoked, its first typed or pre-campaign terminal consumes
 this authorization. There is no deletion of either output root, retry, resume,
 repair run, third attempt, automatic next round, later development stage or
 formal rung under this amendment.
+
+## Rerun terminal record
+
+The reviewed rerun used clean carrier
+`b558695b0f8ec1385067e163ce92d34de96e247d` and the fresh `rerun1` root. All
+carrier, module-origin, original-root, new-root and bounded local proxy
+preflights passed. `scion run` exited zero at `2026-08-18T00:09:24Z` with
+`completed / valid / requested_rounds_completed`. No run, retry or later stage
+followed it.
+
+The run used four provider calls, exactly two H and two C, below the cap of six.
+It used 27 solver subprocesses: two Verification executions, one Protocol
+canary and 24 screening arms. The approximately 740-second run remained below
+the 4,500-second hardwall. No resource exhaustion, interruption or
+infrastructure block occurred.
+
+The first autonomous candidate targeted
+`policies/baseline_modules/destroy_repair.py`. Its H and C completed and its
+Contract passed, but Verification rejected it at `V3_unit_tests`: the patch
+passed a new `max_routes` keyword to scheduler recovery test doubles that did
+not accept it, causing three tests to fail. The typed outcome was
+`RESEARCH_REJECTED / VERIFICATION_LIGHT_REJECTED`; it never entered Protocol.
+
+Scion then autonomously chose a different hypothesis and target,
+`policies/baseline_modules/construction.py`. H, C, Contract, Verification and
+canary passed. The one authorized development screening completed all 12
+pairs: 10 were valid and two were candidate failures. B, P, A and F cases tied;
+`X-n195-k51` was a case loss; both `X-n256-k16` seeds produced a candidate
+`solver_algorithm_runtime_error` because construction could not pack customer
+126 into 16 routes. Case wins/losses/ties were `0/2/4`; pair
+wins/losses/ties were `0/3/9`. The median total-distance delta was `0.0` with
+CI `[-284.25, 0.0]`. Protocol returned
+`fail / SCREENING_FAIL_CASE_QUALITY`; Safe Features exposed the candidate
+runtime failure and deterministic Decision returned
+`abandon / CANDIDATE_RUNTIME_FAILURE`.
+
+The terminal campaign contains one completed screening, zero validation and
+zero frozen stages. Champion version remains 1; no promotion or third
+candidate occurred. The future formal population remains unselected and was
+not read.
+
+This supports the bounded framework claim that Scion, without a host-selected
+patch, target file or repair mechanism, used the ordinary M7 observation to
+propose and implement candidates, rejected one through Verification, changed
+research direction, and carried another through Contract, Verification,
+problem Protocol, Safe Features and Decision. Research effectiveness in this
+campaign is negative/mixed: Scion produced a formally screenable candidate but
+did not find one that passed the development screen. It does not support an
+algorithm-improvement, causal, generalization, production-readiness or
+promotion claim.

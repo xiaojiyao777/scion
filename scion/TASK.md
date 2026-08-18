@@ -289,17 +289,17 @@ The exact design and claim boundary are in the
   strict check is unchanged; absent, existing-empty and existing-nonempty
   roots, direct Protocol metrics creation and provider-zero rejection are
   covered offline.
-- [ ] Commit and independently verify the clean fix carrier, then execute the
+- [x] Commit and independently verify the clean fix carrier, then execute the
   single rerun explicitly authorized by the user on the fresh `rerun1` root
   under the unchanged M9 scientific/resource/stop/claim envelope. Any fix or
   preflight failure stops; no third attempt is authorized.
 - [ ] After the development result, select any future formal population by a
   separately reviewed outcome-blind rule. Keep it unavailable to the Agent and
   require a new resource envelope and explicit authorization.
-- [ ] Run real H and C, current Contract and Verification, problem Protocol,
+- [x] Run real H and C, current Contract and Verification, problem Protocol,
   Safe Features and deterministic Decision. Provider retry, repair and hidden
   host steering remain zero.
-- [ ] Assess separately whether the framework behaved correctly, whether the
+- [x] Assess separately whether the framework behaved correctly, whether the
   Agent used the evidence to conduct grounded research, and whether the solver
   actually improved.
 
@@ -366,3 +366,14 @@ The user has explicitly authorized exactly one rerun after a clean fix carrier
 passes independent checks. It must use a new `rerun1` root and the unchanged
 M9 envelope; the original root remains preserved and no third attempt, later
 development stage or formal rung is authorized.
+
+That rerun is now terminal `completed / valid / requested_rounds_completed`.
+Two autonomous candidates used four provider calls. The first passed Contract
+but was rejected by Verification unit tests. The second passed Contract,
+Verification and canary, then completed all 12 development-screen pairs.
+Protocol returned `fail / SCREENING_FAIL_CASE_QUALITY`; Safe Features exposed
+candidate runtime failures and Decision returned
+`abandon / CANDIDATE_RUNTIME_FAILURE`. Champion remains v1; validation,
+frozen, promotion and a third candidate are all zero. This demonstrates the
+bounded autonomous V3 research chain, but the research result is negative/mixed
+and supplies no algorithm-improvement or generalization claim.
