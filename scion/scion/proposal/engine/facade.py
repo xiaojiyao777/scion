@@ -105,3 +105,41 @@ class CreativeLayer:
             snapshot=snapshot,
         )
         return _parse_patch(raw, context=snapshot.structured_context)
+
+    def call_code_research_turn(
+        self,
+        snapshot: PromptTurnSnapshot,
+    ) -> dict[str, Any]:
+        """Dispatch one explicit research turn through the normal caller."""
+
+        return self._provider_calls.call(
+            request_kind="code_research_turn",
+            tool=dict(snapshot.provider_tool),
+            snapshot=snapshot,
+            max_response_bytes=_code_research_response_bound(snapshot),
+        )
+
+    def call_code_research_finalize(
+        self,
+        snapshot: PromptTurnSnapshot,
+    ) -> dict[str, Any]:
+        """Dispatch the one independent final decision through the caller."""
+
+        if snapshot.provider_tool.get("name") != "finalize_code_research":
+            raise ValueError("code research finalize snapshot has the wrong tool")
+        return self._provider_calls.call(
+            request_kind="code_research_finalize",
+            tool=dict(snapshot.provider_tool),
+            snapshot=snapshot,
+            max_response_bytes=_code_research_response_bound(snapshot),
+        )
+
+
+def _code_research_response_bound(snapshot: PromptTurnSnapshot) -> int:
+    state = snapshot.structured_context.get("code_research")
+    if not isinstance(state, Mapping):
+        raise ValueError("code research snapshot is missing bounded state")
+    value = state.get("max_action_bytes")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError("code research snapshot has invalid max_action_bytes")
+    return value

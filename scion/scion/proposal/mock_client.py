@@ -87,6 +87,11 @@ class MockLLMClient:
             raise LLMTimeoutError("MockLLMClient: simulated timeout")
         if current_mode == "format_error":
             raise LLMFormatError("MockLLMClient: simulated format error")
+        tool_name = str(tool.get("name") or "")
+        if tool_name == "code_research_turn":
+            return {"action": "ready", "patch": dict(self._patch_response)}
+        if tool_name == "finalize_code_research":
+            return {"outcome": "finalize_patch"}
         schema = tool.get("input_schema", {})
         return self._pick_response(schema)
 

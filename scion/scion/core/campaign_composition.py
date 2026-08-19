@@ -21,6 +21,10 @@ from scion.core.async_weight_opt import (
 from scion.core.branch import BranchController
 from scion.core.branch_step_runner import BranchStepRunner
 from scion.core.campaign_loop import CampaignLoop
+from scion.core.code_research_limits import (
+    normalize_code_research_limits,
+    write_code_research_limits,
+)
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.decision_finalizer import DecisionFinalizer
 from scion.core.evaluation_orchestrator import EvaluationOrchestrator
@@ -94,6 +98,7 @@ def compose_campaign_services(
     operator_execute_signature: str | None = None,
     research_input: Any | None = None,
     resource_envelope: Any | None = None,
+    code_research_limits: Any | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     validate_fresh_campaign_output(campaign_dir)
@@ -108,6 +113,11 @@ def compose_campaign_services(
     owner._resource_envelope = normalize_resource_envelope(resource_envelope)
     owner._provider_call_budget = ProviderCallBudget(
         owner._resource_envelope.provider_call_cap
+    )
+    owner._code_research_limits = (
+        None
+        if code_research_limits is None
+        else normalize_code_research_limits(code_research_limits)
     )
     owner._split_manifest = split_manifest
     owner._seed_ledger = seed_ledger
@@ -191,6 +201,8 @@ def compose_campaign_services(
     )
 
     os.makedirs(campaign_dir, exist_ok=True)
+    if owner._code_research_limits is not None:
+        write_code_research_limits(campaign_dir, owner._code_research_limits)
     owner._registry = LineageRegistry(os.path.join(campaign_dir, "scion.db"))
     owner._evidence_recorder = EvidenceRecorder(
         campaign_id=owner._campaign_id,
@@ -234,6 +246,7 @@ def compose_campaign_services(
         get_champion=lambda: owner._champion,
         step_history=owner._step_history,
         mark_balance_exhausted=lambda: _mark_balance_exhausted(owner),
+        code_research_limits=owner._code_research_limits,
     )
     owner._research_rejection_finalizer = ResearchRejectionFinalizer(
         campaign_id=owner._campaign_id,

@@ -84,7 +84,7 @@ def write_resource_envelope(campaign_dir: str, value: Any) -> Path | None:
 
 
 class ProviderCallBudget:
-    """One thread-safe counter shared by all H/C calls in an invocation."""
+    """One thread-safe counter shared by all proposal calls in an invocation."""
 
     def __init__(self, cap: int | None) -> None:
         _validate_optional_positive_int(cap, field="provider_call_cap")

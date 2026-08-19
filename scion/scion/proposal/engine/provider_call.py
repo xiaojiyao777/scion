@@ -9,8 +9,13 @@ from datetime import datetime
 from typing import Any, Dict
 
 from scion.core.resource_envelope import ProviderCallBudget
+from scion.proposal.llm.errors import LLMFormatError
 
 from .trace import _client_request_policy, _TraceWriter
+
+
+class ProviderResponseSizeExceeded(LLMFormatError):
+    """Raised before tracing a provider value beyond an explicit call bound."""
 
 
 @dataclass(frozen=True)
@@ -56,9 +61,16 @@ class ProviderCaller:
         request_kind: str,
         tool: Dict[str, Any],
         snapshot: PromptTurnSnapshot,
+        max_response_bytes: int | None = None,
     ) -> Dict[str, Any]:
         """Call once, write one terminal trace, and return the provider value."""
 
+        if max_response_bytes is not None and (
+            isinstance(max_response_bytes, bool)
+            or not isinstance(max_response_bytes, int)
+            or max_response_bytes <= 0
+        ):
+            raise ValueError("max_response_bytes must be a positive integer or null")
         if self._provider_call_budget is not None:
             self._provider_call_budget.consume(request_kind=request_kind)
         _reset_client_call_observations(self._client)
@@ -118,6 +130,31 @@ class ProviderCaller:
                 provider_response_diagnostics=response_diagnostics,
             )
             raise
+
+        if max_response_bytes is not None and _json_size_exceeds(
+            raw, max_response_bytes
+        ):
+            error = ProviderResponseSizeExceeded(
+                "provider response exceeds explicit byte bound: "
+                f"max_response_bytes={max_response_bytes}"
+            )
+            _write_terminal_trace_best_effort(
+                trace,
+                request_kind=request_kind,
+                model=self._model,
+                tool=tool,
+                prompt=snapshot.user_prompt,
+                system_blocks=rendered_system_blocks,
+                context=structured_context,
+                started_at=started_at,
+                client=self._client,
+                ok=False,
+                error=str(error),
+                error_type=type(error).__name__,
+                request_policy=request_policy,
+                provider_response_diagnostics=None,
+            )
+            raise error
 
         response_diagnostics = _client_response_diagnostics(self._client)
         _write_terminal_trace_best_effort(
@@ -225,7 +262,68 @@ def _client_response_diagnostics(client: Any) -> dict[str, Any] | None:
     return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
 
 
+def _json_size_exceeds(value: Any, maximum: int) -> bool:
+    """Return early when a JSON-compatible value exceeds an encoded bound."""
+
+    total = 0
+    stack = [value]
+    seen_containers: set[int] = set()
+    while stack:
+        item = stack.pop()
+        if item is None:
+            total += 4
+        elif item is True:
+            total += 4
+        elif item is False:
+            total += 5
+        elif isinstance(item, str):
+            total += _json_string_size(item)
+        elif isinstance(item, (int, float)) and not isinstance(item, bool):
+            total += len(str(item).encode("utf-8"))
+        elif isinstance(item, Mapping):
+            item_id = id(item)
+            if item_id in seen_containers:
+                return True
+            seen_containers.add(item_id)
+            total += 2 + max(0, len(item) - 1)
+            for key, child in item.items():
+                if not isinstance(key, str):
+                    return True
+                total += _json_string_size(key) + 1
+                stack.append(child)
+        elif isinstance(item, (list, tuple)):
+            item_id = id(item)
+            if item_id in seen_containers:
+                return True
+            seen_containers.add(item_id)
+            total += 2 + max(0, len(item) - 1)
+            stack.extend(item)
+        else:
+            return True
+        if total > maximum:
+            return True
+    return False
+
+
+def _json_string_size(value: str) -> int:
+    size = 2
+    for char in value:
+        codepoint = ord(char)
+        if char in {'"', "\\"}:
+            size += 2
+        elif codepoint < 0x20:
+            size += 6
+        elif codepoint <= 0x7F:
+            size += 1
+        elif codepoint <= 0xFFFF:
+            size += 6
+        else:
+            size += 12
+    return size
+
+
 __all__ = [
     "PromptTurnSnapshot",
     "ProviderCaller",
+    "ProviderResponseSizeExceeded",
 ]

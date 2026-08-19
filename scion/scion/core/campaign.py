@@ -14,6 +14,7 @@ from scion.config.problem import (
 )
 from scion.core.branch import StateTransitionError
 from scion.core.campaign_loop import CampaignRunResult
+from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
 from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
 from scion.core.evidence_recording.status import project_last_result
@@ -82,6 +83,7 @@ class CampaignManager:
         operator_execute_signature: Optional[str] = None,
         research_input: Optional[Dict[str, Any]] = None,
         resource_envelope: ResourceEnvelope | dict[str, Any] | None = None,
+        code_research_limits: CodeResearchLimits | dict[str, Any] | None = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
@@ -100,6 +102,7 @@ class CampaignManager:
             operator_execute_signature=operator_execute_signature,
             research_input=research_input,
             resource_envelope=resource_envelope,
+            code_research_limits=code_research_limits,
         )
 
     # ------------------------------------------------------------------

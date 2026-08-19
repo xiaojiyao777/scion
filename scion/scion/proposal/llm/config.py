@@ -17,8 +17,10 @@ _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
 _DEEPSEEK_MODEL_PREFIXES = ("deepseek-",)
 _GPT_CODEX_MODEL_PREFIXES = ("gpt-", "codex-")
 _DEEPSEEK_MAX_ALIASES = {"v4pro-max", "deepseek-v4-pro-max"}
-_CODE_REQUEST_KINDS = {"code"}
+_CODE_REQUEST_KINDS = {"code", "code_research_finalize", "code_research_turn"}
 _TOOL_REQUEST_KIND_BY_NAME = {
+    "code_research_turn": "code_research_turn",
+    "finalize_code_research": "code_research_finalize",
     "generate_patch": "code",
     "generate_hypothesis": "hypothesis",
 }

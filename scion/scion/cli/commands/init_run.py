@@ -55,6 +55,14 @@ def _load_research_input(path: Path) -> dict[str, Any]:
     return normalize_research_input(decoded)
 
 
+def _load_code_research_limits(path: Path):
+    """Load one explicit ordinary JSON value enabling bounded C research."""
+
+    from scion.core.code_research_limits import load_code_research_limits
+
+    return load_code_research_limits(path)
+
+
 class _CampaignSignalStop(KeyboardInterrupt):
     """Raised by the CLI signal handler to stop the active campaign."""
 
@@ -214,11 +222,19 @@ def register_run_command(app: typer.Typer) -> None:
                 "and ordered prior observations"
             ),
         ),
+        code_research_limits: Optional[str] = typer.Option(
+            None,
+            "--code-research-limits",
+            help=(
+                "Path to strict JSON limits enabling bounded read/search/ready "
+                "turns before the independent code final decision"
+            ),
+        ),
         provider_call_cap: int | None = typer.Option(
             None,
             "--provider-call-cap",
             min=1,
-            help="Maximum actual H/C provider requests for this invocation",
+            help="Maximum actual proposal provider requests for this invocation",
         ),
         outer_hardwall_sec: int | None = typer.Option(
             None,
@@ -264,6 +280,15 @@ def register_run_command(app: typer.Typer) -> None:
             try:
                 research_input_value = _load_research_input(
                     Path(research_input).resolve()
+                )
+            except (TypeError, ValueError) as exc:
+                typer.echo(f"ERROR: {exc}", err=True)
+                raise typer.Exit(code=1)
+        code_research_limits_value = None
+        if code_research_limits is not None:
+            try:
+                code_research_limits_value = _load_code_research_limits(
+                    Path(code_research_limits).resolve()
                 )
             except (TypeError, ValueError) as exc:
                 typer.echo(f"ERROR: {exc}", err=True)
@@ -471,6 +496,7 @@ def register_run_command(app: typer.Typer) -> None:
                 operator_execute_signature=operator_execute_signature,
                 research_input=research_input_value,
                 resource_envelope=resource_envelope,
+                code_research_limits=code_research_limits_value,
             )
 
             requested_rounds = rounds
@@ -508,6 +534,7 @@ def register_run_command(app: typer.Typer) -> None:
 
 __all__ = [
     "_CampaignOuterHardwall",
+    "_load_code_research_limits",
     "_load_research_input",
     "register_run_command",
 ]

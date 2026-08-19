@@ -9,7 +9,6 @@ from scion.core.execution_outcome import ExecutionOutcomeRecord
 from scion.core.models import HypothesisProposal, PatchProposal
 from scion.proposal.engine import PromptTurnSnapshot
 
-
 ProposalT = TypeVar("ProposalT", HypothesisProposal, PatchProposal)
 
 
@@ -48,6 +47,16 @@ class CreativeLayerLike(Protocol):
         self,
         snapshot: PromptTurnSnapshot,
     ) -> PatchProposal: ...
+
+    def call_code_research_turn(
+        self,
+        snapshot: PromptTurnSnapshot,
+    ) -> dict[str, Any]: ...
+
+    def call_code_research_finalize(
+        self,
+        snapshot: PromptTurnSnapshot,
+    ) -> dict[str, Any]: ...
 
 
 class ProblemRuntimeLike(Protocol):

@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping
 
+from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
@@ -18,6 +19,10 @@ from scion.core.models import (
     StepRecord,
 )
 from scion.core.resource_envelope import ProviderCallCapExhausted
+from scion.proposal.code_research_session import (
+    CodeResearchAbandon,
+    CodeResearchSession,
+)
 from scion.proposal.context_snapshot import (
     ProposalContextSnapshot,
     freeze_proposal_context,
@@ -58,7 +63,7 @@ _KNOWN_PROVIDER_ERRORS = (
 
 @dataclass
 class ProposalPipeline:
-    """Build complete contexts and make exactly one in-process H/C call."""
+    """Build complete contexts for direct H/C and optional bounded C research."""
 
     creative: CreativeLayerLike
     problem_runtime: ProblemRuntimeLike
@@ -67,6 +72,7 @@ class ProposalPipeline:
     get_champion: Callable[[], ChampionState]
     step_history: list[StepRecord]
     mark_balance_exhausted: Callable[[], None]
+    code_research_limits: CodeResearchLimits | None = None
 
     def generate_hypothesis(
         self,
@@ -142,7 +148,23 @@ class ProposalPipeline:
             )
 
         try:
-            patch = self.creative.generate_direct_code(prompt_snapshot)
+            if self.code_research_limits is None:
+                patch = self.creative.generate_direct_code(prompt_snapshot)
+            else:
+                research_result = CodeResearchSession(
+                    self.creative,
+                    self.code_research_limits,
+                ).run(prompt_snapshot)
+                if isinstance(research_result, CodeResearchAbandon):
+                    return ProposalAttempt.failure(
+                        self._record_local_failure(
+                            phase="code",
+                            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                            reason_code="CODE_RESEARCH_ABANDONED",
+                            detail=research_result.reason,
+                        )
+                    )
+                patch = research_result
         except ProviderCallCapExhausted as exc:
             return ProposalAttempt.failure(
                 self._handle_provider_failure(branch, "code", exc)
