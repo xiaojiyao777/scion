@@ -35,6 +35,80 @@ def _install_changed_champion_and_mark_stale(cm, tmp_path):
     return champion
 
 
+class TestPreProtocolObservations:
+    def test_second_and_third_h_see_each_verification_rejection_once(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        from scion.proposal.context_manager import ContextManager
+
+        captured_h_contexts = []
+        original_build = ContextManager.build_hypothesis_context
+
+        def capture_h_context(self, **kwargs):
+            context = original_build(self, **kwargs)
+            captured_h_contexts.append(context)
+            return context
+
+        monkeypatch.setattr(
+            ContextManager,
+            "build_hypothesis_context",
+            capture_h_context,
+        )
+
+        class FailTwiceThenPass(AlwaysPassVerificationGate):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            def run(self, workspace, champion_workspace, patch):
+                self.calls += 1
+                if self.calls > 2:
+                    return super().run(workspace, champion_workspace, patch)
+                check = CheckResult(
+                    name="V3_unit_tests",
+                    passed=False,
+                    severity="light",
+                    detail="PRIVATE/TEST/OUTPUT",
+                    elapsed_ms=0,
+                    metadata={"raw_prompt": "FORBIDDEN_RAW_PROMPT"},
+                )
+                return VerificationResult(
+                    passed=False,
+                    checks=(check,),
+                    failure_severity="light",
+                    first_failure="PRIVATE/TEST/OUTPUT",
+                )
+
+        cm = _campaign(
+            tmp_path,
+            verification_gate=FailTwiceThenPass(),
+            experiment_protocol=MockExperimentProtocol(
+                results=[_make_protocol_result(ExperimentStage.SCREENING)]
+            ),
+        )
+
+        first = cm.run_one_step()
+        second = cm.run_one_step()
+        third = cm.run_one_step()
+
+        assert first.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+        assert second.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+        assert third.execution_outcome.outcome is ExecutionOutcome.EVALUATED
+        assert "pre_protocol_observations" not in captured_h_contexts[0]
+        assert len(captured_h_contexts[1]["pre_protocol_observations"]) == 1
+        assert len(captured_h_contexts[2]["pre_protocol_observations"]) == 2
+        assert captured_h_contexts[2]["pre_protocol_observations"] == [
+            captured_h_contexts[1]["pre_protocol_observations"][0],
+            captured_h_contexts[1]["pre_protocol_observations"][0],
+        ]
+        rendered = json.dumps(captured_h_contexts[2], sort_keys=True)
+        assert "PRIVATE/TEST/OUTPUT" not in rendered
+        assert "FORBIDDEN_RAW_PROMPT" not in rendered
+        assert "last_research_rejection" not in rendered
+
+
 class TestScreeningFail:
     def test_screening_fail_keeps_verified_candidate_and_branch_research_open(
         self, tmp_path

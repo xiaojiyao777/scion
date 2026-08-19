@@ -58,7 +58,11 @@ from .code_context import (
     _build_editable_source_context,
     _read_champion_research_code,
 )
-from .history_projection import proposal_screening_history, screening_eval_stats
+from .history_projection import (
+    proposal_pre_protocol_observations,
+    proposal_screening_history,
+    screening_eval_stats,
+)
 from .io import (
     _expand_surface_targets_for_champion,
     _expand_surface_targets_for_root,
@@ -158,9 +162,11 @@ class ContextManager:
     ) -> dict[str, Any]:
         """Return the V3 round-one research context.
 
-        Each prior screening experiment is exposed once. Validation/frozen
-        details, branch status mirrors, host search controls, repair loops,
-        and cross-branch governance artifacts are deliberately absent.
+        Each prior screening experiment is exposed once. Safe pre-Protocol gate
+        observations remain ordinary research facts rather than repair advice.
+        Validation/frozen details, branch status mirrors, host search controls,
+        repair loops, and cross-branch governance artifacts are deliberately
+        absent.
         """
 
         adapter_spec = _get_adapter_problem_spec(self._adapter)
@@ -215,6 +221,7 @@ class ContextManager:
                 _filter_hypothesis_prompt_steps(history_steps),
             )
         )
+        pre_protocol_observations = proposal_pre_protocol_observations(history_steps)
         provider = (
             resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,
@@ -248,6 +255,8 @@ class ContextManager:
         }
         if branch_source:
             context["branch_current_code"] = branch_source
+        if pre_protocol_observations:
+            context["pre_protocol_observations"] = pre_protocol_observations
 
         measurement = _problem_measurement_diagnostics(
             problem_spec,

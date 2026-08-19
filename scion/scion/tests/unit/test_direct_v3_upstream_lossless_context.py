@@ -415,23 +415,26 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         assert forbidden not in lowered
 
 
-def test_rejection_steps_do_not_become_h_repair_steering() -> None:
+def test_pre_protocol_rejections_become_ordered_safe_h_observations() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("warehouse_delivery")
-    sibling = Branch(
-        branch_id="prior-rejected-sibling",
-        state=BranchState.EXPLORE,
-        base_champion_id=champion.version,
-    )
     hypothesis = HypothesisProposal(
-        hypothesis_text="FORBIDDEN_PROVIDER_HYPOTHESIS_PROSE",
+        hypothesis_text="Change the scheduling mechanism after gate evidence.",
         change_locus="order_level",
         action="modify",
-        target_file="operators/change_vehicle_type.py",
+        target_file="PRIVATE/TARGET/PATH.py",
     )
     patch = PatchProposal(
-        file_path="operators/change_vehicle_type.py",
+        file_path="PRIVATE/PATCH/PATH.py",
         action="modify",
         code_content="FORBIDDEN_REJECTED_PATCH_SOURCE",
+        test_hint="FORBIDDEN_TEST_HINT",
+        additional_changes=(
+            PatchFileChange(
+                file_path="PRIVATE/ADDITIONAL/PATH.py",
+                action="create",
+                code_content="FORBIDDEN_ADDITIONAL_PATCH_SOURCE",
+            ),
+        ),
     )
 
     def rejected_step(
@@ -441,15 +444,14 @@ def test_rejection_steps_do_not_become_h_repair_steering() -> None:
         reason_code: str,
         check_code: str,
         rejected_patch: PatchProposal | None,
-        source_branch_id: str = branch.branch_id,
-        check_detail: str = "FORBIDDEN_CHECK_DETAIL",
+        severity: str = "heavy",
     ) -> StepRecord:
         checks_key = (
             "contract_checks" if phase.endswith("contract") else "verification_checks"
         )
         return StepRecord(
             round_num=round_num,
-            branch_id=source_branch_id,
+            branch_id=f"FORBIDDEN_OWNER_ID_{round_num}",
             hypothesis=hypothesis,
             patch=rejected_patch,
             contract_passed=phase == "verification",
@@ -464,58 +466,121 @@ def test_rejection_steps_do_not_become_h_repair_steering() -> None:
                 detail="FORBIDDEN_EXECUTION_DETAIL",
                 provenance={
                     "stage": phase,
+                    "severity": severity,
+                    "raw_prompt": "FORBIDDEN_RAW_PROMPT",
+                    "response": "FORBIDDEN_RAW_RESPONSE",
+                    "private_path": "/PRIVATE/WORKSPACE/PATH",
+                    "token": "FORBIDDEN_TOKEN",
+                    "hash": "FORBIDDEN_HASH",
+                    "ref": "FORBIDDEN_REF",
+                    "owner": "FORBIDDEN_OWNER",
+                    "lifecycle": "FORBIDDEN_LIFECYCLE",
                     checks_key: [
                         {
                             "name": check_code,
                             "passed": False,
-                            "severity": "heavy",
-                            "detail": check_detail,
+                            "severity": severity,
+                            "detail": "FORBIDDEN_CHECK_DETAIL",
                             "metadata": {
-                                "validation_case_details": "FORBIDDEN_VALIDATION_RAW"
+                                "validation_case_details": "FORBIDDEN_VALIDATION_RAW",
+                                "secret": "FORBIDDEN_CHECK_SECRET",
                             },
                         },
                         {
-                            "name": "PASSED_CHECK_MUST_NOT_APPEAR",
+                            "name": "SAFE_PASSED_CHECK",
                             "passed": True,
+                            "severity": "light",
+                            "detail": "FORBIDDEN_PASSED_DETAIL",
+                        },
+                        {
+                            "name": "../../FORBIDDEN_CHECK_PATH",
+                            "passed": False,
+                            "severity": "heavy",
                         },
                     ],
                 },
             ),
         )
 
-    steps = [
+    h_contract = rejected_step(
+        round_num=1,
+        phase="hypothesis_contract",
+        reason_code="HYPOTHESIS_CONTRACT_REJECTED",
+        check_code="H3_target_matches_locus",
+        rejected_patch=None,
+    )
+    patch_contract = rejected_step(
+        round_num=2,
+        phase="patch_contract",
+        reason_code="PATCH_CONTRACT_REJECTED",
+        check_code="C5_frozen_boundary",
+        rejected_patch=patch,
+    )
+    verification = rejected_step(
+        round_num=4,
+        phase="verification",
+        reason_code="VERIFICATION_HEAVY_REJECTED",
+        check_code="V6_feasibility",
+        rejected_patch=patch,
+    )
+    repeated_verification = rejected_step(
+        round_num=5,
+        phase="verification",
+        reason_code="VERIFICATION_HEAVY_REJECTED",
+        check_code="V6_feasibility",
+        rejected_patch=patch,
+    )
+    unsafe_reason = rejected_step(
+        round_num=6,
+        phase="verification",
+        reason_code="FORBIDDEN_REASON_CODE/private/path",
+        check_code="V1_syntax",
+        rejected_patch=patch,
+    )
+    screening_hypothesis = HypothesisProposal(
+        hypothesis_text="Independent measured screening observation.",
+        change_locus="order_level",
+        action="modify",
+        target_file="operators/safe_screening_target.py",
+    )
+    screening = StepRecord(
+        round_num=3,
+        branch_id=branch.branch_id,
+        hypothesis=screening_hypothesis,
+        patch=None,
+        contract_passed=True,
+        verification_passed=True,
+        protocol_result=ProtocolResult(
+            stage=ExperimentStage.SCREENING,
+            stats=EvalStats(
+                n_cases=0,
+                wins=0,
+                losses=0,
+                ties=0,
+                win_rate=0.0,
+                median_delta=0.0,
+                ci_low=0.0,
+                ci_high=0.0,
+            ),
+            gate_outcome="fail",
+            reason_codes=("SCREENING_FAIL",),
+            exposed_summary="screening observation",
+            raw_metrics_ref="PRIVATE/SCREENING/REF.json",
+        ),
+        decision=Decision.ABANDON,
+        failure_stage=None,
+        failure_detail=None,
+    )
+    unrelated_steps = [
         rejected_step(
-            round_num=1,
-            phase="hypothesis_contract",
-            reason_code="HYPOTHESIS_CONTRACT_REJECTED",
-            check_code="H3_target_matches_locus",
+            round_num=7,
+            phase="verification_metadata",
+            reason_code="VERIFICATION_HEAVY_REJECTED",
+            check_code="V1_syntax",
             rejected_patch=None,
         ),
-        rejected_step(
-            round_num=2,
-            phase="patch_contract",
-            reason_code="PATCH_CONTRACT_REJECTED",
-            check_code="C5_frozen_boundary",
-            rejected_patch=patch,
-        ),
-        rejected_step(
-            round_num=3,
-            phase="verification",
-            reason_code="VERIFICATION_HEAVY_REJECTED",
-            check_code="V6_feasibility",
-            rejected_patch=patch,
-            source_branch_id=sibling.branch_id,
-        ),
-        rejected_step(
-            round_num=4,
-            phase="verification",
-            reason_code="VERIFICATION_REJECTED",
-            check_code="V1_syntax",
-            rejected_patch=patch,
-            check_detail="syntax_error: expected an indented block",
-        ),
         StepRecord(
-            round_num=5,
+            round_num=8,
             branch_id=branch.branch_id,
             hypothesis=hypothesis,
             patch=None,
@@ -526,50 +591,90 @@ def test_rejection_steps_do_not_become_h_repair_steering() -> None:
             failure_stage="proposal_hypothesis",
             failure_detail="FORBIDDEN_PROVIDER_FAILURE",
         ),
-        *[
-            StepRecord(
-                round_num=round_num,
-                branch_id=branch.branch_id,
-                hypothesis=hypothesis,
-                patch=patch,
-                contract_passed=True,
-                verification_passed=False,
-                protocol_result=ProtocolResult(
-                    stage=stage,
-                    stats=EvalStats(
-                        n_cases=1,
-                        wins=0,
-                        losses=1,
-                        ties=0,
-                        win_rate=0.0,
-                        median_delta=-1.0,
-                        ci_low=-2.0,
-                        ci_high=0.0,
-                    ),
-                    gate_outcome="fail",
-                    reason_codes=(f"FORBIDDEN_{stage.value.upper()}_CODE",),
-                    exposed_summary=f"FORBIDDEN_{stage.value.upper()}_SUMMARY",
-                    raw_metrics_ref=f"private/FORBIDDEN_{stage.value.upper()}.json",
-                    case_ids=(f"FORBIDDEN_{stage.value.upper()}_CASE",),
-                ),
-                decision=None,
-                failure_stage="verification",
-                failure_detail=f"FORBIDDEN_{stage.value.upper()}_DETAIL",
-            )
-            for round_num, stage in (
-                (6, ExperimentStage.VALIDATION),
-                (7, ExperimentStage.FROZEN),
-            )
-        ],
     ]
 
-    context = ContextManager(adapter=adapter).build_hypothesis_context(
+    manager = ContextManager(adapter=adapter)
+    fresh_context = manager.build_hypothesis_context(
         branch=branch,
         champion=champion,
         problem_spec=legacy,
-        step_history=steps,
+        step_history=[],
+    )
+    second_h_context = manager.build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[h_contract],
+    )
+    third_h_context = manager.build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[h_contract, patch_contract],
+    )
+    context = manager.build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=legacy,
+        step_history=[
+            h_contract,
+            patch_contract,
+            screening,
+            verification,
+            repeated_verification,
+            unsafe_reason,
+            *unrelated_steps,
+        ],
     )
 
+    assert "pre_protocol_observations" not in fresh_context
+    assert len(second_h_context["pre_protocol_observations"]) == 1
+    assert len(third_h_context["pre_protocol_observations"]) == 2
+    assert (
+        third_h_context["pre_protocol_observations"][0]
+        == (second_h_context["pre_protocol_observations"][0])
+    )
+    assert (
+        context["pre_protocol_observations"][:2]
+        == third_h_context["pre_protocol_observations"]
+    )
+    assert [
+        item["outcome"]["stage"] for item in context["pre_protocol_observations"]
+    ] == [
+        "hypothesis_contract",
+        "patch_contract",
+        "verification",
+        "verification",
+        "verification",
+    ]
+    assert len(context["pre_protocol_observations"]) == 5
+    assert (
+        context["pre_protocol_observations"][2]
+        == context["pre_protocol_observations"][3]
+    )
+    assert context["pre_protocol_observations"][4]["outcome"]["reason_code"] == (
+        "RESEARCH_REJECTED"
+    )
+    assert len(context["experiment_history"]) == 1
+    assert context["pre_protocol_observations"][0]["patch"] == {"present": False}
+    assert context["pre_protocol_observations"][1]["patch"] == {
+        "present": True,
+        "change_count": 2,
+        "actions": ["create", "modify"],
+    }
+    assert context["pre_protocol_observations"][2]["outcome"] == {
+        "stage": "verification",
+        "reason_code": "VERIFICATION_HEAVY_REJECTED",
+        "severity": "heavy",
+        "checks": [
+            {"name": "V6_feasibility", "passed": False, "severity": "heavy"},
+            {"name": "SAFE_PASSED_CHECK", "passed": True, "severity": "light"},
+        ],
+    }
+    assert all(
+        "target_file" not in item["hypothesis"]
+        for item in context["pre_protocol_observations"]
+    )
     assert "last_research_rejection" not in context
     snapshot = freeze_proposal_context("hypothesis", context)
     blocks, user_prompt = _split_hypothesis_context(
@@ -577,21 +682,28 @@ def test_rejection_steps_do_not_become_h_repair_steering() -> None:
     )
     rendered = "\n".join(block["text"] for block in blocks) + user_prompt
     for forbidden in (
-        "FORBIDDEN_PROVIDER_HYPOTHESIS_PROSE",
+        "PRIVATE/TARGET/PATH.py",
+        "PRIVATE/PATCH/PATH.py",
+        "PRIVATE/ADDITIONAL/PATH.py",
         "FORBIDDEN_REJECTED_PATCH_SOURCE",
+        "FORBIDDEN_ADDITIONAL_PATCH_SOURCE",
+        "FORBIDDEN_TEST_HINT",
         "FORBIDDEN_PROVIDER_OR_CHECK_PROSE",
         "FORBIDDEN_EXECUTION_DETAIL",
         "FORBIDDEN_CHECK_DETAIL",
         "FORBIDDEN_VALIDATION_RAW",
+        "FORBIDDEN_CHECK_SECRET",
+        "FORBIDDEN_RAW_PROMPT",
+        "FORBIDDEN_RAW_RESPONSE",
+        "/PRIVATE/WORKSPACE/PATH",
+        "FORBIDDEN_TOKEN",
+        "FORBIDDEN_HASH",
+        "FORBIDDEN_REF",
+        "FORBIDDEN_OWNER",
+        "FORBIDDEN_LIFECYCLE",
+        "FORBIDDEN_CHECK_PATH",
+        "FORBIDDEN_REASON_CODE",
         "FORBIDDEN_PROVIDER_FAILURE",
-        "PASSED_CHECK_MUST_NOT_APPEAR",
-        "FORBIDDEN_VALIDATION_CODE",
-        "FORBIDDEN_VALIDATION_SUMMARY",
-        "FORBIDDEN_VALIDATION_CASE",
-        "FORBIDDEN_FROZEN_CODE",
-        "FORBIDDEN_FROZEN_SUMMARY",
-        "FORBIDDEN_FROZEN_CASE",
-        "syntax_error: expected an indented block",
     ):
         assert forbidden not in rendered
 
@@ -673,6 +785,8 @@ def test_raw_runtime_facts_reach_canonical_h_history_without_advice() -> None:
                 ci_low=-2.0,
                 ci_high=0.0,
                 runtime_pairs=4,
+                shared_failed_pairs=1,
+                bilateral_failed_pairs=2,
             ),
             gate_outcome="fail",
             reason_codes=("SCREENING_FAIL_WIN_RATE",),
@@ -700,6 +814,8 @@ def test_raw_runtime_facts_reach_canonical_h_history_without_advice() -> None:
     }
     aggregate = evidence["objective_outcome"]["aggregate"]
     assert aggregate["runtime_pairs"] == 4
+    assert aggregate["shared_failed_pairs"] == 1
+    assert aggregate["bilateral_failed_pairs"] == 2
     assert "runtime_evidence_status" not in aggregate
     assert "runtime_confidence" not in evidence
 

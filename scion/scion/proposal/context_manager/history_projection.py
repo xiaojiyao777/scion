@@ -1,9 +1,26 @@
-"""Provider-facing V3 screening-memory projection."""
+"""Provider-facing V3 projection of ordinary in-process research history."""
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
+
+from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.models import StepRecord
+
+_PRE_PROTOCOL_STAGES = frozenset(
+    {"hypothesis_contract", "patch_contract", "verification"}
+)
+_STAGE_REASON_CODES = {
+    "hypothesis_contract": frozenset({"HYPOTHESIS_CONTRACT_REJECTED"}),
+    "patch_contract": frozenset({"PATCH_CONTRACT_REJECTED"}),
+    "verification": frozenset(
+        {"VERIFICATION_LIGHT_REJECTED", "VERIFICATION_HEAVY_REJECTED"}
+    ),
+}
+_SAFE_CHECK_NAME = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
+_PATCH_ACTIONS = frozenset({"modify", "create", "delete"})
 
 _SCREENING_EVAL_STAT_FIELDS = (
     "n_cases",
@@ -28,6 +45,8 @@ _SCREENING_EVAL_STAT_FIELDS = (
     "failed_pairs",
     "candidate_failed_pairs",
     "champion_failed_pairs",
+    "shared_failed_pairs",
+    "bilateral_failed_pairs",
     "pair_wins",
     "pair_losses",
     "pair_ties",
@@ -58,6 +77,134 @@ def proposal_screening_history(
 
     records.sort(key=lambda item: int(item["round_num"]))
     return [_screening(record) for record in records]
+
+
+def proposal_pre_protocol_observations(
+    steps: Sequence[StepRecord],
+) -> list[dict[str, Any]]:
+    """Project ordinary pre-Protocol rejection facts for the next H call.
+
+    ``steps`` is already the append-ordered in-process campaign record.  Keep
+    every eligible observation in that order and never query a second durable
+    source or compact repeated attempts.  Free-form failure prose, patch source,
+    paths, metadata, and identities deliberately remain outside this boundary.
+    """
+
+    observations: list[dict[str, Any]] = []
+    for step in steps:
+        outcome = step.execution_outcome
+        stage = step.failure_stage
+        if (
+            outcome is None
+            or outcome.outcome is not ExecutionOutcome.RESEARCH_REJECTED
+            or stage not in _PRE_PROTOCOL_STAGES
+        ):
+            continue
+        observations.append(
+            {
+                "hypothesis": _pre_protocol_hypothesis(step),
+                "patch": _pre_protocol_patch(step),
+                "outcome": _pre_protocol_outcome(step),
+            }
+        )
+    return observations
+
+
+def _pre_protocol_hypothesis(step: StepRecord) -> dict[str, Any]:
+    hypothesis = step.hypothesis
+    return _without_empty(
+        {
+            "hypothesis_text": hypothesis.hypothesis_text,
+            "change_locus": hypothesis.change_locus,
+            "action": hypothesis.action,
+            "predicted_direction": hypothesis.predicted_direction,
+            "target_weakness": hypothesis.target_weakness,
+            "expected_effect": hypothesis.expected_effect,
+            "suggested_weight": hypothesis.suggested_weight,
+        }
+    )
+
+
+def _pre_protocol_patch(step: StepRecord) -> dict[str, Any]:
+    patch = step.patch
+    if patch is None:
+        return {"present": False}
+    changes: list[Any] = [patch]
+    additional = getattr(patch, "additional_changes", ()) or ()
+    if isinstance(additional, (list, tuple)):
+        changes.extend(additional)
+    actions = sorted(
+        {
+            action
+            for change in changes
+            if (action := _change_action(change)) in _PATCH_ACTIONS
+        }
+    )
+    return {
+        "present": True,
+        "change_count": len(changes),
+        "actions": actions,
+    }
+
+
+def _change_action(change: Any) -> str:
+    if isinstance(change, Mapping):
+        value = change.get("action")
+    else:
+        value = getattr(change, "action", None)
+    return str(value or "").strip()
+
+
+def _pre_protocol_outcome(step: StepRecord) -> dict[str, Any]:
+    outcome = step.execution_outcome
+    assert outcome is not None  # guarded by proposal_pre_protocol_observations
+    stage = str(step.failure_stage)
+    projection: dict[str, Any] = {
+        "stage": stage,
+        "reason_code": _safe_reason_code(stage, outcome.reason_code),
+    }
+    provenance = outcome.provenance
+    if stage == "verification":
+        severity = provenance.get("severity")
+        if severity in {"light", "heavy"}:
+            projection["severity"] = severity
+    checks_key = "verification_checks" if stage == "verification" else "contract_checks"
+    projection["checks"] = _safe_checks(provenance.get(checks_key))
+    return projection
+
+
+def _safe_reason_code(stage: str, value: Any) -> str:
+    reason_code = str(value or "").strip()
+    if reason_code in _STAGE_REASON_CODES.get(stage, ()):
+        return reason_code
+    return ExecutionOutcome.RESEARCH_REJECTED.value.upper()
+
+
+def _safe_checks(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, (list, tuple)):
+        return []
+    projected: list[dict[str, Any]] = []
+    for check in value:
+        if not isinstance(check, Mapping):
+            continue
+        name = check.get("name")
+        passed = check.get("passed")
+        severity = check.get("severity")
+        if (
+            not isinstance(name, str)
+            or _SAFE_CHECK_NAME.fullmatch(name) is None
+            or not isinstance(passed, bool)
+            or severity not in {"light", "heavy"}
+        ):
+            continue
+        projected.append(
+            {
+                "name": name,
+                "passed": passed,
+                "severity": severity,
+            }
+        )
+    return projected
 
 
 def _screening(record: Mapping[str, Any]) -> dict[str, Any]:
@@ -231,4 +378,8 @@ def _without_empty(value: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["proposal_screening_history", "screening_eval_stats"]
+__all__ = [
+    "proposal_pre_protocol_observations",
+    "proposal_screening_history",
+    "screening_eval_stats",
+]

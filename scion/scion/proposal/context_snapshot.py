@@ -48,6 +48,7 @@ _HYPOTHESIS_KEYS = frozenset(
         "branch_id",
         "research_question",
         "prior_research_observations",
+        "pre_protocol_observations",
         "seed",
         "experiment_history",
         RENDERER_INPUTS_KEY,
