@@ -16,6 +16,20 @@ solver_path: solver.py
 canary_case_path: data/instance_small_1.json
 unit_test_path: tests/test_operators.py
 regression_test_path: tests/test_solver.py
+development_unit_test_path: tests/test_operators.py
+development_regression_test_path: tests/test_development_solver.py
+development_regression_test_support_paths:
+  - data/instance_development.json
+development_workspace_paths:
+  - config.py
+  - greedy_init.py
+  - models.py
+  - oracle.py
+  - pool.py
+  - solver.py
+  - vns.py
+  - operators/__init__.py
+  - operators/base.py
 
 search_space:
   editable:

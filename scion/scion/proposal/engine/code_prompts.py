@@ -13,9 +13,35 @@ def _split_code_context(
 ) -> tuple[list[dict], str]:
     """Render only the approved hypothesis and its frozen editable source."""
 
+    source_context = context["editable_source_context"]
+    visible_source_context = {
+        **source_context,
+        "sources": [
+            {
+                **source,
+                "content": (
+                    source.get("content")
+                    if source.get("visible") is True
+                    else None
+                ),
+            }
+            for source in source_context["sources"]
+        ],
+        "public_tests": [
+            {
+                **public_test,
+                "content": (
+                    public_test.get("content")
+                    if public_test.get("visible") is True
+                    else None
+                ),
+            }
+            for public_test in source_context["public_tests"]
+        ],
+    }
     provider_context = {
         "approved_hypothesis": context["approved_hypothesis"],
-        "editable_source_context": context["editable_source_context"],
+        "editable_source_context": visible_source_context,
     }
 
     system_blocks = [
@@ -40,7 +66,9 @@ def _split_code_context(
     user_prompt = (
         "## Implementation And Output Instructions\n"
         "Implement the approved hypothesis from the current source and target API "
-        "guidance as one coherent patch, including necessary companion edits; "
+        "guidance as one coherent patch. Source roles identify the target, its "
+        "local dependencies, callers, and unread peer inventory; public_tests are "
+        "read-only development references. Include necessary companion edits; "
         "follow the tool schema's edit protocol and return the patch through the "
         "required tool schema."
     )

@@ -4,24 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Sequence
 
-from scion.problems.cvrp.solver_design.manifest import (
-    SOLVER_DESIGN_API_MANIFEST_FILES,
-    SOLVER_DESIGN_INTEGRATION_FULL_FILES,
-    SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES,
-)
-
 
 class CvrpSolverDesignProvider:
     """Problem-owned guidance for the direct hypothesis-to-code runtime."""
-
-    def solver_design_api_manifest_files(self) -> Sequence[str]:
-        return SOLVER_DESIGN_API_MANIFEST_FILES
-
-    def solver_design_integration_full_files(self) -> Sequence[str]:
-        return SOLVER_DESIGN_INTEGRATION_FULL_FILES
-
-    def solver_design_integration_summary_files(self) -> Sequence[str]:
-        return SOLVER_DESIGN_INTEGRATION_SUMMARY_FILES
 
     def solver_design_target_api_guidance(self, target_file: str) -> str:
         normalized = str(target_file or "").replace("\\", "/").lstrip("/")

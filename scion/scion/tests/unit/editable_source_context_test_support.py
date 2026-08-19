@@ -94,7 +94,16 @@ def editable_code_context(raw: Mapping[str, Any]) -> dict[str, Any]:
         context.pop(legacy_key, None)
     context["editable_source_context"] = {
         "approved_target": target,
-        "sources": [{"path": path, "content": sources[path]} for path in ordered_paths],
+        "sources": [
+            {
+                "path": path,
+                "content": sources[path],
+                "roles": ["target"] if path == target else ["dependency"],
+                "visible": True,
+            }
+            for path in ordered_paths
+        ],
+        "public_tests": [],
         "target_api_guidance": api_text,
     }
     return context

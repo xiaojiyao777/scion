@@ -526,12 +526,21 @@ class ProblemSpecV1(_Strict):
     canary_case_path: str = ""
     unit_test_path: str = ""
     regression_test_path: str = ""
-    unit_test_support_paths: list[str] = Field(default_factory=list)
-    regression_test_support_paths: list[str] = Field(default_factory=list)
+    development_unit_test_path: str = ""
+    development_regression_test_path: str = ""
+    development_unit_test_support_paths: list[str] = Field(default_factory=list)
+    development_regression_test_support_paths: list[str] = Field(
+        default_factory=list
+    )
     development_workspace_paths: list[str] = Field(default_factory=list)
     development_problem_package_paths: list[str] = Field(default_factory=list)
 
-    @field_validator("unit_test_path", "regression_test_path")
+    @field_validator(
+        "unit_test_path",
+        "regression_test_path",
+        "development_unit_test_path",
+        "development_regression_test_path",
+    )
     @classmethod
     def _validate_development_test_path(cls, value: str) -> str:
         if not value:
@@ -546,8 +555,8 @@ class ProblemSpecV1(_Strict):
         return path
 
     @field_validator(
-        "unit_test_support_paths",
-        "regression_test_support_paths",
+        "development_unit_test_support_paths",
+        "development_regression_test_support_paths",
         "development_workspace_paths",
         "development_problem_package_paths",
     )

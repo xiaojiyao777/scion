@@ -11,9 +11,20 @@ def _context(target: str, scheduler: str) -> dict[str, object]:
         "editable_source_context": {
             "approved_target": "destroy_repair.py",
             "sources": [
-                {"path": "destroy_repair.py", "content": target},
-                {"path": "scheduler.py", "content": scheduler},
+                {
+                    "path": "destroy_repair.py",
+                    "content": target,
+                    "roles": ["target"],
+                    "visible": True,
+                },
+                {
+                    "path": "scheduler.py",
+                    "content": scheduler,
+                    "roles": ["caller"],
+                    "visible": True,
+                },
             ],
+            "public_tests": [],
             "target_api_guidance": "",
         }
     }
@@ -119,7 +130,14 @@ def test_parser_rejects_duplicate_editable_source_paths() -> None:
     assert isinstance(editable, dict)
     sources = editable["sources"]
     assert isinstance(sources, list)
-    sources.append({"path": "destroy_repair.py", "content": target})
+    sources.append(
+        {
+            "path": "destroy_repair.py",
+            "content": target,
+            "roles": ["target"],
+            "visible": True,
+        }
+    )
 
     with pytest.raises(ValueError, match="duplicate editable source path"):
         _parse_patch(

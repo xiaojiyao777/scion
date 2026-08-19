@@ -1,0 +1,56 @@
+{
+  "orders": [
+    {
+      "order_id": "DEV_A",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DEV_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 100000.0,
+      "lsp": "DEV_LSP",
+      "ship_method": "SEA",
+      "destination_country": "Germany",
+      "spu_list": [{"packing_type": "FULL_PLT", "quantity": 1}],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "DEV_B",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 1,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DEV_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 120000.0,
+      "lsp": "DEV_LSP",
+      "ship_method": "SEA",
+      "destination_country": "Germany",
+      "spu_list": [{"packing_type": "FULL_PLT", "quantity": 1}],
+      "locked_vehicle_id": null
+    },
+    {
+      "order_id": "DEV_C",
+      "vehicle_category": 0,
+      "vehicle_subcategory": 2,
+      "urgent": false,
+      "hazard_flag": false,
+      "hazard_quantity": 0,
+      "pickup_name": "DEV_WH",
+      "pickup_province": "Guangdong",
+      "pickup_city": "Dongguan",
+      "declaration_amount": 90000.0,
+      "lsp": "DEV_LSP",
+      "ship_method": "SEA",
+      "destination_country": "Germany",
+      "spu_list": [{"packing_type": "FULL_PLT", "quantity": 1}],
+      "locked_vehicle_id": null
+    }
+  ],
+  "amount_limits": {"Germany,SEA": 1000000.0}
+}

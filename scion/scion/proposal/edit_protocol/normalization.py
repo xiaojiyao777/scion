@@ -8,7 +8,10 @@ from typing import Any
 from scion.proposal.edit_protocol.errors import PatchEditProtocolError
 from scion.proposal.edit_protocol.exact_line_replace import apply_exact_line_replace
 from scion.proposal.edit_protocol.exact_replace import apply_exact_replace
-from scion.proposal.edit_protocol.source_discovery import source_files_from_context
+from scion.proposal.edit_protocol.source_discovery import (
+    public_test_files_from_context,
+    source_files_from_context,
+)
 from scion.proposal.schemas.patch import (
     PatchSchemaPreflightError,
     preflight_patch_exact_replace_shape,
@@ -36,6 +39,7 @@ def normalize_patch_typed_edits(
         raise PatchEditProtocolError(str(exc)) from exc
 
     source_files = source_files_from_context(context)
+    read_only_public_tests = public_test_files_from_context(context)
     slots: list[tuple[str, Mapping[str, Any]]] = [("/", normalized)]
     additional = normalized.get("additional_changes")
     if isinstance(additional, list):
@@ -57,6 +61,10 @@ def normalize_patch_typed_edits(
             )
         if path:
             seen_paths[path] = pointer
+        if path in read_only_public_tests:
+            raise PatchEditProtocolError(
+                f"{pointer}: cannot modify read-only public development test {path}"
+            )
         changes[pointer] = _normalize_change(
             raw_change,
             source_files=source_files,

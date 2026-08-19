@@ -912,8 +912,11 @@ def test_code_prompt_trace_and_parser_share_one_frozen_source_value(
             {
                 "path": "operators/bounded_receipt.py",
                 "content": source_before,
+                "roles": ["target"],
+                "visible": True,
             }
         ],
+        "public_tests": [],
         "target_api_guidance": "Keep bounded_receipt callable.",
     }
     turn = build_prompt_turn_snapshot("code", raw_context)

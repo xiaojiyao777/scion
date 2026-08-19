@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from scion.config.problem import ProblemSpec, SearchSpace
@@ -15,6 +16,7 @@ from scion.verification.development import (
     copy_development_suite_closure,
     declared_development_problem_package_paths,
     declared_development_suites,
+    validate_development_closure_boundary,
 )
 
 
@@ -22,7 +24,7 @@ def _spec(problem_root: Path) -> ProblemSpec:
     return ProblemSpec(
         name="generic_subject",
         root_dir=str(problem_root),
-        unit_test_path="tests/test_public.py",
+        development_unit_test_path="tests/test_public.py",
         operator_categories=["generic"],
         search_space=SearchSpace(
             editable=["operators/*.py"],
@@ -121,14 +123,79 @@ def test_manifest_rejects_absolute_traversal_and_symlink(tmp_path: Path) -> None
     outside.write_text("def test_outside(): pass\n", encoding="utf-8")
     (problem_root / "tests/link.py").symlink_to(outside)
     spec = _spec(problem_root)
-    object.__setattr__(spec, "unit_test_path", "tests/link.py")
+    object.__setattr__(spec, "development_unit_test_path", "tests/link.py")
 
     with pytest.raises(ValueError, match="symlink"):
         declared_development_suites(spec)
 
-    object.__setattr__(spec, "unit_test_path", "../outside.py")
+    object.__setattr__(spec, "development_unit_test_path", "../outside.py")
     with pytest.raises(ValueError):
         declared_development_suites(spec)
+
+
+def test_formal_test_paths_never_fall_back_into_development() -> None:
+    spec = ProblemSpec(
+        name="generic_subject",
+        root_dir="/does/not/need/to/exist",
+        unit_test_path="tests/formal_unit.py",
+        regression_test_path="tests/formal_regression.py",
+        operator_categories=["generic"],
+        search_space=SearchSpace(editable=["*.py"], frozen=[], import_whitelist=[]),
+    )
+
+    assert declared_development_suites(spec) == ()
+
+
+def test_development_closure_rejects_relative_protocol_case_alias(
+    tmp_path: Path,
+) -> None:
+    problem_root = tmp_path / "problem"
+    (problem_root / "tests").mkdir(parents=True)
+    (problem_root / "data").mkdir()
+    (problem_root / "tests/test_public.py").write_text(
+        "def test_public(): pass\n",
+        encoding="utf-8",
+    )
+    (problem_root / "data/private.json").write_text("{}\n", encoding="utf-8")
+    spec = _spec(problem_root)
+    object.__setattr__(
+        spec,
+        "development_unit_test_support_paths",
+        ["data/private.json"],
+    )
+    suites = declared_development_suites(spec)
+
+    with pytest.raises(ValueError, match="overlaps Protocol/canary"):
+        validate_development_closure_boundary(
+            problem_spec=spec,
+            suites=suites,
+            workspace_paths=(),
+            problem_package_paths=(),
+            split_manifest=SimpleNamespace(
+                screening=(),
+                validation=("data/private.json",),
+                frozen=(),
+                canary=(),
+                safe_data_roots=(),
+            ),
+            champion_root=str(problem_root),
+        )
+
+    with pytest.raises(ValueError, match="overlaps Protocol/canary"):
+        validate_development_closure_boundary(
+            problem_spec=spec,
+            suites=suites,
+            workspace_paths=(),
+            problem_package_paths=(),
+            split_manifest=SimpleNamespace(
+                screening=(),
+                validation=(str(problem_root / "data/private.json"),),
+                frozen=(),
+                canary=(),
+                safe_data_roots=(),
+            ),
+            champion_root=str(problem_root),
+        )
 
 
 def test_sandbox_is_fail_closed_when_bwrap_is_missing(tmp_path: Path) -> None:
@@ -225,6 +292,44 @@ def test_cvrp_declares_exact_public_development_closure() -> None:
     assert "solver_runtime/algorithm_runtime.py" in runtime_paths
     assert not any(path.startswith("controlled/") for path in runtime_paths)
     assert not any(path.startswith("formal/") for path in runtime_paths)
+
+
+@pytest.mark.parametrize("problem_tree_parent", (2, 3))
+def test_both_warehouse_specs_declare_public_development_closure(
+    problem_tree_parent: int,
+) -> None:
+    from scion.problem.bridge import load_problem_spec_v1_from_yaml
+    from scion.verification.development import declared_development_workspace_paths
+
+    package_root = (
+        Path(__file__).resolve().parents[problem_tree_parent]
+        / "problems/warehouse_delivery"
+    )
+    spec = load_problem_spec_v1_from_yaml(package_root / "problem-v1.yaml")
+    suites = declared_development_suites(spec)
+    workspace_paths = declared_development_workspace_paths(spec)
+
+    assert [suite.check_name for suite in suites] == [
+        "D3_unit_tests",
+        "D4_regression_tests",
+    ]
+    assert suites[1].test_path == "tests/test_development_solver.py"
+    assert suites[1].support_paths == ("data/instance_development.json",)
+    assert "data/instance_small_1.json" not in {
+        path for suite in suites for path in suite.declared_paths
+    }
+    assert workspace_paths == (
+        "config.py",
+        "greedy_init.py",
+        "models.py",
+        "oracle.py",
+        "pool.py",
+        "solver.py",
+        "vns.py",
+        "operators/__init__.py",
+        "operators/base.py",
+    )
+    assert declared_development_problem_package_paths(spec) == ()
 
 
 def test_cvrp_development_scratch_excludes_formal_canary(tmp_path: Path) -> None:

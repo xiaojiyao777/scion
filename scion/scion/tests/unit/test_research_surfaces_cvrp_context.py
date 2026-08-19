@@ -20,7 +20,6 @@ from scion.problem.bridge import (
     load_problem_spec_v1_from_yaml,
 )
 from scion.problems.cvrp.adapter import CvrpAdapter
-from scion.problems.cvrp.solver_design.manifest import SOLVER_DESIGN_API_MANIFEST_FILES
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.engine import _split_code_context, _split_hypothesis_context
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
@@ -157,14 +156,27 @@ def test_direct_cvrp_declared_sources_are_unique_complete_source_pairs() -> None
     assert set(source_context) == {
         "approved_target",
         "sources",
+        "public_tests",
         "target_api_guidance",
     }
     assert source_context["approved_target"] == target
     assert set(source_paths) == set(active_paths)
     assert Counter(source_paths) == Counter({path: 1 for path in active_paths})
-    assert set(SOLVER_DESIGN_API_MANIFEST_FILES).issubset(source_paths)
-    assert all(set(source) == {"path", "content"} for source in sources)
+    assert source_context["public_tests"] == []
+    assert all(
+        set(source) == {"path", "content", "roles", "visible"}
+        for source in sources
+    )
     assert all(isinstance(source["content"], str) for source in sources)
+    source_by_path = {source["path"]: source for source in sources}
+    assert source_by_path[target]["roles"] == ["target"]
+    assert source_by_path["policies/baseline_modules/config.py"]["roles"] == [
+        "dependency"
+    ]
+    assert source_by_path["policies/baseline_modules/scheduler.py"]["roles"] == [
+        "caller"
+    ]
+    assert source_by_path["policies/baseline_modules/acceptance.py"]["visible"] is False
     system_blocks, user_prompt = _split_code_context(context)
     del user_prompt
     provider_context = json.loads(system_blocks[1]["text"].split("\n", 1)[1])

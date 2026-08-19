@@ -87,6 +87,18 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
         canary_case_path=_resolve_optional_file(root_dir, spec.canary_case_path),
         unit_test_path=spec.unit_test_path,
         regression_test_path=spec.regression_test_path,
+        development_unit_test_path=spec.development_unit_test_path,
+        development_regression_test_path=spec.development_regression_test_path,
+        development_unit_test_support_paths=list(
+            spec.development_unit_test_support_paths
+        ),
+        development_regression_test_support_paths=list(
+            spec.development_regression_test_support_paths
+        ),
+        development_workspace_paths=list(spec.development_workspace_paths),
+        development_problem_package_paths=list(
+            spec.development_problem_package_paths
+        ),
         operator_categories=surface_categories,
         research_surfaces=list(spec.research_surfaces or []),
         runtime_failure_guidance=list(spec.runtime_failure_guidance or []),
@@ -100,26 +112,6 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
     object.__setattr__(legacy, "objectives", tuple(spec.objectives))
     object.__setattr__(legacy, "measurement", spec.measurement)
     object.__setattr__(legacy, "runtime_dependencies", spec.runtime_dependencies)
-    object.__setattr__(
-        legacy,
-        "unit_test_support_paths",
-        tuple(spec.unit_test_support_paths),
-    )
-    object.__setattr__(
-        legacy,
-        "regression_test_support_paths",
-        tuple(spec.regression_test_support_paths),
-    )
-    object.__setattr__(
-        legacy,
-        "development_workspace_paths",
-        tuple(spec.development_workspace_paths),
-    )
-    object.__setattr__(
-        legacy,
-        "development_problem_package_paths",
-        tuple(spec.development_problem_package_paths),
-    )
     return legacy
 
 

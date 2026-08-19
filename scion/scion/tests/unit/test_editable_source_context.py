@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
-
 from scion.core.models import ChampionState
 from scion.proposal.context_manager.code_context import (
     _build_editable_source_context,
@@ -15,15 +15,6 @@ from scion.proposal.engine import ProposalValidationError, _parse_patch
 
 
 class _SourceProvider:
-    def solver_design_api_manifest_files(self):
-        return ("solver.py", "helper.py")
-
-    def solver_design_integration_full_files(self):
-        return ("solver.py", "helper.py")
-
-    def solver_design_integration_summary_files(self):
-        return ()
-
     def solver_design_target_api_guidance(self, target_file: str):
         return f"Keep {target_file} callable."
 
@@ -44,11 +35,13 @@ def _build(
 ):
     return _build_editable_source_context(
         champion=_champion(champion_root),
-        research_surfaces=[],
+        selected_surface=None,
         source_root=str(source_root or champion_root),
         target_file="solver.py",
         target_action=action,
         provider=_SourceProvider(),
+        editable_patterns=("*.py", "operators/*.py"),
+        frozen_patterns=(),
     )
 
 
@@ -99,7 +92,7 @@ def test_current_source_tree_never_falls_back_to_champion(
         source_root=branch,
     )
 
-    assert _by_path(source_context)["helper.py"] is None
+    assert "helper.py" not in _by_path(source_context)
     assert source_files_from_context({"editable_source_context": source_context}) == {
         "solver.py": "VALUE = 2\n"
     }
@@ -135,17 +128,29 @@ def test_create_target_distinguishes_absent_existing_and_empty(
     (champion / "helper.py").write_text("HELPER = 1\n")
 
     absent = _build(champion, action="create_new")
-    assert absent["sources"][0] == {"path": "solver.py", "content": None}
+    assert absent["sources"][0] == {
+        "path": "solver.py",
+        "content": None,
+        "roles": ["target"],
+        "visible": True,
+    }
 
     (champion / "solver.py").write_text("")
     existing_empty = _build(champion, action="create_new")
-    assert existing_empty["sources"][0] == {"path": "solver.py", "content": ""}
+    assert existing_empty["sources"][0] == {
+        "path": "solver.py",
+        "content": "",
+        "roles": ["target"],
+        "visible": True,
+    }
 
     (champion / "solver.py").write_text("VALUE = 1\n")
     existing = _build(champion, action="create_new")
     assert existing["sources"][0] == {
         "path": "solver.py",
         "content": "VALUE = 1\n",
+        "roles": ["target"],
+        "visible": True,
     }
 
 
@@ -158,11 +163,130 @@ def test_modify_target_without_current_source_is_rejected(tmp_path: Path) -> Non
         _build(champion)
 
 
+def test_selected_surface_symlink_source_is_rejected(tmp_path: Path) -> None:
+    champion = tmp_path / "champion"
+    champion.mkdir()
+    (champion / "solver.py").write_text("VALUE = 1\n")
+    outside = tmp_path / "outside.py"
+    outside.write_text("SECRET = True\n")
+    (champion / "helper.py").symlink_to(outside)
+
+    with pytest.raises(ValueError, match="unreadable"):
+        _build(champion)
+
+
+def test_public_test_is_visible_but_support_is_execution_only(
+    tmp_path: Path,
+) -> None:
+    champion = tmp_path / "champion"
+    tests_root = tmp_path / "problem"
+    champion.mkdir()
+    (champion / "solver.py").write_text("VALUE = 1\n")
+    (tests_root / "tests").mkdir(parents=True)
+    (tests_root / "data").mkdir()
+    (tests_root / "tests/test_public.py").write_text(
+        "PUBLIC_TEST_SENTINEL = True\n",
+        encoding="utf-8",
+    )
+    (tests_root / "data/support.json").write_text(
+        '"EXECUTION_ONLY_SUPPORT_SENTINEL"\n',
+        encoding="utf-8",
+    )
+
+    source_context = _build_editable_source_context(
+        champion=_champion(champion),
+        selected_surface=None,
+        source_root=str(champion),
+        target_file="solver.py",
+        target_action="modify",
+        provider=_SourceProvider(),
+        editable_patterns=("*.py",),
+        frozen_patterns=(),
+        development_suites=(
+            SimpleNamespace(
+                check_name="D3_unit_tests",
+                source_root=str(tests_root),
+                test_path="tests/test_public.py",
+                support_paths=("data/support.json",),
+            ),
+        ),
+    )
+
+    assert source_context["public_tests"] == [
+        {
+            "path": "tests/test_public.py",
+            "content": "PUBLIC_TEST_SENTINEL = True\n",
+            "check_name": "D3_unit_tests",
+            "visible": True,
+        }
+    ]
+    assert "EXECUTION_ONLY_SUPPORT_SENTINEL" not in str(source_context)
+
+
+def test_hidden_peer_cannot_bind_a_direct_one_shot_patch() -> None:
+    context = _source_context("VALUE = 1\n")
+    context["editable_source_context"]["sources"].append(
+        {
+            "path": "helper.py",
+            "content": "HELPER = 1\n",
+            "roles": ["peer"],
+            "visible": False,
+        }
+    )
+
+    with pytest.raises(ProposalValidationError, match="source unavailable"):
+        _parse_patch(
+            {
+                "file_path": "helper.py",
+                "action": "modify",
+                "edit_intent": "exact_replace",
+                "old_string": "HELPER = 1",
+                "new_string": "HELPER = 2",
+                "replace_all": False,
+                "evidence_refs": [],
+            },
+            context=context,
+        )
+
+
+def test_direct_one_shot_patch_cannot_modify_public_test() -> None:
+    context = _source_context("VALUE = 1\n")
+    context["editable_source_context"]["public_tests"] = [
+        {
+            "path": "tests/test_public.py",
+            "content": "def test_public(): pass\n",
+            "check_name": "D3_unit_tests",
+            "visible": True,
+        }
+    ]
+
+    with pytest.raises(ProposalValidationError, match="read-only public"):
+        _parse_patch(
+            {
+                "file_path": "tests/test_public.py",
+                "action": "create",
+                "edit_intent": "full_file",
+                "content_after": "def test_rewritten(): pass\n",
+                "full_file_reason": "Try to replace a public test.",
+                "evidence_refs": [],
+            },
+            context=context,
+        )
+
+
 def _source_context(content: str | None):
     return {
         "editable_source_context": {
             "approved_target": "solver.py",
-            "sources": [{"path": "solver.py", "content": content}],
+            "sources": [
+                {
+                    "path": "solver.py",
+                    "content": content,
+                    "roles": ["target"],
+                    "visible": True,
+                }
+            ],
+            "public_tests": [],
             "target_api_guidance": "",
         }
     }

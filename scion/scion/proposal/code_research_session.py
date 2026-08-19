@@ -13,7 +13,11 @@ from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.models import PatchProposal
 from scion.core.paths import normalize_relative_patch_path
 from scion.core.resource_envelope import ProviderCallCapExhausted
-from scion.proposal.edit_protocol.source_discovery import source_files_from_context
+from scion.proposal.edit_protocol.source_discovery import (
+    all_source_files_from_context,
+    public_test_files_from_context,
+    research_files_from_context,
+)
 from scion.proposal.engine.code_prompts import _split_code_context
 from scion.proposal.engine.exceptions import ProposalValidationError
 from scion.proposal.engine.parsing import _parse_patch
@@ -227,11 +231,17 @@ class CodeResearchSession:
         if not isinstance(source_context, Mapping):
             raise TypeError("code research requires editable source context")
 
-        corpus = source_files_from_context(
+        editable_corpus = all_source_files_from_context(
             {"editable_source_context": source_context}
         )
-        target, source_order = _source_inventory(source_context)
-        visible_paths = {target} if target in corpus else set()
+        public_test_corpus = public_test_files_from_context(
+            {"editable_source_context": source_context}
+        )
+        corpus = research_files_from_context(
+            {"editable_source_context": source_context}
+        )
+        target, initial_paths = _source_inventory(source_context)
+        visible_paths = {path for path in initial_paths if path in corpus}
         draft_patch: PatchProposal | None = None
         draft_raw: Mapping[str, Any] | None = None
         draft_revision = 0
@@ -245,7 +255,6 @@ class CodeResearchSession:
                 approved_hypothesis=approved_hypothesis,
                 source_context=source_context,
                 corpus=corpus,
-                source_order=source_order,
                 visible_paths=visible_paths,
                 turn_index=turn_index,
                 draft_patch=draft_raw,
@@ -282,8 +291,9 @@ class CodeResearchSession:
                 _validate_patch_bounds(command.patch, self._limits)
                 _require_existing_patch_sources_visible(
                     command.patch,
-                    existing_paths=frozenset(corpus),
+                    existing_paths=frozenset(editable_corpus),
                     visible_paths=frozenset(visible_paths),
+                    public_test_paths=frozenset(public_test_corpus),
                 )
                 parsed = _parse_patch(
                     command.patch,
@@ -302,7 +312,7 @@ class CodeResearchSession:
                 result = self._run_test_patch(
                     draft_patch,
                     draft_revision=draft_revision,
-                    corpus=corpus,
+                    corpus=editable_corpus,
                 )
                 last_tested_revision = draft_revision
                 last_test_outcome = (
@@ -332,7 +342,6 @@ class CodeResearchSession:
             approved_hypothesis=approved_hypothesis,
             source_context=source_context,
             corpus=corpus,
-            source_order=source_order,
             visible_paths=visible_paths,
             turn_index=min(self._limits.max_turns, len(self._tool_results)),
             draft_patch=draft_raw,
@@ -368,7 +377,6 @@ class CodeResearchSession:
         approved_hypothesis: Mapping[str, Any],
         source_context: Mapping[str, Any],
         corpus: Mapping[str, str],
-        source_order: tuple[str, ...],
         visible_paths: set[str],
         turn_index: int,
         draft_patch: Mapping[str, Any] | None,
@@ -379,10 +387,29 @@ class CodeResearchSession:
             "approved_target": source_context["approved_target"],
             "sources": [
                 {
-                    "path": path,
-                    "content": corpus[path] if path in visible_paths else None,
+                    **dict(entry),
+                    "visible": str(entry["path"]) in visible_paths,
+                    "content": (
+                        corpus[str(entry["path"])]
+                        if str(entry["path"]) in visible_paths
+                        and str(entry["path"]) in corpus
+                        else None
+                    ),
                 }
-                for path in source_order
+                for entry in source_context["sources"]
+            ],
+            "public_tests": [
+                {
+                    **dict(entry),
+                    "visible": str(entry["path"]) in visible_paths,
+                    "content": (
+                        corpus[str(entry["path"])]
+                        if str(entry["path"]) in visible_paths
+                        and str(entry["path"]) in corpus
+                        else None
+                    ),
+                }
+                for entry in source_context["public_tests"]
             ],
             "target_api_guidance": source_context["target_api_guidance"],
         }
@@ -736,10 +763,15 @@ def _parse_final_decision(raw: Mapping[str, Any]) -> CodeResearchFinalDecision:
     )
 
 
-def _source_inventory(source_context: Mapping[str, Any]) -> tuple[str, tuple[str, ...]]:
+def _source_inventory(source_context: Mapping[str, Any]) -> tuple[str, frozenset[str]]:
     target = source_context.get("approved_target")
     sources = source_context.get("sources")
-    if not isinstance(target, str) or not isinstance(sources, list):
+    public_tests = source_context.get("public_tests")
+    if (
+        not isinstance(target, str)
+        or not isinstance(sources, list)
+        or not isinstance(public_tests, list)
+    ):
         raise TypeError("editable source context is invalid")
     paths = tuple(
         entry["path"]
@@ -748,7 +780,19 @@ def _source_inventory(source_context: Mapping[str, Any]) -> tuple[str, tuple[str
     )
     if len(paths) != len(sources) or target not in paths:
         raise ValueError("editable source context inventory is invalid")
-    return target, paths
+    public_paths = tuple(
+        entry["path"]
+        for entry in public_tests
+        if isinstance(entry, Mapping) and isinstance(entry.get("path"), str)
+    )
+    if len(public_paths) != len(public_tests) or set(paths) & set(public_paths):
+        raise ValueError("editable source context inventory is invalid")
+    initial_paths = frozenset(
+        str(entry["path"])
+        for entry in (*sources, *public_tests)
+        if isinstance(entry, Mapping) and entry.get("visible") is True
+    )
+    return target, initial_paths
 
 
 def _requested_source_path(value: str | None) -> str | None:
@@ -789,6 +833,7 @@ def _require_existing_patch_sources_visible(
     *,
     existing_paths: frozenset[str],
     visible_paths: frozenset[str],
+    public_test_paths: frozenset[str],
 ) -> None:
     additional = patch.get("additional_changes", [])
     changes = [patch, *(additional if isinstance(additional, list) else [])]
@@ -802,6 +847,10 @@ def _require_existing_patch_sources_visible(
         if path is None:
             raise ProposalValidationError(
                 "draft patch file_path must be a strict canonical relative path"
+            )
+        if path in public_test_paths:
+            raise ProposalValidationError(
+                "draft patch cannot modify a read-only public development test"
             )
         if path in existing_paths and path not in visible_paths:
             raise ProposalValidationError(

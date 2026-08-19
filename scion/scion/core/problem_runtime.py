@@ -110,4 +110,5 @@ class ProblemRuntime:
 
     def build_code_context(self, **kwargs):
         kwargs.setdefault("problem_spec", self._spec)
+        kwargs.setdefault("development_suites", self._development_suites)
         return self._ctx_manager.build_code_context(**kwargs)

@@ -18,7 +18,15 @@ def _parse(content: str, old_string: str, new_string: str):
         context={
             "editable_source_context": {
                 "approved_target": "solver.py",
-                "sources": [{"path": "solver.py", "content": content}],
+                "sources": [
+                    {
+                        "path": "solver.py",
+                        "content": content,
+                        "roles": ["target"],
+                        "visible": True,
+                    }
+                ],
+                "public_tests": [],
                 "target_api_guidance": "",
             }
         },

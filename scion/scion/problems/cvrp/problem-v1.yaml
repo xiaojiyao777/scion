@@ -89,7 +89,9 @@ runtime_failure_guidance:
 canary_case_path: "data/tiny_canary.json"
 unit_test_path: "tests/test_operators.py"
 regression_test_path: "tests/test_solver.py"
-regression_test_support_paths:
+development_unit_test_path: "tests/test_operators.py"
+development_regression_test_path: "tests/test_solver.py"
+development_regression_test_support_paths:
   - "data/tiny_development.json"
 development_problem_package_paths:
   - "__init__.py"

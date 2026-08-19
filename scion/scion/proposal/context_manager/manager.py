@@ -11,6 +11,7 @@ import os
 from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass
 from enum import Enum
+from pathlib import Path
 from typing import Any, Optional
 
 from scion.config.problem import ProblemSpec
@@ -297,6 +298,7 @@ class ContextManager:
         problem_spec: ProblemSpec,
         branch_workspace: Optional[str] = None,
         step_history: Optional[list[StepRecord]] = None,
+        development_suites: Sequence[Any] = (),
     ) -> dict[str, Any]:
         """Return the V3 round-two implementation context only."""
 
@@ -306,11 +308,20 @@ class ContextManager:
             research_surfaces,
             hypothesis.change_locus,
         )
+        if branch.current_code_hash and not (
+            branch_workspace and os.path.isdir(branch_workspace)
+        ):
+            raise ValueError(
+                "branch-current code requires its materialized branch workspace"
+            )
         source_root = (
             branch_workspace
             if branch_workspace and os.path.isdir(branch_workspace)
             else champion.code_snapshot_path
         )
+        source_root_path = Path(str(source_root or ""))
+        if not source_root_path.is_dir() or source_root_path.is_symlink():
+            raise ValueError("current source root must be a non-symlink directory")
         provider = (
             resolve_solver_design_prompt_provider(
                 problem_spec=problem_spec,
@@ -322,13 +333,25 @@ class ContextManager:
             )
             else None
         )
+        problem_id = str(
+            getattr(adapter_spec, "id", None)
+            or getattr(problem_spec, "name", "")
+            or ""
+        ).strip()
+        qualified_module_prefixes = (
+            (f"scion.problems.{problem_id}.",) if problem_id else ()
+        )
         editable_source_context = _build_editable_source_context(
             champion=champion,
-            research_surfaces=research_surfaces,
+            selected_surface=surface,
             source_root=source_root,
             target_file=hypothesis.target_file,
             target_action=hypothesis.action,
             provider=provider,
+            editable_patterns=tuple(problem_spec.search_space.editable),
+            frozen_patterns=tuple(problem_spec.search_space.frozen),
+            development_suites=development_suites,
+            qualified_module_prefixes=qualified_module_prefixes,
         )
         operator_interface_spec = _build_operator_interface_spec(
             problem_spec,

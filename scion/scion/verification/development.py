@@ -111,21 +111,23 @@ def declared_development_suites(problem_spec: Any) -> tuple[DevelopmentSuiteMani
     """Resolve the authoritative V1 host manifest without fallback discovery."""
 
     spec_v1 = getattr(problem_spec, "spec_v1", problem_spec)
-    root = Path(str(getattr(spec_v1, "root_dir", ""))).expanduser().resolve()
-    if not root.is_dir():
-        raise ValueError("development suite root is not a directory")
     declarations = (
         (
             "D3_unit_tests",
-            getattr(spec_v1, "unit_test_path", ""),
-            getattr(spec_v1, "unit_test_support_paths", ()),
+            getattr(spec_v1, "development_unit_test_path", ""),
+            getattr(spec_v1, "development_unit_test_support_paths", ()),
         ),
         (
             "D4_regression_tests",
-            getattr(spec_v1, "regression_test_path", ""),
-            getattr(spec_v1, "regression_test_support_paths", ()),
+            getattr(spec_v1, "development_regression_test_path", ""),
+            getattr(spec_v1, "development_regression_test_support_paths", ()),
         ),
     )
+    if not any(raw_test_path for _name, raw_test_path, _support in declarations):
+        return ()
+    root = Path(str(getattr(spec_v1, "root_dir", ""))).expanduser().resolve()
+    if not root.is_dir():
+        raise ValueError("development suite root is not a directory")
     suites: list[DevelopmentSuiteManifest] = []
     for check_name, raw_test_path, raw_support_paths in declarations:
         if not raw_test_path:
@@ -174,6 +176,64 @@ def declared_development_problem_package_paths(
     )
     _validate_declared_runtime_paths(spec_v1, paths, label="problem package")
     return paths
+
+
+def validate_development_closure_boundary(
+    *,
+    problem_spec: Any,
+    suites: Sequence[DevelopmentSuiteManifest],
+    workspace_paths: Sequence[str],
+    problem_package_paths: Sequence[str],
+    split_manifest: Any | None,
+    champion_root: str | None,
+) -> None:
+    """Reject any public development file that aliases a Protocol case.
+
+    Development support is ordinary host-authored material.  It cannot reuse
+    screening, validation, frozen, or canary cases, and there is no fallback
+    from the explicit development manifest to formal Verification paths.
+    """
+
+    spec_v1 = getattr(problem_spec, "spec_v1", problem_spec)
+    problem_root = Path(str(getattr(spec_v1, "root_dir", ""))).expanduser().resolve()
+    development_paths: set[Path] = set()
+    for suite in suites:
+        root = Path(suite.source_root).expanduser().resolve()
+        development_paths.update(
+            (root / path).resolve() for path in suite.declared_paths
+        )
+    development_paths.update(
+        (problem_root / _canonical_manifest_path(path)).resolve()
+        for path in (*workspace_paths, *problem_package_paths)
+    )
+
+    roots = [problem_root]
+    if champion_root:
+        roots.append(Path(champion_root).expanduser().resolve())
+    roots.extend(
+        Path(path).expanduser().resolve()
+        for path in getattr(split_manifest, "safe_data_roots", ()) or ()
+    )
+    raw_cases: list[Any] = []
+    for field_name in ("screening", "validation", "frozen", "canary"):
+        raw_cases.extend(getattr(split_manifest, field_name, ()) or ())
+    raw_canary = getattr(spec_v1, "canary_case_path", "")
+    if raw_canary:
+        raw_cases.append(raw_canary)
+
+    forbidden: set[Path] = set()
+    for raw_case in raw_cases:
+        case = Path(str(raw_case)).expanduser()
+        if case.is_absolute():
+            forbidden.add(case.resolve())
+        else:
+            forbidden.update((root / case).resolve() for root in roots)
+    overlap = sorted(str(path) for path in development_paths & forbidden)
+    if overlap:
+        raise ValueError(
+            "development closure overlaps Protocol/canary case paths: "
+            + ", ".join(overlap)
+        )
 
 
 def _validate_declared_runtime_paths(
@@ -744,5 +804,6 @@ __all__ = [
     "declared_development_workspace_paths",
     "declared_development_suites",
     "run_development_checks",
+    "validate_development_closure_boundary",
     "write_development_source_corpus",
 ]

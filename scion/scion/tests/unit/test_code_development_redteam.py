@@ -20,7 +20,7 @@ def _problem_spec(problem_root: Path) -> ProblemSpec:
     return ProblemSpec(
         name="redteam_subject",
         root_dir=str(problem_root),
-        unit_test_path="tests/test_public.py",
+        development_unit_test_path="tests/test_public.py",
         operator_categories=["generic"],
         search_space=SearchSpace(
             editable=["operators/*.py"],

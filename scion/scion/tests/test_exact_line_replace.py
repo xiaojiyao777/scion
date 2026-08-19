@@ -9,7 +9,15 @@ def _context(source: str) -> dict[str, object]:
     return {
         "editable_source_context": {
             "approved_target": "solver.py",
-            "sources": [{"path": "solver.py", "content": source}],
+            "sources": [
+                {
+                    "path": "solver.py",
+                    "content": source,
+                    "roles": ["target"],
+                    "visible": True,
+                }
+            ],
+            "public_tests": [],
             "target_api_guidance": "",
         }
     }

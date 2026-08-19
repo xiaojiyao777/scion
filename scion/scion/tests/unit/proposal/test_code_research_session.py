@@ -35,8 +35,10 @@ from scion.proposal.engine.provider_call import ProviderResponseSizeExceeded
 _TARGET_PATH = "operators/main.py"
 _SUPPORT_PATH = "operators/helper.py"
 _UNAVAILABLE_PATH = "operators/unavailable.py"
+_PUBLIC_TEST_PATH = "tests/test_public.py"
 _TARGET_SOURCE = "def improve(value):\n    return value\n"
 _SUPPORT_SOURCE = "def helper(value):\n    return value * 2\n"
+_PUBLIC_TEST_SOURCE = "def test_improve():\n    assert True\n"
 
 
 def _patch(path: str = _TARGET_PATH) -> dict[str, Any]:
@@ -53,7 +55,7 @@ def _patch(path: str = _TARGET_PATH) -> dict[str, Any]:
     }
 
 
-def _snapshot():
+def _snapshot(*, include_public_test: bool = False):
     return build_prompt_turn_snapshot(
         "code",
         {
@@ -65,10 +67,37 @@ def _snapshot():
             "editable_source_context": {
                 "approved_target": _TARGET_PATH,
                 "sources": [
-                    {"path": _TARGET_PATH, "content": _TARGET_SOURCE},
-                    {"path": _SUPPORT_PATH, "content": _SUPPORT_SOURCE},
-                    {"path": _UNAVAILABLE_PATH, "content": None},
+                    {
+                        "path": _TARGET_PATH,
+                        "content": _TARGET_SOURCE,
+                        "roles": ["target"],
+                        "visible": True,
+                    },
+                    {
+                        "path": _SUPPORT_PATH,
+                        "content": _SUPPORT_SOURCE,
+                        "roles": ["peer"],
+                        "visible": False,
+                    },
+                    {
+                        "path": _UNAVAILABLE_PATH,
+                        "content": None,
+                        "roles": ["peer"],
+                        "visible": False,
+                    },
                 ],
+                "public_tests": (
+                    [
+                        {
+                            "path": _PUBLIC_TEST_PATH,
+                            "content": _PUBLIC_TEST_SOURCE,
+                            "check_name": "D3_unit_tests",
+                            "visible": True,
+                        }
+                    ]
+                    if include_public_test
+                    else []
+                ),
                 "target_api_guidance": "Preserve the public callable.",
             },
             "operator_interface_spec": "",
@@ -174,6 +203,77 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
     assert "def helper(value)" in client.calls[1]["system_text"]
     assert "frozen_ready_patch" in client.calls[-1]["system_text"]
     assert session.provider_calls_used == 6
+
+
+def test_read_peer_then_revise_can_bind_that_exact_source() -> None:
+    session, _client = _run(
+        [
+            {"action": "read_source", "path": _SUPPORT_PATH},
+            {"action": "revise", "patch": _patch(_SUPPORT_PATH)},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+    )
+    session._test_patch = _passing_development_test
+
+    result = session.run(_snapshot())
+
+    assert result.file_path == _SUPPORT_PATH
+    assert result.code_content == _SUPPORT_SOURCE.replace(
+        "return value * 2", "return value * 3"
+    )
+
+
+def test_public_development_test_is_visible_but_never_patchable() -> None:
+    public_patch = {
+        "file_path": _PUBLIC_TEST_PATH,
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "old_string": "assert True",
+        "new_string": "assert False",
+        "replace_all": False,
+        "evidence_refs": [],
+    }
+    session, client = _run(
+        [{"action": "revise", "patch": public_patch}],
+        limits=CodeResearchLimits(max_turns=1),
+    )
+
+    with pytest.raises(ProposalValidationError, match="read-only public"):
+        session.run(_snapshot(include_public_test=True))
+
+    assert _PUBLIC_TEST_PATH in client.calls[0]["system_text"]
+    assert "test_improve" in client.calls[0]["system_text"]
+
+
+def test_development_evaluator_receives_only_editable_source_corpus() -> None:
+    observed_corpora: list[dict[str, str]] = []
+
+    def test_patch(_patch_value, _remaining, corpus):
+        observed_corpora.append(dict(corpus))
+        return _passing_development_test(None, 1.0, {})
+
+    session, _client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=3),
+    )
+    session._test_patch = test_patch
+
+    session.run(_snapshot(include_public_test=True))
+
+    assert observed_corpora == [
+        {
+            _TARGET_PATH: _TARGET_SOURCE,
+            _SUPPORT_PATH: _SUPPORT_SOURCE,
+        }
+    ]
 
 
 def test_read_cap_is_a_safe_observation_before_ready() -> None:

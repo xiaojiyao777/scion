@@ -1491,7 +1491,10 @@ def test_direct_v3_code_context_contains_source_not_research_history(
 
     assert source_context["approved_target"] == target_file
     assert len(source_paths) == len(set(source_paths))
-    assert all(set(source) == {"path", "content"} for source in sources)
+    assert all(
+        set(source) == {"path", "content", "roles", "visible"}
+        for source in sources
+    )
     assert all(isinstance(source["content"], str) for source in sources)
     assert isinstance(target["content"], str)
     assert target["content"]
@@ -1524,10 +1527,14 @@ def test_direct_v3_code_context_contains_source_not_research_history(
     assert set(provider_sources) == {
         "approved_target",
         "sources",
+        "public_tests",
         "target_api_guidance",
     }
     assert provider_sources["sources"]
-    assert all(set(item) == {"path", "content"} for item in provider_sources["sources"])
+    assert all(
+        set(item) == {"path", "content", "roles", "visible"}
+        for item in provider_sources["sources"]
+    )
     for hidden in ("digest", "owner", "provenance", "visibility", "views"):
         assert f'"{hidden}"' not in blocks[1]["text"]
 
@@ -1562,5 +1569,8 @@ def test_direct_v3_cvrp_create_context_has_empty_target_and_support_sources() ->
     assert len(source_paths) == len(set(source_paths))
     assert target["content"] is None
     assert support_sources
-    assert all(set(source) == {"path", "content"} for source in sources)
+    assert all(
+        set(source) == {"path", "content", "roles", "visible"}
+        for source in sources
+    )
     assert all(isinstance(source["content"], str) for source in support_sources)

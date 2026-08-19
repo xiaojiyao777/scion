@@ -61,6 +61,7 @@ from scion.verification.development import (
     declared_development_problem_package_paths,
     declared_development_suites,
     declared_development_workspace_paths,
+    validate_development_closure_boundary,
 )
 
 
@@ -120,6 +121,25 @@ def compose_campaign_services(
         if normalized_code_research_limits is None
         else declared_development_suites(problem_spec)
     )
+    development_workspace_paths = (
+        ()
+        if normalized_code_research_limits is None
+        else declared_development_workspace_paths(problem_spec)
+    )
+    development_problem_package_paths = (
+        ()
+        if normalized_code_research_limits is None
+        else declared_development_problem_package_paths(problem_spec)
+    )
+    if normalized_code_research_limits is not None:
+        validate_development_closure_boundary(
+            problem_spec=problem_spec,
+            suites=development_suites,
+            workspace_paths=development_workspace_paths,
+            problem_package_paths=development_problem_package_paths,
+            split_manifest=split_manifest,
+            champion_root=getattr(champion, "code_snapshot_path", None),
+        )
     owner._problem_runtime = ProblemRuntime(
         problem_spec=problem_spec,
         adapter=adapter,
@@ -181,10 +201,8 @@ def compose_campaign_services(
             materializer=owner._materializer,
             problem_spec=problem_spec,
             suites=owner._problem_runtime.development_suites,
-            workspace_paths=declared_development_workspace_paths(problem_spec),
-            problem_package_paths=declared_development_problem_package_paths(
-                problem_spec
-            ),
+            workspace_paths=development_workspace_paths,
+            problem_package_paths=development_problem_package_paths,
             limits=owner._code_research_limits,
             operator_execute_signature=operator_execute_signature,
         )

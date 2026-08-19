@@ -3,9 +3,6 @@ from __future__ import annotations
 from scion.problem.bridge import load_problem_spec_v1_from_yaml
 from scion.problem.providers import resolve_solver_design_prompt_provider
 from scion.problems.cvrp.adapter import CvrpAdapter
-from scion.problems.cvrp.solver_design.manifest import (
-    SOLVER_DESIGN_API_MANIFEST_FILES,
-)
 from scion.tests.unit.research_surface_helpers import _CVRP_ROOT
 
 
@@ -19,9 +16,9 @@ def test_cvrp_adapter_registers_direct_solver_design_guidance() -> None:
     provider = _provider()
 
     assert provider is not None
-    assert tuple(provider.solver_design_api_manifest_files()) == (
-        SOLVER_DESIGN_API_MANIFEST_FILES
-    )
+    assert not hasattr(provider, "solver_design_api_manifest_files")
+    assert not hasattr(provider, "solver_design_integration_full_files")
+    assert not hasattr(provider, "solver_design_integration_summary_files")
 
 
 def test_cvrp_hypothesis_guidance_is_open_and_algorithm_owned() -> None:

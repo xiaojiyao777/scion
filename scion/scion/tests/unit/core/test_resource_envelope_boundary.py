@@ -148,8 +148,11 @@ def _code_snapshot():
                     {
                         "path": "operators/generic.py",
                         "content": "def improve(value):\n    return value\n",
+                        "roles": ["target"],
+                        "visible": True,
                     }
                 ],
+                "public_tests": [],
                 "target_api_guidance": "",
             },
             "operator_interface_spec": "def improve(value): ...",
