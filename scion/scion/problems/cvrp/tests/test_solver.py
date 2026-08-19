@@ -30,7 +30,7 @@ def _candidate_workspace() -> Path:
 
 def test_public_algorithm_entrypoint_returns_valid_solution() -> None:
     problem_root = Path(__file__).resolve().parents[1]
-    instance_path = problem_root / "data" / "tiny_canary.json"
+    instance_path = problem_root / "data" / "tiny_development.json"
     instance = CvrpInstance.from_json(str(instance_path))
     solution, audit = load_baseline_algorithm(
         workspace_root=_candidate_workspace(),

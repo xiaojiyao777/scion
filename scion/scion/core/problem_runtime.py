@@ -31,6 +31,7 @@ class ProblemRuntime:
         split_manifest: Any | None = None,
         seed_ledger: Any | None = None,
         research_input: Any | None = None,
+        development_suites: tuple[Any, ...] = (),
     ) -> None:
         self._spec = problem_spec
         self._adapter = adapter
@@ -41,6 +42,7 @@ class ProblemRuntime:
             if research_input is not None
             else None
         )
+        self._development_suites = tuple(development_suites)
         from scion.proposal.context_manager import ContextManager
 
         self._ctx_manager = ContextManager(
@@ -71,6 +73,12 @@ class ProblemRuntime:
     @property
     def research_input(self) -> dict[str, Any] | None:
         return deepcopy(self._research_input)
+
+    @property
+    def development_suites(self) -> tuple[Any, ...]:
+        """Host-owned public development suite manifest, never prompt context."""
+
+        return self._development_suites
 
     @property
     def ctx_manager(self) -> Any:

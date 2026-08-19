@@ -21,6 +21,7 @@ from scion.core.async_weight_opt import (
 from scion.core.branch import BranchController
 from scion.core.branch_step_runner import BranchStepRunner
 from scion.core.campaign_loop import CampaignLoop
+from scion.core.code_development import CodeDevelopmentEvaluator
 from scion.core.code_research_limits import (
     normalize_code_research_limits,
     write_code_research_limits,
@@ -55,6 +56,11 @@ from scion.core.workspace_service import WorkspaceService
 from scion.lineage.registry import LineageRegistry
 from scion.proposal.engine import CreativeLayer
 from scion.runtime.workspace import WorkspaceMaterializer
+from scion.verification.development import (
+    declared_development_problem_package_paths,
+    declared_development_suites,
+    declared_development_workspace_paths,
+)
 
 
 def _mark_balance_exhausted(owner: Any) -> None:
@@ -102,23 +108,30 @@ def compose_campaign_services(
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     validate_fresh_campaign_output(campaign_dir)
+    normalized_code_research_limits = (
+        None
+        if code_research_limits is None
+        else normalize_code_research_limits(code_research_limits)
+    )
+    development_suites = (
+        ()
+        if normalized_code_research_limits is None
+        else declared_development_suites(problem_spec)
+    )
     owner._problem_runtime = ProblemRuntime(
         problem_spec=problem_spec,
         adapter=adapter,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
         research_input=research_input,
+        development_suites=development_suites,
     )
     owner._protocol_config = protocol_config
     owner._resource_envelope = normalize_resource_envelope(resource_envelope)
     owner._provider_call_budget = ProviderCallBudget(
         owner._resource_envelope.provider_call_cap
     )
-    owner._code_research_limits = (
-        None
-        if code_research_limits is None
-        else normalize_code_research_limits(code_research_limits)
-    )
+    owner._code_research_limits = normalized_code_research_limits
     owner._split_manifest = split_manifest
     owner._seed_ledger = seed_ledger
     owner._llm_client = llm_client
@@ -157,6 +170,21 @@ def compose_campaign_services(
     owner._materializer = WorkspaceMaterializer(
         campaign_dir,
         **_materializer_kwargs_from_problem_spec(problem_spec),
+    )
+    owner._code_development_evaluator = (
+        None
+        if owner._code_research_limits is None
+        else CodeDevelopmentEvaluator(
+            materializer=owner._materializer,
+            problem_spec=problem_spec,
+            suites=owner._problem_runtime.development_suites,
+            workspace_paths=declared_development_workspace_paths(problem_spec),
+            problem_package_paths=declared_development_problem_package_paths(
+                problem_spec
+            ),
+            limits=owner._code_research_limits,
+            operator_execute_signature=operator_execute_signature,
+        )
     )
     owner._experiment_protocol = experiment_protocol
     if hasattr(owner._experiment_protocol, "set_problem_adapter"):
@@ -247,6 +275,7 @@ def compose_campaign_services(
         step_history=owner._step_history,
         mark_balance_exhausted=lambda: _mark_balance_exhausted(owner),
         code_research_limits=owner._code_research_limits,
+        code_development_evaluator=owner._code_development_evaluator,
     )
     owner._research_rejection_finalizer = ResearchRejectionFinalizer(
         campaign_id=owner._campaign_id,

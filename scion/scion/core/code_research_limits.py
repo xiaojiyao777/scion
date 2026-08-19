@@ -15,7 +15,7 @@ MAX_CODE_RESEARCH_LIMITS_BYTES = 4096
 class CodeResearchLimits:
     """Finite host-enforced limits for one code proposal research session."""
 
-    max_turns: int = 4
+    max_turns: int = 6
     max_read_calls: int = 3
     max_search_calls: int = 3
     max_read_chars: int = 120_000
@@ -27,6 +27,12 @@ class CodeResearchLimits:
     max_action_bytes: int = 100_000
     max_patch_files: int = 8
     max_patch_chars: int = 200_000
+    max_test_calls: int = 2
+    max_test_suite_timeout_sec: int = 30
+    max_test_total_timeout_sec: int = 60
+    max_test_files: int = 64
+    max_test_copy_bytes: int = 5_000_000
+    max_test_result_chars: int = 20_000
     max_tool_result_chars: int = 200_000
     max_transcript_chars: int = 800_000
 
@@ -99,6 +105,47 @@ class CodeResearchLimits:
             maximum=1_000_000,
         )
         _bounded_int(
+            self.max_test_calls,
+            field="max_test_calls",
+            minimum=1,
+            maximum=8,
+        )
+        _bounded_int(
+            self.max_test_suite_timeout_sec,
+            field="max_test_suite_timeout_sec",
+            minimum=1,
+            maximum=120,
+        )
+        _bounded_int(
+            self.max_test_total_timeout_sec,
+            field="max_test_total_timeout_sec",
+            minimum=1,
+            maximum=240,
+        )
+        if self.max_test_total_timeout_sec < self.max_test_suite_timeout_sec:
+            raise ValueError(
+                "max_test_total_timeout_sec must be at least "
+                "max_test_suite_timeout_sec"
+            )
+        _bounded_int(
+            self.max_test_files,
+            field="max_test_files",
+            minimum=1,
+            maximum=128,
+        )
+        _bounded_int(
+            self.max_test_copy_bytes,
+            field="max_test_copy_bytes",
+            minimum=1_000,
+            maximum=20_000_000,
+        )
+        _bounded_int(
+            self.max_test_result_chars,
+            field="max_test_result_chars",
+            minimum=256,
+            maximum=100_000,
+        )
+        _bounded_int(
             self.max_tool_result_chars,
             field="max_tool_result_chars",
             minimum=1_000,
@@ -125,6 +172,12 @@ class CodeResearchLimits:
             "max_action_bytes": self.max_action_bytes,
             "max_patch_files": self.max_patch_files,
             "max_patch_chars": self.max_patch_chars,
+            "max_test_calls": self.max_test_calls,
+            "max_test_suite_timeout_sec": self.max_test_suite_timeout_sec,
+            "max_test_total_timeout_sec": self.max_test_total_timeout_sec,
+            "max_test_files": self.max_test_files,
+            "max_test_copy_bytes": self.max_test_copy_bytes,
+            "max_test_result_chars": self.max_test_result_chars,
             "max_tool_result_chars": self.max_tool_result_chars,
             "max_transcript_chars": self.max_transcript_chars,
         }
@@ -150,6 +203,12 @@ def normalize_code_research_limits(value: Any) -> CodeResearchLimits:
         "max_action_bytes",
         "max_patch_files",
         "max_patch_chars",
+        "max_test_calls",
+        "max_test_suite_timeout_sec",
+        "max_test_total_timeout_sec",
+        "max_test_files",
+        "max_test_copy_bytes",
+        "max_test_result_chars",
         "max_tool_result_chars",
         "max_transcript_chars",
     }

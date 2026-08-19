@@ -5,6 +5,7 @@ VerificationGate still consume the older ProblemSpec, so this module provides a
 single narrow compatibility path instead of hand-built dual specs in runners
 and tests.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -12,7 +13,6 @@ from pathlib import Path
 from typing import Sequence
 
 import yaml
-
 from scion.config.problem import (
     ParameterSearchConfig,
     ProblemSpec,
@@ -100,6 +100,26 @@ def legacy_problem_spec_from_v1(spec: ProblemSpecV1) -> ProblemSpec:
     object.__setattr__(legacy, "objectives", tuple(spec.objectives))
     object.__setattr__(legacy, "measurement", spec.measurement)
     object.__setattr__(legacy, "runtime_dependencies", spec.runtime_dependencies)
+    object.__setattr__(
+        legacy,
+        "unit_test_support_paths",
+        tuple(spec.unit_test_support_paths),
+    )
+    object.__setattr__(
+        legacy,
+        "regression_test_support_paths",
+        tuple(spec.regression_test_support_paths),
+    )
+    object.__setattr__(
+        legacy,
+        "development_workspace_paths",
+        tuple(spec.development_workspace_paths),
+    )
+    object.__setattr__(
+        legacy,
+        "development_problem_package_paths",
+        tuple(spec.development_problem_package_paths),
+    )
     return legacy
 
 

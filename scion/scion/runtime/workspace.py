@@ -119,6 +119,14 @@ class WorkspaceMaterializer:
         _make_tree_writable(candidate)
         return str(candidate)
 
+    def create_empty_candidate_workspace(self) -> str:
+        """Create an empty isolated candidate for an explicit public closure."""
+
+        return tempfile.mkdtemp(
+            prefix="candidate-development-",
+            dir=self._candidate_workspaces_dir,
+        )
+
     def cleanup_candidate_workspace(self, candidate_workspace: str) -> None:
         """Delete an isolated candidate without touching its durable base."""
 

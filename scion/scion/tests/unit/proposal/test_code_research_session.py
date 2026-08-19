@@ -127,16 +127,27 @@ def _run(
     return session, client
 
 
+def _passing_development_test(_patch, _remaining, _corpus):
+    return {
+        "outcome": "passed",
+        "checks": [{"name": "D3_unit_tests", "outcome": "passed"}],
+        "counts": {"total": 1, "passed": 1, "failed": 0},
+    }
+
+
 def test_read_search_ready_then_independent_finalize_in_order() -> None:
     session, client = _run(
         [
             {"action": "read_source", "path": _SUPPORT_PATH},
             {"action": "search_source", "path": _SUPPORT_PATH, "query": "* 2"},
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
             {"outcome": "finalize_patch"},
         ],
-        limits=CodeResearchLimits(max_turns=3),
+        limits=CodeResearchLimits(max_turns=5),
     )
+    session._test_patch = _passing_development_test
 
     result = session.run(_snapshot())
 
@@ -147,9 +158,13 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
         "code_research_turn",
         "code_research_turn",
         "code_research_turn",
+        "code_research_turn",
+        "code_research_turn",
         "code_research_finalize",
     ]
     assert [call["tool_name"] for call in client.calls] == [
+        "code_research_turn",
+        "code_research_turn",
         "code_research_turn",
         "code_research_turn",
         "code_research_turn",
@@ -158,7 +173,7 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
     assert "def helper(value)" not in client.calls[0]["system_text"]
     assert "def helper(value)" in client.calls[1]["system_text"]
     assert "frozen_ready_patch" in client.calls[-1]["system_text"]
-    assert session.provider_calls_used == 4
+    assert session.provider_calls_used == 6
 
 
 def test_read_cap_is_a_safe_observation_before_ready() -> None:
@@ -166,11 +181,14 @@ def test_read_cap_is_a_safe_observation_before_ready() -> None:
         [
             {"action": "read_source", "path": _SUPPORT_PATH},
             {"action": "read_source", "path": _TARGET_PATH},
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
             {"outcome": "finalize_patch"},
         ],
-        limits=CodeResearchLimits(max_turns=3, max_read_calls=1),
+        limits=CodeResearchLimits(max_turns=5, max_read_calls=1),
     )
+    session._test_patch = _passing_development_test
 
     session.run(_snapshot())
 
@@ -192,11 +210,14 @@ def test_read_character_and_line_totals_are_bounded(
     session, client = _run(
         [
             {"action": "read_source", "path": _SUPPORT_PATH},
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
             {"outcome": "finalize_patch"},
         ],
-        limits=CodeResearchLimits(max_turns=2, **limit_overrides),
+        limits=CodeResearchLimits(max_turns=4, **limit_overrides),
     )
+    session._test_patch = _passing_development_test
 
     session.run(_snapshot())
 
@@ -214,11 +235,14 @@ def test_search_totals_are_bounded_and_reported_as_truncated(
     session, client = _run(
         [
             {"action": "search_source", "query": "return"},
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
             {"outcome": "finalize_patch"},
         ],
-        limits=CodeResearchLimits(max_turns=2, **limit_overrides),
+        limits=CodeResearchLimits(max_turns=4, **limit_overrides),
     )
+    session._test_patch = _passing_development_test
 
     session.run(_snapshot())
 
@@ -229,11 +253,14 @@ def test_search_treats_regex_metacharacters_as_literal_text() -> None:
     session, client = _run(
         [
             {"action": "search_source", "query": "return.*value"},
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
             {"outcome": "finalize_patch"},
         ],
-        limits=CodeResearchLimits(max_turns=2),
+        limits=CodeResearchLimits(max_turns=4),
     )
+    session._test_patch = _passing_development_test
 
     session.run(_snapshot())
 
@@ -242,7 +269,7 @@ def test_search_treats_regex_metacharacters_as_literal_text() -> None:
 
 def test_cumulative_prompt_bound_blocks_before_provider_dispatch() -> None:
     session, client = _run(
-        [{"action": "ready", "patch": _patch()}],
+        [{"action": "ready"}],
         limits=CodeResearchLimits(max_turns=1, max_transcript_chars=2000),
     )
 
@@ -261,11 +288,14 @@ def test_read_rejects_noncanonical_paths_without_filesystem_access(path: str) ->
     session, client = _run(
         [
             {"action": "read_source", "path": path},
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
             {"outcome": "finalize_patch"},
         ],
-        limits=CodeResearchLimits(max_turns=2),
+        limits=CodeResearchLimits(max_turns=4),
     )
+    session._test_patch = _passing_development_test
 
     session.run(_snapshot())
 
@@ -277,10 +307,13 @@ def test_hidden_and_missing_sources_have_the_same_tool_result() -> None:
     responses = [
         {"action": "read_source", "path": _UNAVAILABLE_PATH},
         {"action": "read_source", "path": "operators/not-listed.py"},
-        {"action": "ready", "patch": _patch()},
+        {"action": "revise", "patch": _patch()},
+        {"action": "test_patch"},
+        {"action": "ready"},
         {"outcome": "finalize_patch"},
     ]
-    session, client = _run(responses, limits=CodeResearchLimits(max_turns=3))
+    session, client = _run(responses, limits=CodeResearchLimits(max_turns=5))
+    session._test_patch = _passing_development_test
 
     session.run(_snapshot())
 
@@ -293,7 +326,7 @@ def test_search_excerpt_does_not_make_an_unread_file_patchable() -> None:
     session, client = _run(
         [
             {"action": "search_source", "path": _SUPPORT_PATH, "query": "helper"},
-            {"action": "ready", "patch": _patch(_SUPPORT_PATH)},
+            {"action": "revise", "patch": _patch(_SUPPORT_PATH)},
         ],
         limits=CodeResearchLimits(max_turns=2),
     )
@@ -312,7 +345,7 @@ def test_search_excerpt_does_not_make_an_unread_file_patchable() -> None:
 )
 def test_ready_patch_rejects_every_noncanonical_file_path(path: str) -> None:
     session, client = _run(
-        [{"action": "ready", "patch": _patch(path)}],
+        [{"action": "revise", "patch": _patch(path)}],
         limits=CodeResearchLimits(max_turns=1),
     )
 
@@ -325,7 +358,7 @@ def test_ready_patch_rejects_every_noncanonical_file_path(path: str) -> None:
 def test_final_turn_can_explicitly_abandon_the_frozen_candidate() -> None:
     session, _client = _run(
         [
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
             {"outcome": "abandon", "reason": "Evidence is insufficient."},
         ],
         limits=CodeResearchLimits(max_turns=1),
@@ -354,7 +387,7 @@ def test_global_cap_rejection_does_not_increment_local_used() -> None:
     session, client = _run(
         [
             {"action": "read_source", "path": _SUPPORT_PATH},
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
         ],
         limits=CodeResearchLimits(max_turns=2),
         budget=budget,
@@ -372,7 +405,7 @@ def test_patch_file_and_character_caps_fail_before_finalize() -> None:
     too_many_files = _patch()
     too_many_files["additional_changes"] = [_patch(_SUPPORT_PATH)]
     file_session, file_client = _run(
-        [{"action": "ready", "patch": too_many_files}],
+        [{"action": "revise", "patch": too_many_files}],
         limits=CodeResearchLimits(max_turns=1, max_patch_files=1),
     )
     with pytest.raises(ProposalValidationError, match="max_patch_files"):
@@ -388,7 +421,7 @@ def test_patch_file_and_character_caps_fail_before_finalize() -> None:
         "evidence_refs": [],
     }
     char_session, char_client = _run(
-        [{"action": "ready", "patch": large_patch}],
+        [{"action": "revise", "patch": large_patch}],
         limits=CodeResearchLimits(max_turns=1, max_patch_chars=1000),
     )
     with pytest.raises(ProposalValidationError, match="max_patch_chars"):
@@ -435,11 +468,21 @@ def test_limits_json_is_strict_and_enables_by_file_presence(tmp_path: Path) -> N
 def test_enabled_limits_reach_the_normal_proposal_pipeline() -> None:
     _session, client = _run(
         [
-            {"action": "ready", "patch": _patch()},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
             {"outcome": "finalize_patch"},
         ],
-        limits=CodeResearchLimits(max_turns=1),
+        limits=CodeResearchLimits(max_turns=3),
     )
+
+    class _DevelopmentRun:
+        def provider_projection(self) -> dict[str, Any]:
+            return _passing_development_test(None, 1.0, {})
+
+    class _DevelopmentEvaluator:
+        def evaluate(self, **_kwargs: Any) -> _DevelopmentRun:
+            return _DevelopmentRun()
 
     class _Runtime:
         def build_code_context(self, **_kwargs: Any) -> dict[str, Any]:
@@ -463,7 +506,8 @@ def test_enabled_limits_reach_the_normal_proposal_pipeline() -> None:
         get_champion=lambda: champion,
         step_history=[],
         mark_balance_exhausted=lambda: None,
-        code_research_limits=CodeResearchLimits(max_turns=1),
+        code_research_limits=CodeResearchLimits(max_turns=3),
+        code_development_evaluator=_DevelopmentEvaluator(),
     )
     hypothesis = HypothesisProposal(
         hypothesis_text="Improve one bounded generic operation.",
@@ -478,5 +522,113 @@ def test_enabled_limits_reach_the_normal_proposal_pipeline() -> None:
     assert attempt.proposal.code_content.endswith("return value + 1\n")
     assert [call["request_kind"] for call in client.calls] == [
         "code_research_turn",
+        "code_research_turn",
+        "code_research_turn",
         "code_research_finalize",
     ]
+
+
+def test_failed_test_cannot_ready_until_revised_draft_passes() -> None:
+    outcomes = iter(("failed", "passed"))
+
+    def test_patch(_patch_value, _remaining, _corpus):
+        outcome = next(outcomes)
+        return {
+            "outcome": outcome,
+            "checks": [{"name": "D3_unit_tests", "outcome": outcome}],
+            "counts": {"total": 1, "passed": 0, "failed": 1},
+        }
+
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=6),
+    )
+    session._test_patch = test_patch
+
+    session.run(_snapshot())
+
+    assert "latest_draft_not_passing" in client.calls[3]["system_text"]
+
+
+def test_development_projection_drops_host_only_fields() -> None:
+    secret = "/host/private/sentinel-token"
+
+    def test_patch(_patch_value, _remaining, _corpus):
+        return {
+            "outcome": "failed",
+            "checks": [{"name": "D3_unit_tests", "outcome": "failed"}],
+            "counts": {"total": 1, "passed": 0, "failed": 1},
+            "stdout": secret,
+            "path": secret,
+        }
+
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "revise", "patch": _patch()},
+            {"outcome": "abandon", "reason": "bounded failure"},
+        ],
+        limits=CodeResearchLimits(max_turns=3),
+    )
+    session._test_patch = test_patch
+
+    session.run(_snapshot())
+
+    assert secret not in client.calls[2]["system_text"]
+
+
+def test_global_provider_cap_blocks_test_before_evaluator_dispatch() -> None:
+    calls: list[int] = []
+
+    def test_patch(_patch_value, _remaining, _corpus):
+        calls.append(1)
+        return _passing_development_test(None, 1.0, {})
+
+    session, _client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=2),
+        budget=ProviderCallBudget(1),
+    )
+    session._test_patch = test_patch
+
+    with pytest.raises(ProviderCallCapExhausted):
+        session.run(_snapshot())
+
+    assert calls == []
+    assert session.provider_calls_used == 1
+
+
+def test_test_call_cap_blocks_second_evaluator_dispatch() -> None:
+    calls: list[int] = []
+
+    def test_patch(_patch_value, _remaining, _corpus):
+        calls.append(1)
+        return _passing_development_test(None, 1.0, {})
+
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "test_patch"},
+            {"outcome": "abandon", "reason": "test cap reached"},
+        ],
+        limits=CodeResearchLimits(max_turns=3, max_test_calls=1),
+    )
+    session._test_patch = test_patch
+
+    session.run(_snapshot())
+
+    assert calls == [1]
+    assert "test_call_cap_exhausted" in client.calls[-1]["system_text"]

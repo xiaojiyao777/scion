@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -29,7 +30,13 @@ _MAX_EVIDENCE_REFS_PER_CHANGE = 32
 class CodeResearchCommand:
     """One strictly parsed source research action."""
 
-    action: Literal["read_source", "search_source", "ready"]
+    action: Literal[
+        "read_source",
+        "search_source",
+        "revise",
+        "test_patch",
+        "ready",
+    ]
     path: str | None = None
     query: str | None = None
     patch: Mapping[str, Any] | None = None
@@ -66,11 +73,31 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
         "description": (
             "Take exactly one bounded source-research action. read_source reveals "
             "one exact source from the listed source corpus; search_source performs "
-            "case-sensitive literal search only; ready freezes the one candidate "
+            "case-sensitive literal search only; revise stages a typed draft; "
+            "test_patch runs host-selected public development checks on that frozen "
+            "draft; ready (with no patch field) freezes only the latest draft whose "
+            "latest test_patch outcome passed; "
             "patch that a later independent final decision may confirm."
         ),
         "input_schema": {
             "oneOf": [
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["action", "patch"],
+                    "properties": {
+                        "action": {"type": "string", "enum": ["revise"]},
+                        "patch": patch_schema,
+                    },
+                },
+                {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["action"],
+                    "properties": {
+                        "action": {"type": "string", "enum": ["test_patch"]},
+                    },
+                },
                 {
                     "type": "object",
                     "additionalProperties": False,
@@ -105,10 +132,9 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
                 {
                     "type": "object",
                     "additionalProperties": False,
-                    "required": ["action", "patch"],
+                    "required": ["action"],
                     "properties": {
                         "action": {"type": "string", "enum": ["ready"]},
-                        "patch": patch_schema,
                     },
                 },
             ]
@@ -153,7 +179,16 @@ CODE_RESEARCH_FINALIZE_TOOL: dict[str, Any] = {
 class CodeResearchSession:
     """Run finite provider-backed source research, then one final decision."""
 
-    def __init__(self, creative: Any, limits: CodeResearchLimits) -> None:
+    def __init__(
+        self,
+        creative: Any,
+        limits: CodeResearchLimits,
+        *,
+        test_patch: Callable[
+            [PatchProposal, float, Mapping[str, str]], Mapping[str, Any]
+        ]
+        | None = None,
+    ) -> None:
         self._creative = creative
         self._limits = limits
         self._provider_calls_used = 0
@@ -165,6 +200,10 @@ class CodeResearchSession:
         self._search_matches = 0
         self._search_chars = 0
         self._search_bytes = 0
+        self._test_patch = test_patch
+        self._test_calls = 0
+        self._test_result_chars = 0
+        self._test_elapsed_sec = 0.0
         self._tool_result_chars = 0
         self._transcript_chars = 0
         self._tool_results: list[dict[str, Any]] = []
@@ -193,7 +232,13 @@ class CodeResearchSession:
         )
         target, source_order = _source_inventory(source_context)
         visible_paths = {target} if target in corpus else set()
-        ready_patch: Mapping[str, Any] | None = None
+        draft_patch: PatchProposal | None = None
+        draft_raw: Mapping[str, Any] | None = None
+        draft_revision = 0
+        last_tested_revision = 0
+        last_test_outcome: str | None = None
+        ready_patch: PatchProposal | None = None
+        ready_raw: Mapping[str, Any] | None = None
 
         for turn_index in range(self._limits.max_turns):
             context = self._provider_context(
@@ -203,6 +248,8 @@ class CodeResearchSession:
                 source_order=source_order,
                 visible_paths=visible_paths,
                 turn_index=turn_index,
+                draft_patch=draft_raw,
+                draft_revision=draft_revision,
                 ready_patch=None,
             )
             snapshot = _research_snapshot(
@@ -211,8 +258,11 @@ class CodeResearchSession:
                 user_prompt=(
                     "Choose exactly one bounded research action. Use read_source "
                     "for exact current source, search_source for case-sensitive "
-                    "literal discovery, or ready with the complete frozen typed "
-                    "patch. Do not assume filesystem or command access."
+                    "literal discovery, revise to stage a complete typed draft, "
+                    "test_patch to run the host-selected public checks on that "
+                    "draft, or ready to freeze the latest candidate. Do not assume "
+                    "filesystem or command access. ready has no patch field and is "
+                    "valid only after the latest draft passes test_patch."
                 ),
             )
             raw = self._call_provider(
@@ -227,7 +277,7 @@ class CodeResearchSession:
                 result = self._read_source(command.path, corpus, visible_paths)
             elif command.action == "search_source":
                 result = self._search_source(command.path, command.query, corpus)
-            else:
+            elif command.action == "revise":
                 assert command.patch is not None
                 _validate_patch_bounds(command.patch, self._limits)
                 _require_existing_patch_sources_visible(
@@ -235,10 +285,47 @@ class CodeResearchSession:
                     existing_paths=frozenset(corpus),
                     visible_paths=frozenset(visible_paths),
                 )
-                ready_patch = deepcopy(dict(command.patch))
-                result = {"action": "ready", "ok": True}
+                parsed = _parse_patch(
+                    command.patch,
+                    context=snapshot.structured_context,
+                )
+                draft_patch = deepcopy(parsed)
+                draft_raw = deepcopy(dict(command.patch))
+                draft_revision += 1
+                last_test_outcome = None
+                result = {
+                    "action": command.action,
+                    "ok": True,
+                    "draft_revision": draft_revision,
+                }
+            elif command.action == "test_patch":
+                result = self._run_test_patch(
+                    draft_patch,
+                    draft_revision=draft_revision,
+                    corpus=corpus,
+                )
+                last_tested_revision = draft_revision
+                last_test_outcome = (
+                    str(result.get("outcome")) if result.get("ok") else None
+                )
+            else:
+                if draft_patch is None:
+                    result = _tool_error("ready", "draft_required")
+                elif (
+                    last_tested_revision != draft_revision
+                    or last_test_outcome != "passed"
+                ):
+                    result = _tool_error("ready", "latest_draft_not_passing")
+                else:
+                    ready_patch = deepcopy(draft_patch)
+                    ready_raw = deepcopy(dict(draft_raw or {}))
+                    result = {
+                        "action": "ready",
+                        "ok": True,
+                        "draft_revision": draft_revision,
+                    }
             self._record_tool_result(result)
-            if command.action == "ready":
+            if command.action == "ready" and result.get("ok") is True:
                 break
 
         final_context = self._provider_context(
@@ -248,7 +335,9 @@ class CodeResearchSession:
             source_order=source_order,
             visible_paths=visible_paths,
             turn_index=min(self._limits.max_turns, len(self._tool_results)),
-            ready_patch=ready_patch,
+            draft_patch=draft_raw,
+            draft_revision=draft_revision,
+            ready_patch=ready_raw,
         )
         final_snapshot = _research_snapshot(
             final_context,
@@ -271,7 +360,7 @@ class CodeResearchSession:
             raise ProposalValidationError(
                 "finalize_patch requires a candidate frozen by a prior ready action"
             )
-        return _parse_patch(ready_patch, context=final_snapshot.structured_context)
+        return deepcopy(ready_patch)
 
     def _provider_context(
         self,
@@ -282,6 +371,8 @@ class CodeResearchSession:
         source_order: tuple[str, ...],
         visible_paths: set[str],
         turn_index: int,
+        draft_patch: Mapping[str, Any] | None,
+        draft_revision: int,
         ready_patch: Mapping[str, Any] | None,
     ) -> dict[str, Any]:
         visible_source_context = {
@@ -307,8 +398,21 @@ class CodeResearchSession:
             "remaining_search_calls": max(
                 0, self._limits.max_search_calls - self._search_calls
             ),
+            "remaining_test_calls": max(
+                0, self._limits.max_test_calls - self._test_calls
+            ),
+            "draft_revision": draft_revision,
+            "remaining_test_timeout_sec": max(
+                0,
+                int(
+                    self._limits.max_test_total_timeout_sec
+                    - self._test_elapsed_sec
+                ),
+            ),
             "tool_results": deepcopy(self._tool_results),
         }
+        if draft_patch is not None:
+            state["latest_draft_patch"] = deepcopy(dict(draft_patch))
         if ready_patch is not None:
             state["frozen_ready_patch"] = deepcopy(dict(ready_patch))
         return {
@@ -316,6 +420,61 @@ class CodeResearchSession:
             "editable_source_context": visible_source_context,
             "code_research": state,
         }
+
+    def _run_test_patch(
+        self,
+        patch: PatchProposal | None,
+        *,
+        draft_revision: int,
+        corpus: Mapping[str, str],
+    ) -> dict[str, Any]:
+        if patch is None:
+            return _tool_error("test_patch", "draft_required")
+        if self._test_calls >= self._limits.max_test_calls:
+            return _tool_error("test_patch", "test_call_cap_exhausted")
+        remaining_timeout = (
+            float(self._limits.max_test_total_timeout_sec) - self._test_elapsed_sec
+        )
+        if remaining_timeout <= 0:
+            return _tool_error("test_patch", "test_total_timeout_exhausted")
+        self._test_calls += 1
+        if self._test_patch is None:
+            projection: Mapping[str, Any] = {
+                "outcome": "unavailable",
+                "checks": [],
+                "counts": {"total": 0, "passed": 0, "failed": 0},
+            }
+        else:
+            started = time.monotonic()
+            try:
+                projection = self._test_patch(
+                    deepcopy(patch),
+                    remaining_timeout,
+                    deepcopy(dict(corpus)),
+                )
+            finally:
+                elapsed = max(0.0, time.monotonic() - started)
+                self._test_elapsed_sec += elapsed
+            if elapsed >= remaining_timeout and projection.get("outcome") == "passed":
+                projection = {
+                    "outcome": "timeout",
+                    "checks": [],
+                    "counts": {"total": 0, "passed": 0, "failed": 0},
+                }
+        result = _bounded_test_projection(
+            projection,
+            draft_revision=draft_revision,
+        )
+        rendered_chars = len(_bounded_json(result))
+        if (
+            self._test_result_chars + rendered_chars
+            > self._limits.max_test_result_chars
+        ):
+            raise ProposalValidationError(
+                "code research test results exceed max_test_result_chars"
+            )
+        self._test_result_chars += rendered_chars
+        return result
 
     def _call_provider(
         self,
@@ -518,7 +677,9 @@ def _research_snapshot(
     )
 
 
-def _parse_research_command(raw: Mapping[str, Any]) -> CodeResearchCommand:
+def _parse_research_command(
+    raw: Mapping[str, Any],
+) -> CodeResearchCommand:
     action = raw.get("action")
     if action == "read_source":
         _require_exact_keys(raw, {"action", "path"}, label="read_source")
@@ -539,14 +700,21 @@ def _parse_research_command(raw: Mapping[str, Any]) -> CodeResearchCommand:
                 raw.get("path"), field="path", maximum=_MAX_PATH_CHARS
             )
         return CodeResearchCommand(action="search_source", path=path, query=query)
-    if action == "ready":
-        _require_exact_keys(raw, {"action", "patch"}, label="ready")
+    if action == "revise":
+        _require_exact_keys(raw, {"action", "patch"}, label=action)
         patch = raw.get("patch")
         if not isinstance(patch, Mapping):
-            raise ProposalValidationError("ready patch must be an object")
-        return CodeResearchCommand(action="ready", patch=dict(patch))
+            raise ProposalValidationError(f"{action} patch must be an object")
+        return CodeResearchCommand(action=action, patch=dict(patch))
+    if action == "test_patch":
+        _require_exact_keys(raw, {"action"}, label="test_patch")
+        return CodeResearchCommand(action="test_patch")
+    if action == "ready":
+        _require_exact_keys(raw, {"action"}, label="ready")
+        return CodeResearchCommand(action="ready")
     raise ProposalValidationError(
-        "code research action must be read_source, search_source, or ready"
+        "code research action must be read_source, search_source, revise, "
+        "test_patch, or ready"
     )
 
 
@@ -598,11 +766,11 @@ def _validate_patch_bounds(
 ) -> None:
     additional = patch.get("additional_changes", [])
     if not isinstance(additional, list):
-        raise ProposalValidationError("ready patch additional_changes must be an array")
+        raise ProposalValidationError("draft patch additional_changes must be an array")
     if 1 + len(additional) > limits.max_patch_files:
-        raise ProposalValidationError("ready patch exceeds max_patch_files")
+        raise ProposalValidationError("draft patch exceeds max_patch_files")
     if _string_chars(patch) > limits.max_patch_chars:
-        raise ProposalValidationError("ready patch exceeds max_patch_chars")
+        raise ProposalValidationError("draft patch exceeds max_patch_chars")
     for change in (patch, *additional):
         if not isinstance(change, Mapping):
             continue
@@ -612,7 +780,7 @@ def _validate_patch_bounds(
             and len(evidence_refs) > _MAX_EVIDENCE_REFS_PER_CHANGE
         ):
             raise ProposalValidationError(
-                "ready patch evidence_refs exceeds the per-change bound"
+                "draft patch evidence_refs exceeds the per-change bound"
             )
 
 
@@ -633,11 +801,11 @@ def _require_existing_patch_sources_visible(
         path = _requested_source_path(path_value)
         if path is None:
             raise ProposalValidationError(
-                "ready patch file_path must be a strict canonical relative path"
+                "draft patch file_path must be a strict canonical relative path"
             )
         if path in existing_paths and path not in visible_paths:
             raise ProposalValidationError(
-                "ready patch references a current source that was not read"
+                "draft patch references a current source that was not read"
             )
 
 
@@ -677,6 +845,63 @@ def _string_chars(value: Any) -> int:
 
 def _tool_error(action: str, reason: str) -> dict[str, Any]:
     return {"action": action, "ok": False, "reason": reason}
+
+
+def _bounded_test_projection(
+    value: Mapping[str, Any],
+    *,
+    draft_revision: int,
+) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ProposalValidationError("development test result must be an object")
+    outcomes = {
+        "passed",
+        "failed",
+        "timeout",
+        "launch_error",
+        "preflight_rejected",
+        "unavailable",
+    }
+    check_names = {
+        "D1_syntax",
+        "D1b_undefined_names",
+        "D2_interface",
+        "D3_unit_tests",
+        "D4_regression_tests",
+    }
+    outcome = value.get("outcome")
+    raw_checks = value.get("checks")
+    if outcome not in outcomes or not isinstance(raw_checks, list):
+        raise ProposalValidationError("development test result has invalid fields")
+    if len(raw_checks) > len(check_names):
+        raise ProposalValidationError("development test result has too many checks")
+    checks: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for raw_check in raw_checks:
+        if not isinstance(raw_check, Mapping) or set(raw_check) != {
+            "name",
+            "outcome",
+        }:
+            raise ProposalValidationError("development check result is invalid")
+        name = raw_check.get("name")
+        check_outcome = raw_check.get("outcome")
+        if name not in check_names or name in seen or check_outcome not in outcomes:
+            raise ProposalValidationError("development check result is invalid")
+        checks.append({"name": name, "outcome": check_outcome})
+        seen.add(name)
+    passed = sum(check["outcome"] == "passed" for check in checks)
+    return {
+        "action": "test_patch",
+        "ok": True,
+        "draft_revision": draft_revision,
+        "outcome": outcome,
+        "checks": checks,
+        "counts": {
+            "total": len(checks),
+            "passed": passed,
+            "failed": len(checks) - passed,
+        },
+    }
 
 
 def _require_exact_keys(

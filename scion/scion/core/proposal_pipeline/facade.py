@@ -73,6 +73,7 @@ class ProposalPipeline:
     step_history: list[StepRecord]
     mark_balance_exhausted: Callable[[], None]
     code_research_limits: CodeResearchLimits | None = None
+    code_development_evaluator: Any | None = None
 
     def generate_hypothesis(
         self,
@@ -151,9 +152,27 @@ class ProposalPipeline:
             if self.code_research_limits is None:
                 patch = self.creative.generate_direct_code(prompt_snapshot)
             else:
+                test_patch = None
+                if self.code_development_evaluator is not None:
+                    selected_surface = getattr(hypothesis, "change_locus", None)
+
+                    def test_patch(
+                        patch: PatchProposal,
+                        remaining_timeout_sec: float,
+                        source_corpus: Mapping[str, str],
+                    ) -> dict[str, Any]:
+                        run = self.code_development_evaluator.evaluate(
+                            source_corpus=source_corpus,
+                            patch=patch,
+                            selected_surface=selected_surface,
+                            total_timeout_sec=remaining_timeout_sec,
+                        )
+                        return run.provider_projection()
+
                 research_result = CodeResearchSession(
                     self.creative,
                     self.code_research_limits,
+                    test_patch=test_patch,
                 ).run(prompt_snapshot)
                 if isinstance(research_result, CodeResearchAbandon):
                     return ProposalAttempt.failure(

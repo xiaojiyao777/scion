@@ -3,13 +3,13 @@
 All problem-specific configuration enters Scion through this schema.
 ``extra="forbid"`` ensures no unrecognised fields slip through.
 """
+
 from __future__ import annotations
 
 import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 from scion.core.operator_interface import parse_execute_signature
 
 
@@ -97,7 +97,9 @@ class ResearchSurfaceInterfaceSpec(_Strict):
     required_functions: list[str] = Field(default_factory=list)
     function_signatures: dict[str, list[str]] = Field(default_factory=dict)
     return_contract: str = ""
-    return_values: dict[str, ResearchSurfaceReturnValueSpec] = Field(default_factory=dict)
+    return_values: dict[str, ResearchSurfaceReturnValueSpec] = Field(
+        default_factory=dict
+    )
 
     @field_validator("function_signatures", mode="before")
     @classmethod
@@ -392,8 +394,7 @@ def _coerce_function_signature_args(name: str, value: Any) -> list[str]:
     for arg in normalized:
         if not arg.isidentifier():
             raise ValueError(
-                f"function_signatures[{name!r}] contains invalid parameter "
-                f"name '{arg}'"
+                f"function_signatures[{name!r}] contains invalid parameter name '{arg}'"
             )
     return normalized
 
@@ -525,6 +526,52 @@ class ProblemSpecV1(_Strict):
     canary_case_path: str = ""
     unit_test_path: str = ""
     regression_test_path: str = ""
+    unit_test_support_paths: list[str] = Field(default_factory=list)
+    regression_test_support_paths: list[str] = Field(default_factory=list)
+    development_workspace_paths: list[str] = Field(default_factory=list)
+    development_problem_package_paths: list[str] = Field(default_factory=list)
+
+    @field_validator("unit_test_path", "regression_test_path")
+    @classmethod
+    def _validate_development_test_path(cls, value: str) -> str:
+        if not value:
+            return value
+        from scion.core.paths import normalize_relative_patch_path
+
+        path = normalize_relative_patch_path(value)
+        if path != value or any(character in path for character in "*?["):
+            raise ValueError(
+                "development test path must be one exact canonical relative file"
+            )
+        return path
+
+    @field_validator(
+        "unit_test_support_paths",
+        "regression_test_support_paths",
+        "development_workspace_paths",
+        "development_problem_package_paths",
+    )
+    @classmethod
+    def _validate_development_support_paths(cls, value: list[str]) -> list[str]:
+        from scion.core.paths import normalize_relative_patch_path
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw_path in value:
+            path = normalize_relative_patch_path(raw_path)
+            if path != raw_path:
+                raise ValueError(
+                    "development support paths must be canonical relative paths"
+                )
+            if any(character in path for character in "*?["):
+                raise ValueError(
+                    "development support paths must be exact files, not globs"
+                )
+            if path in seen:
+                raise ValueError("development support paths must be unique")
+            normalized.append(path)
+            seen.add(path)
+        return normalized
 
     @model_validator(mode="after")
     def _validate_objectives(self) -> ProblemSpecV1:
@@ -569,13 +616,13 @@ class ProblemSpecV1(_Strict):
                     f"missing {missing_weights}"
                 )
             non_positive = [
-                m.name for m in self.objectives
+                m.name
+                for m in self.objectives
                 if m.weight is not None and m.weight <= 0
             ]
             if non_positive:
                 raise ValueError(
-                    "weighted_sum objective weights must be positive: "
-                    f"{non_positive}"
+                    f"weighted_sum objective weights must be positive: {non_positive}"
                 )
 
         module_part = self.adapter.import_path.split(":")[0]
