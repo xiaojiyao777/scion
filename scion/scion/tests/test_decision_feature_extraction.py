@@ -52,6 +52,8 @@ def test_decision_features_field_set_preserves_v3_boundary():
         "failed_pairs",
         "candidate_failed_pairs",
         "champion_failed_pairs",
+        "shared_failed_pairs",
+        "bilateral_failed_pairs",
         "pair_wins",
         "pair_losses",
         "pair_ties",
@@ -218,7 +220,9 @@ def test_extract_protocol_runtime_facts_without_free_text():
             valid_pairs=8,
             failed_pairs=2,
             candidate_failed_pairs=1,
-            champion_failed_pairs=1,
+            champion_failed_pairs=2,
+            shared_failed_pairs=1,
+            bilateral_failed_pairs=1,
         ),
     )
     assert features.runtime_ratio_median == pytest.approx(1.42)
@@ -231,7 +235,9 @@ def test_extract_protocol_runtime_facts_without_free_text():
     assert features.valid_pairs == 8
     assert features.failed_pairs == 2
     assert features.candidate_failed_pairs == 1
-    assert features.champion_failed_pairs == 1
+    assert features.champion_failed_pairs == 2
+    assert features.shared_failed_pairs == 1
+    assert features.bilateral_failed_pairs == 1
     _validate_no_free_text(features)
 
 
@@ -415,6 +421,39 @@ def test_validate_no_free_text_valid():
     )
     # Should not raise
     _validate_no_free_text(features)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    (
+        {"failed_pairs": 0, "champion_failed_pairs": 0, "shared_failed_pairs": 1},
+        {
+            "failed_pairs": 1,
+            "candidate_failed_pairs": 0,
+            "champion_failed_pairs": 1,
+            "bilateral_failed_pairs": 1,
+        },
+        {
+            "failed_pairs": 1,
+            "candidate_failed_pairs": 1,
+            "champion_failed_pairs": 1,
+            "shared_failed_pairs": 1,
+            "bilateral_failed_pairs": 1,
+        },
+    ),
+)
+def test_validate_pair_failure_attribution_counts_fail_closed(overrides):
+    features = _extract(
+        branch=_branch(),
+        hypothesis_action="modify",
+        contract=_contract(),
+        verification=_verification(),
+        canary=_canary(),
+        protocol=None,
+    )
+
+    with pytest.raises(DecisionInputGuardError):
+        _validate_no_free_text(replace(features, **overrides))
 
 
 def test_validate_unknown_failure_code_raises():

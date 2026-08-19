@@ -56,6 +56,8 @@ def _protocol(
     failed_pairs: int = 0,
     candidate_failed_pairs: int = 0,
     champion_failed_pairs: int = 0,
+    shared_failed_pairs: int = 0,
+    bilateral_failed_pairs: int = 0,
     gate_outcome: str = "pass",
     runtime_confidence: str = "high",
     runtime_evidence_status: str = "sufficient",
@@ -77,6 +79,8 @@ def _protocol(
         failed_pairs=failed_pairs,
         candidate_failed_pairs=candidate_failed_pairs,
         champion_failed_pairs=champion_failed_pairs,
+        shared_failed_pairs=shared_failed_pairs,
+        bilateral_failed_pairs=bilateral_failed_pairs,
     )
     return ProtocolResult(
         stage=stage,
@@ -179,6 +183,8 @@ def _features(
     failed_pairs: int = 0,
     candidate_failed_pairs: int = 0,
     champion_failed_pairs: int = 0,
+    shared_failed_pairs: int = 0,
+    bilateral_failed_pairs: int = 0,
     protocol_gate_outcome=None,
     protocol_reason_codes=(),
 ):
@@ -212,6 +218,8 @@ def _features(
         failed_pairs=failed_pairs,
         candidate_failed_pairs=candidate_failed_pairs,
         champion_failed_pairs=champion_failed_pairs,
+        shared_failed_pairs=shared_failed_pairs,
+        bilateral_failed_pairs=bilateral_failed_pairs,
         pair_wins=pair_wins,
         pair_losses=pair_losses,
         pair_ties=pair_ties,

@@ -220,6 +220,8 @@ class CampaignSummaryMixin:
                 "failed_pairs": stats.failed_pairs,
                 "candidate_failed_pairs": stats.candidate_failed_pairs,
                 "champion_failed_pairs": stats.champion_failed_pairs,
+                "shared_failed_pairs": stats.shared_failed_pairs,
+                "bilateral_failed_pairs": stats.bilateral_failed_pairs,
                 "gate_outcome": pr.gate_outcome,
                 "reason_codes": protocol_reason_codes,
                 "decision_reason_codes": decision_reason_codes,

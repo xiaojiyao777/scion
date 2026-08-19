@@ -35,7 +35,6 @@ from scion.protocol.gates import (
 from scion.protocol.stats import compute_eval_stats
 from scion.runtime.audit import (
     declared_surface_required_runtime_fields,
-    format_runtime_audit_failure,
     normalize_surface_name,
     runtime_audit_failure_from_result,
     runtime_audit_issue_blocks_execution,
@@ -147,6 +146,8 @@ def run_experiment(
     failed_pairs = 0
     candidate_failed_pairs = 0
     champion_failed_pairs = 0
+    shared_failed_pairs = 0
+    bilateral_failed_pairs = 0
     runtime_ratios: list[float] = []
     runtime_deltas_ms: list[float] = []
     candidate_runtime_categories: dict[str, int] = {}
@@ -290,6 +291,8 @@ def run_experiment(
                     "failed_pairs": failed_pairs,
                     "candidate_failed_pairs": candidate_failed_pairs,
                     "champion_failed_pairs": champion_failed_pairs,
+                    "shared_failed_pairs": shared_failed_pairs,
+                    "bilateral_failed_pairs": bilateral_failed_pairs,
                     "screening_evidence_status": _screening_evidence_status(
                         stage=stage,
                         complete=True,
@@ -339,9 +342,72 @@ def run_experiment(
             valid_pairs=valid_pairs, failed_pairs=failed_pairs,
             candidate_failed_pairs=candidate_failed_pairs,
             champion_failed_pairs=champion_failed_pairs,
+            shared_failed_pairs=shared_failed_pairs,
+            bilateral_failed_pairs=bilateral_failed_pairs,
             total_pairs=total_pairs,
             **payload,
         )
+
+    def _record_candidate_observation(observation: dict[str, Any]) -> None:
+        nonlocal candidate_first_runtime_failure
+        _merge_runtime_observation(
+            observation,
+            categories=candidate_runtime_categories,
+            counters=candidate_runtime_counters,
+            stop_reasons=candidate_runtime_stop_reasons,
+        )
+        if (
+            candidate_first_runtime_failure is None
+            and observation.get("first_failure") is not None
+        ):
+            candidate_first_runtime_failure = observation["first_failure"]
+
+    def _record_attributable_candidate_failure(
+        *,
+        attribution: Mapping[str, str],
+        result: RunResult,
+        audit: Mapping[str, Any] | None,
+        observation: dict[str, Any],
+    ) -> None:
+        nonlocal candidate_first_runtime_failure
+        _record_candidate_observation(observation)
+        kind = attribution.get("candidate_failure_kind")
+        if kind == "process":
+            category = _candidate_process_failure_category(result)
+            _increment_category(candidate_runtime_categories, category)
+            if candidate_first_runtime_failure is None:
+                candidate_first_runtime_failure = _runtime_failure_summary(
+                    category=category,
+                    code=str(
+                        result.error_category or result.exit_code or "process_failure"
+                    ),
+                    surface=None,
+                    component="solver_process",
+                    detail_summary=(
+                        result.stderr
+                        or result.stdout
+                        or "candidate solver process failed"
+                    ),
+                )
+        elif kind == "missing_output":
+            _increment_category(candidate_runtime_categories, "invalid_output")
+            if candidate_first_runtime_failure is None:
+                candidate_first_runtime_failure = _runtime_failure_summary(
+                    category="invalid_output",
+                    code="missing_output",
+                    surface=None,
+                    component="solver_output",
+                    detail_summary="candidate solver succeeded without parsed output",
+                )
+        elif kind == "runtime_audit" and audit is not None:
+            category = _candidate_audit_failure_category(audit)
+            if category not in (observation.get("categories") or {}):
+                _increment_category(candidate_runtime_categories, category)
+            if candidate_first_runtime_failure is None:
+                candidate_first_runtime_failure = _runtime_failure_summary_from_audit(
+                    audit,
+                    category=category,
+                )
 
     _progress(None, None)
 
@@ -426,14 +492,43 @@ def run_experiment(
                 )
                 if a_failure or b_failure:
                     failed_pairs += 1
-                    champion_failed_pairs += int(bool(a_failure))
-                    candidate_failed_pairs += int(bool(b_failure))
-                    side = "both" if a_failure and b_failure else (
-                        "champion" if a_failure else "candidate"
+                    attribution = _paired_failure_attribution(
+                        champion_result=champ_r,
+                        candidate_result=cand_r,
+                        champion_audit=audits["A"],
+                        candidate_audit=audits["B"],
                     )
+                    side = attribution["side"]
+                    if side == "candidate":
+                        candidate_failed_pairs += 1
+                    elif side == "champion":
+                        champion_failed_pairs += 1
+                    elif attribution["attribution"] == "shared":
+                        # Shared evidence invalidates the comparison/reference
+                        # without becoming a candidate-attributable failure.
+                        champion_failed_pairs += 1
+                        shared_failed_pairs += 1
+                    else:
+                        candidate_failed_pairs += 1
+                        champion_failed_pairs += 1
+                        bilateral_failed_pairs += 1
                     failure_record = {
                         "case": case, "seed": seed, "side": side,
-                        "comparison": "invalid", "error_category": a_failure or b_failure,
+                        "comparison": "invalid",
+                        "failure_attribution": attribution["attribution"],
+                        "error_category": attribution["error_category"],
+                        "champion_error_category": a_failure,
+                        "candidate_error_category": b_failure,
+                        **(
+                            {"champion_runtime_audit": audits["A"]}
+                            if audits["A"] is not None
+                            else {}
+                        ),
+                        **(
+                            {"candidate_runtime_audit": audits["B"]}
+                            if audits["B"] is not None
+                            else {}
+                        ),
                     }
                     raw_failures.append(failure_record)
                     raw_pairs.append({
@@ -473,203 +568,28 @@ def run_experiment(
                 problem_spec=protocol._problem_spec,
                 selected_surface=normalized_selected_surface,
             )
-            _merge_runtime_observation(
-                runtime_observation,
-                categories=candidate_runtime_categories,
-                counters=candidate_runtime_counters,
-                stop_reasons=candidate_runtime_stop_reasons,
-            )
-            if (
-                candidate_first_runtime_failure is None
-                and runtime_observation.get("first_failure") is not None
-            ):
-                candidate_first_runtime_failure = runtime_observation["first_failure"]
 
             champ_audit_failure = None
-            if paired_execution is None and champ_r.success and champ_r.output is not None:
+            if (
+                paired_execution is None
+                and champ_r.success
+                and champ_r.output is not None
+            ):
+                # Candidate surface contracts are not imposed on the current
+                # champion.  Generic runtime errors remain audited on both
+                # sides and are compared by their common failure signature.
                 champ_audit_issue = runtime_audit_failure_from_result(champ_r)
                 champ_audit_failure = (
                     champ_audit_issue
                     if runtime_audit_issue_blocks_execution(champ_audit_issue)
                     else None
                 )
-            if not champ_r.success:
-                failed_pairs += 1
-                champion_failed_pairs += 1
-                side = "both" if not cand_r.success else "champion"
-                paired_failure_category = (
-                    _paired_process_failure_category(champ_r, cand_r)
-                    if side == "both"
-                    else None
-                )
-                failure_record = {
-                    "case": case,
-                    "seed": seed,
-                    "side": side,
-                    "comparison": "invalid",
-                    "error_category": (
-                        paired_failure_category
-                        if paired_failure_category is not None
-                        else champ_r.error_category or "unknown"
-                    ),
-                    "champion_error_category": champ_r.error_category or "unknown",
-                    "candidate_error_category": (
-                        cand_r.error_category or "unknown" if side == "both" else None
-                    ),
-                    "exit_code": champ_r.exit_code,
-                    "champion_exit_code": champ_r.exit_code,
-                    "candidate_exit_code": cand_r.exit_code if side == "both" else None,
-                    "elapsed_ms": champ_r.elapsed_ms,
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    "stderr": champ_r.stderr or "",
-                    "candidate_stderr": (cand_r.stderr or "" if side == "both" else ""),
-                }
-                raw_failures.append(failure_record)
-                raw_pairs.append(
-                    {
-                        "case": case,
-                        "seed": seed,
-                        "comparison": "invalid",
-                        "delta": None,
-                        "decisive_metric": (
-                            paired_failure_category
-                            if paired_failure_category is not None
-                            else "champion_runtime_failure"
-                        ),
-                        "metric_deltas": {},
-                        **pair_budget_fields,
-                        **runtime_fields,
-                        "failure": failure_record,
-                    }
-                )
-                logger.info(
-                    "Pair %s seed=%d: %s solver failed category=%s elapsed_ms=%d → invalid",
-                    os.path.basename(case),
-                    seed,
-                    side,
-                    champ_r.error_category or "unknown",
-                    champ_r.elapsed_ms,
-                )
-                _progress(case, seed)
-                continue
-
-            if not cand_r.success:
-                category = _candidate_process_failure_category(cand_r)
-                _increment_category(candidate_runtime_categories, category)
-                if candidate_first_runtime_failure is None:
-                    candidate_first_runtime_failure = _runtime_failure_summary(
-                        category=category,
-                        code=str(
-                            cand_r.error_category
-                            or cand_r.exit_code
-                            or "process_failure"
-                        ),
-                        surface=None,
-                        component="solver_process",
-                        detail_summary=cand_r.stderr
-                        or cand_r.stdout
-                        or "candidate solver process failed",
-                    )
-                failed_pairs += 1
-                candidate_failed_pairs += 1
-                failure_record = {
-                    "case": case,
-                    "seed": seed,
-                    "side": "candidate",
-                    "comparison": "loss",
-                    "delta": -1.0,
-                    "error_category": cand_r.error_category or "unknown",
-                    "exit_code": cand_r.exit_code,
-                    "elapsed_ms": cand_r.elapsed_ms,
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    "stderr": cand_r.stderr or "",
-                }
-                raw_failures.append(failure_record)
-                raw_pairs.append(
-                    {
-                        "case": case,
-                        "seed": seed,
-                        "comparison": "loss",
-                        "delta": -1.0,
-                        "decisive_metric": "runtime_failure",
-                        "metric_deltas": {},
-                        **pair_budget_fields,
-                        **runtime_fields,
-                        "failure": failure_record,
-                    }
-                )
-                pairs_by_case[os.path.basename(case)].append(
-                    PairwiseCaseFeedback(
-                        case_id=os.path.basename(case),
-                        seed=seed,
-                        comparison="loss",
-                        delta=-1.0,
-                        objective_comparison=None,
-                        case_features=case_features,
-                    )
-                )
-                logger.info(
-                    "Pair %s seed=%d: candidate solver failed category=%s elapsed_ms=%d → loss",
-                    os.path.basename(case),
-                    seed,
-                    cand_r.error_category or "unknown",
-                    cand_r.elapsed_ms,
-                )
-                _progress(case, seed)
-                continue
-
-            if cand_r.output is None or champ_r.output is None:
-                candidate_output_missing = cand_r.output is None
-                champion_output_missing = champ_r.output is None
-                failed_pairs += 1
-                if candidate_output_missing:
-                    candidate_failed_pairs += 1
-                    _increment_category(candidate_runtime_categories, "invalid_output")
-                    if candidate_first_runtime_failure is None:
-                        candidate_first_runtime_failure = _runtime_failure_summary(
-                            category="invalid_output",
-                            code="missing_output",
-                            surface=None,
-                            component="solver_output",
-                            detail_summary="candidate solver succeeded without parsed output",
-                        )
-                if champion_output_missing:
-                    champion_failed_pairs += 1
-                if candidate_output_missing and champion_output_missing:
-                    failure_side = "both"
-                elif candidate_output_missing:
-                    failure_side = "candidate"
-                else:
-                    failure_side = "champion"
-                failure_record = {
-                    "case": case,
-                    "seed": seed,
-                    "side": failure_side,
-                    "comparison": "invalid",
-                    "error_category": "missing_output",
-                    **pair_budget_fields,
-                    **runtime_fields,
-                }
-                raw_failures.append(failure_record)
-                raw_pairs.append(
-                    {
-                        "case": case,
-                        "seed": seed,
-                        "comparison": "invalid",
-                        "delta": None,
-                        "decisive_metric": "missing_output",
-                        "metric_deltas": {},
-                        **pair_budget_fields,
-                        **runtime_fields,
-                        "failure": failure_record,
-                    }
-                )
-                _progress(case, seed)
-                continue
-
-            if paired_execution is None:
+            cand_audit_failure = None
+            if (
+                paired_execution is None
+                and cand_r.success
+                and cand_r.output is not None
+            ):
                 cand_audit_issue = runtime_audit_failure_from_result(
                     cand_r,
                     problem_spec=protocol._problem_spec,
@@ -680,106 +600,144 @@ def run_experiment(
                     if runtime_audit_issue_blocks_execution(cand_audit_issue)
                     else None
                 )
-            else:
-                cand_audit_failure = None
-            if cand_audit_failure is not None:
-                audit_category = _candidate_audit_failure_category(cand_audit_failure)
-                if audit_category not in (runtime_observation.get("categories") or {}):
-                    _increment_category(candidate_runtime_categories, audit_category)
-                if candidate_first_runtime_failure is None:
-                    candidate_first_runtime_failure = (
-                        _runtime_failure_summary_from_audit(
-                            cand_audit_failure,
-                            category=audit_category,
+
+            failure_attribution = _paired_failure_attribution(
+                champion_result=champ_r,
+                candidate_result=cand_r,
+                champion_audit=champ_audit_failure,
+                candidate_audit=cand_audit_failure,
+                include_infeasible=False,
+            )
+            if failure_attribution is not None:
+                failed_pairs += 1
+                attribution = failure_attribution["attribution"]
+                side = failure_attribution["side"]
+                if side == "candidate":
+                    candidate_failed_pairs += 1
+                elif side == "champion":
+                    champion_failed_pairs += 1
+                elif attribution == "shared":
+                    champion_failed_pairs += 1
+                    shared_failed_pairs += 1
+                else:
+                    candidate_failed_pairs += 1
+                    champion_failed_pairs += 1
+                    bilateral_failed_pairs += 1
+
+                if attribution in ("candidate", "bilateral"):
+                    _record_attributable_candidate_failure(
+                        attribution=failure_attribution,
+                        result=cand_r,
+                        audit=cand_audit_failure,
+                        observation=runtime_observation,
+                    )
+                elif attribution == "champion":
+                    _record_candidate_observation(runtime_observation)
+
+                candidate_loss = (
+                    side == "candidate"
+                    and failure_attribution.get("candidate_failure_kind")
+                    in ("process", "runtime_audit")
+                )
+                comparison = "loss" if candidate_loss else "invalid"
+                delta = -1.0 if candidate_loss else None
+                failure_record = {
+                    "case": case,
+                    "seed": seed,
+                    "side": side,
+                    "failure_attribution": attribution,
+                    "comparison": comparison,
+                    "delta": delta,
+                    "error_category": failure_attribution["error_category"],
+                    "champion_error_category": failure_attribution.get(
+                        "champion_error_category"
+                    ),
+                    "candidate_error_category": failure_attribution.get(
+                        "candidate_error_category"
+                    ),
+                    "exit_code": (
+                        cand_r.exit_code if side == "candidate" else champ_r.exit_code
+                    ),
+                    "elapsed_ms": (
+                        cand_r.elapsed_ms if side == "candidate" else champ_r.elapsed_ms
+                    ),
+                    "champion_exit_code": champ_r.exit_code,
+                    "candidate_exit_code": cand_r.exit_code,
+                    **pair_budget_fields,
+                    **runtime_fields,
+                    "champion_stderr": champ_r.stderr or "",
+                    "candidate_stderr": cand_r.stderr or "",
+                    "stderr": (
+                        cand_r.stderr or ""
+                        if side == "candidate"
+                        else champ_r.stderr or ""
+                    ),
+                    **(
+                        {"runtime_audit": cand_audit_failure}
+                        if side == "candidate" and cand_audit_failure is not None
+                        else {}
+                    ),
+                    **(
+                        {"runtime_audit": champ_audit_failure}
+                        if side == "champion" and champ_audit_failure is not None
+                        else {}
+                    ),
+                    **(
+                        {"champion_runtime_audit": champ_audit_failure}
+                        if champ_audit_failure is not None and side == "both"
+                        else {}
+                    ),
+                    **(
+                        {"candidate_runtime_audit": cand_audit_failure}
+                        if cand_audit_failure is not None and side == "both"
+                        else {}
+                    ),
+                }
+                raw_failures.append(failure_record)
+                decisive_metric = failure_attribution["error_category"]
+                if candidate_loss and (
+                    failure_attribution.get("candidate_failure_kind") == "process"
+                ):
+                    decisive_metric = "runtime_failure"
+                elif side == "champion":
+                    decisive_metric = f"champion_{decisive_metric}"
+                raw_pairs.append(
+                    {
+                        "case": case,
+                        "seed": seed,
+                        "comparison": comparison,
+                        "delta": delta,
+                        "decisive_metric": decisive_metric,
+                        "metric_deltas": {},
+                        **pair_budget_fields,
+                        **runtime_fields,
+                        "failure": failure_record,
+                    }
+                )
+                if candidate_loss:
+                    pairs_by_case[os.path.basename(case)].append(
+                        PairwiseCaseFeedback(
+                            case_id=os.path.basename(case),
+                            seed=seed,
+                            comparison="loss",
+                            delta=-1.0,
+                            objective_comparison=None,
+                            case_features=case_features,
                         )
                     )
-                failed_pairs += 1
-                candidate_failed_pairs += 1
-                failure_record = {
-                    "case": case,
-                    "seed": seed,
-                    "side": "candidate",
-                    "comparison": "loss",
-                    "delta": -1.0,
-                    "error_category": cand_audit_failure["error_category"],
-                    "exit_code": cand_r.exit_code,
-                    "elapsed_ms": cand_r.elapsed_ms,
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    "runtime_audit": cand_audit_failure,
-                }
-                raw_failures.append(failure_record)
-                raw_pairs.append(
-                    {
-                        "case": case,
-                        "seed": seed,
-                        "comparison": "loss",
-                        "delta": -1.0,
-                        "decisive_metric": cand_audit_failure["error_category"],
-                        "metric_deltas": {},
-                        **pair_budget_fields,
-                        **runtime_fields,
-                        "failure": failure_record,
-                    }
-                )
-                pairs_by_case[os.path.basename(case)].append(
-                    PairwiseCaseFeedback(
-                        case_id=os.path.basename(case),
-                        seed=seed,
-                        comparison="loss",
-                        delta=-1.0,
-                        objective_comparison=None,
-                        case_features=case_features,
-                    )
-                )
                 logger.info(
-                    "Pair %s seed=%d: candidate runtime audit failed: %s",
+                    "Pair %s seed=%d: execution failure side=%s "
+                    "attribution=%s category=%s",
                     os.path.basename(case),
                     seed,
-                    format_runtime_audit_failure(cand_audit_failure),
+                    side,
+                    attribution,
+                    failure_attribution["error_category"],
                 )
                 _progress(case, seed)
                 continue
 
-            if champ_audit_failure is not None:
-                failed_pairs += 1
-                champion_failed_pairs += 1
-                failure_record = {
-                    "case": case,
-                    "seed": seed,
-                    "side": "champion",
-                    "comparison": "invalid",
-                    "delta": None,
-                    "error_category": champ_audit_failure["error_category"],
-                    "exit_code": champ_r.exit_code,
-                    "elapsed_ms": champ_r.elapsed_ms,
-                    **pair_budget_fields,
-                    **runtime_fields,
-                    "runtime_audit": champ_audit_failure,
-                }
-                raw_failures.append(failure_record)
-                raw_pairs.append(
-                    {
-                        "case": case,
-                        "seed": seed,
-                        "comparison": "invalid",
-                        "delta": None,
-                        "decisive_metric": f"champion_{champ_audit_failure['error_category']}",
-                        "metric_deltas": {},
-                        **pair_budget_fields,
-                        **runtime_fields,
-                        "failure": failure_record,
-                    }
-                )
-                logger.info(
-                    "Pair %s seed=%d: champion runtime audit failed: %s",
-                    os.path.basename(case),
-                    seed,
-                    format_runtime_audit_failure(champ_audit_failure),
-                )
-                _progress(case, seed)
-                continue
-
+            _record_candidate_observation(runtime_observation)
             cmp, breakdown = protocol._compare_objectives(
                 cand_r.output.objective,
                 champ_r.output.objective,
@@ -926,6 +884,8 @@ def run_experiment(
         failed_pairs=failed_pairs,
         candidate_failed_pairs=candidate_failed_pairs,
         champion_failed_pairs=champion_failed_pairs,
+        shared_failed_pairs=shared_failed_pairs,
+        bilateral_failed_pairs=bilateral_failed_pairs,
         pair_wins=pair_wins,
         pair_losses=pair_losses,
         pair_ties=pair_ties,
@@ -944,7 +904,7 @@ def run_experiment(
             ExperimentStage.FROZEN,
         ):
             reason_codes = ["INCOMPLETE_EVIDENCE"]
-            if candidate_failed_pairs:
+            if candidate_failed_pairs > bilateral_failed_pairs:
                 reason_codes.append("CANDIDATE_RUNTIME_FAILURE")
             if champion_failed_pairs:
                 reason_codes.append("CHAMPION_RUNTIME_FAILURE")
@@ -993,6 +953,8 @@ def run_experiment(
         failed_pairs=failed_pairs,
         candidate_failed_pairs=candidate_failed_pairs,
         champion_failed_pairs=champion_failed_pairs,
+        shared_failed_pairs=shared_failed_pairs,
+        bilateral_failed_pairs=bilateral_failed_pairs,
         total_pairs=total_pairs,
         selected_surface=normalized_selected_surface,
         raw_metrics_ref=raw_ref,
@@ -1046,6 +1008,8 @@ def run_experiment(
             f"objective_semantics={objective_semantics} "
             f"failed_pairs={failed_pairs} candidate_failures={candidate_failed_pairs} "
             f"champion_failures={champion_failed_pairs} "
+            f"shared_failures={shared_failed_pairs} "
+            f"bilateral_failures={bilateral_failed_pairs} "
             f"screening_evidence_status={_screening_evidence_status(stage=stage, complete=True, champion_failed_pairs=champion_failed_pairs)} "
             f"reason_codes={','.join(gate.reason_codes) or 'none'} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
@@ -1061,7 +1025,10 @@ def run_experiment(
             f"metric={stats.statistical_metric or 'scalar'} "
             f"objective_semantics={objective_semantics} "
             f"valid_pairs={valid_pairs}/{total_pairs} failed_pairs={failed_pairs} "
-            f"candidate_failures={candidate_failed_pairs} champion_failures={champion_failed_pairs} "
+            f"candidate_failures={candidate_failed_pairs} "
+            f"champion_failures={champion_failed_pairs} "
+            f"shared_failures={shared_failed_pairs} "
+            f"bilateral_failures={bilateral_failed_pairs} "
             f"{runtime_summary}{runtime_failure_summary}{runtime_attempt_summary}"
             f"{phase_telemetry_summary}"
             f"{runtime_budget_summary}"
@@ -1179,14 +1146,182 @@ def _validate_paired_execution(spec: PairedExecutionSpec,
             raise ValueError(f"selected {name} ordinals must be unique")
 
 
-def _paired_failure(result: RunResult, audit: Mapping[str, Any] | None) -> str | None:
+def _paired_failure(
+    result: RunResult,
+    audit: Mapping[str, Any] | None,
+    *,
+    include_infeasible: bool = True,
+) -> str | None:
     if not result.success:
         return result.error_category or "process_failure"
     if result.output is None:
         return "missing_output"
     if audit:
         return str(audit.get("error_category") or "runtime_audit_failure")
-    return None if result.output.feasible else "infeasible"
+    if include_infeasible and not result.output.feasible:
+        return "infeasible"
+    return None
+
+
+def _failure_kind(
+    result: RunResult,
+    audit: Mapping[str, Any] | None,
+    *,
+    include_infeasible: bool,
+) -> str | None:
+    if not result.success:
+        return "process"
+    if result.output is None:
+        return "missing_output"
+    if audit:
+        return "runtime_audit"
+    if include_infeasible and not result.output.feasible:
+        return "infeasible"
+    return None
+
+
+def _paired_failure_attribution(
+    *,
+    champion_result: RunResult,
+    candidate_result: RunResult,
+    champion_audit: Mapping[str, Any] | None,
+    candidate_audit: Mapping[str, Any] | None,
+    include_infeasible: bool = True,
+) -> dict[str, str] | None:
+    """Classify pair-local execution failures without losing either side."""
+
+    champion_failure = _paired_failure(
+        champion_result,
+        champion_audit,
+        include_infeasible=include_infeasible,
+    )
+    candidate_failure = _paired_failure(
+        candidate_result,
+        candidate_audit,
+        include_infeasible=include_infeasible,
+    )
+    champion_kind = _failure_kind(
+        champion_result,
+        champion_audit,
+        include_infeasible=include_infeasible,
+    )
+    candidate_kind = _failure_kind(
+        candidate_result,
+        candidate_audit,
+        include_infeasible=include_infeasible,
+    )
+    if champion_failure is None and candidate_failure is None:
+        return None
+    if champion_failure is None:
+        return {
+            "side": "candidate",
+            "attribution": "candidate",
+            "error_category": str(candidate_failure or "execution_failure"),
+            "candidate_error_category": str(candidate_failure or "execution_failure"),
+            "candidate_failure_kind": str(candidate_kind or "execution"),
+        }
+    if candidate_failure is None:
+        return {
+            "side": "champion",
+            "attribution": "champion",
+            "error_category": str(champion_failure),
+            "champion_error_category": str(champion_failure),
+            "champion_failure_kind": str(champion_kind or "execution"),
+        }
+
+    shared = _paired_failures_equivalent(
+        champion_result=champion_result,
+        candidate_result=candidate_result,
+        champion_audit=champion_audit,
+        candidate_audit=candidate_audit,
+    )
+    if champion_kind == candidate_kind == "runtime_audit":
+        category = (
+            "shared_runtime_audit_failure"
+            if shared
+            else "bilateral_runtime_audit_failure"
+        )
+    elif champion_kind == candidate_kind == "process":
+        category = _paired_process_failure_category(
+            champion_result,
+            candidate_result,
+        )
+    elif champion_kind == candidate_kind:
+        category = f"shared_{champion_kind}" if shared else f"bilateral_{champion_kind}"
+    else:
+        category = (
+            "shared_execution_failure" if shared else "bilateral_execution_failure"
+        )
+    return {
+        "side": "both",
+        "attribution": "shared" if shared else "bilateral",
+        "error_category": category,
+        "champion_error_category": str(champion_failure),
+        "candidate_error_category": str(candidate_failure),
+        "champion_failure_kind": str(champion_kind or "execution"),
+        "candidate_failure_kind": str(candidate_kind or "execution"),
+    }
+
+
+def _paired_failures_equivalent(
+    *,
+    champion_result: RunResult,
+    candidate_result: RunResult,
+    champion_audit: Mapping[str, Any] | None,
+    candidate_audit: Mapping[str, Any] | None,
+) -> bool:
+    if champion_audit is not None or candidate_audit is not None:
+        return _runtime_audit_failures_equivalent(
+            champion_audit,
+            candidate_audit,
+        )
+    if not champion_result.success or not candidate_result.success:
+        return _process_failures_equivalent(champion_result, candidate_result)
+    if champion_result.output is None or candidate_result.output is None:
+        return champion_result.output is None and candidate_result.output is None
+    return (
+        bool(champion_result.output.feasible)
+        == bool(candidate_result.output.feasible)
+    )
+
+
+def _runtime_audit_failures_equivalent(
+    champion_failure: Mapping[str, Any] | None,
+    candidate_failure: Mapping[str, Any] | None,
+) -> bool:
+    if champion_failure is None or candidate_failure is None:
+        return False
+    # Candidate surface-aware audit and generic champion audit describe the
+    # same runtime incident with two structural extras.  Remove only those
+    # view-specific fields; every substantive diagnostic must still match.
+    view_specific_fields = frozenset(
+        {"selected_surface", "runtime_error_counts"}
+    )
+    champion_signature = {
+        field: value
+        for field, value in champion_failure.items()
+        if field not in view_specific_fields
+    }
+    candidate_signature = {
+        field: value
+        for field, value in candidate_failure.items()
+        if field not in view_specific_fields
+    }
+    return bool(champion_signature) and champion_signature == candidate_signature
+
+
+def _process_failures_equivalent(
+    champion_result: RunResult,
+    candidate_result: RunResult,
+) -> bool:
+    if champion_result.success or candidate_result.success:
+        return False
+    return (
+        champion_result.error_category == candidate_result.error_category
+        and champion_result.exit_code == candidate_result.exit_code
+        and (champion_result.stderr or "") == (candidate_result.stderr or "")
+        and (champion_result.stdout or "") == (candidate_result.stdout or "")
+    )
 
 
 def _paired_raw(spec, case_ordinal, seed_ordinal, order, actual, results,
@@ -1253,6 +1388,8 @@ def _paired_process_failure_category(
 ) -> str:
     """Describe two failed, independently executed solver processes."""
 
+    if not _process_failures_equivalent(champion_result, candidate_result):
+        return "bilateral_process_failure"
     if (
         champion_result.error_category == "timeout"
         and candidate_result.error_category == "timeout"

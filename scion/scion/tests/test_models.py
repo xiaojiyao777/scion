@@ -95,6 +95,8 @@ def test_decision_features_no_free_text_guard():
         "failed_pairs": int,
         "candidate_failed_pairs": int,
         "champion_failed_pairs": int,
+        "shared_failed_pairs": int,
+        "bilateral_failed_pairs": int,
     }
     
     # 检查所有 DecisionFeatures 的字段是否都在允许列表中

@@ -13,6 +13,7 @@ from scion.core.models import (
     Decision,
     VerificationResult,
 )
+from scion.protocol.experiment import stages
 from scion.protocol.experiment.stages import _screening_evidence_status
 
 from .protocol_test_support import *  # noqa: F401,F403
@@ -317,6 +318,96 @@ def test_candidate_required_baseline_error_counts_as_screening_failure(tmp_path)
     assert raw["pairs"][0]["decisive_metric"] == "baseline_runtime_error"
 
 
+@pytest.mark.parametrize(
+    ("mode", "candidate_failures", "champion_failures", "shared", "bilateral"),
+    (
+        ("candidate", 4, 0, 0, 0),
+        ("champion", 0, 4, 0, 0),
+        ("shared", 0, 4, 4, 0),
+        ("bilateral", 4, 4, 0, 4),
+    ),
+)
+def test_normal_runtime_audit_failure_attribution_is_pair_local(
+    tmp_path,
+    monkeypatch,
+    mode,
+    candidate_failures,
+    champion_failures,
+    shared,
+    bilateral,
+):
+    champion_issue = {
+        "error_category": "solver_runtime_error",
+        "runtime_error_field": "solver_errors",
+        "runtime_error_count": 1,
+        "detail": "solver runtime audit reported solver_errors=1",
+    }
+    candidate_issue = dict(champion_issue)
+    if mode == "shared":
+        candidate_issue = {
+            **candidate_issue,
+            "selected_surface": "solver_design",
+            "runtime_error_counts": {"solver_errors": 1},
+        }
+    elif mode == "bilateral":
+        candidate_issue = {
+            **candidate_issue,
+            "runtime_error_field": "candidate_errors",
+            "detail": "solver runtime audit reported candidate_errors=1",
+        }
+
+    def audit(result, **_kwargs):
+        is_candidate = result.output.objective["subcategory_splits"] == 1
+        if mode == "candidate":
+            return candidate_issue if is_candidate else None
+        if mode == "champion":
+            return None if is_candidate else champion_issue
+        return candidate_issue if is_candidate else champion_issue
+
+    monkeypatch.setattr(stages, "runtime_audit_failure_from_result", audit)
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 1000),
+        _make_run_result(1, 800),
+    ] * 4
+    result = _make_protocol(runner, tmp_path).run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert result.stats.failed_pairs == 4
+    assert result.stats.candidate_failed_pairs == candidate_failures
+    assert result.stats.champion_failed_pairs == champion_failures
+    assert result.stats.shared_failed_pairs == shared
+    assert result.stats.bilateral_failed_pairs == bilateral
+    decision = _decision_for_screening_result(result)
+    if mode == "candidate":
+        assert decision.decision is Decision.ABANDON
+        assert decision.reason_codes == ("CANDIDATE_RUNTIME_FAILURE",)
+    else:
+        assert decision.decision is Decision.CONTINUE_EXPLORE
+        assert decision.reason_codes == ("SCREENING_PARTIAL_CHAMPION_EVIDENCE",)
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["shared_failed_pairs"] == shared
+    assert raw["bilateral_failed_pairs"] == bilateral
+    first_failure = raw["failures"][0]
+    expected_side = mode if mode in ("candidate", "champion") else "both"
+    assert first_failure["side"] == expected_side
+    assert first_failure["failure_attribution"] == mode
+    if mode in ("shared", "bilateral"):
+        assert first_failure["champion_runtime_audit"] == champion_issue
+        assert first_failure["candidate_runtime_audit"] == candidate_issue
+        assert raw["pairs"][0]["comparison"] == "invalid"
+        assert result.pair_feedback == ()
+    else:
+        assert raw["pairs"][0]["comparison"] == (
+            "loss" if mode == "candidate" else "invalid"
+        )
+
+
 def test_missing_output_records_both_elapsed_values(tmp_path):
     runner = MagicMock()
     runner.run_solver.side_effect = [
@@ -429,11 +520,13 @@ def test_both_missing_outputs_count_one_failed_pair_and_both_sides(tmp_path):
 
     assert result.stats.valid_pairs == 3
     assert result.stats.failed_pairs == 1
-    assert result.stats.candidate_failed_pairs == 1
+    assert result.stats.candidate_failed_pairs == 0
     assert result.stats.champion_failed_pairs == 1
+    assert result.stats.shared_failed_pairs == 1
+    assert result.stats.bilateral_failed_pairs == 0
     decision = _decision_for_screening_result(result)
-    assert decision.decision is Decision.ABANDON
-    assert decision.reason_codes == ("CANDIDATE_RUNTIME_FAILURE",)
+    assert decision.decision is Decision.CONTINUE_EXPLORE
+    assert decision.reason_codes == ("SCREENING_PARTIAL_CHAMPION_EVIDENCE",)
 
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["valid_pairs"] == result.stats.valid_pairs
@@ -442,6 +535,7 @@ def test_both_missing_outputs_count_one_failed_pair_and_both_sides(tmp_path):
     assert raw["champion_failed_pairs"] == result.stats.champion_failed_pairs
     assert raw["screening_evidence_status"] == "partial_champion_evidence"
     assert raw["failures"][-1]["side"] == "both"
+    assert raw["failures"][-1]["failure_attribution"] == "shared"
 
 
 def test_validation_fails_when_candidate_timeout_makes_evidence_incomplete(tmp_path):
@@ -470,6 +564,48 @@ def test_validation_fails_when_candidate_timeout_makes_evidence_incomplete(tmp_p
     assert raw["attempted_pairs"] == 4
     assert raw["valid_pairs"] == 3
     assert raw["failed_pairs"] == 1
+
+
+def test_validation_bilateral_audit_failure_is_not_candidate_only(
+    tmp_path,
+    monkeypatch,
+):
+    champion_issue = {
+        "error_category": "solver_runtime_error",
+        "runtime_error_field": "champion_errors",
+        "detail": "solver runtime audit reported champion_errors=1",
+    }
+    candidate_issue = {
+        "error_category": "solver_runtime_error",
+        "runtime_error_field": "candidate_errors",
+        "detail": "solver runtime audit reported candidate_errors=1",
+    }
+    audit = MagicMock(
+        side_effect=[None, None] * 3 + [champion_issue, candidate_issue]
+    )
+    monkeypatch.setattr(stages, "runtime_audit_failure_from_result", audit)
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 1000),
+        _make_run_result(1, 800),
+    ] * 4
+
+    result = _make_protocol(runner, tmp_path).run_experiment(
+        ExperimentStage.VALIDATION,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert result.stats.valid_pairs == 3
+    assert result.stats.failed_pairs == 1
+    assert result.stats.candidate_failed_pairs == 1
+    assert result.stats.champion_failed_pairs == 1
+    assert result.stats.bilateral_failed_pairs == 1
+    assert result.reason_codes == (
+        "INCOMPLETE_EVIDENCE",
+        "CHAMPION_RUNTIME_FAILURE",
+    )
 
 
 def test_protocol_result_exposes_bounded_candidate_runtime_categories(tmp_path):

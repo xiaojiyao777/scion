@@ -280,6 +280,8 @@ def _supports(formal: Mapping[str, Any]) -> bool:
                 "failed_pairs",
                 "candidate_failed_pairs",
                 "champion_failed_pairs",
+                "shared_failed_pairs",
+                "bilateral_failed_pairs",
             )
         )
     )

@@ -177,6 +177,12 @@ class EvalStats:
     failed_pairs: int = 0
     candidate_failed_pairs: int = 0
     champion_failed_pairs: int = 0
+    # Pair-local attribution prevents a dual-side execution incident from
+    # being flattened into a candidate-only hard failure.  Shared failures
+    # have equivalent evidence on both sides; bilateral failures have
+    # distinct evidence on both sides.
+    shared_failed_pairs: int = 0
+    bilateral_failed_pairs: int = 0
     pair_wins: int = 0
     pair_losses: int = 0
     pair_ties: int = 0
@@ -321,6 +327,8 @@ class DecisionFeatures:
     failed_pairs: int = 0
     candidate_failed_pairs: int = 0
     champion_failed_pairs: int = 0
+    shared_failed_pairs: int = 0
+    bilateral_failed_pairs: int = 0
     pair_wins: int = 0
     pair_losses: int = 0
     pair_ties: int = 0

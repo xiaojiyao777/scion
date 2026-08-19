@@ -140,6 +140,8 @@ class SafeFeatureExtractor:
         failed_pairs = 0
         candidate_failed_pairs = 0
         champion_failed_pairs = 0
+        shared_failed_pairs = 0
+        bilateral_failed_pairs = 0
         pair_wins = 0
         pair_losses = 0
         pair_ties = 0
@@ -183,6 +185,12 @@ class SafeFeatureExtractor:
             failed_pairs = stats.failed_pairs
             candidate_failed_pairs = stats.candidate_failed_pairs
             champion_failed_pairs = stats.champion_failed_pairs
+            shared_failed_pairs = int(
+                getattr(stats, "shared_failed_pairs", 0) or 0
+            )
+            bilateral_failed_pairs = int(
+                getattr(stats, "bilateral_failed_pairs", 0) or 0
+            )
             pair_wins = int(getattr(stats, "pair_wins", 0) or 0)
             pair_losses = int(getattr(stats, "pair_losses", 0) or 0)
             pair_ties = int(getattr(stats, "pair_ties", 0) or 0)
@@ -247,6 +255,8 @@ class SafeFeatureExtractor:
             failed_pairs=failed_pairs,
             candidate_failed_pairs=candidate_failed_pairs,
             champion_failed_pairs=champion_failed_pairs,
+            shared_failed_pairs=shared_failed_pairs,
+            bilateral_failed_pairs=bilateral_failed_pairs,
             pair_wins=pair_wins,
             pair_losses=pair_losses,
             pair_ties=pair_ties,
@@ -344,6 +354,8 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
         "failed_pairs",
         "candidate_failed_pairs",
         "champion_failed_pairs",
+        "shared_failed_pairs",
+        "bilateral_failed_pairs",
         "pair_wins",
         "pair_losses",
         "pair_ties",
@@ -358,6 +370,24 @@ def _validate_no_free_text(features: DecisionFeatures) -> None:
             raise DecisionInputGuardError(
                 f"{field_name} must be non-negative: {value!r}"
             )
+    if features.shared_failed_pairs > features.champion_failed_pairs:
+        raise DecisionInputGuardError(
+            "shared_failed_pairs cannot exceed champion_failed_pairs"
+        )
+    if features.bilateral_failed_pairs > min(
+        features.candidate_failed_pairs,
+        features.champion_failed_pairs,
+    ):
+        raise DecisionInputGuardError(
+            "bilateral_failed_pairs cannot exceed either side's failed pairs"
+        )
+    if (
+        features.shared_failed_pairs + features.bilateral_failed_pairs
+        > features.failed_pairs
+    ):
+        raise DecisionInputGuardError(
+            "pair-local shared and bilateral failures cannot exceed failed_pairs"
+        )
 
 
 def _declared_statistical_metric_id(stats: Any) -> str | None:

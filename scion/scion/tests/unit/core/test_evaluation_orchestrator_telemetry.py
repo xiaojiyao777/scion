@@ -729,6 +729,8 @@ def test_later_stage_champion_evidence_failure_blocks_before_decision() -> None:
         "failed_pairs": 1,
         "candidate_failed_pairs": 0,
         "champion_failed_pairs": 1,
+        "shared_failed_pairs": 0,
+        "bilateral_failed_pairs": 0,
     }
     assert result.decision_engine_reason_codes == ()
     assert result.bypass_reason_codes == (

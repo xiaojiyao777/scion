@@ -46,6 +46,38 @@ def test_screening_partial_champion_evidence_blocks_validation_queue():
     assert outcome.reason_codes == ("SCREENING_PARTIAL_CHAMPION_EVIDENCE",)
 
 
+def test_bilateral_pair_failure_is_not_candidate_only_evidence():
+    features = _features(
+        protocol_gate_outcome="pass",
+        protocol_reason_codes=("SCREENING_PARTIAL_CHAMPION_EVIDENCE",),
+        failed_pairs=1,
+        candidate_failed_pairs=1,
+        champion_failed_pairs=1,
+        bilateral_failed_pairs=1,
+    )
+
+    outcome = _engine.decide(features)
+
+    assert outcome.decision is Decision.CONTINUE_EXPLORE
+    assert outcome.reason_codes == ("SCREENING_PARTIAL_CHAMPION_EVIDENCE",)
+
+
+def test_separate_candidate_failure_remains_hard_with_bilateral_failure():
+    features = _features(
+        protocol_gate_outcome="unclear",
+        protocol_reason_codes=("SCREENING_PARTIAL_CHAMPION_EVIDENCE",),
+        failed_pairs=2,
+        candidate_failed_pairs=2,
+        champion_failed_pairs=1,
+        bilateral_failed_pairs=1,
+    )
+
+    outcome = _engine.decide(features)
+
+    assert outcome.decision is Decision.ABANDON
+    assert outcome.reason_codes == ("CANDIDATE_RUNTIME_FAILURE",)
+
+
 def test_decision_does_not_recompute_screening_science_from_aggregates():
     features = _features(
         win_rate=0.0,

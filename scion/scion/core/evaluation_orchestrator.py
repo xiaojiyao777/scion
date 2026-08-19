@@ -217,6 +217,8 @@ class EvaluationOrchestrator:
                         "failed_pairs": stats.failed_pairs,
                         "candidate_failed_pairs": stats.candidate_failed_pairs,
                         "champion_failed_pairs": stats.champion_failed_pairs,
+                        "shared_failed_pairs": stats.shared_failed_pairs,
+                        "bilateral_failed_pairs": stats.bilateral_failed_pairs,
                     },
                 ),
                 decision=None,

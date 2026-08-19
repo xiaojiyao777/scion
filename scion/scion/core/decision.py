@@ -84,7 +84,14 @@ class DecisionEngine:
             return self._out(features, Decision.ABANDON, ("RUNTIME_GUARD_TIMEOUT",))
         if features.runtime_guard_passed is False:
             return self._out(features, Decision.ABANDON, ("RUNTIME_GUARD_FAILED",))
-        if features.candidate_failed_pairs > 0:
+        # Candidate failures that occur only inside a pair where the champion
+        # also failed are not candidate-only safety evidence.  A separate
+        # candidate-side incident in another pair remains a hard failure.
+        candidate_only_failed_pairs = max(
+            0,
+            features.candidate_failed_pairs - features.bilateral_failed_pairs,
+        )
+        if candidate_only_failed_pairs > 0:
             return self._out(
                 features,
                 Decision.ABANDON,

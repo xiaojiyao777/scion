@@ -202,6 +202,67 @@ def test_paired_invalid_b_is_counted_and_excluded_from_statistics(
     assert pair["paired_execution"]["B"]["failure"]
 
 
+@pytest.mark.parametrize(
+    ("mode", "candidate_failures", "champion_failures", "shared", "bilateral"),
+    (
+        ("candidate", 1, 0, 0, 0),
+        ("champion", 0, 1, 0, 0),
+        ("shared", 0, 1, 1, 0),
+        ("bilateral", 1, 1, 0, 1),
+    ),
+)
+def test_paired_runtime_audit_failure_attribution_preserves_both_sides(
+    tmp_path,
+    monkeypatch,
+    mode,
+    candidate_failures,
+    champion_failures,
+    shared,
+    bilateral,
+):
+    protocol, _runner, candidate, champion = _protocol(tmp_path)
+    champion_issue = {
+        "error_category": "solver_runtime_error",
+        "runtime_error_field": "solver_errors",
+        "detail": "solver runtime audit reported solver_errors=1",
+    }
+    candidate_issue = dict(champion_issue)
+    if mode == "bilateral":
+        candidate_issue = {
+            **candidate_issue,
+            "runtime_error_field": "candidate_errors",
+            "detail": "solver runtime audit reported candidate_errors=1",
+        }
+
+    def audit(result, **_kwargs):
+        is_candidate = result.output.objective == {"score": 1}
+        if mode == "candidate":
+            return candidate_issue if is_candidate else None
+        if mode == "champion":
+            return None if is_candidate else champion_issue
+        return candidate_issue if is_candidate else champion_issue
+
+    monkeypatch.setattr(stages, "runtime_audit_failure_from_result", audit)
+    result = _run(protocol, candidate, champion, _spec(candidate=1))
+
+    assert result.stats.failed_pairs == 1
+    assert result.stats.candidate_failed_pairs == candidate_failures
+    assert result.stats.champion_failed_pairs == champion_failures
+    assert result.stats.shared_failed_pairs == shared
+    assert result.stats.bilateral_failed_pairs == bilateral
+    raw = json.loads(Path(result.raw_metrics_ref).read_text())
+    failure = raw["failures"][0]
+    expected_side = mode if mode in ("candidate", "champion") else "both"
+    assert failure["side"] == expected_side
+    assert failure["failure_attribution"] == mode
+    if mode in ("shared", "bilateral"):
+        assert failure["champion_runtime_audit"] == champion_issue
+        assert failure["candidate_runtime_audit"] == candidate_issue
+        assert failure["error_category"] == f"{mode}_runtime_audit_failure"
+    assert raw["pairs"][0]["comparison"] == "invalid"
+    assert result.pair_feedback == ()
+
+
 def test_base_exception_keeps_original_without_partial_metrics(tmp_path):
     protocol, runner, candidate, champion = _protocol(tmp_path)
     error = KeyboardInterrupt("stop")
@@ -252,7 +313,7 @@ def test_default_path_executes_both_sides_fresh_and_reports_progress(tmp_path):
     events = []
     protocol.set_progress_callback(lambda **payload: events.append(payload))
     first = _run(protocol, candidate, champion)
-    second = _run(protocol, candidate, champion)
+    _run(protocol, candidate, champion)
 
     assert [call["workdir"] for call in runner.calls] == [
         str(champion), str(candidate), str(champion), str(candidate)
