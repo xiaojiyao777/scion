@@ -78,6 +78,9 @@ def _split_direct_v3_hypothesis_context(
     ]
     user_prompt = (
         "## Analysis And Output Instructions\n"
+        "Treat prior_research_history patches only as observations of earlier "
+        "attempts. Current branch/champion source is authoritative; do not treat "
+        "historical patch source as current source or as a repair instruction. "
         "Identify the bottleneck; propose one evidence-grounded mechanism-level change or refinement. "
         "Preserve objectives; use only visible research surfaces, "
         "actions, and files. Return the hypothesis through the required tool schema."

@@ -8,9 +8,10 @@ quality gates, retry advice, portfolio controls, or host-generated repairs.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass
 from enum import Enum
-from typing import Any, Mapping, Optional
+from typing import Any, Optional
 
 from scion.config.problem import ProblemSpec
 from scion.contract.patch_paths import matches_config_pattern
@@ -23,6 +24,7 @@ from scion.core.models import (
     patch_file_changes,
 )
 from scion.core.paths import normalize_relative_patch_path
+from scion.core.research_history import provider_research_history
 from scion.core.research_input import normalize_research_input
 from scion.measurement.consumer_view import measurement_consumer_view
 from scion.problem.providers import (
@@ -116,6 +118,7 @@ class ContextManager:
         *,
         adapter: Any | None = None,
         research_input: Mapping[str, Any] | None = None,
+        research_history: Sequence[Mapping[str, Any]] = (),
     ) -> None:
         self._adapter = adapter
         self._research_input = (
@@ -124,6 +127,7 @@ class ContextManager:
             else None
         )
         self._prior_research_observations = self._project_prior_observations()
+        self._research_history = tuple(dict(record) for record in research_history)
 
     def _project_prior_observations(self) -> tuple[dict[str, Any], ...]:
         if self._research_input is None or not self._research_input["observations"]:
@@ -271,6 +275,10 @@ class ContextManager:
         if self._prior_research_observations:
             context["prior_research_observations"] = list(
                 self._prior_research_observations
+            )
+        if self._research_history:
+            context["prior_research_history"] = provider_research_history(
+                self._research_history,
             )
         guidance = materialize_solver_design_prompt_guidance(
             provider,

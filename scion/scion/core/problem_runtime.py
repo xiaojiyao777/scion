@@ -14,9 +14,14 @@ so campaign-side callers do not thread ``self._spec`` through every call.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from typing import Any, Optional
 
+from scion.core.research_history import (
+    normalize_research_history_record,
+    problem_id_from_spec,
+)
 from scion.core.research_input import normalize_research_input
 
 
@@ -31,6 +36,7 @@ class ProblemRuntime:
         split_manifest: Any | None = None,
         seed_ledger: Any | None = None,
         research_input: Any | None = None,
+        research_history: Sequence[Mapping[str, Any]] = (),
         development_suites: tuple[Any, ...] = (),
     ) -> None:
         self._spec = problem_spec
@@ -42,12 +48,18 @@ class ProblemRuntime:
             if research_input is not None
             else None
         )
+        problem_id = problem_id_from_spec(problem_spec)
+        self._research_history = tuple(
+            normalize_research_history_record(record, expected_problem_id=problem_id)
+            for record in research_history
+        )
         self._development_suites = tuple(development_suites)
         from scion.proposal.context_manager import ContextManager
 
         self._ctx_manager = ContextManager(
             adapter=adapter,
             research_input=self._research_input,
+            research_history=self._research_history,
         )
 
     # ------------------------------------------------------------------
@@ -73,6 +85,10 @@ class ProblemRuntime:
     @property
     def research_input(self) -> dict[str, Any] | None:
         return deepcopy(self._research_input)
+
+    @property
+    def research_history(self) -> tuple[dict[str, Any], ...]:
+        return deepcopy(self._research_history)
 
     @property
     def development_suites(self) -> tuple[Any, ...]:

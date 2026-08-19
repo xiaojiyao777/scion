@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -21,6 +22,29 @@ _STAGE_REASON_CODES = {
 }
 _SAFE_CHECK_NAME = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$")
 _PATCH_ACTIONS = frozenset({"modify", "create", "delete"})
+
+_SCREENING_OBSERVATION_FIELDS = frozenset(
+    {"candidate_composition", "evidence"}
+)
+_COMPOSITION_FIELDS = (
+    "attribution_scope",
+    "protocol_comparison_scope",
+    "evaluation_candidate",
+    "current_step_change_scope",
+    "incremental_effect_isolated",
+    "current_step",
+)
+_AGGREGATION_FIELDS = (
+    "statistical_unit",
+    "method",
+    "effect_metric",
+    "equivalence_band",
+    "win_rate_scope",
+    "median_delta_scope",
+    "ci_scope",
+    "pair_win_rate_scope",
+    "pair_win_rate",
+)
 
 _SCREENING_EVAL_STAT_FIELDS = (
     "n_cases",
@@ -77,6 +101,31 @@ def proposal_screening_history(
 
     records.sort(key=lambda item: int(item["round_num"]))
     return [_screening(record) for record in records]
+
+
+def normalize_proposal_screening_observation(value: Any) -> dict[str, Any]:
+    """Return one strict instance of the canonical screening H projection.
+
+    External history is allowed to carry exactly the same screening value that
+    an in-process H call sees.  The projection itself is the visibility policy;
+    this function only rejects values that would be changed by that policy.
+    """
+
+    if not isinstance(value, Mapping) or set(value) != _SCREENING_OBSERVATION_FIELDS:
+        raise ValueError("screening observation fields do not match schema")
+    candidate = value["candidate_composition"]
+    evidence = value["evidence"]
+    if not isinstance(candidate, Mapping) or not isinstance(evidence, Mapping):
+        raise TypeError("screening observation values must be mappings")
+    if evidence.get("stage") != "screening":
+        raise ValueError("screening observation stage must be screening")
+    canonical = {
+        "candidate_composition": _composition(candidate),
+        "evidence": _full(evidence),
+    }
+    if _canonical_json(value) != _canonical_json(canonical):
+        raise ValueError("screening observation fields do not match canonical projection")
+    return canonical
 
 
 def proposal_pre_protocol_observations(
@@ -269,29 +318,56 @@ def _patch_execution(value: Any) -> dict[str, Any]:
 def _composition(value: Any) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         return {}
-    projected = _plain(value)
+    projected = {
+        key: _plain(value[key])
+        for key in _COMPOSITION_FIELDS
+        if key in value
+    }
+    current_step = projected.get("current_step")
+    if isinstance(current_step, Mapping):
+        projected["current_step"] = (
+            {"target_files": _plain(current_step["target_files"])}
+            if "target_files" in current_step
+            else {}
+        )
     return projected
 
 
 def _full(value: Mapping[str, Any]) -> dict[str, Any]:
-    projected = {
-        key: _plain(value[key])
-        for key in (
-            "stage",
-            "protocol_outcome",
-            "runtime_model",
-            "runtime_errors",
-            "mechanism_evidence",
-            "decision_outcome",
+    projected = _select(value, ("stage", "runtime_model"))
+    protocol_outcome = value.get("protocol_outcome")
+    if isinstance(protocol_outcome, Mapping):
+        projected["protocol_outcome"] = _select(
+            protocol_outcome, ("gate_outcome", "reason_codes")
         )
-        if key in value
-    }
+    runtime_errors = value.get("runtime_errors")
+    if isinstance(runtime_errors, Mapping):
+        projected["runtime_errors"] = (
+            {"categories": _plain(runtime_errors["categories"])}
+            if "categories" in runtime_errors
+            else {}
+        )
+    mechanism = value.get("mechanism_evidence")
+    if isinstance(mechanism, Mapping):
+        projected["mechanism_evidence"] = _plain(mechanism)
+    decision = value.get("decision_outcome")
+    if isinstance(decision, Mapping):
+        projected["decision_outcome"] = _select(
+            decision, ("decision", "reason_codes")
+        )
     objective = value.get("objective_outcome")
     if isinstance(objective, Mapping):
-        projected_objective = _plain(objective)
         aggregate = objective.get("aggregate")
-        if isinstance(projected_objective, dict) and isinstance(aggregate, Mapping):
+        aggregation = objective.get("aggregation")
+        projected_objective = _select(objective, ("semantics",))
+        if isinstance(aggregate, Mapping):
             projected_objective["aggregate"] = screening_eval_stats(aggregate)
+        if isinstance(aggregation, Mapping):
+            projected_objective["aggregation"] = {
+                key: _plain(aggregation[key])
+                for key in _AGGREGATION_FIELDS
+                if key in aggregation
+            }
         projected["objective_outcome"] = projected_objective
     cases = value.get("case_outcomes")
     feedback = cases.get("case_feedback") or () if isinstance(cases, Mapping) else ()
@@ -301,6 +377,23 @@ def _full(value: Mapping[str, Any]) -> dict[str, Any]:
         ]
     }
     return projected
+
+
+def _select(value: Mapping[str, Any], fields: Sequence[str]) -> dict[str, Any]:
+    return {key: _plain(value[key]) for key in fields if key in value}
+
+
+def _canonical_json(value: Any) -> str:
+    try:
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+            allow_nan=False,
+        )
+    except (TypeError, ValueError) as exc:
+        raise TypeError("screening observation must contain JSON values") from exc
 
 
 def screening_eval_stats(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -379,6 +472,7 @@ def _without_empty(value: Mapping[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
+    "normalize_proposal_screening_observation",
     "proposal_pre_protocol_observations",
     "proposal_screening_history",
     "screening_eval_stats",

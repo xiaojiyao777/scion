@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -82,6 +83,7 @@ class CampaignManager:
         verification_gate: Optional[Any] = None,
         operator_execute_signature: Optional[str] = None,
         research_input: Optional[Dict[str, Any]] = None,
+        research_history: Sequence[Mapping[str, Any]] = (),
         resource_envelope: ResourceEnvelope | dict[str, Any] | None = None,
         code_research_limits: CodeResearchLimits | dict[str, Any] | None = None,
     ) -> None:
@@ -101,6 +103,7 @@ class CampaignManager:
             adapter=adapter,
             operator_execute_signature=operator_execute_signature,
             research_input=research_input,
+            research_history=research_history,
             resource_envelope=resource_envelope,
             code_research_limits=code_research_limits,
         )

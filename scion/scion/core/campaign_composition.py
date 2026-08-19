@@ -40,6 +40,7 @@ from scion.core.promotion_service import PromotionService
 from scion.core.proposal_pipeline import (
     ProposalPipeline,
 )
+from scion.core.research_history import problem_id_from_spec
 from scion.core.research_input import write_research_input
 from scion.core.research_rejection_finalizer import ResearchRejectionFinalizer
 from scion.core.research_surface_index import editable_patterns
@@ -103,6 +104,7 @@ def compose_campaign_services(
     verification_gate: Any | None = None,
     operator_execute_signature: str | None = None,
     research_input: Any | None = None,
+    research_history: Any = (),
     resource_envelope: Any | None = None,
     code_research_limits: Any | None = None,
 ) -> None:
@@ -124,6 +126,7 @@ def compose_campaign_services(
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
         research_input=research_input,
+        research_history=research_history,
         development_suites=development_suites,
     )
     owner._protocol_config = protocol_config
@@ -240,6 +243,7 @@ def compose_campaign_services(
         model_id=getattr(llm_client, "model", None),
         protocol_version=getattr(protocol_config, "version", None),
         family_taxonomy=family_taxonomy,
+        problem_id=problem_id_from_spec(problem_spec),
     )
     if owner._problem_runtime.research_input is not None:
         write_research_input(

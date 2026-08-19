@@ -63,6 +63,24 @@ def _load_code_research_limits(path: Path):
     return load_code_research_limits(path)
 
 
+def _load_research_histories(
+    paths: list[Path],
+    *,
+    problem_spec: Any,
+) -> tuple[dict[str, Any], ...]:
+    """Load only explicitly named ordinary history files."""
+
+    from scion.core.research_history import (
+        load_research_histories,
+        problem_id_from_spec,
+    )
+
+    return load_research_histories(
+        paths,
+        expected_problem_id=problem_id_from_spec(problem_spec),
+    )
+
+
 class _CampaignSignalStop(KeyboardInterrupt):
     """Raised by the CLI signal handler to stop the active campaign."""
 
@@ -222,6 +240,14 @@ def register_run_command(app: typer.Typer) -> None:
                 "and ordered prior observations"
             ),
         ),
+        research_history: list[str] | None = typer.Option(
+            None,
+            "--research-history",
+            help=(
+                "Explicit prior research_history.jsonl path; repeat in desired "
+                "campaign order"
+            ),
+        ),
         code_research_limits: Optional[str] = typer.Option(
             None,
             "--code-research-limits",
@@ -341,6 +367,14 @@ def register_run_command(app: typer.Typer) -> None:
                     err=True,
                 )
                 raise typer.Exit(code=1)
+        try:
+            research_history_value = _load_research_histories(
+                [Path(path) for path in (research_history or [])],
+                problem_spec=spec,
+            )
+        except (TypeError, ValueError) as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
         if protocol:
             protocol_path = Path(protocol)
             proto_cfg = ProtocolConfig.from_yaml(protocol_path)
@@ -495,6 +529,7 @@ def register_run_command(app: typer.Typer) -> None:
                 adapter=adapter,
                 operator_execute_signature=operator_execute_signature,
                 research_input=research_input_value,
+                research_history=research_history_value,
                 resource_envelope=resource_envelope,
                 code_research_limits=code_research_limits_value,
             )
@@ -535,6 +570,7 @@ def register_run_command(app: typer.Typer) -> None:
 __all__ = [
     "_CampaignOuterHardwall",
     "_load_code_research_limits",
+    "_load_research_histories",
     "_load_research_input",
     "register_run_command",
 ]

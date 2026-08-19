@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Mapping, MutableSequence
 
 from scion.core.models import StepRecord
+from scion.core.research_history import ResearchHistoryWriter
 from scion.core.status_reporter import StatusReporter
 
 from .lineage import LineageRecorderMixin
@@ -26,6 +27,7 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         model_id: str | None = None,
         protocol_version: str | None = None,
         family_taxonomy: Any | None = None,
+        problem_id: str | None = None,
     ) -> None:
         self.campaign_id = campaign_id
         self.campaign_dir = Path(campaign_dir)
@@ -35,6 +37,11 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         self.protocol_version = protocol_version
         self.family_taxonomy = family_taxonomy
         self.final_evidence_refs: Dict[str, Any] = {}
+        self._research_history_writer = (
+            ResearchHistoryWriter(self.campaign_dir, problem_id=problem_id)
+            if problem_id is not None
+            else None
+        )
 
     def record_step(
         self,
@@ -42,6 +49,8 @@ class EvidenceRecorder(StatusWriterMixin, LineageRecorderMixin, CampaignSummaryM
         step_history: MutableSequence[StepRecord],
     ) -> None:
         """Append a completed step to the durable campaign history."""
+        if self._research_history_writer is not None:
+            self._research_history_writer.append_step(step)
         step_history.append(step)
 
     def attach_final_evidence_refs(self, refs: Mapping[str, Any]) -> None:
