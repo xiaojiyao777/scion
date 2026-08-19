@@ -80,9 +80,7 @@ class TestCodeFailureDirect:
         assert bid not in cm._branch_patches
         step = cm._step_history[-1]
         assert step.failure_stage == "proposal_code"
-        assert step.hypothesis.hypothesis_text == (
-            _VALID_HYPOTHESIS["hypothesis_text"]
-        )
+        assert step.hypothesis.hypothesis_text == (_VALID_HYPOTHESIS["hypothesis_text"])
         with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
             rejection = conn.execute(
                 "SELECT execution_outcome_provenance_json FROM experiment_events "
@@ -129,6 +127,7 @@ class TestCodeFailureDirect:
             problem_spec,
             branch_workspace=None,
             step_history=None,
+            development_suites=(),
         ):
             ctx = original_build(
                 self_ctx,
@@ -138,6 +137,7 @@ class TestCodeFailureDirect:
                 problem_spec=problem_spec,
                 branch_workspace=branch_workspace,
                 step_history=step_history,
+                development_suites=development_suites,
             )
             captured_contexts.append(ctx)
             return ctx

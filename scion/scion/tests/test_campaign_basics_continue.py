@@ -385,7 +385,12 @@ class TestContinueExplore:
             for entry in source_context["sources"]
             if entry["path"] == "operators/local_search.py"
         )
-        assert "candidate = solution" in prior_source["content"]
+        # The prior edit remains durable branch state and visible to the next H,
+        # but it is only a peer of this C target.  Stage-5 source selection keeps
+        # peer content out of the initial code prompt while retaining inventory.
+        assert prior_source["roles"] == ["peer"]
+        assert prior_source["visible"] is False
+        assert prior_source["content"] is None
 
         workspace = Path(cm._branch_workspaces[r2.branch_id])
         assert (
