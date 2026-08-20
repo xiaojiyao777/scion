@@ -168,6 +168,9 @@ def test_hypothesis_prompt_requests_material_evidence_grounded_refinement() -> N
         "one evidence-grounded mechanism-level change or refinement"
         in projection.user_prompt
     )
+    assert "mechanisms already evaluated in experiment_history" in projection.user_prompt
+    assert "Reusing an evaluated target is allowed" in projection.user_prompt
+    assert "semantically equivalent rewrite is not a refinement" in projection.user_prompt
     assert "materially different mechanism" not in projection.user_prompt
 
 

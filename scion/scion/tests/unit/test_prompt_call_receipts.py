@@ -653,6 +653,9 @@ def test_external_cvrp_research_input_reaches_actual_hypothesis_provider_request
     assert (
         "one evidence-grounded mechanism-level change or refinement" in provider_prompt
     )
+    assert "mechanisms already evaluated in experiment_history" in provider_prompt
+    assert "Reusing an evaluated target is allowed" in provider_prompt
+    assert "semantically equivalent rewrite is not a refinement" in provider_prompt
     assert "materially different mechanism" not in provider_bytes
     trace = _single_trace(tmp_path)
     traced_provider_bytes = json.dumps(
