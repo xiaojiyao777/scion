@@ -8,7 +8,8 @@ referenced, not copied into development prompts.
 
 ## Runs
 
-- [CVRP M11 actionable code-research continuation, prepared under delegated one-shot authorization](v04-cvrp-m11-actionable-code-research-continuation-preregistration-20260820.md)
+- [CVRP M12 corrected development-closure continuation, prepared under delegated one-shot authorization](v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md)
+- [CVRP M11 actionable code-research continuation, terminal resource stop before formal candidate](v04-cvrp-m11-actionable-code-research-continuation-preregistration-20260820.md)
 - [CVRP M10 continuous cross-campaign research continuation, terminal resource stop before formal candidate](v04-cvrp-m10-continuous-research-m9-history-development-preregistration-20260820.md)
 - [CVRP M9 autonomous M7-prior development screen, terminal negative/mixed result](v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md)
 - [Scion autonomous prior-evidence research design and M8 offline result](v04-scion-autonomous-prior-evidence-research-design-20260817.md)

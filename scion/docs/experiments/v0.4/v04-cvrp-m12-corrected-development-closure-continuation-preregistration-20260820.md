@@ -1,60 +1,43 @@
-# CVRP M11 actionable code-research continuation preregistration
+# CVRP M12 corrected development-closure continuation preregistration
 
 *Date: 2026-08-20*
 
-*State: `TERMINAL_RESOURCE_EXHAUSTED / ONE_SHOT_CONSUMED`*
-
-## Terminal result
-
-The one-shot used exactly 30 provider calls and stopped
-`RESOURCE_EXHAUSTED / PROVIDER_CALL_CAP_EXHAUSTED`. Three C attempts ended as
-one `PATCH_PROPOSAL_INVALID` and two `CODE_RESEARCH_ABANDONED`; no patch reached
-formal Contract, Verification, solver, Protocol, Safe Features or Decision.
-The run is invalid for algorithm claims and supplies negative framework
-continuity evidence only.
-
-Post-run host diagnostics showed that the repeated D4 result was caused by an
-incomplete problem-owned development closure, not the candidate patches. The
-sandbox omitted frozen package markers, so `policies.__file__` was null before
-the public entrypoint ran. Both retained drafts pass D1-D4 after the closure is
-corrected at commit `0860331b3e53993608db0da7ba9c677e980e588d`. This diagnosis
-does not retroactively turn M11 into a formal or algorithm-positive result.
+*State: `PREPARED_NOT_STARTED / USER_DELEGATED_ONE_SHOT_AUTHORIZATION`*
 
 ## Scientific question
 
-Can the current problem-neutral Scion framework use the ordinary M9 and M10
-research histories, including M10 draft-patch and public-development-check
-failures, to revise its own code research and produce at least one formal CVRP
+Can Scion use the ordinary M9, M10 and M11 research histories after correcting
+the CVRP public-development package closure to produce at least one formal CVRP
 development-screen observation without a host-specified target, mechanism,
 patch or repair?
 
 The experiment is:
 
-`v04-cvrp-m11-actionable-code-research-continuation-20260820`
+`v04-cvrp-m12-corrected-development-closure-continuation-20260820`
 
 It is a longitudinal, treatment-only continuation. It is not an independent
 A/B comparison, unseen-population confirmation or causal estimate of one
-framework change. M9 and M10 are descriptive historical references. The user
+framework change. M9 through M11 are descriptive historical references. The user
 has delegated authority to continue bounded experiments; this document freezes
-the exact one-shot M11 condition before any M11 provider or solver call.
+the exact one-shot M12 condition before any M12 provider or solver call.
 
 ## Source boundary
 
 The exact production baseline is clean commit
-`fcad63d78fbe11ecef9bff5439ab6a62cf844518`. Relative to M10, its generic
-framework changes are limited to:
+`0860331b3e53993608db0da7ba9c677e980e588d`. Relative to M11 it changes only
+the CVRP problem-owned public development manifest: the frozen, read-only
+`policies/__init__.py` and `policies/baseline_modules/__init__.py` package
+markers are copied into the development scratch. This corrects a tool-closure
+failure where D4 observed `policies.__file__ is None`; it does not change any
+CVRP algorithm source, generic core behavior, formal gate or population.
 
-- invalid patch drafts become safe, correctable code-session observations;
-- public development checks return only a canonical public test path and a
-  host-enumerated reason code, never child stdout/stderr/traceback;
-- Proposal terminal reasons distinguish patch, transcript and result limits;
-- transcript accounting counts the actual provider wire rather than adding
-  trace-only structured metadata a second time.
-
-No CVRP policy source changed. The execution carrier must be a clean descendant
-containing this preregistration and its two ordinary inputs. Its exact commit is
-bound as `AUTHORIZED_M11_CARRIER`. The `scion/scion` production subtree must be
-identical to `fcad63d78fbe11ecef9bff5439ab6a62cf844518`.
+The M11 scheduler and 2-for-1 drafts were replayed after the correction and
+both passed D1-D4 in the real bounded sandbox. These are non-evidentiary host
+diagnostics, not formal Verification or algorithm-effect evidence. The
+execution carrier must be a clean descendant containing this preregistration
+and the copied M11 terminal history. Its exact commit is
+bound as `AUTHORIZED_M12_CARRIER`. The `scion/scion` production subtree must be
+identical to `0860331b3e53993608db0da7ba9c677e980e588d`.
 
 ## Ordinary research inputs
 
@@ -63,8 +46,9 @@ The normal CLI receives, in order:
 1. the M7 structured research input;
 2. the two-record M9 history used by M10;
 3. the five-record M10 history prepared for M11;
-4. the M11 code-research limits;
-5. unchanged M9 development Protocol, split and seed files.
+4. the three-record terminal M11 history;
+5. the unchanged M11 code-research limits;
+6. unchanged M9 development Protocol, split and seed files.
 
 The five M10 records are a mechanical projection of the immutable M10 terminal
 history and provider traces:
@@ -81,19 +65,25 @@ tracebacks, child messages, host paths, IDs, seeds, case identities,
 validation/frozen facts and any host-authored repair. Historical patch source
 is non-authoritative; the current carrier source is the sole patch base.
 
-Both history files and the M7 observation reach H only. C receives the current
+The M11 history is copied byte-for-byte from the immutable M11 campaign
+terminal and contains three H values and typed Proposal outcomes. It does not
+reinterpret the false D4 failures as algorithm evidence and contains no host
+repair instruction. All three history files and the M7 observation reach H
+only. C receives the current
 Contract-approved H plus the current generic source graph and public development
 tests. Protocol, Safe Features and Decision do not consume the imported history.
 
 Prepared input SHA-256 values are:
 
 - M10 history: `edc6ea50db856b60216805497c63f713780142d0790bfa754877ca5050541cc1`;
+- M11 terminal history:
+  `440ce00c09ddb68dfce8a7570181f746426a9bf6c11cd2ff8d70baa5148cd40b`;
 - M11 code-research limits:
   `da906dba9b1a6b4e20bcc3d98da32cb9a47216386085ac99e6b0a05923ec1342`.
 
 ## Development population and measurement
 
-M11 intentionally reuses the outcome-known M9/M10 development population to
+M12 intentionally reuses the outcome-known M9/M10/M11 development population to
 test repair continuity:
 
 - screening cases: `B-n39-k5`, `P-n22-k2`, `A-n46-k7`, `F-n45-k4`,
@@ -220,7 +210,7 @@ Provider arithmetic is the worst locally admissible mix of three H requests and
   `INTERRUPTED / OUTER_HARDWALL_EXCEEDED`.
 
 There is no output-root reuse, retry, resume, repair by the host, case/seed
-substitution, extra provider call, third evaluated stage or automatic M12.
+substitution, extra provider call, third evaluated stage or automatic M13.
 
 ## Frozen command
 
@@ -228,16 +218,16 @@ substitution, extra provider call, third evaluated stage or automatic M12.
 set -euo pipefail
 cd /home/clawd/research/or-autoresearch-agent/scion
 
-test -n "${AUTHORIZED_M11_CARRIER:-}"
-test "$(git rev-parse HEAD)" = "$AUTHORIZED_M11_CARRIER"
+test -n "${AUTHORIZED_M12_CARRIER:-}"
+test "$(git rev-parse HEAD)" = "$AUTHORIZED_M12_CARRIER"
 git diff --quiet
 git diff --cached --quiet
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 test "$REPO_ROOT" = /home/clawd/research/or-autoresearch-agent
 git -C "$REPO_ROOT" diff --quiet \
-  fcad63d78fbe11ecef9bff5439ab6a62cf844518 \
-  "$AUTHORIZED_M11_CARRIER" -- scion/scion
-test ! -e /home/clawd/research/scion-experiments/v04-cvrp-m11-actionable-code-research-continuation-20260820
+  0860331b3e53993608db0da7ba9c677e980e588d \
+  "$AUTHORIZED_M12_CARRIER" -- scion/scion
+test ! -e /home/clawd/research/scion-experiments/v04-cvrp-m12-corrected-development-closure-continuation-20260820
 command -v bwrap >/dev/null
 
 PROXY_KEY_VALUE="$(curl -fsS --connect-timeout 5 --max-time 15 \
@@ -265,6 +255,7 @@ SCION_LLM_CODE_TIMEOUT_SEC=240 \
   --research-input /home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/inputs/v04-cvrp-m9-m7-fc1-research-input.json \
   --research-history /home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/inputs/v04-cvrp-m10-m9-research-history.jsonl \
   --research-history /home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/inputs/v04-cvrp-m11-m10-research-history.jsonl \
+  --research-history /home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/inputs/v04-cvrp-m12-m11-research-history.jsonl \
   --code-research-limits /home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/inputs/v04-cvrp-m11-code-research-limits.json \
   --protocol /home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/inputs/v04-cvrp-m9-development-protocol.yaml \
   --split /home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/inputs/v04-cvrp-m9-development-split.yaml \
@@ -273,12 +264,12 @@ SCION_LLM_CODE_TIMEOUT_SEC=240 \
   --provider-call-cap 30 \
   --outer-hardwall-sec 13500 \
   --rounds 2 \
-  --campaign-dir /home/clawd/research/scion-experiments/v04-cvrp-m11-actionable-code-research-continuation-20260820
+  --campaign-dir /home/clawd/research/scion-experiments/v04-cvrp-m12-corrected-development-closure-continuation-20260820
 ```
 
 Before launch, provider-/solver-free preflight must verify the exact clean
-carrier, module origins, loaders, seven ordered history records, public
+carrier, module origins, loaders, ten ordered history records, public
 development closure, sandbox, unchanged population, resource arithmetic and
-absent output. Failure leaves M11 `PREP_INVALID` and performs no live request.
+absent output. Failure leaves M12 `PREP_INVALID` and performs no live request.
 The user's delegated authorization applies only to this frozen one-shot after
 those gates pass; it does not authorize retry or automatic follow-up.

@@ -357,9 +357,13 @@ The exact design, resource arithmetic and stopping boundary are in the
   structured metadata a second time.
 - [x] Mechanically project the five M10 attempts, including the two D4 failures
   and their draft source, into ordinary H-only research history.
-- [ ] Execute one fresh two-stage development continuation under provider cap
-  30, solver cap 64 and a 13,500-second outer hardwall. Do not retry or launch
-  an automatic successor.
+- [x] Execute one fresh two-stage development continuation under provider cap
+  30, solver cap 64 and a 13,500-second outer hardwall. It terminated at the
+  provider cap after three C rejections and reached zero formal candidates.
+- [x] Diagnose the repeated D4 result: the public development scratch omitted
+  two frozen package markers, so `policies` became a namespace package and the
+  test failed before candidate execution. Both retained M11 drafts pass D1-D4
+  after the problem-owned closure correction.
 
 Acceptance: at least one bounded C candidate reaches current Patch Contract,
 Verification, screening Protocol, Safe Features and Decision. Development
@@ -369,7 +373,22 @@ claim.
 The exact design is in the
 [M11 preregistration](docs/experiments/v0.4/v04-cvrp-m11-actionable-code-research-continuation-preregistration-20260820.md).
 
-### M12 - Close on solver evidence
+### M12 - Continue once with the corrected public closure
+
+- [x] Declare the frozen CVRP package markers as read-only development
+  workspace support; do not change generic core or CVRP algorithm source.
+- [x] Copy the three-record M11 terminal history as an ordinary H-only input.
+- [ ] Execute one fresh continuation with the same population, provider cap 30,
+  solver cap 64 and 13,500-second hardwall. Do not retry or launch M13.
+
+Acceptance remains one current candidate reaching formal Patch Contract,
+Verification, screening Protocol, Safe Features and Decision. Replaying a
+draft through development checks alone is not positive evidence.
+
+The exact design is in the
+[M12 preregistration](docs/experiments/v0.4/v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md).
+
+### M13 - Close on solver evidence
 
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,

@@ -158,15 +158,23 @@ is `RESOURCE_EXHAUSTED / PROVIDER_CALL_CAP_EXHAUSTED`, with 18 provider calls,
 four research rejections, zero formal candidates, zero solver calls and no
 algorithm evidence.
 
-The generic failure channel is now corrected at clean production commit
+The generic failure channel is corrected at clean production commit
 `fcad63d78fbe11ecef9bff5439ab6a62cf844518`: invalid drafts return safe repair
 enums, public test failures return an enumerated reason and public test path,
-and transcript accounting counts actual provider wire. M11 is prepared under
-the user's delegated authorization with five mechanically projected M10
-history records, provider cap 30, solver cap 64 and a 13,500-second hardwall.
-It still uses the outcome-known development population and cannot support an
-unseen or causal claim. See the
-[M11 preregistration](../experiments/v0.4/v04-cvrp-m11-actionable-code-research-continuation-preregistration-20260820.md).
+and transcript accounting counts actual provider wire. M11 is terminal
+`RESOURCE_EXHAUSTED / PROVIDER_CALL_CAP_EXHAUSTED` after 30 provider calls,
+three C research rejections, zero formal candidates and zero solver/Protocol
+observations.
+
+Host-only replay showed that the repeated M11 D4 failures were not candidate
+failures. The development scratch omitted the frozen `policies` package
+markers, making `policies.__file__` null before the candidate entrypoint ran.
+Commit `0860331b` adds those two read-only files to the CVRP problem-owned
+development closure; both retained M11 drafts then pass D1-D4. M12 is prepared
+as a fresh continuation with the same development population, the copied
+three-record M11 terminal history and unchanged claim and resource boundaries.
+See the
+[M12 preregistration](../experiments/v0.4/v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md).
 
 ## Current validation rule
 
