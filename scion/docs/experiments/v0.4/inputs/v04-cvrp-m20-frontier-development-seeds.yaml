@@ -1,0 +1,16 @@
+version: 0.4-cvrp-m20-frontier-development
+
+screening:
+  - 7370
+  - 6042
+
+validation:
+  - 6241
+  - 8615
+
+frozen:
+  - 8498
+  - 7903
+
+canary:
+  - 7260

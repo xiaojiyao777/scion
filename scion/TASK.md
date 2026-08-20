@@ -460,6 +460,9 @@ The exact design is in the
   must identify a materially new algorithmic delta or H should pivot. Do not
   ban same-file refinement, score novelty with a second model, or encode a CVRP
   target. Validate the change on a new fresh development population.
+  The generic instruction and prompt-boundary tests are implemented in
+  `06aefa81`; M20 is prepared with 25 history records and a second
+  metadata-selected zero-overlap development split.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

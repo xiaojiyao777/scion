@@ -285,6 +285,16 @@ validation, frozen, promotion, global-improvement or production claim follows.
 See the
 [M19 preregistration](../experiments/v0.4/v04-cvrp-m19-fresh-population-continuous-research-preregistration-20260820.md).
 
+M20 is prepared, not started. Generic H now treats current-campaign
+`experiment_history` as an evaluated research frontier: a repeated target must
+name a concrete incremental algorithmic delta addressing observed limitations,
+while an equivalent rewrite is not a refinement. Same-file refinement remains
+allowed and no problem, target or mechanism is encoded. M20 will load 25 prior
+history records and use a second metadata-selected six-case/two-seed fresh
+development screen under the same 30-call/two-stage/14,000-second envelope.
+See the
+[M20 preregistration](../experiments/v0.4/v04-cvrp-m20-mechanism-frontier-continuation-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test
