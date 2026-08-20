@@ -446,7 +446,10 @@ The exact design is in the
   campaign through the CVRP problem adapter, without adding CVRP semantics to
   generic Scion. Use a fresh development population and let H choose whether
   to address construction completeness, refine local search or pivot; do not
-  host-select a target, patch or repair mechanism.
+  host-select a target, patch or repair mechanism. M19 is prepared with both
+  the M18 problem-owned observation and M16's two native history records, a
+  metadata-selected fresh development split, two evaluated-stage maximum and
+  the unchanged bounded code-research chain.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

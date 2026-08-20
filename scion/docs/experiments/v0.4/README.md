@@ -8,6 +8,7 @@ referenced, not copied into development prompts.
 
 ## Runs
 
+- [CVRP M19 fresh-population continuous research, prepared](v04-cvrp-m19-fresh-population-continuous-research-preregistration-20260820.md)
 - [CVRP M18 `_or_opt` fixed-candidate confirmation, terminal not-supported result](v04-cvrp-m18-oropt-fixed-candidate-confirmation-preregistration-20260820.md)
 - [CVRP M17 `_or_opt` fixed-candidate confirmation, terminal config-invalid before formal population](v04-cvrp-m17-oropt-fixed-candidate-confirmation-preregistration-20260820.md)
 - [CVRP M16 positive-mechanism continuation, terminal valid positive/mixed development result](v04-cvrp-m16-positive-mechanism-continuation-preregistration-20260820.md)

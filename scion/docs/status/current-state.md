@@ -270,6 +270,17 @@ is safe on this population but is not confirmed as a broad or faster
 improvement. See the
 [M18 preregistration](../experiments/v0.4/v04-cvrp-m18-oropt-fixed-candidate-confirmation-preregistration-20260820.md).
 
+M19 is prepared, not started. It leaves generic and problem production code
+unchanged. H will receive the problem-owned ordinary M7 and M18 observations
+plus 23 ordered native history records through M16; C will receive only the
+approved current H, current source graph and public development tests. A fresh
+metadata-selected six-case/two-seed screen has zero exact path/seed overlap
+with the baseline's declared experiment inputs. The host specifies no target,
+patch, repair or mechanism. The run is capped at 30 provider calls, two
+evaluated screening stages, 66 solver subprocesses and a 14,000-second outer
+hardwall; validation, frozen and promotion are out of scope. See the
+[M19 preregistration](../experiments/v0.4/v04-cvrp-m19-fresh-population-continuous-research-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test
