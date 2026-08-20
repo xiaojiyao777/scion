@@ -248,6 +248,14 @@ partial-champion safety rule kept the branch in exploration. No expansion,
 validation, frozen or promotion ran; champion remains v1. See the
 [M16 preregistration](../experiments/v0.4/v04-cvrp-m16-positive-mechanism-continuation-preregistration-20260820.md).
 
+M17 is prepared as a provider-free fixed-candidate confirmation of M16
+candidate 2. It compares the exact `_or_opt` source against exact B0 on six
+outcome-blind cases and four new seeds, with one strict canary and one expanded
+screening Protocol/Safe-Feature/Decision call. The private source trees differ
+in only `local_search.py`; no H, C, patch, retry, later stage or promotion is
+part of the experiment. See the
+[M17 preregistration](../experiments/v0.4/v04-cvrp-m17-oropt-fixed-candidate-confirmation-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test

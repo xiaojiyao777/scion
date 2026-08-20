@@ -1,0 +1,81 @@
+version: 0.4-cvrp-m17-fixed-candidate-expanded-screen
+case_aggregation: paired_effect_median
+case_equivalence_band: 0.0
+
+screening:
+  n_cases_modify: 6
+  n_cases_create: 6
+  n_seeds: 4
+  expand_n_seeds: 4
+  expand_to_modify: 6
+  expand_to_create: 6
+  require_expanded_for_pass: true
+
+validation:
+  n_cases: 6
+  n_seeds: 4
+  expand_to: 6
+
+frozen:
+  n_cases: 6
+  n_seeds: 4
+
+canary:
+  cases:
+    - data/tiny_canary.json
+  seeds:
+    - 4770
+
+runtime:
+  max_runtime_ratio: 2.0
+  tie_speedup_ratio: 0.75
+  tie_min_runtime_pairs: 1
+  time_limits:
+    stage_defaults:
+      canary: 10
+      screening: 30
+      validation: 30
+      frozen: 30
+    rules:
+      - stages: [screening]
+        case_globs: [cvrplib/A/A-n37-k5.vrp]
+        time_limit_sec: 30
+      - stages: [screening]
+        case_globs: [cvrplib/B/B-n51-k7.vrp]
+        time_limit_sec: 30
+      - stages: [screening]
+        case_globs: [cvrplib/P/P-n50-k8.vrp]
+        time_limit_sec: 30
+      - stages: [screening]
+        case_globs: [cvrplib/X/X-n237-k14.vrp]
+        time_limit_sec: 60
+      - stages: [screening]
+        case_globs: [cvrplib/X/X-n351-k40.vrp]
+        time_limit_sec: 90
+      - stages: [screening]
+        case_globs: [cvrplib/X/X-n627-k43.vrp]
+        time_limit_sec: 90
+
+gates:
+  screening:
+    win_rate_min: 0.6
+    median_delta_min: practical_delta_screen
+    bootstrap_ci_low_min: 0.0
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2
+    initial_quality_expansion:
+      min_net_case_score: 0.125
+      max_case_loss_rate: 0.25
+      require_ci_high_at_practical_delta: true
+  validation:
+    win_rate_min: 0.66
+    median_delta_min: practical_delta_validate
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 1000
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2
+  frozen:
+    bootstrap_ci_low_min: 0.0
+    canary_required: true
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2

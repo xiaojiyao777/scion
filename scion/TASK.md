@@ -431,6 +431,8 @@ The exact design is in the
   selected outcome-blind population before any further adaptive H/C campaign.
   Treat this as fixed-candidate confirmation: no new provider call, patch or
   repair, and no promotion claim unless the newly declared Protocol completes.
+  M17 is prepared with the exact M16 candidate-2 source, six previously unseen
+  cases, four new seeds, 50 solver subprocesses and a 5,400-second hardwall.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.
