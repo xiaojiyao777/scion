@@ -235,11 +235,17 @@ candidate-only failure. Decision's partial-champion safety rule returned
 `continue_explore`, so no expanded stage ran; champion remains v1. See the
 [M15 preregistration](../experiments/v0.4/v04-cvrp-m15-customer-conservation-continuation-preregistration-20260820.md).
 
-M16 is prepared as a fresh normal-Scion continuation with 21 ordered history
-records through M15. It changes no framework, algorithm, population, resource
-or claim boundary. The Agent—not the host—chooses whether to retain the first
-positive mechanism, avoid the second regression, address shared baseline
-failure or pivot. See the
+M16 completed validly from clean carrier `78b6e256`. Both autonomous
+candidates passed public development tests, formal Contract, Verification and
+canary. The first deferred repeated solution-wide repair rebuilding and was
+negative/mixed: B/P/A/F tied, X195 lost 97.5, CI `[-97.5, 0]`. The second
+replaced `_or_opt` trial reconstruction with an exact directed constant-time
+delta and produced a second positive initial development screen: A improved by
+2, X195 improved by 244, B/P/F tied and CI was `[0, 244]`. Both screens had ten
+valid pairs, two shared X256 failures and zero candidate-only failure. Protocol
+returned `SCREENING_EXPAND_INITIAL_QUALITY` for candidate 2, but Decision's
+partial-champion safety rule kept the branch in exploration. No expansion,
+validation, frozen or promotion ran; champion remains v1. See the
 [M16 preregistration](../experiments/v0.4/v04-cvrp-m16-positive-mechanism-continuation-preregistration-20260820.md).
 
 ## Current validation rule

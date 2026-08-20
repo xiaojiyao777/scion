@@ -421,10 +421,16 @@ The exact design is in the
   `SCREENING_EXPAND_INITIAL_QUALITY` with two wins and no losses, while the
   second refinement was mixed. Shared X256 baseline failures kept Decision in
   exploration, so no expansion or later stage ran.
-- [ ] Continue in one independently frozen M16 campaign using the two native
-  M15 records. Preserve the same development-only boundary and let the Agent
-  decide whether to retain the first positive mechanism, avoid the second
-  regression, address the shared baseline failure or pivot.
+- [x] Continue in one independently frozen M16 campaign using the two native
+  M15 records. Both autonomous candidates passed current development and
+  formal gates. The second exact directed `_or_opt` delta produced two case
+  wins, zero losses and three ties with CI `[0, 244]` and
+  `SCREENING_EXPAND_INITIAL_QUALITY`; two shared X256 failures kept Decision in
+  exploration, so no later stage ran.
+- [ ] Confirm the strongest autonomous positive candidate on one freshly
+  selected outcome-blind population before any further adaptive H/C campaign.
+  Treat this as fixed-candidate confirmation: no new provider call, patch or
+  repair, and no promotion claim unless the newly declared Protocol completes.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

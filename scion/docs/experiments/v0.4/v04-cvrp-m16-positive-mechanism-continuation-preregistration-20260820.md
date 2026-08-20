@@ -1,6 +1,6 @@
 # CVRP M16 positive-mechanism continuation preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_VALID_POSITIVE_MIXED_DEVELOPMENT`
 
 ## Scientific object and one-shot
 
@@ -140,3 +140,46 @@ Preparation verifies clean carrier and origins, all loaders, 21 ordered
 history records, exact M15 copy, public tests and sandbox, unchanged
 population/resource arithmetic, proxy model metadata and absent output. Any
 failure is `PREP_INVALID` with zero live provider or solver call.
+
+## Terminal record
+
+M16 ran once from clean carrier
+`78b6e2560eedac1457f14be8d543bdff78a89fa3` and exited zero as
+`completed / valid / requested_rounds_completed`. It used twelve provider
+calls, scheduled two candidates, evaluated two screening stages and wrote two
+native ordinary history records. Research rejection, infrastructure,
+resource, interrupt, not-evaluated and unknown counts are zero. No child
+remained. Champion is still v1; validation, frozen and promotion counts are
+zero.
+
+Candidate 1 autonomously targeted repeated index rebuilding in
+`destroy_repair.py`. It deferred the solution-wide repair cleanup until the
+pending customer set had been reinserted. Public development tests, formal
+Contract, Verification and canary passed. Screening attempted all 12 pairs:
+ten were valid and the two X-n256-k16 pairs were shared champion-and-candidate
+failures, with zero candidate-only failure. B/P/A/F tied and X-n195-k51 lost
+by 97.5; the aggregate median was zero with CI `[-97.5, 0]`. Protocol failed
+case quality and Decision returned `continue_explore` because champion
+evidence remained partial.
+
+Candidate 2 autonomously targeted `_or_opt` in `local_search.py`. It replaced
+per-trial route construction and full distance recomputation with an exact
+directed constant-time removal/insertion delta while retaining move order,
+capacity checks and committed-state rebuilding. All development and formal
+gates again passed. Its screen also completed 12 attempted pairs with ten
+valid and two shared X-n256-k16 failures and no candidate-only failure. B/P/F
+tied, A-n46-k7 improved by 2 and X-n195-k51 improved by 244. The case median
+was zero with CI `[0, 244]`; Protocol returned
+`expand / SCREENING_EXPAND_INITIAL_QUALITY`. Decision conservatively returned
+`continue_explore / SCREENING_PARTIAL_CHAMPION_EVIDENCE`, so the two-round
+budget ended without using expanded screening.
+
+M16 is positive framework and mechanism-discovery evidence. In particular,
+the Agent produced a second independently targeted constant-time local-search
+mechanism with a positive initial screen and no candidate-only runtime failure.
+It is not confirmation: the development population is outcome-known after the
+preceding campaign chain and two comparator-side X256 failures make the
+Decision evidence incomplete. No general CVRP improvement, promotion,
+validation, frozen or production claim follows. The immutable root is
+`/home/clawd/research/scion-experiments/v04-cvrp-m16-positive-mechanism-continuation-20260820`;
+it is not retried or resumed.
