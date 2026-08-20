@@ -223,6 +223,14 @@ an improving cross-route exchange and requires exact customer conservation;
 it passes B0 and fails the preserved M14 patch. See the
 [M14 preregistration](../experiments/v0.4/v04-cvrp-m14-continuous-mechanism-refinement-preregistration-20260820.md).
 
+M15 is prepared as a fresh continuation. It adds no algorithm direction: the
+only production change is the CVRP-owned public conservation test derived from
+M14's observed invalid route state. H receives all 19 ordered ordinary records
+through M14; the Agent may repair, refine or pivot, while current source and
+current public tests remain authoritative. Population, two-stage stop,
+provider cap, hardwall and development-only claim boundary are unchanged. See
+the [M15 preregistration](../experiments/v0.4/v04-cvrp-m15-customer-conservation-continuation-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test

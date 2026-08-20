@@ -8,6 +8,7 @@ referenced, not copied into development prompts.
 
 ## Runs
 
+- [CVRP M15 customer-conservation continuation, prepared under delegated authorization](v04-cvrp-m15-customer-conservation-continuation-preregistration-20260820.md)
 - [CVRP M14 continuous mechanism refinement, terminal valid negative/mixed result](v04-cvrp-m14-continuous-mechanism-refinement-preregistration-20260820.md)
 - [CVRP M13 history-safe continuous research, terminal valid negative/mixed two-candidate screen](v04-cvrp-m13-history-safe-continuation-preregistration-20260820.md)
 - [CVRP M12 corrected development-closure continuation, terminal framework exception after complete screening](v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md)
