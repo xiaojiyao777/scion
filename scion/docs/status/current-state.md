@@ -270,15 +270,19 @@ is safe on this population but is not confirmed as a broad or faster
 improvement. See the
 [M18 preregistration](../experiments/v0.4/v04-cvrp-m18-oropt-fixed-candidate-confirmation-preregistration-20260820.md).
 
-M19 is prepared, not started. It leaves generic and problem production code
-unchanged. H will receive the problem-owned ordinary M7 and M18 observations
-plus 23 ordered native history records through M16; C will receive only the
-approved current H, current source graph and public development tests. A fresh
-metadata-selected six-case/two-seed screen has zero exact path/seed overlap
-with the baseline's declared experiment inputs. The host specifies no target,
-patch, repair or mechanism. The run is capped at 30 provider calls, two
-evaluated screening stages, 66 solver subprocesses and a 14,000-second outer
-hardwall; validation, frozen and promotion are out of scope. See the
+M19 completed validly from clean carrier `45fd6a41`. Both autonomous
+candidates passed bounded development checks, formal Contract, Verification
+and canary and completed the fresh six-case/two-seed screen. Each produced
+three case wins, zero losses and two ties, with CI `[0, 15]` and `[0, 44]`;
+both had two shared X429 construction failures and zero candidate-only failure.
+Protocol recommended expansion but partial champion evidence kept Decision at
+`continue_explore`, so no later stage ran. The two patch files were
+byte-distinct but semantically equivalent directed constant-time `_or_opt`
+implementations. Thus M19 supplies stronger positive development evidence for
+that mechanism and negative evidence about current-campaign research
+diversity: the second H received the first experiment yet repeated it. No
+validation, frozen, promotion, global-improvement or production claim follows.
+See the
 [M19 preregistration](../experiments/v0.4/v04-cvrp-m19-fresh-population-continuous-research-preregistration-20260820.md).
 
 ## Current validation rule

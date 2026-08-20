@@ -442,14 +442,24 @@ The exact design is in the
   failed and measured runtime was effectively unchanged. The fixed candidate
   is therefore not confirmed, and no validation, frozen or promotion claim is
   available.
-- [ ] Feed the ordinary M18 confirmation observation into a new autonomous
+- [x] Feed the ordinary M18 confirmation observation into a new autonomous
   campaign through the CVRP problem adapter, without adding CVRP semantics to
   generic Scion. Use a fresh development population and let H choose whether
   to address construction completeness, refine local search or pivot; do not
   host-select a target, patch or repair mechanism. M19 is prepared with both
   the M18 problem-owned observation and M16's two native history records, a
   metadata-selected fresh development split, two evaluated-stage maximum and
-  the unchanged bounded code-research chain.
+  the unchanged bounded code-research chain. M19 completed validly: both
+  candidates passed all gates and produced three wins, zero losses and two
+  ties on the fresh screen, with only shared X429 construction failures. But
+  the two byte-distinct patches were semantically equivalent `_or_opt`
+  implementations, so the run also exposes inadequate research-frontier
+  novelty after a current-campaign result.
+- [ ] Add one problem-neutral H frontier instruction: current-campaign
+  experiment evidence is an already evaluated mechanism, so a repeated target
+  must identify a materially new algorithmic delta or H should pivot. Do not
+  ban same-file refinement, score novelty with a second model, or encode a CVRP
+  target. Validate the change on a new fresh development population.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

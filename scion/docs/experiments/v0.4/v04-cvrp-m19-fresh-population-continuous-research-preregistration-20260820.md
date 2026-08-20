@@ -1,6 +1,6 @@
 # CVRP M19 fresh-population continuous research preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_VALID_POSITIVE_REPETITIVE_DEVELOPMENT`
 
 ## Scientific object
 
@@ -185,3 +185,57 @@ loaders and 23 histories, CVRP projection of both observations, every declared
 case and solution, zero baseline overlap, resource arithmetic, public sandbox,
 proxy model metadata and absent output. Any failure is `PREP_INVALID` with no
 live provider or solver call.
+
+## Terminal result
+
+M19 ran once from clean carrier
+`45fd6a41acec80333b9203646d2ce7fed857abbf` and exited zero as
+`completed / valid / requested_rounds_completed`. It used ten provider calls,
+scheduled two candidates, evaluated two complete screening stages and wrote
+two native ordinary history records. Research rejection, infrastructure,
+resource, interrupt, not-evaluated and unknown counts are zero. No related
+process remained. Champion is still v1; validation, frozen and promotion are
+zero.
+
+Both autonomous H/C paths chose `policies/baseline_modules/local_search.py`
+and replaced `_or_opt` trial-route reconstruction with a directed constant-time
+delta. Both passed bounded public development checks, formal Contract,
+Verification and canary. Their patch sources are byte-distinct, but a direct
+diff shows only equivalent boundary-variable factoring and equivalent
+whole-route removal arithmetic; they do not represent distinct algorithmic
+mechanisms.
+
+Candidate 1 completed 12/12 pairs: ten were valid and both `X-n429-k61`
+pairs were shared champion-and-candidate construction failures. Candidate-only
+and bilateral failures were zero. `A-n61-k9`, `B-n64-k9` and `X-n289-k60`
+won by 11.5, 6.5 and 15 respectively; `P-n50-k10` and `A-n63-k9` tied. The
+case aggregate was three wins, zero losses, two ties, median `6.5`, CI
+`[0, 15]`. Protocol returned `SCREENING_EXPAND_REQUIRED_FOR_PASS`; partial
+champion evidence made Decision `continue_explore`.
+
+Candidate 2 independently regenerated the same mechanism with a different
+source expression. It again had ten valid pairs, two shared `X-n429-k61`
+failures and no candidate-only or bilateral failure. `B-n64-k9`, `P-n50-k10`
+and `X-n289-k60` won by 7, 1 and 44; both A cases tied. The aggregate was three
+wins, zero losses, two ties, median `1`, CI `[0, 44]`; Protocol returned
+`SCREENING_EXPAND_INITIAL_QUALITY` and Decision again conservatively continued.
+Measured wall-clock runtime remained essentially equal to B0 in both screens.
+
+The defensible algorithm conclusion is positive but development-only: the
+directed constant-time `_or_opt` mechanism produced three no-loss case wins in
+two byte-distinct implementations on a fresh population, without a
+candidate-side failure. The shared X429 construction failure still prevents
+complete evidence and no expanded, validation, frozen or promotion stage ran.
+
+The framework conclusion is mixed. Ordinary M18 input and all 23 history
+records reached H, and the complete bounded H/C→Contract→Verification→Protocol
+→Safe Features→Decision chain worked twice. However, the second H also saw the
+first M19 experiment through `experiment_history` and still proposed a
+semantically equivalent mechanism. The next framework experiment should test
+a problem-neutral research-frontier instruction that requires an H revisiting
+an evaluated target to state a materially new algorithmic delta, without
+forbidding legitimate same-file refinement or encoding a CVRP target.
+
+The immutable root is
+`/home/clawd/research/scion-experiments/v04-cvrp-m19-fresh-population-continuous-research-20260820`;
+it is not retried or resumed.
