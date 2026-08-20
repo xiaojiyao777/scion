@@ -402,10 +402,16 @@ The exact design is in the
 - [x] Remove the redundant mandatory `ready` turn: a latest unchanged draft
   whose bounded public development checks passed is eligible for the separate
   finalize/abandon decision; any later revision clears that eligibility.
-- [ ] Prepare and execute one fresh bounded continuation that imports the M12
+- [x] Prepare and execute one fresh bounded continuation that imports the M12
   attempts and complete screening result as ordinary H-only history. Do not
   reuse the M12 output root or reinterpret its framework exception as a valid
-  completed run.
+  completed run. M13 completed validly with two evaluated screening candidates,
+  two durable history records and no candidate-only runtime failures. Both
+  gates failed case quality; the second mechanism was mixed rather than
+  uniformly negative.
+- [ ] Continue in one independently frozen M14 campaign using the two native
+  M13 history records. Keep the same development population and claim boundary;
+  no M13 root reuse and no host-selected mechanism.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

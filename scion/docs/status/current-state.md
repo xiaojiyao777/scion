@@ -191,13 +191,21 @@ corrects that generic schema boundary and also removes the redundant mandatory
 `ready` turn after an unchanged draft has passed development checks. See the
 [M12 preregistration](../experiments/v0.4/v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md).
 
-M13 is prepared as one fresh two-screen continuation. Its committed ordinary
-history contains the two M12 rejection records plus one strict reconstruction
-of the complete M12 screening from the preserved H response, final candidate
-source, raw Protocol metrics and ordinary experiment event. Runtime Scion reads
-only that JSONL and does not reopen M12. M13 retains the same development
-population, provider cap 30, two-evaluated-stage stop and 13,500-second
-hardwall. See the
+M13 completed validly from clean carrier `fa235837`. Its committed input
+contained the two M12 rejection records plus one strict reconstruction of the
+complete M12 screening; runtime Scion did not reopen M12. It used ten provider
+calls and produced two autonomous H/C candidates. Both passed bounded
+development checks, Patch Contract, Verification and canary, completed 12/12
+screening pairs, wrote ordinary history and received `continue_explore`.
+
+The first candidate lowered `SIGMA_ACCEPTED` and was negative: zero case wins,
+two losses and three ties, with total-distance CI `[-457, 0]`. The second made
+route removal honor its sampled destroy quota exactly and was mixed: one win,
+one loss and three ties, with CI `[-2.1025439344, 20.5]`. Both gates were
+`SCREENING_FAIL_CASE_QUALITY`; champion remains v1. Each stage had ten valid
+pairs and two `X-n256-k16` failures attributed as shared champion-and-candidate
+baseline failure, with candidate-only failures zero. No validation, frozen,
+promotion or retained-B0 stage ran. See the
 [M13 preregistration](../experiments/v0.4/v04-cvrp-m13-history-safe-continuation-preregistration-20260820.md).
 
 ## Current validation rule

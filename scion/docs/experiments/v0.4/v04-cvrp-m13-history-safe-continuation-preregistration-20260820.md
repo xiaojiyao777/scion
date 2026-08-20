@@ -214,3 +214,43 @@ origins, all loaders, thirteen ordered history records, the strict recovered
 M12 screening projection, public development closure, sandbox, unchanged
 population, resource arithmetic and absent output. Any failure leaves M13
 `PREP_INVALID` and performs no live request.
+
+## Terminal record
+
+M13 ran once from clean carrier
+`fa235837adb3b0c4f45586c233c0495359c207fb` and exited zero as
+`completed / valid / requested_rounds_completed`. It used ten provider calls,
+scheduled two candidates, evaluated two screening stages, wrote two native
+ordinary history records and left no live child. Research rejection,
+not-evaluated, blocked-infra, resource-exhausted, interrupted and unknown
+outcome counts are all zero. Champion remains v1; validation, frozen,
+promotion and retention counts are zero.
+
+Candidate 1 autonomously targeted
+`policies/baseline_modules/config.py`, lowering `SIGMA_ACCEPTED` from 13 to 5
+while leaving acceptance and feasibility logic unchanged. Contract,
+Verification and canary passed. Screening completed 12 attempted, 10 valid and
+2 shared-failure pairs. Case aggregates were zero wins, two losses and three
+ties; A-n46-k7 was -2.5 and X-n195-k51 was -457 in total-distance delta. The
+case-median effect was 0 with CI `[-457, 0]`; Protocol failed case quality and
+Decision returned `continue_explore` because champion evidence was partial.
+
+Candidate 2 autonomously targeted
+`policies/baseline_modules/destroy_repair.py`, changing route removal to remove
+exactly the sampled customer quota by combining whole routes with one bounded
+contiguous segment. Contract, Verification and canary passed. Screening again
+completed 12 attempted, 10 valid and 2 shared-failure pairs. Case aggregates
+were one win, one loss and three ties: X-n195-k51 was +20.5, F-n45-k4 was
+-2.1025439344 and the other valid cases tied. The median was 0 with CI
+`[-2.1025439344, 20.5]`; Protocol again failed case quality and Decision
+returned `continue_explore`.
+
+In both stages, the two X-n256-k16 seeds failed on both arms with equivalent
+solver-algorithm runtime evidence. Attribution is
+`shared_failed_pairs=2`, `champion_failed_pairs=2`,
+`candidate_failed_pairs=0`, `bilateral_failed_pairs=0`. Thus neither Decision
+was contaminated by a candidate-only runtime-failure claim. The result is
+valid negative/mixed development evidence, not algorithm improvement,
+promotion, generalization or v0.4 completion. The immutable root is
+`/home/clawd/research/scion-experiments/v04-cvrp-m13-history-safe-continuation-20260820`;
+it is not retried or resumed.
