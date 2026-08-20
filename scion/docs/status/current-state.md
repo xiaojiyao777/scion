@@ -235,6 +235,13 @@ candidate-only failure. Decision's partial-champion safety rule returned
 `continue_explore`, so no expanded stage ran; champion remains v1. See the
 [M15 preregistration](../experiments/v0.4/v04-cvrp-m15-customer-conservation-continuation-preregistration-20260820.md).
 
+M16 is prepared as a fresh normal-Scion continuation with 21 ordered history
+records through M15. It changes no framework, algorithm, population, resource
+or claim boundary. The Agent—not the host—chooses whether to retain the first
+positive mechanism, avoid the second regression, address shared baseline
+failure or pivot. See the
+[M16 preregistration](../experiments/v0.4/v04-cvrp-m16-positive-mechanism-continuation-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test
