@@ -191,6 +191,15 @@ corrects that generic schema boundary and also removes the redundant mandatory
 `ready` turn after an unchanged draft has passed development checks. See the
 [M12 preregistration](../experiments/v0.4/v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md).
 
+M13 is prepared as one fresh two-screen continuation. Its committed ordinary
+history contains the two M12 rejection records plus one strict reconstruction
+of the complete M12 screening from the preserved H response, final candidate
+source, raw Protocol metrics and ordinary experiment event. Runtime Scion reads
+only that JSONL and does not reopen M12. M13 retains the same development
+population, provider cap 30, two-evaluated-stage stop and 13,500-second
+hardwall. See the
+[M13 preregistration](../experiments/v0.4/v04-cvrp-m13-history-safe-continuation-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test
