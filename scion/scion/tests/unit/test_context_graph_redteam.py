@@ -8,17 +8,16 @@ from typing import Any
 import pytest
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.models import Branch, BranchState, ChampionState, HypothesisProposal
-from scion.proposal.code_research_session import CodeResearchSession
+from scion.proposal.code_research_session import (
+    CodeResearchAbandon,
+    CodeResearchSession,
+)
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_manager.code_context import (
     _build_editable_source_context,
 )
 from scion.proposal.context_manager.source_graph import source_graph_roles
-from scion.proposal.engine import (
-    CreativeLayer,
-    ProposalValidationError,
-    build_prompt_turn_snapshot,
-)
+from scion.proposal.engine import CreativeLayer, build_prompt_turn_snapshot
 from scion.proposal.engine.code_prompts import _split_code_context
 from scion.verification.development import (
     declared_development_suites,
@@ -285,12 +284,17 @@ def test_peer_becomes_editable_only_after_read_and_public_test_stays_read_only()
         "old_string": "assert True",
         "new_string": "assert False",
     }
-    public_client = _SequenceClient([{"action": "revise", "patch": public_patch}])
+    public_client = _SequenceClient(
+        [
+            {"action": "revise", "patch": public_patch},
+            {"outcome": "abandon", "reason": "public test is read-only"},
+        ]
+    )
     public_session = CodeResearchSession(
         CreativeLayer(public_client), CodeResearchLimits(max_turns=1)
     )
-    with pytest.raises(ProposalValidationError, match="read-only public"):
-        public_session.run(_research_snapshot())
+    public_result = public_session.run(_research_snapshot())
+    assert isinstance(public_result, CodeResearchAbandon)
 
 
 def test_development_manifest_has_no_formal_fallback_and_rejects_case_alias(

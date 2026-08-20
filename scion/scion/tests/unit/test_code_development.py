@@ -116,6 +116,61 @@ def test_real_sandbox_uses_only_public_closure_and_cleans_scratch(
     assert host_sentinel.read_text(encoding="utf-8") == "private"
 
 
+def test_real_sandbox_failure_returns_safe_public_diagnostic_only(
+    tmp_path: Path,
+) -> None:
+    problem_root = tmp_path / "problem"
+    (problem_root / "tests").mkdir(parents=True)
+    (problem_root / "tests/test_public.py").write_text(
+        "from operators.main import improve\n"
+        "def test_public():\n"
+        "    assert improve(1) == 999, 'CHILD_PRIVATE_DIAGNOSTIC'\n",
+        encoding="utf-8",
+    )
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign"), editable_patterns=("operators/*.py",)
+    )
+    evaluator = CodeDevelopmentEvaluator(
+        materializer=materializer,
+        problem_spec=_spec(problem_root),
+        suites=(
+            DevelopmentSuiteManifest(
+                check_name="D3_unit_tests",
+                source_root=str(problem_root),
+                test_path="tests/test_public.py",
+            ),
+        ),
+        workspace_paths=(),
+        problem_package_paths=(),
+        limits=CodeResearchLimits(
+            max_test_suite_timeout_sec=10,
+            max_test_total_timeout_sec=10,
+        ),
+    )
+
+    run = evaluator.evaluate(
+        source_corpus={
+            "operators/__init__.py": "",
+            "operators/main.py": "def improve(value):\n    return value\n",
+        },
+        patch=_patch(),
+        selected_surface=None,
+        total_timeout_sec=10.0,
+    )
+
+    assert run.outcome == "failed"
+    projection = run.provider_projection()
+    assert projection["checks"][-1] == {
+        "name": "D3_unit_tests",
+        "outcome": "failed",
+        "reason_code": "pytest_test_failure",
+        "test_path": "tests/test_public.py",
+    }
+    assert "CHILD_PRIVATE_DIAGNOSTIC" not in repr(projection)
+    assert str(problem_root) not in repr(projection)
+    assert list((tmp_path / "campaign/candidate_workspaces").iterdir()) == []
+
+
 def test_manifest_rejects_absolute_traversal_and_symlink(tmp_path: Path) -> None:
     problem_root = tmp_path / "problem"
     (problem_root / "tests").mkdir(parents=True)
@@ -266,6 +321,40 @@ def test_provider_projection_contains_only_enum_checks_and_counts() -> None:
         "checks": [{"name": "D3_unit_tests", "outcome": "failed"}],
         "counts": {"total": 1, "passed": 0, "failed": 1},
     }
+
+
+def test_provider_projection_exposes_only_safe_actionable_test_diagnostics() -> None:
+    from scion.verification.development import (
+        DevelopmentCheckObservation,
+        DevelopmentCheckRun,
+    )
+
+    projection = DevelopmentCheckRun(
+        outcome="failed",
+        checks=(
+            DevelopmentCheckObservation(
+                name="D4_regression_tests",
+                outcome="failed",
+                reason_code="pytest_test_failure",
+                test_path="tests/test_public_regression.py",
+            ),
+        ),
+    ).provider_projection()
+
+    assert projection == {
+        "outcome": "failed",
+        "checks": [
+            {
+                "name": "D4_regression_tests",
+                "outcome": "failed",
+                "reason_code": "pytest_test_failure",
+                "test_path": "tests/test_public_regression.py",
+            }
+        ],
+        "counts": {"total": 1, "passed": 0, "failed": 1},
+    }
+    assert "stdout" not in repr(projection)
+    assert "traceback" not in repr(projection)
 
 
 def test_cvrp_declares_exact_public_development_closure() -> None:

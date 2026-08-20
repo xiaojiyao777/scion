@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import BranchState, HypothesisProposal, StepRecord
 from scion.proposal.engine import ProposalValidationError
@@ -151,6 +150,10 @@ def test_invalid_code_response_is_research_rejected_after_one_call(
     assert outcome is not None
     assert outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
     assert branch.state is not BranchState.BLOCKED_INFRA
+    if isinstance(error, ProposalValidationError):
+        assert outcome.reason_code == "PATCH_PROPOSAL_INVALID"
+    else:
+        assert outcome.reason_code == "PROPOSAL_RESPONSE_INVALID"
 
 
 def test_keyboard_interrupt_propagates_without_a_side_channel_outcome() -> None:

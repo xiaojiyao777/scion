@@ -254,7 +254,7 @@ class ProposalPipeline:
             if balance
             else "PROVIDER_CALL_CAP_EXHAUSTED"
             if call_cap_exhausted
-            else "PROPOSAL_RESPONSE_INVALID"
+            else _proposal_validation_reason_code(error, phase=phase)
             if invalid
             else "PROVIDER_CALL_BLOCKED_INFRA"
         )
@@ -331,3 +331,18 @@ class ProposalPipeline:
 
 
 __all__ = ["ProposalPipeline"]
+
+
+def _proposal_validation_reason_code(error: Exception, *, phase: str) -> str:
+    if not isinstance(error, ProposalValidationError):
+        return "PROPOSAL_RESPONSE_INVALID"
+    message = str(error).lower()
+    if phase == "code":
+        if "transcript exceeds max_transcript_chars" in message:
+            return "CODE_RESEARCH_TRANSCRIPT_EXHAUSTED"
+        if "local provider call cap exhausted" in message:
+            return "CODE_RESEARCH_TURN_CAP_EXHAUSTED"
+        if "test results exceed" in message or "tool results exceed" in message:
+            return "CODE_RESEARCH_RESULT_CAP_EXHAUSTED"
+        return "PATCH_PROPOSAL_INVALID"
+    return "HYPOTHESIS_PROPOSAL_INVALID"

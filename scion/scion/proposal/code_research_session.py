@@ -288,26 +288,33 @@ class CodeResearchSession:
                 result = self._search_source(command.path, command.query, corpus)
             elif command.action == "revise":
                 assert command.patch is not None
-                _validate_patch_bounds(command.patch, self._limits)
-                _require_existing_patch_sources_visible(
-                    command.patch,
-                    existing_paths=frozenset(editable_corpus),
-                    visible_paths=frozenset(visible_paths),
-                    public_test_paths=frozenset(public_test_corpus),
-                )
-                parsed = _parse_patch(
-                    command.patch,
-                    context=snapshot.structured_context,
-                )
-                draft_patch = deepcopy(parsed)
-                draft_raw = deepcopy(dict(command.patch))
-                draft_revision += 1
-                last_test_outcome = None
-                result = {
-                    "action": command.action,
-                    "ok": True,
-                    "draft_revision": draft_revision,
-                }
+                try:
+                    _validate_patch_bounds(command.patch, self._limits)
+                    _require_existing_patch_sources_visible(
+                        command.patch,
+                        existing_paths=frozenset(editable_corpus),
+                        visible_paths=frozenset(visible_paths),
+                        public_test_paths=frozenset(public_test_corpus),
+                    )
+                    parsed = _parse_patch(
+                        command.patch,
+                        context=snapshot.structured_context,
+                    )
+                except ProposalValidationError as exc:
+                    result = _tool_error(
+                        "revise",
+                        _patch_validation_reason(exc),
+                    )
+                else:
+                    draft_patch = deepcopy(parsed)
+                    draft_raw = deepcopy(dict(command.patch))
+                    draft_revision += 1
+                    last_test_outcome = None
+                    result = {
+                        "action": command.action,
+                        "ok": True,
+                        "draft_revision": draft_revision,
+                    }
             elif command.action == "test_patch":
                 result = self._run_test_patch(
                     draft_patch,
@@ -359,7 +366,7 @@ class CodeResearchSession:
         )
         final_raw = self._call_provider(
             final_snapshot,
-            lambda: self._creative.call_code_research_finalize(final_snapshot)
+            lambda: self._creative.call_code_research_finalize(final_snapshot),
         )
         self._record_action(final_raw)
         decision = _parse_final_decision(final_raw)
@@ -416,9 +423,7 @@ class CodeResearchSession:
         state: dict[str, Any] = {
             "max_action_bytes": self._limits.max_action_bytes,
             "turn_index": turn_index,
-            "remaining_research_turns": max(
-                0, self._limits.max_turns - turn_index
-            ),
+            "remaining_research_turns": max(0, self._limits.max_turns - turn_index),
             "remaining_read_calls": max(
                 0, self._limits.max_read_calls - self._read_calls
             ),
@@ -431,10 +436,7 @@ class CodeResearchSession:
             "draft_revision": draft_revision,
             "remaining_test_timeout_sec": max(
                 0,
-                int(
-                    self._limits.max_test_total_timeout_sec
-                    - self._test_elapsed_sec
-                ),
+                int(self._limits.max_test_total_timeout_sec - self._test_elapsed_sec),
             ),
             "tool_results": deepcopy(self._tool_results),
         }
@@ -519,14 +521,10 @@ class CodeResearchSession:
                     "system_blocks": list(snapshot.system_blocks),
                     "user_prompt": snapshot.user_prompt,
                     "provider_tool": snapshot.provider_tool,
-                    "structured_context": snapshot.structured_context,
                 }
             )
         )
-        if (
-            self._transcript_chars + prompt_chars
-            > self._limits.max_transcript_chars
-        ):
+        if self._transcript_chars + prompt_chars > self._limits.max_transcript_chars:
             raise ProposalValidationError(
                 "code research transcript exceeds max_transcript_chars before dispatch"
             )
@@ -556,10 +554,7 @@ class CodeResearchSession:
     def _record_tool_result(self, result: dict[str, Any]) -> None:
         rendered = _bounded_json(result)
         result_chars = len(rendered)
-        if (
-            self._tool_result_chars + result_chars
-            > self._limits.max_tool_result_chars
-        ):
+        if self._tool_result_chars + result_chars > self._limits.max_tool_result_chars:
             raise ProposalValidationError(
                 "code research tool results exceed max_tool_result_chars"
             )
@@ -599,8 +594,7 @@ class CodeResearchSession:
         if self._read_lines + lines > self._limits.max_read_lines:
             return _tool_error("read_source", "read_line_cap_exhausted")
         if (
-            self._tool_result_chars + chars
-            > self._limits.max_tool_result_chars
+            self._tool_result_chars + chars > self._limits.max_tool_result_chars
             or self._transcript_chars + chars > self._limits.max_transcript_chars
         ):
             return _tool_error("read_source", "tool_result_cap_exhausted")
@@ -918,6 +912,21 @@ def _bounded_test_projection(
         "D3_unit_tests",
         "D4_regression_tests",
     }
+    reason_codes = {
+        "syntax_invalid",
+        "undefined_names",
+        "interface_mismatch",
+        "pytest_test_failure",
+        "pytest_interrupted",
+        "pytest_internal_error",
+        "pytest_usage_error",
+        "pytest_no_tests_collected",
+        "pytest_terminated",
+        "suite_timeout",
+        "suite_launch_error",
+        "suite_preflight_rejected",
+        "suite_unavailable",
+    }
     outcome = value.get("outcome")
     raw_checks = value.get("checks")
     if outcome not in outcomes or not isinstance(raw_checks, list):
@@ -927,16 +936,41 @@ def _bounded_test_projection(
     checks: list[dict[str, str]] = []
     seen: set[str] = set()
     for raw_check in raw_checks:
-        if not isinstance(raw_check, Mapping) or set(raw_check) != {
-            "name",
-            "outcome",
-        }:
+        if (
+            not isinstance(raw_check, Mapping)
+            or not set(raw_check).issubset(
+                {"name", "outcome", "reason_code", "test_path"}
+            )
+            or not {"name", "outcome"}.issubset(raw_check)
+        ):
             raise ProposalValidationError("development check result is invalid")
         name = raw_check.get("name")
         check_outcome = raw_check.get("outcome")
+        reason_code = raw_check.get("reason_code")
+        test_path = raw_check.get("test_path")
         if name not in check_names or name in seen or check_outcome not in outcomes:
             raise ProposalValidationError("development check result is invalid")
-        checks.append({"name": name, "outcome": check_outcome})
+        if reason_code is not None and reason_code not in reason_codes:
+            raise ProposalValidationError("development check result is invalid")
+        if test_path is not None:
+            try:
+                canonical_test_path = normalize_relative_patch_path(test_path)
+            except (TypeError, ValueError):
+                canonical_test_path = None
+            if (
+                not isinstance(test_path, str)
+                or len(test_path) > _MAX_PATH_CHARS
+                or canonical_test_path != test_path
+            ):
+                raise ProposalValidationError("development check result is invalid")
+        checks.append(
+            {
+                "name": name,
+                "outcome": check_outcome,
+                **({"reason_code": reason_code} if reason_code is not None else {}),
+                **({"test_path": test_path} if test_path is not None else {}),
+            }
+        )
         seen.add(name)
     passed = sum(check["outcome"] == "passed" for check in checks)
     return {
@@ -951,6 +985,31 @@ def _bounded_test_projection(
             "failed": len(checks) - passed,
         },
     }
+
+
+def _patch_validation_reason(error: ProposalValidationError) -> str:
+    """Return one safe correction category without echoing provider text."""
+
+    message = str(error).lower()
+    categories = (
+        ("duplicate file_path", "duplicate_file_path"),
+        ("old_string_not_found", "selector_not_found"),
+        ("old_line_not_found", "selector_not_found"),
+        ("old_string_not_unique", "selector_not_unique"),
+        ("old_line_not_unique", "selector_not_unique"),
+        ("source unavailable", "source_not_visible"),
+        ("was not read", "source_not_read"),
+        ("read-only public", "public_test_read_only"),
+        ("max_patch_files", "patch_file_cap_exhausted"),
+        ("max_patch_chars", "patch_char_cap_exhausted"),
+        ("canonical relative path", "invalid_patch_path"),
+        ("unknown", "patch_schema_invalid"),
+        ("missing", "patch_schema_invalid"),
+    )
+    return next(
+        (reason for token, reason in categories if token in message),
+        "patch_validation_failed",
+    )
 
 
 def _require_exact_keys(

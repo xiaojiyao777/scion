@@ -141,7 +141,11 @@ def test_c9_bypass_cannot_read_host_or_masked_framework_or_write_work(
             {"name": "D1_syntax", "outcome": "passed"},
             {"name": "D1b_undefined_names", "outcome": "passed"},
             {"name": "D2_interface", "outcome": "passed"},
-            {"name": "D3_unit_tests", "outcome": "passed"},
+            {
+                "name": "D3_unit_tests",
+                "outcome": "passed",
+                "test_path": "tests/test_public.py",
+            },
         ],
         "counts": {"total": 4, "passed": 4, "failed": 0},
     }

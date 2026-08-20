@@ -45,6 +45,21 @@ DevelopmentOutcome = Literal[
     "preflight_rejected",
     "unavailable",
 ]
+DevelopmentReasonCode = Literal[
+    "syntax_invalid",
+    "undefined_names",
+    "interface_mismatch",
+    "pytest_test_failure",
+    "pytest_interrupted",
+    "pytest_internal_error",
+    "pytest_usage_error",
+    "pytest_no_tests_collected",
+    "pytest_terminated",
+    "suite_timeout",
+    "suite_launch_error",
+    "suite_preflight_rejected",
+    "suite_unavailable",
+]
 
 _SUITE_NAMES = ("D3_unit_tests", "D4_regression_tests")
 _BWRAP = Path("/usr/bin/bwrap")
@@ -74,6 +89,8 @@ class DevelopmentCheckObservation:
 
     name: DevelopmentCheckName
     outcome: DevelopmentOutcome
+    reason_code: DevelopmentReasonCode | None = None
+    test_path: str | None = None
 
     @property
     def passed(self) -> bool:
@@ -96,7 +113,20 @@ class DevelopmentCheckRun:
         return {
             "outcome": self.outcome,
             "checks": [
-                {"name": check.name, "outcome": check.outcome}
+                {
+                    "name": check.name,
+                    "outcome": check.outcome,
+                    **(
+                        {"reason_code": check.reason_code}
+                        if check.reason_code is not None
+                        else {}
+                    ),
+                    **(
+                        {"test_path": check.test_path}
+                        if check.test_path is not None
+                        else {}
+                    ),
+                }
                 for check in self.checks
             ],
             "counts": {
@@ -107,7 +137,17 @@ class DevelopmentCheckRun:
         }
 
 
-def declared_development_suites(problem_spec: Any) -> tuple[DevelopmentSuiteManifest, ...]:
+@dataclass(frozen=True)
+class DevelopmentSandboxResult:
+    """One host-enumerated subprocess result without child-controlled text."""
+
+    outcome: DevelopmentOutcome
+    reason_code: DevelopmentReasonCode | None = None
+
+
+def declared_development_suites(
+    problem_spec: Any,
+) -> tuple[DevelopmentSuiteManifest, ...]:
     """Resolve the authoritative V1 host manifest without fallback discovery."""
 
     spec_v1 = getattr(problem_spec, "spec_v1", problem_spec)
@@ -399,8 +439,12 @@ def run_development_checks(
             raise ValueError("development timeouts must be finite and positive")
     checks: list[DevelopmentCheckObservation] = []
     static = (
-        ("D1_syntax", check_syntax(patch).passed),
-        ("D1b_undefined_names", check_undefined_names(patch).passed),
+        ("D1_syntax", check_syntax(patch).passed, "syntax_invalid"),
+        (
+            "D1b_undefined_names",
+            check_undefined_names(patch).passed,
+            "undefined_names",
+        ),
         (
             "D2_interface",
             check_interface(
@@ -410,12 +454,14 @@ def run_development_checks(
                 selected_surface=selected_surface,
                 operator_execute_signature=operator_execute_signature,
             ).passed,
+            "interface_mismatch",
         ),
     )
-    for name, passed in static:
+    for name, passed, reason_code in static:
         observation = DevelopmentCheckObservation(
             name=name,
             outcome="passed" if passed else "failed",
+            reason_code=None if passed else reason_code,
         )
         checks.append(observation)
         if not passed:
@@ -437,9 +483,12 @@ def run_development_checks(
     for suite in _validated_suite_order(suites):
         remaining = total_timeout_sec - (time.monotonic() - started)
         if remaining <= 0:
-            outcome: DevelopmentOutcome = "timeout"
+            sandbox_result = DevelopmentSandboxResult(
+                outcome="timeout",
+                reason_code="suite_timeout",
+            )
         else:
-            outcome = sandbox.run_pytest(
+            sandbox_result = sandbox.run_pytest(
                 workspace=candidate_workspace,
                 test_path=suite.test_path,
                 timeout_sec=min(float(per_suite_timeout_sec), remaining),
@@ -447,11 +496,16 @@ def run_development_checks(
             )
         observation = DevelopmentCheckObservation(
             name=suite.check_name,
-            outcome=outcome,
+            outcome=sandbox_result.outcome,
+            reason_code=sandbox_result.reason_code,
+            test_path=suite.test_path,
         )
         checks.append(observation)
         if not observation.passed:
-            return DevelopmentCheckRun(outcome=outcome, checks=tuple(checks))
+            return DevelopmentCheckRun(
+                outcome=sandbox_result.outcome,
+                checks=tuple(checks),
+            )
     return DevelopmentCheckRun(outcome="passed", checks=tuple(checks))
 
 
@@ -474,7 +528,9 @@ class BubblewrapDevelopmentSandbox:
             framework_root or Path(__file__).resolve().parents[1]
         ).resolve()
         python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
-        self._python_site = self._python_prefix / "lib" / python_version / "site-packages"
+        self._python_site = (
+            self._python_prefix / "lib" / python_version / "site-packages"
+        )
         self._popen = popen
 
     @property
@@ -501,21 +557,33 @@ class BubblewrapDevelopmentSandbox:
         test_path: str,
         timeout_sec: float,
         problem_runtime_root: str,
-    ) -> DevelopmentOutcome:
+    ) -> DevelopmentSandboxResult:
         if not self.available:
-            return "unavailable"
+            return DevelopmentSandboxResult(
+                outcome="unavailable",
+                reason_code="suite_unavailable",
+            )
         workspace_path = Path(workspace).resolve()
         relative_test = _canonical_manifest_path(test_path)
         host_test = workspace_path / relative_test
         try:
             _require_destination_inside_scratch(workspace_path, host_test)
         except ValueError:
-            return "preflight_rejected"
+            return DevelopmentSandboxResult(
+                outcome="preflight_rejected",
+                reason_code="suite_preflight_rejected",
+            )
         if not host_test.is_file() or host_test.is_symlink():
-            return "preflight_rejected"
+            return DevelopmentSandboxResult(
+                outcome="preflight_rejected",
+                reason_code="suite_preflight_rejected",
+            )
         runtime_path = Path(problem_runtime_root).resolve()
         if not runtime_path.is_dir() or not runtime_path.is_relative_to(workspace_path):
-            return "preflight_rejected"
+            return DevelopmentSandboxResult(
+                outcome="preflight_rejected",
+                reason_code="suite_preflight_rejected",
+            )
         argv = self._argv(workspace_path, relative_test, runtime_path)
         try:
             proc = self._popen(
@@ -531,16 +599,34 @@ class BubblewrapDevelopmentSandbox:
                 preexec_fn=_resource_limiter(timeout_sec),
             )
         except Exception:
-            return "launch_error"
+            return DevelopmentSandboxResult(
+                outcome="launch_error",
+                reason_code="suite_launch_error",
+            )
         try:
             return_code = proc.wait(timeout=timeout_sec)
         except subprocess.TimeoutExpired:
             _kill_process_group(proc)
-            return "timeout"
+            return DevelopmentSandboxResult(
+                outcome="timeout",
+                reason_code="suite_timeout",
+            )
         except BaseException:
             _kill_process_group(proc)
             raise
-        return "passed" if return_code == 0 else "failed"
+        if return_code == 0:
+            return DevelopmentSandboxResult(outcome="passed")
+        reason_by_exit = {
+            1: "pytest_test_failure",
+            2: "pytest_interrupted",
+            3: "pytest_internal_error",
+            4: "pytest_usage_error",
+            5: "pytest_no_tests_collected",
+        }
+        return DevelopmentSandboxResult(
+            outcome="failed",
+            reason_code=reason_by_exit.get(return_code, "pytest_terminated"),
+        )
 
     def _argv(
         self,
@@ -670,8 +756,7 @@ def _development_safety_preflight(
         if not is_editable(change.file_path):
             return False
         if any(
-            segment_glob_match(change.file_path, pattern)
-            for pattern in frozen_patterns
+            segment_glob_match(change.file_path, pattern) for pattern in frozen_patterns
         ):
             return False
         if not check_sensitive_api(single).passed:
@@ -796,6 +881,8 @@ __all__ = [
     "DevelopmentCheckName",
     "DevelopmentCheckObservation",
     "DevelopmentCheckRun",
+    "DevelopmentReasonCode",
+    "DevelopmentSandboxResult",
     "DevelopmentOutcome",
     "DevelopmentSuiteManifest",
     "copy_development_suite_closure",

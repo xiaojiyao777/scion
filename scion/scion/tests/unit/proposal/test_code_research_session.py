@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 from copy import deepcopy
 from pathlib import Path
@@ -15,6 +16,7 @@ from scion.core.models import (
     BranchState,
     ChampionState,
     HypothesisProposal,
+    PatchProposal,
 )
 from scion.core.proposal_pipeline import ProposalPipeline
 from scion.core.resource_envelope import (
@@ -30,7 +32,10 @@ from scion.proposal.engine import (
     ProposalValidationError,
     build_prompt_turn_snapshot,
 )
-from scion.proposal.engine.provider_call import ProviderResponseSizeExceeded
+from scion.proposal.engine.provider_call import (
+    PromptTurnSnapshot,
+    ProviderResponseSizeExceeded,
+)
 
 _TARGET_PATH = "operators/main.py"
 _SUPPORT_PATH = "operators/helper.py"
@@ -237,15 +242,18 @@ def test_public_development_test_is_visible_but_never_patchable() -> None:
         "evidence_refs": [],
     }
     session, client = _run(
-        [{"action": "revise", "patch": public_patch}],
+        [
+            {"action": "revise", "patch": public_patch},
+            {"outcome": "abandon", "reason": "public tests are read-only"},
+        ],
         limits=CodeResearchLimits(max_turns=1),
     )
 
-    with pytest.raises(ProposalValidationError, match="read-only public"):
-        session.run(_snapshot(include_public_test=True))
+    session.run(_snapshot(include_public_test=True))
 
     assert _PUBLIC_TEST_PATH in client.calls[0]["system_text"]
     assert "test_improve" in client.calls[0]["system_text"]
+    assert "public_test_read_only" in client.calls[1]["system_text"]
 
 
 def test_development_evaluator_receives_only_editable_source_corpus() -> None:
@@ -427,16 +435,17 @@ def test_search_excerpt_does_not_make_an_unread_file_patchable() -> None:
         [
             {"action": "search_source", "path": _SUPPORT_PATH, "query": "helper"},
             {"action": "revise", "patch": _patch(_SUPPORT_PATH)},
+            {"outcome": "abandon", "reason": "source must be read first"},
         ],
         limits=CodeResearchLimits(max_turns=2),
     )
 
-    with pytest.raises(ProposalValidationError, match="was not read"):
-        session.run(_snapshot())
+    session.run(_snapshot())
 
-    assert len(client.calls) == 2
+    assert len(client.calls) == 3
     assert "def helper" in client.calls[1]["system_text"]
     assert _SUPPORT_SOURCE not in client.calls[1]["system_text"]
+    assert "source_not_read" in client.calls[2]["system_text"]
 
 
 @pytest.mark.parametrize(
@@ -445,14 +454,16 @@ def test_search_excerpt_does_not_make_an_unread_file_patchable() -> None:
 )
 def test_ready_patch_rejects_every_noncanonical_file_path(path: str) -> None:
     session, client = _run(
-        [{"action": "revise", "patch": _patch(path)}],
+        [
+            {"action": "revise", "patch": _patch(path)},
+            {"outcome": "abandon", "reason": "invalid path"},
+        ],
         limits=CodeResearchLimits(max_turns=1),
     )
 
-    with pytest.raises(ProposalValidationError, match="canonical relative path"):
-        session.run(_snapshot())
+    session.run(_snapshot())
 
-    assert len(client.calls) == 1
+    assert "invalid_patch_path" in client.calls[1]["system_text"]
 
 
 def test_final_turn_can_explicitly_abandon_the_frozen_candidate() -> None:
@@ -505,12 +516,14 @@ def test_patch_file_and_character_caps_fail_before_finalize() -> None:
     too_many_files = _patch()
     too_many_files["additional_changes"] = [_patch(_SUPPORT_PATH)]
     file_session, file_client = _run(
-        [{"action": "revise", "patch": too_many_files}],
+        [
+            {"action": "revise", "patch": too_many_files},
+            {"outcome": "abandon", "reason": "file cap"},
+        ],
         limits=CodeResearchLimits(max_turns=1, max_patch_files=1),
     )
-    with pytest.raises(ProposalValidationError, match="max_patch_files"):
-        file_session.run(_snapshot())
-    assert len(file_client.calls) == 1
+    file_session.run(_snapshot())
+    assert "patch_file_cap_exhausted" in file_client.calls[1]["system_text"]
 
     large_patch = {
         "file_path": _TARGET_PATH,
@@ -521,12 +534,53 @@ def test_patch_file_and_character_caps_fail_before_finalize() -> None:
         "evidence_refs": [],
     }
     char_session, char_client = _run(
-        [{"action": "revise", "patch": large_patch}],
+        [
+            {"action": "revise", "patch": large_patch},
+            {"outcome": "abandon", "reason": "character cap"},
+        ],
         limits=CodeResearchLimits(max_turns=1, max_patch_chars=1000),
     )
-    with pytest.raises(ProposalValidationError, match="max_patch_chars"):
-        char_session.run(_snapshot())
-    assert len(char_client.calls) == 1
+    char_session.run(_snapshot())
+    assert "patch_char_cap_exhausted" in char_client.calls[1]["system_text"]
+
+
+def test_invalid_duplicate_file_draft_is_actionable_and_can_be_revised() -> None:
+    duplicate = _patch()
+    duplicate["additional_changes"] = [_patch()]
+    session, client = _run(
+        [
+            {"action": "revise", "patch": duplicate},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+    )
+    session._test_patch = _passing_development_test
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, PatchProposal)
+    assert "duplicate_file_path" in client.calls[1]["system_text"]
+
+
+def test_transcript_accounting_counts_provider_wire_not_trace_metadata() -> None:
+    session, _client = _run(
+        [],
+        limits=CodeResearchLimits(max_turns=1, max_transcript_chars=2_000),
+    )
+    snapshot = PromptTurnSnapshot(
+        render_kind="code_research",
+        system_blocks=({"type": "text", "text": "small"},),
+        user_prompt="small",
+        provider_tool={"name": "small", "input_schema": {"type": "object"}},
+        structured_context_json=json.dumps({"trace_only": "x" * 10_000}),
+    )
+
+    result = session._call_provider(snapshot, lambda: {"action": "ready"})
+
+    assert result == {"action": "ready"}
 
 
 def test_oversized_provider_action_is_not_written_to_terminal_trace(
@@ -684,6 +738,44 @@ def test_development_projection_drops_host_only_fields() -> None:
     session.run(_snapshot())
 
     assert secret not in client.calls[2]["system_text"]
+
+
+@pytest.mark.parametrize(
+    "unsafe_check",
+    [
+        {
+            "name": "D4_regression_tests",
+            "outcome": "failed",
+            "reason_code": "raw_traceback",
+        },
+        {
+            "name": "D4_regression_tests",
+            "outcome": "failed",
+            "test_path": "/host/private_test.py",
+        },
+    ],
+)
+def test_development_projection_rejects_unapproved_diagnostic_values(
+    unsafe_check: dict[str, str],
+) -> None:
+    def test_patch(_patch_value, _remaining, _corpus):
+        return {
+            "outcome": "failed",
+            "checks": [unsafe_check],
+            "counts": {"total": 1, "passed": 0, "failed": 1},
+        }
+
+    session, _client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=2),
+    )
+    session._test_patch = test_patch
+
+    with pytest.raises(ProposalValidationError, match="development check"):
+        session.run(_snapshot())
 
 
 def test_global_provider_cap_blocks_test_before_evaluator_dispatch() -> None:
