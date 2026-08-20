@@ -208,6 +208,12 @@ baseline failure, with candidate-only failures zero. No validation, frozen,
 promotion or retained-B0 stage ran. See the
 [M13 preregistration](../experiments/v0.4/v04-cvrp-m13-history-safe-continuation-preregistration-20260820.md).
 
+M14 is prepared as an independent fresh continuation using the two native M13
+history records plus all earlier ordered inputs, 15 records total. Framework,
+population, two-stage stop, provider cap and hardwall are unchanged; the Agent
+chooses whether to refine the mixed route-removal mechanism or pivot. See the
+[M14 preregistration](../experiments/v0.4/v04-cvrp-m14-continuous-mechanism-refinement-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test
