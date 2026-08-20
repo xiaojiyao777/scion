@@ -273,3 +273,48 @@ development closure, sandbox, unchanged population, resource arithmetic and
 absent output. Failure leaves M12 `PREP_INVALID` and performs no live request.
 The user's delegated authorization applies only to this frozen one-shot after
 those gates pass; it does not authorize retry or automatic follow-up.
+
+## Terminal record
+
+M12 was launched once from clean carrier
+`342a43d2d91e615cb05f7bca0a1c2322b0804a76`. It is terminal and will not be
+retried. The campaign used 25 provider calls: three H calls, nineteen bounded C
+research turns and three independent finalize/abandon calls.
+
+The first attempt proposed regret-4 repair and abandoned after invalid
+duplicate-file edit payloads. The second proposed elapsed-budget annealing;
+its latest draft passed public D1-D4, but the then-current session required an
+additional `ready` provider turn before independent finalize and rejected the
+otherwise unchanged draft as `PATCH_PROPOSAL_INVALID`. The third proposed a
+deterministic bounded packing fallback, passed bounded development checks,
+formal Patch Contract, Verification and canary, and completed the full
+six-case/two-seed screening stage.
+
+The durable raw Protocol result is complete: 12 attempted pairs, 10 valid and
+2 invalid. The invalid pairs are the two `X-n256-k16` seeds and are attributed
+bilaterally because champion and candidate reported the same solver-algorithm
+packing failure. Candidate-only failures are therefore zero after bilateral
+attribution. Across the five valid case aggregates, the candidate has two wins
+(`A-n46-k7`, `X-n195-k51`), one loss (`F-n45-k4`) and two ties (`B-n39-k5`,
+`P-n22-k2`). The gate is `fail / SCREENING_FAIL_CASE_QUALITY` with
+`SCREENING_PARTIAL_CHAMPION_EVIDENCE`; no validation, frozen, promotion or
+retention stage ran.
+
+After Protocol completion, ordinary history projection rejected the canonical
+safe aggregate field `case_feedback[].seed_pattern`. The CLI caught the
+`ValueError` and wrote `stopped / unhandled_exception`; the durable status has
+two research-rejected steps, one unknown outcome, zero evaluated rounds and an
+invalid run-validity projection. It does not contain the third StepRecord,
+Safe Features or Decision, so M12 is not described as a valid completed
+campaign even though its raw screening metrics are durable. The exact output
+root is preserved at
+`/home/clawd/research/scion-experiments/v04-cvrp-m12-corrected-development-closure-continuation-20260820`.
+
+The generic correction is commit
+`7737bb0a`: canonical case-level `seed_pattern` and `seed_consistency` are
+accepted only at the strict screening projection location, while arbitrary
+open problem evidence still cannot carry seed values. The same commit makes a
+latest unchanged draft eligible for independent finalize immediately after
+its public development checks pass; any later revision clears eligibility.
+These fixes do not alter CVRP algorithms, the M12 population, Protocol gates
+or its terminal evidence.

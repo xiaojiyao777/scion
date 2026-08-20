@@ -170,10 +170,23 @@ Host-only replay showed that the repeated M11 D4 failures were not candidate
 failures. The development scratch omitted the frozen `policies` package
 markers, making `policies.__file__` null before the candidate entrypoint ran.
 Commit `0860331b` adds those two read-only files to the CVRP problem-owned
-development closure; both retained M11 drafts then pass D1-D4. M12 is prepared
-as a fresh continuation with the same development population, the copied
-three-record M11 terminal history and unchanged claim and resource boundaries.
-See the
+development closure; both retained M11 drafts then pass D1-D4. M12 ran once
+with that correction. Its first two attempts were C research rejections. The
+third autonomous candidate passed bounded development checks, formal
+Verification and canary and completed all 12 screening pairs. Ten pairs were
+valid; the two invalid `X-n256-k16` pairs were correctly classified as
+bilateral champion-and-candidate runtime failures rather than candidate-only
+failures. Among valid pairs the candidate produced two case wins, one case
+loss and two ties; the screening gate was `fail /
+SCREENING_FAIL_CASE_QUALITY` with partial champion evidence.
+
+M12 then stopped as `unhandled_exception` while appending ordinary research
+history: the safety validator rejected the canonical aggregate key
+`case_feedback[].seed_pattern`. Consequently the complete raw Protocol metrics
+are durable, but the evaluated StepRecord, Safe Features and Decision are not;
+M12 is not a valid completed campaign and is not retried. Commit `7737bb0a`
+corrects that generic schema boundary and also removes the redundant mandatory
+`ready` turn after an unchanged draft has passed development checks. See the
 [M12 preregistration](../experiments/v0.4/v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md).
 
 ## Current validation rule

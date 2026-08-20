@@ -378,8 +378,12 @@ The exact design is in the
 - [x] Declare the frozen CVRP package markers as read-only development
   workspace support; do not change generic core or CVRP algorithm source.
 - [x] Copy the three-record M11 terminal history as an ordinary H-only input.
-- [ ] Execute one fresh continuation with the same population, provider cap 30,
-  solver cap 64 and 13,500-second hardwall. Do not retry or launch M13.
+- [x] Execute one fresh continuation with the same population, provider cap 30,
+  solver cap 64 and 13,500-second hardwall. The third autonomous candidate
+  completed Verification, canary and all 12 screening pairs, but terminal
+  history persistence rejected the canonical `seed_pattern` aggregate and the
+  run stopped as an unhandled framework exception before the StepRecord and
+  Decision were durably recorded. M12 is terminal and is not retried.
 
 Acceptance remains one current candidate reaching formal Patch Contract,
 Verification, screening Protocol, Safe Features and Decision. Replaying a
@@ -390,6 +394,16 @@ The exact design is in the
 
 ### M13 - Close on solver evidence
 
+- [x] Correct the generic history boundary so canonical screening
+  `seed_pattern`/`seed_consistency` aggregates persist without permitting raw
+  seed values in open problem evidence.
+- [x] Remove the redundant mandatory `ready` turn: a latest unchanged draft
+  whose bounded public development checks passed is eligible for the separate
+  finalize/abandon decision; any later revision clears that eligibility.
+- [ ] Prepare and execute one fresh bounded continuation that imports the M12
+  attempts and complete screening result as ordinary H-only history. Do not
+  reuse the M12 output root or reinterpret its framework exception as a valid
+  completed run.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.
