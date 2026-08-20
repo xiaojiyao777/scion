@@ -473,6 +473,9 @@ The exact design is in the
   autonomous H after a terminal initial result. Host selects no mechanism,
   target or patch; no validation/frozen/promotion claim follows from this
   development continuation.
+  M21 is prepared with the generic preflight fix, exact M20 history and a
+  strict 3 -> 6 nested screening population under the existing bounded H/C
+  research session.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

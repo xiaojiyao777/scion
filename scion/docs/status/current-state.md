@@ -299,6 +299,16 @@ root is preserved and not retried.  Generic multi-round shape validation is
 being moved ahead of provider/solver work before a fresh continuation.  See
 the [M20 preregistration](../experiments/v0.4/v04-cvrp-m20-mechanism-frontier-continuation-preregistration-20260820.md).
 
+M21 is prepared as the bounded continuation.  The normal run preflight now
+rejects a non-growing or undersized multi-round screening plan before LLM or
+solver work.  M21 loads M20's two native ordinary history records, uses a new
+zero-overlap population, and freezes a strict 3-case initial -> 6-case expanded
+screen with the same seeds.  Two evaluated stages permit either one branch's
+initial/expanded evidence or two separate initial candidates; the host chooses
+neither mechanism nor target.  Validation, frozen and promotion remain outside
+this development one-shot.  See the
+[M21 preregistration](../experiments/v0.4/v04-cvrp-m21-strict-expansion-continuation-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test
