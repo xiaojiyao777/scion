@@ -8,7 +8,8 @@ referenced, not copied into development prompts.
 
 ## Runs
 
-- [CVRP M17 `_or_opt` fixed-candidate confirmation, prepared under delegated authorization](v04-cvrp-m17-oropt-fixed-candidate-confirmation-preregistration-20260820.md)
+- [CVRP M18 `_or_opt` fixed-candidate confirmation, prepared shape-corrected continuation](v04-cvrp-m18-oropt-fixed-candidate-confirmation-preregistration-20260820.md)
+- [CVRP M17 `_or_opt` fixed-candidate confirmation, terminal config-invalid before formal population](v04-cvrp-m17-oropt-fixed-candidate-confirmation-preregistration-20260820.md)
 - [CVRP M16 positive-mechanism continuation, terminal valid positive/mixed development result](v04-cvrp-m16-positive-mechanism-continuation-preregistration-20260820.md)
 - [CVRP M15 customer-conservation continuation, terminal valid positive/mixed development result](v04-cvrp-m15-customer-conservation-continuation-preregistration-20260820.md)
 - [CVRP M14 continuous mechanism refinement, terminal valid negative/mixed result](v04-cvrp-m14-continuous-mechanism-refinement-preregistration-20260820.md)

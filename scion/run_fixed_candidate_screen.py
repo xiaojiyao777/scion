@@ -191,6 +191,7 @@ def _validate_population(prepared: Prepared) -> None:
         isinstance(seed, bool) or not isinstance(seed, int) for seed in seeds
     ):
         raise PrepError("population seeds must be unique integers")
+    _validate_expanded_shape(prepared.protocol_config, len(cases), len(seeds))
     seen: set[str] = set()
     nominal = 0
     for index, item in enumerate(cases):
@@ -251,6 +252,26 @@ def _validate_population(prepared: Prepared) -> None:
         )
     ):
         raise PrepError("fixed-candidate action budgets must be zero")
+
+
+def _validate_expanded_shape(
+    protocol_config: ProtocolConfig, case_count: int, seed_count: int
+) -> None:
+    screening = protocol_config.screening
+    if (
+        screening.expand_to_modify != case_count
+        or screening.expand_to_create != case_count
+        or screening.expand_n_seeds != seed_count
+    ):
+        raise PrepError("expanded Protocol shape differs from the frozen population")
+    if (
+        screening.n_cases_modify >= case_count
+        or screening.n_cases_create >= case_count
+        or screening.n_seeds >= seed_count
+    ):
+        raise PrepError("expanded population must exceed the declared initial shape")
+    if not screening.require_expanded_for_pass:
+        raise PrepError("fixed confirmation requires expanded screening for pass")
 
 
 def prepare(config_path: Path, input_root: Path) -> Prepared:

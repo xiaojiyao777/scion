@@ -1,6 +1,6 @@
 # CVRP M17 `_or_opt` fixed-candidate confirmation preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_CONFIG_INVALID_BEFORE_FORMAL_POPULATION`
 
 ## Scientific object
 
@@ -77,3 +77,20 @@ PYTHONDONTWRITEBYTECODE=1 \
   --input-root /home/clawd/research/or-autoresearch-agent/campaign_out/v04-cvrp-m17-oropt-confirmation-20260820-input \
   --output-dir /home/clawd/research/scion-experiments/v04-cvrp-m17-oropt-confirmation-20260820
 ```
+
+## Terminal record
+
+M17 ran once from clean carrier
+`4c35323c5270dbfdfce6b27f2866273315e13808`. The strict B0-then-candidate
+canary consumed two 10-second solver subprocesses and passed. Before the first
+formal population pair, `ExperimentProtocol` rejected the configuration
+because `n_cases_modify/create=6` was not strictly smaller than
+`expand_to_modify/create=6`. The driver wrote
+`failed / UNHANDLED_EXCEPTION / expanded case population must be larger than
+the initial population` and exited 2.
+
+There is no raw metrics file and no ProtocolResult, Safe Feature, Decision or
+candidate-quality observation. Provider, H, C and patch calls are zero. The
+preserved root contains only `input.json`, the empty subject-workspace
+directory and `terminal.json`. It is not deleted, resumed or retried under the
+M17 label.

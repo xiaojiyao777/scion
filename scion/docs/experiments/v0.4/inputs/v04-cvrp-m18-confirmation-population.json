@@ -1,0 +1,127 @@
+{
+  "schema_version": "scion.fixed_candidate_screen.v1",
+  "label": "v04-cvrp-m18-oropt-confirmation-20260820",
+  "selection_salt": "v04-cvrp-m17-oropt-confirmation-20260820|population-v1",
+  "source_digest_framing": "relative_path + NUL + sha256 + NUL + decimal_size + LF",
+  "sources": {
+    "b0": {
+      "path": "subjects/b0",
+      "sha256": "564318850e07eb6bf6c74b3cce89b22d2c53878efaa0b50bdea8031b66f3a7b1",
+      "file_count": 98,
+      "total_bytes": 439268
+    },
+    "candidate": {
+      "path": "subjects/candidate",
+      "sha256": "e03adb6003ff86ce3c18326678ad9f831deed5148765a9ad8db7298a2d52a2df",
+      "file_count": 98,
+      "total_bytes": 440817
+    }
+  },
+  "changed_files": [
+    "policies/baseline_modules/local_search.py"
+  ],
+  "data_root": "data",
+  "protocol_config": "/home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/inputs/v04-cvrp-m18-confirmation-protocol.yaml",
+  "selected_surface": "solver_design",
+  "historical_validation": {
+    "source_campaign": "v04-cvrp-m16-positive-mechanism-continuation-20260820",
+    "contract": true,
+    "verification": true,
+    "source_relation": "same_exact_source",
+    "current_contract_calls": 0,
+    "current_verification_calls": 0
+  },
+  "population": {
+    "cases": [
+      {
+        "path": "cvrplib/A/A-n37-k5.vrp",
+        "time_limit_sec": 30,
+        "bytes": 800,
+        "sha256": "8b3c9c86c6ec147d6699ef1a7e9b33d7d2637c6b8f254922ff3494d56efed3d0",
+        "solution_bytes": 158,
+        "solution_sha256": "b2141e45f0f7ce786cd1fbdbffff854d1526b045b39dc969c77a8576b0346741"
+      },
+      {
+        "path": "cvrplib/B/B-n51-k7.vrp",
+        "time_limit_sec": 30,
+        "bytes": 1041,
+        "sha256": "2067347938f788f2342b8f44cff98a0f524468fa191849691a1a3629c49a30c1",
+        "solution_bytes": 221,
+        "solution_sha256": "9db09061b9d1e2964cebc23c8916b4b36cd06a7baeab8fbb7c24256d4cada452"
+      },
+      {
+        "path": "cvrplib/P/P-n50-k8.vrp",
+        "time_limit_sec": 30,
+        "bytes": 932,
+        "sha256": "9d013b40badea107147c8ef7414a699a7282305b6e6726bc925a69ae8aeaaebc",
+        "solution_bytes": 235,
+        "solution_sha256": "0473166c73bcb49a97d1e7bf832d99f051b5d41fd8ab505c92eff7b4bd09bc61"
+      },
+      {
+        "path": "cvrplib/X/X-n237-k14.vrp",
+        "time_limit_sec": 60,
+        "bytes": 4967,
+        "sha256": "b41f20eb4c7cb1a56caad157088932414a1a9b9639e52b60a68a99110d19b532",
+        "solution_bytes": 992,
+        "solution_sha256": "9c61135b47b4e71bbc6224e4b1ecb1e621e1ddcd87107a880e25b80e19bdb5ff"
+      },
+      {
+        "path": "cvrplib/X/X-n351-k40.vrp",
+        "time_limit_sec": 90,
+        "bytes": 7389,
+        "sha256": "7d6d5d57545c4b869e571413d1b02ce7083801159c5c98b63808b6076d87640d",
+        "solution_bytes": 1774,
+        "solution_sha256": "ed6c9494f19d17968e850faff32b3ea2e11b39d3e6a631e20be44e212e16d471"
+      },
+      {
+        "path": "cvrplib/X/X-n627-k43.vrp",
+        "time_limit_sec": 90,
+        "bytes": 12521,
+        "sha256": "9e3827d8e188658b4493d57697dd1abce27811529bbe68a74bd34ca69bcd707a",
+        "solution_bytes": 2914,
+        "solution_sha256": "44e0d7a07d52c5195dc455b002e9f5d8d99d6b09e35f45ce350a95772a9450b2"
+      }
+    ],
+    "seeds": [4212, 4351, 4758, 4843],
+    "canary": {
+      "path": "data/tiny_canary.json",
+      "seed": 4770,
+      "time_limit_sec": 10,
+      "bytes": 401,
+      "sha256": "9fc9d7d257b3b0e5ab2d490d5ef4b840f9fa83a003e791226d7c8fd8ada95ebc"
+    }
+  },
+  "budgets": {
+    "formal_pairs": 24,
+    "formal_solver_subprocesses": 48,
+    "canary_solver_subprocesses": 2,
+    "max_solver_subprocesses": 50,
+    "nominal_subject_seconds": 2660,
+    "positive_hard_timeout_seconds": 3410,
+    "outer_hardwall_seconds": 5400,
+    "provider_calls": 0,
+    "hypothesis_calls": 0,
+    "code_calls": 0,
+    "patch_calls": 0,
+    "retry": 0,
+    "resume": 0,
+    "automatic_next_round": 0
+  },
+  "claim_boundary": {
+    "candidate_selection_outcome_known": true,
+    "population_selection_outcome_blind_relative_to_exact_candidate": true,
+    "candidate_discovery_independent": false,
+    "incremental_effect_isolated": false,
+    "development_population_overlap_count": 0,
+    "prior_fixed_population_overlap_count": 0,
+    "positive_claim": "The exact outcome-known M16 candidate is supported over exact M16 B0 on the declared M18 confirmation population under the frozen carrier.",
+    "forbidden_claims": [
+      "independent candidate discovery",
+      "isolated causal effect of _or_opt",
+      "validation or frozen success",
+      "promotion or retained champion",
+      "global CVRP generalization",
+      "production readiness"
+    ]
+  }
+}

@@ -431,8 +431,12 @@ The exact design is in the
   selected outcome-blind population before any further adaptive H/C campaign.
   Treat this as fixed-candidate confirmation: no new provider call, patch or
   repair, and no promotion claim unless the newly declared Protocol completes.
-  M17 is prepared with the exact M16 candidate-2 source, six previously unseen
-  cases, four new seeds, 50 solver subprocesses and a 5,400-second hardwall.
+  M17 stopped after its canary and before any formal pair because its equal
+  initial/expanded case counts violated the Protocol shape. Preserve that root
+  and use a new label for the mechanical shape correction; candidate,
+  population, resources and claim boundary must remain unchanged. M18 is
+  prepared with exactly that correction and an added solver-free preflight
+  assertion for the strict expanded shape.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

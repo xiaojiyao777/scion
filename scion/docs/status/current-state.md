@@ -248,13 +248,21 @@ partial-champion safety rule kept the branch in exploration. No expansion,
 validation, frozen or promotion ran; champion remains v1. See the
 [M16 preregistration](../experiments/v0.4/v04-cvrp-m16-positive-mechanism-continuation-preregistration-20260820.md).
 
-M17 is prepared as a provider-free fixed-candidate confirmation of M16
-candidate 2. It compares the exact `_or_opt` source against exact B0 on six
-outcome-blind cases and four new seeds, with one strict canary and one expanded
-screening Protocol/Safe-Feature/Decision call. The private source trees differ
-in only `local_search.py`; no H, C, patch, retry, later stage or promotion is
-part of the experiment. See the
+M17 stopped after its two-call canary and before the first formal population
+pair. The fixed-screen config incorrectly made the declared initial and
+expanded case counts both six; `ExperimentProtocol` rejected it because
+expanded screening must be strictly larger. The terminal is
+`failed / UNHANDLED_EXCEPTION`; metrics, Protocol, Safe Features, Decision and
+candidate-quality observations are zero. The root is preserved and not
+retried. See the
 [M17 preregistration](../experiments/v0.4/v04-cvrp-m17-oropt-fixed-candidate-confirmation-preregistration-20260820.md).
+
+M18 is prepared under the user's delegated experimental authorization. It
+changes only the latent initial Protocol declaration to 3 cases / 2 seeds so
+the unchanged 6-case / 4-seed fixed execution is a legal expanded screen. The
+driver's read-only check now validates this strict relationship before any
+solver call. See the
+[M18 preregistration](../experiments/v0.4/v04-cvrp-m18-oropt-fixed-candidate-confirmation-preregistration-20260820.md).
 
 ## Current validation rule
 

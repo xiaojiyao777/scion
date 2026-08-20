@@ -183,3 +183,21 @@ def test_execute_fails_closed_on_incomplete_resource_matrix(tmp_path, monkeypatc
     )
     with pytest.raises(driver.ScientificTerminal, match="execution matrix"):
         driver.execute(prepared, tmp_path, runner)
+
+
+def test_expanded_shape_must_be_strictly_larger_than_initial():
+    valid = SimpleNamespace(
+        screening=SimpleNamespace(
+            n_cases_modify=3,
+            n_cases_create=3,
+            n_seeds=2,
+            expand_to_modify=6,
+            expand_to_create=6,
+            expand_n_seeds=4,
+            require_expanded_for_pass=True,
+        )
+    )
+    driver._validate_expanded_shape(valid, 6, 4)
+    valid.screening.n_cases_modify = 6
+    with pytest.raises(driver.PrepError, match="must exceed"):
+        driver._validate_expanded_shape(valid, 6, 4)
