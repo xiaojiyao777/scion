@@ -1,0 +1,95 @@
+version: 0.4-cvrp-m22-provider-recovery-development
+case_aggregation: paired_effect_median
+case_equivalence_band: 0.0
+
+screening:
+  n_cases_modify: 3
+  n_cases_create: 3
+  n_seeds: 2
+  expand_n_seeds: 2
+  expand_to_modify: 6
+  expand_to_create: 6
+  priority_case_ids:
+    - cvrplib/B/B-n57-k9.vrp
+    - cvrplib/P/P-n19-k2.vrp
+    - cvrplib/X/X-n303-k21.vrp
+  require_expanded_for_pass: true
+
+validation:
+  n_cases: 3
+  n_seeds: 2
+  expand_to: 3
+
+frozen:
+  n_cases: 3
+  n_seeds: 2
+
+canary:
+  cases:
+    - data/tiny_canary.json
+  seeds:
+    - 5947
+
+runtime:
+  max_runtime_ratio: 2.0
+  tie_speedup_ratio: 0.75
+  tie_min_runtime_pairs: 1
+  time_limits:
+    stage_defaults:
+      canary: 10
+      screening: 30
+      validation: 30
+      frozen: 30
+    rules:
+      - stages:
+          - screening
+          - validation
+          - frozen
+        min_dimension: 101
+        max_dimension: 200
+        time_limit_sec: 45
+      - stages:
+          - screening
+          - validation
+          - frozen
+        min_dimension: 201
+        max_dimension: 350
+        time_limit_sec: 60
+      - stages:
+          - screening
+          - validation
+          - frozen
+        min_dimension: 351
+        max_dimension: 700
+        time_limit_sec: 90
+      - stages:
+          - screening
+          - validation
+          - frozen
+        min_dimension: 701
+        max_dimension: 1001
+        time_limit_sec: 120
+
+gates:
+  screening:
+    win_rate_min: 0.6
+    median_delta_min: practical_delta_screen
+    bootstrap_ci_low_min: 0.0
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2
+    initial_quality_expansion:
+      min_net_case_score: 0.125
+      max_case_loss_rate: 0.25
+      require_ci_high_at_practical_delta: true
+  validation:
+    win_rate_min: 0.66
+    median_delta_min: practical_delta_validate
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 1000
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2
+  frozen:
+    bootstrap_ci_low_min: 0.0
+    canary_required: true
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2

@@ -481,6 +481,8 @@ The exact design is in the
   population. Preserve the strict nested expansion shape and the no-retry
   provider boundary. Treat invalid C draft feedback as tool-usability evidence,
   not algorithm evidence; host still selects no mechanism, target or patch.
+  M22 is prepared with 30 ordered ordinary records and a new strict nested
+  development population; M21's provider request is not resumed or retried.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

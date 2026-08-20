@@ -311,6 +311,13 @@ retry.  It used 14/30 provider calls and wrote three ordinary history records;
 expanded, validation, frozen, promotion and champion change are zero.  See the
 [M21 preregistration](../experiments/v0.4/v04-cvrp-m21-strict-expansion-continuation-preregistration-20260820.md).
 
+M22 is prepared as a fresh post-infrastructure continuation.  It imports M21's
+three native ordinary records, including the evaluated all-tie candidate and
+the unevaluated annealing H, but it does not resume the failed C request.  A
+new zero-overlap population again freezes strict 3 -> 6 nested screening and
+two evaluated stages under the same provider/no-retry/hardwall boundary.  See
+the [M22 preregistration](../experiments/v0.4/v04-cvrp-m22-post-infra-continuation-preregistration-20260820.md).
+
 ## Current validation rule
 
 Current safe validation collected 1,672 tests and passed a 240-test

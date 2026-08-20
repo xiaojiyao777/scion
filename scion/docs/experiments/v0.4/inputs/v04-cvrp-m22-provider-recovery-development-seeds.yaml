@@ -1,0 +1,16 @@
+version: 0.4-cvrp-m22-provider-recovery-development
+
+screening:
+  - 2079
+  - 5831
+
+validation:
+  - 4741
+  - 3617
+
+frozen:
+  - 8830
+  - 2235
+
+canary:
+  - 5947
