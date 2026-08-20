@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-17*
+*Last updated: 2026-08-20*
 
 Read [`../../TASK.md`](../../TASK.md) first. The sole architecture authority is
 [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md).
@@ -138,6 +138,27 @@ evidence for this research attempt, and no evidence of algorithm improvement
 or generalization. The original failed root and terminal rerun root are both
 preserved; no retry, later development stage, R67 recovery or formal rung is
 authorized. Full facts and claim limits are in the M9 preregistration.
+
+The five continuity gaps exposed by M9 are now closed in committed generic
+framework code. Protocol attributes candidate-only, champion-only, shared and
+bilateral failures pair-locally. Safe Contract/Verification rejections reach
+the next H. C can use a bounded read/search/revise/test/revise/finalize session
+whose public tests run in an isolated development sandbox and never replace
+formal Contract or Verification. Explicit `--research-history` transports
+ordinary H, patch, rejection, screening Protocol and Decision values to H only,
+without reading old campaign databases or summaries. C source context is built
+from the approved target, transitive local dependencies, callers and related
+public tests; peer source is read on demand and generic core has no CVRP or
+Warehouse selection branch.
+
+M10 is prepared but not authorized. It starts from unchanged CVRP B0, the
+ordinary M7 input and two mechanically backfilled M9 history records. It enables
+the bounded code-research session and permits at most two evaluated screening
+stages on the outcome-known M9 development population. Its purpose is to test
+longitudinal repair and research continuity, not unseen-population improvement.
+Provider cap 18, solver cap 58 and the 9,000-second outer hardwall are frozen in
+the [M10 preregistration](../experiments/v0.4/v04-cvrp-m10-continuous-research-m9-history-development-preregistration-20260820.md).
+No provider, solver or campaign execution is authorized by this preparation.
 
 ## Current validation rule
 

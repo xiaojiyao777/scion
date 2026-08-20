@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-08-17*
+*Last updated: 2026-08-20*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,8 @@ referenced, not copied into development prompts.
 
 ## Runs
 
-- [CVRP M9 autonomous M7-prior development screen, prepared and not authorized](v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md)
+- [CVRP M10 continuous cross-campaign research continuation, prepared and not authorized](v04-cvrp-m10-continuous-research-m9-history-development-preregistration-20260820.md)
+- [CVRP M9 autonomous M7-prior development screen, terminal negative/mixed result](v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md)
 - [Scion autonomous prior-evidence research design and M8 offline result](v04-scion-autonomous-prior-evidence-research-design-20260817.md)
 - [CVRP M7-FC1 cumulative R3 new-population full-funnel, terminal candidate veto](v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md)
 - [Phase 5 warehouse proposal trajectory compare, 2026-06-12](v04-phase5-warehouse-proposal-trajectory-compare-20260612.md)

@@ -312,7 +312,38 @@ Live provider/solver execution requires a separate explicit one-shot
 authorization after the exact input, populations, budgets, stop conditions and
 claim boundary are prepared.
 
-### M10 - Close on solver evidence
+### M10 - Test continuous cross-campaign CVRP research
+
+- [x] Correct pair-local Protocol failure attribution so a shared or bilateral
+  runtime incident is not flattened into a candidate-only failure.
+- [x] Expose safe current-campaign Contract and Verification rejections to the
+  next H without paths, raw detail, identities or host repair instructions.
+- [x] Add a finite C research session with source read/search, typed revision,
+  sandboxed public development tests, retest and independent finalize/abandon.
+- [x] Add explicit H-only cross-campaign `research_history.jsonl` carrying
+  ordinary H, patch, rejection, screening Protocol and Decision values; do not
+  discover or read old summary/database state at runtime.
+- [x] Select C context from the current target, transitive local dependencies,
+  callers and public tests; keep peers inventoried and problem runtime/support
+  host-only, with no CVRP/Warehouse branches in generic core.
+- [x] Prepare one bounded longitudinal CVRP development continuation from the
+  two M9 history records. Reuse the outcome-known M9 screen only to measure
+  repair continuity; reserve all unseen/generalization claims for a later rung.
+- [ ] Commit and independently verify the clean M10 carrier, then require one
+  explicit authorization naming the exact carrier and complete one-shot
+  envelope before any provider or solver execution.
+- [ ] Run at most two evaluated screening stages and classify framework
+  continuity, research effectiveness and algorithm evidence separately.
+
+Acceptance: a current candidate uses explicit prior history and the bounded
+code-research loop, reruns formal Contract and Verification, and reaches a
+typed Protocol/Decision outcome. Failure remains a valid negative result;
+development repair never becomes an unseen-population improvement claim.
+
+The exact design, resource arithmetic and stopping boundary are in the
+[M10 preregistration](docs/experiments/v0.4/v04-cvrp-m10-continuous-research-m9-history-development-preregistration-20260820.md).
+
+### M11 - Close on solver evidence
 
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
