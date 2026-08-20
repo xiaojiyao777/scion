@@ -151,14 +151,22 @@ from the approved target, transitive local dependencies, callers and related
 public tests; peer source is read on demand and generic core has no CVRP or
 Warehouse selection branch.
 
-M10 is prepared but not authorized. It starts from unchanged CVRP B0, the
-ordinary M7 input and two mechanically backfilled M9 history records. It enables
-the bounded code-research session and permits at most two evaluated screening
-stages on the outcome-known M9 development population. Its purpose is to test
-longitudinal repair and research continuity, not unseen-population improvement.
-Provider cap 18, solver cap 58 and the 9,000-second outer hardwall are frozen in
-the [M10 preregistration](../experiments/v0.4/v04-cvrp-m10-continuous-research-m9-history-development-preregistration-20260820.md).
-No provider, solver or campaign execution is authorized by this preparation.
+M10 is terminal. Five autonomous H values reached bounded C research, but two
+drafts failed D4 public regression, two drafts were invalid duplicate-file
+payloads, and the last stopped at the shared provider cap. The terminal state
+is `RESOURCE_EXHAUSTED / PROVIDER_CALL_CAP_EXHAUSTED`, with 18 provider calls,
+four research rejections, zero formal candidates, zero solver calls and no
+algorithm evidence.
+
+The generic failure channel is now corrected at clean production commit
+`fcad63d78fbe11ecef9bff5439ab6a62cf844518`: invalid drafts return safe repair
+enums, public test failures return an enumerated reason and public test path,
+and transcript accounting counts actual provider wire. M11 is prepared under
+the user's delegated authorization with five mechanically projected M10
+history records, provider cap 30, solver cap 64 and a 13,500-second hardwall.
+It still uses the outcome-known development population and cannot support an
+unseen or causal claim. See the
+[M11 preregistration](../experiments/v0.4/v04-cvrp-m11-actionable-code-research-continuation-preregistration-20260820.md).
 
 ## Current validation rule
 

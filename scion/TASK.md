@@ -329,10 +329,14 @@ claim boundary are prepared.
 - [x] Prepare one bounded longitudinal CVRP development continuation from the
   two M9 history records. Reuse the outcome-known M9 screen only to measure
   repair continuity; reserve all unseen/generalization claims for a later rung.
-- [ ] Commit and independently verify the clean M10 carrier, then require one
+- [x] Commit and independently verify the clean M10 carrier, then require one
   explicit authorization naming the exact carrier and complete one-shot
   envelope before any provider or solver execution.
-- [ ] Run at most two evaluated screening stages and classify framework
+- [x] Run the one-shot M10 carrier. It consumed all 18 provider calls across
+  five H/C attempts, produced four code-research rejections and one typed
+  resource stop, and reached zero formal candidates or solver calls. Classify
+  this as negative framework-continuity evidence, not algorithm evidence.
+- [x] Classify framework
   continuity, research effectiveness and algorithm evidence separately.
 
 Acceptance: a current candidate uses explicit prior history and the bounded
@@ -343,7 +347,29 @@ development repair never becomes an unseen-population improvement claim.
 The exact design, resource arithmetic and stopping boundary are in the
 [M10 preregistration](docs/experiments/v0.4/v04-cvrp-m10-continuous-research-m9-history-development-preregistration-20260820.md).
 
-### M11 - Close on solver evidence
+### M11 - Make bounded C failures actionable and continue once
+
+- [x] Convert invalid patch drafts into bounded correction observations rather
+  than aborting the C session; retain strict source and patch bounds.
+- [x] Return only host-enumerated development failure reasons and already-public
+  test paths; continue to exclude child stdout, stderr and traceback.
+- [x] Count actual provider-wire transcript bytes without adding trace-only
+  structured metadata a second time.
+- [x] Mechanically project the five M10 attempts, including the two D4 failures
+  and their draft source, into ordinary H-only research history.
+- [ ] Execute one fresh two-stage development continuation under provider cap
+  30, solver cap 64 and a 13,500-second outer hardwall. Do not retry or launch
+  an automatic successor.
+
+Acceptance: at least one bounded C candidate reaches current Patch Contract,
+Verification, screening Protocol, Safe Features and Decision. Development
+failure remains a valid negative result and cannot become a generalization
+claim.
+
+The exact design is in the
+[M11 preregistration](docs/experiments/v0.4/v04-cvrp-m11-actionable-code-research-continuation-preregistration-20260820.md).
+
+### M12 - Close on solver evidence
 
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,

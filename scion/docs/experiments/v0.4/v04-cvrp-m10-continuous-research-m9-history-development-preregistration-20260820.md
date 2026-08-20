@@ -2,7 +2,7 @@
 
 *Date: 2026-08-20*
 
-*State: `PREPARED_NOT_STARTED / AWAITING_EXPLICIT_ONE_SHOT_AUTHORIZATION`*
+*State: `TERMINAL / RESOURCE_EXHAUSTED_BEFORE_FORMAL_CANDIDATE`*
 
 ## Scientific question
 
@@ -268,6 +268,20 @@ screening of one candidate. Solver arithmetic is
 There is no repair, resume, deletion/reuse of the output root, case/seed
 substitution, extra provider call, third evaluated stage or automatic follow-up
 campaign under this authorization envelope.
+
+## Terminal result
+
+The authorized one-shot ran once on clean carrier
+`a6704e5688151e49c6ae30b72ca9540582a1a1a0`. It stopped with exit code 21 and
+typed outcome `RESOURCE_EXHAUSTED / PROVIDER_CALL_CAP_EXHAUSTED` after exactly
+18 provider calls. Five H values were generated; four code attempts were
+research-rejected and the fifth reached the pre-dispatch cap. Two configuration
+drafts passed D1, D1b, D2 and D3 but failed D4; two other drafts declared the
+same target file twice. No patch was finalized, so formal Patch Contract,
+Verification, solver, Protocol, Safe Features, Decision, validation, frozen and
+promotion counts are all zero. Run validity is
+`invalid_no_evaluated_outcome`. This is negative framework-continuity evidence
+and supplies no algorithm-effect claim.
 
 ## Frozen command shape
 

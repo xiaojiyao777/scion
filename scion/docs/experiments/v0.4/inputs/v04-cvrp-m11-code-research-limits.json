@@ -1,0 +1,22 @@
+{
+  "max_action_bytes": 100000,
+  "max_patch_chars": 200000,
+  "max_patch_files": 8,
+  "max_read_bytes": 240000,
+  "max_read_calls": 4,
+  "max_read_chars": 120000,
+  "max_read_lines": 10000,
+  "max_search_bytes": 40000,
+  "max_search_calls": 4,
+  "max_search_chars": 20000,
+  "max_search_matches": 80,
+  "max_test_calls": 3,
+  "max_test_copy_bytes": 5000000,
+  "max_test_files": 64,
+  "max_test_result_chars": 30000,
+  "max_test_suite_timeout_sec": 30,
+  "max_test_total_timeout_sec": 90,
+  "max_tool_result_chars": 300000,
+  "max_transcript_chars": 1500000,
+  "max_turns": 8
+}
