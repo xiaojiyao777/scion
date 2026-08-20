@@ -223,13 +223,17 @@ an improving cross-route exchange and requires exact customer conservation;
 it passes B0 and fails the preserved M14 patch. See the
 [M14 preregistration](../experiments/v0.4/v04-cvrp-m14-continuous-mechanism-refinement-preregistration-20260820.md).
 
-M15 is prepared as a fresh continuation. It adds no algorithm direction: the
-only production change is the CVRP-owned public conservation test derived from
-M14's observed invalid route state. H receives all 19 ordered ordinary records
-through M14; the Agent may repair, refine or pivot, while current source and
-current public tests remain authoritative. Population, two-stage stop,
-provider cap, hardwall and development-only claim boundary are unchanged. See
-the [M15 preregistration](../experiments/v0.4/v04-cvrp-m15-customer-conservation-continuation-preregistration-20260820.md).
+M15 completed validly from clean carrier `8ec13e29`. Both autonomous candidates
+passed the new public customer-conservation test, all other development checks,
+formal Contract, Verification and canary. Candidate 1 made intra-route two-opt
+scoring exact and constant-time: it produced two case wins, zero losses and
+three ties, CI `[0, 439]`, and Protocol returned
+`SCREENING_EXPAND_INITIAL_QUALITY`. Candidate 2 extended the helper to a second
+polish path but regressed X195, yielding one win, one loss and three ties, CI
+`[-644.5, 2.1025439344]`. Both screens retained two shared X256 failures and no
+candidate-only failure. Decision's partial-champion safety rule returned
+`continue_explore`, so no expanded stage ran; champion remains v1. See the
+[M15 preregistration](../experiments/v0.4/v04-cvrp-m15-customer-conservation-continuation-preregistration-20260820.md).
 
 ## Current validation rule
 

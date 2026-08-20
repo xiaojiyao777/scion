@@ -415,10 +415,16 @@ The exact design is in the
   customer-conservation invariant and was correctly abandoned after two
   candidate-only X195 runtime failures; no M13/M14 root was reused and the
   host selected no mechanism or patch.
-- [ ] Continue in one independently frozen M15 campaign using the four native
-  M14 history records and the new problem-owned customer-conservation
-  development test. Keep the same outcome-known development population and
-  claim boundary; the Agent remains free to repair, refine or pivot.
+- [x] Continue in one independently frozen M15 campaign using the four native
+  M14 history records and the new problem-owned customer-conservation test.
+  Two candidates passed every development/formal gate; the first reached
+  `SCREENING_EXPAND_INITIAL_QUALITY` with two wins and no losses, while the
+  second refinement was mixed. Shared X256 baseline failures kept Decision in
+  exploration, so no expansion or later stage ran.
+- [ ] Continue in one independently frozen M16 campaign using the two native
+  M15 records. Preserve the same development-only boundary and let the Agent
+  decide whether to retain the first positive mechanism, avoid the second
+  regression, address the shared baseline failure or pivot.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

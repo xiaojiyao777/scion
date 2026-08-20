@@ -1,6 +1,6 @@
 # CVRP M15 customer-conservation continuation preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_VALID_POSITIVE_MIXED_DEVELOPMENT`
 
 ## Scientific object
 
@@ -160,3 +160,45 @@ loaders, 19 ordered history records, the exact M14 copy, B0-pass/M14-fail
 customer-conservation regression, public sandbox and closure, unchanged
 population/resource arithmetic, proxy model metadata and absent output. Any
 failure is `PREP_INVALID` with zero live provider or solver call.
+
+## Terminal record
+
+M15 ran once from clean carrier
+`8ec13e29a74d92e44a8c3490ef68436e25086aac` and exited zero as
+`completed / valid / requested_rounds_completed`. It used ten provider calls,
+scheduled two candidates, evaluated two screening stages and wrote two native
+ordinary history records. Research rejection, infrastructure, resource,
+interrupt, not-evaluated and unknown counts are zero. No child remained.
+Champion is still v1; validation, frozen, promotion and retention counts are
+zero.
+
+Candidate 1 autonomously targeted `_two_opt_intra` in `local_search.py`. It
+replaced full trial-route materialization and route-distance recomputation with
+an exact directed two-opt delta using forward/reverse edge-prefix sums, while
+retaining first-improvement order, deadline polling and committed-state
+recalculation. The new public customer-conservation test, remaining development
+tests, formal Contract, Verification and canary all passed. Screening completed
+12 attempted pairs, ten valid pairs and two shared X-n256-k16 failures, with no
+candidate-only failure. Case results were two wins and three ties: F-n45-k4
+was +2.1025439344, X-n195-k51 was +439, and B/P/A tied. The case median was
+zero with CI `[0, 439]`; Protocol returned
+`expand / SCREENING_EXPAND_INITIAL_QUALITY`.
+
+Decision conservatively returned `continue_explore` because the two shared
+failures still count as partial champion evidence. Therefore the second rounds
+slot did not execute expanded screening; it created a new H/C attempt. That H
+used the first result and extended the same directed delta helper to both
+`_two_opt_intra` and `_two_opt_intra_polish`. All development and formal gates
+again passed. Its screen had the same ten valid/two shared-failure structure,
+but only F remained positive (+2.1025439344) while X-n195-k51 regressed by
+-644.5; B/P/A tied. The aggregate was one win, one loss, three ties, median
+zero and CI `[-644.5, 2.1025439344]`. Protocol failed case quality and Decision
+returned `continue_explore` under the same partial-champion rule.
+
+M15 is positive framework and mechanism-discovery evidence: prior history and
+the current public invariant supported two structurally valid candidates, and
+the first produced the strongest development-screen result in this chain. It
+is not a completed expansion, validation, promotion, generalization or
+production claim. The immutable root is
+`/home/clawd/research/scion-experiments/v04-cvrp-m15-customer-conservation-continuation-20260820`;
+it is not retried or resumed.
