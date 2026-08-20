@@ -183,8 +183,10 @@ SCREENING_FAIL_CASE_QUALITY` with partial champion evidence.
 M12 then stopped as `unhandled_exception` while appending ordinary research
 history: the safety validator rejected the canonical aggregate key
 `case_feedback[].seed_pattern`. Consequently the complete raw Protocol metrics
-are durable, but the evaluated StepRecord, Safe Features and Decision are not;
-M12 is not a valid completed campaign and is not retried. Commit `7737bb0a`
+and the ordinary experiment event's `continue_explore` Decision are durable,
+but the evaluated StepRecord, Safe Features projection and typed execution
+outcome are not. M12 is not a valid completed campaign and is not retried.
+Commit `7737bb0a`
 corrects that generic schema boundary and also removes the redundant mandatory
 `ready` turn after an unchanged draft has passed development checks. See the
 [M12 preregistration](../experiments/v0.4/v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md).

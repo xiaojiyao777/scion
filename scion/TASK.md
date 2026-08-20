@@ -383,7 +383,9 @@ The exact design is in the
   completed Verification, canary and all 12 screening pairs, but terminal
   history persistence rejected the canonical `seed_pattern` aggregate and the
   run stopped as an unhandled framework exception before the StepRecord and
-  Decision were durably recorded. M12 is terminal and is not retried.
+  typed execution outcome were durably recorded. The ordinary experiment event
+  does retain `continue_explore` and its two reason codes. M12 is terminal and
+  is not retried.
 
 Acceptance remains one current candidate reaching formal Patch Contract,
 Verification, screening Protocol, Safe Features and Decision. Replaying a

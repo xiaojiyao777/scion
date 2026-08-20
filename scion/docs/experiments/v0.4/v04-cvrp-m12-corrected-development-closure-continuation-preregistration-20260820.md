@@ -305,9 +305,12 @@ safe aggregate field `case_feedback[].seed_pattern`. The CLI caught the
 `ValueError` and wrote `stopped / unhandled_exception`; the durable status has
 two research-rejected steps, one unknown outcome, zero evaluated rounds and an
 invalid run-validity projection. It does not contain the third StepRecord,
-Safe Features or Decision, so M12 is not described as a valid completed
-campaign even though its raw screening metrics are durable. The exact output
-root is preserved at
+Safe Features projection or typed execution outcome. The ordinary scientific
+experiment event was written before history projection failed and retains
+`continue_explore` with reason codes `SCREENING_PARTIAL_CHAMPION_EVIDENCE` and
+`SCREENING_FAIL_CASE_QUALITY`. M12 is still not described as a valid completed
+campaign even though its raw screening metrics and ordinary Decision event are
+durable. The exact output root is preserved at
 `/home/clawd/research/scion-experiments/v04-cvrp-m12-corrected-development-closure-continuation-20260820`.
 
 The generic correction is commit
