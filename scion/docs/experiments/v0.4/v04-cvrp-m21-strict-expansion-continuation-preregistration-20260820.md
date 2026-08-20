@@ -1,6 +1,36 @@
 # CVRP M21 strict-expansion continuous research preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_VALID_INCOMPLETE_PROVIDER_INFRA`
+
+## Terminal result
+
+M21 ran once from clean carrier `5a8e99f3`; its root is preserved.  Three H
+attempts used 14 provider calls.  The first proposed a destroy-batch-local
+customer-to-route index, but its C revise payload was invalid and it was safely
+rejected before a candidate.  The second proposed removing redundant
+single-customer `_relocate` from VNS because `_or_opt_1` spans the same move.
+It passed development checks, both Contracts, Verification and canary, then
+completed the exact 3-case initial screen with 6/6 valid paired comparisons
+and zero runtime failure.  All three cases tied; median runtime ratio was
+`0.9997241767` (median delta `-8ms`).  Protocol returned
+`fail / SCREENING_FAIL_CASE_QUALITY`, Decision continued exploration, and no
+expanded screen was warranted.
+
+The third H used that result and pivoted again, proposing deadline-fraction
+instead of iteration-count simulated-annealing cooling in `acceptance.py`.
+During bounded C research it recovered from one stale selector and two
+duplicate-path drafts and staged a valid first revision.  Its next provider
+turn failed with an upstream 504 after reasoning without output.  Scion made
+no retry and stopped as `BLOCKED_INFRA / PROVIDER_CALL_BLOCKED_INFRA`.
+
+The terminal run is `stopped / valid_incomplete / execution_blocked_infra`:
+one research rejection, one evaluated initial screen, one provider-infra stop,
+one metric file, three ordinary history records, champion v1, and zero
+expanded, validation, frozen or promotion result.  Prompt size remained about
+50--54k characters and the failed call ended after 43 seconds, while earlier
+calls of comparable size succeeded; the evidence supports an upstream
+response failure, with terse C correction feedback as a separate usability
+finding.  No retry or root reuse occurs under this label.
 
 ## Scientific object
 

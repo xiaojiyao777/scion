@@ -467,15 +467,20 @@ The exact design is in the
   the config declared equal initial/expanded case counts. Preserve the terminal
   root and reject this shape before provider/solver work in every future
   multi-round normal run.
-- [ ] Continue from M20's native ordinary history on a new fresh population
+- [x] Continue from M20's native ordinary history on a new fresh population
   whose initial screen is a strict subset of its expanded screen. Allow two
   evaluated stages: either initial -> expanded for the same branch, or a second
   autonomous H after a terminal initial result. Host selects no mechanism,
   target or patch; no validation/frozen/promotion claim follows from this
   development continuation.
-  M21 is prepared with the generic preflight fix, exact M20 history and a
-  strict 3 -> 6 nested screening population under the existing bounded H/C
-  research session.
+  M21 ran from the generic preflight fix and exact M20 history. One candidate
+  completed a 6/6-valid all-tie initial screen; the next H pivoted to
+  deadline-based annealing but its C session stopped on an upstream 504 after
+  a valid draft revision. No expansion or later stage ran.
+- [ ] Continue from M21's three native records under a new label and fresh
+  population. Preserve the strict nested expansion shape and the no-retry
+  provider boundary. Treat invalid C draft feedback as tool-usability evidence,
+  not algorithm evidence; host still selects no mechanism, target or patch.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.
