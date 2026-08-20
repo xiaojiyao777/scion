@@ -257,11 +257,17 @@ candidate-quality observations are zero. The root is preserved and not
 retried. See the
 [M17 preregistration](../experiments/v0.4/v04-cvrp-m17-oropt-fixed-candidate-confirmation-preregistration-20260820.md).
 
-M18 is prepared under the user's delegated experimental authorization. It
-changes only the latent initial Protocol declaration to 3 cases / 2 seeds so
-the unchanged 6-case / 4-seed fixed execution is a legal expanded screen. The
-driver's read-only check now validates this strict relationship before any
-solver call. See the
+M18 completed once from carrier `1703d225`. Its fixed-candidate expanded screen
+attempted 24/24 pairs: 20 were valid, four `X-n627-k43` pairs were shared
+champion-and-candidate construction failures, and candidate-only failures were
+zero. Four valid cases tied and `X-n351-k40` improved by 26.5 distance units,
+giving one win, zero losses, four ties and CI `[0, 26.5]`. Median runtime was
+effectively unchanged (`candidate/champion = 0.9998438774`). Protocol returned
+`SCREENING_FAIL_CASE_QUALITY` plus partial-champion evidence, Decision returned
+`continue_explore`, and terminal type was `CONFIRMATION_NOT_SUPPORTED`. No
+provider, H/C, patch, validation, frozen or promotion action ran. The candidate
+is safe on this population but is not confirmed as a broad or faster
+improvement. See the
 [M18 preregistration](../experiments/v0.4/v04-cvrp-m18-oropt-fixed-candidate-confirmation-preregistration-20260820.md).
 
 ## Current validation rule

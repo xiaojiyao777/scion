@@ -427,7 +427,7 @@ The exact design is in the
   wins, zero losses and three ties with CI `[0, 244]` and
   `SCREENING_EXPAND_INITIAL_QUALITY`; two shared X256 failures kept Decision in
   exploration, so no later stage ran.
-- [ ] Confirm the strongest autonomous positive candidate on one freshly
+- [x] Confirm the strongest autonomous positive candidate on one freshly
   selected outcome-blind population before any further adaptive H/C campaign.
   Treat this as fixed-candidate confirmation: no new provider call, patch or
   repair, and no promotion claim unless the newly declared Protocol completes.
@@ -436,7 +436,17 @@ The exact design is in the
   and use a new label for the mechanical shape correction; candidate,
   population, resources and claim boundary must remain unchanged. M18 is
   prepared with exactly that correction and an added solver-free preflight
-  assertion for the strict expanded shape.
+  assertion for the strict expanded shape. M18 completed all 24 new-population
+  pairs. The candidate had zero candidate-only failures and one case win, but
+  four shared construction failures left only 20 valid pairs; the quality gate
+  failed and measured runtime was effectively unchanged. The fixed candidate
+  is therefore not confirmed, and no validation, frozen or promotion claim is
+  available.
+- [ ] Feed the ordinary M18 confirmation observation into a new autonomous
+  campaign through the CVRP problem adapter, without adding CVRP semantics to
+  generic Scion. Use a fresh development population and let H choose whether
+  to address construction completeness, refine local search or pivot; do not
+  host-select a target, patch or repair mechanism.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.
