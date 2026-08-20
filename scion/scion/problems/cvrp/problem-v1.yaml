@@ -93,6 +93,9 @@ development_unit_test_path: "tests/test_operators.py"
 development_regression_test_path: "tests/test_solver.py"
 development_regression_test_support_paths:
   - "data/tiny_development.json"
+development_workspace_paths:
+  - "policies/__init__.py"
+  - "policies/baseline_modules/__init__.py"
 development_problem_package_paths:
   - "__init__.py"
   - "adapter.py"

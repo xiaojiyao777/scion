@@ -16,6 +16,7 @@ from scion.verification.development import (
     copy_development_suite_closure,
     declared_development_problem_package_paths,
     declared_development_suites,
+    declared_development_workspace_paths,
     validate_development_closure_boundary,
 )
 
@@ -364,6 +365,7 @@ def test_cvrp_declares_exact_public_development_closure() -> None:
     spec = load_problem_spec_v1_from_yaml(root / "problem-v1.yaml")
 
     suites = declared_development_suites(spec)
+    workspace_paths = declared_development_workspace_paths(spec)
     runtime_paths = declared_development_problem_package_paths(spec)
 
     assert [suite.check_name for suite in suites] == [
@@ -371,6 +373,10 @@ def test_cvrp_declares_exact_public_development_closure() -> None:
         "D4_regression_tests",
     ]
     assert suites[1].support_paths == ("data/tiny_development.json",)
+    assert workspace_paths == (
+        "policies/__init__.py",
+        "policies/baseline_modules/__init__.py",
+    )
     assert "data/tiny_canary.json" not in {
         path for suite in suites for path in suite.declared_paths
     }
@@ -480,7 +486,7 @@ def test_real_cvrp_public_development_evaluator_passes_without_formal_gate(
         materializer=materializer,
         problem_spec=spec,
         suites=declared_development_suites(spec),
-        workspace_paths=(),
+        workspace_paths=declared_development_workspace_paths(spec),
         problem_package_paths=declared_development_problem_package_paths(spec),
         limits=CodeResearchLimits(
             max_test_suite_timeout_sec=30,
@@ -491,6 +497,7 @@ def test_real_cvrp_public_development_evaluator_passes_without_formal_gate(
     source_corpus = {
         path.relative_to(root).as_posix(): path.read_text(encoding="utf-8")
         for path in sorted((root / "policies").rglob("*.py"))
+        if path.name != "__init__.py"
     }
     target = "policies/baseline_algorithm.py"
     formal_calls: list[int] = []
