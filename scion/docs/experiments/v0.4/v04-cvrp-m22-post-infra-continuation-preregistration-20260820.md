@@ -1,6 +1,40 @@
 # CVRP M22 post-infra continuous research preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_COMPLETED_VALID`
+
+## Terminal result
+
+M22 ran once from clean carrier `cdbd582d` and completed normally as
+`completed / valid / requested_rounds_completed`.  Three autonomous H attempts
+used 13 provider calls.  The first revisited batch-local state maintenance in
+the destroy operators, but C returned an invalid revise payload and the attempt
+was safely recorded as `RESEARCH_REJECTED / PATCH_PROPOSAL_INVALID` before any
+candidate or solver work.
+
+The second H changed `_initial_solution` into a small deterministic
+Clarke--Wright/sweep portfolio with capacity-balanced construction retained as
+a fallback.  It passed bounded development checks, both Contracts,
+Verification and canary, then completed all 6 initial-screen pairs with zero
+runtime failure.  All three cases tied; median runtime ratio was
+`1.0003293509` (median delta `+10.5ms`).  Protocol returned
+`fail / SCREENING_FAIL_CASE_QUALITY` and Decision continued exploration.
+
+The third H added an exact directed, capacity-safe inter-route 2-for-2 segment
+exchange to VNS.  It also passed every development/formal gate and completed
+6/6 valid pairs with zero runtime failure.  `P-n19-k2` and `X-n303-k21` tied;
+`B-n57-k9` lost by 10 distance units on its case median.  The aggregate was
+zero wins, one loss and two ties, CI `[-10, 0]`; median runtime ratio was
+`0.9997026812` (median delta `-9.5ms`).  Protocol again returned
+`fail / SCREENING_FAIL_CASE_QUALITY` and Decision continued exploration.
+
+The run therefore contains one research rejection and two evaluated initial
+screens, two metric files and three ordinary history records.  Expanded,
+validation, frozen and promotion stages are zero; champion remains v1.  It is
+positive evidence that the post-M21 provider path and continuous V3 research
+loop recovered without retrying M21, but negative evidence for both evaluated
+mechanisms on this population.  It does not support an algorithm-improvement,
+generalization or production claim.  The terminal root is preserved and this
+label is not resumed or retried.
 
 ## Scientific object
 

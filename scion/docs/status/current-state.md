@@ -311,12 +311,18 @@ retry.  It used 14/30 provider calls and wrote three ordinary history records;
 expanded, validation, frozen, promotion and champion change are zero.  See the
 [M21 preregistration](../experiments/v0.4/v04-cvrp-m21-strict-expansion-continuation-preregistration-20260820.md).
 
-M22 is prepared as a fresh post-infrastructure continuation.  It imports M21's
-three native ordinary records, including the evaluated all-tie candidate and
-the unevaluated annealing H, but it does not resume the failed C request.  A
-new zero-overlap population again freezes strict 3 -> 6 nested screening and
-two evaluated stages under the same provider/no-retry/hardwall boundary.  See
-the [M22 preregistration](../experiments/v0.4/v04-cvrp-m22-post-infra-continuation-preregistration-20260820.md).
+M22 completed validly from clean carrier `cdbd582d`.  Three autonomous attempts
+used 13 provider calls: one destroy-operator draft was safely rejected, while
+two candidates passed bounded development checks, formal Contract,
+Verification and canary and completed 6/6 valid initial-screen pairs each.
+The deterministic construction portfolio tied all three cases.  The exact
+inter-route 2-for-2 exchange tied two cases and lost `B-n57-k9` by 10 distance
+units, giving zero wins, one loss, two ties and CI `[-10, 0]`.  Both Protocol
+results were `fail / SCREENING_FAIL_CASE_QUALITY`; Decision continued
+exploration, champion remains v1, and no expanded or later stage ran.  M22
+confirms provider recovery and the continuous V3 chain, but supplies negative
+mechanism evidence rather than algorithm improvement.  See the
+[M22 preregistration](../experiments/v0.4/v04-cvrp-m22-post-infra-continuation-preregistration-20260820.md).
 
 ## Current validation rule
 

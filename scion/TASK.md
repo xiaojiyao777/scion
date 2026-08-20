@@ -477,12 +477,15 @@ The exact design is in the
   completed a 6/6-valid all-tie initial screen; the next H pivoted to
   deadline-based annealing but its C session stopped on an upstream 504 after
   a valid draft revision. No expansion or later stage ran.
-- [ ] Continue from M21's three native records under a new label and fresh
+- [x] Continue from M21's three native records under a new label and fresh
   population. Preserve the strict nested expansion shape and the no-retry
   provider boundary. Treat invalid C draft feedback as tool-usability evidence,
   not algorithm evidence; host still selects no mechanism, target or patch.
-  M22 is prepared with 30 ordered ordinary records and a new strict nested
-  development population; M21's provider request is not resumed or retried.
+  M22 completed validly with one typed C rejection and two 6/6-valid formal
+  initial screens. The construction-portfolio candidate tied every case; the
+  2-for-2 exchange candidate tied two cases and lost one by 10 distance units.
+  Both gates failed case quality, so expanded and later stages remained zero.
+  M21's provider request was neither resumed nor retried.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.
