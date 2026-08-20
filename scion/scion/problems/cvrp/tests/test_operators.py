@@ -65,6 +65,44 @@ def _instance() -> CvrpInstance:
     )
 
 
+def _cross_route_improvement_instance() -> CvrpInstance:
+    """Expose a strictly improving tail exchange with a unique customer set."""
+
+    return CvrpInstance(
+        name="cross_route_customer_conservation",
+        capacity=2,
+        depot=0,
+        allowed_routes=2,
+        nodes=(
+            CvrpNode(id=0, x=5.0, y=-10.0, demand=0),
+            CvrpNode(id=1, x=0.0, y=0.0, demand=1),
+            CvrpNode(id=2, x=10.0, y=0.0, demand=1),
+            CvrpNode(id=3, x=10.0, y=1.0, demand=1),
+            CvrpNode(id=4, x=0.0, y=1.0, demand=1),
+        ),
+    )
+
+
+def test_two_opt_star_preserves_each_customer_exactly_once() -> None:
+    local_search = _candidate_module("baseline_modules.local_search")
+    state = _candidate_module("baseline_modules.state")
+    instance = _cross_route_improvement_instance()
+    solution = state._Solution(
+        instance,
+        [
+            state._Route(instance, [1, 2]),
+            state._Route(instance, [3, 4]),
+        ],
+    )
+
+    assert local_search._two_opt_star(solution, _RecordingContext(), 0.0)
+
+    customers = [customer for route in solution.routes for customer in route.customers]
+    assert sorted(customers) == [1, 2, 3, 4]
+    assert len(customers) == len(set(customers))
+    assert solution.is_feasible()
+
+
 @pytest.mark.parametrize(
     ("scenario", "expected_reason"),
     [
