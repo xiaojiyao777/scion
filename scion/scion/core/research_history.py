@@ -25,16 +25,41 @@ MAX_RESEARCH_HISTORY_FILE_BYTES = 32 * 1024 * 1024
 MAX_RESEARCH_HISTORY_TOTAL_BYTES = 64 * 1024 * 1024
 MAX_RESEARCH_HISTORY_DEPTH = 24
 
-_TOP = frozenset({"schema_version", "problem_id", "hypothesis", "patch", "outcome", "protocol", "decision"})
+_TOP = frozenset(
+    {
+        "schema_version",
+        "problem_id",
+        "hypothesis",
+        "patch",
+        "outcome",
+        "protocol",
+        "decision",
+    }
+)
 _HYPOTHESIS = frozenset(
-    {"text", "change_locus", "action", "target_file", "predicted_direction", "target_weakness", "expected_effect", "suggested_weight"}
+    {
+        "text",
+        "change_locus",
+        "action",
+        "target_file",
+        "predicted_direction",
+        "target_weakness",
+        "expected_effect",
+        "suggested_weight",
+    }
 )
 _PATCH_CHANGE = frozenset({"file_path", "action", "source"})
 _OUTCOME_REQUIRED = frozenset({"outcome", "stage", "reason_code"})
 _OUTCOME = _OUTCOME_REQUIRED | {"severity", "checks"}
 _CHECK = frozenset({"name", "passed", "severity"})
 _DECISION = frozenset(
-    {"value", "reason_codes", "engine_reason_codes", "diagnostic_reason_codes", "bypass_reason_codes"}
+    {
+        "value",
+        "reason_codes",
+        "engine_reason_codes",
+        "diagnostic_reason_codes",
+        "bypass_reason_codes",
+    }
 )
 _TOKEN = re.compile(r"^[A-Za-z][A-Za-z0-9_.:-]{0,127}$")
 _FORBIDDEN_KEY = re.compile(
@@ -42,10 +67,32 @@ _FORBIDDEN_KEY = re.compile(
     r"|(^|_)(decision_features|raw_metrics|raw_pair|raw_calibration)($|_)"
 )
 _OPEN_FORBIDDEN = frozenset(
-    {"detail", "details", "path", "paths", "case", "cases", "seed", "seed_set", "branch_id", "campaign_id", "artifact_ref", "artifact_refs", "timestamp", "id", "ids"}
+    {
+        "detail",
+        "details",
+        "path",
+        "paths",
+        "case",
+        "cases",
+        "seed",
+        "seed_set",
+        "branch_id",
+        "campaign_id",
+        "artifact_ref",
+        "artifact_refs",
+        "timestamp",
+        "id",
+        "ids",
+    }
 )
-_OPEN_COMPONENTS = frozenset({"detail", "details", "path", "paths", "seed", "seeds", "identity", "identities"})
+_OPEN_COMPONENTS = frozenset(
+    {"detail", "details", "path", "paths", "seed", "seeds", "identity", "identities"}
+)
 _HELD_OUT = frozenset({"validation", "frozen"})
+_CASE_FEEDBACK_PATH = re.compile(
+    r"^\$\.protocol\.evidence\.case_outcomes\.case_feedback\[\d+\]$"
+)
+_CANONICAL_CASE_FEEDBACK_SEED_FIELDS = frozenset({"seed_pattern", "seed_consistency"})
 
 
 def problem_id_from_spec(problem_spec: Any) -> str:
@@ -130,9 +177,13 @@ def load_research_histories(
             raise ValueError(f"research history must end with a newline: {path}")
         for line_number, line in enumerate(raw.splitlines(keepends=True), 1):
             if not line.strip():
-                raise ValueError(f"research history contains blank line: {path}:{line_number}")
+                raise ValueError(
+                    f"research history contains blank line: {path}:{line_number}"
+                )
             if len(line) > MAX_RESEARCH_HISTORY_LINE_BYTES:
-                raise ValueError(f"research history line is too large: {path}:{line_number}")
+                raise ValueError(
+                    f"research history line is too large: {path}:{line_number}"
+                )
             try:
                 value = json.loads(
                     line.decode("utf-8"), object_pairs_hook=_mapping_without_duplicates
@@ -142,9 +193,7 @@ def load_research_histories(
                     f"invalid research history JSON: {path}:{line_number}: {exc}"
                 ) from exc
             records.append(
-                normalize_research_history_record(
-                    value, expected_problem_id=expected
-                )
+                normalize_research_history_record(value, expected_problem_id=expected)
             )
             if len(records) > MAX_RESEARCH_HISTORY_RECORDS:
                 raise ValueError("too many research history records")
@@ -158,7 +207,11 @@ def provider_research_history(
 
     return [
         deepcopy(
-            {key: value for key, value in record.items() if key not in {"schema_version", "problem_id"}}
+            {
+                key: value
+                for key, value in record.items()
+                if key not in {"schema_version", "problem_id"}
+            }
         )
         for record in records
     ]
@@ -254,7 +307,11 @@ def _outcome(step: StepRecord) -> dict[str, Any] | None:
         if step.protocol_result is not None
         else str(step.failure_stage or outcome.provenance.get("stage") or "unknown")
     )
-    return {"outcome": outcome.outcome.value, "stage": stage, "reason_code": outcome.reason_code}
+    return {
+        "outcome": outcome.outcome.value,
+        "stage": stage,
+        "reason_code": outcome.reason_code,
+    }
 
 
 def _screening_protocol(step: StepRecord) -> dict[str, Any] | None:
@@ -319,7 +376,9 @@ def _normalize_patch(value: Any) -> dict[str, Any] | None:
         change = dict(_mapping(raw, _PATCH_CHANGE, path=f"$.patch.changes[{index}]"))
         path = normalize_relative_patch_path(change["file_path"])
         if path != change["file_path"] or path in seen:
-            raise ValueError("research history patch paths must be unique and canonical")
+            raise ValueError(
+                "research history patch paths must be unique and canonical"
+            )
         if change["action"] not in {"modify", "create", "delete"} or not isinstance(
             change["source"], str
         ):
@@ -385,7 +444,10 @@ def _mapping(
         raise TypeError(f"research history value at {path} must be a mapping")
     keys = set(value)
     required = allowed if required is None else required
-    if any(not isinstance(key, str) for key in value) or not required <= keys <= allowed:
+    if (
+        any(not isinstance(key, str) for key in value)
+        or not required <= keys <= allowed
+    ):
         raise ValueError(f"research history fields at {path} do not match schema")
     return value
 
@@ -426,7 +488,11 @@ def _validate_open_keys(value: Any, *, path: str) -> None:
         for key, child in value.items():
             normalized = re.sub(r"[^a-z0-9]+", "_", key.lower()).strip("_")
             components = frozenset(normalized.split("_"))
-            if (
+            canonical_case_feedback_seed_field = (
+                normalized in _CANONICAL_CASE_FEEDBACK_SEED_FIELDS
+                and _CASE_FEEDBACK_PATH.fullmatch(path) is not None
+            )
+            if not canonical_case_feedback_seed_field and (
                 normalized in _OPEN_FORBIDDEN
                 or normalized.endswith(("_id", "_ids"))
                 or components & _OPEN_COMPONENTS
@@ -476,10 +542,17 @@ def _write_bytes_atomically(path: Path, content: bytes) -> None:
 
 
 __all__ = [
-    "MAX_RESEARCH_HISTORY_DEPTH", "MAX_RESEARCH_HISTORY_FILES",
-    "MAX_RESEARCH_HISTORY_FILE_BYTES", "MAX_RESEARCH_HISTORY_LINE_BYTES",
-    "MAX_RESEARCH_HISTORY_RECORDS", "MAX_RESEARCH_HISTORY_TOTAL_BYTES",
-    "RESEARCH_HISTORY_SCHEMA", "ResearchHistoryWriter", "load_research_histories",
-    "normalize_research_history_record", "problem_id_from_spec",
-    "project_research_history_step", "provider_research_history",
+    "MAX_RESEARCH_HISTORY_DEPTH",
+    "MAX_RESEARCH_HISTORY_FILES",
+    "MAX_RESEARCH_HISTORY_FILE_BYTES",
+    "MAX_RESEARCH_HISTORY_LINE_BYTES",
+    "MAX_RESEARCH_HISTORY_RECORDS",
+    "MAX_RESEARCH_HISTORY_TOTAL_BYTES",
+    "RESEARCH_HISTORY_SCHEMA",
+    "ResearchHistoryWriter",
+    "load_research_histories",
+    "normalize_research_history_record",
+    "problem_id_from_spec",
+    "project_research_history_step",
+    "provider_research_history",
 ]

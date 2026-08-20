@@ -310,6 +310,8 @@ class CodeResearchSession:
                     draft_raw = deepcopy(dict(command.patch))
                     draft_revision += 1
                     last_test_outcome = None
+                    ready_patch = None
+                    ready_raw = None
                     result = {
                         "action": command.action,
                         "ok": True,
@@ -325,6 +327,12 @@ class CodeResearchSession:
                 last_test_outcome = (
                     str(result.get("outcome")) if result.get("ok") else None
                 )
+                if last_test_outcome == "passed" and draft_patch is not None:
+                    ready_patch = deepcopy(draft_patch)
+                    ready_raw = deepcopy(dict(draft_raw or {}))
+                else:
+                    ready_patch = None
+                    ready_raw = None
             else:
                 if draft_patch is None:
                     result = _tool_error("ready", "draft_required")
@@ -374,7 +382,7 @@ class CodeResearchSession:
             return CodeResearchAbandon(reason=decision.reason or "abandoned")
         if ready_patch is None:
             raise ProposalValidationError(
-                "finalize_patch requires a candidate frozen by a prior ready action"
+                "finalize_patch requires the latest draft to pass development checks"
             )
         return deepcopy(ready_patch)
 

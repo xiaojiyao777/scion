@@ -210,6 +210,51 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
     assert session.provider_calls_used == 6
 
 
+def test_passing_latest_draft_can_finalize_without_redundant_ready_turn() -> None:
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=2),
+    )
+    session._test_patch = _passing_development_test
+
+    result = session.run(_snapshot())
+
+    assert result.code_content == _TARGET_SOURCE.replace(
+        "return value", "return value + 1"
+    )
+    assert [call["request_kind"] for call in client.calls] == [
+        "code_research_turn",
+        "code_research_turn",
+        "code_research_finalize",
+    ]
+    assert "frozen_ready_patch" in client.calls[-1]["system_text"]
+
+
+def test_revising_after_a_passing_test_clears_finalize_eligibility() -> None:
+    second_patch = _patch()
+    second_patch["new_string"] = "return value + 2"
+    session, _client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "revise", "patch": second_patch},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=3),
+    )
+    session._test_patch = _passing_development_test
+
+    with pytest.raises(
+        ProposalValidationError,
+        match="latest draft to pass development checks",
+    ):
+        session.run(_snapshot())
+
+
 def test_read_peer_then_revise_can_bind_that_exact_source() -> None:
     session, _client = _run(
         [
@@ -489,7 +534,10 @@ def test_finalize_without_ready_is_rejected() -> None:
         limits=CodeResearchLimits(max_turns=1),
     )
 
-    with pytest.raises(ProposalValidationError, match="prior ready"):
+    with pytest.raises(
+        ProposalValidationError,
+        match="latest draft to pass development checks",
+    ):
         session.run(_snapshot())
 
 

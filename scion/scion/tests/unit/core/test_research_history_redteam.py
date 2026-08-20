@@ -120,9 +120,59 @@ def test_safe_aggregate_case_counts_remain_ordinary_evidence() -> None:
         expected_problem_id="generic_demo",
     )
 
-    assert normalized["protocol"]["evidence"]["mechanism_evidence"]["evidence"][
-        "instance_feasibility"
-    ]["coverage"] == coverage
+    assert (
+        normalized["protocol"]["evidence"]["mechanism_evidence"]["evidence"][
+            "instance_feasibility"
+        ]["coverage"]
+        == coverage
+    )
+
+
+def test_canonical_case_feedback_seed_pattern_remains_ordinary_evidence() -> None:
+    record = _base_record()
+    record["protocol"]["evidence"]["case_outcomes"]["case_feedback"] = [
+        {
+            "n_pairs": 2,
+            "wins": 1,
+            "losses": 0,
+            "ties": 1,
+            "win_rate": 0.5,
+            "dominant_result": "win",
+            "seed_pattern": "heterogeneous",
+            "median_deltas": {"total_distance": 2.0},
+            "decisive_metric": "total_distance",
+            "seed_consistency": 0.5,
+            "case_features": {"size_bucket": "small"},
+        }
+    ]
+
+    normalized = normalize_research_history_record(
+        record,
+        expected_problem_id="generic_demo",
+    )
+
+    assert (
+        normalized["protocol"]["evidence"]["case_outcomes"]["case_feedback"][0][
+            "seed_pattern"
+        ]
+        == "heterogeneous"
+    )
+
+
+def test_seed_pattern_is_not_allowed_in_open_problem_evidence() -> None:
+    record = _base_record()
+    record["protocol"]["evidence"]["mechanism_evidence"] = {
+        "schema_version": "scion.problem_proposal_mechanism_evidence.v1",
+        "problem_family": "generic_demo",
+        "producer": "problem_provider",
+        "evidence": {"seed_pattern": "raw-seed-encoded-value"},
+    }
+
+    with pytest.raises(ValueError, match="forbidden research history field"):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
 
 
 def test_nested_payload_depth_is_bounded() -> None:
