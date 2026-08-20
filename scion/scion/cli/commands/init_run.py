@@ -438,9 +438,20 @@ def register_run_command(app: typer.Typer) -> None:
             ExperimentProtocol,
             SeedLedger,
             SplitManager,
+            validate_requested_screening_expansion,
         )
         from scion.runtime.subprocess_runner import LocalSubprocessRunner
         from scion.verification.gate import VerificationGate
+
+        try:
+            validate_requested_screening_expansion(
+                config=proto_cfg,
+                split_manifest=split_manifest,
+                requested_rounds=rounds,
+            )
+        except ValueError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
 
         metrics_dir = str(campaign_path / "metrics")
         runner = LocalSubprocessRunner()

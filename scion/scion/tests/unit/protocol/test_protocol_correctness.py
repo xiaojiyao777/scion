@@ -29,6 +29,7 @@ from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedg
 from scion.protocol.experiment.feedback import _aggregate_pairs_to_case_level
 from scion.protocol.experiment.selection import _select_evenly_spaced_cases
 from scion.protocol.experiment.selection import select_cases
+from scion.protocol.experiment.selection import validate_requested_screening_expansion
 from scion.protocol.experiment.feedback import _protected_objective_regressions
 from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
@@ -79,6 +80,45 @@ def minimal_ledger():
         validation=[30, 40],
         frozen=[50, 60],
         canary=[99],
+    )
+
+
+def test_multi_round_screening_preflight_rejects_non_expanding_cases(
+    minimal_config, minimal_manifest
+):
+    minimal_config.screening.expand_to_modify = minimal_config.screening.n_cases_modify
+
+    with pytest.raises(ValueError, match="expand_to_modify > n_cases_modify"):
+        validate_requested_screening_expansion(
+            config=minimal_config,
+            split_manifest=minimal_manifest,
+            requested_rounds=2,
+        )
+
+
+def test_multi_round_screening_preflight_checks_declared_population(
+    minimal_config, minimal_manifest
+):
+    minimal_config.screening.expand_to_create = 9
+
+    with pytest.raises(ValueError, match="requests 9 cases.*declares 8"):
+        validate_requested_screening_expansion(
+            config=minimal_config,
+            split_manifest=minimal_manifest,
+            requested_rounds=2,
+        )
+
+
+def test_single_round_does_not_require_an_expansion_population(
+    minimal_config, minimal_manifest
+):
+    minimal_config.screening.expand_to_modify = minimal_config.screening.n_cases_modify
+    minimal_config.screening.expand_to_create = minimal_config.screening.n_cases_create
+
+    validate_requested_screening_expansion(
+        config=minimal_config,
+        split_manifest=minimal_manifest,
+        requested_rounds=1,
     )
 
 

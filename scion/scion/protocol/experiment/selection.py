@@ -79,6 +79,50 @@ class SeedLedger:
         return list(self._ledger.canary)
 
 
+def validate_requested_screening_expansion(
+    *,
+    config: Any,
+    split_manifest: SplitManifest,
+    requested_rounds: int,
+) -> None:
+    """Reject an unusable multi-round screening plan before proposal work.
+
+    A second evaluated round may be the expanded screening requested by the
+    Decision engine.  That path must add cases and the declared split must be
+    large enough for either supported proposal action.  Validating the shared
+    configuration here prevents an otherwise deterministic failure only after
+    H/C, Contract, Verification, canary, and the initial formal screen.
+    """
+
+    if max(1, int(requested_rounds)) <= 1:
+        return
+
+    available = len(split_manifest.screening)
+    for action, initial, expanded in (
+        (
+            "modify",
+            int(config.screening.n_cases_modify),
+            int(config.screening.expand_to_modify),
+        ),
+        (
+            "create_new",
+            int(config.screening.n_cases_create),
+            int(config.screening.expand_to_create),
+        ),
+    ):
+        if expanded <= initial:
+            raise ValueError(
+                "multi-round screening requires expand_to_"
+                f"{action.removesuffix('_new')} > n_cases_"
+                f"{action.removesuffix('_new')}"
+            )
+        if expanded > available:
+            raise ValueError(
+                f"multi-round screening {action} expansion requests "
+                f"{expanded} cases but the screening split declares {available}"
+            )
+
+
 def _select_evenly_spaced_cases(all_cases: Sequence[str], n: int) -> List[str]:
     """Select a deterministic spread across the manifest instead of a prefix.
 
@@ -521,4 +565,5 @@ __all__ = [
     "select_cases",
     "select_seeds",
     "validate_case_path_resolution",
+    "validate_requested_screening_expansion",
 ]
