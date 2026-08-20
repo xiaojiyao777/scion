@@ -8,7 +8,7 @@ referenced, not copied into development prompts.
 
 ## Runs
 
-- [CVRP M20 mechanism-frontier continuation, prepared](v04-cvrp-m20-mechanism-frontier-continuation-preregistration-20260820.md)
+- [CVRP M20 mechanism-frontier continuation, terminal positive initial screen / config-incomplete](v04-cvrp-m20-mechanism-frontier-continuation-preregistration-20260820.md)
 - [CVRP M19 fresh-population continuous research, terminal positive/repetitive result](v04-cvrp-m19-fresh-population-continuous-research-preregistration-20260820.md)
 - [CVRP M18 `_or_opt` fixed-candidate confirmation, terminal not-supported result](v04-cvrp-m18-oropt-fixed-candidate-confirmation-preregistration-20260820.md)
 - [CVRP M17 `_or_opt` fixed-candidate confirmation, terminal config-invalid before formal population](v04-cvrp-m17-oropt-fixed-candidate-confirmation-preregistration-20260820.md)

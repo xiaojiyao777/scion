@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Last updated: 2026-08-17*
+*Last updated: 2026-08-20*
 
 ## Authority and objective
 
@@ -455,14 +455,24 @@ The exact design is in the
   the two byte-distinct patches were semantically equivalent `_or_opt`
   implementations, so the run also exposes inadequate research-frontier
   novelty after a current-campaign result.
-- [ ] Add one problem-neutral H frontier instruction: current-campaign
+- [x] Add one problem-neutral H frontier instruction: current-campaign
   experiment evidence is an already evaluated mechanism, so a repeated target
   must identify a materially new algorithmic delta or H should pivot. Do not
   ban same-file refinement, score novelty with a second model, or encode a CVRP
   target. Validate the change on a new fresh development population.
   The generic instruction and prompt-boundary tests are implemented in
-  `06aefa81`; M20 is prepared with 25 history records and a second
-  metadata-selected zero-overlap development split.
+  `06aefa81`. M20's first H made a real `_or_opt` -> `_swap` mechanism advance;
+  its candidate passed all gates and produced three wins, zero losses and three
+  ties on a 12/12-valid fresh screen. Expanded confirmation did not run because
+  the config declared equal initial/expanded case counts. Preserve the terminal
+  root and reject this shape before provider/solver work in every future
+  multi-round normal run.
+- [ ] Continue from M20's native ordinary history on a new fresh population
+  whose initial screen is a strict subset of its expanded screen. Allow two
+  evaluated stages: either initial -> expanded for the same branch, or a second
+  autonomous H after a terminal initial result. Host selects no mechanism,
+  target or patch; no validation/frozen/promotion claim follows from this
+  development continuation.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

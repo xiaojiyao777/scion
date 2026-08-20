@@ -1,6 +1,37 @@
 # CVRP M20 mechanism-frontier continuation preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_VALID_INCOMPLETE_CONFIGURATION_ERROR`
+
+## Terminal result
+
+M20 ran once from clean carrier `ce6c2c26` and the root is preserved.  The
+frontier instruction worked at the hypothesis boundary: instead of another
+equivalent `_or_opt` rewrite, H proposed an exact directed O(1) edge-delta for
+the distinct-route `_swap` move.  C implemented that mechanism autonomously;
+the patch passed bounded development checks, Hypothesis/Patch Contract,
+formal Verification and canary.
+
+Initial screening then completed all 12 pairs with no candidate, champion,
+shared or bilateral runtime failure.  The six case results were three wins,
+zero losses and three ties: `P-n76-k5` improved by 12, `X-n266-k58` by 838.5
+and `X-n376-k94` by 83 distance units.  The case-median improvement was 6 with
+CI `[0, 460.75]`; median runtime ratio was `1.0001169467`.  Protocol correctly
+returned `expand / SCREENING_EXPAND_REQUIRED_FOR_PASS` and Decision requested
+expanded screening.
+
+The second scheduled call did not evaluate science.  The frozen config had
+`n_cases_modify = expand_to_modify = 6` (and the same equality for
+`create_new`), so Protocol rejected the non-growing expanded population with
+`expanded case population must be larger than the initial population`.  The
+terminal run is `stopped / valid_incomplete / execution_not_evaluated`, with
+one evaluated initial screen and one `NOT_EVALUATED / EVALUATION_EXCEPTION`;
+no second H, validation, frozen, promotion or champion change occurred.
+
+This is positive development evidence for the autonomous `_swap` mechanism
+and for the generic frontier instruction, but it is not expanded confirmation,
+validation or a global CVRP improvement claim.  The label/root is not retried.
+The framework follow-up moves multi-round expansion-shape validation before
+provider or solver work and any continuation uses a new label and fresh input.
 
 ## Scientific object
 

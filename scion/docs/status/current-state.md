@@ -285,15 +285,19 @@ validation, frozen, promotion, global-improvement or production claim follows.
 See the
 [M19 preregistration](../experiments/v0.4/v04-cvrp-m19-fresh-population-continuous-research-preregistration-20260820.md).
 
-M20 is prepared, not started. Generic H now treats current-campaign
-`experiment_history` as an evaluated research frontier: a repeated target must
-name a concrete incremental algorithmic delta addressing observed limitations,
-while an equivalent rewrite is not a refinement. Same-file refinement remains
-allowed and no problem, target or mechanism is encoded. M20 will load 25 prior
-history records and use a second metadata-selected six-case/two-seed fresh
-development screen under the same 30-call/two-stage/14,000-second envelope.
-See the
-[M20 preregistration](../experiments/v0.4/v04-cvrp-m20-mechanism-frontier-continuation-preregistration-20260820.md).
+M20 is terminal `stopped / valid_incomplete / execution_not_evaluated`.  The
+generic frontier instruction succeeded: H moved beyond the repeated `_or_opt`
+rewrite and autonomously proposed an exact directed O(1) `_swap` edge delta.
+The candidate passed development checks, Contract, Verification and canary,
+then completed 12/12 valid initial-screen pairs with three wins, zero losses
+and three ties; case-median distance improvement was 6 with CI `[0, 460.75]`
+and median runtime was effectively unchanged.  Protocol correctly requested
+expanded screening.  The next call stopped before science because the frozen
+config declared equal initial and expanded case counts.  Thus no second H,
+expanded result, validation, frozen, promotion or champion change exists.  The
+root is preserved and not retried.  Generic multi-round shape validation is
+being moved ahead of provider/solver work before a fresh continuation.  See
+the [M20 preregistration](../experiments/v0.4/v04-cvrp-m20-mechanism-frontier-continuation-preregistration-20260820.md).
 
 ## Current validation rule
 
