@@ -208,10 +208,19 @@ baseline failure, with candidate-only failures zero. No validation, frozen,
 promotion or retained-B0 stage ran. See the
 [M13 preregistration](../experiments/v0.4/v04-cvrp-m13-history-safe-continuation-preregistration-20260820.md).
 
-M14 is prepared as an independent fresh continuation using the two native M13
-history records plus all earlier ordered inputs, 15 records total. Framework,
-population, two-stage stop, provider cap and hardwall are unchanged; the Agent
-chooses whether to refine the mixed route-removal mechanism or pivot. See the
+M14 completed validly from clean carrier `ed307edd`. Four autonomous attempts
+used 17 provider calls: two typed C responses were safely rejected before a
+candidate, and two candidates passed development checks, formal Contract,
+Verification and canary and reached screening. The reversal-aware 2-opt-star
+candidate was negative/mixed (one case win, two losses, two ties; CI
+`[-761.5, 1.5]`). The constant-time boundary-delta candidate was uniformly
+negative and failed the runtime solution audit on both X-n195-k51 seeds because
+its state update duplicated customers and omitted others; Decision returned
+`abandon / CANDIDATE_RUNTIME_FAILURE`. Both stages continued to classify the
+two X-n256-k16 failures as shared rather than candidate-only. Champion remains
+v1 and no later stage ran. A new problem-owned public unit test now exercises
+an improving cross-route exchange and requires exact customer conservation;
+it passes B0 and fails the preserved M14 patch. See the
 [M14 preregistration](../experiments/v0.4/v04-cvrp-m14-continuous-mechanism-refinement-preregistration-20260820.md).
 
 ## Current validation rule

@@ -409,9 +409,16 @@ The exact design is in the
   two durable history records and no candidate-only runtime failures. Both
   gates failed case quality; the second mechanism was mixed rather than
   uniformly negative.
-- [ ] Continue in one independently frozen M14 campaign using the two native
-  M13 history records. Keep the same development population and claim boundary;
-  no M13 root reuse and no host-selected mechanism.
+- [x] Continue in one independently frozen M14 campaign using the two native
+  M13 history records. M14 completed validly with two typed C rejections and
+  two evaluated candidates. The second candidate exposed a missing public
+  customer-conservation invariant and was correctly abandoned after two
+  candidate-only X195 runtime failures; no M13/M14 root was reused and the
+  host selected no mechanism or patch.
+- [ ] Continue in one independently frozen M15 campaign using the four native
+  M14 history records and the new problem-owned customer-conservation
+  development test. Keep the same outcome-known development population and
+  claim boundary; the Agent remains free to repair, refine or pivot.
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.

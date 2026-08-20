@@ -1,6 +1,6 @@
 # CVRP M14 continuous mechanism-refinement preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_VALID_NEGATIVE_MIXED`
 
 ## Scientific object
 
@@ -147,3 +147,48 @@ Preparation must verify exact clean carrier and module origins, all loaders,
 15 ordered history records, exact M13 copy, sandbox and public closure,
 unchanged population/resource arithmetic, proxy model metadata and absent
 output. Any failure is `PREP_INVALID` with zero live provider or solver call.
+
+## Terminal record
+
+M14 ran once from clean carrier
+`ed307edde1cf844094c7b75e5fad9581d1ed401e` and exited zero as
+`completed / valid / requested_rounds_completed`. It scheduled four research
+attempts, used 17 provider calls, recorded two code-research rejections and two
+evaluated screening stages, and wrote four native ordinary history records.
+There were no infrastructure, resource, interrupt, not-evaluated or unknown
+outcomes, and no live child remained. Champion is still v1; validation,
+frozen, promotion and retention counts are zero.
+
+Attempts one and three independently proposed elapsed-budget simulated
+annealing in `acceptance.py`, but their C revise responses violated the typed
+action schema. Both stopped safely as
+`RESEARCH_REJECTED / PATCH_PROPOSAL_INVALID`; neither reached a candidate
+workspace, Verification or Protocol.
+
+The first evaluated candidate extended `_two_opt_star` with reversal-aware
+tail variants. Contract, Verification and canary passed. Screening completed
+12 attempted pairs, ten valid pairs and two shared X-n256-k16 failures. The
+five case aggregates were one win, two losses and two ties: A-n46-k7 was +1.5,
+F-n45-k4 was -2.1025439344, X-n195-k51 was -761.5, and B/P tied. The
+case-median effect was zero with CI `[-761.5, 1.5]`. Protocol failed case
+quality and Decision returned `continue_explore` because champion evidence was
+partial.
+
+The second evaluated candidate replaced repeated route-distance evaluation in
+the forward `_two_opt_star` exchange with a boundary-edge delta. The idea did
+not preserve behavior in its implementation: it assigned the new left route
+before using the original left tail to build the new right route. On both
+X-n195-k51 seeds this duplicated customers and omitted others; the runtime
+solution audit classified both pairs as candidate-only solver-algorithm
+failures. X-n256-k16 remained two independent shared failures. Only eight
+pairs were valid; the case aggregate had zero wins, five losses and median
+-2.1025439344 with CI `[-12, -1]`. Decision correctly returned
+`abandon / CANDIDATE_RUNTIME_FAILURE`.
+
+This is valid continuous-research evidence: M13 history influenced new H/C
+work, current gates rejected a defective candidate, and pair-local attribution
+separated its X195 failure from the shared X256 baseline failure. It is not
+algorithm improvement, promotion, generalization or v0.4 completion. The
+immutable root is
+`/home/clawd/research/scion-experiments/v04-cvrp-m14-continuous-mechanism-refinement-20260820`;
+it is not retried or resumed.
