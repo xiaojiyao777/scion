@@ -1,14 +1,34 @@
-# CVRP M23 M20 `_swap` provider-free full-funnel preregistration
+# CVRP M23 M20 `_swap` provider-free full-funnel preregistration and result
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `completed / NOT_CONFIRMED`
 
 **Label:** `v04-cvrp-m23-m20-swap-provider-free-full-funnel-20260821`
 
 **External input:**
 `/home/clawd/research/scion-experiment-inputs/v04-cvrp-m23-m20-swap-provider-free-full-funnel-20260821`
 
-**Fresh output:**
+**Preserved output:**
 `/home/clawd/research/scion-experiments/v04-cvrp-m23-m20-swap-provider-free-full-funnel-20260821`
+
+## Observed terminal result
+
+The authorized one-shot completed at `expanded_screening` with terminal type
+`NOT_CONFIRMED`. The strict canary passed. Expanded screening completed all
+24 declared pairs with 24 valid pairs and zero candidate, champion, shared or
+bilateral failures. The aggregate result was two wins, zero losses and four
+ties: `X-n439-k37` had paired-effect median `+27.0`, `X-n502-k39` had
+`+106.5`, and the other four cases tied. Overall median delta was `0.0`, the
+interval was `[0.0, 66.75]`, and win rate was `1/3`.
+
+Protocol returned `unclear`; deterministic Decision returned
+`continue_explore` with
+`SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN`. Median runtime ratio was
+`1.0002066`, median runtime delta was `+8.5 ms`, and there were no protected-
+objective regressions. The terminal counters were 50 solver subprocesses,
+2,420 nominal subject-seconds and 3,170 guarded subject-seconds, all within the
+frozen envelope. Validation, frozen evaluation, promotion and retained
+comparison were not run. The output root above remains preserved, the one-shot
+is consumed, and there is no retry, resume or repair of this estimand.
 
 ## Scientific question and scope
 

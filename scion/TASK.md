@@ -531,12 +531,16 @@ The exact design is in the
 - [x] Complete focused provider-/solver-free regression and independent review.
   Do no distribution, packaging, build, deployment, root/systemd or Trust/Hash
   lifecycle work.
-- [ ] **PREPARED_NOT_STARTED:** run one ordinary provider-free full-funnel
+- [x] **COMPLETED / NOT_CONFIRMED:** run one ordinary provider-free full-funnel
   confirmation of the preserved M20 candidate on the frozen outcome-unseen
   population in the
   [M23 preregistration](docs/experiments/v0.4/v04-cvrp-m23-m20-swap-provider-free-full-funnel-preregistration-20260821.md).
-  Do not create a provider call, replacement candidate, repair, retry or resume
-  path.
+  Canary passed and expanded screening completed 24/24 valid pairs with zero
+  failures, two wins, four ties and no losses. Median delta `0.0` and CI
+  `[0.0, 66.75]` left the aggregate gate `unclear`; Decision returned
+  `continue_explore`, so validation, frozen, promotion and retained remained
+  zero. No provider call, replacement candidate, repair, retry or resume path
+  was created.
 - [ ] After that terminal result, freeze and run one serial bounded autonomous
   campaign in which H performs the direction research and the host supplies
   only ordinary source/history access, resource limits and the V3 gates.
@@ -624,5 +628,10 @@ because the historical config shape was invalid. M23 now supplies bounded H
 direction research, problem-owned non-causal mechanism-family association and
 one consolidated provider-free fixed-candidate funnel with complete bilateral
 runtime attribution. Independent review covered the production and scientific
-boundaries. CVRP acceptance remains unmet; the next operation is the newly
-frozen M20 candidate full funnel, not another adaptive patch attempt.
+boundaries. Its fixed M20 funnel then passed canary and completed all 24
+expanded-screening pairs without failure, producing two wins, four ties and no
+losses. Median delta `0.0` and CI `[0.0, 66.75]` left the aggregate gate
+`unclear`; Decision continued exploration and the terminal was
+`NOT_CONFIRMED`, with validation, frozen, promotion and retained all zero. The
+one-shot is consumed without retry. CVRP acceptance remains unmet; the next
+operation is the still-unchecked serial bounded autonomous campaign above.

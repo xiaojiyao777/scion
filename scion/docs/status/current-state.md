@@ -372,13 +372,23 @@ Retained comparator incompleteness ends as
 
 No distribution, packaging, build, deployment, root/systemd, Trust/Hash
 authority, object identity, lease, signing, registration, receipt or
-duplicate-closure work is authorized by these changes. The next scientific
-operation is `PREPARED_NOT_STARTED`: one provider-free full-funnel confirmation
-of the preserved M20 candidate under the
-[M23 preregistration](../experiments/v0.4/v04-cvrp-m23-m20-swap-provider-free-full-funnel-preregistration-20260821.md).
-Its exact label, ordinary external inputs, tracked populations, resource
-envelope and one-shot boundary are frozen there. Only after its terminal audit
-may one serial bounded autonomous campaign follow.
+duplicate-closure work is authorized by these changes. The provider-free M23
+fixed-candidate funnel is now terminal `completed / NOT_CONFIRMED` at
+`expanded_screening`; its strict canary passed and all 24 expanded-screening
+pairs were valid, with zero candidate, champion, shared or bilateral failures.
+The exact M20 candidate won `X-n439-k37` by paired-effect median `27.0` and
+`X-n502-k39` by `106.5`, tied the other four cases and lost none. Overall
+median delta was `0.0`, CI was `[0.0, 66.75]`, and win rate was `1/3`.
+Protocol returned `unclear` and Decision returned `continue_explore` with
+`SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN`. Median runtime ratio was
+`1.0002066`, median runtime delta was `+8.5 ms`, and protected-objective
+regressions were zero. Terminal counters were 50 solver subprocesses, 2,420
+nominal subject-seconds and 3,170 guarded subject-seconds. Validation, frozen,
+promotion and retained observations are zero. The output root is preserved and
+the one-shot is consumed without retry. See the
+[M23 preregistration and result](../experiments/v0.4/v04-cvrp-m23-m20-swap-provider-free-full-funnel-preregistration-20260821.md).
+The next scientific operation is the still-unchecked serial bounded autonomous
+campaign, not a repair or rerun of M23.
 
 ## Current validation rule
 
