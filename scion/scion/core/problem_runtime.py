@@ -112,3 +112,50 @@ class ProblemRuntime:
         kwargs.setdefault("problem_spec", self._spec)
         kwargs.setdefault("development_suites", self._development_suites)
         return self._ctx_manager.build_code_context(**kwargs)
+
+    def hypothesis_research_public_sources(self) -> tuple[dict[str, str], ...]:
+        """Read only explicitly declared public development test files."""
+
+        from scion.core.paths import normalize_relative_patch_path
+        from scion.proposal.context_manager.io import (
+            _read_solver_design_context_artifact,
+        )
+        from scion.verification.development import (
+            validate_development_closure_boundary,
+        )
+
+        records: list[dict[str, str]] = []
+        seen: set[str] = set()
+        validate_development_closure_boundary(
+            problem_spec=self._spec,
+            suites=self._development_suites,
+            workspace_paths=(),
+            problem_package_paths=(),
+            split_manifest=self._split_manifest,
+            champion_root=None,
+        )
+        for suite in self._development_suites:
+            path = normalize_relative_patch_path(suite.test_path)
+            if path != suite.test_path or path in seen:
+                raise ValueError(f"invalid or duplicate development test path: {path}")
+            check_name = suite.check_name
+            if check_name not in {"D3_unit_tests", "D4_regression_tests"}:
+                raise ValueError(f"invalid development check name: {check_name}")
+            artifact = _read_solver_design_context_artifact(
+                path,
+                source_root=suite.source_root,
+                champion_root="",
+                allow_champion_fallback=False,
+            )
+            if not artifact["readable"]:
+                raise ValueError(f"declared development test is unreadable: {path}")
+            seen.add(path)
+            records.append(
+                {"path": path, "check_name": check_name, "content": artifact["content"]}
+            )
+        return tuple(records)
+
+    def hypothesis_research_source_prefixes(self) -> tuple[str, ...]:
+        """Return the host-known problem package prefix for source adjacency."""
+
+        return (f"scion.problems.{problem_id_from_spec(self._spec)}.",)

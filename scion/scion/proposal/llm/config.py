@@ -1,4 +1,5 @@
 """Configuration helpers for LLMClient."""
+
 from __future__ import annotations
 
 import logging
@@ -19,6 +20,7 @@ _GPT_CODEX_MODEL_PREFIXES = ("gpt-", "codex-")
 _DEEPSEEK_MAX_ALIASES = {"v4pro-max", "deepseek-v4-pro-max"}
 _CODE_REQUEST_KINDS = {"code", "code_research_finalize", "code_research_turn"}
 _TOOL_REQUEST_KIND_BY_NAME = {
+    "hypothesis_research_turn": "hypothesis_research_turn",
     "code_research_turn": "code_research_turn",
     "finalize_code_research": "code_research_finalize",
     "generate_patch": "code",
@@ -69,8 +71,7 @@ def _request_kind_env_key(request_kind: str | None) -> str | None:
     if not request_kind:
         return None
     cleaned = "".join(
-        char.upper() if char.isalnum() else "_"
-        for char in str(request_kind)
+        char.upper() if char.isalnum() else "_" for char in str(request_kind)
     ).strip("_")
     return cleaned or None
 

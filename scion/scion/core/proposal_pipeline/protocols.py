@@ -22,7 +22,8 @@ class ProposalAttempt(Generic[ProposalT]):
     def __post_init__(self) -> None:
         if (self.proposal is None) == (self.execution_outcome is None):
             raise ValueError(
-                "proposal attempt must contain exactly one of proposal or execution_outcome"
+                "proposal attempt must contain exactly one of proposal or "
+                "execution_outcome"
             )
 
     @classmethod
@@ -48,6 +49,11 @@ class CreativeLayerLike(Protocol):
         snapshot: PromptTurnSnapshot,
     ) -> PatchProposal: ...
 
+    def call_hypothesis_research_turn(
+        self,
+        snapshot: PromptTurnSnapshot,
+    ) -> dict[str, Any]: ...
+
     def call_code_research_turn(
         self,
         snapshot: PromptTurnSnapshot,
@@ -63,3 +69,7 @@ class ProblemRuntimeLike(Protocol):
     def build_hypothesis_context(self, **kwargs: Any) -> dict[str, Any]: ...
 
     def build_code_context(self, **kwargs: Any) -> dict[str, Any]: ...
+
+    def hypothesis_research_public_sources(self) -> tuple[dict[str, str], ...]: ...
+
+    def hypothesis_research_source_prefixes(self) -> tuple[str, ...]: ...

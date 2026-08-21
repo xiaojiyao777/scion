@@ -48,8 +48,12 @@ class _TraceWriter:
             "tool_name": tool.get("name"),
             "started_at": started_at,
             "finished_at": datetime.now().isoformat(),
-            "branch_id": context.get("branch_id"),
-            "champion_version": context.get("champion_version"),
+            **({"branch_id": context["branch_id"]} if "branch_id" in context else {}),
+            **(
+                {"champion_version": context["champion_version"]}
+                if "champion_version" in context
+                else {}
+            ),
             "structured_context": context,
             "system_blocks": system_blocks,
             "user_prompt": prompt,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence
 
 from scion.config.problem import ProtocolConfig
@@ -46,7 +47,9 @@ class ExperimentProtocol:
         self.time_limit_sec = time_limit_sec
         self.metrics_dir = metrics_dir
         self._metric_specs = _hydrate_metric_specs(metric_specs, problem_spec)
-        self._objective_policy = objective_policy or _hydrate_objective_policy(problem_spec)
+        self._objective_policy = objective_policy or _hydrate_objective_policy(
+            problem_spec
+        )
         self._problem_spec = problem_spec
         self._problem_adapter: Any | None = None
         self._strict_case_paths = True
@@ -67,7 +70,9 @@ class ExperimentProtocol:
             try:
                 runner_hook(self._emit_progress if callback is not None else None)
             except Exception:
-                logger.debug("Runner progress callback registration failed", exc_info=True)
+                logger.debug(
+                    "Runner progress callback registration failed", exc_info=True
+                )
 
     def _emit_progress(self, **payload: object) -> None:
         if self._progress_callback is None:
@@ -85,13 +90,19 @@ class ExperimentProtocol:
         """Return (comparison_str, ObjectiveComparison)."""
         if getattr(self._objective_policy, "mode", None) == "weighted_sum":
             from scion.problem.objectives import compare_weighted_sum
+
             result = compare_weighted_sum(
-                self._metric_specs, candidate_objective, champion_objective,
+                self._metric_specs,
+                candidate_objective,
+                champion_objective,
             )
         else:
             from scion.problem.objectives import compare_lexicographic
+
             result = compare_lexicographic(
-                self._metric_specs, candidate_objective, champion_objective,
+                self._metric_specs,
+                candidate_objective,
+                champion_objective,
             )
         return result.outcome, result
 
@@ -102,13 +113,19 @@ class ExperimentProtocol:
     ) -> float:
         if getattr(self._objective_policy, "mode", None) == "weighted_sum":
             from scion.problem.objectives import compare_weighted_sum
+
             result = compare_weighted_sum(
-                self._metric_specs, candidate_objective, champion_objective,
+                self._metric_specs,
+                candidate_objective,
+                champion_objective,
             )
         else:
             from scion.problem.objectives import compare_lexicographic
+
             result = compare_lexicographic(
-                self._metric_specs, candidate_objective, champion_objective,
+                self._metric_specs,
+                candidate_objective,
+                champion_objective,
             )
         return result.scalar_delta
 
@@ -127,6 +144,7 @@ class ExperimentProtocol:
         champion_ws: str,
         *,
         selected_surface: str | None = None,
+        require_complete_pairs: bool = False,
     ) -> CanaryResult:
         from .canary import run_canary
 
@@ -135,6 +153,7 @@ class ExperimentProtocol:
             candidate_ws,
             champion_ws,
             selected_surface=selected_surface,
+            require_complete_pairs=require_complete_pairs,
         )
 
     def _select_cases(
@@ -246,6 +265,7 @@ class ExperimentProtocol:
         selected_surface: str | None = None,
         *,
         paired_execution: "PairedExecutionSpec | None" = None,
+        proposal_subject: Mapping[str, Any] | None = None,
     ) -> ProtocolResult:
         from .stages import run_experiment
 
@@ -259,6 +279,7 @@ class ExperimentProtocol:
             expand_round=expand_round,
             selected_surface=selected_surface,
             paired_execution=paired_execution,
+            proposal_subject=proposal_subject,
         )
 
 

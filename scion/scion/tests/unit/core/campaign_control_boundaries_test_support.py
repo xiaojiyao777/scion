@@ -169,7 +169,9 @@ class _MockProtocol:
         hypothesis_action: str,
         expand: bool = False,
         expand_round: int = 1,
+        proposal_subject: dict[str, Any] | None = None,
     ) -> ProtocolResult:
+        del proposal_subject
         self.experiment_calls.append((stage, candidate_ws, champion_ws, hypothesis_action))
         if self._results:
             return self._results.pop(0)

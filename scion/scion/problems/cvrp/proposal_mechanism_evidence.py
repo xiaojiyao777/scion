@@ -9,7 +9,9 @@ from scion.problems.cvrp.evidence.search_allocation import (
     build_search_allocation_evidence,
     has_search_allocation_observations,
 )
-
+from scion.problems.cvrp.mechanism_attribution import (
+    summarize_cvrp_mechanism_attribution,
+)
 
 _PROPOSAL_SCHEMA_VERSION = "scion.cvrp.proposal_mechanism_evidence.v1"
 _COMPARISON_COLUMNS = (
@@ -28,13 +30,40 @@ class CvrpProposalMechanismEvidenceProvider:
         stage: str,
         selected_surface: str | None,
         runtime_pairs: Sequence[Mapping[str, Any]],
+        proposal_subject: Mapping[str, Any] | None = None,
+        runtime_pairs_complete: bool = True,
     ) -> Mapping[str, Any]:
         if stage != "screening" or selected_surface != "solver_design":
             return {}
         packet = build_search_allocation_evidence(runtime_pairs)
+        attribution = summarize_cvrp_mechanism_attribution(
+            proposal_subject=proposal_subject,
+            runtime_pairs=runtime_pairs,
+            runtime_pairs_complete=runtime_pairs_complete,
+        )
         if not has_search_allocation_observations(packet):
-            return {}
-        return _project_for_proposal(packet)
+            if attribution["attribution_status"] not in {
+                "family_observable_changed",
+                "family_observable_unchanged",
+            }:
+                return {}
+            return {
+                "schema_version": _PROPOSAL_SCHEMA_VERSION,
+                "evidence_scope": "screening_mechanism_attribution",
+                "hypothesis_attribution": attribution["attribution_status"],
+                "interpretation_constraint": "association_only",
+                "mechanism_attribution": attribution,
+            }
+        projection = _project_for_proposal(packet)
+        projection["mechanism_attribution"] = attribution
+        if attribution["attribution_status"] in {
+            "family_observable_changed",
+            "family_observable_unchanged",
+        }:
+            projection["hypothesis_attribution"] = attribution[
+                "attribution_status"
+            ]
+        return projection
 
 
 def _project_for_proposal(packet: Mapping[str, Any]) -> dict[str, Any]:

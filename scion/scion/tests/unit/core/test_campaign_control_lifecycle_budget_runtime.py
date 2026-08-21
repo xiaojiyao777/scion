@@ -1,14 +1,13 @@
 """Focused tests split from test_campaign_control_boundaries.py."""
 
-from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
-
 from types import SimpleNamespace
 
 import pytest
-
 from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.production_boundary import production_boundary_errors
 from scion.problem.spec import ObjectiveMetricSpec
+
+from .campaign_control_boundaries_test_support import *  # noqa: F401,F403
 
 
 class TestEvalStepHypothesisLifecycle:
@@ -17,10 +16,16 @@ class TestEvalStepHypothesisLifecycle:
         # NOTE: run_one_step() for READY_VALIDATE schedules AND runs the eval in one call.
         cm = _campaign(
             tmp_path,
-            experiment_protocol=_MockProtocol(results=[
-                _make_protocol_result("pass", stage=ExperimentStage.SCREENING, win_rate=0.85),
-                _make_protocol_result("pass", stage=ExperimentStage.VALIDATION, win_rate=0.85),
-            ]),
+            experiment_protocol=_MockProtocol(
+                results=[
+                    _make_protocol_result(
+                        "pass", stage=ExperimentStage.SCREENING, win_rate=0.85
+                    ),
+                    _make_protocol_result(
+                        "pass", stage=ExperimentStage.VALIDATION, win_rate=0.85
+                    ),
+                ]
+            ),
         )
         # Step 1: explore + screening → QUEUE_VALIDATE
         r1 = cm.run_one_step()
@@ -44,25 +49,36 @@ class TestEvalStepHypothesisLifecycle:
         assert r2.action == "validate", f"expected validate action, got {r2.action!r}"
 
         val_steps = [
-            s for s in cm._step_history
+            s
+            for s in cm._step_history
             if s.failure_stage is None
             and s.protocol_result is not None
             and s.protocol_result.stage is ExperimentStage.VALIDATION
             and s.round_num > screening_steps[-1].round_num
         ]
         assert val_steps, "validation step must be in step_history"
-        assert cm._branch_ctrl.get_branch(r1.branch_id).hypothesis == screening_hypothesis
+        assert (
+            cm._branch_ctrl.get_branch(r1.branch_id).hypothesis == screening_hypothesis
+        )
 
     def test_promote_clears_completed_branch_hypothesis(self, tmp_path):
         """PROMOTE closes the branch's ordinary in-progress proposal value."""
         # Full happy path: screening → validation → frozen → promote
         cm = _campaign(
             tmp_path,
-            experiment_protocol=_MockProtocol(results=[
-                _make_protocol_result("pass", stage=ExperimentStage.SCREENING, win_rate=0.85),
-                _make_protocol_result("pass", stage=ExperimentStage.VALIDATION, win_rate=0.85),
-                _make_protocol_result("pass", stage=ExperimentStage.FROZEN, win_rate=0.90),
-            ]),
+            experiment_protocol=_MockProtocol(
+                results=[
+                    _make_protocol_result(
+                        "pass", stage=ExperimentStage.SCREENING, win_rate=0.85
+                    ),
+                    _make_protocol_result(
+                        "pass", stage=ExperimentStage.VALIDATION, win_rate=0.85
+                    ),
+                    _make_protocol_result(
+                        "pass", stage=ExperimentStage.FROZEN, win_rate=0.90
+                    ),
+                ]
+            ),
         )
         # Run enough steps to get to PROMOTE
         for _ in range(10):
@@ -100,19 +116,24 @@ class TestEvalStepWritesStepRecord:
         """Validation appends a step without inventing a new verification run."""
         cm = _campaign(
             tmp_path,
-            experiment_protocol=_MockProtocol(results=[
-                _make_protocol_result("pass", stage=ExperimentStage.SCREENING, win_rate=0.85),
-                _make_protocol_result("pass", stage=ExperimentStage.VALIDATION, win_rate=0.85),
-            ]),
+            experiment_protocol=_MockProtocol(
+                results=[
+                    _make_protocol_result(
+                        "pass", stage=ExperimentStage.SCREENING, win_rate=0.85
+                    ),
+                    _make_protocol_result(
+                        "pass", stage=ExperimentStage.VALIDATION, win_rate=0.85
+                    ),
+                ]
+            ),
         )
         # screening → QUEUE_VALIDATE
         r1 = cm.run_one_step()
         assert r1.decision == Decision.QUEUE_VALIDATE
         steps_after_screen = len(cm._step_history)
 
-        # schedule + validation eval
-        cm.run_one_step()  # schedule READY_VALIDATE → VALIDATING
-        cm.run_one_step()  # eval step
+        # READY_VALIDATE schedules and evaluates the accepted source in one step.
+        cm.run_one_step()
 
         new_steps = cm._step_history[steps_after_screen:]
         assert new_steps, "eval step must append to step_history"
@@ -167,9 +188,7 @@ class TestEvalStepWritesStepRecord:
         assert result.failure_detail == "protocol boom"
 
         failure_steps = [
-            step
-            for step in cm._step_history
-            if step.failure_stage == "evaluation"
+            step for step in cm._step_history if step.failure_stage == "evaluation"
         ]
         assert failure_steps, "evaluation exception must write a failure StepRecord"
         failure = failure_steps[-1]
@@ -212,7 +231,9 @@ class TestEvalStepWritesStepRecord:
 
 
 class TestProgrammaticRuntimeVerificationDefault:
-    def _production_spec(self, base: ProblemSpec, canary_case_path: str = "") -> ProblemSpec:
+    def _production_spec(
+        self, base: ProblemSpec, canary_case_path: str = ""
+    ) -> ProblemSpec:
         return base.model_copy(
             update={
                 "spec_version": "problem-v1",
@@ -298,6 +319,7 @@ class TestProgrammaticRuntimeVerificationDefault:
         assert cm._vgate._adapter is cm_adapter
         assert cm._vgate._strict_runtime_checks is True
         assert cm._vgate._require_adapter_for_runtime is True
+
     def test_adapter_without_runner_fails_closed_by_default(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
         problem_spec = self._production_spec(base._problem_runtime.spec)
@@ -514,8 +536,7 @@ class TestProgrammaticRuntimeVerificationDefault:
         )
 
         assert any(
-            "adapter.spec must match campaign problem" in error
-            for error in errors
+            "adapter.spec must match campaign problem" in error for error in errors
         )
 
     def test_production_boundary_ignores_adapter_self_declared_problem_hash(
@@ -615,8 +636,7 @@ class TestProgrammaticRuntimeVerificationDefault:
         )
 
         assert (
-            "parameter_search.enabled must be false for direct-v3 production "
-            "campaigns"
+            "parameter_search.enabled must be false for direct-v3 production campaigns"
         ) in errors
 
     def test_production_campaign_rejects_metric_names_mismatch(self, tmp_path):

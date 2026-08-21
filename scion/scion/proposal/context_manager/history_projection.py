@@ -11,10 +11,20 @@ from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import StepRecord
 
 _PRE_PROTOCOL_STAGES = frozenset(
-    {"hypothesis_contract", "patch_contract", "verification"}
+    {"hypothesis_contract", "proposal_code", "patch_contract", "verification"}
 )
 _STAGE_REASON_CODES = {
     "hypothesis_contract": frozenset({"HYPOTHESIS_CONTRACT_REJECTED"}),
+    "proposal_code": frozenset(
+        {
+            "PATCH_PROPOSAL_INVALID",
+            "PROPOSAL_RESPONSE_INVALID",
+            "CODE_RESEARCH_ABANDONED",
+            "CODE_RESEARCH_TRANSCRIPT_EXHAUSTED",
+            "CODE_RESEARCH_TURN_CAP_EXHAUSTED",
+            "CODE_RESEARCH_RESULT_CAP_EXHAUSTED",
+        }
+    ),
     "patch_contract": frozenset({"PATCH_CONTRACT_REJECTED"}),
     "verification": frozenset(
         {"VERIFICATION_LIGHT_REJECTED", "VERIFICATION_HEAVY_REJECTED"}
@@ -124,7 +134,9 @@ def normalize_proposal_screening_observation(value: Any) -> dict[str, Any]:
         "evidence": _full(evidence),
     }
     if _canonical_json(value) != _canonical_json(canonical):
-        raise ValueError("screening observation fields do not match canonical projection")
+        raise ValueError(
+            "screening observation fields do not match canonical projection"
+        )
     return canonical
 
 

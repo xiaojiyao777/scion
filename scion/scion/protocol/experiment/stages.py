@@ -103,6 +103,7 @@ def run_experiment(
     selected_surface: str | None = None,
     *,
     paired_execution: PairedExecutionSpec | None = None,
+    proposal_subject: Mapping[str, Any] | None = None,
 ) -> ProtocolResult:
     """Execute paired A/B evaluation for the given stage.
 
@@ -1053,6 +1054,8 @@ def run_experiment(
         stage=stage.value,
         selected_surface=normalized_selected_surface or selected_surface,
         runtime_pairs=problem_runtime_pairs,
+        proposal_subject=proposal_subject,
+        runtime_pairs_complete=(failed_pairs == 0),
         problem_spec=protocol._problem_spec,
         adapter=getattr(protocol, "_problem_adapter", None),
     )

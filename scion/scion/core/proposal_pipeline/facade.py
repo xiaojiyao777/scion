@@ -32,6 +32,12 @@ from scion.proposal.engine import (
     ProposalValidationError,
     build_prompt_turn_snapshot,
 )
+from scion.proposal.hypothesis_research_session import (
+    HypothesisResearchAbstain,
+    HypothesisResearchContextError,
+    HypothesisResearchFinalized,
+    HypothesisResearchSession,
+)
 from scion.proposal.llm_client import (
     LLMAuthError,
     LLMBalanceError,
@@ -85,6 +91,15 @@ class ProposalPipeline:
                 branch,
                 champion,
             )
+            public_sources: tuple[Mapping[str, Any], ...] = ()
+            source_prefixes: tuple[str, ...] = ()
+            if self.code_research_limits is not None:
+                public_sources = tuple(
+                    self.problem_runtime.hypothesis_research_public_sources()
+                )
+                source_prefixes = tuple(
+                    self.problem_runtime.hypothesis_research_source_prefixes()
+                )
         except (TypeError, ValueError) as exc:
             return ProposalAttempt.failure(
                 self._record_local_failure(
@@ -99,7 +114,39 @@ class ProposalPipeline:
             )
 
         try:
-            hypothesis = self.creative.generate_direct_hypothesis(prompt_snapshot)
+            if self.code_research_limits is None:
+                hypothesis = self.creative.generate_direct_hypothesis(prompt_snapshot)
+            else:
+                research_result = HypothesisResearchSession(
+                    self.creative,
+                    self.code_research_limits,
+                ).run(
+                    prompt_snapshot,
+                    public_sources=public_sources,
+                    qualified_prefixes=source_prefixes,
+                )
+                if isinstance(research_result, HypothesisResearchAbstain):
+                    return ProposalAttempt.failure(
+                        self._record_local_failure(
+                            phase="hypothesis",
+                            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                            reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
+                            detail=research_result.reason,
+                        )
+                    )
+                if not isinstance(research_result, HypothesisResearchFinalized):
+                    raise TypeError("hypothesis research returned an invalid result")
+                hypothesis = research_result.hypothesis
+        except HypothesisResearchContextError as exc:
+            return ProposalAttempt.failure(
+                self._record_local_failure(
+                    phase="hypothesis",
+                    outcome=ExecutionOutcome.NOT_EVALUATED,
+                    reason_code="PROPOSAL_CONTEXT_INVALID",
+                    detail=str(exc),
+                    error=exc,
+                )
+            )
         except ProviderCallCapExhausted as exc:
             return ProposalAttempt.failure(
                 self._handle_provider_failure(branch, "hypothesis", exc)
@@ -337,6 +384,14 @@ def _proposal_validation_reason_code(error: Exception, *, phase: str) -> str:
     if not isinstance(error, ProposalValidationError):
         return "PROPOSAL_RESPONSE_INVALID"
     message = str(error).lower()
+    if phase == "hypothesis":
+        if "transcript exceeds max_transcript_chars" in message:
+            return "HYPOTHESIS_RESEARCH_TRANSCRIPT_EXHAUSTED"
+        if "turn cap exhausted" in message or "local provider call cap" in message:
+            return "HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED"
+        if "tool results exceed" in message:
+            return "HYPOTHESIS_RESEARCH_RESULT_CAP_EXHAUSTED"
+        return "HYPOTHESIS_PROPOSAL_INVALID"
     if phase == "code":
         if "transcript exceeds max_transcript_chars" in message:
             return "CODE_RESEARCH_TRANSCRIPT_EXHAUSTED"
@@ -345,4 +400,4 @@ def _proposal_validation_reason_code(error: Exception, *, phase: str) -> str:
         if "test results exceed" in message or "tool results exceed" in message:
             return "CODE_RESEARCH_RESULT_CAP_EXHAUSTED"
         return "PATCH_PROPOSAL_INVALID"
-    return "HYPOTHESIS_PROPOSAL_INVALID"
+    return "PROPOSAL_RESPONSE_INVALID"

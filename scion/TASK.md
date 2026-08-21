@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Last updated: 2026-08-20*
+*Last updated: 2026-08-21*
 
 ## Authority and objective
 
@@ -30,10 +30,14 @@ A valid negative experiment is scientific evidence, not task completion.
 The active research path is:
 
 ```text
-complete safe problem facts + complete current branch source + prior safe evidence
-  -> one structured Hypothesis call
+complete safe problem facts + complete current branch source
++ explicit safe prior evidence
+  -> optional finite Hypothesis research actions, or the direct one-shot path
+  -> at most one tainted structured H
   -> structural Hypothesis Contract
-  -> one Code call using that same Contract-approved ordinary H value
+  -> optional finite Code research actions bound to that exact approved H,
+     or the direct one-shot path
+  -> at most one tainted structured C
   -> structural Patch Contract
   -> isolated Workspace
   -> executable Verification
@@ -43,11 +47,28 @@ complete safe problem facts + complete current branch source + prior safe eviden
   -> exact stage reuse, branch iteration, or promotion
 ```
 
+A bounded Creative session may use several deliberate provider turns, all
+charged to the declared shared provider/resource envelope. These turns are
+internal Creative-Layer research actions, not provider retries. One branch
+attempt exports at most one H and, only after Hypothesis Contract approval, at
+most one C. A provider turn without a terminal response stops the session; an
+exported, rejected, finalized, abandoned or abstained H/C is never repaired,
+replayed, resumed or regenerated.
+
+Creative drafts and `research_basis` remain tainted. Public-development
+results, explicit research history and problem-owned mechanism-family
+association are proposal context only. They cannot replace Contract or
+Verification, alter a Protocol gate, enter Safe Features or Decision, or
+select the next mechanism. The host may expose complete ordinary
+source/history indexes and problem-owned association observations; it may not
+rank, select or require a mechanism, surface, action, target file or patch.
+
 The following are required:
 
 - LLM output remains tainted and cannot author Protocol, Decision, scheduling or
   promotion.
-- Contract owns schema, the same-call H-to-C value boundary, editable/frozen paths, public
+- Contract owns schema, the same-attempt exact approved-H binding,
+  editable/frozen paths, public
   interface, import/API and dangerous-capability boundaries. It does not grade
   novelty, style, mechanism taste, activation or expected quality.
 - Verification owns executable correctness, feasibility, objective semantics,
@@ -171,12 +192,13 @@ Decision semantics are unchanged.
 - [x] Remove prompt/context/source identity, owner maps used as authority,
   prompt manifests/hash receipts, duplicate digest reconciliation,
   formal-candidate recorder, promotion dossier and readiness closure.
-- [x] Keep one validated provider-visible context value, an ordinary complete
-  path/content source mapping, the same-call ordinary H value, strict patch
-  application and isolated candidate materialization.
-- [x] Keep at most one optional terminal H/C trace as diagnostics; no second call
-  event, public trace receipt or provider-call identity carrier remains, and a
-  trace write failure cannot discard an otherwise valid provider result.
+- [x] Keep one validated ordinary source/history corpus and one immutable
+  provider-visible projection per deliberate turn, plus the same-attempt exact
+  approved-H binding, strict patch application and isolated candidate
+  materialization.
+- [x] Keep at most one optional terminal trace per deliberate provider turn as
+  best-effort diagnostics; no public trace receipt or provider-call identity
+  carrier remains, and trace failure cannot change a valid provider result.
 - [x] Complete the minimal failure-only nondeterminism record: successful
   same-seed checks write no sidecar; a mismatch writes one bounded diagnostic;
   diagnostic write failure cannot change Verification.
@@ -486,6 +508,47 @@ The exact design is in the
   2-for-2 exchange candidate tied two cases and lost one by 10 distance units.
   Both gates failed case quality, so expanded and later stages remained zero.
   M21's provider request was neither resumed nor retried.
+
+### M23 - Freeze bounded research and resume solver evidence
+
+- [x] Freeze optional bounded H and C research sessions: finite internal
+  actions, at most one exported tainted H and one exported tainted C per
+  attempt, with every provider turn charged to the shared resource envelope.
+- [x] Keep explicit ordered `research_history.jsonl` as H-only ordinary
+  evidence. Exclude validation, frozen/holdout, private/raw state and automatic
+  campaign discovery or reopen.
+- [x] Expose complete ordinary source/history indexes to H with bounded
+  read/search, dependency/caller and declared public-test organization, and a
+  required tainted `research_basis`. Do not add a host mechanism ranker.
+- [x] Keep CVRP mechanism-family observations problem-owned,
+  association-only and available only from complete paired observations. They
+  are not exact activation, causal proof, a Protocol gate or Decision input.
+- [x] Consolidate provider-free fixed-candidate evaluation into one funnel with
+  private read-only source snapshots and the existing
+  Protocol -> Safe Features -> Decision chain. Distinguish candidate-negative
+  evidence from comparator-incomplete evidence at canary, every formal stage
+  and retained comparison.
+- [x] Complete focused provider-/solver-free regression and independent review.
+  Do no distribution, packaging, build, deployment, root/systemd or Trust/Hash
+  lifecycle work.
+- [ ] Run one ordinary provider-free full-funnel confirmation of the preserved
+  M20 candidate on a newly frozen outcome-unseen population. Do not create a
+  provider call, replacement candidate, repair, retry or resume path.
+- [ ] After that terminal result, freeze and run one serial bounded autonomous
+  campaign in which H performs the direction research and the host supplies
+  only ordinary source/history access, resource limits and the V3 gates.
+
+Acceptance: an enabled attempt may spend finite Creative turns but exports at
+most one H and one C. Contract, Verification, Protocol, Safe Features and
+Decision retain their existing authority. History and family association may
+inform a later H without host mechanism selection or Decision influence.
+At canary or a main-chain formal stage, comparator-incomplete evidence never
+advances and never reaches Decision. After a complete frozen-stage promotion,
+retained comparator incompleteness terminates
+`completed_incomplete / INCOMPLETE_COMPARATOR_EVIDENCE` at
+`stop_stage=retained`; it is not sent to Decision and is never reported as
+`PROMOTED_NOT_RETAINED`.
+
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
   mechanism-level evidence, formal promotion and independent replay.
@@ -549,3 +612,14 @@ candidate runtime failures and Decision returned
 frozen, promotion and a third candidate are all zero. This demonstrates the
 bounded autonomous V3 research chain, but the research result is negative/mixed
 and supplies no algorithm-improvement or generalization claim.
+
+M10-M22 then established continuous cross-campaign research history, bounded C
+development tools and several valid negative/mixed CVRP screens. M20 produced
+the strongest preserved candidate: an autonomous exact directed `_swap` delta
+with three initial-screen wins and no losses, but its expanded stage never ran
+because the historical config shape was invalid. M23 now supplies bounded H
+direction research, problem-owned non-causal mechanism-family association and
+one consolidated provider-free fixed-candidate funnel with complete bilateral
+runtime attribution. Independent review covered the production and scientific
+boundaries. CVRP acceptance remains unmet; the next operation is the newly
+frozen M20 candidate full funnel, not another adaptive patch attempt.

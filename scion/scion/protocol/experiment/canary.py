@@ -20,10 +20,15 @@ def run_canary(
     champion_ws: str,
     *,
     selected_surface: str | None = None,
+    require_complete_pairs: bool = False,
 ) -> CanaryResult:
     """
     Canary regression check using the dedicated canary split and seeds.
-    Veto-only — blocks if candidate produces infeasible solutions or crashes.
+
+    The default remains a candidate veto for normal campaigns.  A fixed
+    scientific funnel can require complete pairs; in that mode both arms run
+    and any candidate, champion, shared, or bilateral execution failure stops
+    before formal Protocol evidence is created.
 
     Raises ValueError if canary split/seeds are not configured.
     """
@@ -96,6 +101,50 @@ def run_canary(
                 registry_path=os.path.join(candidate_ws, "registry.yaml"),
                 selected_surface=selected_surface,
             )
+            champ_result = None
+            if require_complete_pairs:
+                champ_result = protocol.runner.run_solver(
+                    workdir=champion_ws,
+                    instance_path=champion_case_path,
+                    seed=seed,
+                    time_limit_sec=pair_time_limit_sec,
+                    registry_path=os.path.join(champion_ws, "registry.yaml"),
+                    selected_surface=selected_surface,
+                )
+                strict_failure = _complete_pair_failure(
+                    protocol,
+                    base_details,
+                    case=case,
+                    seed=seed,
+                    attempted_pairs=attempted_pairs,
+                    candidate_result=cand_result,
+                    champion_result=champ_result,
+                    selected_surface=selected_surface,
+                )
+                if strict_failure is not None:
+                    protocol._emit_progress(
+                        stage="canary",
+                        phase="canary",
+                        case=case,
+                        seed=seed,
+                        attempted_pairs=attempted_pairs,
+                        completed_pairs=attempted_pairs,
+                        candidate_failed_pairs=int(
+                            strict_failure.details["candidate_failed_pairs"]
+                        ),
+                        champion_failed_pairs=int(
+                            strict_failure.details["champion_failed_pairs"]
+                        ),
+                        shared_failed_pairs=int(
+                            strict_failure.details["shared_failed_pairs"]
+                        ),
+                        bilateral_failed_pairs=int(
+                            strict_failure.details["bilateral_failed_pairs"]
+                        ),
+                        failed_pairs=1,
+                        complete=True,
+                    )
+                    return strict_failure
             if not cand_result.success:
                 protocol._emit_progress(
                     stage="canary",
@@ -170,14 +219,15 @@ def run_canary(
                     ),
                 )
 
-            champ_result = protocol.runner.run_solver(
-                workdir=champion_ws,
-                instance_path=champion_case_path,
-                seed=seed,
-                time_limit_sec=pair_time_limit_sec,
-                registry_path=os.path.join(champion_ws, "registry.yaml"),
-                selected_surface=selected_surface,
-            )
+            if champ_result is None:
+                champ_result = protocol.runner.run_solver(
+                    workdir=champion_ws,
+                    instance_path=champion_case_path,
+                    seed=seed,
+                    time_limit_sec=pair_time_limit_sec,
+                    registry_path=os.path.join(champion_ws, "registry.yaml"),
+                    selected_surface=selected_surface,
+                )
             if not champ_result.success:
                 # Infra issue on champion side — skip veto
                 continue
@@ -218,8 +268,7 @@ def run_canary(
                         champion_result=champ_result,
                         failure_kind="candidate_infeasible_champion_feasible",
                         failure_reason=(
-                            f"Candidate infeasible on {case} "
-                            "(champion was feasible)"
+                            f"Candidate infeasible on {case} (champion was feasible)"
                         ),
                     ),
                 )
@@ -245,8 +294,99 @@ def run_canary(
             "failure_kind": None,
             "failure_reason": None,
             "candidate_status": "passed",
-            "champion_status": "not_applicable",
+            "champion_status": (
+                "passed" if require_complete_pairs else "not_applicable"
+            ),
+            "complete_pairs_required": require_complete_pairs,
         },
+    )
+
+
+def _complete_pair_failure(
+    protocol: "ExperimentProtocol",
+    base_details: dict,
+    *,
+    case: str,
+    seed: int,
+    attempted_pairs: int,
+    candidate_result,
+    champion_result,
+    selected_surface: str | None,
+) -> CanaryResult | None:
+    candidate_audit = runtime_audit_failure_from_result(
+        candidate_result,
+        problem_spec=protocol._problem_spec,
+        selected_surface=selected_surface,
+    )
+    if not runtime_audit_issue_blocks_execution(candidate_audit):
+        candidate_audit = None
+    champion_audit = runtime_audit_failure_from_result(
+        champion_result,
+        problem_spec=protocol._problem_spec,
+        selected_surface=selected_surface,
+    )
+    if not runtime_audit_issue_blocks_execution(champion_audit):
+        champion_audit = None
+    # Formal Protocol and complete-pair canary must use one pair-local
+    # candidate/champion/shared/bilateral classifier.
+    from .stages import _paired_failure_attribution
+
+    attribution = _paired_failure_attribution(
+        champion_result=champion_result,
+        candidate_result=candidate_result,
+        champion_audit=champion_audit,
+        candidate_audit=candidate_audit,
+    )
+    if attribution is None:
+        return None
+    scope = str(attribution["attribution"])
+    shared = scope == "shared"
+    # Match formal Protocol accounting: a shared comparator incident is not a
+    # candidate-attributable failure; bilateral incidents remain charged to
+    # both sides.
+    candidate_failed = scope in {"candidate", "bilateral"}
+    champion_failed = scope in {"champion", "shared", "bilateral"}
+    reason = f"Complete-pair canary {scope} failure on {case}"
+    details = _failure_details(
+        base_details,
+        case=case,
+        seed=seed,
+        attempted_pairs=attempted_pairs,
+        candidate_result=candidate_result,
+        champion_result=champion_result,
+        failure_kind=f"{scope}_pair_failure",
+        failure_reason=reason,
+    )
+    details.update(
+        {
+            "pair_failure_scope": scope,
+            "failure_attribution": dict(attribution),
+            "candidate_failed_pairs": int(candidate_failed),
+            "champion_failed_pairs": int(champion_failed),
+            "shared_failed_pairs": int(shared),
+            "bilateral_failed_pairs": int(scope == "bilateral"),
+        }
+    )
+    if scope == "candidate":
+        failure_category = "candidate_failure"
+        reason_codes = ("CANARY_FAILED",)
+    else:
+        failure_category = "incomplete_evidence"
+        reason_codes = (
+            "CANARY_SHARED_FAILURE"
+            if scope == "shared"
+            else (
+                "CANARY_BILATERAL_FAILURE"
+                if scope == "bilateral"
+                else "CANARY_CHAMPION_FAILURE"
+            ),
+        )
+    return CanaryResult(
+        passed=False,
+        reason=reason,
+        details=details,
+        failure_category=failure_category,
+        reason_codes=reason_codes,
     )
 
 
@@ -271,9 +411,7 @@ def _failure_details(
         "failure_reason": failure_reason,
         "candidate_status": _run_status(candidate_result),
         "champion_status": (
-            _run_status(champion_result)
-            if champion_result is not None
-            else "not_run"
+            _run_status(champion_result) if champion_result is not None else "not_run"
         ),
         "candidate_outcome": _run_outcome(candidate_result),
         "champion_outcome": (

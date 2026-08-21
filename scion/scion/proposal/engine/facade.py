@@ -119,6 +119,24 @@ class CreativeLayer:
             max_response_bytes=_code_research_response_bound(snapshot),
         )
 
+    def call_hypothesis_research_turn(
+        self,
+        snapshot: PromptTurnSnapshot,
+    ) -> dict[str, Any]:
+        """Dispatch one bounded H research action through the normal caller."""
+
+        if snapshot.provider_tool.get("name") != "hypothesis_research_turn":
+            raise ValueError("hypothesis research snapshot has the wrong tool")
+        return self._provider_calls.call(
+            request_kind="hypothesis_research_turn",
+            tool=dict(snapshot.provider_tool),
+            snapshot=snapshot,
+            max_response_bytes=_research_response_bound(
+                snapshot,
+                state_key="hypothesis_research",
+            ),
+        )
+
     def call_code_research_finalize(
         self,
         snapshot: PromptTurnSnapshot,
@@ -136,10 +154,18 @@ class CreativeLayer:
 
 
 def _code_research_response_bound(snapshot: PromptTurnSnapshot) -> int:
-    state = snapshot.structured_context.get("code_research")
+    return _research_response_bound(snapshot, state_key="code_research")
+
+
+def _research_response_bound(
+    snapshot: PromptTurnSnapshot,
+    *,
+    state_key: str,
+) -> int:
+    state = snapshot.structured_context.get(state_key)
     if not isinstance(state, Mapping):
-        raise ValueError("code research snapshot is missing bounded state")
+        raise ValueError(f"{state_key} snapshot is missing bounded state")
     value = state.get("max_action_bytes")
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
-        raise ValueError("code research snapshot has invalid max_action_bytes")
+        raise ValueError(f"{state_key} snapshot has invalid max_action_bytes")
     return value

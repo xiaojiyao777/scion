@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import time
 from collections.abc import Callable, Mapping
 from copy import deepcopy
@@ -12,7 +11,16 @@ from typing import Any, Literal
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.models import PatchProposal
 from scion.core.paths import normalize_relative_patch_path
-from scion.core.resource_envelope import ProviderCallCapExhausted
+from scion.proposal.bounded_research import (
+    BoundedMatchCollector,
+    BoundedResearchBudget,
+    iter_text_lines,
+    text_line_count,
+)
+from scion.proposal.bounded_research import bounded_json as _bounded_json
+from scion.proposal.bounded_research import nonempty_text as _nonempty_text
+from scion.proposal.bounded_research import require_exact_keys as _require_exact_keys
+from scion.proposal.bounded_research import tool_error as _tool_error
 from scion.proposal.edit_protocol.source_discovery import (
     all_source_files_from_context,
     public_test_files_from_context,
@@ -195,28 +203,21 @@ class CodeResearchSession:
     ) -> None:
         self._creative = creative
         self._limits = limits
-        self._provider_calls_used = 0
-        self._read_calls = 0
-        self._search_calls = 0
-        self._read_chars = 0
-        self._read_bytes = 0
-        self._read_lines = 0
-        self._search_matches = 0
-        self._search_chars = 0
-        self._search_bytes = 0
+        self._budget = BoundedResearchBudget(
+            limits,
+            label="code research",
+            provider_cap=limits.max_turns + 1,
+        )
         self._test_patch = test_patch
         self._test_calls = 0
         self._test_result_chars = 0
         self._test_elapsed_sec = 0.0
-        self._tool_result_chars = 0
-        self._transcript_chars = 0
-        self._tool_results: list[dict[str, Any]] = []
 
     @property
     def provider_calls_used(self) -> int:
         """Number of locally admitted calls that reached provider dispatch."""
 
-        return self._provider_calls_used
+        return self._budget.provider_calls
 
     def run(self, full_snapshot: PromptTurnSnapshot) -> CodeResearchResult:
         """Research only the frozen source map and return a patch or abandon."""
@@ -358,7 +359,7 @@ class CodeResearchSession:
             source_context=source_context,
             corpus=corpus,
             visible_paths=visible_paths,
-            turn_index=min(self._limits.max_turns, len(self._tool_results)),
+            turn_index=min(self._limits.max_turns, len(self._budget.results)),
             draft_patch=draft_raw,
             draft_revision=draft_revision,
             ready_patch=ready_raw,
@@ -433,10 +434,10 @@ class CodeResearchSession:
             "turn_index": turn_index,
             "remaining_research_turns": max(0, self._limits.max_turns - turn_index),
             "remaining_read_calls": max(
-                0, self._limits.max_read_calls - self._read_calls
+                0, self._limits.max_read_calls - self._budget.read_calls
             ),
             "remaining_search_calls": max(
-                0, self._limits.max_search_calls - self._search_calls
+                0, self._limits.max_search_calls - self._budget.search_calls
             ),
             "remaining_test_calls": max(
                 0, self._limits.max_test_calls - self._test_calls
@@ -446,7 +447,7 @@ class CodeResearchSession:
                 0,
                 int(self._limits.max_test_total_timeout_sec - self._test_elapsed_sec),
             ),
-            "tool_results": deepcopy(self._tool_results),
+            "tool_results": deepcopy(self._budget.results),
         }
         if draft_patch is not None:
             state["latest_draft_patch"] = deepcopy(dict(draft_patch))
@@ -518,64 +519,13 @@ class CodeResearchSession:
         snapshot: PromptTurnSnapshot,
         call: Callable[[], Mapping[str, Any]],
     ) -> dict[str, Any]:
-        local_cap = self._limits.max_turns + 1
-        if self._provider_calls_used >= local_cap:
-            raise ProposalValidationError(
-                "code research local provider call cap exhausted before dispatch"
-            )
-        prompt_chars = len(
-            _bounded_json(
-                {
-                    "system_blocks": list(snapshot.system_blocks),
-                    "user_prompt": snapshot.user_prompt,
-                    "provider_tool": snapshot.provider_tool,
-                }
-            )
-        )
-        if self._transcript_chars + prompt_chars > self._limits.max_transcript_chars:
-            raise ProposalValidationError(
-                "code research transcript exceeds max_transcript_chars before dispatch"
-            )
-        try:
-            raw = call()
-        except ProviderCallCapExhausted:
-            raise
-        except BaseException:
-            self._transcript_chars += prompt_chars
-            self._provider_calls_used += 1
-            raise
-        self._transcript_chars += prompt_chars
-        self._provider_calls_used += 1
-        if not isinstance(raw, Mapping):
-            raise ProposalValidationError("code research response must be an object")
-        return dict(raw)
+        return self._budget.call_provider(snapshot, call)
 
     def _record_action(self, raw: Mapping[str, Any]) -> None:
-        rendered = _bounded_json(raw)
-        action_bytes = len(rendered.encode("utf-8"))
-        if action_bytes > self._limits.max_action_bytes:
-            raise ProposalValidationError(
-                "code research action exceeds max_action_bytes"
-            )
-        self._reserve_transcript(len(rendered))
+        self._budget.record_action(raw)
 
     def _record_tool_result(self, result: dict[str, Any]) -> None:
-        rendered = _bounded_json(result)
-        result_chars = len(rendered)
-        if self._tool_result_chars + result_chars > self._limits.max_tool_result_chars:
-            raise ProposalValidationError(
-                "code research tool results exceed max_tool_result_chars"
-            )
-        self._reserve_transcript(result_chars)
-        self._tool_result_chars += result_chars
-        self._tool_results.append(result)
-
-    def _reserve_transcript(self, chars: int) -> None:
-        if self._transcript_chars + chars > self._limits.max_transcript_chars:
-            raise ProposalValidationError(
-                "code research transcript exceeds max_transcript_chars"
-            )
-        self._transcript_chars += chars
+        self._budget.record_result(result)
 
     def _read_source(
         self,
@@ -583,9 +533,8 @@ class CodeResearchSession:
         corpus: Mapping[str, str],
         visible_paths: set[str],
     ) -> dict[str, Any]:
-        if self._read_calls >= self._limits.max_read_calls:
+        if not self._budget.begin_read():
             return _tool_error("read_source", "read_call_cap_exhausted")
-        self._read_calls += 1
         canonical = _requested_source_path(path)
         if canonical is None:
             return _tool_error("read_source", "invalid_path")
@@ -594,23 +543,9 @@ class CodeResearchSession:
             return _tool_error("read_source", "source_not_visible")
         chars = len(content)
         content_bytes = len(content.encode("utf-8"))
-        lines = len(content.splitlines())
-        if self._read_chars + chars > self._limits.max_read_chars:
-            return _tool_error("read_source", "read_char_cap_exhausted")
-        if self._read_bytes + content_bytes > self._limits.max_read_bytes:
-            return _tool_error("read_source", "read_byte_cap_exhausted")
-        if self._read_lines + lines > self._limits.max_read_lines:
-            return _tool_error("read_source", "read_line_cap_exhausted")
-        if (
-            self._tool_result_chars + chars > self._limits.max_tool_result_chars
-            or self._transcript_chars + chars > self._limits.max_transcript_chars
-        ):
-            return _tool_error("read_source", "tool_result_cap_exhausted")
-        self._read_chars += chars
-        self._read_bytes += content_bytes
-        self._read_lines += lines
-        self._tool_result_chars += chars
-        self._reserve_transcript(chars)
+        lines = text_line_count(content)
+        if reason := self._budget.reserve_read(content, lines=lines):
+            return _tool_error("read_source", reason)
         visible_paths.add(canonical)
         return {
             "action": "read_source",
@@ -627,9 +562,8 @@ class CodeResearchSession:
         query: str | None,
         corpus: Mapping[str, str],
     ) -> dict[str, Any]:
-        if self._search_calls >= self._limits.max_search_calls:
+        if not self._budget.begin_search():
             return _tool_error("search_source", "search_call_cap_exhausted")
-        self._search_calls += 1
         assert query is not None
         if path is None:
             candidates = tuple(corpus.items())
@@ -642,45 +576,35 @@ class CodeResearchSession:
                 return _tool_error("search_source", "source_not_visible")
             candidates = ((canonical, content),)
 
-        matches: list[dict[str, Any]] = []
-        result_chars = 0
-        result_bytes = 0
-        match_capacity = self._limits.max_search_matches - self._search_matches
-        char_capacity = self._limits.max_search_chars - self._search_chars
-        byte_capacity = self._limits.max_search_bytes - self._search_bytes
+        collector = BoundedMatchCollector(
+            self._budget,
+            action="search_source",
+            query=query,
+            extra={"truncated": False},
+        )
+        if collector.exhausted:
+            return _tool_error("search_source", "search_result_cap_exhausted")
         truncated = False
         for candidate_path, content in candidates:
-            for line_number, line in enumerate(content.splitlines(), start=1):
+            for line_number, line in enumerate(iter_text_lines(content), start=1):
                 if query not in line:
                     continue
-                match_chars = len(candidate_path) + len(line)
-                match_bytes = len(candidate_path.encode("utf-8")) + len(
-                    line.encode("utf-8")
-                )
-                if (
-                    len(matches) >= match_capacity
-                    or result_chars + match_chars > char_capacity
-                    or result_bytes + match_bytes > byte_capacity
+                if not collector.add(
+                    {
+                        "path": candidate_path,
+                        "line_number": line_number,
+                        "line": line,
+                    },
+                    search_chars=len(candidate_path) + len(line),
+                    search_bytes=len(candidate_path.encode("utf-8"))
+                    + len(line.encode("utf-8")),
                 ):
                     truncated = True
                     break
-                matches.append(
-                    {"path": candidate_path, "line_number": line_number, "line": line}
-                )
-                result_chars += match_chars
-                result_bytes += match_bytes
             if truncated:
                 break
-        self._search_matches += len(matches)
-        self._search_chars += result_chars
-        self._search_bytes += result_bytes
-        return {
-            "action": "search_source",
-            "ok": True,
-            "query": query,
-            "matches": matches,
-            "truncated": truncated,
-        }
+        collector.commit()
+        return {**collector.result(), "truncated": truncated}
 
 
 def _research_snapshot(
@@ -894,10 +818,6 @@ def _string_chars(value: Any) -> int:
     return total
 
 
-def _tool_error(action: str, reason: str) -> dict[str, Any]:
-    return {"action": action, "ok": False, "reason": reason}
-
-
 def _bounded_test_projection(
     value: Mapping[str, Any],
     *,
@@ -1018,36 +938,6 @@ def _patch_validation_reason(error: ProposalValidationError) -> str:
         (reason for token, reason in categories if token in message),
         "patch_validation_failed",
     )
-
-
-def _require_exact_keys(
-    value: Mapping[str, Any], expected: set[str], *, label: str
-) -> None:
-    if set(value) != expected:
-        raise ProposalValidationError(f"{label} response has unknown or missing fields")
-
-
-def _nonempty_text(value: Any, *, field: str, maximum: int) -> str:
-    if not isinstance(value, str) or not value or value != value.strip():
-        raise ProposalValidationError(f"{field} must be non-empty trimmed text")
-    if len(value) > maximum:
-        raise ProposalValidationError(f"{field} exceeds its character bound")
-    return value
-
-
-def _bounded_json(value: Any) -> str:
-    try:
-        return json.dumps(
-            value,
-            ensure_ascii=True,
-            sort_keys=True,
-            separators=(",", ":"),
-            allow_nan=False,
-        )
-    except (RecursionError, TypeError, ValueError) as exc:
-        raise ProposalValidationError(
-            f"code research value is not bounded JSON: {type(exc).__name__}"
-        ) from exc
 
 
 __all__ = [

@@ -3,10 +3,10 @@ from __future__ import annotations
 import uuid
 from contextlib import nullcontext
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-
 from scion.config.problem import ProtocolConfig
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_orchestrator import (
@@ -25,6 +25,7 @@ from scion.core.models import (
     ExperimentStage,
     HypothesisProposal,
     OperatorConfig,
+    PatchProposal,
     ProtocolResult,
 )
 from scion.core.runtime_budget_diagnostics import (
@@ -112,6 +113,89 @@ class _Protocol:
                 },
             },
         )
+
+
+@pytest.mark.parametrize(
+    ("branch_state", "branch_value"),
+    (
+        (BranchState.EXPLORE, "branch-current"),
+        (BranchState.EXPLORE_EXPAND, "candidate"),
+    ),
+)
+def test_proposal_subject_uses_branch_current_base_not_global_champion(
+    tmp_path: Path,
+    branch_state: BranchState,
+    branch_value: str,
+) -> None:
+    branch = Branch(
+        branch_id=str(uuid.uuid4()),
+        state=branch_state,
+        base_champion_id=1,
+    )
+    relative = Path("policies/baseline_modules/scheduler.py")
+    branch_base = tmp_path / "branch-base"
+    champion_base = tmp_path / "champion"
+    for root, source in (
+        (branch_base, f"def solve():\n    return '{branch_value}'\n"),
+        (champion_base, "def solve():\n    return 'global-champion'\n"),
+    ):
+        target = root / relative
+        target.parent.mkdir(parents=True)
+        target.write_text(source, encoding="utf-8")
+    patch = PatchProposal(
+        file_path=str(relative),
+        action="modify",
+        code_content="def solve():\n    return 'candidate'\n",
+    )
+    captured: dict = {}
+
+    class RecordingProtocol(_Protocol):
+        def run_experiment(self, **kwargs) -> ProtocolResult:
+            captured.update(kwargs)
+            return super().run_experiment(**kwargs)
+
+    orchestrator = EvaluationOrchestrator(
+        branch_controller=_BranchController(),
+        champion_lock=nullcontext(),
+        get_champion=lambda: replace(
+            _champion(),
+            code_snapshot_path=str(champion_base),
+        ),
+        branch_patches={branch.branch_id: patch},
+        branch_workspaces={branch.branch_id: str(branch_base)},
+        experiment_protocol_provider=RecordingProtocol,
+        feature_extractor=SafeFeatureExtractor(),
+        decision_coordinator=DecisionCoordinator(config=ProtocolConfig()),
+        campaign_id="campaign",
+        registry=SimpleNamespace(),
+        materializer=SimpleNamespace(),
+        begin_status_progress=lambda **_kwargs: None,
+        end_status_progress=lambda: None,
+        increment_experiment_count=lambda: None,
+    )
+
+    result = orchestrator.evaluate(branch, str(tmp_path / "candidate"), _hypothesis())
+
+    assert result.execution_outcome.outcome is ExecutionOutcome.EVALUATED
+    subject = captured["proposal_subject"]
+    assert subject == {
+        "schema_version": "scion.problem_proposal_subject.v1",
+        "changes": [
+            {
+                "file_path": str(relative),
+                "action": "modify",
+                "before_source": f"def solve():\n    return '{branch_value}'\n",
+                "after_source": "def solve():\n    return 'candidate'\n",
+            }
+        ],
+    }
+    assert "global-champion" not in str(subject)
+    assert "hypothesis_text" not in str(subject)
+    assert "hash" not in str(subject).lower()
+    if branch_state is BranchState.EXPLORE_EXPAND:
+        assert subject["changes"][0]["before_source"] == subject["changes"][0][
+            "after_source"
+        ]
 
 
 class _RecordingExpandProtocol:

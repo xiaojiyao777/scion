@@ -24,20 +24,10 @@ def source_graph_roles(
     than silently weakening the dependency graph.
     """
 
-    module_paths = _module_path_index(sources)
-    dependencies_by_path: dict[str, set[str]] = {path: set() for path in sources}
-    for path, content in sources.items():
-        if not isinstance(content, str) or not path.endswith(".py"):
-            continue
-        dependencies_by_path[path].update(
-            _local_import_paths(
-                path=path,
-                content=content,
-                module_paths=module_paths,
-                qualified_prefixes=qualified_prefixes,
-            )
-        )
-        dependencies_by_path[path].discard(path)
+    dependencies_by_path = _dependency_edges(
+        sources,
+        qualified_prefixes=qualified_prefixes,
+    )
 
     dependencies = _reachable(target, dependencies_by_path)
     reverse: dict[str, set[str]] = {path: set() for path in sources}
@@ -59,6 +49,30 @@ def source_graph_roles(
             selected.append("peer")
         roles[path] = tuple(role for role in _ROLE_ORDER if role in selected)
     return roles
+
+
+def source_graph_links(
+    sources: Mapping[str, str | None],
+    *,
+    qualified_prefixes: tuple[str, ...] = (),
+) -> dict[str, dict[str, tuple[str, ...]]]:
+    """Return direct local-import adjacency without inventing a focus target."""
+
+    dependencies = _dependency_edges(
+        sources,
+        qualified_prefixes=qualified_prefixes,
+    )
+    callers: dict[str, set[str]] = {path: set() for path in sources}
+    for caller, imported_paths in dependencies.items():
+        for imported in imported_paths:
+            callers[imported].add(caller)
+    return {
+        path: {
+            "dependencies": tuple(sorted(dependencies[path])),
+            "callers": tuple(sorted(callers[path])),
+        }
+        for path in sorted(sources)
+    }
 
 
 def ordered_source_paths(
@@ -87,6 +101,28 @@ def _module_path_index(
                 raise ValueError(f"duplicate local source module: {module}")
             modules[module] = path
     return modules
+
+
+def _dependency_edges(
+    sources: Mapping[str, str | None],
+    *,
+    qualified_prefixes: tuple[str, ...],
+) -> dict[str, set[str]]:
+    module_paths = _module_path_index(sources)
+    dependencies: dict[str, set[str]] = {path: set() for path in sources}
+    for path, content in sources.items():
+        if not isinstance(content, str) or not path.endswith(".py"):
+            continue
+        dependencies[path].update(
+            _local_import_paths(
+                path=path,
+                content=content,
+                module_paths=module_paths,
+                qualified_prefixes=qualified_prefixes,
+            )
+        )
+        dependencies[path].discard(path)
+    return dependencies
 
 
 def _module_name(path: str) -> str:
@@ -130,9 +166,7 @@ def _local_import_paths(
             if base:
                 candidates.append(base)
                 candidates.extend(
-                    f"{base}.{alias.name}"
-                    for alias in node.names
-                    if alias.name != "*"
+                    f"{base}.{alias.name}" for alias in node.names if alias.name != "*"
                 )
         for candidate in candidates:
             if resolved := _nearest_local_module(
@@ -216,4 +250,4 @@ def _reachable(
     return reached
 
 
-__all__ = ["ordered_source_paths", "source_graph_roles"]
+__all__ = ["ordered_source_paths", "source_graph_links", "source_graph_roles"]

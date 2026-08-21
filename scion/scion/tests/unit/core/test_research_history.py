@@ -287,6 +287,97 @@ def test_real_cvrp_mechanism_envelope_round_trips_safe_aggregates(
     assert loaded[0]["protocol"]["evidence"]["mechanism_evidence"]["evidence"] == evidence
 
 
+def test_writer_round_trips_safe_problem_owned_family_attribution(
+    tmp_path: Path,
+) -> None:
+    from scion.problems.cvrp.proposal_mechanism_evidence import (
+        CvrpProposalMechanismEvidenceProvider,
+    )
+
+    subject = {
+        "schema_version": "scion.problem_proposal_subject.v1",
+        "changes": [
+            {
+                "file_path": "policies/baseline_modules/local_search.py",
+                "action": "modify",
+                "before_source": (
+                    "def _default_vns_operators():\n    return ()\n"
+                ),
+                "after_source": (
+                    "def _default_vns_operators():\n    return ('swap',)\n"
+                ),
+            }
+        ],
+    }
+    provider = CvrpProposalMechanismEvidenceProvider()
+    evidence = provider.summarize_proposal_mechanism_evidence(
+        stage="screening",
+        selected_surface="solver_design",
+        proposal_subject=subject,
+        runtime_pairs=[
+            {
+                "candidate_runtime": {
+                    "solver_algorithm_elapsed_ms": 10,
+                    "solver_algorithm_solution_progress": {
+                        "initial_total_distance": 90.0,
+                        "initial_route_count": 2,
+                        "final_total_distance": 80.0,
+                    },
+                    "solver_algorithm_phase_accepted_moves": {"vns": 1},
+                    "solver_algorithm_phase_improvement_counts": {"vns": 1},
+                    "solver_algorithm_phase_delta_sum": {"vns": 10.0},
+                },
+                "champion_runtime": {
+                    "solver_algorithm_elapsed_ms": 10,
+                    "solver_algorithm_solution_progress": {
+                        "initial_total_distance": 100.0,
+                        "initial_route_count": 2,
+                        "final_total_distance": 90.0,
+                    },
+                    "solver_algorithm_phase_accepted_moves": {"vns": 0},
+                    "solver_algorithm_phase_improvement_counts": {"vns": 0},
+                    "solver_algorithm_phase_delta_sum": {"vns": 0.0},
+                },
+            }
+        ],
+    )
+    step = _evaluated()
+    step.protocol_result = replace(
+        step.protocol_result,
+        mechanism_evidence={
+            "schema_version": "scion.problem_proposal_mechanism_evidence.v1",
+            "problem_family": "cvrp",
+            "producer": "problem_provider",
+            "evidence": evidence,
+        },
+    )
+    writer = ResearchHistoryWriter(tmp_path, problem_id="cvrp")
+
+    writer.append_step(step)
+    loaded = load_research_histories(
+        [writer.path],
+        expected_problem_id="cvrp",
+    )
+
+    attribution = loaded[0]["protocol"]["evidence"]["mechanism_evidence"][
+        "evidence"
+    ]["mechanism_attribution"]
+    assert attribution["attribution_status"] == "family_observable_changed"
+    assert attribution["attribution_resolution"] == "family_association"
+    assert attribution["exact_mechanism_activation"] is False
+    assert attribution["changed_source_roles"] == ["local_search"]
+    assert attribution["changed_symbol_names"] == ["_default_vns_operators"]
+    assert {
+        observation["signal"]
+        for observation in attribution["activation_observations"]
+    } >= {
+        "vns_move_attempts",
+        "vns_accepted_moves",
+        "vns_improvement_count",
+        "vns_delta_sum",
+    }
+
+
 def test_explicit_multi_history_loader_preserves_file_and_line_order(
     tmp_path: Path,
 ) -> None:

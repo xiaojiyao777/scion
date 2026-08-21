@@ -1,7 +1,7 @@
 # Scion v0.4 direct-v3 实验运行与验收手册
 
 *适用范围：当前 v0.4 direct-V3 研究工作树*
-*最后更新：2026-08-08*
+*最后更新：2026-08-21*
 
 本手册只描述当前 direct-v3 runtime。唯一架构边界是
 `scion/design/scion-architecture-v3.md`；
@@ -19,9 +19,11 @@
 
 ```text
 完整且安全的问题/源码上下文
-  -> 最多一次 Hypothesis 调用
+  -> 可选有限 Hypothesis research actions，或 direct one-shot
+  -> 每个 attempt 最多导出一个 tainted H
   -> Hypothesis Contract
-  -> 通过后，最多一次 Code 调用
+  -> 通过后，可选有限 Code research actions，或 direct one-shot
+  -> 每个 attempt 最多导出一个 tainted C
   -> Patch Contract
   -> Workspace
   -> Verification
@@ -34,15 +36,34 @@
 
 - 从明确记录的当前源码状态运行；同一 campaign 运行期间不得改变框架源码；
 - 不绑定 surface、action 或 target file；
-- 不从旧 campaign 恢复；
+- 不恢复旧 campaign 的 mutable branch/champion/provider-session state；显式、
+  有序的 H-only `research_history` 是普通输入，不是 reopen；
 - warehouse 与 CVRP 的 `parameter_search.enabled` 都必须显式为 `false`；
   CLI 对配置不完整或启用状态 fail-closed；
 - 先运行 warehouse control，确认框架闭环后再运行 clean/open CVRP；
 - 用真实 Hypothesis、代码、执行行为和 Protocol 结果判断研究有效性，不能只凭测试通过或进程正常退出。
 
-正式运行没有 Scion semantic budget、truncation 或 retry。`--rounds` 是操作员明确选择的“typed formal Protocol evaluated rounds”目标，不是模型调用次数上限或自动重试次数。每个已记录的 Contract/Verification `RESEARCH_REJECTED` 是独立 typed event：该 H/C 结束、不计 formal round，scheduler-forward 到 exact clean base 上的新 H；只有其他未进入 `EVALUATED` 的结果才会在未达到目标轮数时停止当前 invocation。`--time-limit-sec` 是每次 solver/subprocess 的科学运行边界，必须随实验记录。
+正式入口有两个窄定义。自主 H/C campaign 使用
+`python -m scion.cli.main run`；已冻结 exact candidate 的 provider-free estimand
+只使用 `run_fixed_candidate_funnel.py`，导出 H/C 与 provider call 均为零，但仍走
+同一 complete-pair canary -> Protocol -> Safe Features -> Decision 科学链。下文
+“warehouse control 先行”只约束自主 H/C control，不约束这种 provider-free fixed
+funnel。
 
-Anthropic transport 要求的 `max_tokens` 仅是 provider transport ceiling。它不是 Scion 的语义 token budget，不是 campaign 终止规则，也不授权截断、压缩或省略上下文。provider SDK retry 保持为零；每次 provider 调用只追加一条最小 `proposal_call.v1` 事件，不能由隐藏的 SDK 重放产生。
+正式运行没有算法质量、novelty 或 retry budget。启用的 Creative session
+必须声明有限 provider-turn、read/search、public-test、output、transcript 与共享
+provider-call 资源上限；它们只负责 fail-closed，不能选择机制、静默截断上下文或
+影响 Protocol/Decision。`--rounds` 是操作员明确选择的“typed formal Protocol
+evaluated rounds”目标，不是模型调用次数上限或自动重试次数。每个已记录的
+Contract/Verification `RESEARCH_REJECTED` 是独立 typed event：该 H/C 结束、不计
+formal round，scheduler-forward 到 exact clean base 上的新 H；只有其他未进入
+`EVALUATED` 的结果才会在未达到目标轮数时停止当前 invocation。
+`--time-limit-sec` 是每次 solver/subprocess 的科学运行边界，必须随实验记录。
+
+Anthropic transport 要求的 `max_tokens` 仅是 provider transport ceiling。它不是
+研究质量 gate，也不授权截断、压缩或省略上下文。provider SDK retry 保持为零；
+每个 deliberate provider turn 最多写一个 best-effort terminal trace，trace 不是
+receipt/call identity，不能由隐藏的 SDK 重放产生，也不能改变有效 provider 结果。
 
 v0.4 production Scheduler 默认最多允许三个 active research branches，并按
 state priority/FIFO 选择 runnable branch。一个 branch 仍表示一个可持续深入的
@@ -62,7 +83,7 @@ mapping 看到该 branch 已验证的当前源码。只有 Verification 失败�
 
 ```bash
 export SOURCE_REPO=/home/clawd/research/or-autoresearch-agent
-export REPO_ROOT=/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion
+export REPO_ROOT="$SOURCE_REPO/scion"
 export PY=/home/clawd/miniconda3/envs/claw/bin/python
 export EXPERIMENTS_ROOT=/home/clawd/research/scion-experiments
 export SCION_MODEL=gpt-5.6-terra
@@ -123,8 +144,9 @@ test -n "$SCION_API_KEY"
 但不得打印或写入文档/实验 artifact。启动前应用该 key 只读验证 `/v1/models`
 并确认目标模型可见。
 
-检查问题数据与配置文件后，为每次运行创建新的、独立的 `CAMPAIGN_DIR`。不要
-跨机器或跨运行复用 campaign state。
+检查问题数据与配置文件后，自主 H/C run 使用新的、独立的 `CAMPAIGN_DIR`；
+provider-free fixed funnel 使用新的、原本不存在的 output directory。不要跨机器
+或跨运行复用 campaign/output state。
 
 ## 4. Warehouse control：CLI 直跑
 
@@ -150,11 +172,13 @@ export SCION_WAREHOUSE_DATA_ROOT=/home/clawd/research/or-autoresearch-agent/surr
 运行结束后，只使用 CLI 的 `inspect` 和 `report` 命令读取 campaign 证据；
 不要把旧工具或旧 campaign 当作当前入口。
 
-## 5. Warehouse 通过后才进入 CVRP
+## 5. 自主 H/C control 在 Warehouse 通过后才进入 CVRP
 
-在启动 CVRP 前，确认 warehouse 的 H/C append-only proposal-call 事件、可用 trace、
-typed outcome、Contract、Verification、Protocol 与 Decision 都可追溯，且结果具有可归因的 solver
-证据。若发现框架错误，修复后从新的源码状态创建新的 campaign。
+在启动自主 CVRP H/C control 前，确认 warehouse 的 ordinary H/C refs、typed step
+outcome、可用 per-turn trace、Contract、Verification、Protocol 与 Decision 都可
+追溯，且结果具有可归因的 solver 证据。若发现框架错误，修复后从新的源码状态
+创建新的 campaign。provider-free fixed funnel 不生成 H/C，也不借用这条要求伪造
+proposal evidence。
 
 ## 6. Clean/open CVRP：CLI 直跑
 
@@ -181,7 +205,7 @@ open CVRP 不绑定 successor、surface、action 或 target file。
 
 ## 7. 低频监控与当前产物
 
-运行时可低频读取 campaign 状态；不要秒级轮询或自行重启：
+自主 H/C run 可低频读取 campaign 状态；不要秒级轮询或自行重启：
 
 ```bash
 "$PY" -m scion.cli.main inspect campaign --campaign-dir "$CAMPAIGN_DIR"
@@ -194,6 +218,9 @@ open CVRP 不绑定 successor、surface、action 或 target file。
 `workspaces/`、`champions/`。它们是诊断与研究验收的输入，但不替代对实际
 Hypothesis、当前 branch source、solver 行为和 Protocol 结果的审查。当前 active
 campaign 不为每次 screening 另建 formal-candidate identity/hash 闭包。
+provider-free fixed funnel 的普通证据是其 fresh output 下的 `input.json`、Protocol
+metrics、可选 promoted snapshot 与单一 `terminal.json`；它没有 H/C trace、campaign
+DB 或 mutable reopen state。
 
 ## 8. 旧运行手册说明
 
@@ -204,43 +231,31 @@ postrun 工具的流程已 superseded，不能执行或用作当前验收依据�
 
 不要先从最后一个 reason code 猜原因。按职责边界逐层检查。
 
-### 9.1 H/C proposal call event、trace 与 typed outcome
+### 9.1 H/C research turns、ordinary history 与 typed outcome
 
-先看 append-only `proposal_call.v1` event：
+先从 `campaign_summary.json`/status 的 typed step outcome 判断 H/C 是否导出，
+再查看可选的 `llm_traces/` terminal diagnostics 和本 campaign 的普通
+`research_history.jsonl`。trace 写入是 best-effort，缺少 trace 不能把有效结果
+改写为失败；trace 也不是 call identity、receipt 或另一份事实账本。
 
-```bash
-test -n "$CAMPAIGN_DIR"
-
-sqlite3 "$CAMPAIGN_DIR/scion.db" <<'SQL'
-.headers on
-.mode column
-SELECT timestamp,
-       branch_id,
-       hypothesis_id,
-       stage,
-       json_extract(audit_payload_json, '$.phase') AS phase,
-       json_extract(audit_payload_json, '$.status') AS status,
-       json_extract(audit_payload_json, '$.execution_outcome') AS execution_outcome
-FROM experiment_events
-WHERE event_kind = 'proposal_call'
-ORDER BY timestamp, rowid;
-SQL
-```
-
-再根据 event 的 `phase`、`status` 与 `execution_outcome` 字段检查最小调用链；如
-campaign 保留了诊断 trace，再从 `llm_traces/` 读取它。应看到：
-
-- 每次 H 或 C 是一个独立的 `proposal_call.v1` event；
-- 只有 H 通过 Contract 后才存在绑定该 H 的 C call；
-- event 的 phase、可用 trace 与 typed outcome 对齐；不以 prompt/context hash 或
-  receipt 闭包作为研究或 Decision 前置；
-- 失败保持原始分类，不被改写成研究否决或自动再调用；合法的 Contract/Verification `RESEARCH_REJECTED` 另行记录后 scheduler-forward 到新 H，且不计 formal round。
-
-列出 trace：
+列出可用 trace 与普通历史：
 
 ```bash
 find "$CAMPAIGN_DIR/llm_traces" -maxdepth 1 -type f -name '*.json' -print | sort
+test ! -e "$CAMPAIGN_DIR/research_history.jsonl" || \
+  wc -l "$CAMPAIGN_DIR/research_history.jsonl"
 ```
+
+应看到：
+
+- 每个 deliberate provider turn 至多有一个 terminal trace，并计入共享 cap；
+- 一个 attempt 最多导出一个 H，H 通过 Contract 后最多导出一个与该 exact H
+  绑定的 C；内部 research turns 不构成 retry；
+- `research_history.jsonl` 只保存安全、H-visible 的普通研究记录，不含
+  validation/frozen/raw/private state，也不恢复 mutable campaign state；
+- 失败保持原始 typed 分类，不被改写成研究否决或自动再调用；合法的
+  Contract/Verification `RESEARCH_REJECTED` 记录后 scheduler-forward 到新 H，且
+  不计 formal round。
 
 ### 9.2 Hypothesis 与 Patch Contract
 
@@ -313,7 +328,8 @@ Scheduler 只负责 branch state、priority/FIFO 和 active slot；若它改变 
   screening evidence；
 - 第二个 C 的 editable source context 对上一轮触及的文件使用 branch-current
   path/content value；
-- 每个候选仍只有一次 H 和一次 C，不因同分支迭代增加隐式调用。
+- 每个 attempt 最多导出一个 H 和一个 C；有限 deliberate Creative turns 全部
+  计入共享 cap，不构成 retry，也不会产生第二个导出值。
 
 当前 solver-improvement 验收不投资 campaign reopen。若 live campaign 无法在
 现有 branch state 与 workspace 上继续，保留现场并显式启动 fresh campaign；
@@ -351,7 +367,8 @@ export PYTHONPATH="$REPO_ROOT"
 框架层至少证明：
 
 - 已记录的当前源码状态与 campaign 配置一致；
-- H/C 次数、append-only proposal-call 事件、可用 trace 与 typed outcome 符合 direct-v3；
+- deliberate provider turns、导出的普通 H/C refs、可用 trace 与 typed outcome
+  符合 direct-v3；
 - Contract、Verification、Protocol、Decision 没有越权；
 - multi-file patch 如有需要可完整物化、执行，并按 typed Decision 保留或回退；
 - screening continuation 确实在同一 branch 上利用上一轮实验和 verified source，
@@ -365,6 +382,9 @@ export PYTHONPATH="$REPO_ROOT"
 - H 是否提出具体、可证伪并与当前源码相符的算法假设；
 - C 是否真正实现该机制，而非注释、参数微调或无关重排；
 - solver 行为是否能归因到修改后的执行路径；
+- complete paired observations 是否只把 problem-owned mechanism-family
+  association 暴露给后续 H；该 association 不是因果、exact activation、host
+  mechanism selection、Protocol gate、Safe Feature 或 Decision input；
 - Protocol 是否提供足够的 case/seed/pair、质量与 runtime 证据；
 - 结果是可复现的收益、有信息量的无收益，还是框架/基础设施失败；
 - warehouse 和 open CVRP 是否都表明同一小型 runtime 能进行实际研究。
@@ -376,9 +396,9 @@ screening -> validation -> frozen 晋升及对原始 B0 的独立比较。
 
 ## 12. 诊断运行与正式证据隔离
 
-当前 CLI 直跑不暴露旧 launcher 的 forced-target、prepare 或 resume 路径。若
-需要诊断，创建独立的 `--campaign-dir`，并明确把它与 warehouse/CVRP formal
-control 的研究证据隔离。
+自主 campaign 的当前 CLI 直跑不暴露旧 launcher 的 forced-target、prepare 或
+resume 路径；provider-free fixed funnel 同样不调用旧 launcher。若需要诊断，
+创建独立输出目录，并明确把它与 warehouse/CVRP formal control 的研究证据隔离。
 
 ## 13. 失败处理
 
@@ -387,21 +407,23 @@ control 的研究证据隔离。
 1. 不删除或覆盖 campaign directory；
 2. 记录 `git rev-parse HEAD`、实际 CLI 参数和 `run_status.json`；
 3. 读取 `run_status.json`、`campaign_summary.json` 与 CLI report 输出；
-4. 检查 append-only proposal-call 事件、typed outcome 与 H/C trace；
+4. 检查 typed step outcome、ordinary H/C refs/research history 与可用 per-turn trace；
 5. 确认失败层：provider/infra、Contract、Verification、Protocol 或 Decision；
 6. 若需代码修复，修改完成后创建新的 campaign，不复用旧 campaign state；
 7. 只有操作员显式决定后才启动新的 invocation。
 
 不要把“请求轮数未完成”自动解释为需要重试。先看最后一个 typed
-`execution_outcome` 和 `transition_reason`：direct-v3 有意在第一个非
-`EVALUATED` outcome 后停止当前 invocation。
+`execution_outcome` 和 `transition_reason`：finalized proposal、Contract 或
+Verification 的 `RESEARCH_REJECTED` 是 attempt-terminal、formal count 为零，并
+scheduler-forward 到 clean base 上的新 H；其他非 `EVALUATED` category 才停止或
+hold 当前 invocation。
 
 ## 14. 最终清单
 
 Warehouse：
 
 - [ ] campaign 记录实际源码状态与明确的 CLI 配置，运行期间源码未改变；
-- [ ] H/C proposal-call 事件、可用 trace、typed outcome、Contract、Verification、Protocol、Decision 全部可审计；
+- [ ] ordinary H/C refs、typed outcome、可用 per-turn trace、Contract、Verification、Protocol、Decision 全部可审计；
 - [ ] 研究结果有实际算法与 solver 证据。
 - [ ] 同一不中断 campaign 达到至少 v3，且独立 replay 支持最终 champion
   优于 v1 和 immediate predecessor；production transfer 按 `TASK.md` 得到晋升
@@ -409,10 +431,13 @@ Warehouse：
 
 CVRP：
 
-- [ ] warehouse 已先通过；
-- [ ] 使用同一 runtime 源码状态，从 fresh campaign 开始；
-- [ ] 使用当前 CLI 直跑，不使用旧 launcher 参数；
-- [ ] 无 successor 目标绑定或历史 campaign 恢复；
+- [ ] 若为自主 H/C control，warehouse 已先通过；若为 provider-free fixed
+  funnel，已记录 H/C/provider calls 为零；
+- [ ] 使用同一 runtime 源码状态，从 fresh campaign 或 fixed-funnel output 开始；
+- [ ] 自主 campaign 使用当前 CLI 直跑；exact fixed candidate 只使用
+  `run_fixed_candidate_funnel.py`；两者都不使用旧 launcher 参数；
+- [ ] 无 successor 目标绑定或 mutable 历史 campaign 恢复；若使用
+  `research_history`，其显式路径、顺序与 H-only 边界已记录；
 - [ ] 低频监控不干预运行；
 - [ ] open research direction、代码实现、Protocol 和 full-solver 行为可归因；
 - [ ] 一个 exact candidate 完整通过 screening、validation 和 frozen，确定性晋升，

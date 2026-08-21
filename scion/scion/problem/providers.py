@@ -93,6 +93,8 @@ class ProposalMechanismEvidenceProvider(Protocol):
         stage: str,
         selected_surface: str | None,
         runtime_pairs: Sequence[Mapping[str, Any]],
+        proposal_subject: Mapping[str, Any] | None = None,
+        runtime_pairs_complete: bool = True,
     ) -> Mapping[str, Any]:
         """Return a compact proposal-visible evidence payload."""
 

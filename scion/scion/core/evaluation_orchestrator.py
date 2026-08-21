@@ -146,6 +146,7 @@ class EvaluationOrchestrator:
             candidate_workspace=workspace,
             champion_workspace=champion_workspace,
             hypothesis_action=hypothesis.action,
+            proposal_base_workspace=self.branch_workspaces.get(bid),
             expand=expand,
             expand_round=expand_round,
             selected_surface=hypothesis.change_locus,

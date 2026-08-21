@@ -69,7 +69,7 @@ class TestCodeFailureDirect:
         assert r1.branch_id is not None
         bid = r1.branch_id
         assert r1.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
-        assert r1.execution_outcome.reason_code == "PROPOSAL_RESPONSE_INVALID"
+        assert r1.execution_outcome.reason_code == "PATCH_PROPOSAL_INVALID"
         assert not hasattr(r1, "attempt_disposition")
         assert r1.decision is None
         durable = cm._registry.query_execution_outcomes(branch_id=bid)
@@ -164,8 +164,8 @@ class TestCodeFailureDirect:
         assert captured_contexts
         assert all("prior_code_failure" not in context for context in captured_contexts)
 
-    def test_changed_h_input_is_an_ordinary_invalid_response_rejection(self, tmp_path):
-        """There is no durable H-binding lookup outside direct response validation."""
+    def test_changed_h_input_is_a_typed_patch_proposal_rejection(self, tmp_path):
+        """There is no durable H-binding lookup outside patch response validation."""
         llm = self._make_invalid_patch_then_succeed_llm()
         cm = _campaign(tmp_path, llm_client=llm)
 
@@ -181,7 +181,7 @@ class TestCodeFailureDirect:
         result = cm.run_one_step()
 
         assert result.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
-        assert result.execution_outcome.reason_code == "PROPOSAL_RESPONSE_INVALID"
+        assert result.execution_outcome.reason_code == "PATCH_PROPOSAL_INVALID"
         assert "APPROVED_HYPOTHESIS_BINDING_MISSING" not in (
             result.execution_outcome.reason_code,
             *result.execution_outcome.provenance.values(),

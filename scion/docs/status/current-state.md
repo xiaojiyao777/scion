@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-20*
+*Last updated: 2026-08-21*
 
 Read [`../../TASK.md`](../../TASK.md) first. The sole architecture authority is
 [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md).
@@ -21,15 +21,28 @@ the task.
 
 ## Current boundary
 
-The only active research path is:
+The active autonomous H/C research path is:
 
 ```text
 safe complete problem/source context
-  -> Hypothesis -> Hypothesis Contract
-  -> Code using the same Contract-approved ordinary H value -> Patch Contract
+  -> optional finite H research, or direct one-shot
+  -> at most one tainted H -> Hypothesis Contract
+  -> optional finite C research bound to that approved H, or direct one-shot
+  -> at most one tainted C -> Patch Contract
   -> isolated Workspace -> Verification
   -> problem Protocol -> Safe Features -> deterministic Decision
 ```
+
+Finite Creative turns are resource-bounded internal deliberation, not provider
+retry. One attempt exports at most one H and one C. Creative drafts and
+`research_basis` are tainted. Source/history/public-development values and
+problem-owned family association are non-authoritative proposal-only context.
+Only an exported H/C proceeds through Contract -> Verification -> Protocol ->
+Safe Features -> Decision.
+
+The narrow provider-free fixed-candidate estimand has no H/C: it uses
+`run_fixed_candidate_funnel.py`, a fresh output directory and the same
+complete-pair canary/Protocol/Safe Features/Decision chain where applicable.
 
 Retain ordinary references, exact scientific source/stage reuse, fixed
 case/seed selection, minimal append-only lineage and local subprocess isolation.
@@ -73,8 +86,8 @@ lifecycles.
 platform/activation stack, mutable owner and candidate graphs, prompt/source
 identity, two-phase promotion, duplicate scheduler/status/accounting closures,
 provider-call receipts and historical compatibility readers. The live path now
-passes ordinary values directly: the Contract-approved H enters C in the same
-call, one `CandidateWorkspace` enters Verification and Protocol, Decision
+passes ordinary values directly: C is bound to the same-attempt exact
+Contract-approved H, one `CandidateWorkspace` enters Verification and Protocol, Decision
 selects one branch action, and promotion is one operation.
 
 M7-FC1 ran once under explicit authorization and is terminal
@@ -159,8 +172,8 @@ four research rejections, zero formal candidates, zero solver calls and no
 algorithm evidence.
 
 The generic failure channel is corrected at clean production commit
-`fcad63d78fbe11ecef9bff5439ab6a62cf844518`: invalid drafts return safe repair
-enums, public test failures return an enumerated reason and public test path,
+`fcad63d78fbe11ecef9bff5439ab6a62cf844518`: invalid drafts return enumerated
+open-session action feedback, public test failures return an enumerated reason and public test path,
 and transcript accounting counts actual provider wire. M11 is terminal
 `RESOURCE_EXHAUSTED / PROVIDER_CALL_CAP_EXHAUSTED` after 30 provider calls,
 three C research rejections, zero formal candidates and zero solver/Protocol
@@ -324,14 +337,56 @@ confirms provider recovery and the continuous V3 chain, but supplies negative
 mechanism evidence rather than algorithm improvement.  See the
 [M22 preregistration](../experiments/v0.4/v04-cvrp-m22-post-infra-continuation-preregistration-20260820.md).
 
+M23 framework preparation is implemented and independently reviewed. H may now
+perform a finite, resource-bounded read/search research session over complete
+ordinary source and history indexes before exporting one proposal. Its required
+`research_basis` records what it read, the nearest prior work, material delta,
+alternatives and an observable prediction, but remains tainted and never enters
+Protocol or Decision. C retains its finite read/search/revise/public-test path
+and still exports at most one patch proposal bound to the exact approved H. The
+direct one-shot path remains available and byte-compatible when research limits
+are absent.
+
+Problem-owned CVRP evidence can now associate a complete paired observation
+with a changed mechanism family. The status is explicitly family association,
+not exact activation or causal proof; incomplete comparator evidence and source
+states without an actual symbol delta report unavailable. Generic Scion carries
+the ordinary mapping but contains no CVRP mechanism selector, and the mapping
+does not reach Safe Features or Decision.
+
+Provider-free fixed-candidate evaluation is consolidated into one funnel. It
+copies the explicitly declared baseline and candidate once into private
+read-only input snapshots and uses direct byte equality, not identity or hash
+authority. It then runs strict complete-pair canary -> expanded screening ->
+validation -> frozen -> deterministic promotion -> separately declared retained
+comparison. An ordinary per-pair solver failure is recorded and the current
+formal Protocol stage completes its declared pair matrix before the driver
+stops. Champion-only, shared or bilateral failures produce
+`completed_incomplete / INCOMPLETE_COMPARATOR_EVIDENCE`; Decision is not called
+for an incomplete main-chain stage and no later stage runs. Candidate-only
+failures remain candidate evidence and reach deterministic Decision after the
+stage completes. Strict canary incompleteness stops before formal Protocol.
+Retained comparator incompleteness ends as
+`completed_incomplete / INCOMPLETE_COMPARATOR_EVIDENCE` with
+`stop_stage=retained`; it is never reported as `PROMOTED_NOT_RETAINED`.
+
+No distribution, packaging, build, deployment, root/systemd, Trust/Hash
+authority, object identity, lease, signing, registration, receipt or
+duplicate-closure work is authorized by these changes. The next scientific
+operation is one newly frozen provider-free full-funnel confirmation of the
+preserved M20 candidate, followed only after its terminal audit by one serial
+bounded autonomous campaign.
+
 ## Current validation rule
 
-Current safe validation collected 1,672 tests and passed a 240-test
-provider-/solver-free core/proposal selection plus 136 focused Protocol,
-campaign, resource-envelope and signal tests. The 44-test resource-envelope
-and signal subset also passed. Production Ruff F/E9, touched-file Ruff import
-checks and formatting, in-memory compilation of 446 Python files, CLI help and
-`git diff --check` passed with bytecode and pytest caches disabled.
+Current M23 safe validation collected 1,844 tests. Exact isolated invocations
+passed 340 core/proposal tests, 180 focused Protocol/campaign/funnel tests and
+103 context/history/mechanism boundary tests. Production Ruff F/E9 and
+touched-file import checks, in-memory compilation of 262 production Python
+files and `git diff --check` passed with bytecode and pytest caches disabled.
+Independent review covered the production and scientific boundaries. These
+checks made no provider
+request, real solver call, formal experiment, build or deployment action.
 
 M9 preparation additionally passed 139 isolated prior-input, context-boundary,
 provider-cap and hardwall tests. All three YAML files load through production

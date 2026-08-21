@@ -30,6 +30,9 @@ class EvaluationRequest:
     candidate_workspace: str
     champion_workspace: str
     hypothesis_action: str
+    # Source against which the current patch was authored.  This can be a
+    # branch's accepted workspace rather than the global champion.
+    proposal_base_workspace: str | None = None
     expand: bool = False
     expand_round: int = 0
     selected_surface: str | None = None
@@ -68,6 +71,7 @@ class ExperimentProtocolLike(Protocol):
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
+        proposal_subject: Mapping[str, Any] | None = None,
     ) -> ProtocolResult:
         ...
 
@@ -107,6 +111,10 @@ class EvaluationPipeline:
             canary_result = normalize_canary_result(canary_result)
 
             if canary_result.passed:
+                from scion.protocol.experiment.proposal_evidence import (
+                    build_problem_proposal_subject,
+                )
+
                 protocol_result = _run_protocol_experiment(
                     self._experiment_protocol,
                     stage=_stage_for_state(request.branch_state),
@@ -116,6 +124,10 @@ class EvaluationPipeline:
                     expand=request.expand,
                     expand_round=request.expand_round,
                     selected_surface=request.selected_surface,
+                    proposal_subject=build_problem_proposal_subject(
+                        patch=request.patch,
+                        base_workspace=request.proposal_base_workspace,
+                    ),
                 )
                 protocol_result = _sanitize_protocol_exposure(protocol_result)
 
@@ -206,6 +218,9 @@ def _run_protocol_experiment(
         selected_surface,
     ):
         kwargs["selected_surface"] = selected_surface
+    proposal_subject = kwargs.pop("proposal_subject", None)
+    if isinstance(proposal_subject, Mapping) and proposal_subject:
+        kwargs["proposal_subject"] = dict(proposal_subject)
     return protocol.run_experiment(**kwargs)
 
 
