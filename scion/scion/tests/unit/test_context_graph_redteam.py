@@ -268,7 +268,7 @@ def test_peer_becomes_editable_only_after_read_and_public_test_stays_read_only()
     session = CodeResearchSession(
         CreativeLayer(client),
         CodeResearchLimits(max_turns=4),
-        test_patch=lambda _patch, _remaining, _corpus: {
+        test_patch=lambda _patch, _remaining, _corpus, _falsifier_source: {
             "outcome": "passed",
             "checks": [{"name": "D3_unit_tests", "outcome": "passed"}],
             "counts": {"total": 1, "passed": 1, "failed": 0},

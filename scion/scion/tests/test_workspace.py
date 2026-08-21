@@ -106,6 +106,30 @@ class TestCandidateWorkspace:
 
 
 class TestApplyPatch:
+    def test_ephemeral_apply_skips_post_apply_digest(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ws = mat.create_branch_workspace("ephemeral", str(code_base))
+        patch = PatchProposal(
+            file_path="operators/swap.py",
+            action="modify",
+            code_content="changed = True\n",
+        )
+        monkeypatch.setattr(
+            mat,
+            "compute_code_hash",
+            lambda *_args: (_ for _ in ()).throw(AssertionError("digest requested")),
+        )
+
+        mat.apply_ephemeral_patch(ws, patch)
+
+        assert (Path(ws) / "operators" / "swap.py").read_text() == (
+            "changed = True\n"
+        )
+
     def test_modify_creates_file(self, mat: WorkspaceMaterializer, code_base: Path):
         ws = mat.create_branch_workspace("b1", str(code_base))
         patch = PatchProposal(

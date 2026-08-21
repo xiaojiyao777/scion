@@ -9,6 +9,8 @@ from pathlib import Path
 from typing import Any
 
 MAX_CODE_RESEARCH_LIMITS_BYTES = 4096
+MAX_CODE_RESEARCH_PROBE_SOURCE_CHARS = 20_000
+MAX_CODE_RESEARCH_PROBE_TIMEOUT_SEC = 10
 
 
 @dataclass(frozen=True)
@@ -273,6 +275,8 @@ def _bounded_int(
 
 __all__ = [
     "MAX_CODE_RESEARCH_LIMITS_BYTES",
+    "MAX_CODE_RESEARCH_PROBE_SOURCE_CHARS",
+    "MAX_CODE_RESEARCH_PROBE_TIMEOUT_SEC",
     "CodeResearchLimits",
     "load_code_research_limits",
     "normalize_code_research_limits",

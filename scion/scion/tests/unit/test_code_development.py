@@ -11,6 +11,7 @@ from scion.core.models import PatchProposal
 from scion.runtime.workspace import WorkspaceMaterializer
 from scion.verification.development import (
     BubblewrapDevelopmentSandbox,
+    DevelopmentSandboxResult,
     DevelopmentSuiteManifest,
     copy_declared_development_files,
     copy_development_suite_closure,
@@ -105,7 +106,7 @@ def test_real_sandbox_uses_only_public_closure_and_cleans_scratch(
         total_timeout_sec=10.0,
     )
 
-    assert run.outcome == "passed"
+    assert run.outcome == "passed", run.provider_projection()
     assert [check.name for check in run.checks] == [
         "D1_syntax",
         "D1b_undefined_names",
@@ -170,6 +171,329 @@ def test_real_sandbox_failure_returns_safe_public_diagnostic_only(
     assert "CHILD_PRIVATE_DIAGNOSTIC" not in repr(projection)
     assert str(problem_root) not in repr(projection)
     assert list((tmp_path / "campaign/candidate_workspaces").iterdir()) == []
+
+
+def test_test_patch_falsifier_hides_framework_and_leaves_no_host_residue(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    problem_root = tmp_path / "problem"
+    (problem_root / "tests").mkdir(parents=True)
+    (problem_root / "tests/test_public.py").write_text(
+        "from pathlib import Path\n"
+        "def test_public():\n"
+        "    assert not Path('/work/.scion-development-probe').exists()\n",
+        encoding="utf-8",
+    )
+    framework_root = tmp_path / "host-framework"
+    framework_sentinel = framework_root / "core/host_only_sentinel.py"
+    framework_sentinel.parent.mkdir(parents=True)
+    framework_sentinel.write_text("HOST_FRAMEWORK_SECRET = True\n", encoding="utf-8")
+    (framework_root / "problems").mkdir()
+    (framework_root / "tests").mkdir()
+    host_sentinel = tmp_path / "host-only-sentinel"
+    host_sentinel.write_text("HOST_ONLY_SECRET\n", encoding="utf-8")
+    materializer = WorkspaceMaterializer(
+        str(tmp_path / "campaign"), editable_patterns=("operators/*.py",)
+    )
+
+    class InspectingSandbox(BubblewrapDevelopmentSandbox):
+        def run_pytest(self, *, workspace: str, **kwargs):
+            assert not (Path(workspace) / ".scion-development-probe").exists()
+            return super().run_pytest(workspace=workspace, **kwargs)
+
+    evaluator = CodeDevelopmentEvaluator(
+        materializer=materializer,
+        problem_spec=_spec(problem_root),
+        suites=(
+            DevelopmentSuiteManifest(
+                check_name="D3_unit_tests",
+                source_root=str(problem_root),
+                test_path="tests/test_public.py",
+            ),
+        ),
+        workspace_paths=(),
+        problem_package_paths=(),
+        limits=CodeResearchLimits(),
+        sandbox=InspectingSandbox(framework_root=framework_root),
+    )
+
+    from scion.contract.gate import ContractGate
+    from scion.verification.gate import VerificationGate
+
+    def formal_gate_called(*_args, **_kwargs):
+        raise AssertionError("formal gates must not run during a development probe")
+
+    monkeypatch.setattr(ContractGate, "validate_patch", formal_gate_called)
+    monkeypatch.setattr(VerificationGate, "run", formal_gate_called)
+    run = evaluator.evaluate(
+        source_corpus={
+            "operators/__init__.py": "",
+            "operators/main.py": "def improve(value):\n    return value\n",
+        },
+        patch=_patch(),
+        selected_surface=None,
+        falsifier_source=(
+            "from pathlib import Path\n"
+            "from operators.main import improve\n"
+            "def test_bounded_hint():\n"
+            "    assert improve(1) == 2\n"
+            "    assert not Path('/work/tests/test_public.py').exists()\n"
+            "    assert not Path("
+            "'/opt/scion-runtime/scion/core/host_only_sentinel.py').exists()\n"
+            f"    assert not Path({str(host_sentinel)!r}).exists()\n"
+        ),
+        total_timeout_sec=10.0,
+    )
+
+    assert run.outcome == "passed", run.provider_projection()
+    assert run.falsifier_outcome == "passed"
+    assert "HOST" not in repr(run.provider_projection())
+    assert list((tmp_path / "campaign/candidate_workspaces").iterdir()) == []
+    assert framework_sentinel.read_text(encoding="utf-8").startswith("HOST_")
+    assert host_sentinel.read_text(encoding="utf-8").startswith("HOST_")
+
+
+def test_invalid_falsifier_is_inconclusive_but_host_checks_still_run(
+    tmp_path: Path,
+) -> None:
+    problem_root = tmp_path / "problem"
+    (problem_root / "tests").mkdir(parents=True)
+    (problem_root / "tests/test_public.py").write_text(
+        "def test_public(): pass\n", encoding="utf-8"
+    )
+    evaluator = CodeDevelopmentEvaluator(
+        materializer=WorkspaceMaterializer(
+            str(tmp_path / "campaign"), editable_patterns=("operators/*.py",)
+        ),
+        problem_spec=_spec(problem_root),
+        suites=(
+            DevelopmentSuiteManifest(
+                check_name="D3_unit_tests",
+                source_root=str(problem_root),
+                test_path="tests/test_public.py",
+            ),
+        ),
+        workspace_paths=(),
+        problem_package_paths=(),
+        limits=CodeResearchLimits(),
+        sandbox=BubblewrapDevelopmentSandbox(),
+    )
+
+    run = evaluator.evaluate(
+        source_corpus={"operators/main.py": "def improve(value):\n    return value\n"},
+        patch=_patch(),
+        selected_surface=None,
+        falsifier_source="def test_broken(: pass",
+        total_timeout_sec=10.0,
+    )
+
+    assert run.outcome == "passed"
+    assert run.falsifier_outcome == "inconclusive"
+    assert list((tmp_path / "campaign/candidate_workspaces").iterdir()) == []
+
+
+class _RecordingSandbox:
+    available = True
+
+    def __init__(self, probe_outcome: str = "passed") -> None:
+        self.probe_outcome = probe_outcome
+        self.probe_calls = 0
+        self.host_calls = 0
+
+    def run_probe(self, **_kwargs):
+        self.probe_calls += 1
+        return self.probe_outcome
+
+    def run_pytest(self, *, workspace: str, **_kwargs):
+        self.host_calls += 1
+        assert not (Path(workspace) / ".scion-development-probe").exists()
+        return DevelopmentSandboxResult(outcome="passed")
+
+
+def test_falsifier_without_copy_capacity_is_unavailable_and_host_runs(
+    tmp_path: Path,
+) -> None:
+    problem_root = tmp_path / "problem"
+    (problem_root / "tests").mkdir(parents=True)
+    (problem_root / "tests/test_public.py").write_text(
+        "def test_public(): pass\n", encoding="utf-8"
+    )
+    sandbox = _RecordingSandbox()
+    evaluator = CodeDevelopmentEvaluator(
+        materializer=WorkspaceMaterializer(
+            str(tmp_path / "campaign"), editable_patterns=("operators/*.py",)
+        ),
+        problem_spec=_spec(problem_root),
+        suites=(
+            DevelopmentSuiteManifest(
+                check_name="D3_unit_tests",
+                source_root=str(problem_root),
+                test_path="tests/test_public.py",
+            ),
+        ),
+        workspace_paths=(),
+        problem_package_paths=(),
+        limits=CodeResearchLimits(max_test_copy_bytes=1_000),
+        sandbox=sandbox,
+    )
+    run = evaluator.evaluate(
+        source_corpus={"operators/main.py": "def improve(value):\n    return value\n"},
+        patch=_patch(),
+        selected_surface=None,
+        falsifier_source="def test_hint():\n    assert True\n" + "#" * 1_000,
+        total_timeout_sec=10.0,
+    )
+
+    assert run.outcome == "passed"
+    assert run.falsifier_outcome == "unavailable"
+    assert sandbox.probe_calls == 0
+    assert sandbox.host_calls == 1
+    assert list((tmp_path / "campaign/candidate_workspaces").iterdir()) == []
+
+
+def test_falsifier_copy_charge_is_not_refunded_before_host_copy(
+    tmp_path: Path,
+) -> None:
+    problem_root = tmp_path / "problem"
+    (problem_root / "tests").mkdir(parents=True)
+    (problem_root / "tests/test_public.py").write_text(
+        "def test_public(): pass\n", encoding="utf-8"
+    )
+    sandbox = _RecordingSandbox()
+    evaluator = CodeDevelopmentEvaluator(
+        materializer=WorkspaceMaterializer(
+            str(tmp_path / "campaign"), editable_patterns=("operators/*.py",)
+        ),
+        problem_spec=_spec(problem_root),
+        suites=(
+            DevelopmentSuiteManifest(
+                check_name="D3_unit_tests",
+                source_root=str(problem_root),
+                test_path="tests/test_public.py",
+            ),
+        ),
+        workspace_paths=(),
+        problem_package_paths=(),
+        limits=CodeResearchLimits(max_test_copy_bytes=1_000),
+        sandbox=sandbox,
+    )
+
+    run = evaluator.evaluate(
+        source_corpus={
+            "operators/main.py": "def improve(value):\n    return value\n" + "#" * 920
+        },
+        patch=_patch(),
+        selected_surface=None,
+        falsifier_source="def test_hint(): assert True",
+        total_timeout_sec=10.0,
+    )
+
+    assert run.outcome == "preflight_rejected"
+    assert sandbox.probe_calls == 1
+    assert sandbox.host_calls == 0
+
+
+@pytest.mark.parametrize(
+    "unsafe_source",
+    [
+        (
+            "import subprocess\n"
+            "def improve(value):\n"
+            "    subprocess.run(['true'])\n"
+            "    return value\n"
+        ),
+        "import definitely_not_whitelisted\ndef improve(value):\n    return value\n",
+    ],
+)
+def test_unsafe_patch_never_dispatches_falsifier_or_formal_gates(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    unsafe_source: str,
+) -> None:
+    problem_root = tmp_path / "problem"
+    (problem_root / "tests").mkdir(parents=True)
+    (problem_root / "tests/test_public.py").write_text(
+        "def test_public(): pass\n", encoding="utf-8"
+    )
+    sandbox = _RecordingSandbox()
+    evaluator = CodeDevelopmentEvaluator(
+        materializer=WorkspaceMaterializer(
+            str(tmp_path / "campaign"), editable_patterns=("operators/*.py",)
+        ),
+        problem_spec=_spec(problem_root),
+        suites=(
+            DevelopmentSuiteManifest(
+                check_name="D3_unit_tests",
+                source_root=str(problem_root),
+                test_path="tests/test_public.py",
+            ),
+        ),
+        workspace_paths=(),
+        problem_package_paths=(),
+        limits=CodeResearchLimits(),
+        sandbox=sandbox,
+    )
+    from scion.contract.gate import ContractGate
+    from scion.verification.gate import VerificationGate
+
+    def formal_gate_called(*_args, **_kwargs):
+        raise AssertionError("formal gates must not run during development")
+
+    monkeypatch.setattr(ContractGate, "validate_patch", formal_gate_called)
+    monkeypatch.setattr(VerificationGate, "run", formal_gate_called)
+    run = evaluator.evaluate(
+        source_corpus={"operators/main.py": "def improve(value):\n    return value\n"},
+        patch=PatchProposal(
+            file_path="operators/main.py",
+            action="modify",
+            code_content=unsafe_source,
+        ),
+        selected_surface=None,
+        falsifier_source="def test_hint(): assert True",
+        total_timeout_sec=10.0,
+    )
+
+    assert run.outcome == "preflight_rejected"
+    assert sandbox.probe_calls == 0
+    assert sandbox.host_calls == 0
+
+
+def test_reserved_falsifier_suite_path_fails_before_dispatch(tmp_path: Path) -> None:
+    problem_root = tmp_path / "problem"
+    reserved = problem_root / ".scion-development-probe/test_probe.py"
+    reserved.parent.mkdir(parents=True)
+    reserved.write_text("def test_public(): pass\n", encoding="utf-8")
+    sandbox = _RecordingSandbox()
+    evaluator = CodeDevelopmentEvaluator(
+        materializer=WorkspaceMaterializer(
+            str(tmp_path / "campaign"), editable_patterns=("operators/*.py",)
+        ),
+        problem_spec=_spec(problem_root),
+        suites=(
+            DevelopmentSuiteManifest(
+                check_name="D3_unit_tests",
+                source_root=str(problem_root),
+                test_path=".scion-development-probe/test_probe.py",
+            ),
+        ),
+        workspace_paths=(),
+        problem_package_paths=(),
+        limits=CodeResearchLimits(),
+        sandbox=sandbox,
+    )
+
+    run = evaluator.evaluate(
+        source_corpus={"operators/main.py": "def improve(value):\n    return value\n"},
+        patch=_patch(),
+        selected_surface=None,
+        falsifier_source="def test_hint(): assert True",
+        total_timeout_sec=10.0,
+    )
+
+    assert run.outcome == "preflight_rejected"
+    assert sandbox.probe_calls == 0
+    assert sandbox.host_calls == 0
 
 
 def test_manifest_rejects_absolute_traversal_and_symlink(tmp_path: Path) -> None:

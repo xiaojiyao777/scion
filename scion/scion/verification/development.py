@@ -60,6 +60,13 @@ DevelopmentReasonCode = Literal[
     "suite_preflight_rejected",
     "suite_unavailable",
 ]
+DevelopmentProbeOutcome = Literal[
+    "passed",
+    "failed",
+    "inconclusive",
+    "timeout",
+    "unavailable",
+]
 
 _SUITE_NAMES = ("D3_unit_tests", "D4_regression_tests")
 _BWRAP = Path("/usr/bin/bwrap")
@@ -67,6 +74,18 @@ _PRLIMIT = Path("/usr/bin/prlimit")
 _SANDBOX_PYTHON_ROOT = "/opt/scion-python"
 _SANDBOX_FRAMEWORK_ROOT = "/opt/scion-runtime"
 _SANDBOX_WORKSPACE = "/work"
+_DEVELOPMENT_PROBE_DIRECTORY = ".scion-development-probe"
+_DEVELOPMENT_PROBE_PATH = f"{_DEVELOPMENT_PROBE_DIRECTORY}/test_probe.py"
+
+
+def development_probe_path_conflicts(paths: Sequence[str]) -> bool:
+    """Return whether a declared file occupies the reserved scratch subtree."""
+
+    return any(
+        path == _DEVELOPMENT_PROBE_DIRECTORY
+        or path.startswith(f"{_DEVELOPMENT_PROBE_DIRECTORY}/")
+        for path in paths
+    )
 
 
 @dataclass(frozen=True)
@@ -103,6 +122,7 @@ class DevelopmentCheckRun:
 
     outcome: DevelopmentOutcome
     checks: tuple[DevelopmentCheckObservation, ...] = ()
+    falsifier_outcome: DevelopmentProbeOutcome | None = None
 
     @property
     def passed(self) -> bool:
@@ -112,6 +132,11 @@ class DevelopmentCheckRun:
         passed = sum(check.passed for check in self.checks)
         return {
             "outcome": self.outcome,
+            **(
+                {"falsifier_outcome": self.falsifier_outcome}
+                if self.falsifier_outcome is not None
+                else {}
+            ),
             "checks": [
                 {
                     "name": check.name,
@@ -363,6 +388,39 @@ def write_development_source_corpus(
     return len(normalized), total
 
 
+def write_development_probe_source(
+    source: str,
+    destination_root: str | Path,
+    *,
+    max_chars: int,
+    max_bytes: int,
+) -> str:
+    """Write one bounded provider probe at a fixed scratch-only path."""
+
+    encoded = source.encode("utf-8")
+    if len(source) > max_chars or len(encoded) > max_bytes:
+        raise ValueError("development probe source exceeds its source cap")
+
+    workspace = Path(destination_root).resolve()
+    if not workspace.is_dir():
+        raise ValueError("development probe destination is not a directory")
+    probe_directory = workspace / _DEVELOPMENT_PROBE_DIRECTORY
+    if probe_directory.exists() or probe_directory.is_symlink():
+        raise ValueError("development probe reserved path is not empty")
+    probe_directory.mkdir(mode=0o700)
+    destination = workspace / _DEVELOPMENT_PROBE_PATH
+    _require_destination_inside_scratch(workspace, destination)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(destination, flags, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=False) as stream:
+            stream.write(encoded)
+            stream.flush()
+    finally:
+        os.close(descriptor)
+    return _DEVELOPMENT_PROBE_PATH
+
+
 def copy_development_suite_closure(
     suites: Sequence[DevelopmentSuiteManifest],
     candidate_workspace: str,
@@ -467,7 +525,7 @@ def run_development_checks(
         if not passed:
             return DevelopmentCheckRun(outcome="failed", checks=tuple(checks))
 
-    if not _development_safety_preflight(
+    if not development_safety_preflight(
         patch=patch,
         problem_spec=problem_spec,
         candidate_workspace=candidate_workspace,
@@ -535,19 +593,29 @@ class BubblewrapDevelopmentSandbox:
 
     @property
     def available(self) -> bool:
+        return self._available(require_framework=True)
+
+    def _available(self, *, require_framework: bool) -> bool:
         try:
             mode = self._bwrap.stat().st_mode
             self._python_executable.relative_to(self._python_prefix)
         except (OSError, ValueError):
             return False
-        return (
+        common = (
             stat.S_ISREG(mode)
             and os.access(self._bwrap, os.X_OK)
             and _regular_nonsymlink_file(_PRLIMIT)
             and os.access(_PRLIMIT, os.X_OK)
             and self._python_prefix.is_dir()
-            and self._framework_root.is_dir()
             and _regular_nonsymlink_file(self._python_site / "pytest" / "__init__.py")
+        )
+        if not common:
+            return False
+        if require_framework:
+            return self._framework_root.is_dir()
+        return not (
+            (self._python_site / "scion").exists()
+            or (self._python_site / "scion.py").exists()
         )
 
     def run_pytest(
@@ -584,36 +652,26 @@ class BubblewrapDevelopmentSandbox:
                 outcome="preflight_rejected",
                 reason_code="suite_preflight_rejected",
             )
-        argv = self._argv(workspace_path, relative_test, runtime_path)
-        try:
-            proc = self._popen(
-                argv,
-                cwd="/",
-                env={},
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                shell=False,
-                close_fds=True,
-                start_new_session=True,
-                preexec_fn=_resource_limiter(timeout_sec),
-            )
-        except Exception:
+        status, return_code = self._execute(
+            self._argv(
+                workspace_path,
+                relative_test,
+                runtime_path,
+                profile="suite",
+            ),
+            timeout_sec,
+        )
+        if status == "launch_error":
             return DevelopmentSandboxResult(
                 outcome="launch_error",
                 reason_code="suite_launch_error",
             )
-        try:
-            return_code = proc.wait(timeout=timeout_sec)
-        except subprocess.TimeoutExpired:
-            _kill_process_group(proc)
+        if status == "timeout":
             return DevelopmentSandboxResult(
                 outcome="timeout",
                 reason_code="suite_timeout",
             )
-        except BaseException:
-            _kill_process_group(proc)
-            raise
+        assert return_code is not None
         if return_code == 0:
             return DevelopmentSandboxResult(outcome="passed")
         reason_by_exit = {
@@ -628,11 +686,86 @@ class BubblewrapDevelopmentSandbox:
             reason_code=reason_by_exit.get(return_code, "pytest_terminated"),
         )
 
+    def run_probe(
+        self,
+        *,
+        workspace: str,
+        probe_path: str,
+        timeout_sec: float,
+        problem_runtime_root: str,
+    ) -> DevelopmentProbeOutcome:
+        """Run one pytest falsifier with no host framework tree mounted."""
+
+        if not self._available(require_framework=False):
+            return "unavailable"
+        workspace_path = Path(workspace).resolve()
+        if probe_path != _DEVELOPMENT_PROBE_PATH:
+            return "unavailable"
+        host_probe = workspace_path / probe_path
+        try:
+            _require_destination_inside_scratch(workspace_path, host_probe)
+        except ValueError:
+            return "unavailable"
+        if not host_probe.is_file() or host_probe.is_symlink():
+            return "unavailable"
+        runtime_path = Path(problem_runtime_root).resolve()
+        if not runtime_path.is_dir() or not runtime_path.is_relative_to(workspace_path):
+            return "unavailable"
+        status, return_code = self._execute(
+            self._argv(
+                workspace_path,
+                _DEVELOPMENT_PROBE_PATH,
+                runtime_path,
+                profile="probe",
+            ),
+            timeout_sec,
+        )
+        if status == "launch_error":
+            return "unavailable"
+        if status == "timeout":
+            return "timeout"
+        if return_code == 0:
+            return "passed"
+        if return_code == 1:
+            return "failed"
+        return "inconclusive"
+
+    def _execute(
+        self,
+        argv: list[str],
+        timeout_sec: float,
+    ) -> tuple[str, int | None]:
+        try:
+            proc = self._popen(
+                argv,
+                cwd="/",
+                env={},
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                shell=False,
+                close_fds=True,
+                start_new_session=True,
+                preexec_fn=_resource_limiter(timeout_sec),
+            )
+        except Exception:
+            return "launch_error", None
+        try:
+            return "exited", proc.wait(timeout=timeout_sec)
+        except subprocess.TimeoutExpired:
+            _kill_process_group(proc)
+            return "timeout", None
+        except BaseException:
+            _kill_process_group(proc)
+            raise
+
     def _argv(
         self,
         workspace: Path,
         relative_test: str,
         problem_runtime_root: Path,
+        *,
+        profile: Literal["suite", "probe"],
     ) -> list[str]:
         executable_rel = self._python_executable.relative_to(self._python_prefix)
         sandbox_python = str(Path(_SANDBOX_PYTHON_ROOT) / executable_rel)
@@ -656,16 +789,30 @@ class BubblewrapDevelopmentSandbox:
         python_path = ":".join(
             (_SANDBOX_WORKSPACE, _SANDBOX_FRAMEWORK_ROOT, sandbox_site)
         )
-        argv.extend(
-            (
-                "--ro-bind",
-                str(self._python_prefix),
-                _SANDBOX_PYTHON_ROOT,
+        framework_mounts: tuple[str, ...]
+        if profile == "suite":
+            framework_mounts = (
                 "--ro-bind",
                 str(self._framework_root),
                 f"{_SANDBOX_FRAMEWORK_ROOT}/scion",
                 "--tmpfs",
                 f"{_SANDBOX_FRAMEWORK_ROOT}/scion/tests",
+            )
+            pytest_root = _SANDBOX_WORKSPACE
+        else:
+            framework_mounts = (
+                "--dir",
+                _SANDBOX_FRAMEWORK_ROOT,
+                "--dir",
+                f"{_SANDBOX_FRAMEWORK_ROOT}/scion",
+            )
+            pytest_root = f"{_SANDBOX_WORKSPACE}/{_DEVELOPMENT_PROBE_DIRECTORY}"
+        argv.extend(
+            (
+                "--ro-bind",
+                str(self._python_prefix),
+                _SANDBOX_PYTHON_ROOT,
+                *framework_mounts,
                 "--ro-bind",
                 str(problem_runtime_root),
                 f"{_SANDBOX_FRAMEWORK_ROOT}/scion/problems",
@@ -712,15 +859,15 @@ class BubblewrapDevelopmentSandbox:
                 "-p",
                 "no:cacheprovider",
                 "--rootdir",
-                _SANDBOX_WORKSPACE,
+                pytest_root,
                 "--confcutdir",
-                _SANDBOX_WORKSPACE,
+                pytest_root,
             )
         )
         return argv
 
 
-def _development_safety_preflight(
+def development_safety_preflight(
     *,
     patch: PatchProposal,
     problem_spec: Any,
@@ -881,6 +1028,7 @@ __all__ = [
     "DevelopmentCheckName",
     "DevelopmentCheckObservation",
     "DevelopmentCheckRun",
+    "DevelopmentProbeOutcome",
     "DevelopmentReasonCode",
     "DevelopmentSandboxResult",
     "DevelopmentOutcome",
@@ -890,7 +1038,10 @@ __all__ = [
     "declared_development_problem_package_paths",
     "declared_development_workspace_paths",
     "declared_development_suites",
+    "development_probe_path_conflicts",
+    "development_safety_preflight",
     "run_development_checks",
     "validate_development_closure_boundary",
     "write_development_source_corpus",
+    "write_development_probe_source",
 ]

@@ -233,12 +233,14 @@ class ProposalPipeline:
                         patch: PatchProposal,
                         remaining_timeout_sec: float,
                         source_corpus: Mapping[str, str],
+                        falsifier_source: str | None,
                     ) -> dict[str, Any]:
                         run = self.code_development_evaluator.evaluate(
                             source_corpus=source_corpus,
                             patch=patch,
                             selected_surface=selected_surface,
                             total_timeout_sec=remaining_timeout_sec,
+                            falsifier_source=falsifier_source,
                         )
                         return run.provider_projection()
 

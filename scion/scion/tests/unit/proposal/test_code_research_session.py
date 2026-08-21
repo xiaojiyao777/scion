@@ -161,7 +161,9 @@ def _run(
     return session, client
 
 
-def _passing_development_test(_patch, _remaining, _corpus):
+def _passing_development_test(
+    _patch, _remaining, _corpus, _falsifier_source=None
+):
     return {
         "outcome": "passed",
         "checks": [{"name": "D3_unit_tests", "outcome": "passed"}],
@@ -208,6 +210,141 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
     assert "def helper(value)" in client.calls[1]["system_text"]
     assert "frozen_ready_patch" in client.calls[-1]["system_text"]
     assert session.provider_calls_used == 6
+
+
+def test_test_patch_falsifier_is_non_evidentiary_and_not_replayed() -> None:
+    sentinel = "PROVIDER_PROBE_SOURCE_SENTINEL"
+    observed: list[tuple[PatchProposal, str | None, dict[str, str]]] = []
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {
+                "action": "test_patch",
+                "falsifier_source": f"def test_hint():\n    assert {sentinel!r}\n",
+            },
+            {"action": "ready"},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=3),
+    )
+
+    def test_patch(patch, _remaining, corpus, source):
+        observed.append((patch, source, dict(corpus)))
+        return {
+            **_passing_development_test(None, 1.0, {}),
+            "falsifier_outcome": "failed",
+        }
+
+    session._test_patch = test_patch
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, PatchProposal)
+    assert observed[0][0].code_content.endswith("return value + 1\n")
+    assert observed[0][1] is not None and sentinel in observed[0][1]
+    assert observed[0][2][_TARGET_PATH] == _TARGET_SOURCE
+    assert '"falsifier_outcome":"failed"' in client.calls[2]["system_text"]
+    assert sentinel not in client.calls[2]["system_text"]
+    assert "falsifier_source" not in client.calls[2]["system_text"]
+
+
+def test_test_patch_falsifier_shares_the_host_test_call_cap() -> None:
+    test_calls: list[int] = []
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {
+                "action": "test_patch",
+                "falsifier_source": "def test_one(): assert True",
+            },
+            {"action": "test_patch"},
+            {"outcome": "abandon", "reason": "test cap reached"},
+        ],
+        limits=CodeResearchLimits(max_turns=3, max_test_calls=1),
+    )
+    session._test_patch = lambda *_args: (
+        test_calls.append(1) or _passing_development_test(None, 1.0, {})
+    )
+
+    session.run(_snapshot())
+
+    assert test_calls == [1]
+    assert "test_call_cap_exhausted" in client.calls[3]["system_text"]
+
+
+def test_malformed_falsifier_is_enum_feedback_without_source_replay() -> None:
+    calls: list[int] = []
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch", "falsifier_source": "BAD\x00PROBE"},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+    )
+    session._test_patch = lambda *_args: (
+        calls.append(1) or _passing_development_test(None, 1.0, {})
+    )
+
+    session.run(_snapshot())
+
+    assert calls == [1]
+    assert "falsifier_source_invalid" in client.calls[2]["system_text"]
+    assert "BAD" not in client.calls[2]["system_text"]
+
+
+def test_falsifier_projection_drops_paths_and_free_text() -> None:
+    secret = "/private/case/seed-7"
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {
+                "action": "test_patch",
+                "falsifier_source": "def test_hint(): assert True",
+            },
+            {"action": "revise", "patch": _patch()},
+            {"outcome": "abandon", "reason": "invalid projection"},
+        ],
+        limits=CodeResearchLimits(max_turns=3),
+    )
+    session._test_patch = lambda *_args: {
+        **_passing_development_test(None, 1.0, {}),
+        "falsifier_outcome": "failed",
+        "path": secret,
+        "stdout": secret,
+    }
+
+    session.run(_snapshot())
+
+    assert secret not in client.calls[2]["system_text"]
+
+
+def test_passing_falsifier_cannot_unlock_failed_host_checks() -> None:
+    session, _client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {
+                "action": "test_patch",
+                "falsifier_source": "def test_hint(): assert True",
+            },
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=2),
+    )
+    session._test_patch = lambda *_args: {
+        "outcome": "failed",
+        "falsifier_outcome": "passed",
+        "checks": [{"name": "D3_unit_tests", "outcome": "failed"}],
+        "counts": {"total": 1, "passed": 0, "failed": 1},
+    }
+
+    with pytest.raises(
+        ProposalValidationError,
+        match="latest draft to pass development checks",
+    ):
+        session.run(_snapshot())
 
 
 def test_passing_latest_draft_can_finalize_without_redundant_ready_turn() -> None:
@@ -304,7 +441,7 @@ def test_public_development_test_is_visible_but_never_patchable() -> None:
 def test_development_evaluator_receives_only_editable_source_corpus() -> None:
     observed_corpora: list[dict[str, str]] = []
 
-    def test_patch(_patch_value, _remaining, corpus):
+    def test_patch(_patch_value, _remaining, corpus, _falsifier_source):
         observed_corpora.append(dict(corpus))
         return _passing_development_test(None, 1.0, {})
 
@@ -733,7 +870,7 @@ def test_enabled_limits_reach_the_normal_proposal_pipeline() -> None:
 def test_failed_test_cannot_ready_until_revised_draft_passes() -> None:
     outcomes = iter(("failed", "passed"))
 
-    def test_patch(_patch_value, _remaining, _corpus):
+    def test_patch(_patch_value, _remaining, _corpus, _falsifier_source):
         outcome = next(outcomes)
         return {
             "outcome": outcome,
@@ -763,7 +900,7 @@ def test_failed_test_cannot_ready_until_revised_draft_passes() -> None:
 def test_development_projection_drops_host_only_fields() -> None:
     secret = "/host/private/sentinel-token"
 
-    def test_patch(_patch_value, _remaining, _corpus):
+    def test_patch(_patch_value, _remaining, _corpus, _falsifier_source):
         return {
             "outcome": "failed",
             "checks": [{"name": "D3_unit_tests", "outcome": "failed"}],
@@ -806,7 +943,7 @@ def test_development_projection_drops_host_only_fields() -> None:
 def test_development_projection_rejects_unapproved_diagnostic_values(
     unsafe_check: dict[str, str],
 ) -> None:
-    def test_patch(_patch_value, _remaining, _corpus):
+    def test_patch(_patch_value, _remaining, _corpus, _falsifier_source):
         return {
             "outcome": "failed",
             "checks": [unsafe_check],
@@ -829,7 +966,7 @@ def test_development_projection_rejects_unapproved_diagnostic_values(
 def test_global_provider_cap_blocks_test_before_evaluator_dispatch() -> None:
     calls: list[int] = []
 
-    def test_patch(_patch_value, _remaining, _corpus):
+    def test_patch(_patch_value, _remaining, _corpus, _falsifier_source):
         calls.append(1)
         return _passing_development_test(None, 1.0, {})
 
@@ -853,7 +990,7 @@ def test_global_provider_cap_blocks_test_before_evaluator_dispatch() -> None:
 def test_test_call_cap_blocks_second_evaluator_dispatch() -> None:
     calls: list[int] = []
 
-    def test_patch(_patch_value, _remaining, _corpus):
+    def test_patch(_patch_value, _remaining, _corpus, _falsifier_source):
         calls.append(1)
         return _passing_development_test(None, 1.0, {})
 

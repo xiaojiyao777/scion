@@ -156,15 +156,20 @@ class WorkspaceMaterializer:
         Raises:
             FrozenFileError: If the patch targets a frozen file.
         """
+        self.apply_ephemeral_patch(workspace, patch)
+        ws = Path(workspace).resolve()
+        return self.compute_code_hash(str(ws))
+
+    def apply_ephemeral_patch(self, workspace: str, patch: PatchProposal) -> None:
+        """Apply a patch to disposable scratch without a post-apply digest."""
+
         ws = Path(workspace).resolve()
         if not ws.is_dir():
             raise FileNotFoundError(f"workspace does not exist: {workspace}")
         changes = patch_file_changes(patch)
         self._preflight_file_changes(ws, changes)
-
         for change in changes:
             self._apply_file_change(ws, change)
-        return self.compute_code_hash(str(ws))
 
     def _preflight_file_changes(
         self,

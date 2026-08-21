@@ -1,4 +1,4 @@
-"""Bounded source-only research before one direct code proposal is finalized."""
+"""Bounded source research before one direct code proposal is finalized."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from scion.core.code_research_limits import CodeResearchLimits
+from scion.core.code_research_limits import (
+    MAX_CODE_RESEARCH_PROBE_SOURCE_CHARS,
+    CodeResearchLimits,
+)
 from scion.core.models import PatchProposal
 from scion.core.paths import normalize_relative_patch_path
 from scion.proposal.bounded_research import (
@@ -52,6 +55,7 @@ class CodeResearchCommand:
     path: str | None = None
     query: str | None = None
     patch: Mapping[str, Any] | None = None
+    falsifier_source: Any = None
 
 
 @dataclass(frozen=True)
@@ -86,8 +90,11 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
             "Take exactly one bounded source-research action. read_source reveals "
             "one exact source from the listed source corpus; search_source performs "
             "case-sensitive literal search only; revise stages a typed draft; "
-            "test_patch runs host-selected public development checks on that frozen "
-            "draft; ready (with no patch field) freezes only the latest draft whose "
+            "test_patch optionally runs one self-authored non-evidentiary pytest "
+            "hint, then runs host-selected public development checks on that draft; "
+            "the hint outcome never directly determines readiness; all work shares "
+            "the existing test budget. ready (with no patch field) freezes only "
+            "the latest draft whose "
             "latest test_patch outcome passed; "
             "patch that a later independent final decision may confirm."
         ),
@@ -108,6 +115,11 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
                     "required": ["action"],
                     "properties": {
                         "action": {"type": "string", "enum": ["test_patch"]},
+                        "falsifier_source": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": MAX_CODE_RESEARCH_PROBE_SOURCE_CHARS,
+                        },
                     },
                 },
                 {
@@ -197,7 +209,8 @@ class CodeResearchSession:
         limits: CodeResearchLimits,
         *,
         test_patch: Callable[
-            [PatchProposal, float, Mapping[str, str]], Mapping[str, Any]
+            [PatchProposal, float, Mapping[str, str], str | None],
+            Mapping[str, Any],
         ]
         | None = None,
     ) -> None:
@@ -269,10 +282,13 @@ class CodeResearchSession:
                     "Choose exactly one bounded research action. Use read_source "
                     "for exact current source, search_source for case-sensitive "
                     "literal discovery, revise to stage a complete typed draft, "
-                    "test_patch to run the host-selected public checks on that "
-                    "draft, or ready to freeze the latest candidate. Do not assume "
-                    "filesystem or command access. ready has no patch field and is "
-                    "valid only after the latest draft passes test_patch."
+                    "test_patch to optionally run one self-authored, "
+                    "non-evidentiary pytest hint and then the host-selected checks "
+                    "on that draft. The hint outcome never directly determines "
+                    "readiness; all work shares the existing test budget. Use ready "
+                    "to freeze the latest candidate. Do not assume filesystem or "
+                    "command access. ready has no patch field and is valid only "
+                    "after the latest draft passes test_patch."
                 ),
             )
             raw = self._call_provider(
@@ -323,6 +339,7 @@ class CodeResearchSession:
                     draft_patch,
                     draft_revision=draft_revision,
                     corpus=editable_corpus,
+                    falsifier_source=command.falsifier_source,
                 )
                 last_tested_revision = draft_revision
                 last_test_outcome = (
@@ -465,9 +482,25 @@ class CodeResearchSession:
         *,
         draft_revision: int,
         corpus: Mapping[str, str],
+        falsifier_source: Any,
     ) -> dict[str, Any]:
         if patch is None:
             return _tool_error("test_patch", "draft_required")
+        if falsifier_source is not None:
+            if (
+                not isinstance(falsifier_source, str)
+                or not falsifier_source.strip()
+                or "\x00" in falsifier_source
+            ):
+                return _tool_error("test_patch", "falsifier_source_invalid")
+            if len(falsifier_source) > MAX_CODE_RESEARCH_PROBE_SOURCE_CHARS:
+                return _tool_error(
+                    "test_patch", "falsifier_source_char_cap_exhausted"
+                )
+            try:
+                falsifier_source.encode("utf-8")
+            except UnicodeError:
+                return _tool_error("test_patch", "falsifier_source_invalid")
         if self._test_calls >= self._limits.max_test_calls:
             return _tool_error("test_patch", "test_call_cap_exhausted")
         remaining_timeout = (
@@ -489,6 +522,7 @@ class CodeResearchSession:
                     deepcopy(patch),
                     remaining_timeout,
                     deepcopy(dict(corpus)),
+                    falsifier_source,
                 )
             finally:
                 elapsed = max(0.0, time.monotonic() - started)
@@ -660,8 +694,18 @@ def _parse_research_command(
             raise ProposalValidationError(f"{action} patch must be an object")
         return CodeResearchCommand(action=action, patch=dict(patch))
     if action == "test_patch":
-        _require_exact_keys(raw, {"action"}, label="test_patch")
-        return CodeResearchCommand(action="test_patch")
+        if set(raw) not in (
+            {"action"},
+            {"action", "falsifier_source"},
+        ):
+            raise ProposalValidationError(
+                "test_patch response has unknown or missing fields"
+            )
+        source = raw.get("falsifier_source")
+        return CodeResearchCommand(
+            action="test_patch",
+            falsifier_source=source,
+        )
     if action == "ready":
         _require_exact_keys(raw, {"action"}, label="ready")
         return CodeResearchCommand(action="ready")
@@ -856,8 +900,17 @@ def _bounded_test_projection(
         "suite_unavailable",
     }
     outcome = value.get("outcome")
+    falsifier_outcome = value.get("falsifier_outcome")
     raw_checks = value.get("checks")
     if outcome not in outcomes or not isinstance(raw_checks, list):
+        raise ProposalValidationError("development test result has invalid fields")
+    if "falsifier_outcome" in value and falsifier_outcome not in {
+        "passed",
+        "failed",
+        "inconclusive",
+        "timeout",
+        "unavailable",
+    }:
         raise ProposalValidationError("development test result has invalid fields")
     if len(raw_checks) > len(check_names):
         raise ProposalValidationError("development test result has too many checks")
@@ -906,6 +959,11 @@ def _bounded_test_projection(
         "ok": True,
         "draft_revision": draft_revision,
         "outcome": outcome,
+        **(
+            {"falsifier_outcome": falsifier_outcome}
+            if "falsifier_outcome" in value
+            else {}
+        ),
         "checks": checks,
         "counts": {
             "total": len(checks),
