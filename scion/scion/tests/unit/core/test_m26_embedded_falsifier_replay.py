@@ -25,6 +25,7 @@ from scion.proposal.context_snapshot import freeze_proposal_context
 from scion.proposal.engine import CreativeLayer, build_prompt_turn_snapshot
 from scion.proposal.hypothesis_research_corpus import (
     build_hypothesis_research_corpus,
+    nearest_history_headline_ref,
 )
 
 _SCION_ROOT = Path(__file__).resolve().parents[4]
@@ -214,6 +215,55 @@ def test_m26_real_context_has_five_observations_then_thirty_five_history() -> No
             observation=terminal
         )
     )
+
+
+def test_m26_h1_h2_headlines_replay_to_later_terminal_and_exact_prior() -> None:
+    fixture = _fixture()
+    research_input = _load_research_input(_M26_INPUT)
+    history = load_research_histories(
+        _M26_HISTORY_PATHS,
+        expected_problem_id="cvrp",
+    )
+    spec = load_problem_spec_v1_from_yaml(_CVRP_ROOT / "problem-v1.yaml")
+    context = ContextManager(
+        adapter=CvrpAdapter(spec),
+        research_input=research_input,
+        research_history=history,
+    ).build_hypothesis_context(
+        branch=Branch(
+            branch_id="m26-nearest-history-replay",
+            state=BranchState.EXPLORE,
+            base_champion_id=1,
+        ),
+        champion=ChampionState(
+            version=1,
+            operator_pool={},
+            code_snapshot_path=str(_CVRP_ROOT),
+        ),
+        problem_spec=legacy_problem_spec_from_v1(spec),
+    )
+    provider_context = freeze_proposal_context("hypothesis", context).provider_context()
+    candidates = fixture["nearest_history_candidates"]
+    expected_refs = fixture["expected"]["nearest_history_refs"]
+
+    _, h1_histories, _ = build_hypothesis_research_corpus(provider_context)
+    h1_ref = nearest_history_headline_ref(
+        candidates[0], tuple(entry["index"] for entry in h1_histories)
+    )
+    assert (
+        h1_histories[30]["index"]["hypothesis"]
+        == (h1_histories[31]["index"]["hypothesis"])
+    )
+    assert h1_ref == expected_refs[0] == "history-0032"
+
+    h2_context = deepcopy(provider_context)
+    h2_context["experiment_history"] = [{"proposal_intent": candidates[0]}]
+    _, h2_histories, _ = build_hypothesis_research_corpus(h2_context)
+    h2_ref = nearest_history_headline_ref(
+        candidates[1], tuple(entry["index"] for entry in h2_histories)
+    )
+    assert len(h2_histories) == 41
+    assert h2_ref == expected_refs[1] == "history-0034"
 
 
 def test_m26_falsifier_is_a_non_evidentiary_enum_and_source_is_not_replayed() -> None:

@@ -31,7 +31,9 @@ from scion.proposal.hypothesis_research_basis import (
 )
 from scion.proposal.hypothesis_research_corpus import (
     build_hypothesis_research_corpus,
+    has_usable_history_headline,
     iter_string_leaves,
+    nearest_history_headline_ref,
 )
 
 _MAX_REF_CHARS = MAX_HYPOTHESIS_RESEARCH_REF_CHARS
@@ -71,6 +73,7 @@ def bind_hypothesis_research_turn_tool(
     source_refs: Collection[str] | None = None,
     history_refs: Collection[str] | None = None,
     history_read_reserved: bool = False,
+    history_headline_audit_available: bool = False,
 ) -> dict[str, Any]:
     """Reuse the already surface-bound H schema inside the research tool."""
 
@@ -117,7 +120,7 @@ def bind_hypothesis_research_turn_tool(
     if (
         (visible_refs is None or bool(visible_refs))
         and source_read_satisfied
-        and history_read_satisfied
+        and (history_read_satisfied or history_headline_audit_available)
     ):
         actions.append(
             _action_schema(
@@ -127,7 +130,9 @@ def bind_hypothesis_research_turn_tool(
                     "research_basis": hypothesis_research_basis_schema(
                         visible_refs=visible_refs,
                         visible_history_refs=visible_history_refs,
-                        require_nearest_prior=history_read_required,
+                        require_nearest_prior=(
+                            history_read_required and bool(visible_history_refs)
+                        ),
                     ),
                 },
             )
@@ -144,6 +149,20 @@ def bind_hypothesis_research_turn_tool(
             },
         )
     )
+    history_guidance = (
+        " When history_index has usable headline fields and finalize_hypothesis "
+        "is exposed before any history is visible, that finalize may use "
+        "nearest_prior_refs=[]. If finalize_hypothesis is not exposed, complete "
+        "an allowed read first. The host first "
+        "validates that basis, then may return only one required_history_ref; "
+        "read and cite that exact ref before re-finalizing. Every finalize "
+        "recomputes the ref, so a pivot may require a different history."
+        if history_headline_audit_available
+        else (
+            " When history_index is nonempty, finalize is unavailable until one "
+            "successful read_history."
+        )
+    )
     return {
         "name": "hypothesis_research_turn",
         "description": (
@@ -151,13 +170,14 @@ def bind_hypothesis_research_turn_tool(
             "hypothesis through the unchanged hypothesis schema, or abstain. Indexes are "
             "complete ordinary inventories; read/search reveals bodies on demand. "
             "When source_index contains an available entry, finalize is unavailable "
-            "until one successful read_source. When history_index is nonempty, "
-            "finalize is unavailable until one successful read_history. "
+            "until one successful read_source." + history_guidance + " "
             "In research_basis, read_refs may cite only refs actually read in this "
             "session. nearest_prior_refs may cite only refs actually revealed by "
-            "read_history and must also appear in read_refs; use [] only when the "
-            "history inventory is empty. A rejected finalize consumes one turn and "
-            "returns only a fixed correction category." + reserve_notice
+            "read_history and must also appear in read_refs; before the first "
+            "history read, use [] only when the headline-audit guidance permits it "
+            "or the history inventory is empty. A rejected finalize consumes one "
+            "turn and returns a fixed correction category plus, only for this "
+            "audit, one existing required_history_ref." + reserve_notice
         ),
         "input_schema": {"oneOf": actions},
     }
@@ -200,6 +220,8 @@ class HypothesisResearchSession:
                 f"hypothesis research context is invalid: {type(exc).__name__}:{exc}"
             ) from exc
         readable_sources = [entry for entry in sources if entry.get("body") is not None]
+        history_indexes = tuple(entry["index"] for entry in histories)
+        history_headline_audit_available = has_usable_history_headline(history_indexes)
         required_read_kinds = int(bool(readable_sources)) + int(bool(histories))
         if self._limits.max_read_calls < required_read_kinds:
             raise HypothesisResearchContextError(
@@ -209,10 +231,14 @@ class HypothesisResearchSession:
         visible_histories: set[str] = set()
 
         for turn in range(self._limits.max_turns):
+            pending_required_history_ref = _pending_required_history_ref(
+                self._budget.results,
+                visible_histories=visible_histories,
+            )
             history_read_reserved = (
                 bool(histories)
-                and not visible_histories
                 and self._limits.max_read_calls - self._budget.read_calls == 1
+                and (not visible_histories or pending_required_history_ref is not None)
             )
             context = self._context(
                 compact,
@@ -222,6 +248,7 @@ class HypothesisResearchSession:
                 visible_histories,
                 turn,
                 history_read_reserved=history_read_reserved,
+                history_headline_audit_available=history_headline_audit_available,
             )
             snapshot = _research_snapshot(
                 context,
@@ -233,6 +260,7 @@ class HypothesisResearchSession:
                     source_refs=tuple(entry["ref"] for entry in readable_sources),
                     history_refs=tuple(entry["ref"] for entry in histories),
                     history_read_reserved=history_read_reserved,
+                    history_headline_audit_available=history_headline_audit_available,
                 ),
                 allowed_loci=full_snapshot.allowed_change_loci,
             )
@@ -254,20 +282,6 @@ class HypothesisResearchSession:
                 continue
             if action == "finalize_hypothesis":
                 try:
-                    basis = parse_hypothesis_research_basis(
-                        payload["research_basis"],
-                        visible_refs=visible_sources | visible_histories,
-                        visible_source_refs=visible_sources,
-                        visible_history_refs=visible_histories,
-                        require_source_read=bool(readable_sources),
-                        require_nearest_prior=bool(histories),
-                    )
-                except ProposalValidationError as exc:
-                    self._budget.record_result(
-                        _finalize_tool_error(_basis_validation_reason(exc))
-                    )
-                    continue
-                try:
                     hypothesis = _parse_hypothesis(
                         payload["hypothesis"],
                         allowed_change_loci=full_snapshot.allowed_change_loci,
@@ -275,6 +289,53 @@ class HypothesisResearchSession:
                 except ProposalValidationError:
                     self._budget.record_result(
                         _finalize_tool_error("hypothesis_invalid")
+                    )
+                    continue
+                try:
+                    basis = parse_hypothesis_research_basis(
+                        payload["research_basis"],
+                        visible_refs=visible_sources | visible_histories,
+                        visible_source_refs=visible_sources,
+                        visible_history_refs=visible_histories,
+                        require_source_read=bool(readable_sources),
+                        require_nearest_prior=bool(visible_histories),
+                    )
+                except ProposalValidationError as exc:
+                    self._budget.record_result(
+                        _finalize_tool_error(_basis_validation_reason(exc))
+                    )
+                    continue
+                required_history_ref = nearest_history_headline_ref(
+                    {
+                        "hypothesis_text": hypothesis.hypothesis_text,
+                        "target_file": hypothesis.target_file,
+                        "change_locus": hypothesis.change_locus,
+                        "action": hypothesis.action,
+                        "predicted_direction": hypothesis.predicted_direction,
+                        "target_weakness": hypothesis.target_weakness,
+                        "expected_effect": hypothesis.expected_effect,
+                    },
+                    history_indexes,
+                )
+                if (
+                    required_history_ref is not None
+                    and required_history_ref not in visible_histories
+                ):
+                    self._budget.record_result(
+                        _nearest_history_audit_tool_error(required_history_ref)
+                    )
+                    continue
+                if histories and not visible_histories:
+                    self._budget.record_result(
+                        _finalize_tool_error("nearest_prior_refs_not_read_and_cited")
+                    )
+                    continue
+                if required_history_ref is not None and (
+                    required_history_ref not in basis.read_refs
+                    or required_history_ref not in basis.nearest_prior_refs
+                ):
+                    self._budget.record_result(
+                        _nearest_history_audit_tool_error(required_history_ref)
                     )
                     continue
                 return HypothesisResearchFinalized(
@@ -319,10 +380,12 @@ class HypothesisResearchSession:
         turn: int,
         *,
         history_read_reserved: bool,
+        history_headline_audit_available: bool,
     ) -> dict[str, Any]:
         state = {
             **self._budget.remaining_state(turn=turn),
             "history_read_reserved": history_read_reserved,
+            "history_headline_audit_available": history_headline_audit_available,
             "source_index": [entry["index"] for entry in sources],
             "history_index": [entry["index"] for entry in histories],
             "visible_sources": [
@@ -466,6 +529,24 @@ def _action_schema(
 def _research_snapshot(
     context: dict[str, Any], *, tool: dict[str, Any], allowed_loci: tuple[str, ...]
 ) -> PromptTurnSnapshot:
+    audit_available = bool(
+        context["hypothesis_research"].get("history_headline_audit_available")
+    )
+    history_guidance = (
+        "When history_index has usable headline fields, no history is yet visible, "
+        "and finalize_hypothesis is exposed, submit the candidate with "
+        "nearest_prior_refs=[]. If it is not exposed, complete an allowed read "
+        "first. After "
+        "the host returns required_history_ref, read it and include it in both "
+        "read_refs and nearest_prior_refs before re-finalizing. The host "
+        "recomputes this ref from the current candidate on every finalize, so a "
+        "pivot may require a different ref. "
+        if audit_available
+        else (
+            "When history_index is nonempty, read at least one history and cite "
+            "at least one nearest prior before finalizing. "
+        )
+    )
     base = {
         key: value for key, value in context.items() if key != "hypothesis_research"
     }
@@ -488,9 +569,10 @@ def _research_snapshot(
             "when source_index contains an available entry, read at least one source "
             "before finalizing; "
             "nearest_prior_refs must be histories actually revealed by read_history "
-            "and also listed in read_refs. When history_index is nonempty, read at "
-            "least one history and cite at least one nearest prior before finalizing; "
-            "otherwise nearest_prior_refs must be []. Observe remaining_read_calls "
+            "and also listed in read_refs. "
+            + history_guidance
+            + "When history_index is empty, nearest_prior_refs must be []. "
+            "Observe remaining_read_calls "
             "and history_read_reserved: when "
             "the latter is true, the final shared read call is available only to "
             "read_history."
@@ -570,6 +652,36 @@ def _finalize_tool_error(reason: str) -> dict[str, Any]:
     if reason not in _FINALIZE_REJECTION_REASONS:
         raise AssertionError("unknown hypothesis finalize rejection category")
     return tool_error("finalize_hypothesis", reason)
+
+
+def _nearest_history_audit_tool_error(required_ref: str) -> dict[str, Any]:
+    """Route one headline-ranked ref without replaying candidate or match text."""
+
+    return {
+        "action": "finalize_hypothesis",
+        "ok": False,
+        "reason": "nearest_history_audit_required",
+        "required_history_ref": required_ref,
+    }
+
+
+def _pending_required_history_ref(
+    results: Sequence[Mapping[str, Any]],
+    *,
+    visible_histories: set[str],
+) -> str | None:
+    """Return the latest unread host-routed audit ref, if one exists."""
+
+    for result in reversed(results):
+        if (
+            result.get("action") == "finalize_hypothesis"
+            and result.get("reason") == "nearest_history_audit_required"
+        ):
+            ref = result.get("required_history_ref")
+            return (
+                ref if isinstance(ref, str) and ref not in visible_histories else None
+            )
+    return None
 
 
 __all__ = [

@@ -29,6 +29,10 @@ from scion.proposal.engine import (
     ProposalValidationError,
     build_prompt_turn_snapshot,
 )
+from scion.proposal.hypothesis_research_corpus import (
+    has_usable_history_headline,
+    nearest_history_headline_ref,
+)
 from scion.proposal.hypothesis_research_session import (
     HypothesisResearchAbstain,
     HypothesisResearchContextError,
@@ -77,6 +81,12 @@ def _hypothesis() -> dict[str, Any]:
         "target_weakness": "The current generic operation misses an opportunity.",
         "expected_effect": "Improve the declared solver objective.",
     }
+
+
+def _history_one_hypothesis() -> dict[str, Any]:
+    hypothesis = _hypothesis()
+    hypothesis["hypothesis_text"] = "Earlier exact generic delta."
+    return hypothesis
 
 
 def _source_section(path: str, content: str) -> str:
@@ -244,7 +254,7 @@ def test_compact_indexes_are_complete_and_bodies_are_read_on_demand() -> None:
             {"action": "search_history", "query": "SCREENING_FAIL"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "source-0001",
                     "history-0001",
@@ -607,7 +617,7 @@ def test_unavailable_source_entries_do_not_create_a_mandatory_read_gate() -> Non
             {"action": "read_history", "ref": "history-0001"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "history-0001", nearest_prior_refs=("history-0001",)
                 ),
@@ -621,6 +631,14 @@ def test_unavailable_source_entries_do_not_create_a_mandatory_read_gate() -> Non
     assert isinstance(result, HypothesisResearchFinalized)
     assert '"available":false' in client.calls[0]["system_text"]
     assert "contains an available entry" in client.calls[0]["prompt"]
+    assert (
+        "If it is not exposed, complete an allowed read first."
+        in client.calls[0]["prompt"]
+    )
+    assert (
+        "If finalize_hypothesis is not exposed, complete an allowed read first."
+        in client.calls[0]["tool"]["description"]
+    )
     assert "finalize_hypothesis" not in {
         branch["properties"]["action"]["enum"][0]
         for branch in client.calls[0]["tool"]["input_schema"]["oneOf"]
@@ -648,6 +666,155 @@ def test_history_index_contains_every_record_without_recent_top_k() -> None:
     assert '"ref":"history-0053"' in first
     assert "ordinary prior 000" in first
     assert "ordinary prior 049" in first
+
+
+def test_nearest_history_headline_rank_is_normalized_and_ties_later() -> None:
+    candidate = {
+        "hypothesis_text": "Use ＣAFÉ routing Δ mechanism.",
+        "target_file": "operators/main.py",
+        "change_locus": "generic",
+        "action": "modify",
+        "predicted_direction": "improve",
+    }
+    indexes = [
+        {
+            "ref": "history-0001",
+            "hypothesis": {
+                "text": "Unrelated queue policy.",
+                "target_file": "operators/main.py",
+                "change_locus": "generic",
+                "action": "modify",
+                "predicted_direction": "improve",
+            },
+        },
+        {
+            "ref": "history-0002",
+            "hypothesis": {
+                "text": "Use café routing δ mechanism.",
+                "target_file": "operators/main.py",
+                "change_locus": "generic",
+                "action": "modify",
+                "predicted_direction": "improve",
+            },
+        },
+        {
+            "ref": "history-0003",
+            "hypothesis": {
+                "hypothesis_text": "Use CAFÉ routing Δ mechanism.",
+                "target_file": "operators/main.py",
+                "change_locus": "generic",
+                "action": "modify",
+                "predicted_direction": "improve",
+            },
+        },
+    ]
+
+    assert has_usable_history_headline(indexes)
+    assert nearest_history_headline_ref(candidate, indexes) == "history-0003"
+
+
+def test_nearest_history_headline_uses_only_index_headline_fields() -> None:
+    class _TripwireHeadline(Mapping[str, Any]):
+        def __init__(self) -> None:
+            self._values = {
+                "text": "Generic bounded mechanism.",
+                "target_file": "operators/main.py",
+                "change_locus": "generic",
+                "action": "modify",
+                "predicted_direction": "improve",
+            }
+
+        def __getitem__(self, key: str) -> Any:
+            if key in {"body", "patch", "metrics", "outcomes", "record"}:
+                raise AssertionError(f"ranker read forbidden history field: {key}")
+            return self._values[key]
+
+        def __iter__(self) -> Iterator[str]:
+            raise AssertionError("ranker iterated the headline mapping")
+
+        def __len__(self) -> int:
+            return len(self._values)
+
+    class _TripwireIndex(Mapping[str, Any]):
+        def __getitem__(self, key: str) -> Any:
+            if key == "ref":
+                return "history-0001"
+            if key == "hypothesis":
+                return _TripwireHeadline()
+            raise AssertionError(f"ranker read forbidden index field: {key}")
+
+        def __iter__(self) -> Iterator[str]:
+            raise AssertionError("ranker iterated the history index")
+
+        def __len__(self) -> int:
+            return 2
+
+    candidate = {
+        "hypothesis_text": "Generic bounded mechanism.",
+        "target_file": "operators/main.py",
+        "change_locus": "generic",
+        "action": "modify",
+        "predicted_direction": "improve",
+    }
+
+    assert nearest_history_headline_ref(candidate, [_TripwireIndex()]) == (
+        "history-0001"
+    )
+    assert (
+        nearest_history_headline_ref(
+            {},
+            [
+                {"ref": "history-0001", "sections": ["outcome"]},
+                {"ref": "history-0002", "hypothesis": {}},
+                {"ref": "history-0003", "hypothesis": {"target_file": "   "}},
+            ],
+        )
+        is None
+    )
+
+
+def test_nearest_history_structured_only_rank_preserves_field_priority() -> None:
+    candidate = {
+        "target_file": "operators/main.py",
+        "change_locus": "generic",
+        "action": "modify",
+        "predicted_direction": "improve",
+    }
+    indexes = [
+        {
+            "ref": "history-0001",
+            "hypothesis": {
+                "target_file": "operators/other.py",
+                "change_locus": "generic",
+                "action": "modify",
+                "predicted_direction": "improve",
+            },
+        },
+        {
+            "ref": "history-0002",
+            "hypothesis": {
+                "target_file": "operators/main.py",
+                "change_locus": "different",
+                "action": "remove",
+                "predicted_direction": "tradeoff",
+            },
+        },
+    ]
+
+    assert has_usable_history_headline(indexes)
+    assert nearest_history_headline_ref(candidate, indexes) == "history-0002"
+
+
+def test_nearest_history_rank_skips_malformed_indexes_and_refs() -> None:
+    malformed: list[Any] = [
+        "not-an-index",
+        {"ref": "", "hypothesis": {"text": "Usable words."}},
+        {"ref": " history-0001", "hypothesis": {"text": "Usable words."}},
+        {"ref": "history-0002", "hypothesis": {"target_file": "   "}},
+    ]
+
+    assert not has_usable_history_headline(malformed)
+    assert nearest_history_headline_ref({}, malformed) is None
 
 
 def test_proposal_code_rejection_is_safe_and_visible_to_next_h() -> None:
@@ -700,13 +867,18 @@ def test_proposal_code_rejection_is_safe_and_visible_to_next_h() -> None:
             },
         }
     ]
+    followup_hypothesis = _hypothesis()
+    followup_hypothesis.update(
+        hypothesis_text="Try one bounded implementation.",
+        target_weakness="The current mechanism is incomplete.",
+    )
     session, client = _run(
         [
             {"action": "read_source", "ref": "source-0001"},
             {"action": "read_history", "ref": "history-0002"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": followup_hypothesis,
                 "research_basis": _basis(
                     "source-0001",
                     "history-0002",
@@ -754,6 +926,51 @@ def test_finalize_basis_rejection_can_be_corrected_within_remaining_turns() -> N
     ) in client.calls[2]["system_text"]
 
 
+@pytest.mark.parametrize("basis_fault", ["missing", "unknown"])
+def test_invalid_first_basis_cannot_oracle_the_ranked_history_ref(
+    basis_fault: str,
+) -> None:
+    candidate = _history_one_hypothesis()
+    candidate["hypothesis_text"] += " REJECTED_BASIS_CANDIDATE_SENTINEL"
+    invalid_basis = _basis("source-0001")
+    if basis_fault == "missing":
+        invalid_basis.pop("material_delta")
+    else:
+        invalid_basis["UNKNOWN_BASIS_FIELD_SENTINEL"] = "must stay terminal"
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": candidate,
+                "research_basis": invalid_basis,
+            },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": candidate,
+                "research_basis": _basis("source-0001"),
+            },
+            {"action": "abstain", "reason": "Audit routing inspected."},
+        ],
+        limits=CodeResearchLimits(max_turns=4, max_read_calls=2),
+    )
+
+    result = session.run(_snapshot())
+
+    assert result == HypothesisResearchAbstain(reason="Audit routing inspected.")
+    basis_feedback = client.calls[2]["system_text"]
+    assert '"reason":"research_basis_invalid"' in basis_feedback
+    assert "required_history_ref" not in basis_feedback
+    assert "REJECTED_BASIS_CANDIDATE_SENTINEL" not in basis_feedback
+    assert "UNKNOWN_BASIS_FIELD_SENTINEL" not in basis_feedback
+    audit_feedback = client.calls[3]["system_text"]
+    assert (
+        '"reason":"nearest_history_audit_required",'
+        '"required_history_ref":"history-0001"'
+    ) in audit_feedback
+    assert "REJECTED_BASIS_CANDIDATE_SENTINEL" not in audit_feedback
+
+
 def test_m24_unseen_nearest_ref_can_be_grounded_and_revised(
     tmp_path: Path,
 ) -> None:
@@ -767,15 +984,12 @@ def test_m24_unseen_nearest_ref_can_be_grounded_and_revised(
             {
                 "action": "finalize_hypothesis",
                 "hypothesis": invalid_hypothesis,
-                "research_basis": _basis(
-                    "source-0001",
-                    nearest_prior_refs=("history-0001",),
-                ),
+                "research_basis": _basis("source-0001"),
             },
             {"action": "read_history", "ref": "history-0001"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "source-0001",
                     "history-0001",
@@ -790,10 +1004,18 @@ def test_m24_unseen_nearest_ref_can_be_grounded_and_revised(
     result = session.run(_snapshot())
 
     assert isinstance(result, HypothesisResearchFinalized)
-    assert result.hypothesis.hypothesis_text == _hypothesis()["hypothesis_text"]
+    assert (
+        result.hypothesis.hypothesis_text
+        == _history_one_hypothesis()["hypothesis_text"]
+    )
     assert session.provider_calls_used == 4
     assert len(client.calls) == 4
-    assert "nearest_prior_refs_not_read_and_cited" in client.calls[2]["system_text"]
+    correction_context = client.calls[2]["system_text"]
+    assert (
+        '"action":"finalize_hypothesis","ok":false,'
+        '"reason":"nearest_history_audit_required",'
+        '"required_history_ref":"history-0003"'
+    ) in correction_context
     assert invalid_hypothesis["hypothesis_text"] not in client.calls[2]["system_text"]
 
     first_actions = {
@@ -805,12 +1027,10 @@ def test_m24_unseen_nearest_ref_can_be_grounded_and_revised(
         "enum"
     ] == ["history-0001", "history-0002", "history-0003"]
 
-    for call in client.calls[:3]:
-        actions = {
-            branch["properties"]["action"]["enum"][0]
-            for branch in call["tool"]["input_schema"]["oneOf"]
-        }
-        assert "finalize_hypothesis" not in actions
+    first_finalize = _tool_action(client.calls[1], "finalize_hypothesis")
+    first_basis = first_finalize["properties"]["research_basis"]["properties"]
+    assert "minItems" not in first_basis["nearest_prior_refs"]
+    assert _tool_action(client.calls[2], "finalize_hypothesis")
     finalize = _tool_action(client.calls[3], "finalize_hypothesis")
     basis_schema = finalize["properties"]["research_basis"]["properties"]
     assert basis_schema["read_refs"]["items"]["enum"] == [
@@ -839,7 +1059,130 @@ def test_m24_unseen_nearest_ref_can_be_grounded_and_revised(
     assert len(finalized) == 2
     hypotheses = [trace["response"]["hypothesis"] for trace in finalized]
     assert invalid_hypothesis in hypotheses
-    assert _hypothesis() in hypotheses
+    assert _history_one_hypothesis() in hypotheses
+
+
+def test_arbitrary_history_read_does_not_satisfy_ranked_audit() -> None:
+    rejected = _history_one_hypothesis()
+    rejected["hypothesis_text"] += " REJECTED_CANDIDATE_SENTINEL"
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "read_history", "ref": "history-0002"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": rejected,
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0002",
+                    nearest_prior_refs=("history-0002",),
+                ),
+            },
+            {"action": "read_source", "ref": "source-0002"},
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": rejected,
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=6, max_read_calls=3),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    correction = client.calls[3]["system_text"]
+    assert (
+        '"action":"finalize_hypothesis","ok":false,'
+        '"reason":"nearest_history_audit_required",'
+        '"required_history_ref":"history-0001"'
+    ) in correction
+    assert "REJECTED_CANDIDATE_SENTINEL" not in correction
+    assert "nearest_history_score" not in correction
+    assert "match_text" not in correction
+    assert '"history_read_reserved":true' in correction
+    assert "read_call_reserved_for_history" in client.calls[4]["system_text"]
+    assert result.research_basis.nearest_prior_refs == ("history-0001",)
+
+
+def test_ranked_history_must_be_in_both_basis_ref_arrays() -> None:
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "read_history", "ref": "history-0001"},
+            {"action": "read_history", "ref": "history-0002"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _history_one_hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0002",
+                    nearest_prior_refs=("history-0002",),
+                ),
+            },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _history_one_hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=5, max_read_calls=3),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert (
+        '"reason":"nearest_history_audit_required",'
+        '"required_history_ref":"history-0001"'
+    ) in client.calls[4]["system_text"]
+
+
+def test_history_without_usable_headline_keeps_any_history_grounding() -> None:
+    context = _context(include_history=False)
+    context["prior_research_history"] = [
+        {"outcome": {"stage": "screening", "reason_code": "ORDINARY_FAILURE"}}
+    ]
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis("source-0001"),
+            },
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=4, max_read_calls=2),
+    )
+
+    result = session.run(build_prompt_turn_snapshot("hypothesis", context))
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert '"history_headline_audit_available":false' in client.calls[0]["system_text"]
+    assert "finalize_hypothesis" not in {
+        branch["properties"]["action"]["enum"][0]
+        for branch in client.calls[1]["tool"]["input_schema"]["oneOf"]
+    }
+    assert "nearest_prior_refs_not_read_and_cited" in client.calls[2]["system_text"]
 
 
 def test_nonempty_source_corpus_also_gates_finalize_and_host_bypass() -> None:
@@ -848,7 +1191,7 @@ def test_nonempty_source_corpus_also_gates_finalize_and_host_bypass() -> None:
             {"action": "read_history", "ref": "history-0001"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "history-0001", nearest_prior_refs=("history-0001",)
                 ),
@@ -856,7 +1199,7 @@ def test_nonempty_source_corpus_also_gates_finalize_and_host_bypass() -> None:
             {"action": "read_source", "ref": "source-0001"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "source-0001",
                     "history-0001",
@@ -890,12 +1233,12 @@ def test_nonempty_history_requires_nearest_prior_even_after_reads() -> None:
             {"action": "read_history", "ref": "history-0001"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis("source-0001", "history-0001"),
             },
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "source-0001",
                     "history-0001",
@@ -928,12 +1271,12 @@ def test_missing_falsification_condition_is_fixed_and_revisable() -> None:
             {"action": "read_history", "ref": "history-0001"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": invalid_basis,
             },
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "source-0001",
                     "history-0001",
@@ -958,7 +1301,7 @@ def test_visible_nearest_history_must_also_be_cited_and_can_be_revised() -> None
             {"action": "read_history", "ref": "history-0001"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "source-0001",
                     nearest_prior_refs=("history-0001",),
@@ -966,7 +1309,7 @@ def test_visible_nearest_history_must_also_be_cited_and_can_be_revised() -> None
             },
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "source-0001",
                     "history-0001",
@@ -1036,6 +1379,32 @@ def test_invalid_finalize_on_last_turn_stops_at_the_local_cap() -> None:
     assert len(client.calls) == 2
 
 
+def test_nearest_history_audit_on_last_turn_is_typed_then_stops() -> None:
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _history_one_hypothesis(),
+                "research_basis": _basis("source-0001"),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=2, max_read_calls=2),
+    )
+
+    with pytest.raises(ProposalValidationError, match="turn cap exhausted"):
+        session.run(_snapshot())
+
+    assert session.provider_calls_used == 2
+    assert len(client.calls) == 2
+    assert session._budget.results[-1] == {
+        "action": "finalize_hypothesis",
+        "ok": False,
+        "reason": "nearest_history_audit_required",
+        "required_history_ref": "history-0001",
+    }
+
+
 def test_last_shared_read_call_is_reserved_for_unread_history() -> None:
     invalid_ref = "HISTORY_REF_SENTINEL_MUST_NOT_BE_ECHOED"
     session, client = _run(
@@ -1048,7 +1417,7 @@ def test_last_shared_read_call_is_reserved_for_unread_history() -> None:
             {"action": "read_history", "ref": "history-0001"},
             {
                 "action": "finalize_hypothesis",
-                "hypothesis": _hypothesis(),
+                "hypothesis": _history_one_hypothesis(),
                 "research_basis": _basis(
                     "source-0001",
                     "history-0001",
@@ -1076,6 +1445,32 @@ def test_last_shared_read_call_is_reserved_for_unread_history() -> None:
     assert _tool_action(client.calls[4], "read_history")["properties"]["ref"][
         "enum"
     ] == ["history-0001", "history-0002", "history-0003"]
+
+
+def test_history_first_does_not_deadlock_the_last_mandatory_source_read() -> None:
+    session, client = _run(
+        [
+            {"action": "read_history", "ref": "history-0001"},
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _history_one_hypothesis(),
+                "research_basis": _basis(
+                    "history-0001",
+                    "source-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=3, max_read_calls=2),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert '"remaining_read_calls":1' in client.calls[1]["system_text"]
+    assert '"history_read_reserved":false' in client.calls[1]["system_text"]
+    assert "read_call_reserved_for_history" not in client.calls[2]["system_text"]
 
 
 def test_invalid_finalize_does_not_bypass_the_global_provider_cap() -> None:

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections.abc import Iterator, Mapping, Sequence
 from copy import deepcopy
+from fractions import Fraction
 from typing import Any
 
 from scion.core.paths import normalize_relative_patch_path
@@ -39,6 +42,23 @@ _FACT_FIELDS = (
     "diagnostic_reason_codes",
     "bypass_reason_codes",
 )
+_NEAREST_HISTORY_TEXT_FIELDS = (
+    "target_weakness",
+    "expected_effect",
+)
+_NEAREST_HISTORY_STRUCTURED_FIELDS = (
+    "target_file",
+    "change_locus",
+    "action",
+    "predicted_direction",
+)
+_NEAREST_HISTORY_ALLOWED_FIELDS = (
+    "text",
+    "hypothesis_text",
+    *_NEAREST_HISTORY_STRUCTURED_FIELDS,
+    *_NEAREST_HISTORY_TEXT_FIELDS,
+)
+_NEAREST_HISTORY_TOKEN = re.compile(r"[\w]+", re.UNICODE)
 
 
 def build_hypothesis_research_corpus(
@@ -82,6 +102,112 @@ def iter_string_leaves(value: Any, path: str = "$") -> Iterator[tuple[str, str]]
     elif isinstance(value, list):
         for index, child in enumerate(value):
             yield from iter_string_leaves(child, f"{path}[{index}]")
+
+
+def nearest_history_headline_ref(
+    hypothesis: Mapping[str, Any],
+    history_indexes: Sequence[Mapping[str, Any]],
+) -> str | None:
+    """Return the lexical top-1 ordinary history ref from headline fields only.
+
+    NFKC-casefolded token Jaccard is ranked before ordered structured exact
+    matches and unique-token overlap count. Equal headlines resolve to the later
+    append position. Histories without any usable headline are ignored; ``None``
+    preserves the existing any-history grounding path when the complete inventory
+    has no usable headline fields at all.
+    """
+
+    candidate_tokens = _headline_tokens(hypothesis)
+    ranked: list[tuple[tuple[Fraction, bool, bool, bool, bool, int, int], str]] = []
+    for append_ordinal, index in enumerate(history_indexes):
+        resolved = _history_index_headline(index)
+        if resolved is None:
+            continue
+        ref, headline = resolved
+        if not _has_usable_headline(headline):
+            continue
+        prior_tokens = _headline_tokens(headline)
+        overlap = len(candidate_tokens & prior_tokens)
+        union = len(candidate_tokens | prior_tokens)
+        score = (
+            Fraction(overlap, union or 1),
+            *_structured_exact_score(hypothesis, headline),
+            overlap,
+            append_ordinal,
+        )
+        ranked.append((score, ref))
+    return max(ranked)[1] if ranked else None
+
+
+def has_usable_history_headline(
+    history_indexes: Sequence[Mapping[str, Any]],
+) -> bool:
+    """Return whether any index has usable headline fields for the audit."""
+
+    for index in history_indexes:
+        resolved = _history_index_headline(index)
+        if resolved is not None and _has_usable_headline(resolved[1]):
+            return True
+    return False
+
+
+def _headline_tokens(headline: Mapping[str, Any]) -> set[str]:
+    return {
+        token
+        for field in ("text", "hypothesis_text", *_NEAREST_HISTORY_TEXT_FIELDS)
+        for value in (_normalized_headline_text(headline.get(field)),)
+        if value is not None
+        for token in _NEAREST_HISTORY_TOKEN.findall(value)
+    }
+
+
+def _normalized_headline_text(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return normalized if normalized.strip() else None
+
+
+def _nonempty_exact(left: Any, right: Any) -> bool:
+    return isinstance(left, str) and bool(left.strip()) and left == right
+
+
+def _has_usable_headline(value: Mapping[str, Any]) -> bool:
+    return any(
+        isinstance(item, str) and bool(item.strip())
+        for item in (value.get(field) for field in _NEAREST_HISTORY_ALLOWED_FIELDS)
+    )
+
+
+def _structured_exact_score(
+    candidate: Mapping[str, Any],
+    prior: Mapping[str, Any],
+) -> tuple[bool, bool, bool, bool]:
+    return (
+        _nonempty_exact(candidate.get("target_file"), prior.get("target_file")),
+        _nonempty_exact(candidate.get("change_locus"), prior.get("change_locus")),
+        _nonempty_exact(candidate.get("action"), prior.get("action")),
+        _nonempty_exact(
+            candidate.get("predicted_direction"), prior.get("predicted_direction")
+        ),
+    )
+
+
+def _history_index_headline(
+    index: Any,
+) -> tuple[str, Mapping[str, Any]] | None:
+    if not isinstance(index, Mapping):
+        return None
+    ref = index.get("ref")
+    headline = index.get("hypothesis")
+    if (
+        not isinstance(ref, str)
+        or not ref
+        or ref != ref.strip()
+        or not isinstance(headline, Mapping)
+    ):
+        return None
+    return ref, headline
 
 
 def _sources(
@@ -292,5 +418,7 @@ def _facts(value: Any, path: str = "$") -> list[dict[str, Any]]:
 
 __all__ = [
     "build_hypothesis_research_corpus",
+    "has_usable_history_headline",
     "iter_string_leaves",
+    "nearest_history_headline_ref",
 ]

@@ -7,6 +7,27 @@
   "hypothesis": {
     "hypothesis_text": "Test one bounded source-grounded candidate without transferring formal authority to a development hint."
   },
+  "nearest_history_candidates": [
+    {
+      "hypothesis_text": "Modify `_swap` in `policies/baseline_modules/local_search.py` to score each cross-route one-for-one exchange with an exact O(1) directed boundary-edge delta instead of copying both routes and recomputing both full depot-to-depot distances for every tested pair. For customers `a` and `b`, compare the predecessor/a/successor and predecessor/b/successor arcs before and after substitution, retaining the current load tests, pair enumeration order, strict `_EPS` improvement condition, deadline polling, and recalculation/index rebuild only after a selected improving swap. This preserves the same feasible accepted swap state on completed scans, including with asymmetric distances, while reducing VNS evaluation work and freeing fixed-budget time for more search trajectories.",
+      "change_locus": "solver_design",
+      "action": "modify",
+      "predicted_direction": "improve",
+      "target_weakness": "The current `_swap` materializes two trial customer lists and calls full `_route_distance` twice for every capacity-feasible cross-route pair, despite only local adjacent arcs changing. This occurs in embedded VNS under a budget-exhausting runtime model and limits completed search work.",
+      "expected_effect": "Unchanged hard feasibility and fleet_violation, lower swap-neighborhood scoring overhead, more completed ALNS/VNS work, and lower final total_distance among equal-fleet feasible outputs.",
+      "target_file": "policies/baseline_modules/local_search.py",
+      "suggested_weight": null
+    },
+    {
+      "hypothesis_text": "Modify `_default_vns_operators` in `policies/baseline_modules/local_search.py` so that it does not run `_relocate` immediately before `_or_opt_1`. The source shows that both neighborhoods enumerate the same feasible cross-route one-customer relocation state: a one-customer segment, capacity-feasible destination positions, and a strictly improving move. Retain `_or_opt_1`, which also covers that state while sharing the segment-relocation implementation used by longer Or-opt moves. Eliminating the redundant no-improvement scan should release embedded-VNS time for additional destroy/repair trajectories without removing a feasible one-customer relocation transition. Capacity, coverage, route count, route-limit rejection, and incumbent handling remain unchanged.",
+      "change_locus": "solver_design",
+      "action": "modify",
+      "predicted_direction": "improve",
+      "target_weakness": "The default VNS executes two overlapping cross-route single-customer relocation neighborhoods in sequence (`_relocate` then `_or_opt_1`), paying for a second scan whenever the first finds no improvement. In the fixed-budget solver this redundant VNS work can reduce the number of ALNS trajectories explored.",
+      "expected_effect": "For unchanged fleet-feasible outputs, reduce embedded-VNS runtime and increase completed ALNS iterations; seek lower final total_distance only if paired final outcomes improve without structural-feasibility or fleet_violation regression.",
+      "target_file": "policies/baseline_modules/local_search.py"
+    }
+  ],
   "falsifier": {
     "source": "def test_m26_hint():\n    assert 'M26_PRIVATE_FALSIFIER_SENTINEL' != ''\n",
     "reported_outcome": "failed"
@@ -39,6 +60,7 @@
     "prior_observations": 5,
     "native_history": 35,
     "provider_history_entries": 40,
-    "code_research_provider_calls": 4
+    "code_research_provider_calls": 4,
+    "nearest_history_refs": ["history-0032", "history-0034"]
   }
 }
