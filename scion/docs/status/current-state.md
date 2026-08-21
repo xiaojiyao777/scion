@@ -409,6 +409,11 @@ promotion remain zero. The host does not select a mechanism, target or patch,
 and the experiment makes no distribution, build, deployment or Trust/Hash
 lifecycle investment. See the
 [M24 preregistration](../experiments/v0.4/v04-cvrp-m24-autonomous-direction-research-development-preregistration-20260821.md).
+Its first fenced-shell execution stopped in the process-absence preflight
+because `pgrep` matched the enclosing shell text containing the later live
+line. The output root remained absent and all scientific/provider/solver counts
+remained zero. The guard is corrected to inspect Python executables only; the
+single scientific invocation remains not started.
 
 ## Current validation rule
 

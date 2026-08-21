@@ -7,6 +7,15 @@
 **Fresh campaign root:**
 `/home/clawd/research/scion-experiments/v04-cvrp-m24-autonomous-direction-research-development-20260821`
 
+**Prelaunch correction:** The first execution of the fenced shell stopped at
+its process-absence guard before proxy metadata or the live command. `pgrep`
+matched the enclosing shell because that shell's own command text contained the
+later `scion.cli.main run` line. The campaign root remained absent and H, C,
+Contract, Verification, solver, Protocol, Safe Features and Decision counts
+all remained zero. The guard below now inspects only processes whose executable
+name is Python. This is a preparation-control correction, not a scientific
+attempt; no scientific input, resource or claim boundary changed.
+
 ## Scientific question
 
 Can Scion use its bounded H source/history research session and bounded C
@@ -180,7 +189,13 @@ CAMPAIGN_DIR=/home/clawd/research/scion-experiments/v04-cvrp-m24-autonomous-dire
 test ! -e "$CAMPAIGN_DIR"
 test -x /usr/bin/bwrap
 test -x /usr/bin/prlimit
-test -z "$(pgrep -af '[s]cion\.cli\.main run|[r]un_.*candidate.*\.py' || true)"
+test -z "$(ps -eo comm=,args= | awk '
+  $1 ~ /^python/ &&
+  ($0 ~ /-m scion[.]cli[.]main run/ || $0 ~ /run_.*candidate.*[.]py/) {
+    print
+    exit
+  }
+')"
 
 PROXY_KEY_VALUE="$(curl -fsS --connect-timeout 5 --max-time 15 \
   http://127.0.0.1:8080/auth/status | \
