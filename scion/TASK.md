@@ -574,20 +574,25 @@ The exact design is in the
   research direction was grounded and testable, and the exact algorithm result
   is negative/mixed development evidence. See the
   [M25 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
-- [x] **PREPARED / NOT LAUNCHED:** design M26 as a new embedded-falsifier
-  autonomous continuation with a new label, root and preregistration. It uses
-  five ordered problem observations plus 35 native history records, including
-  the two canonical M25 records, and deliberately reuses M25's outcome-exposed
-  development bank. The optional C-authored falsifier uses an ephemeral
-  sandbox file and yields a non-evidentiary enum hint inside `test_patch`; its
-  source remains only in the tainted raw provider response trace and is never
-  replayed or admitted to history or claims. Terminal reporting is trace-
-  observable and types missing projection or trajectory coverage rather than
-  inferring an enum or unused adoption. Ordinary host checks and the unchanged
-  formal chain retain authority. This is adaptive development, not fresh or
-  confirmatory evidence. Do not retry or resume M25, and do not launch M26
-  before the frozen clean-tree preflight and independent reviews pass. See
-  the [M26 preregistration](docs/experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
+- [x] **TERMINAL / COMPLETED VALID / TWO NEGATIVE INITIAL SCREENS:** execute
+  M26 once on M25's outcome-exposed development bank. Fifteen provider calls
+  comprised seven H turns, six C turns and two independent C final decisions.
+  Both candidates passed Contract, Verification and canary and completed 6/6
+  valid formal pairs, but each lost one of three cases: case win/loss/tie
+  `0/1/2`, with pair counts
+  `1/1/4` and `0/2/4`, median delta `0.0`, and CIs `[-61.5, 0.0]` and
+  `[-90.5, 0.0]`. Both Protocol results were
+  `fail / SCREENING_FAIL_CASE_QUALITY`; both Decisions continued exploration.
+  The two ordered C-authored probes were fully observed: 3,272 characters
+  projected `failed`, then 326 projected `passed`, while ordinary host checks
+  passed 5/5 both times and each session went directly to ready without a
+  post-probe revision. This establishes adoption and bounded framework
+  execution, not a causal probe effect. H1 reimplemented historical work; H2
+  read same-campaign `history-0041` and pivoted, but reproduced unread failed
+  `history-0034` byte for byte. Exactly 32 serial solver subprocesses ran; no
+  expansion, validation, frozen, promotion or retained stage ran. The root is
+  preserved and consumed without retry, resume or automatic M27. See the
+  [M26 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and

@@ -1,6 +1,6 @@
 # CVRP M26 embedded-falsifier autonomous-continuation preregistration
 
-**State:** `PREPARED / NOT_LAUNCHED`
+**State:** `TERMINAL_COMPLETED_VALID / TWO_INITIAL_SCREENS_NEGATIVE`
 
 **Label:**
 `v04-cvrp-m26-embedded-falsifier-autonomous-continuation-20260821`
@@ -10,11 +10,85 @@
 
 **Preparation base:** `83d9ab74674b851de4ae0621ddf08c2578b70c30`
 
-M26 has not been launched. Its root must be absent at the final preflight, and
-the command below may be invoked exactly once after the preparation carrier is
-committed and independently reviewed. A created root is consumed even if the
-process exits before scientific work. There is no retry, resume, root reuse,
-repair launch or automatic M27.
+**Live carrier:** `320a42c5477cdbefdce6d76336ffee412929d481`
+
+## Terminal result
+
+The authorized command ran exactly once and is terminal
+`completed / valid / requested_rounds_completed`. It completed two distinct
+candidate initial screens and consumed the fresh root. The root is preserved;
+there is no M26 retry, resume, root reuse, repair launch or automatic M27.
+
+Framework execution was complete. The campaign used 15/34 provider calls:
+seven H research turns, six C research turns and two independent C final
+decisions. Both candidates passed Contract, Verification and the two-call
+canary before reaching the unchanged Protocol -> Safe Features -> Decision
+chain. Exactly 32 solver subprocesses ran serially with maximum concurrency
+one: four in Verification, four in the two canaries and 24 in the two formal
+screens. The recorded interval from first-branch creation to the terminal
+status update was `1053.552895s`, well within the `14000s` hardwall; this is not
+a measurement of the full CLI process lifetime.
+
+The complete observable C trajectory adopted the embedded falsifier twice, in
+order. The first supplied source had 3,272 characters and projected `failed`;
+the ordinary host checks nevertheless passed 5/5. The second supplied source
+had 326 characters and projected `passed`; its ordinary host checks also
+passed 5/5. Each C session proceeded directly to `ready` after that host pass,
+with no post-probe revision, and then finalized independently. Thus adoption
+is complete, but both enums remain tainted, provider-authored development
+hints. The source bodies remain only in the raw provider response trace and
+are not copied here, replayed into later context or written to ordinary
+history. The ordered failed/passed observations neither gate readiness nor
+support a causal claim about either candidate or research trajectory.
+
+Candidate 1 completed all 6/6 initial-screen pairs without a runtime or
+feasibility failure. Its case win/loss/tie counts were `0/1/2`, its pair counts
+were `1/1/4`, and its median total-distance delta was `0.0` with CI
+`[-61.5, 0.0]`. Protocol returned
+`fail / SCREENING_FAIL_CASE_QUALITY`; Decision returned `continue_explore`.
+Candidate 2 also completed 6/6 valid pairs without failure. Its case counts
+were `0/1/2`, pair counts were `0/2/4`, and median delta was `0.0` with CI
+`[-90.5, 0.0]`. It received the same Protocol failure and Decision continuation.
+The requested second formal round was therefore a second candidate's initial
+screen, not an expansion of candidate 1.
+
+Direction quality was poor despite complete bounded execution. H1
+reimplemented a mechanism already represented in ordinary historical evidence.
+H2 did read the same-campaign `history-0041` observation and completed a pivot,
+but its candidate was byte-identical to the failed historical
+`history-0034`, which that H session had not read. Exactly two ordinary JSONL
+records were appended to `research_history.jsonl`, in candidate order. Family
+telemetry remained `unavailable_legacy` / association-only; it does not prove
+exact mechanism activation or causality.
+
+No expanded screen, validation, frozen evaluation, promotion or retained
+comparison ran, and champion v1 did not change. At post-terminal audit, no live
+campaign, child, solver, bubblewrap, prlimit or M26-named process remained;
+branch workspaces and probe residue were zero. The checked run-root temporary
+patterns and launch-era `/tmp/scion_run_*` patterns showed no M26-scoped
+residue. The two durable candidate workspaces are expected retained campaign
+evidence, not cleanup leaks. Before these terminal documentation edits, the
+tracked worktree and index were clean.
+
+The three claim layers therefore separate cleanly:
+
+1. **Framework.** The bounded H/C path, optional embedded probe, ordinary host
+   checks and unchanged formal gates all executed as designed, including probe
+   isolation from readiness authority and a forward same-campaign H step.
+2. **Research direction.** Probe adoption is observed, but this one
+   non-randomized run provides no causal probe-effect evidence. H2 used the
+   current-campaign observation, yet the historical reimplementation and
+   unread byte-identical failed patch are negative evidence about direction
+   novelty and history selection.
+3. **Algorithm.** Both complete paired initial screens are negative development
+   evidence on the already outcome-exposed bank. They establish neither an
+   improvement nor fresh-population, confirmation, generalization, validation,
+   frozen, promotion, retained or v0.4-complete evidence.
+
+At preparation time the root was required to be absent and the frozen command
+below could be invoked exactly once only after the preparation carrier was
+committed and independently reviewed. Those conditions were satisfied before
+the now-consumed invocation.
 
 ## Scientific question
 
@@ -392,11 +466,11 @@ env -i \
   --campaign-dir "$CAMPAIGN_DIR"
 ```
 
-The user's standing authorization permits this exact live command once only
-after the preparation carrier is committed, the provider- and solver-free
-preflight and two independent scientific/runtime reviews pass, and the output
-root remains absent. It authorizes neither deletion of a created root nor a
-second launch.
+The user's standing authorization permitted this exact live command once only
+after the preparation carrier was committed, the provider- and solver-free
+preflight and two independent scientific/runtime reviews passed, and the
+output root remained absent. That invocation is now consumed. It authorizes
+neither deletion or reuse of the created root nor a second launch.
 
 No distribution, packaging, build, deployment, root/systemd, Trust/Hash
 authority, object identity, lease, signing, registration or duplicate-control

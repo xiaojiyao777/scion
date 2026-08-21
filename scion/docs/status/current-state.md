@@ -478,40 +478,53 @@ zero, so M25 does not establish a retained CVRP improvement or complete v0.4.
 The root is preserved and consumed without retry, resume or reuse. See the
 [M25 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
 
-M26 is now `PREPARED / NOT_LAUNCHED` under a new label and fresh absent root.
-It appends a sanitized M25 terminal observation and the two canonical M25
-ordinary history records, yielding five observations plus 35 native records
-and 40 ordered H history entries. It deliberately reuses the exact M25 reached
-screen and seeds as an outcome-exposed adaptive development bank; this is not
-fresh, outcome-blind, confirmation or generalization, and the M25-unreached
-validation/frozen populations remain untouched.
+M26 is now terminal `completed / valid / requested_rounds_completed` after its
+single authorized invocation on M25's outcome-exposed development bank. It
+used 15/34 provider calls: seven H research turns, six C research turns and two
+independent C final decisions. Both candidates passed Contract, Verification
+and canary, and each completed 6/6 valid initial-screen pairs without failure.
+Exactly 32 solver subprocesses ran serially: four Verification, four canary and
+24 formal calls, with maximum concurrency one. The recorded interval from
+first-branch creation to terminal status update was `1053.552895s`, well within
+the hardwall; it is not the full CLI process lifetime.
 
-C may optionally include at most one bounded self-authored falsifier on each
-ordinary `test_patch` call, with zero through three ordered count-consuming
-attempts per C session and potentially multiple fresh C sessions under
-scheduler-forward research rejection. Each source is at most 20,000 characters
-and each probe at most 10 seconds within the existing shared budget. Only the
-sandbox scratch file is ephemeral; source remains in the tainted raw provider
-response trace but is never replayed or admitted to history or claims. Even a
-projected `passed` or `failed` enum is a tainted development hint and never
-directly controls C readiness; the host outcome does.
+Candidate 1 had case win/loss/tie counts `0/1/2`, pair counts `1/1/4`, median
+delta `0.0` and CI `[-61.5, 0.0]`. Candidate 2 had case counts `0/1/2`, pair
+counts `0/2/4`, median `0.0` and CI `[-90.5, 0.0]`. Both Protocol results were
+`fail / SCREENING_FAIL_CASE_QUALITY`, and both Decisions returned
+`continue_explore`. Therefore the two requested rounds were two candidate
+initial screens: expansion, validation, frozen, promotion and retained replay
+were all zero, and champion v1 did not change.
 
-The terminal audit is trace-observable: it lists all visible `test_patch`
-actions in order across C sessions and records a projected enum only when a
-later prompt trace makes it durable. Otherwise it records
-`projection_unobserved`, never an inferred enum. It may report
-`adoption_inconclusive_unused` only when complete observable trajectory and
-terminal evidence prove the field was never supplied; missing coverage is
-`adoption_observation_incomplete`. Any supplied field with an unobserved
-projection also makes adoption observation incomplete. No favorable enum
-selection is allowed. Family telemetry remains permanently association-only;
-only completed paired Protocol comparisons support candidate-versus-champion
-algorithm evidence and cannot upgrade exact activation or causal mechanism.
-The live command
-has not run and is authorized at most once only after the clean-tree provider-
-and solver-free preflight and independent reviews.
-See the
-[M26 preregistration](../experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
+Embedded-falsifier adoption was completely observable twice in order. A
+3,272-character source projected `failed` while its ordinary host checks
+passed 5/5; a later 326-character source projected `passed` while its host
+checks also passed 5/5. Both C sessions went directly to ready with no
+post-probe revision, then finalized independently. Source bodies remain only
+in the tainted raw provider response trace and were neither replayed nor
+admitted to ordinary history. The enums are non-evidentiary development hints:
+they did not control readiness and this non-randomized run cannot establish a
+causal probe effect.
+
+Research-direction quality was negative. H1 reimplemented a historical
+mechanism. H2 read the same-campaign `history-0041` record and completed a
+pivot, but its candidate was byte-identical to failed `history-0034`, which
+that session had not read. `research_history.jsonl` contains exactly two
+ordinary JSONL records in candidate order. Family telemetry was
+`unavailable_legacy` / association-only, never exact activation or causal
+mechanism evidence.
+
+Mechanically, the bounded H/C, probe, host-test and formal paths completed as
+designed. Scientifically, both paired screens are negative development
+evidence only on an already outcome-exposed bank; they establish no algorithm
+improvement, fresh-population result, confirmation or generalization. At the
+post-terminal audit, live campaign/child/solver/bubblewrap/prlimit and
+M26-named processes were zero, as were branch workspaces and probe residue; the
+checked run-root temporary and launch-era `/tmp/scion_run_*` patterns showed no
+M26-scoped residue. The two durable candidate workspaces are expected campaign
+evidence, not leaks. The root is preserved and consumed without retry, resume,
+reuse or automatic M27. See the
+[M26 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
 
 ## Current validation rule
 

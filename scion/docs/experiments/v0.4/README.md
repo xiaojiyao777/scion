@@ -8,7 +8,7 @@ referenced, not copied into development prompts.
 
 ## Runs
 
-- [CVRP M26 embedded-falsifier autonomous continuation, prepared / not launched](v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md)
+- [CVRP M26 embedded-falsifier autonomous continuation, terminal valid two-candidate negative initial screens](v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md)
 - [CVRP M25 evidence-grounded autonomous continuous research, terminal valid expanded-screening abandon](v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md)
 - [CVRP M24 bounded autonomous direction research, terminal provider-cap stop before a valid H](v04-cvrp-m24-autonomous-direction-research-development-preregistration-20260821.md)
 - [CVRP M23 M20 `_swap` provider-free full funnel, terminal not confirmed after expanded screening](v04-cvrp-m23-m20-swap-provider-free-full-funnel-preregistration-20260821.md)
