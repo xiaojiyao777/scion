@@ -1,0 +1,49 @@
+{
+  "schema_version": "scion.m27.nearest_history_audit_replay.v1",
+  "source": {
+    "path": "operators/main.py",
+    "content": "def improve(value):\n    return value\n"
+  },
+  "hypothesis": {
+    "hypothesis_text": "Modify one source-grounded bounded calculation so repeated equivalent work is performed once while preserving the public callable and returned value.",
+    "change_locus": "solver_design",
+    "action": "modify",
+    "predicted_direction": "improve",
+    "target_weakness": "The visible generic function repeats an equivalent bounded calculation on every invocation.",
+    "expected_effect": "Preserve the returned value while reducing repeated local work in the generic subject.",
+    "target_file": "operators/main.py"
+  },
+  "research_basis": {
+    "material_delta": "This candidate changes one repeated calculation rather than replaying a prior implementation.",
+    "alternatives_considered": [
+      "Leave the generic function unchanged.",
+      "Move the calculation to a helper without changing its frequency."
+    ],
+    "observable_prediction": "The public callable returns the same values while executing the calculation fewer times.",
+    "falsification_condition": "Reject the candidate if any public result changes or the calculation count does not decrease."
+  },
+  "expected": {
+    "prior_observations": 6,
+    "history_files": 14,
+    "native_history": 37,
+    "provider_history_entries": 43,
+    "eligible_headline_entries": 37,
+    "m26_history_lines": 2,
+    "m26_history_bytes": 51034,
+    "provider_observation_refs": [
+      "history-0001",
+      "history-0002",
+      "history-0003",
+      "history-0004",
+      "history-0005",
+      "history-0006"
+    ],
+    "m26_history_provider_refs": [
+      "history-0042",
+      "history-0043"
+    ],
+    "generic_fake_h_required_ref": "history-0031",
+    "provider_turns": 4,
+    "feedback_reason": "nearest_history_audit_required"
+  }
+}

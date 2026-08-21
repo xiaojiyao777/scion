@@ -526,6 +526,41 @@ evidence, not leaks. The root is preserved and consumed without retry, resume,
 reuse or automatic M27. See the
 [M26 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
 
+The generic nearest-history audit is now implemented at ordinary H
+finalization. For an otherwise valid candidate it scans the complete current
+history index, deterministically ranks only usable headline-bearing entries,
+routes their lexical top-1 ref, and requires that H read it and cite it in both basis arrays. The
+fixed rejection contains only that existing ref. Candidate changes recompute
+the requirement; a preemptive exact-ref read can satisfy it without a trigger.
+The ranker reads no history body, patch or metric, judges no novelty, adds no
+provider action or durable state, and does not reach C, Contract, Verification,
+Protocol, Safe Features or Decision. The direct one-shot H path is unchanged.
+
+M27 is prepared but not launched under fresh label/root
+`v04-cvrp-m27-nearest-history-audit-autonomous-continuation-20260821`. Its
+strict research context is the exact five-observation M26 prefix plus one
+aggregate M26 terminal observation, followed by the prior 35 native records
+and a byte-for-byte tracked copy of M26's two ordinary records. Thus the first H
+index is six observations plus 37 native records, exactly 43 entries; the six
+headline-free observations remain visible but the 37 native entries are the
+eligible lexical candidates. The M26
+observation imports no mechanism, target, patch, H basis, provider/probe body,
+raw solver output or reserved later-stage identity. Its one exact-candidate
+outcome overlap count records historical candidate replay, not case-population
+overlap.
+
+M27 deliberately reuses the M25/M26 outcome-exposed seen development bank,
+unchanged protocol/split/seeds and M11 research limits. Two formal rounds, a
+34-call provider cap, 48 serial solver-call ceiling, `10630s` known guarded
+work and `14000s` outer hardwall are unchanged. Validation and frozen raw data
+remain sealed and unreachable. The optional C falsifier retains M26's complete
+trace-observable, sandboxed, enum-only and non-evidentiary rules. The terminal
+analysis must separate audit behavior, tainted research-direction quality and
+paired Protocol algorithm evidence; M26-to-M27 is non-randomized and cannot
+support a causal comparison. The first candidate remains Agent-selected. There
+is no launch before commit/review and no automatic M28. See the
+[M27 preregistration](../experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
+
 ## Current validation rule
 
 Current M23 safe validation collected 1,844 tests. Exact isolated invocations

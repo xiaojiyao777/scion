@@ -593,6 +593,25 @@ The exact design is in the
   expansion, validation, frozen, promotion or retained stage ran. The root is
   preserved and consumed without retry, resume or automatic M27. See the
   [M26 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
+- [x] Add a problem-neutral nearest-history audit to bounded H finalization.
+  For each otherwise valid candidate, a pure headline-only ranker scans the
+  complete current index and routes the lexical top-1 among usable headline-
+  bearing ordinary refs. H must read it and cite
+  it in both basis arrays; a candidate change recomputes the ref. The fixed
+  feedback contains only the required ref, not candidate/match text or a score.
+  Preemptive exact-ref reads remain valid. The ranker does not judge novelty,
+  choose a mechanism/target/patch or reach C, Contract, Protocol or Decision.
+  Direct-H behavior without research limits is unchanged.
+- [ ] **PREPARED / NOT LAUNCHED:** run M27 once, only after the tracked
+  preparation and independent gates pass, under the fresh label/root in the
+  [M27 preregistration](docs/experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
+  Its first H sees six problem observations plus 37 native records in exact
+  order. It reuses the M25/M26 outcome-exposed development bank and two-round,
+  34-provider-call, 14,000-second envelope; validation/frozen remain sealed and
+  unreachable. Report the actual audit trigger/ref, preemptive read,
+  pivot/refinement and exact H/patch replay facts separately from paired
+  Protocol evidence. M26-to-M27 is non-randomized and non-causal. Do not
+  preselect a first candidate or automatically start M28.
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and
@@ -669,18 +688,19 @@ frozen, promotion and a third candidate are all zero. This demonstrates the
 bounded autonomous V3 research chain, but the research result is negative/mixed
 and supplies no algorithm-improvement or generalization claim.
 
-M10-M22 then established continuous cross-campaign research history, bounded C
-development tools and several valid negative/mixed CVRP screens. M20 produced
-the strongest preserved candidate: an autonomous exact directed `_swap` delta
-with three initial-screen wins and no losses, but its expanded stage never ran
-because the historical config shape was invalid. M23 now supplies bounded H
-direction research, problem-owned non-causal mechanism-family association and
-one consolidated provider-free fixed-candidate funnel with complete bilateral
-runtime attribution. Independent review covered the production and scientific
-boundaries. Its fixed M20 funnel then passed canary and completed all 24
-expanded-screening pairs without failure, producing two wins, four ties and no
-losses. Median delta `0.0` and CI `[0.0, 66.75]` left the aggregate gate
-`unclear`; Decision continued exploration and the terminal was
-`NOT_CONFIRMED`, with validation, frozen, promotion and retained all zero. The
-one-shot is consumed without retry. CVRP acceptance remains unmet; the next
-operation is the still-unchecked serial bounded autonomous campaign above.
+M10-M26 then established continuous cross-campaign ordinary history, bounded H
+and C research, an optional sandboxed C falsifier and several valid
+negative/mixed CVRP screens. M25 reached an expanded screen but its exact
+candidate had one candidate-only timeout and was abandoned. M26 completed two
+valid initial screens; both failed case quality. Its first direction
+reimplemented historical work, while its second used same-campaign evidence but
+exactly replayed an unread failed prior patch. Validation, frozen, promotion and
+retained evidence remain zero; both roots are preserved and consumed.
+
+The generic nearest-history audit now scans every current ordinary index entry,
+ranks only usable hypothesis headlines and requires the candidate-specific
+top-1 ref to be read and cited before H acceptance. M27 is prepared under a
+fresh label/root with a 43-entry first-H inventory and the outcome-exposed
+M25/M26 development bank. It is not launched. Its one-shot may run only after
+the tracked preparation and independent gates pass. CVRP acceptance remains
+unmet, M26-to-M27 is non-causal, and no M28 is automatic.
