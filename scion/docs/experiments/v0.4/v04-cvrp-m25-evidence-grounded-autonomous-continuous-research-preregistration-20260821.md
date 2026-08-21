@@ -1,12 +1,57 @@
 # CVRP M25 evidence-grounded autonomous continuous-research preregistration
 
-**State:** `PREPARED_NOT_RUN`
+**State:** `TERMINAL_COMPLETED_VALID / SCREENING_ABANDON`
 
 **Label:**
 `v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-20260821`
 
 **Fresh campaign root:**
 `/home/clawd/research/scion-experiments/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-20260821`
+
+## Terminal result
+
+The authorized command ran exactly once and is terminal
+`completed / valid / requested_rounds_completed`. It completed two evaluated
+screening stages on one exact verified branch. The root is preserved and the
+one-shot is consumed; there is no M25 retry, resume, repair launch or root
+reuse.
+
+Framework evidence is positive. H used three provider calls in the required
+`read_source -> read_history -> finalize` sequence, cited only the read source
+and ordinary history, and exported one proposal with a material difference,
+alternatives, observable prediction and falsification condition. C used four
+provider calls, including a public patch test and an independent finalization,
+and exported one patch bound to that H. Contract, Verification and the public
+canary passed. The unchanged Protocol -> Safe Features -> Decision chain then
+completed both formal stages. Total use was seven provider calls, 42 serial
+solver subprocesses and about 1,458 seconds of campaign wall time, all within
+the frozen caps and with no provider retry.
+
+Research-direction evidence is promising but bounded. The Agent selected an
+exact O(1) directed intra-route 2-opt delta in
+`policies/baseline_modules/local_search.py`, rather than a host-selected
+mechanism or target. C implemented the stated prefix-sum scoring mechanism
+while preserving first-improvement ordering and route recalculation. The
+initial three-case, two-seed screen completed 6/6 valid pairs with no failure:
+one case win, two ties, median total-distance delta `0.0`, CI `[0.0, 28.5]`,
+and Protocol `expand / SCREENING_EXPAND_INITIAL_QUALITY`. This establishes that
+the repaired research interface can turn grounded source/history inspection
+into a testable candidate and reach a positive initial development signal; it
+does not establish causal mechanism truth or independent discovery.
+
+Algorithm evidence is negative/mixed at expanded screening. Exact-branch reuse
+attempted all 12 declared pairs and completed 11 valid pairs; the remaining
+pair was a candidate-only solver timeout. Across the six cases there was one
+win, one loss and four ties, median delta `0.0`, CI `[-0.5, 0.5]`. Protocol
+returned `fail / SCREENING_FAIL_CASE_QUALITY`, and Decision returned
+`abandon / CANDIDATE_RUNTIME_FAILURE`. Validation, frozen, promotion and
+retained replay are zero. M25 therefore supports the framework mechanism and
+the plausibility of the selected research direction, but not a retained CVRP
+improvement, generalization or v0.4 completion.
+
+Any continuation must be a freshly designed and preregistered M26 with a new
+label and root and a separately justified population. M25 may enter only as
+ordinary terminal history; no automatic M26 is authorized.
 
 ## Scientific question
 

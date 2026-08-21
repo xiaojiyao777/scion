@@ -559,12 +559,25 @@ The exact design is in the
   fixed-enum and same-campaign rejection memory is bounded; local/global
   resource caps remain hard stops. Provider-/solver-free real-context replay
   and independent review passed.
-- [ ] **PREPARED / NOT RUN:** execute the new M25 evidence-grounded autonomous
-  continuous-research one-shot on the carried-forward unopened M24 population.
-  Reuse the exact ordinary population controls instead of duplicating them;
-  use a fresh root and sanitized M24 framework-control observation. Host still
-  selects no mechanism, target, patch or repair. See the
-  [M25 preregistration](docs/experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
+- [x] **TERMINAL / COMPLETED VALID / SCREENING ABANDON:** execute the M25
+  evidence-grounded autonomous continuous-research one-shot on the
+  carried-forward unopened M24 population. H read current source and ordinary
+  history and finalized in three provider calls; C publicly tested and
+  finalized the aligned directed intra-route 2-opt delta patch in four. The
+  unchanged gates passed Contract, Verification and canary. Initial screening
+  completed 6/6 valid pairs and expanded. Exact-branch expanded screening
+  attempted 12/12 pairs, completed 11 valid pairs and recorded one
+  candidate-only timeout; Protocol failed case quality and Decision abandoned
+  for `CANDIDATE_RUNTIME_FAILURE`. Total use was seven provider calls, 42
+  serial solver subprocesses and about 1,458 seconds. Validation, frozen,
+  promotion and retained remained zero. The framework result is positive, the
+  research direction was grounded and testable, and the exact algorithm result
+  is negative/mixed development evidence. See the
+  [M25 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
+- [ ] Design any continuation as a fresh M26 with a new scientific question,
+  label, root, preregistration and separately justified population. Treat M25
+  only as ordinary terminal history; do not retry, resume or reuse its root,
+  and do not launch M26 automatically.
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and

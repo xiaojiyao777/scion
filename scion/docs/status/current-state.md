@@ -450,15 +450,37 @@ same four-action correction sequence. Two live bubblewrap isolation tests also
 passed without a provider or solver. Focused regression and independent review
 found no P0/P1.
 
-M25 is prepared as a new one-shot, not an M24 retry. It carries forward the
-exact unopened M24 population because M24 reached no candidate, solver, canary
-or formal stage; it does not create duplicate protocol/split/seed controls.
-The new ordinary input preserves M7/M18/M23 and appends a sanitized M24
-framework-control terminal with zero algorithm evidence and no population
-identity. Two formal rounds allow either exact-branch initial-to-expanded
-screening or a second autonomous initial candidate after an ordinary first
-screen outcome. The host still chooses no mechanism, target or patch. See the
-[M25 preregistration](../experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
+M25 is now terminal `completed / valid / requested_rounds_completed` after its
+single authorized invocation. Framework behavior is positive: H used three
+provider calls to read current source, read ordinary history and finalize one
+evidence-bound proposal; C used four calls to publicly test and independently
+finalize one aligned patch. Contract, Verification and canary passed, and both
+formal Protocol -> Safe Features -> Decision stages completed. Total use was
+seven provider calls, 42 serial solver subprocesses and about 1,458 seconds,
+with no provider retry.
+
+The selected direction was an exact O(1) directed intra-route 2-opt delta in
+`local_search.py`. It was Agent-selected, source/history-grounded, explicit
+about its alternatives and falsifier, and implemented consistently by C. The
+initial screen completed 6/6 valid pairs with no failure and returned
+`expand / SCREENING_EXPAND_INITIAL_QUALITY`: one case win, two ties, median
+delta `0.0`, CI `[0.0, 28.5]`. This is positive framework evidence and a
+plausible, testable research-direction result, not causal proof.
+
+The same verified branch then completed the declared expanded screen with
+12/12 attempted pairs, 11 valid pairs and one candidate-only timeout. Across
+six cases it produced one win, one loss and four ties, median delta `0.0`, CI
+`[-0.5, 0.5]`. Protocol returned
+`fail / SCREENING_FAIL_CASE_QUALITY`; Decision returned
+`abandon / CANDIDATE_RUNTIME_FAILURE`. This is negative/mixed development
+algorithm evidence. Validation, frozen, promotion and retained replay are
+zero, so M25 does not establish a retained CVRP improvement or complete v0.4.
+The root is preserved and consumed without retry, resume or reuse. See the
+[M25 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
+
+Any continuation must be designed and preregistered as a fresh M26 with a new
+label, root and separately justified population. M25 may be supplied only as
+ordinary terminal history; no automatic M26 is authorized.
 
 ## Current validation rule
 
