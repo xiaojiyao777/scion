@@ -602,16 +602,24 @@ The exact design is in the
   Preemptive exact-ref reads remain valid. The ranker does not judge novelty,
   choose a mechanism/target/patch or reach C, Contract, Protocol or Decision.
   Direct-H behavior without research limits is unchanged.
-- [ ] **PREPARED / NOT LAUNCHED:** run M27 once, only after the tracked
-  preparation and independent gates pass, under the fresh label/root in the
-  [M27 preregistration](docs/experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
-  Its first H sees six problem observations plus 37 native records in exact
-  order. It reuses the M25/M26 outcome-exposed development bank and two-round,
-  34-provider-call, 14,000-second envelope; validation/frozen remain sealed and
-  unreachable. Report the actual audit trigger/ref, preemptive read,
-  pivot/refinement and exact H/patch replay facts separately from paired
-  Protocol evidence. M26-to-M27 is non-randomized and non-causal. Do not
-  preselect a first candidate or automatically start M28.
+- [x] **TERMINAL / COMPLETED VALID / EXPANDED SCREENING ABANDON:** execute M27
+  once on the M25/M26 outcome-exposed development bank. One accepted H used
+  four turns over the 43-entry index: source read, audit trigger for
+  `history-0030`, required history read, then acceptance with that ref cited in
+  both basis arrays. Coverage was accepted 1/1 and incomplete zero; the read
+  was not preemptive. The candidate changed after the trigger but retained the
+  same top-1. Its self-described pivot/refinement label was `not_observable`,
+  and exact structured-H and complete ordered-patch replay counts were both
+  zero. C used `revise -> test_patch -> ready -> finalize_patch`; its
+  1,199-character falsifier projected `passed`, all 5/5 host checks passed and
+  no post-probe revision occurred. Eight provider calls and 42 serial solver subprocesses
+  completed initial 6/6 screening and an expanded screen with 10/12 valid pairs
+  plus two candidate-only timeouts. Initial evidence expanded; expanded
+  Protocol failed case quality and Decision abandoned for runtime failure.
+  Validation and frozen remained zero. The preserved root is consumed without
+  retry, resume or automatic M28. Audit/probe observations are non-causal, and
+  the result is negative/mixed evidence only on the seen bank. See the
+  [M27 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and
@@ -688,19 +696,25 @@ frozen, promotion and a third candidate are all zero. This demonstrates the
 bounded autonomous V3 research chain, but the research result is negative/mixed
 and supplies no algorithm-improvement or generalization claim.
 
-M10-M26 then established continuous cross-campaign ordinary history, bounded H
+M10-M27 then established continuous cross-campaign ordinary history, bounded H
 and C research, an optional sandboxed C falsifier and several valid
 negative/mixed CVRP screens. M25 reached an expanded screen but its exact
 candidate had one candidate-only timeout and was abandoned. M26 completed two
 valid initial screens; both failed case quality. Its first direction
 reimplemented historical work, while its second used same-campaign evidence but
 exactly replayed an unread failed prior patch. Validation, frozen, promotion and
-retained evidence remain zero; both roots are preserved and consumed.
+retained evidence remain zero; the roots are preserved and consumed.
 
 The generic nearest-history audit now scans every current ordinary index entry,
 ranks only usable hypothesis headlines and requires the candidate-specific
-top-1 ref to be read and cited before H acceptance. M27 is prepared under a
-fresh label/root with a 43-entry first-H inventory and the outcome-exposed
-M25/M26 development bank. It is not launched. Its one-shot may run only after
-the tracked preparation and independent gates pass. CVRP acceptance remains
-unmet, M26-to-M27 is non-causal, and no M28 is automatic.
+top-1 ref to be read and cited before H acceptance. M27 exercised that path in
+four H turns over a 43-entry inventory, then used the same accepted H and patch
+for initial and expanded screening. Initial screening expanded, but two
+candidate-only expanded-stage timeouts left 10/12 valid pairs; Protocol failed
+case quality and Decision abandoned for runtime failure. The run is terminal
+`completed / valid / requested_rounds_completed`, with validation and frozen
+zero. Its audit and probe observations establish bounded framework behavior,
+not causal research improvement; its paired result is negative/mixed seen-bank
+development evidence. CVRP acceptance remains unmet. The current operation is
+to review and commit this terminal documentation. Any M28 requires a new
+preregistered design and explicit authorization; no launch is automatic.

@@ -536,30 +536,69 @@ The ranker reads no history body, patch or metric, judges no novelty, adds no
 provider action or durable state, and does not reach C, Contract, Verification,
 Protocol, Safe Features or Decision. The direct one-shot H path is unchanged.
 
-M27 is prepared but not launched under fresh label/root
-`v04-cvrp-m27-nearest-history-audit-autonomous-continuation-20260821`. Its
-strict research context is the exact five-observation M26 prefix plus one
-aggregate M26 terminal observation, followed by the prior 35 native records
-and a byte-for-byte tracked copy of M26's two ordinary records. Thus the first H
-index is six observations plus 37 native records, exactly 43 entries; the six
-headline-free observations remain visible but the 37 native entries are the
-eligible lexical candidates. The M26
-observation imports no mechanism, target, patch, H basis, provider/probe body,
-raw solver output or reserved later-stage identity. Its one exact-candidate
-outcome overlap count records historical candidate replay, not case-population
-overlap.
+M27 is now terminal `completed / valid / requested_rounds_completed` after one
+authorized invocation under label/root
+`v04-cvrp-m27-nearest-history-audit-autonomous-continuation-20260821`. The first
+H prompt contained six observations plus 37 native records, exactly 43 index
+entries; only the 37 headline-bearing native records were ranking-eligible.
+One H session used four provider turns: source read, otherwise-valid finalize
+and fixed audit trigger for `history-0030`, required history read, then accepted
+finalize. Accepted coverage was 1/1 and incomplete coverage zero. The read was
+not preemptive, and the accepted basis cited the required ref in both
+`read_refs` and `nearest_prior_refs`.
 
-M27 deliberately reuses the M25/M26 outcome-exposed seen development bank,
-unchanged protocol/split/seeds and M11 research limits. Two formal rounds, a
-34-call provider cap, 48 serial solver-call ceiling, `10630s` known guarded
-work and `14000s` outer hardwall are unchanged. Validation and frozen raw data
-remain sealed and unreachable. The optional C falsifier retains M26's complete
-trace-observable, sandboxed, enum-only and non-evidentiary rules. The terminal
-analysis must separate audit behavior, tainted research-direction quality and
-paired Protocol algorithm evidence; M26-to-M27 is non-randomized and cannot
-support a causal comparison. The first candidate remains Agent-selected. There
-is no launch before commit/review and no automatic M28. See the
-[M27 preregistration](../experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
+The candidate changed after the trigger, but recomputation kept its top-1 at
+`history-0030`. H did not explicitly label its `material_delta` as pivot or
+refinement, so that frozen audit field is `not_observable`. Direct comparison
+against all 37 ordinary priors found zero exact structured-H replays and zero
+exact complete ordered-patch replays. Qualitative direction review nevertheless
+describes same-mechanism refinement/reimplementation, not a pivot or proof of
+novelty.
+
+C proceeded `revise -> test_patch -> ready -> finalize_patch`. The single test
+supplied a 1,199-character falsifier source; its next durable prompt projected
+probe information only as `passed`, while the ordinary host outcome and all
+five host checks passed. There was no post-probe revision. This is complete
+trace-observable adoption, but the provider-authored probe and nearest-history
+audit remain non-evidentiary and support no causal effect claim.
+
+The campaign used 8/34 provider calls: four H turns, three C turns and one final
+decision. Exactly 42 solver subprocesses ran serially with maximum concurrency
+one: two Verification, four canary and 36 formal calls. Initial screening
+completed 6/6 valid pairs without failure. Case win/loss/tie counts were
+`1/0/2`, pair counts `1/0/5`, median total-distance delta `0.0`, CI
+`[0.0, 28.5]`, median runtime ratio `0.99951391` and median runtime delta
+`-9.5ms`. Protocol and Decision expanded screening.
+
+Expanded screening attempted 12 pairs and completed 10 valid pairs. The two
+candidate-only timeouts reached the declared `90s + 15s` host guard; recorded
+end-to-end elapsed values were `105112ms` and `105116ms`, including bounded
+post-kill drain/accounting. Both paired champion runs completed. Case counts
+were `1/1/4`, pair counts `1/2/9`, median delta `0.0`, CI `[-0.5, 0.5]`, median
+runtime ratio `1.00062879` and median runtime delta `+17ms`. Protocol returned
+`fail / SCREENING_FAIL_CASE_QUALITY`; Decision returned
+`abandon / CANDIDATE_RUNTIME_FAILURE`. The two ordinary records contain the
+same structured H and complete ordered patch, recording initial then expanded
+evidence for one candidate.
+
+Family telemetry was `unavailable_current_source` / association-only.
+Validation, frozen, promotion, retained comparison and champion change were
+zero. The recorded interval from run-root birth to the root-directory mtime
+immediately following terminal-summary publication was `1545.200343s`, not the
+full shell lifetime, and the `14000s` hardwall was not hit. Post-terminal
+scoped process count, active slots and children below the checked run-root
+`workspaces`, `candidate_workspaces` and `archive` directories were all zero;
+no M27-era `/tmp/scion_run_*` match remained. The root is preserved and
+consumed without
+retry, resume, reuse or automatic M28.
+
+Mechanically, M27 establishes the live bounded audit/read/citation path and
+probe projection boundary. Scientifically, it supplies negative/mixed paired
+development evidence only on the outcome-exposed seen bank; M26-to-M27 remains
+non-randomized and non-causal. CVRP acceptance remains unmet. The current
+operation is to review and commit this terminal record. Any M28 requires a new
+preregistered design and explicit authorization. See the
+[M27 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
 
 ## Current validation rule
 

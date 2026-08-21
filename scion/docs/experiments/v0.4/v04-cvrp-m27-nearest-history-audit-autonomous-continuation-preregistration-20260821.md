@@ -1,6 +1,6 @@
 # CVRP M27 nearest-history-audit autonomous-continuation preregistration
 
-**State:** `PREPARED / NOT_LAUNCHED`
+**State:** `TERMINAL_COMPLETED_VALID / EXPANDED_SCREENING_ABANDON`
 
 **Label:**
 `v04-cvrp-m27-nearest-history-audit-autonomous-continuation-20260821`
@@ -10,11 +10,106 @@
 
 **Framework preparation base:** `c65c1438f2efcc488b0be8cf58e5d82515367077`
 
-The implementation revision is an ordinary source reference, not an
-authorization, identity, digest or proof object. This preregistration and all
-named inputs must be committed before launch. The preparation carrier will be
-reported as ordinary provenance after that commit; it is not recursively
-embedded here.
+**Preparation and live carrier:** `4f4a8de9ae4504f0c22de0b315a92fa74aab4203`
+
+The implementation revision and carrier are ordinary source references, not
+authorization, identity, digest or proof objects. This preregistration and all
+named inputs were committed before launch.
+
+## Terminal result
+
+The authorized command ran exactly once and is terminal
+`completed / valid / requested_rounds_completed`. One accepted H produced one
+candidate that completed initial and expanded screening. The two requested
+formal rounds were therefore two screening stages for the same candidate;
+validation and frozen evaluation were zero. The fresh root is preserved and
+consumed, with no retry, resume, root reuse or automatic M28.
+
+The live nearest-history audit was completely observable. The first H prompt
+contained 43 entries: six problem observations and 37 native ordinary records,
+of which the 37 headline-bearing native records were ranking-eligible. The
+single H session used four provider turns in order: read current source,
+attempt finalize and receive the fixed audit trigger for `history-0030`, read
+that ref, then finalize an accepted H. Thus accepted-H coverage was 1/1 and
+incomplete-H coverage was zero. The accepted basis contained `history-0030` in
+both `read_refs` and `nearest_prior_refs`; the read was audit-triggered rather
+than preemptive.
+
+The structured candidate changed after the trigger, but independent
+recomputation on the complete current index kept its eligible top-1 at
+`history-0030`. H did not explicitly characterize its `material_delta` as a
+pivot or refinement, so the frozen self-label audit is `not_observable`.
+Direct equality against all 37 supplied ordinary records found zero exact
+structured-H replays and zero exact complete ordered-patch replays. Qualitative
+post-hoc direction review describes the accepted work as a same-mechanism
+refinement or reimplementation, not a pivot or a novelty result.
+
+The observable C path was `revise -> test_patch -> ready -> finalize_patch`.
+The `test_patch` action supplied a 1,199-character falsifier source; the next
+durable C prompt projected probe information only as
+`falsifier_outcome=passed`, while its ordinary host outcome was `passed` with
+all five checks passing. C made no post-probe revision. The source body remains
+only in the tainted raw provider trace and is not copied here or into ordinary
+history. Probe adoption and its enum are descriptive, non-evidentiary facts
+and support no causal probe claim.
+
+Resource accounting reconciled exactly. The campaign used 8/34 provider calls:
+four H turns, three C turns and one C final decision. It ran 42 solver
+subprocesses with maximum concurrency one: two in Verification, four across
+the two canaries and 36 in formal Protocol work. The recorded interval from
+run-root birth to the root-directory mtime immediately following terminal-
+summary publication was `1545.200343s`; it is not a measurement of the full
+shell lifetime. The `14000s` hardwall was not reached.
+
+Initial screening completed 6/6 valid pairs with zero failures. Case
+win/loss/tie counts were `1/0/2`, pair counts were `1/0/5`, and median
+total-distance delta was `0.0` with CI `[0.0, 28.5]`. Median candidate/champion
+runtime ratio was `0.99951391`, with median runtime delta `-9.5ms`. Protocol
+returned `expand / SCREENING_EXPAND_INITIAL_QUALITY`; Decision returned
+`expand_screening`.
+
+Expanded screening attempted all 12 pairs, completed 10 valid pairs and
+recorded two candidate-only timeouts. The host guard fired at the declared
+`90s + 15s`; recorded end-to-end elapsed values were `105112ms` and
+`105116ms`, including bounded post-kill drain/accounting. Both paired champion
+runs completed. Across six cases, case counts were `1/1/4`,
+pair counts were `1/2/9`, and median total-distance delta was `0.0` with CI
+`[-0.5, 0.5]`. Median runtime ratio was `1.00062879`, with median runtime delta
+`+17ms`. Protocol returned `fail / SCREENING_FAIL_CASE_QUALITY`; Decision
+returned `abandon / CANDIDATE_RUNTIME_FAILURE`.
+
+Exactly two ordinary JSONL records were appended in stage order. Their
+structured H values and complete ordered patches are respectively equal,
+recording the same candidate's initial and expanded evidence rather than a
+second H. Family telemetry was `unavailable_current_source` and remains
+association-only; it cannot establish exact activation or causality. No
+validation, frozen, promotion, retained or champion-change evidence exists.
+
+Post-terminal cleanup found zero scoped campaign/child/solver/bubblewrap/
+prlimit processes and zero active slots. The checked run-root `workspaces`,
+`candidate_workspaces` and `archive` directories had zero children, and no
+M27-era `/tmp/scion_run_*` match remained. The durable campaign root is
+expected preserved evidence, not resumable state.
+
+The three claim layers therefore remain separate:
+
+1. **Framework.** The four-turn audit trigger/read/citation path, candidate
+   recomputation, bounded C probe projection, host checks and formal execution
+   were observable and behaved as designed. This does not establish a causal
+   audit or probe effect.
+2. **Research direction.** The accepted direction was testable but is best
+   described as same-mechanism refinement/reimplementation. Zero exact replay
+   is only a direct-equality fact, not proof of semantic novelty.
+3. **Algorithm.** Initial expansion followed by expanded-screening failure and
+   runtime abandon is negative/mixed development evidence on the already
+   outcome-exposed bank. It establishes no fresh-population, confirmation,
+   generalization, validation, frozen, promotion, retained, production-readiness
+   or v0.4-complete claim.
+
+At preparation time the root was required to be absent and the frozen command
+below could be invoked exactly once only after the carrier was committed and
+the provider-/solver-free and independent review gates passed. Those conditions
+were satisfied before the now-consumed invocation.
 
 ## Scientific question
 
@@ -610,14 +705,14 @@ env -i \
   --campaign-dir "$M27_CAMPAIGN_DIR"
 ```
 
-The user's standing authorization permits this exact live command once only
-after the preparation carrier is committed, the provider-/solver-free preflight
-and two independent scientific/runtime reviews pass, the tracked tree remains
-clean and the output root remains absent. This prepared state itself does not
-launch. A preflight failure stops before live execution. Once any live
-invocation creates the root, the one-shot is consumed regardless of outcome;
-there is no retry, resume, repair launch or root reuse.
+The user's standing authorization permitted this exact live command once only
+after the preparation carrier was committed, the provider-/solver-free
+preflight and two independent scientific/runtime reviews passed, the tracked
+tree remained clean and the output root remained absent. Those gates passed
+before the single now-terminal invocation. Creation of the root consumed the
+one-shot; there is no retry, resume, repair launch or root reuse.
 
 No distribution, packaging, build, deployment, root/systemd, Trust/Hash
 authority, object identity, lease, signing, registration, duplicate-control or
-automatic next experiment is part of M27.
+automatic next experiment is part of M27. Any M28 requires a separately
+reviewed design and new authorization.
