@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, ClassVar, Literal, Mapping, TypeAlias, Union
+from typing import Any, ClassVar, Literal, TypeAlias, Union
 
 from scion.core.research_input import is_sensitive_research_key
 from scion.proposal.solver_design_guidance import RENDERER_INPUTS_KEY
@@ -50,6 +51,7 @@ _HYPOTHESIS_KEYS = frozenset(
         "prior_research_observations",
         "prior_research_history",
         "pre_protocol_observations",
+        "hypothesis_rejection_summary",
         "seed",
         "experiment_history",
         RENDERER_INPUTS_KEY,

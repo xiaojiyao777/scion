@@ -217,6 +217,14 @@ def _run(
     )
 
 
+def _tool_action(call: Mapping[str, Any], action: str) -> dict[str, Any]:
+    return next(
+        branch
+        for branch in call["tool"]["input_schema"]["oneOf"]
+        if branch["properties"]["action"]["enum"] == [action]
+    )
+
+
 def test_compact_indexes_are_complete_and_bodies_are_read_on_demand() -> None:
     session, client = _run(
         [
@@ -646,7 +654,7 @@ def test_proposal_code_rejection_is_safe_and_visible_to_next_h() -> None:
     assert secret_target not in rendered
 
 
-def test_finalize_basis_rejects_refs_that_were_not_read() -> None:
+def test_finalize_basis_rejection_can_be_corrected_within_remaining_turns() -> None:
     session, client = _run(
         [
             {"action": "read_source", "ref": "source-0001"},
@@ -655,17 +663,284 @@ def test_finalize_basis_rejects_refs_that_were_not_read() -> None:
                 "hypothesis": _hypothesis(),
                 "research_basis": _basis("source-0002"),
             },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis("source-0001"),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=3),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert len(client.calls) == 3
+    assert (
+        '"action":"finalize_hypothesis","ok":false,"reason":"read_refs_not_read"'
+    ) in client.calls[2]["system_text"]
+
+
+def test_m24_unseen_nearest_ref_can_be_grounded_and_revised(
+    tmp_path: Path,
+) -> None:
+    invalid_hypothesis = _hypothesis()
+    invalid_hypothesis["hypothesis_text"] = (
+        "INVALID_FINALIZE_BODY_MUST_REMAIN_ONLY_IN_ITS_TERMINAL_TRACE"
+    )
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": invalid_hypothesis,
+                "research_basis": _basis(
+                    "source-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+        trace_dir=str(tmp_path),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert result.hypothesis.hypothesis_text == _hypothesis()["hypothesis_text"]
+    assert session.provider_calls_used == 4
+    assert len(client.calls) == 4
+    assert "nearest_prior_refs_not_read_and_cited" in client.calls[2]["system_text"]
+    assert invalid_hypothesis["hypothesis_text"] not in client.calls[2]["system_text"]
+
+    first_actions = {
+        branch["properties"]["action"]["enum"][0]
+        for branch in client.calls[0]["tool"]["input_schema"]["oneOf"]
+    }
+    assert "finalize_hypothesis" not in first_actions
+    assert _tool_action(client.calls[0], "read_history")["properties"]["ref"][
+        "enum"
+    ] == ["history-0001", "history-0002", "history-0003"]
+
+    basis_schemas = []
+    for call in client.calls[1:]:
+        finalize = _tool_action(call, "finalize_hypothesis")
+        basis_schemas.append(finalize["properties"]["research_basis"]["properties"])
+    assert basis_schemas[0]["read_refs"]["items"]["enum"] == ["source-0001"]
+    assert basis_schemas[0]["nearest_prior_refs"]["maxItems"] == 0
+    assert basis_schemas[1]["nearest_prior_refs"]["maxItems"] == 0
+    assert basis_schemas[2]["read_refs"]["items"]["enum"] == [
+        "history-0001",
+        "source-0001",
+    ]
+    assert basis_schemas[2]["nearest_prior_refs"]["items"]["enum"] == ["history-0001"]
+    assert (
+        "must also appear in read_refs"
+        in (basis_schemas[2]["nearest_prior_refs"]["description"])
+    )
+
+    traces = [
+        json.loads(path.read_text(encoding="utf-8")) for path in tmp_path.glob("*.json")
+    ]
+    finalized = [
+        trace
+        for trace in traces
+        if trace.get("response", {}).get("action") == "finalize_hypothesis"
+    ]
+    assert len(finalized) == 2
+    hypotheses = [trace["response"]["hypothesis"] for trace in finalized]
+    assert invalid_hypothesis in hypotheses
+    assert _hypothesis() in hypotheses
+
+
+def test_visible_nearest_history_must_also_be_cited_and_can_be_revised() -> None:
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert "nearest_prior_refs_not_read_and_cited" in client.calls[3]["system_text"]
+
+
+def test_invalid_hypothesis_can_be_corrected_without_echoing_validator_text() -> None:
+    invalid = _hypothesis()
+    invalid["change_locus"] = "FORBIDDEN_UNBOUND_LOCUS_MUST_NOT_BE_ECHOED"
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": invalid,
+                "research_basis": _basis("source-0001"),
+            },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis("source-0001"),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=3),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    correction_context = client.calls[2]["system_text"]
+    assert '"reason":"hypothesis_invalid"' in correction_context
+    assert invalid["change_locus"] not in correction_context
+
+
+def test_invalid_finalize_on_last_turn_stops_at_the_local_cap() -> None:
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis("source-0002"),
+            },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis("source-0001"),
+            },
         ],
         limits=CodeResearchLimits(max_turns=2),
     )
 
-    with pytest.raises(
-        ProposalValidationError,
-        match="read_refs must reference sources or histories read",
-    ):
+    with pytest.raises(ProposalValidationError, match="turn cap exhausted"):
         session.run(_snapshot())
 
+    assert session.provider_calls_used == 2
     assert len(client.calls) == 2
+
+
+def test_last_shared_read_call_is_reserved_for_unread_history() -> None:
+    invalid_ref = "HISTORY_REF_SENTINEL_MUST_NOT_BE_ECHOED"
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "read_source", "ref": "source-0002"},
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "read_source", "ref": "source-0002"},
+            {"action": "read_history", "ref": invalid_ref},
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=7, max_read_calls=4),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert "read_call_reserved_for_history" in client.calls[4]["system_text"]
+    assert '"history_read_reserved":true' in client.calls[3]["system_text"]
+    assert '"remaining_read_calls":1' in client.calls[4]["system_text"]
+    assert "unknown_history_ref" in client.calls[5]["system_text"]
+    assert invalid_ref not in client.calls[5]["system_text"]
+    assert '"history_read_reserved":true' in client.calls[5]["system_text"]
+    assert '"remaining_read_calls":1' in client.calls[5]["system_text"]
+    assert (
+        "final shared read call is currently reserved"
+        in client.calls[3]["tool"]["description"]
+    )
+    assert _tool_action(client.calls[4], "read_history")["properties"]["ref"][
+        "enum"
+    ] == ["history-0001", "history-0002", "history-0003"]
+
+
+def test_invalid_finalize_does_not_bypass_the_global_provider_cap() -> None:
+    budget = ProviderCallBudget(2)
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis("source-0002"),
+            },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis("source-0001"),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=3),
+        budget=budget,
+    )
+
+    with pytest.raises(ProviderCallCapExhausted):
+        session.run(_snapshot())
+
+    assert budget.used == 2
+    assert session.provider_calls_used == 2
+    assert len(client.calls) == 2
+
+
+def test_unknown_action_and_provider_fault_remain_hard_failures() -> None:
+    unknown_session, unknown_client = _run(
+        [
+            {"action": "run_solver"},
+            {"action": "abstain", "reason": "must not be reached"},
+        ],
+        limits=CodeResearchLimits(max_turns=2),
+    )
+
+    with pytest.raises(ProposalValidationError, match="action must be"):
+        unknown_session.run(_snapshot())
+
+    provider_session, provider_client = _run(
+        [RuntimeError("provider transport sentinel")],
+        limits=CodeResearchLimits(max_turns=2),
+    )
+    with pytest.raises(RuntimeError, match="provider transport sentinel"):
+        provider_session.run(_snapshot())
+
+    assert len(unknown_client.calls) == 1
+    assert unknown_session.provider_calls_used == 1
+    assert len(provider_client.calls) == 1
+    assert provider_session.provider_calls_used == 1
 
 
 def test_validated_basis_is_retained_by_terminal_trace_not_hypothesis(

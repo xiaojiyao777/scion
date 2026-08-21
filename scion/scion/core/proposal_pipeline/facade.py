@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
-from typing import Any, Callable, Mapping
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from typing import Any
 
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.execution_outcome import (
@@ -66,6 +67,21 @@ _KNOWN_PROVIDER_ERRORS = (
     ProposalValidationError,
 )
 
+_ORDINARY_HYPOTHESIS_REJECTION_REASONS = frozenset(
+    {
+        "HYPOTHESIS_PROPOSAL_INVALID",
+        "HYPOTHESIS_RESEARCH_ABSTAINED",
+    }
+)
+_HYPOTHESIS_RESEARCH_RESOURCE_REASONS = frozenset(
+    {
+        "HYPOTHESIS_RESEARCH_RESULT_CAP_EXHAUSTED",
+        "HYPOTHESIS_RESEARCH_TRANSCRIPT_EXHAUSTED",
+        "HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED",
+    }
+)
+_HYPOTHESIS_REJECTION_COUNT_LIMIT = 99
+
 
 @dataclass
 class ProposalPipeline:
@@ -80,6 +96,16 @@ class ProposalPipeline:
     mark_balance_exhausted: Callable[[], None]
     code_research_limits: CodeResearchLimits | None = None
     code_development_evaluator: Any | None = None
+    _hypothesis_rejection_counts: dict[str, int] = field(
+        default_factory=dict,
+        init=False,
+        repr=False,
+    )
+    _last_hypothesis_rejection_reason: str | None = field(
+        default=None,
+        init=False,
+        repr=False,
+    )
 
     def generate_hypothesis(
         self,
@@ -101,7 +127,7 @@ class ProposalPipeline:
                     self.problem_runtime.hypothesis_research_source_prefixes()
                 )
         except (TypeError, ValueError) as exc:
-            return ProposalAttempt.failure(
+            return self._hypothesis_failure(
                 self._record_local_failure(
                     phase="hypothesis",
                     outcome=ExecutionOutcome.NOT_EVALUATED,
@@ -126,7 +152,7 @@ class ProposalPipeline:
                     qualified_prefixes=source_prefixes,
                 )
                 if isinstance(research_result, HypothesisResearchAbstain):
-                    return ProposalAttempt.failure(
+                    return self._hypothesis_failure(
                         self._record_local_failure(
                             phase="hypothesis",
                             outcome=ExecutionOutcome.RESEARCH_REJECTED,
@@ -138,7 +164,7 @@ class ProposalPipeline:
                     raise TypeError("hypothesis research returned an invalid result")
                 hypothesis = research_result.hypothesis
         except HypothesisResearchContextError as exc:
-            return ProposalAttempt.failure(
+            return self._hypothesis_failure(
                 self._record_local_failure(
                     phase="hypothesis",
                     outcome=ExecutionOutcome.NOT_EVALUATED,
@@ -148,19 +174,19 @@ class ProposalPipeline:
                 )
             )
         except ProviderCallCapExhausted as exc:
-            return ProposalAttempt.failure(
+            return self._hypothesis_failure(
                 self._handle_provider_failure(branch, "hypothesis", exc)
             )
         except LLMBalanceError as exc:
-            return ProposalAttempt.failure(
+            return self._hypothesis_failure(
                 self._handle_provider_failure(branch, "hypothesis", exc, balance=True)
             )
         except _KNOWN_PROVIDER_ERRORS as exc:
-            return ProposalAttempt.failure(
+            return self._hypothesis_failure(
                 self._handle_provider_failure(branch, "hypothesis", exc)
             )
-        except Exception as exc:
-            return ProposalAttempt.failure(
+        except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
+            return self._hypothesis_failure(
                 self._record_unexpected_call_failure("hypothesis", exc)
             )
         return ProposalAttempt.success(hypothesis)
@@ -252,7 +278,7 @@ class ProposalPipeline:
                     exc,
                 )
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
             return ProposalAttempt.failure(
                 self._record_unexpected_call_failure(
                     "code",
@@ -273,11 +299,45 @@ class ProposalPipeline:
             step_history=self.step_history,
             branch_workspace=self.branch_workspaces.get(branch.branch_id),
         )
+        if "hypothesis_rejection_summary" in context:
+            raise ValueError("hypothesis rejection summary is pipeline-owned")
+        rejection_summary = self._hypothesis_rejection_summary()
+        if rejection_summary is not None:
+            context = dict(context)
+            context["hypothesis_rejection_summary"] = rejection_summary
         context_snapshot = freeze_proposal_context("hypothesis", context)
         return context_snapshot, build_prompt_turn_snapshot(
             "hypothesis",
             context_snapshot,
         )
+
+    def _hypothesis_failure(
+        self,
+        record: ExecutionOutcomeRecord,
+    ) -> ProposalAttempt[HypothesisProposal]:
+        eligible = (
+            record.outcome is ExecutionOutcome.RESEARCH_REJECTED
+            and record.reason_code in _ORDINARY_HYPOTHESIS_REJECTION_REASONS
+        )
+        if eligible:
+            reason_code = record.reason_code
+            self._hypothesis_rejection_counts[reason_code] = min(
+                self._hypothesis_rejection_counts.get(reason_code, 0) + 1,
+                _HYPOTHESIS_REJECTION_COUNT_LIMIT,
+            )
+            self._last_hypothesis_rejection_reason = reason_code
+        return ProposalAttempt.failure(record)
+
+    def _hypothesis_rejection_summary(self) -> dict[str, Any] | None:
+        if self._last_hypothesis_rejection_reason is None:
+            return None
+        return {
+            "reason_counts": {
+                reason_code: self._hypothesis_rejection_counts[reason_code]
+                for reason_code in sorted(self._hypothesis_rejection_counts)
+            },
+            "last_reason": self._last_hypothesis_rejection_reason,
+        }
 
     def _handle_provider_failure(
         self,
@@ -289,9 +349,16 @@ class ProposalPipeline:
     ) -> ExecutionOutcomeRecord:
         call_cap_exhausted = isinstance(error, ProviderCallCapExhausted)
         invalid = isinstance(error, (LLMFormatError, ProposalValidationError))
+        validation_reason = (
+            _proposal_validation_reason_code(error, phase=phase) if invalid else None
+        )
+        h_research_resource_exhausted = (
+            phase == "hypothesis"
+            and validation_reason in _HYPOTHESIS_RESEARCH_RESOURCE_REASONS
+        )
         outcome_value = (
             ExecutionOutcome.RESOURCE_EXHAUSTED
-            if balance or call_cap_exhausted
+            if balance or call_cap_exhausted or h_research_resource_exhausted
             else ExecutionOutcome.RESEARCH_REJECTED
             if invalid
             else ExecutionOutcome.BLOCKED_INFRA
@@ -301,7 +368,7 @@ class ProposalPipeline:
             if balance
             else "PROVIDER_CALL_CAP_EXHAUSTED"
             if call_cap_exhausted
-            else _proposal_validation_reason_code(error, phase=phase)
+            else validation_reason
             if invalid
             else "PROVIDER_CALL_BLOCKED_INFRA"
         )

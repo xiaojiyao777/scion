@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -34,17 +34,54 @@ class HypothesisResearchFinalized:
     research_basis: HypothesisResearchBasis
 
 
-def hypothesis_research_basis_schema() -> dict[str, Any]:
-    ref_array = {
-        "type": "array",
-        "items": {
+def hypothesis_research_basis_schema(
+    *,
+    visible_refs: Collection[str] | None = None,
+    visible_history_refs: Collection[str] | None = None,
+) -> dict[str, Any]:
+    """Return a basis schema bound to evidence revealed in this H session."""
+
+    if visible_refs is not None and not visible_refs:
+        raise ValueError(
+            "a dynamic research_basis schema requires at least one visible ref"
+        )
+
+    def ref_array(
+        visible: Collection[str] | None,
+        *,
+        description: str,
+    ) -> dict[str, Any]:
+        allowed = None if visible is None else sorted(set(visible))
+        items: dict[str, Any] = {
             "type": "string",
             "minLength": 1,
             "maxLength": MAX_HYPOTHESIS_RESEARCH_REF_CHARS,
-        },
-        "uniqueItems": True,
-        "maxItems": _MAX_REFS,
-    }
+        }
+        if allowed:
+            items["enum"] = allowed
+        return {
+            "type": "array",
+            "description": description,
+            "items": items,
+            "uniqueItems": True,
+            "maxItems": _MAX_REFS if allowed is None else min(_MAX_REFS, len(allowed)),
+        }
+
+    read_ref_array = ref_array(
+        visible_refs,
+        description=(
+            "Refs revealed by successful read_source or read_history actions in "
+            "this session. Use only this turn's enumerated refs."
+        ),
+    )
+    nearest_ref_array = ref_array(
+        visible_history_refs,
+        description=(
+            "Nearest prior refs must come only from successful read_history "
+            "actions in this session and must also appear in read_refs. Use [] "
+            "when no history ref is enumerated."
+        ),
+    )
     text = {"type": "string", "minLength": 1, "maxLength": _MAX_TEXT_CHARS}
     return {
         "type": "object",
@@ -57,8 +94,8 @@ def hypothesis_research_basis_schema() -> dict[str, Any]:
             "observable_prediction",
         ],
         "properties": {
-            "read_refs": {**deepcopy(ref_array), "minItems": 1},
-            "nearest_prior_refs": deepcopy(ref_array),
+            "read_refs": {**read_ref_array, "minItems": 1},
+            "nearest_prior_refs": nearest_ref_array,
             "material_delta": deepcopy(text),
             "alternatives_considered": {
                 "type": "array",
