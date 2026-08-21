@@ -541,12 +541,19 @@ The exact design is in the
   `continue_explore`, so validation, frozen, promotion and retained remained
   zero. No provider call, replacement candidate, repair, retry or resume path
   was created.
-- [ ] **PREPARED_NOT_STARTED:** after that terminal result, run one serial
-  bounded autonomous campaign in which H performs the direction research and
-  the host supplies only ordinary source/history access, resource limits and
-  the V3 gates. The exact fresh population, 34-call shared provider cap,
-  two-stage stopping rule and claim boundary are frozen in the
+- [x] **TERMINAL / RESOURCE_EXHAUSTED:** run one serial bounded autonomous
+  campaign in which H performs the direction research and the host supplies
+  only ordinary source/history access, resource limits and the V3 gates. M24
+  stopped at 34/34 provider calls after nine H drafts all failed the same
+  unread-nearest-history basis check; no valid H, C, Contract, Verification,
+  solver or formal Protocol stage was reached. This is a bounded H-feedback
+  failure and supplies zero algorithm evidence. The exact population, resource
+  boundary and terminal record are preserved in the
   [M24 preregistration](docs/experiments/v0.4/v04-cvrp-m24-autonomous-direction-research-development-preregistration-20260821.md).
+- [ ] Make invalid H-finalization evidence binding a bounded, enumerated
+  in-session observation, constrain provider-visible refs to those actually
+  read, and validate the repair without a provider or solver before designing
+  another autonomous experiment.
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and

@@ -1,6 +1,6 @@
 # CVRP M24 bounded autonomous direction-research preregistration
 
-**State:** `PREPARED_NOT_STARTED`
+**State:** `TERMINAL_RESOURCE_EXHAUSTED / INVALID_NO_EVALUATED_OUTCOME`
 
 **Label:** `v04-cvrp-m24-autonomous-direction-research-development-20260821`
 
@@ -15,6 +15,36 @@ Contract, Verification, solver, Protocol, Safe Features and Decision counts
 all remained zero. The guard below now inspects only processes whose executable
 name is Python. This is a preparation-control correction, not a scientific
 attempt; no scientific input, resource or claim boundary changed.
+
+## Terminal result
+
+The corrected, single authorized scientific invocation ran once and terminated
+`stopped / invalid_no_evaluated_outcome` with
+`PROVIDER_CALL_CAP_EXHAUSTED` (process exit 21). The shared provider budget was
+consumed exactly at 34/34 calls; no thirty-fifth provider dispatch occurred and
+the outer hardwall did not fire.
+
+All 34 completed provider calls were bounded `hypothesis_research_turn` calls:
+22 `read_source`, two `read_history`, one `search_source`, and nine
+`finalize_hypothesis`. Each finalized H was safely rejected with
+`HYPOTHESIS_PROPOSAL_INVALID` because `nearest_prior_refs` named at least one
+history that the same session had not both read and cited. A tenth scheduled H
+then stopped before dispatch at the shared cap. The provider-facing schema and
+prompt had not stated this exact nearest-prior precondition, and the rejection
+reason was not returned as an ordinary tool result to the remaining turns or
+to the next H attempt. The Agent consequently repeated the same grounding
+mistake instead of repairing it.
+
+The nine drafts included plausible, testable directions--most often exact-delta
+scoring or a missing intra-route relocation neighborhood--but none exported a
+valid H. Therefore C, Contract, Verification, canary, solver, Protocol, Safe
+Features, Decision, formal rounds, metrics, candidate workspaces, and new
+research-history records are all zero. The declared M24 case/seed population
+was not reached. This is resource-safe framework research evidence about H
+feedback and evidence binding, not evidence for or against any algorithm,
+mechanism family, C tool loop, or direction-selection effectiveness. The output
+root is preserved and this one-shot is consumed; it must not be retried,
+resumed, deleted, or reused.
 
 ## Scientific question
 

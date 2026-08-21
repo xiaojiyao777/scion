@@ -413,7 +413,21 @@ Its first fenced-shell execution stopped in the process-absence preflight
 because `pgrep` matched the enclosing shell text containing the later live
 line. The output root remained absent and all scientific/provider/solver counts
 remained zero. The guard is corrected to inspect Python executables only; the
-single scientific invocation remains not started.
+single scientific invocation then ran once.
+
+M24 is now terminal
+`stopped / invalid_no_evaluated_outcome / PROVIDER_CALL_CAP_EXHAUSTED`. It used
+exactly 34/34 provider calls, all in bounded H research, with no extra dispatch.
+Nine plausible H drafts were rejected because every `nearest_prior_refs` list
+included at least one history the same session had not both read and cited; the
+tenth scheduled H stopped before dispatch at the cap. The provider-facing
+schema/prompt did not state this exact requirement and the rejection was not
+fed back as an in-session ordinary action result, so the Agent repeated the
+same error. C, Contract, Verification, solver, canary, Protocol, Safe Features,
+Decision, formal rounds and algorithm evidence are all zero. The M24 root is
+preserved and consumed without retry. The next operation is a provider- and
+solver-free generic H feedback/evidence-binding repair, not M24 resumption or
+an automatic M25.
 
 ## Current validation rule
 
