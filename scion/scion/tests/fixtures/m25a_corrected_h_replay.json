@@ -1,0 +1,68 @@
+{
+  "schema_version": "scion.m25a.corrected_h_replay.v1",
+  "source": {
+    "path": "operators/main.py",
+    "content": "def improve(value):\n    return value\n"
+  },
+  "hypothesis": {
+    "hypothesis_text": "Evaluate one bounded, evidence-grounded change to the declared research surface.",
+    "change_locus": "generic",
+    "action": "modify",
+    "target_file": "operators/main.py",
+    "predicted_direction": "improve",
+    "target_weakness": "Visible source and prior evidence identify a testable opportunity.",
+    "expected_effect": "Change the declared public objective measurably while preserving feasibility."
+  },
+  "actions": [
+    {
+      "action": "read_source",
+      "ref": "source-0001"
+    },
+    {
+      "action": "finalize_hypothesis",
+      "hypothesis_text_override": "M25A_INVALID_FINALIZE_BODY_MUST_NOT_BE_ECHOED",
+      "research_basis": {
+        "read_refs": [
+          "source-0001"
+        ],
+        "nearest_prior_refs": [
+          "history-0001"
+        ],
+        "material_delta": "The proposed experiment differs materially from the nearest prior observation.",
+        "alternatives_considered": [
+          "Retain the current generic mechanism without the proposed experiment."
+        ],
+        "observable_prediction": "The declared public objective should change under the proposed experiment.",
+        "falsification_condition": "Reject the hypothesis if the public evaluation shows no measurable objective change or a feasibility regression."
+      }
+    },
+    {
+      "action": "read_history",
+      "ref": "history-0001"
+    },
+    {
+      "action": "finalize_hypothesis",
+      "research_basis": {
+        "read_refs": [
+          "source-0001",
+          "history-0001"
+        ],
+        "nearest_prior_refs": [
+          "history-0001"
+        ],
+        "material_delta": "The proposed experiment differs materially from the nearest prior observation.",
+        "alternatives_considered": [
+          "Retain the current generic mechanism without the proposed experiment."
+        ],
+        "observable_prediction": "The declared public objective should change under the proposed experiment.",
+        "falsification_condition": "Reject the hypothesis if the public evaluation shows no measurable objective change or a feasibility regression."
+      }
+    }
+  ],
+  "expected": {
+    "feedback_reason": "nearest_prior_refs_not_read_and_cited",
+    "provider_turns": 4,
+    "cross_attempt_invalid_repetitions": 105,
+    "saturated_rejection_count": 99
+  }
+}

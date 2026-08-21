@@ -550,10 +550,21 @@ The exact design is in the
   failure and supplies zero algorithm evidence. The exact population, resource
   boundary and terminal record are preserved in the
   [M24 preregistration](docs/experiments/v0.4/v04-cvrp-m24-autonomous-direction-research-development-preregistration-20260821.md).
-- [ ] Make invalid H-finalization evidence binding a bounded, enumerated
-  in-session observation, constrain provider-visible refs to those actually
+- [x] Make invalid H-finalization evidence binding a bounded, enumerated
+  in-session observation, constrain finalize-basis ref enums to refs actually
   read, and validate the repair without a provider or solver before designing
-  another autonomous experiment.
+  another autonomous experiment. Finalize now requires current-source and
+  history reads when those corpora are available, a cited nearest prior and an
+  explicit falsification condition. Recognized invalid finalize feedback is
+  fixed-enum and same-campaign rejection memory is bounded; local/global
+  resource caps remain hard stops. Provider-/solver-free real-context replay
+  and independent review passed.
+- [ ] **PREPARED / NOT RUN:** execute the new M25 evidence-grounded autonomous
+  continuous-research one-shot on the carried-forward unopened M24 population.
+  Reuse the exact ordinary population controls instead of duplicating them;
+  use a fresh root and sanitized M24 framework-control observation. Host still
+  selects no mechanism, target, patch or repair. See the
+  [M25 preregistration](docs/experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and

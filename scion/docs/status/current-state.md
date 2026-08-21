@@ -429,6 +429,37 @@ preserved and consumed without retry. The next operation is a provider- and
 solver-free generic H feedback/evidence-binding repair, not M24 resumption or
 an automatic M25.
 
+That generic repair is now complete. The complete source/history inventories
+remain available for bounded read/search, while finalize-basis enums contain
+only refs successfully read in the current session. Recognized invalid finalize
+actions return fixed bounded correction categories, and repeated
+INVALID/ABSTAINED H outcomes enter only a saturated H-local same-campaign
+summary. When readable current source or ordinary history is available, H must
+read each kind before finalizing, cite a nonempty read nearest prior, and record
+a separate falsification condition. The basis, feedback and summary remain
+Creative audit context and cannot enter C, Protocol, Safe Features or Decision.
+Local transcript/turn/result exhaustion and the shared provider cap remain
+typed resource stops.
+
+An independent provider- and solver-free replay on the actual M25-sized context
+passed with 13 source entries and 37 history/observation entries: read source,
+reject an unread-history finalize with fixed feedback, read history, then
+export one valid H in four bounded calls without replaying the rejected raw
+body. The tracked regression separately fixes the 37-entry ordering and the
+same four-action correction sequence. Two live bubblewrap isolation tests also
+passed without a provider or solver. Focused regression and independent review
+found no P0/P1.
+
+M25 is prepared as a new one-shot, not an M24 retry. It carries forward the
+exact unopened M24 population because M24 reached no candidate, solver, canary
+or formal stage; it does not create duplicate protocol/split/seed controls.
+The new ordinary input preserves M7/M18/M23 and appends a sanitized M24
+framework-control terminal with zero algorithm evidence and no population
+identity. Two formal rounds allow either exact-branch initial-to-expanded
+screening or a second autonomous initial candidate after an ordinary first
+screen outcome. The host still chooses no mechanism, target or patch. See the
+[M25 preregistration](../experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
+
 ## Current validation rule
 
 Current M23 safe validation collected 1,844 tests. Exact isolated invocations
