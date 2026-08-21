@@ -478,9 +478,40 @@ zero, so M25 does not establish a retained CVRP improvement or complete v0.4.
 The root is preserved and consumed without retry, resume or reuse. See the
 [M25 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
 
-Any continuation must be designed and preregistered as a fresh M26 with a new
-label, root and separately justified population. M25 may be supplied only as
-ordinary terminal history; no automatic M26 is authorized.
+M26 is now `PREPARED / NOT_LAUNCHED` under a new label and fresh absent root.
+It appends a sanitized M25 terminal observation and the two canonical M25
+ordinary history records, yielding five observations plus 35 native records
+and 40 ordered H history entries. It deliberately reuses the exact M25 reached
+screen and seeds as an outcome-exposed adaptive development bank; this is not
+fresh, outcome-blind, confirmation or generalization, and the M25-unreached
+validation/frozen populations remain untouched.
+
+C may optionally include at most one bounded self-authored falsifier on each
+ordinary `test_patch` call, with zero through three ordered count-consuming
+attempts per C session and potentially multiple fresh C sessions under
+scheduler-forward research rejection. Each source is at most 20,000 characters
+and each probe at most 10 seconds within the existing shared budget. Only the
+sandbox scratch file is ephemeral; source remains in the tainted raw provider
+response trace but is never replayed or admitted to history or claims. Even a
+projected `passed` or `failed` enum is a tainted development hint and never
+directly controls C readiness; the host outcome does.
+
+The terminal audit is trace-observable: it lists all visible `test_patch`
+actions in order across C sessions and records a projected enum only when a
+later prompt trace makes it durable. Otherwise it records
+`projection_unobserved`, never an inferred enum. It may report
+`adoption_inconclusive_unused` only when complete observable trajectory and
+terminal evidence prove the field was never supplied; missing coverage is
+`adoption_observation_incomplete`. Any supplied field with an unobserved
+projection also makes adoption observation incomplete. No favorable enum
+selection is allowed. Family telemetry remains permanently association-only;
+only completed paired Protocol comparisons support candidate-versus-champion
+algorithm evidence and cannot upgrade exact activation or causal mechanism.
+The live command
+has not run and is authorized at most once only after the clean-tree provider-
+and solver-free preflight and independent reviews.
+See the
+[M26 preregistration](../experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
 
 ## Current validation rule
 

@@ -1,0 +1,44 @@
+{
+  "schema_version": "scion.m26.embedded_falsifier_replay.v1",
+  "source": {
+    "path": "operators/main.py",
+    "content": "def improve(value):\n    return value\n"
+  },
+  "hypothesis": {
+    "hypothesis_text": "Test one bounded source-grounded candidate without transferring formal authority to a development hint."
+  },
+  "falsifier": {
+    "source": "def test_m26_hint():\n    assert 'M26_PRIVATE_FALSIFIER_SENTINEL' != ''\n",
+    "reported_outcome": "failed"
+  },
+  "actions": [
+    {
+      "action": "revise",
+      "patch": {
+        "file_path": "operators/main.py",
+        "action": "modify",
+        "edit_intent": "exact_replace",
+        "old_string": "return value",
+        "new_string": "return value + 1",
+        "replace_all": false,
+        "evidence_refs": []
+      }
+    },
+    {
+      "action": "test_patch",
+      "falsifier_source": "def test_m26_hint():\n    assert 'M26_PRIVATE_FALSIFIER_SENTINEL' != ''\n"
+    },
+    {
+      "action": "ready"
+    },
+    {
+      "outcome": "finalize_patch"
+    }
+  ],
+  "expected": {
+    "prior_observations": 5,
+    "native_history": 35,
+    "provider_history_entries": 40,
+    "code_research_provider_calls": 4
+  }
+}

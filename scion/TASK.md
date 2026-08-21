@@ -574,10 +574,20 @@ The exact design is in the
   research direction was grounded and testable, and the exact algorithm result
   is negative/mixed development evidence. See the
   [M25 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
-- [ ] Design any continuation as a fresh M26 with a new scientific question,
-  label, root, preregistration and separately justified population. Treat M25
-  only as ordinary terminal history; do not retry, resume or reuse its root,
-  and do not launch M26 automatically.
+- [x] **PREPARED / NOT LAUNCHED:** design M26 as a new embedded-falsifier
+  autonomous continuation with a new label, root and preregistration. It uses
+  five ordered problem observations plus 35 native history records, including
+  the two canonical M25 records, and deliberately reuses M25's outcome-exposed
+  development bank. The optional C-authored falsifier uses an ephemeral
+  sandbox file and yields a non-evidentiary enum hint inside `test_patch`; its
+  source remains only in the tainted raw provider response trace and is never
+  replayed or admitted to history or claims. Terminal reporting is trace-
+  observable and types missing projection or trajectory coverage rather than
+  inferring an enum or unused adoption. Ordinary host checks and the unchanged
+  formal chain retain authority. This is adaptive development, not fresh or
+  confirmatory evidence. Do not retry or resume M25, and do not launch M26
+  before the frozen clean-tree preflight and independent reviews pass. See
+  the [M26 preregistration](docs/experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and
