@@ -541,9 +541,12 @@ The exact design is in the
   `continue_explore`, so validation, frozen, promotion and retained remained
   zero. No provider call, replacement candidate, repair, retry or resume path
   was created.
-- [ ] After that terminal result, freeze and run one serial bounded autonomous
-  campaign in which H performs the direction research and the host supplies
-  only ordinary source/history access, resource limits and the V3 gates.
+- [ ] **PREPARED_NOT_STARTED:** after that terminal result, run one serial
+  bounded autonomous campaign in which H performs the direction research and
+  the host supplies only ordinary source/history access, resource limits and
+  the V3 gates. The exact fresh population, 34-call shared provider cap,
+  two-stage stopping rule and claim boundary are frozen in the
+  [M24 preregistration](docs/experiments/v0.4/v04-cvrp-m24-autonomous-direction-research-development-preregistration-20260821.md).
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and

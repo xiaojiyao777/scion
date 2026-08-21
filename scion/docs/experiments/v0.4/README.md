@@ -8,6 +8,7 @@ referenced, not copied into development prompts.
 
 ## Runs
 
+- [CVRP M24 bounded autonomous direction research, prepared not started](v04-cvrp-m24-autonomous-direction-research-development-preregistration-20260821.md)
 - [CVRP M23 M20 `_swap` provider-free full funnel, terminal not confirmed after expanded screening](v04-cvrp-m23-m20-swap-provider-free-full-funnel-preregistration-20260821.md)
 - [CVRP M22 post-infra continuous research, terminal valid negative result](v04-cvrp-m22-post-infra-continuation-preregistration-20260820.md)
 - [CVRP M21 strict-expansion continuous research, terminal valid-incomplete provider stop](v04-cvrp-m21-strict-expansion-continuation-preregistration-20260820.md)

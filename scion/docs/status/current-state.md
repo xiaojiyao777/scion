@@ -390,6 +390,26 @@ the one-shot is consumed without retry. See the
 The next scientific operation is the still-unchecked serial bounded autonomous
 campaign, not a repair or rerun of M23.
 
+That next operation is now prepared as M24. It uses normal `scion run`, the
+current committed B0 source, 33 ordered native research-history records through
+M22 and three problem-owned prior observations ending with M23. H receives
+complete ordinary source/history indexes and may spend at most eight bounded
+research turns before exporting one proposal with a cited `research_basis`.
+C may spend at most eight bounded read/search/revise/public-test actions plus
+one independent final decision. H and C share a 34-call provider cap; SDK retry
+is zero.
+
+M24's metadata-only population has an initial three-case screen strictly nested
+in a six-case expanded screen, plus declared but unreachable validation and
+frozen splits. All selected cases and seeds are disjoint from the current M7,
+R67, M20-M23 and tracked-input comparison inventory; this is not a globally
+case-unseen claim. Two formal rounds allow either initial -> expanded reuse of
+one verified branch or two autonomous initial screens. Validation, frozen and
+promotion remain zero. The host does not select a mechanism, target or patch,
+and the experiment makes no distribution, build, deployment or Trust/Hash
+lifecycle investment. See the
+[M24 preregistration](../experiments/v0.4/v04-cvrp-m24-autonomous-direction-research-development-preregistration-20260821.md).
+
 ## Current validation rule
 
 Current M23 safe validation collected 1,844 tests. Exact isolated invocations

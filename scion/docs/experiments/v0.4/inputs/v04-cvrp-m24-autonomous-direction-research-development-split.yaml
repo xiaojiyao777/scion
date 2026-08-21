@@ -1,0 +1,25 @@
+version: 0.4-cvrp-m24-autonomous-direction-research-development
+
+safe_data_roots:
+  - ../../../../../vrp
+
+screening:
+  - cvrplib/B/B-n57-k7.vrp
+  - cvrplib/P/P-n60-k15.vrp
+  - cvrplib/X/X-n261-k13.vrp
+  - cvrplib/A/A-n53-k7.vrp
+  - cvrplib/X/X-n167-k10.vrp
+  - cvrplib/X/X-n411-k19.vrp
+
+validation:
+  - cvrplib/P/P-n55-k7.vrp
+  - cvrplib/X/X-n308-k13.vrp
+  - cvrplib/X/X-n548-k50.vrp
+
+frozen:
+  - cvrplib/X/X-n275-k28.vrp
+  - cvrplib/X/X-n480-k70.vrp
+  - cvrplib/X/X-n876-k59.vrp
+
+canary:
+  - data/tiny_canary.json
