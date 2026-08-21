@@ -531,9 +531,12 @@ The exact design is in the
 - [x] Complete focused provider-/solver-free regression and independent review.
   Do no distribution, packaging, build, deployment, root/systemd or Trust/Hash
   lifecycle work.
-- [ ] Run one ordinary provider-free full-funnel confirmation of the preserved
-  M20 candidate on a newly frozen outcome-unseen population. Do not create a
-  provider call, replacement candidate, repair, retry or resume path.
+- [ ] **PREPARED_NOT_STARTED:** run one ordinary provider-free full-funnel
+  confirmation of the preserved M20 candidate on the frozen outcome-unseen
+  population in the
+  [M23 preregistration](docs/experiments/v0.4/v04-cvrp-m23-m20-swap-provider-free-full-funnel-preregistration-20260821.md).
+  Do not create a provider call, replacement candidate, repair, retry or resume
+  path.
 - [ ] After that terminal result, freeze and run one serial bounded autonomous
   campaign in which H performs the direction research and the host supplies
   only ordinary source/history access, resource limits and the V3 gates.

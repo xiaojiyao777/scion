@@ -373,9 +373,12 @@ Retained comparator incompleteness ends as
 No distribution, packaging, build, deployment, root/systemd, Trust/Hash
 authority, object identity, lease, signing, registration, receipt or
 duplicate-closure work is authorized by these changes. The next scientific
-operation is one newly frozen provider-free full-funnel confirmation of the
-preserved M20 candidate, followed only after its terminal audit by one serial
-bounded autonomous campaign.
+operation is `PREPARED_NOT_STARTED`: one provider-free full-funnel confirmation
+of the preserved M20 candidate under the
+[M23 preregistration](../experiments/v0.4/v04-cvrp-m23-m20-swap-provider-free-full-funnel-preregistration-20260821.md).
+Its exact label, ordinary external inputs, tracked populations, resource
+envelope and one-shot boundary are frozen there. Only after its terminal audit
+may one serial bounded autonomous campaign follow.
 
 ## Current validation rule
 
