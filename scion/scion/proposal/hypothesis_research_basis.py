@@ -26,6 +26,7 @@ class HypothesisResearchBasis:
     material_delta: str
     alternatives_considered: tuple[str, ...]
     observable_prediction: str
+    falsification_condition: str
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,7 @@ def hypothesis_research_basis_schema(
     *,
     visible_refs: Collection[str] | None = None,
     visible_history_refs: Collection[str] | None = None,
+    require_nearest_prior: bool = False,
 ) -> dict[str, Any]:
     """Return a basis schema bound to evidence revealed in this H session."""
 
@@ -82,6 +84,8 @@ def hypothesis_research_basis_schema(
             "when no history ref is enumerated."
         ),
     )
+    if require_nearest_prior:
+        nearest_ref_array["minItems"] = 1
     text = {"type": "string", "minLength": 1, "maxLength": _MAX_TEXT_CHARS}
     return {
         "type": "object",
@@ -92,6 +96,7 @@ def hypothesis_research_basis_schema(
             "material_delta",
             "alternatives_considered",
             "observable_prediction",
+            "falsification_condition",
         ],
         "properties": {
             "read_refs": {**read_ref_array, "minItems": 1},
@@ -104,6 +109,7 @@ def hypothesis_research_basis_schema(
                 "maxItems": _MAX_ALTERNATIVES,
             },
             "observable_prediction": deepcopy(text),
+            "falsification_condition": deepcopy(text),
         },
     }
 
@@ -112,7 +118,10 @@ def parse_hypothesis_research_basis(
     raw: Mapping[str, Any],
     *,
     visible_refs: set[str],
+    visible_source_refs: set[str],
     visible_history_refs: set[str],
+    require_source_read: bool = False,
+    require_nearest_prior: bool = False,
 ) -> HypothesisResearchBasis:
     fields = {
         "read_refs",
@@ -120,14 +129,24 @@ def parse_hypothesis_research_basis(
         "material_delta",
         "alternatives_considered",
         "observable_prediction",
+        "falsification_condition",
     }
     require_exact_keys(raw, fields, label="research_basis")
+    if require_source_read and not visible_source_refs:
+        raise ProposalValidationError(
+            "research_basis requires a successful source read in this session"
+        )
     read_refs = _ref_list(raw["read_refs"], field="read_refs", require_one=True)
     nearest = _ref_list(raw["nearest_prior_refs"], field="nearest_prior_refs")
     if not set(read_refs) <= visible_refs:
         raise ProposalValidationError(
             "research_basis read_refs must reference sources or histories read "
             "in this session"
+        )
+    if require_nearest_prior and not nearest:
+        raise ProposalValidationError(
+            "research_basis nearest_prior_refs must reference histories read "
+            "and cited by this session"
         )
     if not set(nearest) <= visible_history_refs or not set(nearest) <= set(read_refs):
         raise ProposalValidationError(
@@ -159,6 +178,11 @@ def parse_hypothesis_research_basis(
         observable_prediction=nonempty_text(
             raw["observable_prediction"],
             field="observable_prediction",
+            maximum=_MAX_TEXT_CHARS,
+        ),
+        falsification_condition=nonempty_text(
+            raw["falsification_condition"],
+            field="falsification_condition",
             maximum=_MAX_TEXT_CHARS,
         ),
     )

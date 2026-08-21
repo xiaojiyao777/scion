@@ -66,7 +66,9 @@ def bind_hypothesis_research_turn_tool(
     direct_tool: Mapping[str, Any],
     *,
     visible_refs: Collection[str] | None = None,
+    visible_source_refs: Collection[str] | None = None,
     visible_history_refs: Collection[str] | None = None,
+    source_refs: Collection[str] | None = None,
     history_refs: Collection[str] | None = None,
     history_read_reserved: bool = False,
 ) -> dict[str, Any]:
@@ -108,7 +110,15 @@ def bind_hypothesis_research_turn_tool(
             ),
         )
     )
-    if visible_refs is None or visible_refs:
+    source_read_required = source_refs is not None and bool(source_refs)
+    history_read_required = bool(allowed_history_refs)
+    source_read_satisfied = not source_read_required or bool(visible_source_refs)
+    history_read_satisfied = not history_read_required or bool(visible_history_refs)
+    if (
+        (visible_refs is None or bool(visible_refs))
+        and source_read_satisfied
+        and history_read_satisfied
+    ):
         actions.append(
             _action_schema(
                 "finalize_hypothesis",
@@ -117,6 +127,7 @@ def bind_hypothesis_research_turn_tool(
                     "research_basis": hypothesis_research_basis_schema(
                         visible_refs=visible_refs,
                         visible_history_refs=visible_history_refs,
+                        require_nearest_prior=history_read_required,
                     ),
                 },
             )
@@ -137,13 +148,16 @@ def bind_hypothesis_research_turn_tool(
         "name": "hypothesis_research_turn",
         "description": (
             "Take one bounded source/history research action, finalize one "
-            "hypothesis through the unchanged schema, or abstain. Indexes are "
+            "hypothesis through the unchanged hypothesis schema, or abstain. Indexes are "
             "complete ordinary inventories; read/search reveals bodies on demand. "
+            "When source_index contains an available entry, finalize is unavailable "
+            "until one successful read_source. When history_index is nonempty, "
+            "finalize is unavailable until one successful read_history. "
             "In research_basis, read_refs may cite only refs actually read in this "
             "session. nearest_prior_refs may cite only refs actually revealed by "
-            "read_history and must also appear in read_refs; use [] before any "
-            "history is read. A rejected finalize consumes one turn and returns "
-            "only a fixed correction category." + reserve_notice
+            "read_history and must also appear in read_refs; use [] only when the "
+            "history inventory is empty. A rejected finalize consumes one turn and "
+            "returns only a fixed correction category." + reserve_notice
         ),
         "input_schema": {"oneOf": actions},
     }
@@ -185,6 +199,12 @@ class HypothesisResearchSession:
             raise HypothesisResearchContextError(
                 f"hypothesis research context is invalid: {type(exc).__name__}:{exc}"
             ) from exc
+        readable_sources = [entry for entry in sources if entry.get("body") is not None]
+        required_read_kinds = int(bool(readable_sources)) + int(bool(histories))
+        if self._limits.max_read_calls < required_read_kinds:
+            raise HypothesisResearchContextError(
+                "hypothesis research max_read_calls cannot satisfy mandatory reads"
+            )
         visible_sources: set[str] = set()
         visible_histories: set[str] = set()
 
@@ -208,7 +228,9 @@ class HypothesisResearchSession:
                 tool=bind_hypothesis_research_turn_tool(
                     full_snapshot.provider_tool,
                     visible_refs=visible_sources | visible_histories,
+                    visible_source_refs=visible_sources,
                     visible_history_refs=visible_histories,
+                    source_refs=tuple(entry["ref"] for entry in readable_sources),
                     history_refs=tuple(entry["ref"] for entry in histories),
                     history_read_reserved=history_read_reserved,
                 ),
@@ -235,7 +257,10 @@ class HypothesisResearchSession:
                     basis = parse_hypothesis_research_basis(
                         payload["research_basis"],
                         visible_refs=visible_sources | visible_histories,
+                        visible_source_refs=visible_sources,
                         visible_history_refs=visible_histories,
+                        require_source_read=bool(readable_sources),
+                        require_nearest_prior=bool(histories),
                     )
                 except ProposalValidationError as exc:
                     self._budget.record_result(
@@ -460,9 +485,13 @@ def _research_snapshot(
             "comparing current source and prior evidence, or abstain. Do not assume "
             "filesystem, Protocol, Decision, benchmark, or hidden holdout access. "
             "For research_basis, cite only refs actually read in this session; "
+            "when source_index contains an available entry, read at least one source "
+            "before finalizing; "
             "nearest_prior_refs must be histories actually revealed by read_history "
-            "and also listed in read_refs, and must be [] while no history is "
-            "visible. Observe remaining_read_calls and history_read_reserved: when "
+            "and also listed in read_refs. When history_index is nonempty, read at "
+            "least one history and cite at least one nearest prior before finalizing; "
+            "otherwise nearest_prior_refs must be []. Observe remaining_read_calls "
+            "and history_read_reserved: when "
             "the latter is true, the final shared read call is available only to "
             "read_history."
         ),
@@ -527,7 +556,10 @@ def _basis_validation_reason(error: ProposalValidationError) -> str:
     message = str(error)
     if "nearest_prior_refs must reference histories read" in message:
         return "nearest_prior_refs_not_read_and_cited"
-    if "read_refs must reference sources or histories read" in message:
+    if (
+        "successful source read" in message
+        or "read_refs must reference sources" in message
+    ):
         return "read_refs_not_read"
     return "research_basis_invalid"
 

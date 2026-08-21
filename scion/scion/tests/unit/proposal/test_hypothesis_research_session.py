@@ -31,6 +31,7 @@ from scion.proposal.engine import (
 )
 from scion.proposal.hypothesis_research_session import (
     HypothesisResearchAbstain,
+    HypothesisResearchContextError,
     HypothesisResearchFinalized,
     HypothesisResearchSession,
 )
@@ -60,6 +61,9 @@ def _basis(
         "observable_prediction": (
             "The public solver metric should change when activated."
         ),
+        "falsification_condition": (
+            "Reject the mechanism if the declared public metric does not change."
+        ),
     }
 
 
@@ -82,8 +86,9 @@ def _source_section(path: str, content: str) -> str:
 def _context(
     *,
     pre_protocol_observations: list[dict[str, Any]] | None = None,
+    include_history: bool = True,
 ) -> dict[str, Any]:
-    return {
+    context = {
         "problem_summary": "Generic combinatorial optimization subject.",
         "branch_id": "hypothesis-research-branch",
         "champion_version": 987654321,
@@ -159,6 +164,11 @@ def _context(
             }
         ],
     }
+    if not include_history:
+        context["prior_research_history"] = []
+        context["pre_protocol_observations"] = []
+        context["experiment_history"] = []
+    return context
 
 
 def _snapshot(**kwargs: Any):
@@ -284,7 +294,7 @@ def test_search_over_result_cap_returns_no_partial_top_k() -> None:
         limits=CodeResearchLimits(max_turns=3, max_search_matches=1),
     )
 
-    result = session.run(_snapshot())
+    result = session.run(_snapshot(include_history=False))
 
     assert isinstance(result, HypothesisResearchFinalized)
     second = client.calls[1]["system_text"]
@@ -457,7 +467,9 @@ def test_declared_public_development_test_is_indexed_then_read_losslessly(
         limits=CodeResearchLimits(max_turns=2),
     )
 
-    result = session.run(_snapshot(), public_sources=public_sources)
+    result = session.run(
+        _snapshot(include_history=False), public_sources=public_sources
+    )
 
     assert isinstance(result, HypothesisResearchFinalized)
     first, second = (call["system_text"] for call in client.calls)
@@ -558,6 +570,64 @@ def test_complete_index_over_transcript_budget_fails_before_provider() -> None:
     assert client.calls == []
 
 
+@pytest.mark.parametrize(
+    ("limits", "include_history", "reason"),
+    [
+        (
+            CodeResearchLimits(max_turns=2, max_read_calls=0),
+            False,
+            "max_read_calls",
+        ),
+        (
+            CodeResearchLimits(max_turns=3, max_read_calls=1),
+            True,
+            "max_read_calls",
+        ),
+    ],
+)
+def test_unsatisfiable_mandatory_read_limits_fail_before_provider(
+    limits: CodeResearchLimits,
+    include_history: bool,
+    reason: str,
+) -> None:
+    session, client = _run([], limits=limits)
+
+    with pytest.raises(HypothesisResearchContextError, match=reason):
+        session.run(_snapshot(include_history=include_history))
+
+    assert session.provider_calls_used == 0
+    assert client.calls == []
+
+
+def test_unavailable_source_entries_do_not_create_a_mandatory_read_gate() -> None:
+    context = _context()
+    context["champion_operators_code"] = ""
+    session, client = _run(
+        [
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "history-0001", nearest_prior_refs=("history-0001",)
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=2, max_read_calls=1),
+    )
+
+    result = session.run(build_prompt_turn_snapshot("hypothesis", context))
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert '"available":false' in client.calls[0]["system_text"]
+    assert "contains an available entry" in client.calls[0]["prompt"]
+    assert "finalize_hypothesis" not in {
+        branch["properties"]["action"]["enum"][0]
+        for branch in client.calls[0]["tool"]["input_schema"]["oneOf"]
+    }
+    assert _tool_action(client.calls[1], "finalize_hypothesis")
+
+
 def test_history_index_contains_every_record_without_recent_top_k() -> None:
     context = _context()
     context["prior_research_observations"] = [
@@ -632,16 +702,19 @@ def test_proposal_code_rejection_is_safe_and_visible_to_next_h() -> None:
     ]
     session, client = _run(
         [
+            {"action": "read_source", "ref": "source-0001"},
             {"action": "read_history", "ref": "history-0002"},
             {
                 "action": "finalize_hypothesis",
                 "hypothesis": _hypothesis(),
                 "research_basis": _basis(
-                    "history-0002", nearest_prior_refs=("history-0002",)
+                    "source-0001",
+                    "history-0002",
+                    nearest_prior_refs=("history-0002",),
                 ),
             },
         ],
-        limits=CodeResearchLimits(max_turns=2),
+        limits=CodeResearchLimits(max_turns=3),
     )
 
     result = session.run(_snapshot(pre_protocol_observations=observations))
@@ -672,7 +745,7 @@ def test_finalize_basis_rejection_can_be_corrected_within_remaining_turns() -> N
         limits=CodeResearchLimits(max_turns=3),
     )
 
-    result = session.run(_snapshot())
+    result = session.run(_snapshot(include_history=False))
 
     assert isinstance(result, HypothesisResearchFinalized)
     assert len(client.calls) == 3
@@ -732,21 +805,27 @@ def test_m24_unseen_nearest_ref_can_be_grounded_and_revised(
         "enum"
     ] == ["history-0001", "history-0002", "history-0003"]
 
-    basis_schemas = []
-    for call in client.calls[1:]:
-        finalize = _tool_action(call, "finalize_hypothesis")
-        basis_schemas.append(finalize["properties"]["research_basis"]["properties"])
-    assert basis_schemas[0]["read_refs"]["items"]["enum"] == ["source-0001"]
-    assert basis_schemas[0]["nearest_prior_refs"]["maxItems"] == 0
-    assert basis_schemas[1]["nearest_prior_refs"]["maxItems"] == 0
-    assert basis_schemas[2]["read_refs"]["items"]["enum"] == [
+    for call in client.calls[:3]:
+        actions = {
+            branch["properties"]["action"]["enum"][0]
+            for branch in call["tool"]["input_schema"]["oneOf"]
+        }
+        assert "finalize_hypothesis" not in actions
+    finalize = _tool_action(client.calls[3], "finalize_hypothesis")
+    basis_schema = finalize["properties"]["research_basis"]["properties"]
+    assert basis_schema["read_refs"]["items"]["enum"] == [
         "history-0001",
         "source-0001",
     ]
-    assert basis_schemas[2]["nearest_prior_refs"]["items"]["enum"] == ["history-0001"]
+    assert basis_schema["nearest_prior_refs"]["items"]["enum"] == ["history-0001"]
+    assert basis_schema["nearest_prior_refs"]["minItems"] == 1
+    assert (
+        "falsification_condition"
+        in finalize["properties"]["research_basis"]["required"]
+    )
     assert (
         "must also appear in read_refs"
-        in (basis_schemas[2]["nearest_prior_refs"]["description"])
+        in (basis_schema["nearest_prior_refs"]["description"])
     )
 
     traces = [
@@ -761,6 +840,115 @@ def test_m24_unseen_nearest_ref_can_be_grounded_and_revised(
     hypotheses = [trace["response"]["hypothesis"] for trace in finalized]
     assert invalid_hypothesis in hypotheses
     assert _hypothesis() in hypotheses
+
+
+def test_nonempty_source_corpus_also_gates_finalize_and_host_bypass() -> None:
+    session, client = _run(
+        [
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "history-0001", nearest_prior_refs=("history-0001",)
+                ),
+            },
+            {"action": "read_source", "ref": "source-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    for call in client.calls[:3]:
+        actions = {
+            branch["properties"]["action"]["enum"][0]
+            for branch in call["tool"]["input_schema"]["oneOf"]
+        }
+        assert "finalize_hypothesis" not in actions
+    assert (
+        '"action":"finalize_hypothesis","ok":false,"reason":"read_refs_not_read"'
+        in client.calls[2]["system_text"]
+    )
+    assert _tool_action(client.calls[3], "finalize_hypothesis")
+
+
+def test_nonempty_history_requires_nearest_prior_even_after_reads() -> None:
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis("source-0001", "history-0001"),
+            },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert (
+        '"reason":"nearest_prior_refs_not_read_and_cited"'
+        in client.calls[3]["system_text"]
+    )
+
+
+def test_missing_falsification_condition_is_fixed_and_revisable() -> None:
+    invalid_basis = _basis(
+        "source-0001",
+        "history-0001",
+        nearest_prior_refs=("history-0001",),
+    )
+    invalid_basis.pop("falsification_condition")
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "read_history", "ref": "history-0001"},
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": invalid_basis,
+            },
+            {
+                "action": "finalize_hypothesis",
+                "hypothesis": _hypothesis(),
+                "research_basis": _basis(
+                    "source-0001",
+                    "history-0001",
+                    nearest_prior_refs=("history-0001",),
+                ),
+            },
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+    )
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert '"reason":"research_basis_invalid"' in client.calls[3]["system_text"]
+    assert result.research_basis.falsification_condition
 
 
 def test_visible_nearest_history_must_also_be_cited_and_can_be_revised() -> None:
@@ -815,7 +1003,7 @@ def test_invalid_hypothesis_can_be_corrected_without_echoing_validator_text() ->
         limits=CodeResearchLimits(max_turns=3),
     )
 
-    result = session.run(_snapshot())
+    result = session.run(_snapshot(include_history=False))
 
     assert isinstance(result, HypothesisResearchFinalized)
     correction_context = client.calls[2]["system_text"]
@@ -960,7 +1148,7 @@ def test_validated_basis_is_retained_by_terminal_trace_not_hypothesis(
         trace_dir=str(tmp_path),
     )
 
-    result = session.run(_snapshot())
+    result = session.run(_snapshot(include_history=False))
 
     assert isinstance(result, HypothesisResearchFinalized)
     assert not hasattr(result.hypothesis, "research_basis")
