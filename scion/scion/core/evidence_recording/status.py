@@ -6,9 +6,14 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Mapping
 
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.public_refs import redact_public_refs
 
 logger = logging.getLogger(__name__)
+
+_REDACTED_PROPOSAL_STAGES = frozenset(
+    {"proposal_hypothesis", "proposal_code"}
+)
 
 
 def project_last_result(result: Any) -> dict[str, Any]:
@@ -28,14 +33,29 @@ def project_last_result(result: Any) -> dict[str, Any]:
     execution_outcome = getattr(result, "execution_outcome", None)
     if execution_outcome is not None:
         primitive = execution_outcome.to_primitive()
+        stage = primitive.get("provenance", {}).get("stage")
+        failure_stage = getattr(result, "failure_stage", None)
+        redacted_proposal_stage = (
+            failure_stage
+            if isinstance(failure_stage, str)
+            and failure_stage in _REDACTED_PROPOSAL_STAGES
+            else stage
+            if isinstance(stage, str) and stage in _REDACTED_PROPOSAL_STAGES
+            else None
+        )
         outcome = {
             "outcome": primitive["outcome"],
             "reason_code": primitive["reason_code"],
         }
-        stage = primitive.get("provenance", {}).get("stage")
-        if isinstance(stage, str) and stage.strip():
-            outcome["stage"] = stage.strip()
+        public_stage = redacted_proposal_stage or stage
+        if isinstance(public_stage, str) and public_stage.strip():
+            outcome["stage"] = public_stage.strip()
         projected["execution_outcome"] = outcome
+        if (
+            execution_outcome.outcome is not ExecutionOutcome.EVALUATED
+            and redacted_proposal_stage is not None
+        ):
+            projected["reason"] = primitive["reason_code"]
     return projected
 
 

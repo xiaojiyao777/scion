@@ -101,6 +101,26 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 proposal_outcome,
                 event_kind="proposal_execution_outcome",
             )
+            durable_outcome = ExecutionOutcomeRecord(
+                outcome=proposal_outcome.outcome,
+                reason_code=proposal_outcome.reason_code,
+                provenance={"stage": "proposal_hypothesis"},
+            )
+            self.record_step(
+                StepRecord(
+                    round_num=rnum,
+                    branch_id=bid,
+                    hypothesis=None,
+                    patch=None,
+                    contract_passed=None,
+                    verification_passed=None,
+                    protocol_result=None,
+                    decision=None,
+                    failure_stage="proposal_hypothesis",
+                    failure_detail=durable_outcome.reason_code,
+                    execution_outcome=durable_outcome,
+                )
+            )
             return self._finish_status_progress(
                 StepResult(
                     action="explore",

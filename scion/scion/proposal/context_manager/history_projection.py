@@ -173,6 +173,8 @@ def proposal_pre_protocol_observations(
 
 def _pre_protocol_hypothesis(step: StepRecord) -> dict[str, Any]:
     hypothesis = step.hypothesis
+    if hypothesis is None:
+        return {}
     return _without_empty(
         {
             "hypothesis_text": hypothesis.hypothesis_text,
@@ -225,6 +227,8 @@ def _pre_protocol_outcome(step: StepRecord) -> dict[str, Any]:
         "reason_code": _safe_reason_code(stage, outcome.reason_code),
     }
     provenance = outcome.provenance
+    if stage == "proposal_hypothesis":
+        return projection
     if stage == "verification":
         severity = provenance.get("severity")
         if severity in {"light", "heavy"}:

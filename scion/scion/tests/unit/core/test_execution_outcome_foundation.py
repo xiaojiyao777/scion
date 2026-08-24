@@ -108,6 +108,28 @@ def _step(
     )
 
 
+def _hypothesis_free_step(**overrides: object) -> StepRecord:
+    values: dict[str, object] = {
+        "round_num": 1,
+        "branch_id": "branch-no-hypothesis",
+        "hypothesis": None,
+        "patch": None,
+        "contract_passed": None,
+        "verification_passed": None,
+        "protocol_result": None,
+        "decision": None,
+        "failure_stage": "proposal_hypothesis",
+        "failure_detail": "HYPOTHESIS_RESEARCH_ABSTAINED",
+        "execution_outcome": ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
+            provenance={"stage": "proposal_hypothesis"},
+        ),
+    }
+    values.update(overrides)
+    return StepRecord(**values)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize("outcome", list(ExecutionOutcome))
 def test_six_state_roundtrip_event_query_step_result_and_step_record(
     tmp_path: Path,
@@ -179,6 +201,58 @@ def test_non_evaluated_outcome_rejects_decision_and_protocol() -> None:
             ExecutionOutcome.NOT_EVALUATED,
             protocol_result=_protocol(),
         )
+
+
+@pytest.mark.parametrize(
+    "override",
+    (
+        {"execution_outcome": None},
+        {
+            "execution_outcome": ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.EVALUATED,
+                reason_code="EVALUATED",
+                provenance={"stage": "proposal_hypothesis"},
+            )
+        },
+        {"failure_stage": "proposal_code"},
+        {"patch": object()},
+        {"contract_passed": False},
+        {"verification_passed": False},
+        {"protocol_result": _protocol()},
+        {"decision": Decision.CONTINUE_EXPLORE},
+        {"canary_result": object()},
+        {"candidate_parent_scope": "declared_champion"},
+        {"decision_reason_codes": ()},
+        {"decision_engine_reason_codes": ("SENTINEL",)},
+        {"diagnostic_reason_codes": ("SENTINEL",)},
+        {"bypass_reason_codes": ("SENTINEL",)},
+        {"contract_diagnostics": ({"name": "SENTINEL"},)},
+        {"failure_detail": "RAW_SENTINEL"},
+        {
+            "execution_outcome": ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
+                detail="RAW_SENTINEL",
+                provenance={"stage": "proposal_hypothesis"},
+            )
+        },
+        {
+            "execution_outcome": ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
+                provenance={
+                    "stage": "proposal_hypothesis",
+                    "phase": "hypothesis",
+                },
+            )
+        },
+    ),
+)
+def test_hypothesis_free_step_rejects_noncanonical_payloads(
+    override: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="hypothesis-free"):
+        _hypothesis_free_step(**override)
 
 
 def test_step_values_reject_a_bare_outcome_enum() -> None:
@@ -348,3 +422,144 @@ def test_status_and_summary_use_the_single_research_rejection_outcome(
     )
     assert "attempt_disposition" not in status["last_result"]
     assert "attempt_disposition" not in summary["steps"][0]
+
+
+@pytest.mark.parametrize(
+    "stage",
+    ("proposal_hypothesis", "proposal_code"),
+)
+def test_public_proposal_failure_status_and_summary_drop_provider_detail(
+    tmp_path: Path,
+    stage: str,
+) -> None:
+    sentinel = (
+        "RAW_SENTINEL H_BASIS_SENTINEL PROBE_SENTINEL RESERVED_SENTINEL"
+    )
+    original_outcome = ExecutionOutcomeRecord(
+        outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        reason_code=(
+            "HYPOTHESIS_RESEARCH_ABSTAINED"
+            if stage == "proposal_hypothesis"
+            else "PATCH_PROPOSAL_INVALID"
+        ),
+        detail=sentinel,
+        provenance={
+            "stage": stage,
+            "phase": stage,
+            "exception_type": sentinel,
+        },
+    )
+    result = StepResult(
+        action="explore",
+        branch_id="branch-1",
+        reason=sentinel,
+        failure_stage=stage,
+        failure_detail=sentinel,
+        execution_outcome=original_outcome,
+    )
+
+    projected = project_last_result(result)
+
+    assert projected["reason"] == original_outcome.reason_code
+    assert projected["execution_outcome"] == {
+        "outcome": "research_rejected",
+        "reason_code": original_outcome.reason_code,
+        "stage": stage,
+    }
+    assert sentinel not in str(projected)
+
+    durable_outcome = (
+        ExecutionOutcomeRecord(
+            outcome=original_outcome.outcome,
+            reason_code=original_outcome.reason_code,
+            provenance={"stage": stage},
+        )
+        if stage == "proposal_hypothesis"
+        else original_outcome
+    )
+    step = StepRecord(
+        round_num=1,
+        branch_id="branch-1",
+        hypothesis=None if stage == "proposal_hypothesis" else _hypothesis(),
+        patch=None,
+        contract_passed=None if stage == "proposal_hypothesis" else True,
+        verification_passed=None if stage == "proposal_hypothesis" else False,
+        protocol_result=None,
+        decision=None,
+        failure_stage=stage,
+        failure_detail=(
+            original_outcome.reason_code
+            if stage == "proposal_hypothesis"
+            else sentinel
+        ),
+        execution_outcome=durable_outcome,
+    )
+    recorder = EvidenceRecorder(campaign_id="campaign-1", campaign_dir=tmp_path)
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(),
+        run_result=_run_projection(ExecutionOutcome.RESEARCH_REJECTED),
+        step_history=[step],
+    )
+
+    assert summary["steps"][0]["failure_detail"] == original_outcome.reason_code
+    assert summary["steps"][0]["execution_outcome"] == {
+        "outcome": "research_rejected",
+        "reason_code": original_outcome.reason_code,
+        "detail": "",
+        "provenance": {"stage": stage},
+    }
+    assert sentinel not in str(summary)
+
+
+@pytest.mark.parametrize(
+    ("failure_stage", "provenance_stage"),
+    (
+        ("proposal_code", "workspace"),
+        ("workspace", "proposal_code"),
+    ),
+)
+def test_summary_sanitizes_proposal_failure_from_either_stage_fact(
+    tmp_path: Path,
+    failure_stage: str,
+    provenance_stage: str,
+) -> None:
+    sentinel = "RAW_PROVIDER_DETAIL_SENTINEL"
+    outcome = ExecutionOutcomeRecord(
+        outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        reason_code="PATCH_PROPOSAL_INVALID",
+        detail=sentinel,
+        provenance={
+            "stage": provenance_stage,
+            "exception_type": sentinel,
+        },
+    )
+    step = StepRecord(
+        round_num=1,
+        branch_id="branch-1",
+        hypothesis=_hypothesis(),
+        patch=None,
+        contract_passed=True,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage=failure_stage,
+        failure_detail=sentinel,
+        execution_outcome=outcome,
+    )
+    recorder = EvidenceRecorder(campaign_id="campaign-1", campaign_dir=tmp_path)
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(),
+        run_result=_run_projection(ExecutionOutcome.RESEARCH_REJECTED),
+        step_history=[step],
+    )
+
+    assert summary["steps"][0]["failure_detail"] == "PATCH_PROPOSAL_INVALID"
+    assert summary["steps"][0]["failure_stage"] == "proposal_code"
+    assert summary["steps"][0]["execution_outcome"] == {
+        "outcome": "research_rejected",
+        "reason_code": "PATCH_PROPOSAL_INVALID",
+        "detail": "",
+        "provenance": {"stage": "proposal_code"},
+    }
+    assert sentinel not in str(summary)

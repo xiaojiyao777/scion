@@ -31,6 +31,10 @@ from scion.core.research_history import (
 )
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_snapshot import freeze_proposal_context
+from scion.proposal.hypothesis_research_corpus import (
+    build_hypothesis_research_corpus,
+    has_usable_history_headline,
+)
 
 
 def _hypothesis(text: str = "Try a bounded mechanism.") -> HypothesisProposal:
@@ -83,6 +87,26 @@ def _verification_rejection(text: str = "Try a bounded mechanism.") -> StepRecor
                     }
                 ],
             },
+        ),
+    )
+
+
+def _hypothesis_failure() -> StepRecord:
+    return StepRecord(
+        round_num=1,
+        branch_id="private-branch",
+        hypothesis=None,
+        patch=None,
+        contract_passed=None,
+        verification_passed=None,
+        protocol_result=None,
+        decision=None,
+        failure_stage="proposal_hypothesis",
+        failure_detail="HYPOTHESIS_RESEARCH_ABSTAINED",
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
+            provenance={"stage": "proposal_hypothesis"},
         ),
     )
 
@@ -194,6 +218,249 @@ def test_writer_persists_only_ordinary_failure_before_memory_append(
         "metadata",
     ):
         assert forbidden not in raw
+
+
+def test_hypothesis_free_attempt_round_trips_as_one_redacted_history_row(
+    tmp_path: Path,
+) -> None:
+    writer = ResearchHistoryWriter(tmp_path, problem_id="generic_demo")
+
+    writer.append_step(_hypothesis_failure())
+
+    raw = writer.path.read_text(encoding="utf-8")
+    loaded = load_research_histories(
+        [writer.path],
+        expected_problem_id="generic_demo",
+    )
+    assert len(loaded) == 1
+    assert loaded[0] == json.loads(raw)
+    assert loaded[0] == {
+        "schema_version": RESEARCH_HISTORY_SCHEMA,
+        "problem_id": "generic_demo",
+        "hypothesis": None,
+        "patch": None,
+        "outcome": {
+            "outcome": "research_rejected",
+            "stage": "proposal_hypothesis",
+            "reason_code": "HYPOTHESIS_RESEARCH_ABSTAINED",
+        },
+        "protocol": None,
+        "decision": None,
+    }
+    for marker in (
+        "private-branch",
+        "RAW_SENTINEL",
+        "H_BASIS_SENTINEL",
+        "PROBE_SENTINEL",
+        "RESERVED_SENTINEL",
+    ):
+        assert marker not in raw
+
+
+def test_hypothesis_free_history_has_no_nearest_ranking_headline(
+    tmp_path: Path,
+) -> None:
+    spec = _spec(tmp_path)
+    record = _record(_hypothesis_failure(), problem_id=spec.name)
+    manager = ContextManager(research_history=(record,))
+    branch = Branch(
+        branch_id="branch",
+        state=BranchState.EXPLORE,
+        base_champion_id=1,
+    )
+    champion = ChampionState(
+        version=1,
+        operator_pool={},
+        code_snapshot_path=spec.root_dir,
+    )
+
+    context = manager.build_hypothesis_context(
+        branch=branch,
+        champion=champion,
+        problem_spec=spec,
+    )
+    _, histories, _ = build_hypothesis_research_corpus(context)
+
+    assert context["prior_research_history"][0]["hypothesis"] is None
+    assert len(histories) == 1
+    assert "hypothesis" not in histories[0]["index"]
+    assert not has_usable_history_headline(
+        [history["index"] for history in histories]
+    )
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        (
+            "patch",
+            {
+                "changes": [
+                    {"file_path": "x.py", "action": "modify", "source": "x"}
+                ]
+            },
+        ),
+        ("protocol", _record(_evaluated())["protocol"]),
+        ("decision", _record(_evaluated())["decision"]),
+    ),
+)
+def test_external_hypothesis_free_history_rejects_scientific_payloads(
+    field: str,
+    value: object,
+) -> None:
+    record = _record(_hypothesis_failure())
+    record[field] = value
+
+    with pytest.raises(ValueError, match="hypothesis-free"):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ({"outcome": None}, "requires an outcome"),
+        ({"stage": "proposal_code"}, "proposal_hypothesis"),
+        ({"outcome_value": "evaluated"}, "cannot be evaluated"),
+        ({"checks": []}, "only typed terminal fields"),
+    ),
+)
+def test_external_hypothesis_free_history_rejects_nonterminal_shapes(
+    mutation: dict[str, object],
+    message: str,
+) -> None:
+    record = _record(_hypothesis_failure())
+    if "outcome" in mutation:
+        record["outcome"] = mutation["outcome"]
+    else:
+        outcome = record["outcome"]
+        assert isinstance(outcome, dict)
+        if "stage" in mutation:
+            outcome["stage"] = mutation["stage"]
+        if "outcome_value" in mutation:
+            outcome["outcome"] = mutation["outcome_value"]
+        if "checks" in mutation:
+            outcome["checks"] = mutation["checks"]
+
+    with pytest.raises(ValueError, match=message):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
+
+
+def test_all_tracked_v04_histories_satisfy_cross_field_contracts() -> None:
+    inputs = (
+        Path(__file__).resolve().parents[4]
+        / "docs"
+        / "experiments"
+        / "v0.4"
+        / "inputs"
+    )
+    paths = sorted(inputs.glob("*research-history.jsonl"))
+
+    assert len(paths) == 15
+    structural_shapes: set[tuple[bool, str, bool, bool]] = set()
+    for path in paths:
+        records = load_research_histories([path], expected_problem_id="cvrp")
+        for record in records:
+            outcome = record["outcome"]
+            assert isinstance(outcome, dict)
+            structural_shapes.add(
+                (
+                    record["patch"] is not None,
+                    outcome["stage"],
+                    record["protocol"] is not None,
+                    record["decision"] is not None,
+                )
+            )
+
+    assert structural_shapes == {
+        (False, "proposal_code", False, False),
+        (True, "proposal_code", False, False),
+        (True, "verification", False, False),
+        (True, "evaluation", False, False),
+        (True, "screening", True, True),
+    }
+
+
+def test_history_with_hypothesis_requires_typed_outcome() -> None:
+    record = _record(_verification_rejection())
+    record["outcome"] = None
+
+    with pytest.raises(ValueError, match="requires an outcome"):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
+
+
+def test_proposal_hypothesis_stage_rejects_nonempty_hypothesis() -> None:
+    record = _record(_verification_rejection())
+    record["outcome"]["stage"] = "proposal_hypothesis"
+
+    with pytest.raises(ValueError, match="cannot carry a hypothesis"):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
+
+
+@pytest.mark.parametrize(
+    "missing_field",
+    ("protocol", "decision"),
+)
+def test_screening_protocol_and_decision_must_be_present_together(
+    missing_field: str,
+) -> None:
+    record = _record(_evaluated())
+    record[missing_field] = None
+
+    with pytest.raises(ValueError, match="Protocol and Decision"):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
+
+
+def test_evaluated_outcome_without_protocol_is_rejected() -> None:
+    record = _record(_verification_rejection())
+    record["outcome"]["outcome"] = "evaluated"
+    record["outcome"]["stage"] = "screening"
+
+    with pytest.raises(ValueError, match="evaluated outcome requires"):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
+
+
+def test_protocol_requires_patch_and_evaluated_matching_outcome() -> None:
+    without_patch = _record(_evaluated())
+    without_patch["patch"] = None
+    with pytest.raises(ValueError, match="Protocol requires a patch"):
+        normalize_research_history_record(
+            without_patch,
+            expected_problem_id="generic_demo",
+        )
+
+    non_evaluated = _record(_evaluated())
+    non_evaluated["outcome"]["outcome"] = "not_evaluated"
+    with pytest.raises(ValueError, match="evaluated outcome requires"):
+        normalize_research_history_record(
+            non_evaluated,
+            expected_problem_id="generic_demo",
+        )
+
+    mismatched_stage = _record(_evaluated())
+    mismatched_stage["outcome"]["stage"] = "evaluation"
+    with pytest.raises(ValueError, match="must match Protocol evidence stage"):
+        normalize_research_history_record(
+            mismatched_stage,
+            expected_problem_id="generic_demo",
+        )
 
 
 def test_writer_failure_preserves_atomic_prefix_and_memory(

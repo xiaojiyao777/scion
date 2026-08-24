@@ -646,6 +646,8 @@ def screening_record(step: StepRecord) -> dict[str, Any]:
     protocol = step.protocol_result
     if protocol is None or protocol.stage != ExperimentStage.SCREENING:
         raise ValueError("hypothesis evidence requires a screening result")
+    if step.hypothesis is None:
+        raise ValueError("screening evidence requires a hypothesis")
     experiment_evidence = _screening_projection(protocol)
     if step.decision is not None:
         experiment_evidence["decision_outcome"] = _drop_empty(

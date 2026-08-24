@@ -9,6 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import StepRecord
 from scion.core.public_refs import (
     public_artifact_ref,
@@ -21,11 +22,42 @@ from .common import _stage_value
 
 logger = logging.getLogger(__name__)
 
+_REDACTED_PROPOSAL_STAGES = frozenset(
+    {"proposal_hypothesis", "proposal_code"}
+)
+
+
+def _redacted_proposal_stage(step: StepRecord) -> str | None:
+    record = getattr(step, "execution_outcome", None)
+    if record is None or record.outcome is ExecutionOutcome.EVALUATED:
+        return None
+    failure_stage = step.failure_stage
+    provenance_stage = record.provenance.get("stage")
+    if (
+        isinstance(failure_stage, str)
+        and failure_stage in _REDACTED_PROPOSAL_STAGES
+    ):
+        return failure_stage
+    if (
+        isinstance(provenance_stage, str)
+        and provenance_stage in _REDACTED_PROPOSAL_STAGES
+    ):
+        return provenance_stage
+    return None
+
 
 def _execution_outcome_projection(step: StepRecord) -> dict[str, Any] | None:
     record = getattr(step, "execution_outcome", None)
     if record is None:
         return None
+    proposal_stage = _redacted_proposal_stage(step)
+    if proposal_stage is not None:
+        return {
+            "outcome": record.outcome.value,
+            "reason_code": record.reason_code,
+            "detail": "",
+            "provenance": {"stage": proposal_stage},
+        }
     return record.to_primitive()
 
 
@@ -96,17 +128,24 @@ class CampaignSummaryMixin:
                     else "unknown"
                 )
                 verification_failures[code] = verification_failures.get(code, 0) + 1
-            locus = f"{step.hypothesis.action}/{step.hypothesis.change_locus}"
-            action_locus_coverage[locus] = action_locus_coverage.get(locus, 0) + 1
+            hypothesis = step.hypothesis
+            if hypothesis is not None:
+                locus = f"{hypothesis.action}/{hypothesis.change_locus}"
+                action_locus_coverage[locus] = (
+                    action_locus_coverage.get(locus, 0) + 1
+                )
 
         try:
             from scion.proposal.mechanism_labels import extract_mechanism_label
 
             for step in steps:
+                hypothesis = step.hypothesis
+                if hypothesis is None:
+                    continue
                 label = extract_mechanism_label(
-                    step.hypothesis.hypothesis_text or "",
+                    hypothesis.hypothesis_text or "",
                     taxonomy=self.family_taxonomy,
-                    preferred_label=step.hypothesis.change_locus,
+                    preferred_label=hypothesis.change_locus,
                 )
                 family_coverage[label] = family_coverage.get(label, 0) + 1
         except Exception as exc:  # pragma: no cover - observational best effort
@@ -148,6 +187,13 @@ class CampaignSummaryMixin:
             getattr(step, "diagnostic_reason_codes", ()) or ()
         )
         bypass_reason_codes = list(getattr(step, "bypass_reason_codes", ()) or ())
+        execution_outcome = _execution_outcome_projection(step)
+        proposal_stage = _redacted_proposal_stage(step)
+        public_failure_detail = step.failure_detail
+        if execution_outcome is not None and proposal_stage is not None:
+            public_failure_detail = execution_outcome["reason_code"]
+        public_failure_stage = proposal_stage or step.failure_stage
+        hypothesis = step.hypothesis
         step_data: Dict[str, Any] = {
             "round": step.round_num,
             "branch_id": step.branch_id,
@@ -160,16 +206,19 @@ class CampaignSummaryMixin:
                 getattr(step, "contract_diagnostics", ()) or ()
             ),
             "verification_passed": step.verification_passed,
-            "failure_stage": step.failure_stage,
-            "failure_detail": step.failure_detail,
-            "hypothesis": {
-                "text": step.hypothesis.hypothesis_text or "",
-                "action": step.hypothesis.action,
-                "change_locus": step.hypothesis.change_locus,
-                "target_file": step.hypothesis.target_file,
-            },
+            "failure_stage": public_failure_stage,
+            "failure_detail": public_failure_detail,
+            "hypothesis": (
+                {
+                    "text": hypothesis.hypothesis_text or "",
+                    "action": hypothesis.action,
+                    "change_locus": hypothesis.change_locus,
+                    "target_file": hypothesis.target_file,
+                }
+                if hypothesis is not None
+                else None
+            ),
         }
-        execution_outcome = _execution_outcome_projection(step)
         if execution_outcome is not None:
             step_data["execution_outcome"] = execution_outcome
         canary_payload = _canary_result_payload(

@@ -182,12 +182,20 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
 
     assert "must exactly match one provider-visible research surface" in result.reason
     assert result.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
-    assert result.execution_outcome.reason_code == "PROPOSAL_RESPONSE_INVALID"
+    assert result.execution_outcome.reason_code == "HYPOTHESIS_PROPOSAL_INVALID"
     assert result.decision is None
     assert llm.call_count == 1
     assert counts.get("contract_hypothesis", 0) == 0
     assert counts.get("verification", 0) == 0
-    assert campaign._step_history == []
+    assert len(campaign._step_history) == 1
+    step = campaign._step_history[0]
+    assert step.hypothesis is None
+    assert step.failure_stage == "proposal_hypothesis"
+    assert step.failure_detail == result.execution_outcome.reason_code
+    assert step.execution_outcome.detail == ""
+    assert step.execution_outcome.provenance == {
+        "stage": "proposal_hypothesis"
+    }
     branch = campaign._branch_ctrl.get_branch(result.branch_id)
     assert branch.state is not BranchState.BLOCKED_INFRA
     assert "CONTRACT" not in branch.failure_codes
@@ -203,7 +211,7 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
     durable = campaign._registry.query_execution_outcomes(
         branch_id=result.branch_id
     )[0]
-    assert durable["reason_code"] == "PROPOSAL_RESPONSE_INVALID"
+    assert durable["reason_code"] == "HYPOTHESIS_PROPOSAL_INVALID"
     assert "owner" not in durable["provenance"]
     assert durable["provenance"]["stage"] == "proposal_hypothesis"
 

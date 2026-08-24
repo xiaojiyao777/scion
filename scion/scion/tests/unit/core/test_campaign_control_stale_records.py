@@ -27,8 +27,8 @@ class TestContractFailStepRecord:
                 f"but got {step.decision!r}"
             )
 
-    def test_hypothesis_proposal_failure_has_no_scientific_step_record(self, tmp_path):
-        """A failed H call has an outcome event, not a fabricated scientific H."""
+    def test_hypothesis_proposal_failure_has_redacted_attempt_record(self, tmp_path):
+        """A failed H call is durable without a fabricated scientific H."""
         cm = _campaign(tmp_path, llm_client=MockLLMClient(mode="format_error"))
 
         result = cm.run_one_step()
@@ -36,7 +36,15 @@ class TestContractFailStepRecord:
         assert result.reason == "MockLLMClient: simulated format error"
         assert result.failure_stage == "proposal_hypothesis"
         assert result.execution_outcome is not None
-        assert cm._step_history == []
+        assert len(cm._step_history) == 1
+        step = cm._step_history[0]
+        assert step.hypothesis is None
+        assert step.failure_stage == "proposal_hypothesis"
+        assert step.failure_detail == result.execution_outcome.reason_code
+        assert step.execution_outcome.detail == ""
+        assert step.execution_outcome.provenance == {
+            "stage": "proposal_hypothesis"
+        }
         branch = cm._branch_ctrl.get_branch(result.branch_id)
         assert branch.state is not BranchState.BLOCKED_INFRA
         events = cm._registry.query_by_branch(result.branch_id)

@@ -1,4 +1,4 @@
-"""Ordinary, H-only cross-campaign research history."""
+"""Ordinary, provider-safe cross-campaign research history."""
 
 from __future__ import annotations
 
@@ -238,6 +238,7 @@ def normalize_research_history_record(
         "protocol": _normalize_protocol(record["protocol"]),
         "decision": _normalize_decision(record["decision"]),
     }
+    _validate_record_relationships(normalized)
     _validate_safe_value(normalized, path="$", depth=0)
     if len(_render(normalized)) > MAX_RESEARCH_HISTORY_LINE_BYTES:
         raise ValueError("research history record exceeds line byte limit")
@@ -256,8 +257,10 @@ def _is_held_out(step: StepRecord) -> bool:
     )
 
 
-def _hypothesis(step: StepRecord) -> dict[str, Any]:
+def _hypothesis(step: StepRecord) -> dict[str, Any] | None:
     hypothesis = step.hypothesis
+    if hypothesis is None:
+        return None
     target = hypothesis.target_file
     if target is not None:
         try:
@@ -295,6 +298,12 @@ def _outcome(step: StepRecord) -> dict[str, Any] | None:
     outcome = step.execution_outcome
     if outcome is None:
         return None
+    if step.hypothesis is None:
+        return {
+            "outcome": outcome.outcome.value,
+            "stage": "proposal_hypothesis",
+            "reason_code": outcome.reason_code,
+        }
     from scion.proposal.context_manager.history_projection import (
         proposal_pre_protocol_observations,
     )
@@ -351,7 +360,9 @@ def _decision(step: StepRecord) -> dict[str, Any] | None:
     }
 
 
-def _normalize_hypothesis(value: Any) -> dict[str, Any]:
+def _normalize_hypothesis(value: Any) -> dict[str, Any] | None:
+    if value is None:
+        return None
     item = dict(_mapping(value, _HYPOTHESIS, path="$.hypothesis"))
     for field in ("text", "change_locus", "target_weakness", "expected_effect"):
         if not isinstance(item[field], str):
@@ -362,6 +373,65 @@ def _normalize_hypothesis(value: Any) -> dict[str, Any]:
     ):
         raise ValueError("research history target_file must be canonical or null")
     return item
+
+
+def _validate_record_relationships(record: Mapping[str, Any]) -> None:
+    """Reject cross-field shapes that cannot be an ordinary step."""
+
+    if record["hypothesis"] is not None:
+        _validate_hypothesis_record(record)
+        return
+    if any(record[field] is not None for field in ("patch", "protocol", "decision")):
+        raise ValueError(
+            "hypothesis-free research history cannot carry patch, Protocol, "
+            "or Decision data"
+        )
+    outcome = record["outcome"]
+    if not isinstance(outcome, Mapping):
+        raise ValueError("hypothesis-free research history requires an outcome")
+    if set(outcome) != _OUTCOME_REQUIRED:
+        raise ValueError(
+            "hypothesis-free research history outcome must contain only "
+            "typed terminal fields"
+        )
+    if outcome["stage"] != "proposal_hypothesis":
+        raise ValueError(
+            "hypothesis-free research history must fail at proposal_hypothesis"
+        )
+    if outcome["outcome"] == ExecutionOutcome.EVALUATED.value:
+        raise ValueError("hypothesis-free research history cannot be evaluated")
+
+
+def _validate_hypothesis_record(record: Mapping[str, Any]) -> None:
+    outcome = record["outcome"]
+    if not isinstance(outcome, Mapping):
+        raise ValueError("research history with a hypothesis requires an outcome")
+    if outcome["stage"] == "proposal_hypothesis":
+        raise ValueError(
+            "proposal_hypothesis research history cannot carry a hypothesis"
+        )
+
+    protocol = record["protocol"]
+    decision = record["decision"]
+    if (protocol is None) != (decision is None):
+        raise ValueError(
+            "research history Protocol and Decision must be present together"
+        )
+
+    evaluated = outcome["outcome"] == ExecutionOutcome.EVALUATED.value
+    if evaluated != (protocol is not None):
+        raise ValueError(
+            "research history evaluated outcome requires Protocol and Decision"
+        )
+    if protocol is None:
+        return
+    if record["patch"] is None:
+        raise ValueError("research history Protocol requires a patch")
+    protocol_stage = protocol["evidence"]["stage"]
+    if outcome["stage"] != protocol_stage:
+        raise ValueError(
+            "research history outcome stage must match Protocol evidence stage"
+        )
 
 
 def _normalize_patch(value: Any) -> dict[str, Any] | None:

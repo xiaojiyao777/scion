@@ -31,7 +31,15 @@ def _base_record() -> dict:
             "expected_effect": "better solutions",
             "suggested_weight": None,
         },
-        "patch": None,
+        "patch": {
+            "changes": [
+                {
+                    "file_path": "operators/local_search.py",
+                    "action": "modify",
+                    "source": "def improve(solution):\n    return solution\n",
+                }
+            ]
+        },
         "outcome": {
             "outcome": "evaluated",
             "stage": "screening",

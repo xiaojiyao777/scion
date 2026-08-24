@@ -436,12 +436,13 @@ class WeightOptimizationResult:
 
 @dataclass
 class StepRecord:
-    """Record of one completed proposal+evaluation cycle (explore step).
+    """Record of one completed proposal or evaluation attempt.
 
     Stored in CampaignManager._step_history and passed to ContextManager
     so the LLM receives a rich history of prior attempts on each branch.
 
     failure_stage values:
+        'proposal_hypothesis' — no hypothesis was produced
         'hypothesis_contract' — hypothesis failed ContractGate
         'code_generation'     — LLM failed to produce a patch
         'patch_contract'      — patch failed ContractGate
@@ -459,7 +460,7 @@ class StepRecord:
     """
     round_num: int
     branch_id: str
-    hypothesis: HypothesisProposal
+    hypothesis: HypothesisProposal | None
     patch: Optional[PatchProposal]
     contract_passed: Optional[bool]
     verification_passed: Optional[bool]
@@ -482,6 +483,64 @@ class StepRecord:
         record = self.execution_outcome
         if record is not None and not isinstance(record, ExecutionOutcomeRecord):
             raise TypeError("execution_outcome must be an ExecutionOutcomeRecord")
+        if self.hypothesis is None:
+            if record is None:
+                raise ValueError(
+                    "a hypothesis-free step requires an execution outcome"
+                )
+            if record.outcome is ExecutionOutcome.EVALUATED:
+                raise ValueError(
+                    "a hypothesis-free step cannot be evaluated"
+                )
+            if self.failure_stage != "proposal_hypothesis":
+                raise ValueError(
+                    "a hypothesis-free step must fail at proposal_hypothesis"
+                )
+            if self.patch is not None:
+                raise ValueError("a hypothesis-free step cannot carry a patch")
+            if self.contract_passed is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry a Contract result"
+                )
+            if self.verification_passed is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry a verification result"
+                )
+            if self.protocol_result is not None or self.decision is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry Protocol or Decision data"
+                )
+            if self.canary_result is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry a canary result"
+                )
+            if self.candidate_parent_scope is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry candidate parent scope"
+                )
+            if (
+                self.decision_reason_codes is not None
+                or self.decision_engine_reason_codes
+                or self.diagnostic_reason_codes
+                or self.bypass_reason_codes
+                or self.contract_diagnostics
+            ):
+                raise ValueError(
+                    "a hypothesis-free step cannot carry decision or "
+                    "Contract diagnostics"
+                )
+            if self.failure_detail != record.reason_code:
+                raise ValueError(
+                    "a hypothesis-free step failure detail must be its reason code"
+                )
+            if record.detail:
+                raise ValueError(
+                    "a hypothesis-free step execution detail must be redacted"
+                )
+            if record.provenance != {"stage": "proposal_hypothesis"}:
+                raise ValueError(
+                    "a hypothesis-free step provenance must contain only its stage"
+                )
         if record is not None and record.outcome is not ExecutionOutcome.EVALUATED:
             if self.decision is not None:
                 raise ValueError(

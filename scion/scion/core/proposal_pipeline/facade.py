@@ -111,7 +111,12 @@ class ProposalPipeline:
         self,
         branch: Branch,
     ) -> ProposalAttempt[HypothesisProposal]:
-        champion = self._champion_snapshot()
+        try:
+            champion = self._champion_snapshot()
+        except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
+            return self._hypothesis_failure(
+                self._record_unexpected_call_failure("hypothesis", exc)
+            )
         try:
             _context_snapshot, prompt_snapshot = self._hypothesis_snapshots(
                 branch,
@@ -137,6 +142,10 @@ class ProposalPipeline:
                     ),
                     error=exc,
                 )
+            )
+        except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
+            return self._hypothesis_failure(
+                self._record_unexpected_call_failure("hypothesis", exc)
             )
 
         try:
@@ -197,7 +206,12 @@ class ProposalPipeline:
         hypothesis: HypothesisProposal,
     ) -> ProposalAttempt[PatchProposal]:
         branch_id = branch.branch_id
-        champion = self._champion_snapshot()
+        try:
+            champion = self._champion_snapshot()
+        except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
+            return ProposalAttempt.failure(
+                self._record_unexpected_call_failure("code", exc)
+            )
         try:
             context = self.problem_runtime.build_code_context(
                 branch=branch,
@@ -219,6 +233,10 @@ class ProposalPipeline:
                     ),
                     error=exc,
                 )
+            )
+        except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
+            return ProposalAttempt.failure(
+                self._record_unexpected_call_failure("code", exc)
             )
 
         try:

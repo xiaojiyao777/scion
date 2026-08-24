@@ -4,11 +4,32 @@ import json
 import sqlite3
 from dataclasses import replace
 
-from scion.core.execution_outcome import ExecutionOutcome
+from scion.cli.commands.init_run import _completion_from_run_result
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import BranchState
+from scion.core.proposal_pipeline import ProposalAttempt
 from scion.core.scheduler import Scheduler
 
 from .campaign_test_support import *
+
+
+def _assert_canonical_hypothesis_failure_step(cm, *, reason_code):
+    assert len(cm._step_history) == 1
+    step = cm._step_history[0]
+    assert step.hypothesis is None
+    assert step.patch is None
+    assert step.contract_passed is None
+    assert step.verification_passed is None
+    assert step.protocol_result is None
+    assert step.decision is None
+    assert step.failure_stage == "proposal_hypothesis"
+    assert step.failure_detail == reason_code
+    assert step.execution_outcome is not None
+    assert step.execution_outcome.reason_code == reason_code
+    assert step.execution_outcome.detail == ""
+    assert step.execution_outcome.provenance == {
+        "stage": "proposal_hypothesis"
+    }
 
 
 class TestCodeFailureDirect:
@@ -233,7 +254,118 @@ def test_provider_auth_failure_blocks_branch_with_one_typed_outcome(tmp_path):
     assert outcomes[0]["stage"] == "proposal_hypothesis"
     assert outcomes[0]["outcome"] == ExecutionOutcome.BLOCKED_INFRA.value
     assert outcomes[0]["reason_code"] == "PROVIDER_CALL_BLOCKED_INFRA"
-    assert cm._step_history == []
+    _assert_canonical_hypothesis_failure_step(
+        cm,
+        reason_code="PROVIDER_CALL_BLOCKED_INFRA",
+    )
+
+
+@pytest.mark.parametrize(
+    ("outcome", "reason_code"),
+    (
+        (ExecutionOutcome.NOT_EVALUATED, "PROPOSAL_CONTEXT_INVALID"),
+        (ExecutionOutcome.RESOURCE_EXHAUSTED, "PROVIDER_CALL_CAP_EXHAUSTED"),
+    ),
+)
+def test_every_hypothesis_no_proposal_terminal_has_a_canonical_step(
+    tmp_path,
+    outcome,
+    reason_code,
+):
+    cm = _campaign(tmp_path)
+    cm._explore_step_pipeline.generate_hypothesis = lambda _branch: (
+        ProposalAttempt.failure(
+            ExecutionOutcomeRecord(
+                outcome=outcome,
+                reason_code=reason_code,
+                detail="RAW_SENTINEL",
+                provenance={
+                    "stage": "proposal_hypothesis",
+                    "exception_type": "RAW_SENTINEL",
+                },
+            )
+        )
+    )
+
+    result = cm.run_one_step()
+
+    assert result.execution_outcome.outcome is outcome
+    assert result.execution_outcome.reason_code == reason_code
+    _assert_canonical_hypothesis_failure_step(cm, reason_code=reason_code)
+
+
+@pytest.mark.parametrize(
+    ("builder_name", "failure_stage"),
+    (
+        ("build_hypothesis_context", "proposal_hypothesis"),
+        ("build_code_context", "proposal_code"),
+    ),
+)
+def test_unexpected_proposal_context_failure_is_typed_and_publicly_redacted(
+    tmp_path,
+    builder_name,
+    failure_stage,
+):
+    sentinel = "RAW_CONTEXT_SENTINEL H_BASIS_SENTINEL RESERVED_SENTINEL"
+    cm = _campaign(tmp_path)
+
+    def fail_context(**_kwargs):
+        raise RuntimeError(sentinel)
+
+    setattr(cm._problem_runtime, builder_name, fail_context)
+
+    terminal = cm.run(requested_rounds=1)
+
+    assert terminal.scheduled_calls == 1
+    assert terminal.evaluated_rounds == 0
+    assert terminal.stop_reason == "execution_blocked_infra"
+    assert terminal.execution_outcome_counts["blocked_infra"] == 1
+    assert terminal.failure_categories == {"blocked_infra": 1}
+    assert _completion_from_run_result(terminal) == (
+        20,
+        "incomplete_infra_stop:execution_blocked_infra",
+    )
+    assert terminal.last_execution_outcome == {
+        "outcome": "blocked_infra",
+        "reason_code": "PROPOSAL_UNEXPECTED_FAILURE",
+        "stage": failure_stage,
+    }
+    state = cm.get_state(run_result=terminal)
+    assert state["total_rounds"] == 1
+    assert state["n_steps"] == 1
+    step = cm._step_history[0]
+    assert step.failure_stage == failure_stage
+    assert (step.hypothesis is None) == (failure_stage == "proposal_hypothesis")
+
+    campaign_dir = tmp_path / "campaign"
+    status = json.loads((campaign_dir / "status.json").read_text(encoding="utf-8"))
+    summary = json.loads(
+        (campaign_dir / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    history = json.loads(
+        (campaign_dir / "research_history.jsonl").read_text(encoding="utf-8")
+    )
+    assert status["last_result"]["reason"] == "PROPOSAL_UNEXPECTED_FAILURE"
+    assert summary["steps"][0]["failure_detail"] == (
+        "PROPOSAL_UNEXPECTED_FAILURE"
+    )
+    assert summary["steps"][0]["execution_outcome"] == {
+        "outcome": "blocked_infra",
+        "reason_code": "PROPOSAL_UNEXPECTED_FAILURE",
+        "detail": "",
+        "provenance": {"stage": failure_stage},
+    }
+    assert history["outcome"] == {
+        "outcome": "blocked_infra",
+        "stage": failure_stage,
+        "reason_code": "PROPOSAL_UNEXPECTED_FAILURE",
+    }
+    public_artifacts = json.dumps(
+        {"status": status, "summary": summary, "history": history},
+        sort_keys=True,
+    )
+    for marker in (*sentinel.split(), "RuntimeError"):
+        assert marker not in public_artifacts
 
 
 class TestMissingOrdinaryHypothesis:
@@ -291,7 +423,10 @@ class TestProviderFailClosedTerminals:
         assert result.execution_outcome.reason_code == "PROPOSAL_UNEXPECTED_FAILURE"
         assert result.decision is None
         assert result.protocol_result is None
-        assert cm._step_history == []
+        _assert_canonical_hypothesis_failure_step(
+            cm,
+            reason_code="PROPOSAL_UNEXPECTED_FAILURE",
+        )
         self._assert_blocked_once(
             cm,
             result.branch_id,
@@ -339,3 +474,90 @@ class TestProviderFailClosedTerminals:
         assert branch.state is BranchState.EXPLORE
         assert cm._registry.query_execution_outcomes(branch_id=branch.branch_id) == []
         assert branch.hypothesis is None
+
+
+def test_hypothesis_abstention_is_one_redacted_durable_attempt(tmp_path):
+    sentinel = (
+        "RAW_SENTINEL H_BASIS_SENTINEL PROBE_SENTINEL RESERVED_SENTINEL"
+    )
+    cm = _campaign(
+        tmp_path,
+        experiment_protocol=MockExperimentProtocol(
+            results=[_make_protocol_result(ExperimentStage.SCREENING)]
+        ),
+    )
+    generate_hypothesis = cm._explore_step_pipeline.generate_hypothesis
+    calls = 0
+
+    def abstain_once(branch):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return ProposalAttempt.failure(
+                ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                    reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
+                    detail=sentinel,
+                    provenance={
+                        "stage": "proposal_hypothesis",
+                        "phase": "hypothesis",
+                        "provider_probe": sentinel,
+                    },
+                )
+            )
+        return generate_hypothesis(branch)
+
+    cm._explore_step_pipeline.generate_hypothesis = abstain_once
+
+    terminal = cm.run(requested_rounds=1)
+
+    assert terminal.scheduled_calls == 2
+    assert terminal.evaluated_rounds == 1
+    assert terminal.execution_outcome_counts["research_rejected"] == 1
+    assert terminal.execution_outcome_counts["evaluated"] == 1
+    state = cm.get_state(run_result=terminal)
+    assert state["total_rounds"] == 2
+    assert state["n_steps"] == 2
+
+    summary_path = tmp_path / "campaign" / "campaign_summary.json"
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert [step["round"] for step in summary["steps"]] == [1, 2]
+    assert summary["steps"][0]["hypothesis"] is None
+    assert summary["steps"][0]["failure_detail"] == (
+        "HYPOTHESIS_RESEARCH_ABSTAINED"
+    )
+    assert summary["steps"][0]["execution_outcome"] == {
+        "outcome": "research_rejected",
+        "reason_code": "HYPOTHESIS_RESEARCH_ABSTAINED",
+        "detail": "",
+        "provenance": {"stage": "proposal_hypothesis"},
+    }
+    assert summary["action_locus_coverage"] == {"modify/local_search": 1}
+
+    history_lines = (
+        (tmp_path / "campaign" / "research_history.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    assert len(history_lines) == 2
+    first_history = json.loads(history_lines[0])
+    assert first_history["hypothesis"] is None
+    assert first_history["patch"] is None
+    assert first_history["protocol"] is None
+    assert first_history["decision"] is None
+    assert first_history["outcome"] == {
+        "outcome": "research_rejected",
+        "stage": "proposal_hypothesis",
+        "reason_code": "HYPOTHESIS_RESEARCH_ABSTAINED",
+    }
+
+    public_artifacts = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            tmp_path / "campaign" / "status.json",
+            summary_path,
+            tmp_path / "campaign" / "research_history.jsonl",
+        )
+    )
+    for marker in sentinel.split():
+        assert marker not in public_artifacts
