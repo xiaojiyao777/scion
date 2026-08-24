@@ -24,7 +24,7 @@ from urllib.parse import quote
 
 from scion.config.problem import ProblemSpec
 from scion.core.execution_outcome import ExecutionOutcome
-from scion.core.models import Decision
+from scion.core.models import BranchState, Decision
 from scion.core.path_match import segment_glob_match
 from scion.core.paths import normalize_relative_patch_path
 from scion.core.research_history import (
@@ -46,6 +46,66 @@ _LIMIT_KEYS = frozenset(
         "max_proposal_attempts",
         "max_verified_candidate_chains",
         "max_formal_screening_stages",
+    }
+)
+_BRANCH_ROW_KEYS = frozenset(
+    {
+        "id",
+        "state",
+        "base_champion_id",
+        "current_code_hash",
+        "weight_revision",
+        "direction",
+        "failure_codes",
+        "created_at",
+        "updated_at",
+    }
+)
+_QUALIFICATION_TERMINAL_BRANCH_STATES = frozenset(
+    {
+        BranchState.EXPLORE.value,
+        BranchState.READY_VALIDATE.value,
+        BranchState.PARKED_LINEAGE.value,
+    }
+)
+_QUALIFICATION_ACTIVE_BRANCH_STATES = frozenset(
+    {BranchState.EXPLORE.value, BranchState.READY_VALIDATE.value}
+)
+_NONQUALIFYING_SCREENING_GATES = frozenset({"continue", "fail", "unclear"})
+_FORMAL_RUNTIME_GUARD_ABANDON_CODES = frozenset(
+    {"RUNTIME_GUARD_FAILED", "RUNTIME_GUARD_TIMEOUT"}
+)
+_QUALIFICATION_DECISIONS = frozenset(
+    {
+        Decision.CONTINUE_EXPLORE.value,
+        Decision.EXPAND_SCREENING.value,
+        Decision.QUEUE_VALIDATE.value,
+        Decision.ABANDON.value,
+    }
+)
+_HELDOUT_STAGE_NAMES = frozenset({"validation", "frozen"})
+_PREFORMAL_REJECTION_STAGES = frozenset(
+    {
+        "proposal_hypothesis",
+        "hypothesis_contract",
+        "proposal_code",
+        "patch_contract",
+        "verification",
+    }
+)
+_PREFORMAL_EVENT_KIND_BY_STAGE = {
+    "proposal_hypothesis": "proposal_execution_outcome",
+    "hypothesis_contract": "research_rejection",
+    "proposal_code": "research_rejection",
+    "patch_contract": "research_rejection",
+    "verification": "research_rejection",
+}
+_QUALIFICATION_FORBIDDEN_EXECUTION_OUTCOMES = frozenset(
+    {
+        ExecutionOutcome.BLOCKED_INFRA.value,
+        ExecutionOutcome.RESOURCE_EXHAUSTED.value,
+        ExecutionOutcome.INTERRUPTED.value,
+        ExecutionOutcome.NOT_EVALUATED.value,
     }
 )
 
@@ -171,6 +231,8 @@ def load_qualification_audit_expectation(
             bool(protocol_stages) and bool(forbidden_stages) and bool(zero_metrics)
         )
         _require(formal_stage in protocol_stages)
+        _require(formal_stage.strip() == formal_stage)
+        _require(formal_stage.casefold() not in _HELDOUT_STAGE_NAMES)
         _require(forbidden_stages.issubset(protocol_stages - {formal_stage}))
         screens: list[ScreeningExpectation] = []
         for raw in _sequence(value["screening"]):
@@ -210,6 +272,10 @@ def load_qualification_audit_expectation(
         _require(len(screens) == 2)
         _require(screens[0].require_contract_verification)
         initial, expanded = screens
+        _require(initial.gate_outcome == "expand")
+        _require(initial.decision == Decision.EXPAND_SCREENING.value)
+        _require(expanded.gate_outcome == "pass")
+        _require(expanded.decision == Decision.QUEUE_VALIDATE.value)
         _require(set(initial.case_ids) <= set(expanded.case_ids))
         _require(set(initial.seed_set) <= set(expanded.seed_set))
         _require(
@@ -259,6 +325,12 @@ def audit_qualification_campaign(
         )
         history = _read_json_lines(root / "research_history.jsonl")
         lineage = _read_lineage_events(root / "scion.db")
+        _audit_durable_pre_source_boundary(
+            summary=summary,
+            history=history,
+            lineage_events=lineage,
+            expectation=expectation,
+        )
         _require_canonical_commit(repository=repo, base_revision=base_revision)
         with tempfile.TemporaryDirectory(
             prefix="scion_qualification_audit_"
@@ -305,6 +377,11 @@ def _audit_terminal_boundary(
     )
     qualification = _mapping(run.get("qualification"))
     _require(qualification.get("mode") == "qualification_only")
+    _require(
+        status.get("campaign_mode")
+        == summary.get("campaign_mode")
+        == "qualification_only"
+    )
     _require(qualification.get("limits") == expectation.limits)
     _require(qualification.get("disposition") == expectation.ready_disposition)
     _require(
@@ -364,18 +441,67 @@ def _audit_terminal_boundary(
     _require(run.get("unknown_outcome_count") == 0)
     _require(summary.get("branches") == status.get("branches"))
     branches = _mapping_sequence(status.get("branches"))
+    _require(bool(branches))
+    _require(all(set(branch) == _BRANCH_ROW_KEYS for branch in branches))
+    branch_ids = tuple(_string(branch.get("id")) for branch in branches)
+    _require(len(branch_ids) == len(set(branch_ids)))
+    branch_states = tuple(_string(branch.get("state")) for branch in branches)
+    _require(
+        all(state in _QUALIFICATION_TERMINAL_BRANCH_STATES for state in branch_states)
+    )
     ready_branches = tuple(
-        branch for branch in branches if branch.get("state") == "ready_validate"
+        branch
+        for branch, state in zip(branches, branch_states, strict=True)
+        if state == BranchState.READY_VALIDATE.value
     )
     _require(len(ready_branches) == 1)
     ready_branch_id = _string(ready_branches[0].get("id"))
+    for branch, state in zip(branches, branch_states, strict=True):
+        code_hash = branch.get("current_code_hash")
+        if state == BranchState.READY_VALIDATE.value:
+            _require(
+                isinstance(code_hash, str)
+                and re.fullmatch(r"[0-9a-f]{64}", code_hash) is not None
+            )
+        else:
+            _require(code_hash is None)
+    _require(status.get("n_active_branches") == summary.get("n_active_branches"))
+    _require(status.get("active_slots") == summary.get("active_slots"))
+    _audit_active_slot_projection(
+        status,
+        branch_ids=branch_ids,
+        branch_states=branch_states,
+    )
+    _audit_active_slot_projection(
+        summary,
+        branch_ids=branch_ids,
+        branch_states=branch_states,
+    )
     steps = _mapping_sequence(summary.get("steps"))
     n_steps = status.get("n_steps")
     _require(type(n_steps) is int and n_steps == summary.get("n_steps") == len(steps))
     _require(status.get("total_rounds") == summary.get("total_rounds") == n_steps)
     _require(run.get("scheduled_calls") == len(steps))
+    formal_count = qualification.get("formal_screening_stages")
+    for field in ("n_experiments", "screened_experiments"):
+        _require(
+            type(status.get(field)) is int
+            and type(summary.get(field)) is int
+            and status.get(field) == summary.get(field) == formal_count
+        )
     for ordinal, step in enumerate(steps, 1):
         _require(type(step.get("round")) is int and step.get("round") == ordinal)
+    _audit_summary_decision_grammar(
+        steps=steps,
+        ready_branch_id=ready_branch_id,
+        expectation=expectation,
+    )
+    _audit_branch_terminal_relationships(
+        branches=branches,
+        steps=steps,
+        ready_branch_id=ready_branch_id,
+    )
+    _audit_step_stage_boundary(steps=steps, expectation=expectation)
     _require(
         run.get("evaluated_rounds") == qualification.get("formal_screening_stages")
     )
@@ -391,6 +517,12 @@ def _audit_terminal_boundary(
         _require(outcome_name in observed_outcomes)
         observed_outcomes[str(outcome_name)] += 1
     _require(run.get("execution_outcome_counts") == observed_outcomes)
+    _require(
+        all(
+            observed_outcomes[outcome] == 0
+            for outcome in _QUALIFICATION_FORBIDDEN_EXECUTION_OUTCOMES
+        )
+    )
     last_outcome = _mapping(steps[-1].get("execution_outcome"))
     expected_last = {
         "outcome": _string(last_outcome.get("outcome")),
@@ -414,7 +546,7 @@ def _audit_terminal_boundary(
     )
     _require(bool(_string(last_result.get("action"))))
     _require(last_result.get("branch_id") == ready_branch_id)
-    _require(isinstance(last_result.get("decision"), str))
+    _require(last_result.get("decision") == Decision.QUEUE_VALIDATE.value)
     _require(type(last_result.get("stopped")) is bool)
     _require(isinstance(last_result.get("reason"), str))
     _require(last_result.get("execution_outcome") == expected_last)
@@ -423,9 +555,454 @@ def _audit_terminal_boundary(
         qualification=qualification,
         formal_stage=expectation.formal_stage,
         screening=expectation.screening,
+        ready_branch_id=ready_branch_id,
         records=None,
         lineage_events=None,
     )
+
+
+def _audit_active_slot_projection(
+    projection: Mapping[str, Any],
+    *,
+    branch_ids: Sequence[str],
+    branch_states: Sequence[str],
+) -> None:
+    active_ids = tuple(
+        branch_id
+        for branch_id, state in zip(branch_ids, branch_states, strict=True)
+        if state in _QUALIFICATION_ACTIVE_BRANCH_STATES
+    )
+    slots = _mapping(projection.get("active_slots"))
+    _require(set(slots) == {"used", "max", "available", "branch_ids"})
+    used = _nonnegative_int(slots.get("used"))
+    maximum = _nonnegative_int(slots.get("max"))
+    available = _nonnegative_int(slots.get("available"))
+    projected_ids = tuple(_string(item) for item in _sequence(slots.get("branch_ids")))
+    _require(
+        used == _nonnegative_int(projection.get("n_active_branches")) == len(active_ids)
+    )
+    _require(maximum >= used and available == maximum - used)
+    _require(projected_ids == active_ids)
+
+
+def _audit_branch_terminal_relationships(
+    *,
+    branches: Sequence[Mapping[str, Any]],
+    steps: Sequence[Mapping[str, Any]],
+    ready_branch_id: str,
+) -> None:
+    state_by_branch = {
+        _string(branch.get("id")): _string(branch.get("state")) for branch in branches
+    }
+    _require(all(step.get("branch_id") in state_by_branch for step in steps))
+    for branch_id, state in state_by_branch.items():
+        branch_steps = tuple(
+            step for step in steps if step.get("branch_id") == branch_id
+        )
+        if branch_id == ready_branch_id:
+            _require(state == BranchState.READY_VALIDATE.value)
+            continue
+        if state == BranchState.EXPLORE.value:
+            _require(bool(branch_steps))
+            _require(
+                all(
+                    step.get("decision") is None
+                    and step.get("protocol_result") is None
+                    and step.get("verification_passed") is not True
+                    for step in branch_steps
+                )
+            )
+            continue
+        _require(state == BranchState.PARKED_LINEAGE.value)
+        _require(bool(branch_steps))
+        _require(any(step.get("verification_passed") is True for step in branch_steps))
+        _require(
+            all(
+                step.get("decision") != Decision.QUEUE_VALIDATE.value
+                for step in branch_steps
+            )
+        )
+
+
+def _audit_summary_decision_grammar(
+    *,
+    steps: Sequence[Mapping[str, Any]],
+    ready_branch_id: str,
+    expectation: QualificationAuditExpectation,
+) -> None:
+    decisions = tuple(step.get("decision") for step in steps)
+    _require(
+        all(
+            decision is None
+            or (isinstance(decision, str) and decision in _QUALIFICATION_DECISIONS)
+            for decision in decisions
+        )
+    )
+    queue_indices = tuple(
+        index
+        for index, decision in enumerate(decisions)
+        if decision == Decision.QUEUE_VALIDATE.value
+    )
+    _require(queue_indices == (len(steps) - 1,))
+    queue_step = steps[queue_indices[0]]
+    _require(queue_step.get("branch_id") == ready_branch_id)
+    queue_protocol = _mapping(queue_step.get("protocol_result"))
+    _require(queue_protocol.get("stage") == expectation.formal_stage)
+    _require(queue_protocol.get("gate_outcome") == "pass")
+    _require(
+        (queue_step.get("contract_passed"), queue_step.get("verification_passed"))
+        == (None, None)
+    )
+    for index, (step, decision) in enumerate(zip(steps, decisions, strict=True)):
+        protocol_value = step.get("protocol_result")
+        if decision is None:
+            _require(protocol_value is None)
+            continue
+        if protocol_value is None:
+            _require(decision == Decision.ABANDON.value)
+            _audit_candidate_failure_canary_summary(
+                step=step,
+                formal_stage=expectation.formal_stage,
+            )
+            _require_no_later_branch_step(steps=steps, index=index)
+            continue
+        protocol = _mapping(protocol_value)
+        _require(protocol.get("stage") == expectation.formal_stage)
+        gate = protocol.get("gate_outcome")
+        _require(
+            isinstance(gate, str)
+            and gate in _NONQUALIFYING_SCREENING_GATES | {"expand", "pass"}
+        )
+        shape = (step.get("contract_passed"), step.get("verification_passed"))
+        _require(shape in {(True, True), (None, None)})
+        if decision == Decision.ABANDON.value:
+            _require(_has_formal_abandon_safety_evidence(step))
+            _require_no_later_branch_step(steps=steps, index=index)
+            continue
+        if gate == "pass":
+            _require(decision == Decision.QUEUE_VALIDATE.value)
+            continue
+        if gate in _NONQUALIFYING_SCREENING_GATES:
+            _require(decision == Decision.CONTINUE_EXPLORE.value)
+            _require_no_later_branch_step(steps=steps, index=index)
+            continue
+        _require(gate == "expand" and decision == Decision.EXPAND_SCREENING.value)
+        if shape == (None, None):
+            _require(
+                all(
+                    later.get("branch_id") != step.get("branch_id")
+                    for later in steps[index + 1 :]
+                )
+            )
+            continue
+        _require(shape == (True, True) and index + 1 < len(steps))
+        dispatch = steps[index + 1]
+        _require(dispatch.get("branch_id") == step.get("branch_id"))
+        _require(
+            (dispatch.get("contract_passed"), dispatch.get("verification_passed"))
+            == (None, None)
+        )
+
+
+def _require_no_later_branch_step(
+    *,
+    steps: Sequence[Mapping[str, Any]],
+    index: int,
+) -> None:
+    branch_id = steps[index].get("branch_id")
+    _require(all(step.get("branch_id") != branch_id for step in steps[index + 1 :]))
+
+
+def _audit_candidate_failure_canary_summary(
+    *,
+    step: Mapping[str, Any],
+    formal_stage: str,
+) -> None:
+    _require(
+        (step.get("contract_passed"), step.get("verification_passed"))
+        in {(True, True), (None, None)}
+    )
+    _require(step.get("failure_stage") == "canary")
+    canary = _mapping(step.get("canary_result"))
+    _require(canary.get("passed") is False)
+    _require(canary.get("failure_category") == "candidate_failure")
+    _require(
+        step.get("execution_outcome")
+        == {
+            "outcome": "evaluated",
+            "reason_code": "EVALUATION_COMPLETED",
+            "detail": "",
+            "provenance": {"stage": formal_stage},
+        }
+    )
+
+
+def _forbidden_stage_names(
+    expectation: QualificationAuditExpectation,
+) -> frozenset[str]:
+    return frozenset(
+        {item.casefold() for item in expectation.forbidden_stages}
+        | _HELDOUT_STAGE_NAMES
+    )
+
+
+def _require_stage_not_forbidden(
+    value: Any,
+    *,
+    forbidden: frozenset[str],
+    allow_none: bool,
+    allow_empty: bool = False,
+) -> None:
+    if value is None:
+        _require(allow_none)
+        return
+    _require(isinstance(value, str))
+    normalized = value.strip()
+    _require(value == normalized)
+    _require(allow_empty or bool(normalized))
+    _require(normalized.casefold() not in forbidden)
+
+
+def _audit_step_stage_boundary(
+    *,
+    steps: Sequence[Mapping[str, Any]],
+    expectation: QualificationAuditExpectation,
+) -> None:
+    forbidden = _forbidden_stage_names(expectation)
+    for step in steps:
+        protocol = step.get("protocol_result")
+        if isinstance(protocol, Mapping):
+            _require_stage_not_forbidden(
+                protocol.get("stage"),
+                forbidden=forbidden,
+                allow_none=False,
+            )
+            _require(protocol.get("stage") == expectation.formal_stage)
+        else:
+            _require(protocol is None)
+        outcome = step.get("execution_outcome")
+        if isinstance(outcome, Mapping):
+            provenance = outcome.get("provenance")
+            if isinstance(provenance, Mapping):
+                _require_stage_not_forbidden(
+                    provenance.get("stage"),
+                    forbidden=forbidden,
+                    allow_none=False,
+                )
+            else:
+                _require(provenance is None)
+        else:
+            _require(outcome is None)
+        _require_stage_not_forbidden(
+            step.get("failure_stage"),
+            forbidden=forbidden,
+            allow_none=True,
+        )
+
+
+def _audit_durable_pre_source_boundary(
+    *,
+    summary: Mapping[str, Any],
+    history: Sequence[Mapping[str, Any]],
+    lineage_events: Sequence[Mapping[str, Any]],
+    expectation: QualificationAuditExpectation,
+) -> None:
+    steps = _mapping_sequence(summary.get("steps"))
+    records = _mapping_sequence(history)
+    events = _mapping_sequence(lineage_events)
+    _require(len(steps) == len(records) == len(events))
+    forbidden = _forbidden_stage_names(expectation)
+    for step, record, event in zip(steps, records, events, strict=True):
+        _require(event.get("branch_id") == step.get("branch_id"))
+        decision = step.get("decision")
+        recorded = record.get("decision")
+        summary_decision_codes: tuple[str, ...] = ()
+        if decision is None:
+            _require(recorded is None)
+            _require(event.get("decision") is None)
+            _require(event.get("decision_reason") is None)
+        else:
+            recorded_decision = _mapping(recorded)
+            _require(recorded_decision.get("value") == decision)
+            for summary_key, history_key in (
+                ("decision_reason_codes", "reason_codes"),
+                ("diagnostic_reason_codes", "diagnostic_reason_codes"),
+                ("bypass_reason_codes", "bypass_reason_codes"),
+            ):
+                summary_codes = tuple(
+                    _string(item) for item in _sequence(step.get(summary_key) or ())
+                )
+                history_codes = tuple(
+                    _string(item)
+                    for item in _sequence(recorded_decision.get(history_key) or ())
+                )
+                _require(summary_codes == history_codes)
+                if summary_key == "decision_reason_codes":
+                    summary_decision_codes = summary_codes
+            _require(event.get("event_kind") == "experiment")
+            _require(event.get("decision") == decision)
+        summary_protocol = step.get("protocol_result")
+        history_protocol = record.get("protocol")
+        protocol_reason_codes: tuple[str, ...] = ()
+        if summary_protocol is None:
+            _require(history_protocol is None)
+        else:
+            summary_protocol_record = _mapping(summary_protocol)
+            protocol_reason_codes = tuple(
+                _string(item)
+                for item in _sequence(summary_protocol_record.get("reason_codes"))
+            )
+            for protocol_key, summary_key in (
+                ("decision_reason_codes", "decision_reason_codes"),
+                ("diagnostic_reason_codes", "diagnostic_reason_codes"),
+                ("bypass_reason_codes", "bypass_reason_codes"),
+            ):
+                _require(
+                    tuple(
+                        _string(item)
+                        for item in _sequence(summary_protocol_record.get(protocol_key))
+                    )
+                    == tuple(
+                        _string(item) for item in _sequence(step.get(summary_key) or ())
+                    )
+                )
+            history_protocol_outcome = _mapping(
+                _mapping(_mapping(history_protocol).get("evidence")).get(
+                    "protocol_outcome"
+                )
+            )
+            summary_gate = summary_protocol_record.get("gate_outcome")
+            history_gate = history_protocol_outcome.get("gate_outcome")
+            _require(history_gate == summary_gate)
+            _require(
+                tuple(
+                    _string(item)
+                    for item in _sequence(history_protocol_outcome.get("reason_codes"))
+                )
+                == protocol_reason_codes
+            )
+        if decision is not None:
+            expected_lineage_reasons = tuple(
+                dict.fromkeys((*summary_decision_codes, *protocol_reason_codes))
+            )
+            _require(
+                _json_string_tuple(event.get("decision_reason"))
+                == expected_lineage_reasons
+            )
+        outcome = record.get("outcome")
+        if isinstance(outcome, Mapping):
+            _require_stage_not_forbidden(
+                outcome.get("stage"),
+                forbidden=forbidden,
+                allow_none=False,
+            )
+        else:
+            _require(outcome is None)
+        protocol = record.get("protocol")
+        if isinstance(protocol, Mapping):
+            evidence = protocol.get("evidence")
+            if isinstance(evidence, Mapping):
+                _require_stage_not_forbidden(
+                    evidence.get("stage"),
+                    forbidden=forbidden,
+                    allow_none=False,
+                )
+                _require(evidence.get("stage") == expectation.formal_stage)
+            else:
+                _require(evidence is None)
+        else:
+            _require(protocol is None)
+        _require_stage_not_forbidden(
+            event.get("stage"),
+            forbidden=forbidden,
+            allow_none=False,
+            allow_empty=True,
+        )
+        if decision is None:
+            _audit_preformal_rejection_artifacts(
+                step=step,
+                record=record,
+                event=event,
+            )
+        elif summary_protocol is None:
+            _audit_candidate_failure_canary_artifacts(
+                step=step,
+                record=record,
+                event=event,
+                formal_stage=expectation.formal_stage,
+            )
+            _require(event.get("execution_outcome") is None)
+            _require(event.get("execution_outcome_reason_code") is None)
+        else:
+            _audit_formal_artifact_row(
+                step=step,
+                shape=(step.get("contract_passed"), step.get("verification_passed")),
+                record=record,
+                event=event,
+                formal_stage=expectation.formal_stage,
+            )
+            _require(event.get("execution_outcome") is None)
+            _require(event.get("execution_outcome_reason_code") is None)
+
+
+def _audit_preformal_rejection_artifacts(
+    *,
+    step: Mapping[str, Any],
+    record: Mapping[str, Any],
+    event: Mapping[str, Any],
+) -> None:
+    _require(step.get("protocol_result") is None)
+    _require(step.get("decision") is None)
+    _require(step.get("canary_result") is None)
+    for field in (
+        "code_hash",
+        "patch_action",
+        "patch_file",
+        "hypothesis_text",
+        "contract_result",
+        "verification_result",
+        "canary_result",
+    ):
+        _require(event.get(field) is None)
+    stage = _string(step.get("failure_stage"))
+    _require(stage in _PREFORMAL_REJECTION_STAGES)
+    summary_outcome = _mapping(step.get("execution_outcome"))
+    history_outcome = _mapping(record.get("outcome"))
+    summary_name = _string(summary_outcome.get("outcome"))
+    history_name = _string(history_outcome.get("outcome"))
+    _require(summary_name == history_name == ExecutionOutcome.RESEARCH_REJECTED.value)
+    summary_reason = _string(summary_outcome.get("reason_code"))
+    history_reason = _string(history_outcome.get("reason_code"))
+    _require(summary_reason == history_reason)
+    summary_stage = _string(_mapping(summary_outcome.get("provenance")).get("stage"))
+    history_stage = _string(history_outcome.get("stage"))
+    _require(summary_stage == history_stage == event.get("stage") == stage)
+    _require(event.get("event_kind") == _PREFORMAL_EVENT_KIND_BY_STAGE[stage])
+    _require(event.get("execution_outcome") == summary_name)
+    _require(event.get("execution_outcome_reason_code") == summary_reason)
+    hypothesis = step.get("hypothesis")
+    history_hypothesis = record.get("hypothesis")
+    history_patch = record.get("patch")
+    shape = (step.get("contract_passed"), step.get("verification_passed"))
+    if stage == "proposal_hypothesis":
+        _require(hypothesis is None and history_hypothesis is None)
+        _require(history_patch is None and shape == (None, None))
+    elif stage == "hypothesis_contract":
+        _require(isinstance(hypothesis, Mapping))
+        _require(isinstance(history_hypothesis, Mapping) and history_patch is None)
+        _require(shape == (False, False))
+    elif stage == "proposal_code":
+        _require(isinstance(hypothesis, Mapping))
+        _require(isinstance(history_hypothesis, Mapping) and history_patch is None)
+        _require(shape == (True, False))
+    elif stage == "patch_contract":
+        _require(isinstance(hypothesis, Mapping))
+        _require(isinstance(history_hypothesis, Mapping))
+        _require(isinstance(history_patch, Mapping) and shape == (False, False))
+    else:
+        _require(stage == "verification" and isinstance(hypothesis, Mapping))
+        _require(isinstance(history_hypothesis, Mapping))
+        _require(isinstance(history_patch, Mapping) and shape == (True, False))
 
 
 def _audit_qualification_artifacts(
@@ -513,6 +1090,7 @@ def _audit_ready_candidate(
         qualification=_mapping(run["qualification"]),
         formal_stage=expectation.formal_stage,
         screening=expectation.screening,
+        ready_branch_id=carrier.branch_id,
         records=records,
         lineage_events=lineage_events,
     )
@@ -690,16 +1268,18 @@ def _audit_qualification_counters(
     qualification: Mapping[str, Any],
     formal_stage: str,
     screening: Sequence[ScreeningExpectation],
+    ready_branch_id: str,
     records: Sequence[Mapping[str, Any]] | None,
     lineage_events: Sequence[Mapping[str, Any]] | None,
 ) -> None:
     _require(len(screening) == 2)
     initial_screening, expanded_screening = screening
-    verified_branches = tuple(
-        _string(step.get("branch_id"))
-        for step in steps
+    verified_rows = tuple(
+        (index, _string(step.get("branch_id")))
+        for index, step in enumerate(steps)
         if step.get("verification_passed") is True
     )
+    verified_branches = tuple(branch_id for _index, branch_id in verified_rows)
     _require(len(verified_branches) == len(set(verified_branches)))
     _require(qualification.get("verified_candidate_chains") == len(verified_branches))
     formal_rows = tuple(
@@ -738,6 +1318,8 @@ def _audit_qualification_counters(
         decision = step.get("decision")
         _require(decision is None or isinstance(decision, str))
         formal_by_branch.setdefault(branch_id, []).append((index, shape, decision))
+    _require(set(formal_by_branch) <= set(verified_branches))
+    _require(ready_branch_id in formal_by_branch)
     expansion_dispatch_indices: set[int] = set()
     for branch_id, rows in formal_by_branch.items():
         shapes = tuple(row[1] for row in rows)
@@ -771,9 +1353,44 @@ def _audit_qualification_counters(
                 formal_stage=formal_stage,
             )
             expansion_dispatch_indices.add(dispatch[0])
+            if branch_id == ready_branch_id:
+                _require(len(rows) == 2 and rows[1][0] == dispatch[0])
+                _audit_expected_formal_endpoint(
+                    step=steps[initial_index],
+                    required=initial_screening,
+                )
+                _audit_expected_formal_endpoint(
+                    step=steps[dispatch[0]],
+                    required=expanded_screening,
+                )
+            elif len(rows) == 1:
+                _require(steps[dispatch[0]].get("protocol_result") is None)
+            else:
+                _require(len(rows) == 2 and rows[1][0] == dispatch[0])
+                _audit_nonqualifying_formal_endpoint(
+                    step=steps[dispatch[0]],
+                )
         else:
             _require(post_initial_indices == (initial_index,))
             _require(len(rows) == 1)
+            _require(branch_id != ready_branch_id)
+            _audit_nonqualifying_formal_endpoint(step=steps[initial_index])
+    for verified_index, branch_id in verified_rows:
+        if branch_id in formal_by_branch:
+            continue
+        step = steps[verified_index]
+        _require(step.get("protocol_result") is None)
+        _require(step.get("decision") == Decision.ABANDON.value)
+        _audit_candidate_failure_canary_summary(
+            step=step,
+            formal_stage=formal_stage,
+        )
+        _require(
+            all(
+                later.get("branch_id") != branch_id
+                for later in steps[verified_index + 1 :]
+            )
+        )
     _require(
         qualification.get("proposal_attempts")
         == len(steps) - len(expansion_dispatch_indices)
@@ -802,6 +1419,17 @@ def _audit_qualification_counters(
             event=_mapping(event_by_step.get(index)),
             formal_stage=formal_stage,
         )
+    for index, step in enumerate(steps):
+        if (
+            step.get("protocol_result") is None
+            and step.get("decision") == Decision.ABANDON.value
+        ):
+            _audit_candidate_failure_canary_artifacts(
+                step=step,
+                record=records[index],
+                event=_mapping(event_by_step.get(index)),
+                formal_stage=formal_stage,
+            )
     for branch_id, rows in formal_by_branch.items():
         initial_index, _shape, initial_decision = rows[0]
         if initial_decision != initial_screening.decision:
@@ -830,6 +1458,43 @@ def _audit_qualification_counters(
         and event.get("stage") == formal_stage
     )
     _require(lineage_formal_branches == formal_branches)
+
+
+def _audit_expected_formal_endpoint(
+    *,
+    step: Mapping[str, Any],
+    required: ScreeningExpectation,
+) -> None:
+    protocol = _mapping(step.get("protocol_result"))
+    _require(protocol.get("gate_outcome") == required.gate_outcome)
+    _require(step.get("decision") == required.decision)
+
+
+def _audit_nonqualifying_formal_endpoint(*, step: Mapping[str, Any]) -> None:
+    protocol = _mapping(step.get("protocol_result"))
+    gate = protocol.get("gate_outcome")
+    decision = step.get("decision")
+    if decision == Decision.ABANDON.value:
+        _require(_has_formal_abandon_safety_evidence(step))
+        return
+    if gate == "expand":
+        _require(decision == Decision.EXPAND_SCREENING.value)
+        return
+    _require(gate in _NONQUALIFYING_SCREENING_GATES)
+    _require(decision == Decision.CONTINUE_EXPLORE.value)
+
+
+def _has_formal_abandon_safety_evidence(step: Mapping[str, Any]) -> bool:
+    protocol = _mapping(step.get("protocol_result"))
+    candidate_failed = _nonnegative_int(protocol.get("candidate_failed_pairs"))
+    bilateral_failed = _nonnegative_int(protocol.get("bilateral_failed_pairs"))
+    if candidate_failed > bilateral_failed:
+        return True
+    reason_codes_value = step.get("decision_reason_codes")
+    if reason_codes_value is None:
+        return False
+    reason_codes = tuple(_string(item) for item in _sequence(reason_codes_value))
+    return bool(_FORMAL_RUNTIME_GUARD_ABANDON_CODES.intersection(reason_codes))
 
 
 def _audit_formal_screening_population(
@@ -918,7 +1583,33 @@ def _audit_formal_artifact_row(
         _mapping(_mapping(record.get("protocol")).get("evidence")).get("stage")
         == formal_stage
     )
+    _require(
+        _mapping(
+            _mapping(_mapping(record.get("protocol")).get("evidence")).get(
+                "protocol_outcome"
+            )
+        ).get("gate_outcome")
+        == _mapping(step.get("protocol_result")).get("gate_outcome")
+    )
     _require(_mapping(record.get("decision")).get("value") == step.get("decision"))
+    if step.get("decision") == Decision.ABANDON.value:
+        protocol = _mapping(step.get("protocol_result"))
+        if _nonnegative_int(protocol.get("candidate_failed_pairs")) <= _nonnegative_int(
+            protocol.get("bilateral_failed_pairs")
+        ):
+            summary_reasons = tuple(
+                _string(item) for item in _sequence(step.get("decision_reason_codes"))
+            )
+            history_reasons = tuple(
+                _string(item)
+                for item in _sequence(
+                    _mapping(record.get("decision")).get("reason_codes")
+                )
+            )
+            _require(summary_reasons == history_reasons)
+            _require(
+                bool(_FORMAL_RUNTIME_GUARD_ABANDON_CODES.intersection(summary_reasons))
+            )
     _require(event.get("stage") == formal_stage)
     _require(event.get("canary_result") == "passed")
     if shape == (True, True):
@@ -926,6 +1617,40 @@ def _audit_formal_artifact_row(
         _require(event.get("verification_result") == "passed")
     else:
         _require(shape == (None, None))
+        _require(event.get("contract_result") == "not_run")
+        _require(event.get("verification_result") == "not_run")
+
+
+def _audit_candidate_failure_canary_artifacts(
+    *,
+    step: Mapping[str, Any],
+    record: Mapping[str, Any],
+    event: Mapping[str, Any],
+    formal_stage: str,
+) -> None:
+    _audit_candidate_failure_canary_summary(
+        step=step,
+        formal_stage=formal_stage,
+    )
+    _require(
+        _mapping(record.get("outcome"))
+        == {
+            "outcome": "evaluated",
+            "stage": "canary",
+            "reason_code": "EVALUATION_COMPLETED",
+        }
+    )
+    _require(record.get("protocol") is None)
+    _require(_mapping(record.get("decision")).get("value") == Decision.ABANDON.value)
+    _require(event.get("event_kind") == "experiment")
+    _require(event.get("stage") == "")
+    _require(event.get("canary_result") == "failed")
+    _require(event.get("decision") == Decision.ABANDON.value)
+    if step.get("verification_passed") is True:
+        _require(event.get("contract_result") == "passed")
+        _require(event.get("verification_result") == "passed")
+    else:
+        _require(step.get("verification_passed") is None)
         _require(event.get("contract_result") == "not_run")
         _require(event.get("verification_result") == "not_run")
 
@@ -968,23 +1693,12 @@ def _audit_expansion_dispatch_artifacts(
         _require(dispatch_event.get("verification_result") == "not_run")
         _require(dispatch_event.get("canary_result") == "passed")
         return
-    _require(
-        _mapping(dispatch_record.get("outcome"))
-        == {
-            "outcome": "evaluated",
-            "stage": "canary",
-            "reason_code": "EVALUATION_COMPLETED",
-        }
+    _audit_candidate_failure_canary_artifacts(
+        step=steps[dispatch_index],
+        record=dispatch_record,
+        event=dispatch_event,
+        formal_stage=formal_stage,
     )
-    _require(dispatch_record.get("protocol") is None)
-    _require(
-        _mapping(dispatch_record.get("decision")).get("value") == Decision.ABANDON.value
-    )
-    _require(dispatch_event.get("stage") == "")
-    _require(dispatch_event.get("contract_result") == "not_run")
-    _require(dispatch_event.get("verification_result") == "not_run")
-    _require(dispatch_event.get("canary_result") == "failed")
-    _require(dispatch_event.get("decision") == Decision.ABANDON.value)
 
 
 def _read_json_object(path: Path) -> dict[str, Any]:
@@ -1038,6 +1752,14 @@ def _no_duplicate_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return value
 
 
+def _json_string_tuple(value: Any) -> tuple[str, ...]:
+    _require(isinstance(value, str))
+    parsed = json.loads(value, object_pairs_hook=_no_duplicate_pairs)
+    result = tuple(_string(item) for item in _sequence(parsed))
+    _require(len(result) == len(set(result)))
+    return result
+
+
 def _read_lineage_events(path: Path) -> tuple[dict[str, Any], ...]:
     suffixes = ("", "-wal", "-shm")
     snapshots: dict[str, tuple[bytes, tuple[int, ...]]] = {}
@@ -1060,7 +1782,9 @@ def _read_lineage_events(path: Path) -> tuple[dict[str, Any], ...]:
     query = (
         "SELECT event_kind, branch_id, code_hash, patch_action, patch_file, "
         "hypothesis_text, contract_result, verification_result, canary_result, "
-        "stage, decision FROM experiment_events ORDER BY rowid ASC"
+        "stage, decision, decision_reason, execution_outcome, "
+        "execution_outcome_reason_code "
+        "FROM experiment_events ORDER BY rowid ASC"
     )
     with tempfile.TemporaryDirectory(prefix="scion_qualification_lineage_") as temp:
         copied = Path(temp) / path.name
