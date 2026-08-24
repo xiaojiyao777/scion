@@ -646,6 +646,48 @@ predicate already failed and no ready carrier existed. The terminal root is
 preserved and consumed without retry, resume or reuse. See the
 [M28 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md).
 
+The M28 P1/P2 prerequisites are repaired through qualification-only runtime
+carrier `2f424a2f1b870ce05833dd6683bfe3c9d2013820`, and the final problem-neutral
+qualification auditor is committed at exact M30 runtime/source base
+`5d282ea8e9133e0146c47588f2310c9bd2493e50`. Candidate-carrier selection
+allows preserved non-ready branches and nonmatching historical workspaces but
+fails closed unless exactly one ready branch, two aligned same-H/patch screens
+and one production-hash-matching durable workspace agree. Provider-safe null-H
+rows retain ordinary accounting without a hypothesis headline or
+candidate-specific nearest-history rank. Qualification-only runtime separately
+bounds EXPLORE H/C proposal attempts, Verification-passing chains and formal
+screening stages; legal exhaustion is completed/valid negative, while a
+positive branch stops before heldout dispatch for postrun audit.
+
+M30 is prepared but neither authorized nor launched. Its outcome-blind
+metadata selector fixes a six-case fresh-at-start development bank, four
+screening seeds and a distinct normal canary seed at the runtime base. The
+first H context is eight observations plus 42 native histories. The exact live
+limits are six proposal attempts, two verified chains, four formal screening
+stages, 60 provider calls and a 28,000-second hardwall. Qualification requires
+one exact `modify` branch to complete initial `6/6` and expanded `24/24` with
+zero failures/fleet regressions and then pass the sole public provider-/solver-
+free auditor using the tracked strict M30 expectation. Only exact token
+`QUALIFIED_FOR_NEW_FIXED_CANDIDATE_FUNNEL` after durable all-formal-bank,
+candidate-carrier, B0 reconstruction and complete path/byte checks is a
+qualification result. The auditor terminal gate precedes history, read-only
+private-copy SQLite/WAL/SHM and opaque base materialization. Its final generic
+suite collected 136 tests; combined auditor/carrier was 149 and the exact
+generic postcommit gate was 181 including qualification-only runtime coverage.
+M31 remains an unmaterialized conditional selector rule; its
+identities may be computed only after M30 qualification and separate
+authorization. See the
+[M30 preregistration](../experiments/v0.4/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md).
+
+The B30 safe selector saw 2,163 tracked paths, filtered 524, skipped all 18
+controlled `.vrp`/`.sol` blobs before read, allowlisted 506, found zero unknown
+suffixes, parsed 69 JSON/YAML files without error and found seed lines in 322.
+Its 2,962-value union, 82 exclusions, 19,918 eligible M30 seeds and selected
+five identities/digests exactly match the independently completed safe scan.
+An earlier provisional wide replay did read those 18 tracked controlled
+synthetic bodies; this real prep-boundary violation did not affect the union or
+ranking. It did not open the external CVRPLIB corpus or reserved heldout raw.
+
 ## Current validation rule
 
 Current M23 safe validation collected 1,844 tests. Exact isolated invocations

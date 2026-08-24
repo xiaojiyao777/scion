@@ -645,6 +645,37 @@ The exact design is in the
   scientific predicate had already failed and no eligible carrier existed.
   The conditional M29 selector expired unmaterialized; there is no M29 prep,
   launch, retry or resume authority.
+- [x] Repair the M28 postrun-carrier false-negative and provider-safe null-H
+  durability boundaries, then add a bounded qualification-only campaign mode.
+  The reviewed runtime now counts EXPLORE H/C proposal attempts, distinct
+  Verification-passing chains and initial/expanded screening stages
+  independently; legal cap exhaustion is a completed valid negative, while
+  infra/resource/hardwall terminals remain incomplete. Nonqualifying verified
+  chains are durably recorded before their mutable workspace/H/patch/hash is
+  cleared and the lineage is parked; a positive branch stops before validation
+  as `ready_for_postrun_qualification_audit`, not as already qualified.
+- [x] **PREPARED / NOT AUTHORIZED / NOT LAUNCHED:** freeze M30 as the next CVRP
+  qualification attempt on a metadata-selected fresh-at-start development
+  bank. Its first H receives eight ordinary observations plus 42 native history
+  rows; six H/C proposal attempts, two verified chains, four screening stages,
+  60 provider calls and a 28,000-second hardwall are independent explicit
+  limits. The runtime/source base is exact
+  `5d282ea8e9133e0146c47588f2310c9bd2493e50`. A tracked strict expectation JSON
+  supplies M30 facts to the sole public, problem-neutral postrun auditor; only
+  its exact `QUALIFIED_FOR_NEW_FIXED_CANDIDATE_FUNNEL` token after terminal
+  boundary, scientific join and B0/full-byte carrier checks can unlock a
+  successor. The exact selector, controls, resource arithmetic, three-layer
+  claim boundary and mechanical prelaunch/postrun commands are preserved in the
+  [M30 preregistration](docs/experiments/v0.4/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md).
+  M31 exists only as a conditional outcome-blind rule and count-only
+  feasibility proof; no M31 case/seed identity is materialized.
+- [ ] **NEXT / REQUIRES CLEAN COMMITTED PREP, TWO RED TEAMS AND EXPLICIT USER
+  AUTHORIZATION:** run the frozen M30 command exactly once. `queue_validate`
+  alone is not success: only exact initial `6/6`, expanded `24/24`, zero
+  failures/fleet regressions, the frozen Decision chain and the sole public
+  exact carrier/source audit may qualify a later independently authorized M31
+  prep. Exit zero is ambiguous by design; exits `20/21/22/124` remain typed
+  infra/resource/incomplete/hardwall terminals and never qualify.
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and
