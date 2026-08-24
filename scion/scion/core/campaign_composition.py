@@ -40,6 +40,10 @@ from scion.core.promotion_service import PromotionService
 from scion.core.proposal_pipeline import (
     ProposalPipeline,
 )
+from scion.core.qualification import (
+    QualificationRuntime,
+    normalize_qualification_only_config,
+)
 from scion.core.research_history import problem_id_from_spec
 from scion.core.research_input import write_research_input
 from scion.core.research_rejection_finalizer import ResearchRejectionFinalizer
@@ -108,6 +112,7 @@ def compose_campaign_services(
     research_history: Any = (),
     resource_envelope: Any | None = None,
     code_research_limits: Any | None = None,
+    qualification_only: Any | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     validate_fresh_campaign_output(campaign_dir)
@@ -155,6 +160,14 @@ def compose_campaign_services(
         owner._resource_envelope.provider_call_cap
     )
     owner._code_research_limits = normalized_code_research_limits
+    owner._qualification_only_config = normalize_qualification_only_config(
+        qualification_only
+    )
+    owner._qualification_runtime = (
+        QualificationRuntime(owner._qualification_only_config)
+        if owner._qualification_only_config is not None
+        else None
+    )
     owner._split_manifest = split_manifest
     owner._seed_ledger = seed_ledger
     owner._llm_client = llm_client
@@ -367,6 +380,11 @@ def compose_campaign_services(
         finalize_research_rejection=owner._research_rejection_finalizer.finalize,
         evaluate=owner._evaluate,
         apply_decision_and_finalize=owner._apply_decision_and_finalize,
+        reserve_proposal_attempt=(
+            owner._qualification_runtime.reserve_proposal_attempt
+            if owner._qualification_runtime is not None
+            else (lambda: None)
+        ),
         update_status_progress=owner._update_status_progress,
         step_history=owner._step_history,
     )
@@ -396,6 +414,9 @@ def compose_campaign_services(
         apply_reconcile_candidate=(owner._workspace_service.apply_candidate_patch),
         verify_reconcile_candidate=(owner._workspace_service.verify_candidate),
         reject_reconcile_candidate=(owner._workspace_service.reject_candidate),
+        qualification_only=owner._qualification_only_config is not None,
+        qualification_runtime=owner._qualification_runtime,
+        discard_branch_workspace=owner._workspace_service.discard_branch_workspace,
     )
     owner._campaign_loop = CampaignLoop(
         write_status=lambda **kwargs: owner._write_status(**kwargs),
@@ -403,7 +424,11 @@ def compose_campaign_services(
         should_stop=lambda: owner.should_stop(),
         get_last_stop_reason=lambda: owner._last_stop_reason,
         set_last_stop_reason=lambda reason: setattr(owner, "_last_stop_reason", reason),
-        run_one_step=lambda: owner.run_one_step(),
+        run_one_step=(
+            (lambda: owner._run_scheduled_step())
+            if owner._qualification_only_config is not None
+            else (lambda: owner.run_one_step())
+        ),
         write_terminal_artifacts=lambda result: owner._write_terminal_artifacts(result),
         get_final_wait_timeout=lambda: bounded_terminal_wait_timeout(
             getattr(
@@ -415,6 +440,8 @@ def compose_campaign_services(
         wait_weight_opt_all=lambda timeout: owner._weight_opt_coord.wait_all(
             timeout=timeout
         ),
+        qualification_runtime=owner._qualification_runtime,
+        park_qualification_chain=owner._park_qualification_chain,
     )
 
 

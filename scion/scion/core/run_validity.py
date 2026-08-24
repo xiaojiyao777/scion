@@ -17,6 +17,7 @@ def classify_run_validity(
     terminal: bool,
     completed: bool,
     execution_outcome_counts: Mapping[str, Any],
+    completed_without_evaluated_outcome_is_valid: bool = False,
 ) -> dict[str, Any]:
     """Classify only the typed outcomes owned by ``CampaignRunResult``.
 
@@ -31,6 +32,12 @@ def classify_run_validity(
             "status": "pending",
             "reason": RUN_VALIDITY_PENDING,
             "valid": None,
+        }
+    if completed and completed_without_evaluated_outcome_is_valid:
+        return {
+            "status": "valid",
+            "reason": RUN_VALIDITY_VALID,
+            "valid": True,
         }
     if evaluated > 0:
         return {

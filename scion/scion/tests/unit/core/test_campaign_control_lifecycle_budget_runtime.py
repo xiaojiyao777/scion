@@ -109,6 +109,17 @@ class TestEvalStepHypothesisLifecycle:
         assert r.branch_id is not None
         branch = cm._branch_ctrl.get_branch(r.branch_id)
         assert branch.hypothesis is None
+        assert cm._branch_workspaces == {}
+        assert cm._branch_patches == {}
+        events = [
+            row
+            for row in cm._registry.query_by_branch(r.branch_id)
+            if row["event_kind"] == "experiment"
+        ]
+        assert len(events) == 1
+        assert events[0]["decision"] == Decision.ABANDON.value
+        assert events[0]["canary_result"] == "failed"
+        assert events[0]["code_hash"]
 
 
 class TestEvalStepWritesStepRecord:

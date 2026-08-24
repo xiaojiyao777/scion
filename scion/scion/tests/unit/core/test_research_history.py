@@ -5,6 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+
 from scion.cli.commands.init_run import _load_research_histories
 from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.evidence_recording import EvidenceRecorder
@@ -12,6 +13,7 @@ from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecor
 from scion.core.models import (
     Branch,
     BranchState,
+    CanaryResult,
     ChampionState,
     Decision,
     EvalStats,
@@ -425,6 +427,79 @@ def test_screening_protocol_and_decision_must_be_present_together(
         )
 
 
+def test_evaluated_canary_abandonment_is_the_only_decision_without_protocol() -> None:
+    record = _record(_evaluated())
+    record["protocol"] = None
+    record["outcome"] = {
+        "outcome": "evaluated",
+        "stage": "canary",
+        "reason_code": "EVALUATION_COMPLETED",
+    }
+    record["decision"]["value"] = "abandon"
+
+    normalized = normalize_research_history_record(
+        record,
+        expected_problem_id="generic_demo",
+    )
+
+    assert normalized["protocol"] is None
+    assert normalized["decision"]["value"] == "abandon"
+    assert normalized["outcome"]["stage"] == "canary"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (
+        ("patch", None),
+        (
+            "outcome",
+            {
+                "outcome": "research_rejected",
+                "stage": "canary",
+                "reason_code": "CANARY_FAILED",
+            },
+        ),
+        (
+            "outcome",
+            {
+                "outcome": "evaluated",
+                "stage": "screening",
+                "reason_code": "EVALUATION_COMPLETED",
+            },
+        ),
+        (
+            "decision",
+            {
+                "value": "continue_explore",
+                "reason_codes": [],
+                "engine_reason_codes": [],
+                "diagnostic_reason_codes": [],
+                "bypass_reason_codes": [],
+            },
+        ),
+    ),
+)
+def test_other_decision_without_protocol_shapes_fail_closed(
+    field: str,
+    value: object,
+) -> None:
+    record = _record(_evaluated())
+    record["protocol"] = None
+    record["outcome"] = {
+        "outcome": "evaluated",
+        "stage": "canary",
+        "reason_code": "EVALUATION_COMPLETED",
+    }
+    record["decision"]["value"] = "abandon"
+    record[field] = value
+
+    with pytest.raises(ValueError, match="Protocol and Decision"):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
+
+
 def test_evaluated_outcome_without_protocol_is_rejected() -> None:
     record = _record(_verification_rejection())
     record["outcome"]["outcome"] = "evaluated"
@@ -502,6 +577,31 @@ def test_any_heldout_stage_marker_excludes_the_whole_step(tmp_path: Path) -> Non
     step = _verification_rejection()
     step.execution_outcome = replace(
         step.execution_outcome,
+        provenance={"stage": "validation"},
+    )
+    writer = ResearchHistoryWriter(tmp_path, problem_id="generic_demo")
+
+    writer.append_step(step)
+
+    assert not writer.path.exists()
+
+
+def test_validation_canary_abandonment_remains_wholly_excluded(
+    tmp_path: Path,
+) -> None:
+    step = _evaluated(ExperimentStage.VALIDATION)
+    step.protocol_result = None
+    step.decision = Decision.ABANDON
+    step.failure_stage = "canary"
+    step.failure_detail = "CANARY_FAILED"
+    step.canary_result = CanaryResult(
+        passed=False,
+        failure_category="candidate_failure",
+        reason_codes=("CANARY_FAILED",),
+    )
+    step.execution_outcome = ExecutionOutcomeRecord(
+        outcome=ExecutionOutcome.EVALUATED,
+        reason_code="EVALUATION_COMPLETED",
         provenance={"stage": "validation"},
     )
     writer = ResearchHistoryWriter(tmp_path, problem_id="generic_demo")

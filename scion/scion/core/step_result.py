@@ -27,6 +27,7 @@ class StepResult:
     failure_stage: Optional[str] = None
     failure_detail: Optional[str] = None
     failure_category: Optional[str] = None
+    verification_passed: Optional[bool] = None
     protocol_result: ProtocolResult | None = None
     decision_engine_reason_codes: Tuple[str, ...] = ()
     diagnostic_reason_codes: Tuple[str, ...] = ()

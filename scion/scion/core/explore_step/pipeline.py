@@ -69,6 +69,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         EvaluationExecutionResult,
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
+    reserve_proposal_attempt: Callable[[], None] = lambda: None
     update_status_progress: Callable[[dict[str, Any] | None], None] = lambda _payload: (
         None
     )
@@ -87,6 +88,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             phase="proposal_hypothesis",
             round_num=rnum,
         )
+        self.reserve_proposal_attempt()
         hypothesis_attempt = self.generate_hypothesis(branch)
         hypothesis = hypothesis_attempt.proposal
         if hypothesis is None:
@@ -554,6 +556,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     action="skip",
                     branch_id=bid,
                     reason="stale_during_explore",
+                    verification_passed=True,
                     execution_outcome=stale_outcome,
                 )
             )
@@ -596,6 +599,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 failure_detail=(
                     execution_outcome.detail or execution_outcome.reason_code
                 ),
+                verification_passed=True,
                 canary_result=canary_result,
                 execution_outcome=execution_outcome,
             )
@@ -642,6 +646,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             patch=patch,
             candidate=candidate,
         )
+        result.verification_passed = True
         if result.execution_outcome is None:
             result.protocol_result = protocol_result
             result.canary_result = canary_result
@@ -778,6 +783,12 @@ def _evaluation_failure_detail(
     canary_result: CanaryResult | None = None,
 ) -> tuple[str | None, str | None]:
     if protocol_result is None:
+        if canary_result is not None and not canary_result.passed:
+            canary_reason_codes = tuple(canary_result.reason_codes or ())
+            return (
+                "canary",
+                canary_reason_codes[0] if canary_reason_codes else "CANARY_FAILED",
+            )
         return None, None
     reason_codes = {
         str(code).lower() for code in getattr(protocol_result, "reason_codes", ()) or ()

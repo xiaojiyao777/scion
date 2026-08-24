@@ -413,6 +413,18 @@ def _validate_hypothesis_record(record: Mapping[str, Any]) -> None:
 
     protocol = record["protocol"]
     decision = record["decision"]
+    if protocol is None and decision is not None:
+        if not (
+            record["patch"] is not None
+            and outcome["outcome"] == ExecutionOutcome.EVALUATED.value
+            and outcome["stage"] == "canary"
+            and decision["value"] == "abandon"
+        ):
+            raise ValueError(
+                "research history Protocol and Decision may be separated only "
+                "for an evaluated canary abandonment with a patch"
+            )
+        return
     if (protocol is None) != (decision is None):
         raise ValueError(
             "research history Protocol and Decision must be present together"

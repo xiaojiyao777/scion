@@ -242,6 +242,7 @@ def _campaign(
     llm_client: Any = None,
     experiment_protocol: Any = None,
     verification_gate: Any = None,
+    qualification_only: Any = None,
 ) -> CampaignManager:
     # Create minimal champion code directory
     code_dir = tmp_path / "champion_code"
@@ -275,6 +276,7 @@ def _campaign(
         verification_gate=verification_gate or AlwaysPassVerificationGate(),
         experiment_protocol=protocol,
         adapter=SimpleNamespace(spec=spec),
+        qualification_only=qualification_only,
     )
 
 

@@ -88,26 +88,33 @@ class DecisionFinalizer:
         has_candidate = all(value is not None for value in candidate_values)
         if any(value is not None for value in candidate_values) and not has_candidate:
             raise ValueError("candidate finalization requires patch and workspace")
-        if (
-            protocol_result is not None
-            and decision is not Decision.PROMOTE
-            and has_candidate
-        ):
-            assert patch is not None
-            assert candidate is not None
-            return self._apply_nonpromotion(
-                branch=branch,
-                decision=decision,
-                hypothesis=hypothesis,
-                protocol_result=protocol_result,
-                canary_result=canary_result,
-                contract_result=contract_result,
-                verification_result=verification_result,
-                action_label=action_label,
-                decision_reason_codes=effective_reason_codes,
-                patch=patch,
-                candidate=candidate,
-                reanchor_champion=reanchor_champion,
+        canary_abandonment = (
+            decision is Decision.ABANDON and not canary_result.passed
+        )
+        if protocol_result is None and not canary_abandonment:
+            raise ValueError(
+                "Decision without Protocol requires failed-canary ABANDON"
+            )
+        if decision is not Decision.PROMOTE and has_candidate:
+            if protocol_result is not None or canary_abandonment:
+                assert patch is not None
+                assert candidate is not None
+                return self._apply_nonpromotion(
+                    branch=branch,
+                    decision=decision,
+                    hypothesis=hypothesis,
+                    protocol_result=protocol_result,
+                    canary_result=canary_result,
+                    contract_result=contract_result,
+                    verification_result=verification_result,
+                    action_label=action_label,
+                    decision_reason_codes=effective_reason_codes,
+                    patch=patch,
+                    candidate=candidate,
+                    reanchor_champion=reanchor_champion,
+                )
+            raise ValueError(
+                "candidate Decision without Protocol requires failed-canary ABANDON"
             )
         if decision == Decision.PROMOTE:
             _consume_completed_protocol_expansion(branch, protocol_result)

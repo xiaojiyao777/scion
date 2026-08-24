@@ -193,6 +193,34 @@ class BranchController:
             branch.state = BranchState.ABANDONED
         branch.updated_at = datetime.now()
 
+    def park_qualification_branch(self, branch_id: str) -> None:
+        """Remove one failed qualification chain from future scheduling.
+
+        The ordinary Decision and lineage row are already durable when this is
+        called.  Parking is an orchestration disposition, not a replacement
+        scientific Decision.  The campaign owner separately removes all
+        executable workspace and patch authority after this transition.
+        """
+
+        branch = self._get(branch_id)
+        if branch.state is BranchState.PARKED_LINEAGE:
+            return
+        if branch.state in {
+            BranchState.READY_VALIDATE,
+            BranchState.VALIDATING,
+            BranchState.VALIDATING_EXPAND,
+            BranchState.READY_FROZEN,
+            BranchState.FROZEN_TESTING,
+            BranchState.PROMOTED,
+        }:
+            raise StateTransitionError(
+                "qualification failure cannot park branch in state "
+                f"{branch.state.value}"
+            )
+        branch.state = BranchState.PARKED_LINEAGE
+        branch.hypothesis = None
+        branch.updated_at = datetime.now()
+
     def get_code_base(self, branch_id: str) -> str:
         """
         Return the code-base identifier for the branch (§4.5):

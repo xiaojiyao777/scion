@@ -84,7 +84,7 @@ def _apply(finalizer, branch, hypothesis, decision: Decision):
         branch=branch,
         decision=decision,
         hypothesis=hypothesis,
-        protocol_result=None,
+        protocol_result=_screening_protocol("pass"),
         canary_result=CanaryResult(passed=True),
         contract_result=ContractResult(passed=True, checks=()),
         verification_result=VerificationResult(passed=True, checks=()),
@@ -117,6 +117,82 @@ def test_protocol_without_candidate_workspace_uses_regular_transition() -> None:
 
     assert result.decision is Decision.QUEUE_VALIDATE
     assert controller.get_branch(branch.branch_id).state is BranchState.READY_VALIDATE
+
+
+@pytest.mark.parametrize(
+    "decision",
+    (Decision.QUEUE_VALIDATE, Decision.CONTINUE_EXPLORE),
+)
+def test_decision_without_candidate_or_protocol_fails_closed(
+    decision: Decision,
+) -> None:
+    finalizer, _controller, branch, hypothesis, *_rest = _fixture()
+
+    with pytest.raises(
+        ValueError,
+        match="Decision without Protocol requires failed-canary ABANDON",
+    ):
+        finalizer.apply(
+            branch=branch,
+            decision=decision,
+            hypothesis=hypothesis,
+            protocol_result=None,
+            canary_result=CanaryResult(passed=True),
+            contract_result=ContractResult(passed=True, checks=()),
+            verification_result=VerificationResult(passed=True, checks=()),
+            action_label="explore",
+            decision_reason_codes=("NO_PROTOCOL",),
+        )
+
+    assert branch.state is BranchState.EXPLORE
+    assert branch.current_code_hash is None
+    assert _rest[2] == []
+
+
+@pytest.mark.parametrize(
+    "decision",
+    (Decision.QUEUE_VALIDATE, Decision.CONTINUE_EXPLORE),
+)
+def test_candidate_without_protocol_fails_before_accepting_staging(
+    decision: Decision,
+) -> None:
+    fixture = _fixture()
+    finalizer, _controller, branch, hypothesis = fixture[:4]
+    accepted: list[str] = []
+    rejected: list[str] = []
+
+    def accept(_branch, candidate) -> str:
+        accepted.append(candidate.workspace)
+        return candidate.workspace
+
+    def reject(candidate) -> None:
+        rejected.append(candidate.workspace)
+
+    finalizer.accept_candidate = accept
+    finalizer.reject_candidate = reject
+
+    with pytest.raises(
+        ValueError,
+        match="Decision without Protocol requires failed-canary ABANDON",
+    ):
+        finalizer.apply(
+            branch=branch,
+            decision=decision,
+            hypothesis=hypothesis,
+            protocol_result=None,
+            canary_result=CanaryResult(passed=True),
+            contract_result=ContractResult(passed=True, checks=()),
+            verification_result=VerificationResult(passed=True, checks=()),
+            action_label="explore",
+            decision_reason_codes=("NO_PROTOCOL",),
+            **_candidate_kwargs(fixture),
+        )
+
+    assert accepted == []
+    assert rejected == []
+    assert branch.current_code_hash is None
+    assert fixture[5] == {}
+    assert fixture[6] == []
 
 
 def _screening_protocol(gate_outcome: str) -> ProtocolResult:

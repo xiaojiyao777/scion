@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,6 +20,7 @@ from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
 from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
 from scion.core.evidence_recording.status import project_last_result
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
     Branch,
     BranchState,
@@ -35,6 +37,7 @@ from scion.core.models import (
 )
 from scion.core.promotion_service import PromotionResult
 from scion.core.proposal_pipeline import ProposalAttempt
+from scion.core.qualification import QualificationOnlyConfig, QualificationProgress
 from scion.core.resource_envelope import ResourceEnvelope
 from scion.core.scheduler import (
     active_slot_inventory,
@@ -86,6 +89,9 @@ class CampaignManager:
         research_history: Sequence[Mapping[str, Any]] = (),
         resource_envelope: ResourceEnvelope | dict[str, Any] | None = None,
         code_research_limits: CodeResearchLimits | dict[str, Any] | None = None,
+        qualification_only: (
+            QualificationOnlyConfig | Mapping[str, Any] | None
+        ) = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
@@ -106,6 +112,7 @@ class CampaignManager:
             research_history=research_history,
             resource_envelope=resource_envelope,
             code_research_limits=code_research_limits,
+            qualification_only=qualification_only,
         )
 
     # ------------------------------------------------------------------
@@ -115,6 +122,57 @@ class CampaignManager:
     def _record_step(self, step: StepRecord) -> None:
         """Append one durable step fact to the campaign history."""
         self._evidence_recorder.record_step(step, self._step_history)
+
+    def _park_qualification_chain(self, branch_id: str) -> None:
+        """Retire one failed chain without retaining an executable patch base."""
+
+        branch = self._branch_ctrl.get_branch(branch_id)
+        runtime = self._qualification_runtime
+        if runtime is not None:
+            runtime.validate_chain_retirement(branch_id)
+        # Validate and make the branch unschedulable before touching the
+        # carrier.  In particular, a READY_VALIDATE branch is a positive
+        # qualification boundary and must survive an accidental park call.
+        self._branch_ctrl.park_qualification_branch(branch_id)
+        if runtime is not None:
+            runtime.record_chain_retired(branch_id)
+        try:
+            self._workspace_service.discard_branch_workspace(branch_id)
+        finally:
+            # Workspace cleanup can fail after popping its mapping.  Authority
+            # still has to be retired fail-closed so no later proposal can
+            # inherit the failed candidate as a branch source.
+            self._branch_workspaces.pop(branch_id, None)
+            self._branch_patches.pop(branch_id, None)
+            branch.current_code_hash = None
+            branch.hypothesis = None
+            branch.direction = None
+
+    def _terminal_run_result(self, requested_rounds: int) -> CampaignRunResult:
+        """Refresh in-flight qualification counters before terminalization."""
+
+        current = self._campaign_loop.current_result or self._empty_run_result(
+            requested_rounds
+        )
+        runtime = getattr(self, "_qualification_runtime", None)
+        if runtime is not None:
+            current = replace(current, qualification=runtime.progress())
+        return current
+
+    def _empty_run_result(self, requested_rounds: int) -> CampaignRunResult:
+        runtime = getattr(self, "_qualification_runtime", None)
+        config = getattr(self, "_qualification_only_config", None)
+        qualification = (
+            runtime.progress()
+            if runtime is not None
+            else QualificationProgress(config=config)
+            if config is not None
+            else None
+        )
+        return CampaignRunResult.empty(
+            requested_rounds,
+            qualification=qualification,
+        )
 
     def run(self, requested_rounds: int):
         """Run toward the operator-selected number of formal evaluated rounds."""
@@ -128,9 +186,7 @@ class CampaignManager:
                 if not getattr(self, "_research_preflight_checked", False)
                 else "unhandled_exception"
             )
-            current = self._campaign_loop.current_result or CampaignRunResult.empty(
-                self._requested_rounds
-            )
+            current = self._terminal_run_result(self._requested_rounds)
             terminal = current.terminalized(
                 reason=reason,
                 exception=exc,
@@ -164,9 +220,7 @@ class CampaignManager:
                 coordinator.wait_all(timeout=0.0)
             except Exception:
                 logger.exception("Failed to shut down weight opt after requested stop")
-        current = self._campaign_loop.current_result or CampaignRunResult.empty(
-            getattr(self, "_requested_rounds", 1)
-        )
+        current = self._terminal_run_result(getattr(self, "_requested_rounds", 1))
         terminal = current.terminalized(
             self._last_stop_reason,
             interrupted=(
@@ -213,7 +267,25 @@ class CampaignManager:
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
+        if self._qualification_only_config is not None:
+            return StepResult(
+                action="stopped",
+                stopped=True,
+                reason="qualification-only mode requires CampaignManager.run",
+                failure_stage="campaign",
+                failure_detail="qualification direct step dispatch blocked",
+                execution_outcome=ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.NOT_EVALUATED,
+                    reason_code="QUALIFICATION_OUTER_LOOP_REQUIRED",
+                    provenance={"stage": "campaign"},
+                ),
+            )
         self._run_research_environment_preflight()
+        return self._run_scheduled_step()
+
+    def _run_scheduled_step(self) -> StepResult:
+        """Execute one step after the owning outer loop has established policy."""
+
         return self._branch_step_runner.run_one_step()
 
     def should_stop(self) -> bool:
@@ -261,6 +333,8 @@ class CampaignManager:
             "balance_exhausted": self._balance_exhausted,
             "branches": branch_rows,
         }
+        if self._qualification_only_config is not None:
+            state["campaign_mode"] = "qualification_only"
         if measurement_readiness is not None:
             state["measurement_readiness"] = measurement_readiness
         weight_opt_status = self._weight_opt_coord.status_snapshot()
@@ -286,7 +360,9 @@ class CampaignManager:
                 None,
             )
         if current_run is None:
-            current_run = CampaignRunResult.empty(getattr(self, "_requested_rounds", 1))
+            current_run = self._empty_run_result(
+                getattr(self, "_requested_rounds", 1)
+            )
         state["run_result"] = current_run.to_projection()
         return state
 
@@ -430,6 +506,16 @@ class CampaignManager:
         hypothesis: HypothesisProposal,
         **stage_values: Any,
     ) -> EvaluationExecutionResult:
+        if self._qualification_only_config is not None:
+            effective_state = stage_values.get("branch_state") or branch.state
+            allowed_states = {
+                BranchState.EXPLORE,
+                BranchState.EXPLORE_EXPAND,
+            }
+            if branch.state not in allowed_states or effective_state not in allowed_states:
+                raise RuntimeError(
+                    "qualification-only mode blocks validation/frozen evaluation"
+                )
         return self._evaluation_orchestrator.evaluate(
             branch,
             workspace,
@@ -615,7 +701,9 @@ class CampaignManager:
         if current_run is None:
             current_run = getattr(self._campaign_loop, "current_result", None)
         if current_run is None:
-            current_run = CampaignRunResult.empty(getattr(self, "_requested_rounds", 1))
+            current_run = self._empty_run_result(
+                getattr(self, "_requested_rounds", 1)
+            )
         state_snapshot = state or self.get_state(run_result=current_run)
         self._evidence_recorder.write_campaign_summary(
             state=state_snapshot,

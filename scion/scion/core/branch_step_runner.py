@@ -26,6 +26,7 @@ from scion.core.models import (
     StepRecord,
     VerificationResult,
 )
+from scion.core.qualification import QualificationProposalBudgetExhausted
 from scion.core.scheduler import (
     Scheduler,
     SchedulerAction,
@@ -35,6 +36,16 @@ from scion.core.verification_call import run_verification_gate
 from scion.core.workspace_service import CandidateWorkspace
 
 logger = logging.getLogger(__name__)
+
+_QUALIFICATION_HELDOUT_STATES = frozenset(
+    {
+        BranchState.READY_VALIDATE,
+        BranchState.VALIDATING,
+        BranchState.VALIDATING_EXPAND,
+        BranchState.READY_FROZEN,
+        BranchState.FROZEN_TESTING,
+    }
+)
 
 
 @dataclass
@@ -71,6 +82,9 @@ class BranchStepRunner:
         Callable[[CandidateWorkspace], CandidateWorkspace] | None
     ) = None
     reject_reconcile_candidate: Callable[[CandidateWorkspace], Any] | None = None
+    qualification_only: bool = False
+    qualification_runtime: Any = None
+    discard_branch_workspace: Callable[[str], None] = lambda _branch_id: None
 
     def _select_next(self, active: list[Branch]) -> SchedulerAction:
         return self.scheduler.select_next(active)
@@ -104,7 +118,33 @@ class BranchStepRunner:
                 ),
             )
 
+        pending_expansion_branch_id = (
+            self.qualification_runtime.pending_expansion_branch_id
+            if self.qualification_runtime is not None
+            else None
+        )
+        if pending_expansion_branch_id is not None and sched.action != "run_existing":
+            return StepResult(
+                action="skip",
+                branch_id=pending_expansion_branch_id,
+                reason="qualification pending expansion dispatch mismatch",
+                failure_stage="scheduler",
+                failure_detail="qualification pending expansion dispatch blocked",
+                execution_outcome=ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.NOT_EVALUATED,
+                    reason_code="QUALIFICATION_PENDING_EXPANSION_MISMATCH",
+                    provenance={"stage": "scheduler"},
+                ),
+            )
+
         if sched.action == "create_new":
+            if (
+                self.qualification_runtime is not None
+                and not self.qualification_runtime.can_start_proposal()
+            ):
+                raise QualificationProposalBudgetExhausted(
+                    "qualification-only proposal budget exhausted"
+                )
             with self.champion_lock:
                 champion = self.get_champion()
             branch = self.branch_controller.create_branch(champion)
@@ -116,9 +156,115 @@ class BranchStepRunner:
         branch = sched.branch
         assert branch is not None
 
+        if pending_expansion_branch_id is not None and (
+            branch.branch_id != pending_expansion_branch_id
+            or branch.state is not BranchState.EXPLORE_EXPAND
+        ):
+            return StepResult(
+                action="skip",
+                branch_id=branch.branch_id,
+                reason="qualification pending expansion dispatch mismatch",
+                failure_stage="scheduler",
+                failure_detail="qualification pending expansion dispatch blocked",
+                execution_outcome=ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.NOT_EVALUATED,
+                    reason_code="QUALIFICATION_PENDING_EXPANSION_MISMATCH",
+                    provenance={"stage": "scheduler"},
+                ),
+            )
+
+        if self.qualification_only and branch.state in _QUALIFICATION_HELDOUT_STATES:
+            return StepResult(
+                action="skip",
+                branch_id=branch.branch_id,
+                reason="qualification-only mode blocks heldout stage dispatch",
+                failure_stage="scheduler",
+                failure_detail="qualification heldout stage dispatch blocked",
+                execution_outcome=ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.NOT_EVALUATED,
+                    reason_code="QUALIFICATION_HELDOUT_DISPATCH_BLOCKED",
+                    provenance={"stage": "scheduler"},
+                ),
+            )
+
+        if (
+            self.qualification_runtime is not None
+            and branch.state is BranchState.EXPLORE_EXPAND
+            and not self.qualification_runtime.authorize_expansion(branch.branch_id)
+        ):
+            return StepResult(
+                action="skip",
+                branch_id=branch.branch_id,
+                reason="qualification expansion branch is not pending",
+                failure_stage="scheduler",
+                failure_detail="qualification expansion dispatch blocked",
+                execution_outcome=ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.NOT_EVALUATED,
+                    reason_code="QUALIFICATION_EXPANSION_DISPATCH_BLOCKED",
+                    provenance={"stage": "scheduler"},
+                ),
+            )
+
         # EXPLORE branches share one research tier.  Advance service time before
         # H/C so rejected research returns to the back of the in-process queue.
         if branch.state == BranchState.EXPLORE:
+            if self.qualification_runtime is not None:
+                if (
+                    branch.current_code_hash is not None
+                    or branch.hypothesis is not None
+                    or branch.branch_id in self.branch_patches
+                    or branch.direction is not None
+                ):
+                    return StepResult(
+                        action="skip",
+                        branch_id=branch.branch_id,
+                        reason="qualification proposal base is not clean B0",
+                        failure_stage="scheduler",
+                        failure_detail="qualification proposal base is not clean B0",
+                        execution_outcome=ExecutionOutcomeRecord(
+                            outcome=ExecutionOutcome.NOT_EVALUATED,
+                            reason_code="QUALIFICATION_PROPOSAL_BASE_NOT_CLEAN",
+                            provenance={"stage": "scheduler"},
+                        ),
+                    )
+                if branch.branch_id in self.branch_workspaces:
+                    try:
+                        self.discard_branch_workspace(branch.branch_id)
+                    except Exception:
+                        self.branch_workspaces.pop(branch.branch_id, None)
+                        return StepResult(
+                            action="skip",
+                            branch_id=branch.branch_id,
+                            reason="qualification proposal base cleanup failed",
+                            failure_stage="workspace",
+                            failure_detail=(
+                                "qualification proposal base cleanup failed"
+                            ),
+                            execution_outcome=ExecutionOutcomeRecord(
+                                outcome=ExecutionOutcome.BLOCKED_INFRA,
+                                reason_code=(
+                                    "QUALIFICATION_PROPOSAL_BASE_CLEANUP_FAILED"
+                                ),
+                                provenance={"stage": "workspace"},
+                            ),
+                        )
+                if branch.branch_id in self.branch_workspaces:
+                    return StepResult(
+                        action="skip",
+                        branch_id=branch.branch_id,
+                        reason="qualification proposal base is not clean B0",
+                        failure_stage="scheduler",
+                        failure_detail="qualification proposal base is not clean B0",
+                        execution_outcome=ExecutionOutcomeRecord(
+                            outcome=ExecutionOutcome.NOT_EVALUATED,
+                            reason_code="QUALIFICATION_PROPOSAL_BASE_NOT_CLEAN",
+                            provenance={"stage": "scheduler"},
+                        ),
+                    )
+                if not self.qualification_runtime.can_start_proposal():
+                    raise QualificationProposalBudgetExhausted(
+                        "qualification-only proposal budget exhausted"
+                    )
             branch.updated_at = datetime.now()  # noqa: DTZ005
 
         if branch.state in (BranchState.READY_VALIDATE, BranchState.READY_FROZEN):
@@ -854,6 +1000,12 @@ def _eval_failure_detail(
     canary_result: Any | None = None,
 ) -> tuple[str | None, str | None]:
     if protocol_result is None:
+        if canary_result is not None and not canary_result.passed:
+            canary_reason_codes = tuple(canary_result.reason_codes or ())
+            return (
+                "canary",
+                canary_reason_codes[0] if canary_reason_codes else "CANARY_FAILED",
+            )
         return None, None
     reason_codes = {
         str(code).lower() for code in getattr(protocol_result, "reason_codes", ()) or ()
