@@ -1,6 +1,6 @@
 # CVRP M28 seen-bank qualification autonomous-continuation preregistration
 
-**State:** `PREPARED / NOT_LAUNCHED / AUTHORIZATION_REQUIRED`
+**State:** `TERMINAL_STOPPED_RESOURCE_EXHAUSTED / VALID_INCOMPLETE / NOT_QUALIFIED`
 
 **Label:**
 `v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-20260824`
@@ -11,16 +11,110 @@
 **Frozen metadata-selection base:**
 `6d8b53a56b056c71420d8a35b7d34b3f3ab8e5f1`
 
-The Git revision is an ordinary source reference, not an identity, digest,
-authorization or proof object. M28 changes no production source. This document,
-the three M28 YAML controls, the strict aggregate input, the exact M27 history
-copy and provider-/solver-free replay must be committed and independently
-reviewed before a launch can be considered. The preparation carrier will be
-reported after that commit and is not recursively embedded here.
+**Preparation and live carrier:**
+`6b082e04878c74863b2cdcaff6e877e9ce9a75fe`
 
-Preparation has not dispatched a provider request, solver, canary or formal
-Protocol stage and has not created the campaign root. The command below is
-frozen review material; this prepared state supplies no live authorization.
+The Git revisions are ordinary source references, not identities, digests,
+authorization or proof objects. M28 changed no production source. This
+document, the three M28 YAML controls, the strict aggregate input, the exact
+M27 history copy and provider-/solver-free replay were committed and
+independently reviewed before launch. The command below remains the frozen
+one-shot command; its explicit authorization has been consumed.
+
+## Terminal result
+
+The authorized command ran exactly once and exited 21. The preserved public
+terminal is `stopped / execution_resource_exhausted`, with
+`run_validity=valid_incomplete` and last execution outcome
+`resource_exhausted / PROVIDER_CALL_CAP_EXHAUSTED` at `proposal_code`. It
+scheduled four attempts but completed only one of the two requested formal
+rounds. The terminal counters are one evaluated screening, two
+`research_rejected` outcomes, one resource-exhausted outcome and zero unknown
+outcomes. This is an ordinary valid-incomplete campaign, not the declared M28
+qualification terminal.
+
+The run consumed the exact 34/34 provider-call allowance: 25 H research turns,
+eight C research turns and one independent C final decision. The safe
+action-only H projections, grouped by scheduled attempt, were:
+
+1. `read_source(source-0001) -> read_source(source-0010) ->
+   read_source(source-0006) -> finalize_hypothesis ->
+   read_history(history-0043) -> finalize_hypothesis ->
+   read_history(history-0044) -> abstain`;
+2. `read_source(source-0010) -> finalize_hypothesis ->
+   read_history(history-0008) -> finalize_hypothesis`, accepted;
+3. `read_source(source-0010) -> read_source(source-0004) ->
+   read_source(source-0009) -> finalize_hypothesis ->
+   read_history(history-0039) -> finalize_hypothesis`, accepted; and
+4. `read_source(source-0006) -> finalize_hypothesis ->
+   read_history(history-0043) -> search_source(source-0010) ->
+   finalize_hypothesis -> read_history(history-0017) ->
+   finalize_hypothesis`, accepted.
+
+These are action/ref projections only; no provider response body is reproduced
+here. The first path's `HYPOTHESIS_RESEARCH_ABSTAINED` classification was a
+safe-public live observation. The terminal counters retain both research
+rejections, but terminal `steps` and ordinary history each contain only three
+rows and durably represent only one rejected row. The missing rejected row's
+specific H reason therefore cannot be reconstructed from terminal-only
+ordinary history.
+
+The first accepted H had action `modify`. C proceeded
+`revise -> revise -> test_patch -> ready -> finalize_patch`; the probe action
+was observed, but its body remains tainted and is neither reproduced nor used
+as evidence. Patch Contract, Verification and canary passed. Initial
+screening then completed all `6/6` pairs valid with every failure class zero.
+Case win/loss/tie was `1/1/1`, pair win/loss/tie was `2/1/3`, median
+total-distance delta was `0.0` and CI was `[-2.5, 206.0]`. Protocol returned
+`fail / SCREENING_FAIL_CASE_QUALITY`, and Decision returned
+`continue_explore`. The candidate did not expand.
+
+The second accepted H also had action `modify`; its C used four `revise`
+turns, after which the host recorded
+`research_rejected / PATCH_PROPOSAL_INVALID`. The fourth scheduled-attempt H
+(the third accepted H) was accepted as `modify`, but the shared provider cap
+was exhausted before any corresponding C trace could be dispatched. Thus
+formal counts are initial screening `1`, expanded screening `0`, validation
+`0` and frozen `0`; promotion and retained comparison are also zero.
+
+Exactly 16 solver subprocesses ran serially with observed maximum concurrency
+one: two Verification, two canary and twelve formal initial-screening
+subjects. The interval from campaign-root birth
+`2026-08-24T13:22:27.972508217Z` to terminal `status.updated_at`
+`2026-08-24T13:41:30.552102Z` was `1142.579593783s` (about `1142.580s`). This
+is a root-birth-to-status-publication interval, not complete shell lifetime or
+a hardwall measurement; the 15,000-second hardwall was not reached.
+
+At terminal there were three durable branch records: one `blocked_infra` from
+the provider-cap stop and two `explore` branches. `active_slots` was
+used/max/available `2/3/1`; these are logical branch slots, not live processes.
+There was no `READY_VALIDATE` branch. One durable candidate workspace and one
+artifact file in the `metrics` directory remain as evidence for the sole
+evaluated candidate; scratch `workspaces`, `archive` and `champions` were
+empty. Scoped campaign, solver, bubblewrap and prlimit process counts were zero
+after exit, and the preserved campaign root remained mode `0700`.
+
+M28 therefore does not satisfy `6/6 -> 24/24`, `pass`, `queue_validate`, the
+two-screening-record carrier join or any later-stage condition. The conditional
+M29 selector expired without materialization: no M29 identity, input bundle,
+candidate carrier or launch is authorized.
+
+Independent terminal review found no P0, one P1 design defect and one P2
+observability defect. The frozen carrier audit incorrectly asserts that total
+branch-record count equals active-branch count and both equal one. The intended
+scientific requirement is uniqueness of the `READY_VALIDATE` branch; preserved
+non-ready records can make that assertion a structural false negative in a
+hypothetical otherwise-qualified run. It did not change this result: M28 had no
+expanded screen, no pass, no `queue_validate` and zero `READY_VALIDATE`
+branches before the carrier audit was relevant. The P2 is the missing ordinary
+step/history row for the live-observed H abstention described above. Neither
+finding upgrades or downgrades the scientific terminal, and neither permits a
+retry, repair or M29 preparation.
+
+The remaining scientific design, population, carrier predicate, conditional
+selector, resource envelope and command are retained as the pre-launch frozen
+record. Their prospective wording describes the design that governed the
+consumed invocation; it is not current launch authority.
 
 ## Scientific question
 
@@ -994,12 +1088,12 @@ env -i \
   --campaign-dir "$M28_CAMPAIGN_DIR"
 ```
 
-Do not run the provider metadata check or live command during preparation. A
-future explicit authorization must cover this exact argument vector after the
-preparation carrier is committed, independent scientific/runtime review passes,
-the tracked tree stays clean and the root stays absent. A failed preflight
-performs no live work. Once any live invocation creates the root, the one-shot
-is consumed regardless of outcome.
+The provider metadata check and live command were not run during preparation.
+After the preparation carrier was committed, independent scientific/runtime
+review passed, the tracked tree stayed clean and the root stayed absent, the
+user explicitly authorized this exact argument vector. The invocation created
+the root and consumed the one-shot; no further authorization follows from this
+document.
 
 No distribution, packaging, build, deployment, root/systemd, Trust/Hash
 authority, object identity, lease, signing, registration, duplicate-control,

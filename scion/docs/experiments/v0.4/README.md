@@ -8,7 +8,7 @@ referenced, not copied into development prompts.
 
 ## Runs
 
-- [CVRP M28 seen-bank qualification autonomous continuation, prepared and not launched](v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md)
+- [CVRP M28 seen-bank qualification autonomous continuation, terminal valid-incomplete provider-cap stop after one negative initial screen](v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md)
 - [CVRP M27 nearest-history-audit autonomous continuation, terminal valid expanded-screening abandon](v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md)
 - [CVRP M26 embedded-falsifier autonomous continuation, terminal valid two-candidate negative initial screens](v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md)
 - [CVRP M25 evidence-grounded autonomous continuous research, terminal valid expanded-screening abandon](v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md)

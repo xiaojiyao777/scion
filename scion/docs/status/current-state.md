@@ -79,6 +79,11 @@ lifecycles.
   error. No validation result, frozen result, promotion or retained-B0 result
   exists; the exact evidence and claim boundary remain in its
   [preregistration](../experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md).
+- M28 is terminal `stopped / execution_resource_exhausted / valid_incomplete`.
+  One candidate completed a valid initial screen but failed case quality; no
+  expanded or later stage ran, no carrier qualified and conditional M29 was not
+  materialized. Its exact terminal and claim boundary remain in its
+  [preregistration](../experiments/v0.4/v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md).
 
 ## Active work
 
@@ -598,50 +603,48 @@ development evidence only on the outcome-exposed seen bank; M26-to-M27 remains
 non-randomized and non-causal. CVRP acceptance remains unmet. See the
 [M27 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
 
-M28 is prepared and not launched under label/root
+M28 is terminal after its sole authorized invocation under label/root
 `v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-20260824`. It
-changes no production source. Its first H will receive seven strict aggregate
-observations and 39 native records, exactly 46 ordinary index entries; the 39
-native headlines are nearest-history eligible. The exact two-line M27 history
-copy is preserved in stage order.
+exited 21 as `stopped / execution_resource_exhausted`, with valid-incomplete
+run validity and `PROVIDER_CALL_CAP_EXHAUSTED` at `proposal_code`. The exact
+34/34 provider calls were 25 H turns, eight C research turns and one C final
+decision. Four scheduled attempts produced one evaluated formal stage, two
+research rejections and the terminal resource stop; only one of the two
+requested formal rounds completed.
 
-M28 is an adaptive qualification on the same six outcome-exposed screening
-cases, not a fresh-population experiment. Initial uses old seeds `4358`,
-`1868`; expanded uses those plus metadata-selected `10684`, `14577`. The sole
-qualification trajectory requires one exact candidate to complete initial
-`6/6` and expanded `24/24`, every failure class and fleet regression zero, and
-Protocol/Decision progression
-`expand -> expand_screening -> pass -> queue_validate`. The two-round limit
-makes M24-derived validation and frozen controls unreachable.
+The sole evaluated `modify` candidate passed Contract, Verification and
+canary and completed initial screening `6/6` valid with zero failures. Case
+win/loss/tie was `1/1/1`, pair win/loss/tie was `2/1/3`, median total-distance
+delta was `0.0` and CI was `[-2.5, 206.0]`. Protocol failed
+`SCREENING_FAIL_CASE_QUALITY`; Decision returned `continue_explore`, so the
+candidate did not expand. A second accepted H reached C but ended
+`PATCH_PROPOSAL_INVALID`; a third accepted H reached the provider cap before C
+dispatch. The public terminal counters contain two research rejections, while
+the three durable ordinary steps/history rows contain only one rejected row.
+The omitted H abstention classification was observed through the bounded live
+safe-public projection and is not reconstructable from terminal-only ordinary
+history.
 
-The provider cap is 34 and the hardwall is 15,000 seconds. The conservative
-maximum is 72 serial solver subprocesses: 3,040 nominal seconds, 4,120 seconds
-after the per-dispatch communicate guard, and a strict conservative 4,552
-seconds after possible kill/drain cleanup. All known dispatch-accounted work is
-12,130 seconds; all known conservative elapsed work is 12,562 seconds under the
-hardwall. Provider-/solver-free
-replay checks the input prefix, sanitized M27 observation, `7 + 39` ordering,
-nearest-history behavior, exact config delta, deterministic seed selection and
-resource arithmetic. Qualification also requires a provider-/solver-free
-post-terminal audit: one `READY_VALIDATE` branch, one durable candidate
-workspace, an accepted `modify` H, and direct complete-source byte equality
-between the actual workspace and the canonical M28 patch mechanically applied
-to the exact 99-file base-commit B0.
+Exactly 16 solver subprocesses ran with observed concurrency one: two
+Verification, two canary and twelve initial-screening subjects. The precise
+campaign-root-birth to terminal-status-publication interval was
+`1142.579593783s`; it is not full shell lifetime or a hardwall measurement.
+The 15,000-second hardwall was not reached. Post-exit scoped campaign, solver,
+bubblewrap and prlimit process counts were zero. One durable candidate
+workspace and one artifact file in the `metrics` directory preserve the
+evaluated candidate; temporary `workspaces`, `archive` and `champions` were
+empty.
 
-A candidate-independent conditional M29 selector is frozen before any M28
-candidate exists. Its case pool and stratified SHA ordering, seed domain and
-ordering are fixed, but no M29 case/seed identity is calculated or recorded
-during M28. Only the exact M28 qualification result permits one later reviewed
-materialization; it never launches automatically. The corrected conditional
-M29 envelope includes strict canary and is 86 solver subprocesses,
-4,820 nominal seconds, 6,110 communicate-guard seconds and a conservative
-6,626-second elapsed bound including possible kill/drain cleanup under an
-8,000-second hardwall. Its sole future driver, exact B0/candidate derivation and
-M28-to-M29 control-delta whitelist are frozen now. M28 still requires its clean
-postcommit carrier gate and explicit live authorization. The exact carrier is
-reported externally after commit and is not recursively embedded here.
-See the
-[M28 preregistration](../experiments/v0.4/v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md).
+Expanded screening, validation, frozen, promotion and retained comparison are
+zero. No branch reached `READY_VALIDATE`, so M28 is not qualified and CVRP
+acceptance remains unmet. The conditional M29 selector expired without
+materialization; there is no M29 prep or launch authority. Independent review
+found one P1 in the frozen carrier audit: its total-branch-count equality can
+false-negative a hypothetical qualified run when non-ready branch records are
+preserved. It did not affect this outcome because the scientific qualification
+predicate already failed and no ready carrier existed. The terminal root is
+preserved and consumed without retry, resume or reuse. See the
+[M28 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md).
 
 ## Current validation rule
 
