@@ -7,9 +7,9 @@ import typer
 from scion.cli.commands.init_run import register_run_command
 from scion.cli.commands.inspect import register_inspect_commands
 from scion.cli.commands.postmortem import register_postmortem_command
+from scion.cli.commands.qualification_audit import register_qualification_audit_command
 from scion.cli.commands.reports import register_report_commands
 from scion.cli.commands.weights import register_weight_commands
-
 
 app = typer.Typer(
     name="scion",
@@ -32,6 +32,7 @@ app.add_typer(report_app, name="report")
 register_run_command(app)
 register_weight_commands(app)
 register_postmortem_command(app)
+register_qualification_audit_command(app)
 register_inspect_commands(inspect_app)
 register_report_commands(report_app)
 
