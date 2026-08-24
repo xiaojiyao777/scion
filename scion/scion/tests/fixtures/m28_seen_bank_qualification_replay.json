@@ -1,0 +1,68 @@
+{
+  "schema_version": "scion.m28.seen_bank_qualification_replay.v1",
+  "source": {
+    "path": "operators/main.py",
+    "content": "def improve(value):\n    return value\n"
+  },
+  "hypothesis": {
+    "hypothesis_text": "Modify one source-grounded bounded calculation so repeated equivalent work is performed once while preserving the public callable and returned value.",
+    "change_locus": "solver_design",
+    "action": "modify",
+    "predicted_direction": "improve",
+    "target_weakness": "The visible generic function repeats an equivalent bounded calculation on every invocation.",
+    "expected_effect": "Preserve the returned value while reducing repeated local work in the generic subject.",
+    "target_file": "operators/main.py"
+  },
+  "research_basis": {
+    "material_delta": "This candidate changes one repeated calculation rather than replaying a prior implementation.",
+    "alternatives_considered": [
+      "Leave the generic function unchanged.",
+      "Move the calculation to a helper without changing its frequency."
+    ],
+    "observable_prediction": "The public callable returns the same values while executing the calculation fewer times.",
+    "falsification_condition": "Reject the candidate if any public result changes or the calculation count does not decrease."
+  },
+  "seed_selection": {
+    "base_revision": "6d8b53a56b056c71420d8a35b7d34b3f3ab8e5f1",
+    "salt": "v04-cvrp-m28-seen-bank-seed-expansion-20260824|seeds-v1",
+    "domain_min": 10000,
+    "domain_max": 19999,
+    "tracked_seed_values": 2784,
+    "excluded_domain_values": 73,
+    "selected": [
+      {
+        "seed": 10684,
+        "digest": "0000d16694b890e464f92532b1b74a077ec559bb959a41b58a9ae55e9d4db5cd"
+      },
+      {
+        "seed": 14577,
+        "digest": "0008d3a0ec70657cd8cfe8e6af5c84b8b9da45df94adc802bedd085e1c9467f6"
+      }
+    ]
+  },
+  "expected": {
+    "prior_observations": 7,
+    "history_files": 15,
+    "native_history": 39,
+    "provider_history_entries": 46,
+    "eligible_headline_entries": 39,
+    "m27_history_lines": 2,
+    "m27_history_bytes": 54686,
+    "provider_observation_refs": [
+      "history-0001",
+      "history-0002",
+      "history-0003",
+      "history-0004",
+      "history-0005",
+      "history-0006",
+      "history-0007"
+    ],
+    "m27_history_provider_refs": [
+      "history-0045",
+      "history-0046"
+    ],
+    "generic_fake_h_required_ref": "history-0032",
+    "provider_turns": 4,
+    "feedback_reason": "nearest_history_audit_required"
+  }
+}

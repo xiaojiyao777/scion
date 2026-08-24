@@ -1,0 +1,946 @@
+{
+  "current_question": "Scion 能否在不给定算法机制、target file、patch、修复方向或 falsifier 内容的情况下，综合 M7/M18/M23/M24/M25/M26/M27 七项 problem-owned ordinary observations、截至 M22 的 33 条普通历史以及 M25、M26、M27 各两条普通终端 research-history 记录，自主选择并实现下一项 CVRP solver candidate；generic nearest-history audit 是否继续要求每个拟接受 H 在接受前 read 且 cite 完整 ordinary index 中该 candidate 的 lexical top-1 usable headline ref；同一经 Contract、Verification 和 canary 的 candidate 是否先完成 3 cases x 2 seeds initial screening，再在严格包含 initial 的 6 cases x 4 seeds expanded screening 中完成 24/24 valid pairs、所有 failure class 为零、Protocol pass 且 Decision queue_validate？optional falsifier 仍只允许作为非证据性开发提示。M28 复用 outcome-exposed seen development cases 和两个旧 seeds，仅在 expansion 增加两个于 candidate 产生前冻结的新 seeds；它是 adaptive seen-bank qualification，不是 fresh-population、confirmation、generalization、validation、frozen、promotion、retained 或 M27→M28 因果比较。",
+  "observations": [
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "candidate_evaluation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "initial",
+          "valid_pairs": 32,
+          "planned_pairs": 32,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "expand",
+          "decision": "expand_screening",
+          "case_outcomes": {
+            "wins": 6,
+            "losses": 0,
+            "ties": 2,
+            "median_delta": 6.25,
+            "ci_low": 0,
+            "ci_high": 74
+          }
+        },
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 96,
+          "planned_pairs": 96,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "pass",
+          "decision": "queue_validate",
+          "case_outcomes": {
+            "wins": 7,
+            "losses": 2,
+            "ties": 3,
+            "median_delta": 2,
+            "ci_low": 0,
+            "ci_high": 27.25
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "validation",
+        "terminal_code": "CANDIDATE_SUBJECT_VETO",
+        "arm": "candidate",
+        "case_id": "X-n200-k36",
+        "seed": 2069,
+        "failure": {
+          "category": "solver_algorithm_error",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "failure_kind",
+              "value": "route_packing_failure"
+            },
+            {
+              "name": "unpacked_customer_id",
+              "value": 106
+            },
+            {
+              "name": "route_limit",
+              "value": 36
+            }
+          ]
+        },
+        "stage_metrics_produced": false
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_candidate_on_reached_population",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 20,
+          "planned_pairs": 24,
+          "subject_failures": 4,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 0,
+            "ties": 4,
+            "median_delta": 0,
+            "ci_low": 0,
+            "ci_high": 26.5
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "CONFIRMATION_NOT_SUPPORTED",
+        "arm": "both",
+        "case_id": "X-n627-k43",
+        "seed": "multiple",
+        "failure": {
+          "category": "shared_construction_failure",
+          "count": 4,
+          "diagnostics": [
+            {
+              "name": "failure_kind",
+              "value": "route_packing_failure"
+            },
+            {
+              "name": "unpacked_customer_id",
+              "value": 624
+            },
+            {
+              "name": "route_limit",
+              "value": 43
+            },
+            {
+              "name": "candidate_only_failures",
+              "value": 0
+            },
+            {
+              "name": "runtime_ratio_median",
+              "value": 0.9998438773735676
+            },
+            {
+              "name": "runtime_delta_median_ms",
+              "value": -6.5
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_outcome_known_candidate_confirmation",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "unclear",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 2,
+            "losses": 0,
+            "ties": 4,
+            "median_delta": 0,
+            "ci_low": 0,
+            "ci_high": 66.75
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "reason_code",
+              "value": "SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            },
+            {
+              "name": "candidate_source_relation",
+              "value": "m20_exact_candidate_from_native_history"
+            },
+            {
+              "name": "canary_passed",
+              "value": true
+            },
+            {
+              "name": "candidate_failed_pairs",
+              "value": 0
+            },
+            {
+              "name": "champion_failed_pairs",
+              "value": 0
+            },
+            {
+              "name": "shared_failed_pairs",
+              "value": 0
+            },
+            {
+              "name": "bilateral_failed_pairs",
+              "value": 0
+            },
+            {
+              "name": "runtime_ratio_median",
+              "value": 1.0002065761465642
+            },
+            {
+              "name": "runtime_delta_median_ms",
+              "value": 8.5
+            },
+            {
+              "name": "runtime_confidence",
+              "value": "high"
+            },
+            {
+              "name": "protected_regressions",
+              "value": 0
+            },
+            {
+              "name": "positive_unit_delta_min",
+              "value": 27
+            },
+            {
+              "name": "positive_unit_delta_max",
+              "value": 106.5
+            },
+            {
+              "name": "zero_effect_unit_count",
+              "value": 4
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": true,
+        "validation_safe_features": true,
+        "validation_decision": true,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_candidate_on_adaptive_declared_population",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "framework_control_terminal",
+      "completed_stages": [],
+      "terminal": {
+        "stage": "proposal_hypothesis",
+        "terminal_code": "PROVIDER_CALL_CAP_EXHAUSTED",
+        "arm": "framework_control",
+        "case_id": "not_reached",
+        "seed": "not_reached",
+        "failure": {
+          "category": "hypothesis_research_basis_binding",
+          "count": 9,
+          "diagnostics": [
+            {
+              "name": "event_semantics",
+              "value": "terminal_framework_control_observation"
+            },
+            {
+              "name": "repeated_rejection_reason",
+              "value": "HYPOTHESIS_PROPOSAL_INVALID"
+            },
+            {
+              "name": "basis_rejection_category",
+              "value": "nearest_prior_refs_not_read_and_cited"
+            },
+            {
+              "name": "terminal_reason",
+              "value": "PROVIDER_CALL_CAP_EXHAUSTED"
+            },
+            {
+              "name": "provider_call_cap",
+              "value": 34
+            },
+            {
+              "name": "provider_calls_used",
+              "value": 34
+            },
+            {
+              "name": "hypothesis_research_calls",
+              "value": 34
+            },
+            {
+              "name": "read_source_actions",
+              "value": 22
+            },
+            {
+              "name": "read_history_actions",
+              "value": 2
+            },
+            {
+              "name": "search_source_actions",
+              "value": 1
+            },
+            {
+              "name": "finalize_hypothesis_actions",
+              "value": 9
+            },
+            {
+              "name": "research_rejected_attempts",
+              "value": 9
+            },
+            {
+              "name": "resource_exhausted_attempts",
+              "value": 1
+            },
+            {
+              "name": "valid_hypotheses",
+              "value": 0
+            },
+            {
+              "name": "code_candidates",
+              "value": 0
+            },
+            {
+              "name": "solver_calls",
+              "value": 0
+            },
+            {
+              "name": "formal_stage_count",
+              "value": 0
+            },
+            {
+              "name": "algorithm_evidence_count",
+              "value": 0
+            },
+            {
+              "name": "population_reached",
+              "value": false
+            }
+          ]
+        },
+        "stage_metrics_produced": false
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "framework_control_only",
+        "candidate_selection_outcome_known": false,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "autonomous_candidate_evaluation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "initial",
+          "valid_pairs": 6,
+          "planned_pairs": 6,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "expand",
+          "decision": "expand_screening",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 0,
+            "ties": 2,
+            "median_delta": 0,
+            "ci_low": 0,
+            "ci_high": 28.5
+          }
+        },
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 11,
+          "planned_pairs": 12,
+          "subject_failures": 1,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "abandon",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 1,
+            "ties": 4,
+            "median_delta": 0,
+            "ci_low": -0.5,
+            "ci_high": 0.5
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "CANDIDATE_RUNTIME_FAILURE",
+        "arm": "candidate",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "candidate_solver_timeout",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "event_semantics",
+              "value": "terminal_autonomous_development_observation"
+            },
+            {
+              "name": "campaign_status",
+              "value": "completed_valid"
+            },
+            {
+              "name": "stop_reason",
+              "value": "requested_rounds_completed"
+            },
+            {
+              "name": "provider_call_cap",
+              "value": 34
+            },
+            {
+              "name": "provider_calls_used",
+              "value": 7
+            },
+            {
+              "name": "hypothesis_research_calls",
+              "value": 3
+            },
+            {
+              "name": "code_research_calls",
+              "value": 4
+            },
+            {
+              "name": "provider_retry_count",
+              "value": 0
+            },
+            {
+              "name": "valid_hypotheses",
+              "value": 1
+            },
+            {
+              "name": "code_candidates",
+              "value": 1
+            },
+            {
+              "name": "public_development_checks_passed",
+              "value": true
+            },
+            {
+              "name": "verification_passed",
+              "value": true
+            },
+            {
+              "name": "canary_passed",
+              "value": true
+            },
+            {
+              "name": "solver_calls",
+              "value": 42
+            },
+            {
+              "name": "formal_stage_count",
+              "value": 2
+            },
+            {
+              "name": "algorithm_evidence_count",
+              "value": 2
+            },
+            {
+              "name": "validation_reached",
+              "value": false
+            },
+            {
+              "name": "frozen_reached",
+              "value": false
+            },
+            {
+              "name": "promotion_reached",
+              "value": false
+            },
+            {
+              "name": "retained_replay_reached",
+              "value": false
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "seen_development_population",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": false,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "autonomous_candidate_evaluation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "initial",
+          "valid_pairs": 6,
+          "planned_pairs": 6,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 0,
+            "losses": 1,
+            "ties": 2,
+            "median_delta": 0,
+            "ci_low": -61.5,
+            "ci_high": 0
+          }
+        },
+        {
+          "stage": "screening",
+          "block": "initial",
+          "valid_pairs": 6,
+          "planned_pairs": 6,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 0,
+            "losses": 1,
+            "ties": 2,
+            "median_delta": 0,
+            "ci_low": -90.5,
+            "ci_high": 0
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "REQUESTED_ROUNDS_COMPLETED",
+        "arm": "aggregate",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_non_improvement",
+          "count": 2,
+          "diagnostics": [
+            {
+              "name": "event_semantics",
+              "value": "terminal_autonomous_development_observation"
+            },
+            {
+              "name": "campaign_status",
+              "value": "completed_valid"
+            },
+            {
+              "name": "stop_reason",
+              "value": "requested_rounds_completed"
+            },
+            {
+              "name": "provider_call_cap",
+              "value": 34
+            },
+            {
+              "name": "provider_calls_used",
+              "value": 15
+            },
+            {
+              "name": "hypothesis_research_calls",
+              "value": 7
+            },
+            {
+              "name": "code_research_calls",
+              "value": 6
+            },
+            {
+              "name": "code_final_decision_calls",
+              "value": 2
+            },
+            {
+              "name": "provider_retry_count",
+              "value": 0
+            },
+            {
+              "name": "valid_hypotheses",
+              "value": 2
+            },
+            {
+              "name": "code_candidates",
+              "value": 2
+            },
+            {
+              "name": "public_development_checks_passed",
+              "value": true
+            },
+            {
+              "name": "verification_passed",
+              "value": true
+            },
+            {
+              "name": "canary_passed",
+              "value": true
+            },
+            {
+              "name": "solver_calls",
+              "value": 32
+            },
+            {
+              "name": "solver_max_concurrency",
+              "value": 1
+            },
+            {
+              "name": "formal_stage_count",
+              "value": 2
+            },
+            {
+              "name": "algorithm_evidence_count",
+              "value": 2
+            },
+            {
+              "name": "initial_screen_valid_pairs",
+              "value": 12
+            },
+            {
+              "name": "initial_screen_planned_pairs",
+              "value": 12
+            },
+            {
+              "name": "subject_failures",
+              "value": 0
+            },
+            {
+              "name": "fleet_regressions",
+              "value": 0
+            },
+            {
+              "name": "protocol_failures",
+              "value": 2
+            },
+            {
+              "name": "continue_explore_decisions",
+              "value": 2
+            },
+            {
+              "name": "ordinary_history_records_written",
+              "value": 2
+            },
+            {
+              "name": "validation_reached",
+              "value": false
+            },
+            {
+              "name": "frozen_reached",
+              "value": false
+            },
+            {
+              "name": "promotion_reached",
+              "value": false
+            },
+            {
+              "name": "retained_replay_reached",
+              "value": false
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": true,
+        "validation_safe_features": true,
+        "validation_decision": true,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "seen_development_population",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": false,
+        "exact_candidate_outcome_overlap_count": 1,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "autonomous_candidate_evaluation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "initial",
+          "valid_pairs": 6,
+          "planned_pairs": 6,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "expand",
+          "decision": "expand_screening",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 0,
+            "ties": 2,
+            "median_delta": 0,
+            "ci_low": 0,
+            "ci_high": 28.5
+          }
+        },
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 10,
+          "planned_pairs": 12,
+          "subject_failures": 2,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "abandon",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 1,
+            "ties": 4,
+            "median_delta": 0,
+            "ci_low": -0.5,
+            "ci_high": 0.5
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "REQUESTED_ROUNDS_COMPLETED",
+        "arm": "aggregate",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_non_qualification",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "event_semantics",
+              "value": "terminal_autonomous_development_observation"
+            },
+            {
+              "name": "campaign_status",
+              "value": "completed_valid"
+            },
+            {
+              "name": "stop_reason",
+              "value": "requested_rounds_completed"
+            },
+            {
+              "name": "nearest_history_audit_accepted_hypotheses",
+              "value": 1
+            },
+            {
+              "name": "provider_calls_used",
+              "value": 8
+            },
+            {
+              "name": "hypothesis_research_calls",
+              "value": 4
+            },
+            {
+              "name": "code_research_calls",
+              "value": 3
+            },
+            {
+              "name": "code_final_decision_calls",
+              "value": 1
+            },
+            {
+              "name": "provider_retry_count",
+              "value": 0
+            },
+            {
+              "name": "valid_hypotheses",
+              "value": 1
+            },
+            {
+              "name": "code_candidates",
+              "value": 1
+            },
+            {
+              "name": "public_development_checks_passed",
+              "value": true
+            },
+            {
+              "name": "verification_passed",
+              "value": true
+            },
+            {
+              "name": "canary_passed",
+              "value": true
+            },
+            {
+              "name": "solver_calls",
+              "value": 42
+            },
+            {
+              "name": "solver_max_concurrency",
+              "value": 1
+            },
+            {
+              "name": "exact_ordered_patch_replays",
+              "value": 0
+            },
+            {
+              "name": "nearest_history_audit_triggered_hypotheses",
+              "value": 1
+            },
+            {
+              "name": "initial_screen_valid_pairs",
+              "value": 6
+            },
+            {
+              "name": "nearest_history_audit_incomplete_hypotheses",
+              "value": 0
+            },
+            {
+              "name": "expanded_screen_valid_pairs",
+              "value": 10
+            },
+            {
+              "name": "expanded_screen_planned_pairs",
+              "value": 12
+            },
+            {
+              "name": "subject_failures",
+              "value": 2
+            },
+            {
+              "name": "candidate_only_failures",
+              "value": 2
+            },
+            {
+              "name": "fleet_regressions",
+              "value": 0
+            },
+            {
+              "name": "exact_structured_h_replays",
+              "value": 0
+            },
+            {
+              "name": "ordinary_history_records_written",
+              "value": 2
+            },
+            {
+              "name": "validation_reached",
+              "value": false
+            },
+            {
+              "name": "frozen_reached",
+              "value": false
+            },
+            {
+              "name": "promotion_reached",
+              "value": false
+            },
+            {
+              "name": "retained_replay_reached",
+              "value": false
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": true,
+        "validation_safe_features": true,
+        "validation_decision": true,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "seen_development_population",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": false,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    }
+  ]
+}

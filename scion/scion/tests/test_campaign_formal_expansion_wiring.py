@@ -1,4 +1,5 @@
 """Campaign wiring regression for the formal CVRP staged screen."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,18 +15,29 @@ from scion.core.models import (
     PairwiseCaseFeedback,
     ProtocolResult,
 )
-from scion.proposal.mock_client import MockLLMClient
 from scion.problem.spec import ObjectiveMetricSpec
+from scion.proposal.mock_client import MockLLMClient
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.protocol.experiment.selection import select_cases
 from scion.protocol.gates import screening_gate, validation_gate
 
 from .campaign_test_support import _VALID_HYPOTHESIS, _VALID_PATCH, _campaign
 
+_FORMAL_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "formal"
 
-_FORMAL_DIR = (
-    Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "formal"
-)
+
+def _ordinary_source_bytes(root: Path) -> dict[str, bytes]:
+    files: dict[str, bytes] = {}
+    for path in root.rglob("*"):
+        relative = path.relative_to(root)
+        assert not path.is_symlink()
+        if {"__pycache__", ".pytest_cache"}.intersection(relative.parts):
+            continue
+        if relative.suffix == ".pyc" or path.is_dir():
+            continue
+        assert path.is_file()
+        files[relative.as_posix()] = path.read_bytes()
+    return files
 
 
 class _FormalPopulationTracingProtocol(ExperimentProtocol):
@@ -74,6 +86,7 @@ class _FormalPopulationTracingProtocol(ExperimentProtocol):
         expand: bool = False,
         expand_round: int = 1,
         selected_surface: str | None = None,
+        **_kwargs: Any,
     ) -> ProtocolResult:
         cases = self._select_cases(
             stage,
@@ -197,9 +210,7 @@ def test_formal_screening_expansion_reuses_exact_candidate_then_enters_validatio
     assert provider.call_count == 2
     assert len(candidate_workspace_creations) == 1
     assert protocol.calls[0]["gate_outcome"] == "expand"
-    assert protocol.calls[0]["reason_codes"] == (
-        "SCREENING_EXPAND_REQUIRED_FOR_PASS",
-    )
+    assert protocol.calls[0]["reason_codes"] == ("SCREENING_EXPAND_REQUIRED_FOR_PASS",)
 
     expanded = campaign.run_one_step()
     branch = campaign._branch_ctrl.get_branch(branch_id)
@@ -215,7 +226,31 @@ def test_formal_screening_expansion_reuses_exact_candidate_then_enters_validatio
     assert protocol.calls[1]["reason_codes"] == ("SCREENING_PASS",)
     assert protocol.calls[1]["expand"] is True
     assert protocol.calls[1]["expand_round"] == 1
-    assert protocol.calls[1]["candidate_source"] == protocol.calls[0]["candidate_source"]
+    assert (
+        protocol.calls[1]["candidate_source"] == protocol.calls[0]["candidate_source"]
+    )
+    assert protocol.calls[1]["candidate_ws"] == protocol.calls[0]["candidate_ws"]
+    durable_candidate = Path(campaign._branch_workspaces[branch_id]).resolve()
+    candidate_root = Path(campaign._campaign_dir) / "candidate_workspaces"
+    candidate_children = sorted(path.resolve() for path in candidate_root.iterdir())
+    assert candidate_children == [durable_candidate]
+    assert durable_candidate.is_dir() and not durable_candidate.is_symlink()
+    assert Path(protocol.calls[1]["candidate_ws"]).resolve() == durable_candidate
+    assert hypothesis.action == "modify"
+    baseline_source = _ordinary_source_bytes(
+        Path(campaign._champion.code_snapshot_path)
+    )
+    candidate_source = _ordinary_source_bytes(durable_candidate)
+    assert set(baseline_source) == set(candidate_source)
+    assert [
+        path
+        for path in baseline_source
+        if baseline_source[path] != candidate_source[path]
+    ] == [_VALID_PATCH["file_path"]]
+    assert branch.current_code_hash is not None
+    assert branch.current_code_hash == campaign._materializer.compute_code_hash(
+        str(durable_candidate)
+    )
 
     expected_initial_cases = tuple(
         select_cases(
@@ -259,4 +294,6 @@ def test_formal_screening_expansion_reuses_exact_candidate_then_enters_validatio
     assert protocol.calls[2]["cases"] == tuple(split.validation)
     assert protocol.calls[2]["seeds"] == tuple(seeds.validation)
     assert len(protocol.calls[2]["cases"]) == 12
-    assert protocol.calls[2]["candidate_source"] == protocol.calls[0]["candidate_source"]
+    assert (
+        protocol.calls[2]["candidate_source"] == protocol.calls[0]["candidate_source"]
+    )

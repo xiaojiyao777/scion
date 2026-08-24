@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-08-21*
+*Last updated: 2026-08-24*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,6 +8,7 @@ referenced, not copied into development prompts.
 
 ## Runs
 
+- [CVRP M28 seen-bank qualification autonomous continuation, prepared and not launched](v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md)
 - [CVRP M27 nearest-history-audit autonomous continuation, terminal valid expanded-screening abandon](v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md)
 - [CVRP M26 embedded-falsifier autonomous continuation, terminal valid two-candidate negative initial screens](v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md)
 - [CVRP M25 evidence-grounded autonomous continuous research, terminal valid expanded-screening abandon](v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md)

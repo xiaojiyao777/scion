@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-21*
+*Last updated: 2026-08-24*
 
 Read [`../../TASK.md`](../../TASK.md) first. The sole architecture authority is
 [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md).
@@ -595,10 +595,53 @@ retry, resume, reuse or automatic M28.
 Mechanically, M27 establishes the live bounded audit/read/citation path and
 probe projection boundary. Scientifically, it supplies negative/mixed paired
 development evidence only on the outcome-exposed seen bank; M26-to-M27 remains
-non-randomized and non-causal. CVRP acceptance remains unmet. The current
-operation is to review and commit this terminal record. Any M28 requires a new
-preregistered design and explicit authorization. See the
+non-randomized and non-causal. CVRP acceptance remains unmet. See the
 [M27 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
+
+M28 is prepared and not launched under label/root
+`v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-20260824`. It
+changes no production source. Its first H will receive seven strict aggregate
+observations and 39 native records, exactly 46 ordinary index entries; the 39
+native headlines are nearest-history eligible. The exact two-line M27 history
+copy is preserved in stage order.
+
+M28 is an adaptive qualification on the same six outcome-exposed screening
+cases, not a fresh-population experiment. Initial uses old seeds `4358`,
+`1868`; expanded uses those plus metadata-selected `10684`, `14577`. The sole
+qualification trajectory requires one exact candidate to complete initial
+`6/6` and expanded `24/24`, every failure class and fleet regression zero, and
+Protocol/Decision progression
+`expand -> expand_screening -> pass -> queue_validate`. The two-round limit
+makes M24-derived validation and frozen controls unreachable.
+
+The provider cap is 34 and the hardwall is 15,000 seconds. The conservative
+maximum is 72 serial solver subprocesses: 3,040 nominal seconds, 4,120 seconds
+after the per-dispatch communicate guard, and a strict conservative 4,552
+seconds after possible kill/drain cleanup. All known dispatch-accounted work is
+12,130 seconds; all known conservative elapsed work is 12,562 seconds under the
+hardwall. Provider-/solver-free
+replay checks the input prefix, sanitized M27 observation, `7 + 39` ordering,
+nearest-history behavior, exact config delta, deterministic seed selection and
+resource arithmetic. Qualification also requires a provider-/solver-free
+post-terminal audit: one `READY_VALIDATE` branch, one durable candidate
+workspace, an accepted `modify` H, and direct complete-source byte equality
+between the actual workspace and the canonical M28 patch mechanically applied
+to the exact 99-file base-commit B0.
+
+A candidate-independent conditional M29 selector is frozen before any M28
+candidate exists. Its case pool and stratified SHA ordering, seed domain and
+ordering are fixed, but no M29 case/seed identity is calculated or recorded
+during M28. Only the exact M28 qualification result permits one later reviewed
+materialization; it never launches automatically. The corrected conditional
+M29 envelope includes strict canary and is 86 solver subprocesses,
+4,820 nominal seconds, 6,110 communicate-guard seconds and a conservative
+6,626-second elapsed bound including possible kill/drain cleanup under an
+8,000-second hardwall. Its sole future driver, exact B0/candidate derivation and
+M28-to-M29 control-delta whitelist are frozen now. M28 still requires its clean
+postcommit carrier gate and explicit live authorization. The exact carrier is
+reported externally after commit and is not recursively embedded here.
+See the
+[M28 preregistration](../experiments/v0.4/v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md).
 
 ## Current validation rule
 

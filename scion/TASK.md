@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Last updated: 2026-08-21*
+*Last updated: 2026-08-24*
 
 ## Authority and objective
 
@@ -620,6 +620,27 @@ The exact design is in the
   retry, resume or automatic M28. Audit/probe observations are non-causal, and
   the result is negative/mixed evidence only on the seen bank. See the
   [M27 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
+- [ ] **PREPARED / NOT LAUNCHED / AUTHORIZATION REQUIRED:** run M28 once under
+  the new seen-bank qualification label/root in the
+  [M28 preregistration](docs/experiments/v0.4/v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md).
+  Its first H sees seven sanitized problem observations plus 39 native ordinary
+  records. Initial screening reuses the exact three cases and two old seeds;
+  expanded screening uses the strict six-case superset and adds the two
+  metadata-selected seeds `10684`, `14577`. Qualification requires the same
+  verified candidate to complete initial `6/6` and expanded `24/24`, with every
+  failure class and fleet regression zero and exact progression
+  `expand -> expand_screening -> pass -> queue_validate`. The result remains
+  adaptive seen-bank evidence, not fresh-population or generalization evidence.
+  M24 validation/frozen controls stay unreachable. Qualification additionally
+  requires the accepted `modify` H, sole `READY_VALIDATE` branch and sole
+  durable candidate workspace to pass the frozen post-terminal audit: apply the
+  canonical complete ordered patch to the exact 99-file base-commit B0 and
+  compare the complete ordinary-source path/bytes directly. Missing, multiple,
+  create/delete or mismatched carriers are not qualified. A candidate-
+  independent M29 case/seed selector, sole fixed-funnel driver and control-
+  derivation whitelist are frozen now, but identities and source inputs may be
+  materialized only after qualification in a separately reviewed M29 prep; no
+  M29 launch is automatic.
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and
@@ -715,6 +736,13 @@ case quality and Decision abandoned for runtime failure. The run is terminal
 `completed / valid / requested_rounds_completed`, with validation and frozen
 zero. Its audit and probe observations establish bounded framework behavior,
 not causal research improvement; its paired result is negative/mixed seen-bank
-development evidence. CVRP acceptance remains unmet. The current operation is
-to review and commit this terminal documentation. Any M28 requires a new
-preregistered design and explicit authorization; no launch is automatic.
+development evidence. CVRP acceptance remains unmet. M28 is now prepared but
+not launched under a new seen-bank qualification design. It adds two
+deterministically pre-frozen expansion seeds while keeping the six
+outcome-exposed cases and all gates unchanged. Its sole qualification path is
+one exact candidate with initial `6/6`, expanded `24/24`, zero failures and
+`queue_validate`. The future M29 selector is candidate-independent and frozen,
+but no identities are materialized and no launch is automatic. M28 still
+requires its clean postcommit carrier gate and explicit live authorization.
+The exact carrier is reported externally after commit and is not recursively
+embedded in this file.
