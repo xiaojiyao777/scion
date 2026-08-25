@@ -721,31 +721,45 @@ candidates per provider call. M32 therefore improves the tainted Creative
 research boundary first and leaves every downstream scientific authority
 unchanged.
 
+The provider-/solver-free metric contract, M30 calibration row, future
+five-block matched-study gate, freshness rule and claim boundary are frozen in
+the [M32 design](docs/experiments/v0.4/v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md).
+It is design-only: no K=2 implementation, population selection or live
+authority exists. Telemetry carrier `a3b1ed9b` corrects the campaign-level
+bounded-mode label and aggregate provider-call projection only; it is not K=2
+evidence and does not yet supply the required attempt-level candidate counts.
+Follow-on configuration-skeleton carrier `a2fe7c38` persists effective K=1,
+accepts only absent/explicit `1` and rejects `2` and every other value fail
+closed. It changes no H-session behavior and is likewise not K=2 evidence.
+
 - [x] Close the M30 terminal documentation and monitoring-incident record on a
   clean docs-only commit before changing research behavior. Preserve the M30
   root as consumed; do not retry, resume or reinterpret its incomplete result.
 - [ ] Correct proposal telemetry so bounded H/C research is not reported as
   `direct_v3`, and durably project safe attempt-level provider-turn,
   H-candidate and selected-candidate counts without exposing draft bodies.
-- [ ] Freeze baseline research-throughput and candidate-quality measures before
+- [x] Freeze baseline research-throughput and candidate-quality measures before
   implementation:
-  finalized H per provider call, distinct non-replayed H per attempt, C-ready
-  rate, formal candidate per attempt/provider call, exact H/patch replay rate
-  and initial gate/expand rate, paired-effect distribution and candidate-only
-  runtime-failure rate. The exact throughput and quality endpoints and their
-  repeated-block acceptance rule must be fixed before outcomes. These are
-  development diagnostics, never promotion features or Decision inputs.
+  finalized H per provider call, history- and within-arm-exact-distinct H per
+  attempt, C-ready rate, exact-distinct formal candidate per attempt/provider
+  call, separate loaded-history/within-block/cross-block exact H/patch replay
+  guards, initial gate/expand rate, the median-of-candidate-medians
+  paired-effect guard and candidate-only runtime-failure rate. The exact
+  throughput and quality endpoints and their repeated-block acceptance rule
+  must be fixed before outcomes. These are development diagnostics, never
+  promotion features or Decision inputs.
 - [ ] Add bounded session-local H candidate slots and safe counters without a
   new durable ledger, identity, hash, receipt or authority. All slots share the
   existing turn/read/search/transcript and campaign provider budgets; creating
   a second slot may not reset or multiply any allowance. Public artifacts may
   expose only bounded counts and the single exported H.
-- [ ] Add the strict optional configuration contract
-  `max_hypothesis_candidates`: absent or `1` preserves the current bounded H
-  path, explicit `2` enables M32, all other values fail closed, and `2` is the
-  M32 hard maximum. Persist the effective mode and used budget. Any future live
-  use must also declare proposal-attempt, shared provider-call and outer
-  hardwall caps.
+- [ ] Complete the strict optional configuration contract
+  `max_hypothesis_candidates`. Carrier `a2fe7c38` already makes absent or `1`
+  preserve the current bounded H path, persists effective K=1 and rejects all
+  other values, including `2`, fail closed. M32 must make explicit `2` enable
+  the still-unimplemented K=2 path while keeping `2` as the hard maximum, then
+  persist the effective mode and used budget. Any future live use must also
+  declare proposal-attempt, shared provider-call and outer hardwall caps.
 - [ ] Implement the `K=2` H draft bank inside one
   `HypothesisResearchSession`. The provider may stage two complete structured H
   values in session-local ordinal slots and finally choose one existing slot;
@@ -775,9 +789,11 @@ development evidence under the same total resource envelope as K=1 that
 improves both distinct formal-candidate yield per provider call and the frozen
 development-quality endpoint without hidden host selection, draft persistence
 or held-out leakage. Throughput-only uplift is research-throughput evidence,
-not effective-research evidence. Failure or no repeatable joint uplift freezes
-a valid negative result and blocks the next architectural rung. A repeated
-joint uplift is bounded development research-effectiveness evidence only.
+not effective-research evidence. A completed valid comparison without
+repeatable joint uplift is a valid negative and blocks the next architectural
+rung; an incomplete comparison is inconclusive and also cannot advance. A
+repeated joint uplift is bounded development research-effectiveness evidence
+only.
 CVRP acceptance still requires a later exact autonomous candidate to complete
 screening, validation and frozen holdout, receive deterministic `PROMOTE`, and
 survive an independent retained-B0 comparison without feasibility or fleet

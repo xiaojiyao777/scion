@@ -6,6 +6,10 @@ This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
 referenced, not copied into development prompts.
 
+## Designs
+
+- [CVRP M32 H-candidate-bank research-effectiveness design, design-only with K=2 unimplemented and no population or live authority](v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md)
+
 ## Runs
 
 - [CVRP M30 fresh-development qualification-only autonomous continuation, terminal valid-incomplete H-session resource stop after one negative initial screen](v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md)
