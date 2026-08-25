@@ -89,9 +89,7 @@ class CampaignManager:
         research_history: Sequence[Mapping[str, Any]] = (),
         resource_envelope: ResourceEnvelope | dict[str, Any] | None = None,
         code_research_limits: CodeResearchLimits | dict[str, Any] | None = None,
-        qualification_only: (
-            QualificationOnlyConfig | Mapping[str, Any] | None
-        ) = None,
+        qualification_only: (QualificationOnlyConfig | Mapping[str, Any] | None) = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
@@ -320,11 +318,16 @@ class CampaignManager:
             getattr(protocol_config, "measurement_readiness", None)
         )
         bounded_research = self._code_research_limits is not None
+        proposal_runtime_mode = "direct_v3"
+        if bounded_research:
+            proposal_runtime_mode = (
+                "bounded_hypothesis_candidates_v1"
+                if self._code_research_limits.max_hypothesis_candidates == 2
+                else "bounded_research_v1"
+            )
         state = {
             "campaign_id": self._campaign_id,
-            "proposal_runtime_mode": (
-                "bounded_research_v1" if bounded_research else "direct_v3"
-            ),
+            "proposal_runtime_mode": proposal_runtime_mode,
             "n_experiments": self._n_experiments,
             "screened_experiments": screened_experiments,
             "total_rounds": self._round_num,
@@ -367,9 +370,7 @@ class CampaignManager:
                 None,
             )
         if current_run is None:
-            current_run = self._empty_run_result(
-                getattr(self, "_requested_rounds", 1)
-            )
+            current_run = self._empty_run_result(getattr(self, "_requested_rounds", 1))
         state["run_result"] = current_run.to_projection()
         return state
 
@@ -519,7 +520,10 @@ class CampaignManager:
                 BranchState.EXPLORE,
                 BranchState.EXPLORE_EXPAND,
             }
-            if branch.state not in allowed_states or effective_state not in allowed_states:
+            if (
+                branch.state not in allowed_states
+                or effective_state not in allowed_states
+            ):
                 raise RuntimeError(
                     "qualification-only mode blocks validation/frozen evaluation"
                 )
@@ -708,9 +712,7 @@ class CampaignManager:
         if current_run is None:
             current_run = getattr(self._campaign_loop, "current_result", None)
         if current_run is None:
-            current_run = self._empty_run_result(
-                getattr(self, "_requested_rounds", 1)
-            )
+            current_run = self._empty_run_result(getattr(self, "_requested_rounds", 1))
         state_snapshot = state or self.get_state(run_result=current_run)
         self._evidence_recorder.write_campaign_summary(
             state=state_snapshot,

@@ -39,13 +39,12 @@ def test_existing_positional_max_turns_call_keeps_its_meaning() -> None:
     ("value", "error_type"),
     (
         (0, ValueError),
-        (2, ValueError),
         (3, ValueError),
         (True, TypeError),
         ("1", TypeError),
     ),
 )
-def test_non_k1_candidate_counts_fail_closed_in_constructor_and_mapping(
+def test_unsupported_candidate_counts_fail_closed_in_constructor_and_mapping(
     value: object,
     error_type: type[Exception],
 ) -> None:
@@ -55,18 +54,35 @@ def test_non_k1_candidate_counts_fail_closed_in_constructor_and_mapping(
         normalize_code_research_limits({"max_hypothesis_candidates": value})
 
 
+def test_k2_is_the_only_additional_candidate_count() -> None:
+    direct = CodeResearchLimits(max_turns=4, max_hypothesis_candidates=2)
+    mapped = normalize_code_research_limits(
+        {"max_turns": 4, "max_hypothesis_candidates": 2}
+    )
+
+    assert direct == mapped
+    assert direct.to_primitive()["max_hypothesis_candidates"] == 2
+
+
 def test_candidate_count_has_no_alias() -> None:
     with pytest.raises(ValueError, match="unsupported code research limits field"):
         normalize_code_research_limits({"hypothesis_candidates": 1})
 
 
-def test_write_and_load_roundtrip_persists_effective_k1(tmp_path: Path) -> None:
-    expected = CodeResearchLimits(max_turns=2)
+@pytest.mark.parametrize("candidate_count", (1, 2))
+def test_write_and_load_roundtrip_persists_effective_candidate_count(
+    tmp_path: Path,
+    candidate_count: int,
+) -> None:
+    expected = CodeResearchLimits(
+        max_turns=4,
+        max_hypothesis_candidates=candidate_count,
+    )
 
     path = write_code_research_limits(str(tmp_path), expected)
     payload = json.loads(path.read_text(encoding="utf-8"))
 
-    assert payload["max_hypothesis_candidates"] == 1
+    assert payload["max_hypothesis_candidates"] == candidate_count
     assert load_code_research_limits(path) == expected
 
 
@@ -87,18 +103,34 @@ def test_tracked_legacy_limits_without_candidate_field_load_as_k1(
     assert load_code_research_limits(path).max_hypothesis_candidates == 1
 
 
-def test_cli_limits_loader_accepts_k1_and_rejects_k2(tmp_path: Path) -> None:
+@pytest.mark.parametrize("candidate_count", (1, 2))
+def test_cli_limits_loader_accepts_k1_and_k2(
+    tmp_path: Path,
+    candidate_count: int,
+) -> None:
     accepted = tmp_path / "accepted.json"
     accepted.write_text(
-        '{"max_hypothesis_candidates":1,"max_turns":2}',
-        encoding="utf-8",
-    )
-    rejected = tmp_path / "rejected.json"
-    rejected.write_text(
-        '{"max_hypothesis_candidates":2,"max_turns":2}',
+        json.dumps(
+            {
+                "max_hypothesis_candidates": candidate_count,
+                "max_turns": 4,
+            }
+        ),
         encoding="utf-8",
     )
 
-    assert _load_code_research_limits(accepted).max_hypothesis_candidates == 1
+    assert (
+        _load_code_research_limits(accepted).max_hypothesis_candidates
+        == candidate_count
+    )
+
+
+def test_cli_limits_loader_rejects_k3(tmp_path: Path) -> None:
+    rejected = tmp_path / "rejected.json"
+    rejected.write_text(
+        '{"max_hypothesis_candidates":3,"max_turns":4}',
+        encoding="utf-8",
+    )
+
     with pytest.raises(ValueError, match="max_hypothesis_candidates"):
         _load_code_research_limits(rejected)

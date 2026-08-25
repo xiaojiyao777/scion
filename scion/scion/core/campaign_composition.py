@@ -121,6 +121,29 @@ def compose_campaign_services(
         if code_research_limits is None
         else normalize_code_research_limits(code_research_limits)
     )
+    k2_hypothesis_candidates = (
+        normalized_code_research_limits is not None
+        and normalized_code_research_limits.max_hypothesis_candidates == 2
+    )
+    normalized_resource_envelope = None
+    normalized_qualification_only = None
+    if k2_hypothesis_candidates:
+        normalized_resource_envelope = normalize_resource_envelope(resource_envelope)
+        normalized_qualification_only = normalize_qualification_only_config(
+            qualification_only
+        )
+        if normalized_qualification_only is None:
+            raise ValueError("max_hypothesis_candidates=2 requires qualification_only")
+        if normalized_resource_envelope.provider_call_cap is None:
+            raise ValueError(
+                "max_hypothesis_candidates=2 requires resource envelope "
+                "provider_call_cap"
+            )
+        if normalized_resource_envelope.outer_hardwall_sec is None:
+            raise ValueError(
+                "max_hypothesis_candidates=2 requires resource envelope "
+                "outer_hardwall_sec"
+            )
     development_suites = (
         ()
         if normalized_code_research_limits is None
@@ -155,13 +178,19 @@ def compose_campaign_services(
         development_suites=development_suites,
     )
     owner._protocol_config = protocol_config
-    owner._resource_envelope = normalize_resource_envelope(resource_envelope)
+    owner._resource_envelope = (
+        normalized_resource_envelope
+        if normalized_resource_envelope is not None
+        else normalize_resource_envelope(resource_envelope)
+    )
     owner._provider_call_budget = ProviderCallBudget(
         owner._resource_envelope.provider_call_cap
     )
     owner._code_research_limits = normalized_code_research_limits
-    owner._qualification_only_config = normalize_qualification_only_config(
-        qualification_only
+    owner._qualification_only_config = (
+        normalized_qualification_only
+        if normalized_qualification_only is not None
+        else normalize_qualification_only_config(qualification_only)
     )
     owner._qualification_runtime = (
         QualificationRuntime(owner._qualification_only_config)

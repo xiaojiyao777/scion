@@ -22,6 +22,12 @@ from scion.proposal.engine.exceptions import ProposalValidationError
 from scion.proposal.engine.hypothesis_prompts import _split_hypothesis_context
 from scion.proposal.engine.parsing import _parse_hypothesis
 from scion.proposal.engine.provider_call import PromptTurnSnapshot
+from scion.proposal.hypothesis_candidate_bank import (
+    HypothesisCandidateBank,
+    candidate_selection_tool_error,
+    candidate_stage_tool_error,
+    parse_hypothesis_candidate_action,
+)
 from scion.proposal.hypothesis_research_basis import (
     MAX_HYPOTHESIS_RESEARCH_REF_CHARS,
     HypothesisResearchBasis,
@@ -74,6 +80,8 @@ def bind_hypothesis_research_turn_tool(
     history_refs: Collection[str] | None = None,
     history_read_reserved: bool = False,
     history_headline_audit_available: bool = False,
+    max_hypothesis_candidates: int = 1,
+    staged_candidate_slots: Collection[int] = (),
 ) -> dict[str, Any]:
     """Reuse the already surface-bound H schema inside the research tool."""
 
@@ -81,6 +89,11 @@ def bind_hypothesis_research_turn_tool(
         direct_tool.get("input_schema"), Mapping
     ):
         raise ValueError("hypothesis research requires the bound hypothesis tool")
+    staged_slots = HypothesisCandidateBank.normalize_slots(
+        max_hypothesis_candidates,
+        staged_candidate_slots,
+    )
+    candidate_mode = max_hypothesis_candidates == 2
     ref = {"type": "string", "minLength": 1, "maxLength": _MAX_REF_CHARS}
     query = {"type": "string", "minLength": 1, "maxLength": _MAX_QUERY_CHARS}
     allowed_history_refs = None if history_refs is None else sorted(set(history_refs))
@@ -122,21 +135,50 @@ def bind_hypothesis_research_turn_tool(
         and source_read_satisfied
         and (history_read_satisfied or history_headline_audit_available)
     ):
-        actions.append(
-            _action_schema(
-                "finalize_hypothesis",
-                required={
-                    "hypothesis": deepcopy(direct_tool["input_schema"]),
-                    "research_basis": hypothesis_research_basis_schema(
-                        visible_refs=visible_refs,
-                        visible_history_refs=visible_history_refs,
-                        require_nearest_prior=(
-                            history_read_required and bool(visible_history_refs)
-                        ),
-                    ),
-                },
-            )
+        hypothesis = deepcopy(direct_tool["input_schema"])
+        research_basis = hypothesis_research_basis_schema(
+            visible_refs=visible_refs,
+            visible_history_refs=visible_history_refs,
+            require_nearest_prior=(
+                history_read_required and bool(visible_history_refs)
+            ),
         )
+        if not candidate_mode:
+            actions.append(
+                _action_schema(
+                    "finalize_hypothesis",
+                    required={
+                        "hypothesis": hypothesis,
+                        "research_basis": research_basis,
+                    },
+                )
+            )
+        elif len(staged_slots) < max_hypothesis_candidates:
+            actions.append(
+                _action_schema(
+                    "stage_hypothesis_candidate",
+                    required={
+                        "slot": {
+                            "type": "integer",
+                            "enum": [len(staged_slots) + 1],
+                        },
+                        "hypothesis": hypothesis,
+                        "research_basis": research_basis,
+                    },
+                )
+            )
+        else:
+            actions.append(
+                _action_schema(
+                    "select_hypothesis_candidate",
+                    required={
+                        "slot": {
+                            "type": "integer",
+                            "enum": list(staged_slots),
+                        }
+                    },
+                )
+            )
     actions.append(
         _action_schema(
             "abstain",
@@ -149,36 +191,67 @@ def bind_hypothesis_research_turn_tool(
             },
         )
     )
-    history_guidance = (
-        " When history_index has usable headline fields and finalize_hypothesis "
-        "is exposed before any history is visible, that finalize may use "
-        "nearest_prior_refs=[]. If finalize_hypothesis is not exposed, complete "
-        "an allowed read first. The host first "
-        "validates that basis, then may return only one required_history_ref; "
-        "read and cite that exact ref before re-finalizing. Every finalize "
-        "recomputes the ref, so a pivot may require a different history."
-        if history_headline_audit_available
-        else (
-            " When history_index is nonempty, finalize is unavailable until one "
-            "successful read_history."
+    if candidate_mode:
+        history_guidance = (
+            " When history_index has usable headline fields and "
+            "stage_hypothesis_candidate is exposed before any history is visible, "
+            "that stage may use nearest_prior_refs=[]. If staging is not exposed, "
+            "complete an allowed read first. The host first validates that basis, "
+            "then may return only one required_history_ref; read and cite that "
+            "exact ref before re-staging. Every stage recomputes the ref, so a "
+            "pivot may require a different history."
+            if history_headline_audit_available
+            else (
+                " When history_index is nonempty, staging is unavailable until one "
+                "successful read_history."
+            )
         )
-    )
-    return {
-        "name": "hypothesis_research_turn",
-        "description": (
+        description = (
+            "Read/search, stage exactly two complete hypotheses through the "
+            "unchanged schema, select one existing slot, or abstain. Staging "
+            "exposes only the next ordinal and never resets a shared budget. "
+            "Indexes are complete inventories; bodies appear only after read/search. "
+            "An available source requires one successful read_source before staging."
+            + history_guidance
+            + " Cite only session-read refs. nearest_prior_refs must be histories "
+            "revealed by read_history and also in read_refs; use [] only when the "
+            "headline audit permits it or history is empty. Rejected staging or "
+            "selection consumes one turn and returns only a fixed category."
+            + reserve_notice
+        )
+    else:
+        history_guidance = (
+            " When history_index has usable headline fields and finalize_hypothesis "
+            "is exposed before any history is visible, that finalize may use "
+            "nearest_prior_refs=[]. If finalize_hypothesis is not exposed, complete "
+            "an allowed read first. The host first "
+            "validates that basis, then may return only one required_history_ref; "
+            "read and cite that exact ref before re-finalizing. Every finalize "
+            "recomputes the ref, so a pivot may require a different history."
+            if history_headline_audit_available
+            else (
+                " When history_index is nonempty, finalize is unavailable until one "
+                "successful read_history."
+            )
+        )
+        description = (
             "Take one bounded source/history research action, finalize one "
             "hypothesis through the unchanged hypothesis schema, or abstain. Indexes are "
             "complete ordinary inventories; read/search reveals bodies on demand. "
             "When source_index contains an available entry, finalize is unavailable "
-            "until one successful read_source." + history_guidance + " "
-            "In research_basis, read_refs may cite only refs actually read in this "
+            "until one successful read_source."
+            + history_guidance
+            + " In research_basis, read_refs may cite only refs actually read in this "
             "session. nearest_prior_refs may cite only refs actually revealed by "
             "read_history and must also appear in read_refs; before the first "
             "history read, use [] only when the headline-audit guidance permits it "
             "or the history inventory is empty. A rejected finalize consumes one "
             "turn and returns a fixed correction category plus, only for this "
             "audit, one existing required_history_ref." + reserve_notice
-        ),
+        )
+    return {
+        "name": "hypothesis_research_turn",
+        "description": description,
         "input_schema": {"oneOf": actions},
     }
 
@@ -227,8 +300,15 @@ class HypothesisResearchSession:
             raise HypothesisResearchContextError(
                 "hypothesis research max_read_calls cannot satisfy mandatory reads"
             )
+        candidate_mode = self._limits.max_hypothesis_candidates == 2
+        if candidate_mode and self._limits.max_turns < required_read_kinds + 3:
+            raise HypothesisResearchContextError(
+                "hypothesis research max_turns cannot satisfy mandatory reads, "
+                "two candidate slots, and selection"
+            )
         visible_sources: set[str] = set()
         visible_histories: set[str] = set()
+        candidate_bank = HypothesisCandidateBank() if candidate_mode else None
 
         for turn in range(self._limits.max_turns):
             pending_required_history_ref = _pending_required_history_ref(
@@ -249,8 +329,12 @@ class HypothesisResearchSession:
                 turn,
                 history_read_reserved=history_read_reserved,
                 history_headline_audit_available=history_headline_audit_available,
+                candidate_bank=candidate_bank,
             )
-            snapshot = _research_snapshot(
+            snapshot_builder = (
+                _candidate_research_snapshot if candidate_mode else _research_snapshot
+            )
+            snapshot = snapshot_builder(
                 context,
                 tool=bind_hypothesis_research_turn_tool(
                     full_snapshot.provider_tool,
@@ -261,6 +345,12 @@ class HypothesisResearchSession:
                     history_refs=tuple(entry["ref"] for entry in histories),
                     history_read_reserved=history_read_reserved,
                     history_headline_audit_available=history_headline_audit_available,
+                    max_hypothesis_candidates=(self._limits.max_hypothesis_candidates),
+                    staged_candidate_slots=(
+                        candidate_bank.staged_slots
+                        if candidate_bank is not None
+                        else ()
+                    ),
                 ),
                 allowed_loci=full_snapshot.allowed_change_loci,
             )
@@ -271,77 +361,40 @@ class HypothesisResearchSession:
                 ),
             )
             self._budget.record_action(raw)
-            try:
-                action, payload = _parse_action(raw)
-            except ProposalValidationError:
-                if raw.get("action") != "finalize_hypothesis":
-                    raise
-                self._budget.record_result(
-                    _finalize_tool_error("finalize_payload_invalid")
-                )
+            ordinal_error = _prevalidate_candidate_ordinal(
+                raw,
+                candidate_bank=candidate_bank,
+            )
+            if ordinal_error is not None:
+                self._budget.record_result(ordinal_error)
                 continue
-            if action == "finalize_hypothesis":
-                try:
-                    hypothesis = _parse_hypothesis(
-                        payload["hypothesis"],
-                        allowed_change_loci=full_snapshot.allowed_change_loci,
-                    )
-                except ProposalValidationError:
-                    self._budget.record_result(
-                        _finalize_tool_error("hypothesis_invalid")
-                    )
-                    continue
-                try:
-                    basis = parse_hypothesis_research_basis(
-                        payload["research_basis"],
-                        visible_refs=visible_sources | visible_histories,
-                        visible_source_refs=visible_sources,
-                        visible_history_refs=visible_histories,
-                        require_source_read=bool(readable_sources),
-                        require_nearest_prior=bool(visible_histories),
-                    )
-                except ProposalValidationError as exc:
-                    self._budget.record_result(
-                        _finalize_tool_error(_basis_validation_reason(exc))
-                    )
-                    continue
-                required_history_ref = nearest_history_headline_ref(
-                    {
-                        "hypothesis_text": hypothesis.hypothesis_text,
-                        "target_file": hypothesis.target_file,
-                        "change_locus": hypothesis.change_locus,
-                        "action": hypothesis.action,
-                        "predicted_direction": hypothesis.predicted_direction,
-                        "target_weakness": hypothesis.target_weakness,
-                        "expected_effect": hypothesis.expected_effect,
-                    },
-                    history_indexes,
+            try:
+                action, payload = _parse_action(raw, candidate_mode=candidate_mode)
+            except ProposalValidationError:
+                correction = _malformed_action_tool_error(
+                    raw,
+                    candidate_mode=candidate_mode,
                 )
-                if (
-                    required_history_ref is not None
-                    and required_history_ref not in visible_histories
-                ):
-                    self._budget.record_result(
-                        _nearest_history_audit_tool_error(required_history_ref)
-                    )
-                    continue
-                if histories and not visible_histories:
-                    self._budget.record_result(
-                        _finalize_tool_error("nearest_prior_refs_not_read_and_cited")
-                    )
-                    continue
-                if required_history_ref is not None and (
-                    required_history_ref not in basis.read_refs
-                    or required_history_ref not in basis.nearest_prior_refs
-                ):
-                    self._budget.record_result(
-                        _nearest_history_audit_tool_error(required_history_ref)
-                    )
-                    continue
-                return HypothesisResearchFinalized(
-                    hypothesis=hypothesis,
-                    research_basis=basis,
-                )
+                if correction is None:
+                    raise
+                self._budget.record_result(correction)
+                continue
+            resolution = _resolve_hypothesis_action(
+                action,
+                payload,
+                candidate_bank=candidate_bank,
+                allowed_change_loci=full_snapshot.allowed_change_loci,
+                visible_sources=visible_sources,
+                visible_histories=visible_histories,
+                readable_sources=readable_sources,
+                histories=histories,
+                history_indexes=history_indexes,
+            )
+            if isinstance(resolution, dict):
+                self._budget.record_result(resolution)
+                continue
+            if isinstance(resolution, HypothesisResearchFinalized):
+                return resolution
             if action == "abstain":
                 return HypothesisResearchAbstain(payload["reason"])
             if action == "read_source":
@@ -366,6 +419,11 @@ class HypothesisResearchSession:
                     sources if action == "search_source" else histories,
                 )
             self._budget.record_result(result)
+        if candidate_mode:
+            raise ProposalValidationError(
+                "hypothesis research turn cap exhausted without two staged "
+                "candidates and selection or abstain"
+            )
         raise ProposalValidationError(
             "hypothesis research turn cap exhausted without finalize or abstain"
         )
@@ -381,6 +439,7 @@ class HypothesisResearchSession:
         *,
         history_read_reserved: bool,
         history_headline_audit_available: bool,
+        candidate_bank: HypothesisCandidateBank | None,
     ) -> dict[str, Any]:
         state = {
             **self._budget.remaining_state(turn=turn),
@@ -405,6 +464,8 @@ class HypothesisResearchSession:
             ],
             "tool_results": deepcopy(self._budget.results),
         }
+        if candidate_bank is not None:
+            state["candidate_bank"] = candidate_bank.to_research_projection()
         return {**deepcopy(dict(compact)), "hypothesis_research": state}
 
     def _read(
@@ -583,7 +644,53 @@ def _research_snapshot(
     )
 
 
-def _parse_action(raw: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
+def _candidate_research_snapshot(
+    context: dict[str, Any], *, tool: dict[str, Any], allowed_loci: tuple[str, ...]
+) -> PromptTurnSnapshot:
+    """Render the K2-only ordinal staging and selection instructions."""
+
+    base = _research_snapshot(context, tool=tool, allowed_loci=allowed_loci)
+    audit_available = bool(
+        context["hypothesis_research"].get("history_headline_audit_available")
+    )
+    history_guidance = (
+        "When history_index has usable headline fields, no history is yet visible, "
+        "and stage_hypothesis_candidate is exposed, submit the candidate with "
+        "nearest_prior_refs=[]. If staging is not exposed, complete an allowed read "
+        "first. After the host returns required_history_ref, read it and include it "
+        "in both read_refs and nearest_prior_refs before re-staging. The host "
+        "recomputes this ref from the current candidate on every stage, so a pivot "
+        "may require a different ref. "
+        if audit_available
+        else (
+            "When history_index is nonempty, read at least one history and cite "
+            "at least one nearest prior before staging. "
+        )
+    )
+    return PromptTurnSnapshot(
+        render_kind=base.render_kind,
+        system_blocks=base.system_blocks,
+        user_prompt=(
+            "Read/search, stage the next ordinal candidate after comparing evidence, "
+            "select an existing slot only after both slots, or abstain. Do not "
+            "assume filesystem, Protocol, Decision, benchmark, or hidden holdout "
+            "access; staging never resets a budget. Cite only session-read refs. "
+            "An available source requires one read before staging; "
+            "nearest_prior_refs must be read histories also in read_refs. "
+            + history_guidance
+            + "With no history, nearest_prior_refs must be []. Observe all remaining "
+            "budgets; history_read_reserved dedicates the final shared read to "
+            "read_history."
+        ),
+        provider_tool=base.provider_tool,
+        structured_context_json=base.structured_context_json,
+        allowed_change_loci=base.allowed_change_loci,
+    )
+
+
+def _parse_action(
+    raw: Mapping[str, Any], *, candidate_mode: bool = False
+) -> tuple[str, dict[str, Any]]:
     action = raw.get("action")
     if action in {"read_source", "read_history"}:
         require_exact_keys(raw, {"action", "ref"}, label=action)
@@ -605,7 +712,7 @@ def _parse_action(raw: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
                 raw["ref"], field="ref", maximum=_MAX_REF_CHARS
             )
         return action, payload
-    if action == "finalize_hypothesis":
+    if not candidate_mode and action == "finalize_hypothesis":
         require_exact_keys(
             raw, {"action", "hypothesis", "research_basis"}, label=action
         )
@@ -619,6 +726,10 @@ def _parse_action(raw: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
             "hypothesis": dict(raw["hypothesis"]),
             "research_basis": dict(raw["research_basis"]),
         }
+    if candidate_mode:
+        candidate_action = parse_hypothesis_candidate_action(raw)
+        if candidate_action is not None:
+            return candidate_action
     if action == "abstain":
         require_exact_keys(raw, {"action", "reason"}, label=action)
         return action, {
@@ -626,9 +737,178 @@ def _parse_action(raw: Mapping[str, Any]) -> tuple[str, dict[str, Any]]:
                 raw["reason"], field="reason", maximum=_MAX_REASON_CHARS
             )
         }
-    raise ProposalValidationError(
-        "hypothesis research action must be read_source, search_source, "
-        "read_history, search_history, finalize_hypothesis, or abstain"
+    allowed = (
+        "read_source, search_source, read_history, search_history, "
+        "stage_hypothesis_candidate, select_hypothesis_candidate, or abstain"
+        if candidate_mode
+        else (
+            "read_source, search_source, read_history, search_history, "
+            "finalize_hypothesis, or abstain"
+        )
+    )
+    raise ProposalValidationError(f"hypothesis research action must be {allowed}")
+
+
+def _malformed_action_tool_error(
+    raw: Mapping[str, Any],
+    *,
+    candidate_mode: bool,
+) -> dict[str, Any] | None:
+    action = raw.get("action")
+    if not candidate_mode and action == "finalize_hypothesis":
+        return _finalize_tool_error("finalize_payload_invalid")
+    if candidate_mode and action == "stage_hypothesis_candidate":
+        return candidate_stage_tool_error("candidate_payload_invalid")
+    if candidate_mode and action == "select_hypothesis_candidate":
+        return candidate_selection_tool_error("candidate_selection_invalid")
+    return None
+
+
+def _prevalidate_candidate_ordinal(
+    raw: Mapping[str, Any],
+    *,
+    candidate_bank: HypothesisCandidateBank | None,
+) -> dict[str, Any] | None:
+    """Reject an existing or out-of-order slot before inspecting its body."""
+
+    if candidate_bank is None or raw.get("action") != "stage_hypothesis_candidate":
+        return None
+    slot = raw.get("slot")
+    if type(slot) is not int:
+        return None
+    return candidate_bank.prevalidate_stage(slot)
+
+
+def _resolve_hypothesis_action(
+    action: str,
+    payload: Mapping[str, Any],
+    *,
+    candidate_bank: HypothesisCandidateBank | None,
+    allowed_change_loci: tuple[str, ...],
+    visible_sources: set[str],
+    visible_histories: set[str],
+    readable_sources: Sequence[Mapping[str, Any]],
+    histories: Sequence[Mapping[str, Any]],
+    history_indexes: Sequence[Mapping[str, Any]],
+) -> HypothesisResearchFinalized | dict[str, Any] | None:
+    if action == "select_hypothesis_candidate":
+        if candidate_bank is None:
+            raise AssertionError("K2 selection requires a candidate bank")
+        return candidate_bank.select(payload["slot"])
+    if action not in {"finalize_hypothesis", "stage_hypothesis_candidate"}:
+        return None
+    slot = None
+    if action == "stage_hypothesis_candidate":
+        if candidate_bank is None:
+            raise AssertionError("K2 staging requires a candidate bank")
+        slot = payload["slot"]
+        ordinal_error = candidate_bank.prevalidate_stage(slot)
+        if ordinal_error is not None:
+            return ordinal_error
+    candidate = _validate_hypothesis_candidate(
+        payload,
+        action=action,
+        allowed_change_loci=allowed_change_loci,
+        visible_sources=visible_sources,
+        visible_histories=visible_histories,
+        readable_sources=readable_sources,
+        histories=histories,
+        history_indexes=history_indexes,
+    )
+    if isinstance(candidate, dict) or action == "finalize_hypothesis":
+        return candidate
+    if candidate_bank is None or slot is None:
+        raise AssertionError("K2 staging requires an ordinal candidate bank")
+    stage_error = candidate_bank.stage_validated(slot, candidate)
+    if stage_error is not None:
+        return stage_error
+    return {
+        "action": "stage_hypothesis_candidate",
+        "ok": True,
+        "slot": slot,
+        "staged_count": len(candidate_bank.staged_slots),
+    }
+
+
+def _validate_hypothesis_candidate(
+    payload: Mapping[str, Any],
+    *,
+    action: str,
+    allowed_change_loci: tuple[str, ...],
+    visible_sources: set[str],
+    visible_histories: set[str],
+    readable_sources: Sequence[Mapping[str, Any]],
+    histories: Sequence[Mapping[str, Any]],
+    history_indexes: Sequence[Mapping[str, Any]],
+) -> HypothesisResearchFinalized | dict[str, Any]:
+    """Validate one complete H while returning only provider-safe corrections."""
+
+    if not isinstance(payload.get("hypothesis"), Mapping) or not isinstance(
+        payload.get("research_basis"), Mapping
+    ):
+        reason = (
+            "candidate_payload_invalid"
+            if action == "stage_hypothesis_candidate"
+            else "finalize_payload_invalid"
+        )
+        return _candidate_validation_tool_error(action, reason)
+    try:
+        hypothesis = _parse_hypothesis(
+            payload["hypothesis"],
+            allowed_change_loci=allowed_change_loci,
+        )
+    except ProposalValidationError:
+        return _candidate_validation_tool_error(action, "hypothesis_invalid")
+    try:
+        basis = parse_hypothesis_research_basis(
+            payload["research_basis"],
+            visible_refs=visible_sources | visible_histories,
+            visible_source_refs=visible_sources,
+            visible_history_refs=visible_histories,
+            require_source_read=bool(readable_sources),
+            require_nearest_prior=bool(visible_histories),
+        )
+    except ProposalValidationError as exc:
+        return _candidate_validation_tool_error(
+            action,
+            _basis_validation_reason(exc),
+        )
+    required_history_ref = nearest_history_headline_ref(
+        {
+            "hypothesis_text": hypothesis.hypothesis_text,
+            "target_file": hypothesis.target_file,
+            "change_locus": hypothesis.change_locus,
+            "action": hypothesis.action,
+            "predicted_direction": hypothesis.predicted_direction,
+            "target_weakness": hypothesis.target_weakness,
+            "expected_effect": hypothesis.expected_effect,
+        },
+        history_indexes,
+    )
+    if (
+        required_history_ref is not None
+        and required_history_ref not in visible_histories
+    ):
+        return _nearest_history_audit_tool_error(
+            required_history_ref,
+            action=action,
+        )
+    if histories and not visible_histories:
+        return _candidate_validation_tool_error(
+            action,
+            "nearest_prior_refs_not_read_and_cited",
+        )
+    if required_history_ref is not None and (
+        required_history_ref not in basis.read_refs
+        or required_history_ref not in basis.nearest_prior_refs
+    ):
+        return _nearest_history_audit_tool_error(
+            required_history_ref,
+            action=action,
+        )
+    return HypothesisResearchFinalized(
+        hypothesis=hypothesis,
+        research_basis=basis,
     )
 
 
@@ -654,11 +934,25 @@ def _finalize_tool_error(reason: str) -> dict[str, Any]:
     return tool_error("finalize_hypothesis", reason)
 
 
-def _nearest_history_audit_tool_error(required_ref: str) -> dict[str, Any]:
+def _candidate_validation_tool_error(action: str, reason: str) -> dict[str, Any]:
+    if action == "finalize_hypothesis":
+        return _finalize_tool_error(reason)
+    if action == "stage_hypothesis_candidate":
+        return candidate_stage_tool_error(reason)
+    raise AssertionError("unknown hypothesis candidate validation action")
+
+
+def _nearest_history_audit_tool_error(
+    required_ref: str,
+    *,
+    action: str = "finalize_hypothesis",
+) -> dict[str, Any]:
     """Route one headline-ranked ref without replaying candidate or match text."""
 
+    if action not in {"finalize_hypothesis", "stage_hypothesis_candidate"}:
+        raise AssertionError("unknown nearest-history audit action")
     return {
-        "action": "finalize_hypothesis",
+        "action": action,
         "ok": False,
         "reason": "nearest_history_audit_required",
         "required_history_ref": required_ref,
@@ -674,7 +968,8 @@ def _pending_required_history_ref(
 
     for result in reversed(results):
         if (
-            result.get("action") == "finalize_hypothesis"
+            result.get("action")
+            in {"finalize_hypothesis", "stage_hypothesis_candidate"}
             and result.get("reason") == "nearest_history_audit_required"
         ):
             ref = result.get("required_history_ref")

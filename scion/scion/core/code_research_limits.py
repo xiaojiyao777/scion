@@ -44,7 +44,7 @@ class CodeResearchLimits:
             self.max_hypothesis_candidates,
             field="max_hypothesis_candidates",
             minimum=1,
-            maximum=1,
+            maximum=2,
         )
         _bounded_int(self.max_turns, field="max_turns", minimum=1, maximum=12)
         _bounded_int(
