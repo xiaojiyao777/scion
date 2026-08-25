@@ -16,12 +16,15 @@ from .models import (
     LoadedHistoryAvailable,
     LoadedHistoryUnavailable,
     ResearchEffectivenessExpectation,
+    _ArmEvaluation,
+    _ArmEvidence,
     _as_mapping,
     _fail,
     _h_key,
     _history_decision,
     _JoinedRow,
     _OriginQuality,
+    _PairKey,
     _patch_key,
     _Physical,
 )
@@ -42,6 +45,27 @@ def calculate_research_effectiveness(
     initial_cells: Sequence[Sequence[InitialCell]] | None = None,
 ) -> dict[str, Any]:
     """Calculate one M32 arm report without external reads or side effects."""
+
+    return _evaluate_arm(
+        status=status,
+        summary=summary,
+        current_history=current_history,
+        loaded_history=loaded_history,
+        expectation=expectation,
+        initial_cells=initial_cells,
+    ).report
+
+
+def _evaluate_arm(
+    *,
+    status: Mapping[str, Any],
+    summary: Mapping[str, Any],
+    current_history: Sequence[Mapping[str, Any]],
+    loaded_history: LoadedHistoryAvailable | LoadedHistoryUnavailable,
+    expectation: ResearchEffectivenessExpectation,
+    initial_cells: Sequence[Sequence[InitialCell]] | None = None,
+) -> _ArmEvaluation:
+    """Run the single arm oracle and retain only private immutable exact keys."""
 
     if not isinstance(expectation, ResearchEffectivenessExpectation):
         _fail("INVALID_EXPECTATION_TYPE")
@@ -79,14 +103,17 @@ def calculate_research_effectiveness(
     if not feasibility_available:
         limitations.append(CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE)
     if physical.incomplete or loaded is None:
-        return _report(
-            incomplete=physical.incomplete,
-            limitations=limitations,
-            physical=physical_output,
-            adjusted=_blank_adjusted(),
+        return _ArmEvaluation(
+            report=_report(
+                incomplete=physical.incomplete,
+                limitations=limitations,
+                physical=physical_output,
+                adjusted=_blank_adjusted(),
+            ),
+            evidence=_arm_evidence(physical, f_pair_keys=None),
         )
     assert loaded is not None
-    adjusted, limitation = _adjusted_output(
+    adjusted, limitation, f_pair_keys = _adjusted_output(
         physical,
         loaded,
         expectation,
@@ -94,11 +121,14 @@ def calculate_research_effectiveness(
     )
     if limitation is not None:
         limitations.append(limitation)
-    return _report(
-        incomplete=False,
-        limitations=limitations,
-        physical=physical_output,
-        adjusted=adjusted,
+    return _ArmEvaluation(
+        report=_report(
+            incomplete=False,
+            limitations=limitations,
+            physical=physical_output,
+            adjusted=adjusted,
+        ),
+        evidence=_arm_evidence(physical, f_pair_keys=f_pair_keys),
     )
 
 
@@ -185,7 +215,7 @@ def _adjusted_output(
     loaded: tuple[dict[str, Any], ...],
     expectation: ResearchEffectivenessExpectation,
     initial_cells: Sequence[Sequence[InitialCell]] | None,
-) -> tuple[dict[str, Any], str | None]:
+) -> tuple[dict[str, Any], str | None, tuple[_PairKey, ...]]:
     loaded_h = {
         key for record in loaded if (key := _h_key(record["hypothesis"])) is not None
     }
@@ -279,7 +309,32 @@ def _adjusted_output(
         "candidate_only_failure_rate": _ratio(candidate_only, expectation.a_cap),
         "e": e_value,
     }
-    return adjusted, limitation
+    f_pair_keys: list[_PairKey] = []
+    for row in f_rows:
+        assert row.h_key is not None and row.patch_key is not None
+        f_pair_keys.append((row.h_key, row.patch_key))
+    return adjusted, limitation, tuple(f_pair_keys)
+
+
+def _arm_evidence(
+    physical: _Physical,
+    *,
+    f_pair_keys: tuple[_PairKey, ...] | None,
+) -> _ArmEvidence:
+    exported_h_keys: list[tuple[Any, ...]] = []
+    pair_keys: list[_PairKey] = []
+    for row in physical.rows:
+        if row.attempt is None:
+            continue
+        if row.h_key is not None:
+            exported_h_keys.append(row.h_key)
+        if row.h_key is not None and row.patch_key is not None:
+            pair_keys.append((row.h_key, row.patch_key))
+    return _ArmEvidence(
+        exported_h_keys=tuple(exported_h_keys),
+        pair_keys=tuple(pair_keys),
+        f_pair_keys=f_pair_keys,
+    )
 
 
 def _effect_value(

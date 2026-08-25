@@ -157,6 +157,85 @@ class LoadedHistoryUnavailable:
             raise ValueError("INVALID_LOADED_HISTORY_UNAVAILABLE_REASON")
 
 
+@dataclass(frozen=True, repr=False)
+class ResearchEffectivenessArmArtifacts:
+    """One identity-bearing arm input kept outside the public comparison result."""
+
+    status: Mapping[str, Any]
+    summary: Mapping[str, Any]
+    current_history: tuple[Mapping[str, Any], ...]
+    expectation: ResearchEffectivenessExpectation
+    initial_cells: tuple[tuple[InitialCell, ...], ...] | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.status, Mapping) or not isinstance(
+            self.summary, Mapping
+        ):
+            raise TypeError("ARM_ARTIFACT_MAPPING_INVALID")
+        if type(self.current_history) is not tuple or any(
+            not isinstance(record, Mapping) for record in self.current_history
+        ):
+            raise ValueError("ARM_CURRENT_HISTORY_MUST_BE_A_TUPLE")
+        if type(self.expectation) is not ResearchEffectivenessExpectation:
+            raise ValueError("ARM_EXPECTATION_INVALID")
+        if self.initial_cells is not None and (
+            type(self.initial_cells) is not tuple
+            or any(type(cells) is not tuple for cells in self.initial_cells)
+        ):
+            raise ValueError("ARM_INITIAL_CELLS_MUST_BE_TUPLES")
+
+    def __repr__(self) -> str:
+        return "ResearchEffectivenessArmArtifacts(<redacted>)"
+
+
+@dataclass(frozen=True, repr=False)
+class MatchedResearchEffectivenessBlock:
+    """One K=1/K=2 block sharing exactly one loaded-history basis."""
+
+    k1: ResearchEffectivenessArmArtifacts
+    k2: ResearchEffectivenessArmArtifacts
+    loaded_history: LoadedHistoryAvailable | LoadedHistoryUnavailable
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.k1) is not ResearchEffectivenessArmArtifacts
+            or type(self.k2) is not ResearchEffectivenessArmArtifacts
+        ):
+            raise ValueError("MATCHED_BLOCK_ARM_INVALID")
+        if type(self.loaded_history) not in {
+            LoadedHistoryAvailable,
+            LoadedHistoryUnavailable,
+        }:
+            raise ValueError("MATCHED_BLOCK_HISTORY_INVALID")
+
+    def __repr__(self) -> str:
+        return "MatchedResearchEffectivenessBlock(<redacted>)"
+
+
+_HKey = tuple[Any, ...]
+_PatchKey = tuple[tuple[str, str, str], ...]
+_PairKey = tuple[_HKey, _PatchKey]
+
+
+@dataclass(frozen=True, repr=False)
+class _ArmEvidence:
+    exported_h_keys: tuple[_HKey, ...]
+    pair_keys: tuple[_PairKey, ...]
+    f_pair_keys: tuple[_PairKey, ...] | None
+
+    def __repr__(self) -> str:
+        return "_ArmEvidence(<redacted>)"
+
+
+@dataclass(frozen=True, repr=False)
+class _ArmEvaluation:
+    report: dict[str, Any]
+    evidence: _ArmEvidence
+
+    def __repr__(self) -> str:
+        return "_ArmEvaluation(<redacted>)"
+
+
 @dataclass(frozen=True)
 class _Attempt:
     round_num: int

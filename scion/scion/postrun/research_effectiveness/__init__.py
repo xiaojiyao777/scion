@@ -1,5 +1,6 @@
 """Public API for provider- and solver-free M32 effectiveness scoring."""
 
+from .comparison import compare_five_block_research_effectiveness
 from .endpoints import calculate_research_effectiveness
 from .models import (
     BLOCK_UNSCORABLE,
@@ -10,6 +11,8 @@ from .models import (
     InitialCell,
     LoadedHistoryAvailable,
     LoadedHistoryUnavailable,
+    MatchedResearchEffectivenessBlock,
+    ResearchEffectivenessArmArtifacts,
     ResearchEffectivenessExpectation,
     ResearchEffectivenessInputError,
 )
@@ -23,7 +26,10 @@ __all__ = [
     "InitialCell",
     "LoadedHistoryAvailable",
     "LoadedHistoryUnavailable",
+    "MatchedResearchEffectivenessBlock",
+    "ResearchEffectivenessArmArtifacts",
     "ResearchEffectivenessExpectation",
     "ResearchEffectivenessInputError",
     "calculate_research_effectiveness",
+    "compare_five_block_research_effectiveness",
 ]
