@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 import signal
 import threading
-from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import FrozenInstanceError, replace
 from types import SimpleNamespace
 
 import pytest
+
 from scion.cli.commands.init_run import (
     _campaign_signal_handlers,
     _CampaignOuterHardwall,
@@ -87,6 +89,19 @@ def test_h_and_c_share_one_provider_call_cap_without_extra_dispatch(
 
     assert client.calls == ["hypothesis", "code"]
     assert budget.used == 2
+    assert budget.snapshot().to_primitive() == {
+        "budget_admitted": 2,
+        "cap": 2,
+        "remaining": 0,
+        "by_request_kind": {
+            "hypothesis": 1,
+            "hypothesis_research_turn": 0,
+            "code": 1,
+            "code_research_turn": 0,
+            "code_research_finalize": 0,
+            "other": 0,
+        },
+    }
     assert raised.value.request_kind == "hypothesis"
     assert tuple((tmp_path / "traces").glob("*.json")) == traces_before_exhaustion
 
@@ -110,6 +125,129 @@ def test_none_cap_preserves_unbounded_legacy_dispatch(tmp_path) -> None:
 
     assert client.calls == ["hypothesis"] * 3
     assert budget.used == 3
+    snapshot = budget.snapshot().to_primitive()
+    assert snapshot["cap"] is None
+    assert snapshot["remaining"] is None
+    assert snapshot["budget_admitted"] == 3
+    assert sum(snapshot["by_request_kind"].values()) == 3
+
+
+def test_budget_snapshot_has_five_known_kinds_plus_public_safe_other() -> None:
+    budget = ProviderCallBudget(7)
+    for request_kind in (
+        "hypothesis",
+        "hypothesis_research_turn",
+        "code",
+        "code_research_turn",
+        "code_research_finalize",
+        "provider-private-kind",
+    ):
+        budget.consume(request_kind=request_kind)
+
+    snapshot = budget.snapshot()
+    primitive = snapshot.to_primitive()
+
+    assert primitive == {
+        "budget_admitted": 6,
+        "cap": 7,
+        "remaining": 1,
+        "by_request_kind": {
+            "hypothesis": 1,
+            "hypothesis_research_turn": 1,
+            "code": 1,
+            "code_research_turn": 1,
+            "code_research_finalize": 1,
+            "other": 1,
+        },
+    }
+    assert sum(primitive["by_request_kind"].values()) == primitive["budget_admitted"]
+    with pytest.raises(FrozenInstanceError):
+        snapshot.budget_admitted = 99  # type: ignore[misc]
+    primitive["by_request_kind"]["hypothesis"] = 99
+    assert dict(snapshot.by_request_kind)["hypothesis"] == 1
+
+
+def test_budget_reservation_counts_provider_failure_and_interruption(
+    tmp_path,
+) -> None:
+    class TerminalClient:
+        def call_with_tool(
+            self,
+            _prompt,
+            _tool,
+            _model,
+            *,
+            system_blocks,
+            request_kind,
+        ):
+            del system_blocks
+            if request_kind == "code_research_turn":
+                raise RuntimeError("provider failed after dispatch")
+            raise KeyboardInterrupt("provider interrupted after dispatch")
+
+    budget = ProviderCallBudget(2)
+    caller = ProviderCaller(
+        TerminalClient(),
+        "fake-model",
+        trace_dir=str(tmp_path / "traces"),
+        provider_call_budget=budget,
+    )
+
+    with pytest.raises(RuntimeError, match="provider failed"):
+        caller.call(
+            request_kind="code_research_turn",
+            tool={},
+            snapshot=_snapshot("code"),
+        )
+    with pytest.raises(KeyboardInterrupt, match="provider interrupted"):
+        caller.call(
+            request_kind="code_research_finalize",
+            tool={},
+            snapshot=_snapshot("code"),
+        )
+
+    assert budget.snapshot().to_primitive() == {
+        "budget_admitted": 2,
+        "cap": 2,
+        "remaining": 0,
+        "by_request_kind": {
+            "hypothesis": 0,
+            "hypothesis_research_turn": 0,
+            "code": 0,
+            "code_research_turn": 1,
+            "code_research_finalize": 1,
+            "other": 0,
+        },
+    }
+
+
+def test_budget_concurrent_reservation_and_kind_counting_are_atomic() -> None:
+    cap = 257
+    budget = ProviderCallBudget(cap)
+    request_kinds = (
+        "hypothesis",
+        "hypothesis_research_turn",
+        "code",
+        "code_research_turn",
+        "code_research_finalize",
+        "unknown-kind",
+    )
+
+    def reserve(index: int) -> bool:
+        try:
+            budget.consume(request_kind=request_kinds[index % len(request_kinds)])
+        except ProviderCallCapExhausted:
+            return False
+        return True
+
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        admitted = list(executor.map(reserve, range(cap * 2)))
+
+    primitive = budget.snapshot().to_primitive()
+    assert sum(admitted) == cap
+    assert primitive["budget_admitted"] == cap
+    assert primitive["remaining"] == 0
+    assert sum(primitive["by_request_kind"].values()) == cap
 
 
 def test_pipeline_projects_cap_exhaustion_as_typed_resource_terminal() -> None:

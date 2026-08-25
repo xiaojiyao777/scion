@@ -9,6 +9,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+_KNOWN_PROVIDER_REQUEST_KINDS = (
+    "hypothesis",
+    "hypothesis_research_turn",
+    "code",
+    "code_research_turn",
+    "code_research_finalize",
+)
+_PROVIDER_REQUEST_KINDS = (*_KNOWN_PROVIDER_REQUEST_KINDS, "other")
+
 
 class ProviderCallCapExhausted(RuntimeError):
     """Raised before a provider request that would exceed the declared cap."""
@@ -83,6 +92,26 @@ def write_resource_envelope(campaign_dir: str, value: Any) -> Path | None:
     return path
 
 
+@dataclass(frozen=True)
+class ProviderCallBudgetSnapshot:
+    """One immutable, public-safe view of budget-admitted provider calls."""
+
+    cap: int | None
+    budget_admitted: int
+    remaining: int | None
+    by_request_kind: tuple[tuple[str, int], ...]
+
+    def to_primitive(self) -> dict[str, Any]:
+        """Return a fresh JSON-safe projection without provider-authored data."""
+
+        return {
+            "budget_admitted": self.budget_admitted,
+            "cap": self.cap,
+            "remaining": self.remaining,
+            "by_request_kind": dict(self.by_request_kind),
+        }
+
+
 class ProviderCallBudget:
     """One thread-safe counter shared by all proposal calls in an invocation."""
 
@@ -90,6 +119,7 @@ class ProviderCallBudget:
         _validate_optional_positive_int(cap, field="provider_call_cap")
         self._cap = cap
         self._used = 0
+        self._by_request_kind = {kind: 0 for kind in _PROVIDER_REQUEST_KINDS}
         self._lock = threading.Lock()
 
     @property
@@ -104,6 +134,12 @@ class ProviderCallBudget:
     def consume(self, *, request_kind: str) -> None:
         """Reserve one actual provider request or fail before client dispatch."""
 
+        kind = (
+            request_kind
+            if type(request_kind) is str
+            and request_kind in _KNOWN_PROVIDER_REQUEST_KINDS
+            else "other"
+        )
         with self._lock:
             if self._cap is not None and self._used >= self._cap:
                 raise ProviderCallCapExhausted(
@@ -112,6 +148,22 @@ class ProviderCallBudget:
                     request_kind=request_kind,
                 )
             self._used += 1
+            self._by_request_kind[kind] += 1
+
+    def snapshot(self) -> ProviderCallBudgetSnapshot:
+        """Atomically freeze the public accounting view."""
+
+        with self._lock:
+            remaining = None if self._cap is None else max(0, self._cap - self._used)
+            return ProviderCallBudgetSnapshot(
+                cap=self._cap,
+                budget_admitted=self._used,
+                remaining=remaining,
+                by_request_kind=tuple(
+                    (kind, self._by_request_kind[kind])
+                    for kind in _PROVIDER_REQUEST_KINDS
+                ),
+            )
 
 
 def _validate_optional_positive_int(value: Any, *, field: str) -> None:
@@ -125,6 +177,7 @@ def _validate_optional_positive_int(value: Any, *, field: str) -> None:
 
 __all__ = [
     "ProviderCallBudget",
+    "ProviderCallBudgetSnapshot",
     "ProviderCallCapExhausted",
     "ResourceEnvelope",
     "normalize_resource_envelope",

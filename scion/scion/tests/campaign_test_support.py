@@ -243,6 +243,8 @@ def _campaign(
     experiment_protocol: Any = None,
     verification_gate: Any = None,
     qualification_only: Any = None,
+    resource_envelope: Any = None,
+    code_research_limits: Any = None,
 ) -> CampaignManager:
     # Create minimal champion code directory
     code_dir = tmp_path / "champion_code"
@@ -277,6 +279,8 @@ def _campaign(
         experiment_protocol=protocol,
         adapter=SimpleNamespace(spec=spec),
         qualification_only=qualification_only,
+        resource_envelope=resource_envelope,
+        code_research_limits=code_research_limits,
     )
 
 

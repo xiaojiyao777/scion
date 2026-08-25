@@ -319,9 +319,12 @@ class CampaignManager:
         measurement_readiness = reduced_measurement_readiness_payload(
             getattr(protocol_config, "measurement_readiness", None)
         )
+        bounded_research = self._code_research_limits is not None
         state = {
             "campaign_id": self._campaign_id,
-            "proposal_runtime_mode": "direct_v3",
+            "proposal_runtime_mode": (
+                "bounded_research_v1" if bounded_research else "direct_v3"
+            ),
             "n_experiments": self._n_experiments,
             "screened_experiments": screened_experiments,
             "total_rounds": self._round_num,
@@ -333,6 +336,10 @@ class CampaignManager:
             "balance_exhausted": self._balance_exhausted,
             "branches": branch_rows,
         }
+        if bounded_research:
+            state["proposal_runtime"] = {
+                "provider_calls": self._provider_call_budget.snapshot().to_primitive()
+            }
         if self._qualification_only_config is not None:
             state["campaign_mode"] = "qualification_only"
         if measurement_readiness is not None:

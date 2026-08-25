@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+from scion.core.code_research_limits import CodeResearchLimits
+from scion.core.resource_envelope import ResourceEnvelope
 from scion.core.scheduler import Scheduler
 from scion.proposal.llm_client import LLMProviderError
 
@@ -17,6 +19,7 @@ class TestCampaignBasics:
         assert state["n_active_branches"] == 0
         assert state["champion_version"] == 1
         assert state["proposal_runtime_mode"] == "direct_v3"
+        assert "proposal_runtime" not in state
         assert "campaign_id" in state
 
     def test_run_writes_status_json(self, tmp_path):
@@ -34,6 +37,7 @@ class TestCampaignBasics:
         status = json.loads(status_path.read_text())
         assert status["campaign_id"] == cm.get_state()["campaign_id"]
         assert status["proposal_runtime_mode"] == "direct_v3"
+        assert "proposal_runtime" not in status
         assert status["total_rounds"] >= 1
         assert "last_result" in status
 
@@ -64,7 +68,10 @@ class TestCampaignBasics:
         assert summary["run_result"] == status["run_result"]
         assert summary["n_active_branches"] == 1
         assert summary["branches"][0]["state"] == branch.state.value
+        assert status["proposal_runtime_mode"] == "direct_v3"
         assert summary["proposal_runtime_mode"] == "direct_v3"
+        assert "proposal_runtime" not in status
+        assert "proposal_runtime" not in summary
         assert "formal_candidate_artifact_count" not in summary
         assert not (tmp_path / "campaign" / "artifacts" / "formal_candidates").exists()
         assert "final_evidence_refs" not in summary
@@ -150,6 +157,61 @@ class TestCampaignBasics:
         assert run_result["failure_categories"] == {"blocked_infra": 1}
         assert run_result["scheduled_calls"] == 1
         assert summary["run_result"] == run_result
+
+    def test_bounded_provider_failure_projects_one_terminal_runtime_snapshot(
+        self,
+        tmp_path,
+    ):
+        class FailingBoundedLLM:
+            model = "fake-bounded-model"
+
+            def call_with_tool(
+                self,
+                prompt,
+                tool,
+                model=None,
+                system_blocks=None,
+                request_kind=None,
+            ):
+                del prompt, tool, model, system_blocks, request_kind
+                raise LLMProviderError("bounded provider failure")
+
+        cm = _campaign(
+            tmp_path,
+            llm_client=FailingBoundedLLM(),
+            code_research_limits=CodeResearchLimits(max_turns=1),
+            resource_envelope=ResourceEnvelope(provider_call_cap=2),
+        )
+
+        result = cm.run(requested_rounds=1)
+
+        state = cm.get_state(run_result=result)
+        status = json.loads((tmp_path / "campaign" / "status.json").read_text())
+        summary = json.loads(
+            (tmp_path / "campaign" / "campaign_summary.json").read_text()
+        )
+        expected_runtime = {
+            "provider_calls": {
+                "budget_admitted": 1,
+                "cap": 2,
+                "remaining": 1,
+                "by_request_kind": {
+                    "hypothesis": 0,
+                    "hypothesis_research_turn": 1,
+                    "code": 0,
+                    "code_research_turn": 0,
+                    "code_research_finalize": 0,
+                    "other": 0,
+                },
+            }
+        }
+        assert result.stop_reason == "execution_blocked_infra"
+        assert state["proposal_runtime_mode"] == "bounded_research_v1"
+        assert status["proposal_runtime_mode"] == "bounded_research_v1"
+        assert summary["proposal_runtime_mode"] == "bounded_research_v1"
+        assert state["proposal_runtime"] == expected_runtime
+        assert status["proposal_runtime"] == expected_runtime
+        assert summary["proposal_runtime"] == expected_runtime
 
     def test_should_stop_false_initially(self, tmp_path):
         cm = _campaign(tmp_path)
