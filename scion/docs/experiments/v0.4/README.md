@@ -8,7 +8,7 @@ referenced, not copied into development prompts.
 
 ## Designs
 
-- [CVRP M32 H-candidate-bank research-effectiveness design, default-off K=2 and single-arm offline scoring implemented with no population or live authority](v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md)
+- [CVRP M32 H-candidate-bank research-effectiveness design, default-off K=2 and pure single-arm/exact-five-block offline scoring implemented with no population or live authority](v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md)
 
 ## Runs
 

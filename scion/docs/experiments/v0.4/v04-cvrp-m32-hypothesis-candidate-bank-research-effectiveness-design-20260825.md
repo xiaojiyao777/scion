@@ -1,6 +1,6 @@
 # CVRP M32 hypothesis-candidate-bank research-effectiveness design
 
-Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / NO_POPULATION_SELECTION / NO_LIVE_AUTHORITY**
+Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / NO_POPULATION_SELECTION / NO_LIVE_AUTHORITY**
 
 Date: `2026-08-25`
 
@@ -18,6 +18,9 @@ Attempt-telemetry carrier:
 
 Single-arm offline-scoring carrier:
 `bda346e96aec47b49e7078533ba781a47a84771a`
+
+Exact-five-block offline-comparison carrier:
+`3e97243d96df1082246d06c1440c0e2c5480fe28`
 
 This is a measurement and future-study design, not a live preregistration. It
 does not select, rank or materialize a case, seed, salt, population, campaign
@@ -77,9 +80,16 @@ paired-effect endpoints. Its output contains only counts, ratios and fixed
 availability/status values. It does not emit H, patch, path, identity, hash,
 case or seed material.
 
-These carriers implement and synthetically audit K=2, telemetry and single-arm
-measurement. They do not select a population, execute a matched experiment or
-show that K=2 improves CVRP research.
+Carrier `3e97243d96df1082246d06c1440c0e2c5480fe28` adds the pure
+exact-five-block comparator. It applies the same single-arm oracle to all ten
+supplied arms, computes the five frozen joint signs and the cross-block
+replay/`U_F` guard inside one private in-memory boundary, and returns aggregate
+counts, ratios, signs and availability values only. It emits no GO token and
+creates no population, command or launch authority.
+
+These carriers implement and synthetically audit K=2, telemetry, single-arm
+measurement and exact-five-block comparison. They do not select a population,
+execute a matched experiment or show that K=2 improves CVRP research.
 
 ## Provider- and solver-free measurement baseline
 
@@ -227,22 +237,22 @@ Provider-/solver-free tests now prove:
   terminal projections;
 - invalid payloads, duplicate staging, attempted overwrite, a terminal result
   that is neither typed abstention nor valid selection, transport interruption
-  and every resource boundary fail closed; and
+  and every resource boundary fail closed;
 - synthetic postrun fixtures reproduce every implemented single-arm endpoint
   and reject double-count, replay-denominator, missing-row and
-  candidate/shared-failure mutations.
+  candidate/shared-failure mutations; and
+- the exact-five-block comparator applies that same single-arm oracle to all ten
+  supplied arms, fails closed on incomplete or unscorable blocks, and emits
+  only the frozen aggregate block signs and cross-block guards.
 
-The remaining offline gate is an exact-five-block comparator that applies the
-same single-arm oracle to all ten arms and computes the frozen five signs,
-cross-block replay rates and `U_F` guard inside one private in-memory boundary.
-The body-free single-arm reports are intentionally insufficient to reconstruct
-cross-block replay or `U_F`; the comparator must receive the already-decoded
-ordinary H and ordered-patch evidence for all ten arms at once, compare those
-values only transiently, and never emit an identity, hash, digest, path or
-body. It must emit aggregates only and receive independent red-team review
-before any study preparation. Passing either offline gate establishes
-instrumentation and non-persistence only; it is not research-effectiveness
-evidence.
+The exact-five-block comparator now supplies the previously missing offline
+reducer. The body-free single-arm reports remain intentionally insufficient to
+reconstruct cross-block replay or `U_F`; the comparator receives already-decoded
+ordinary H and ordered-patch evidence for all ten supplied arms at once,
+compares those values only transiently, and never emits an identity, hash,
+digest, path or body. Its implementation and independent review establish only
+offline accounting, claim fencing and non-persistence; all executed evidence is
+synthetic. They are not a real matched study or research-effectiveness evidence.
 
 ## Future matched development study
 
@@ -298,19 +308,24 @@ other arm's outcomes or any earlier M32 block outcome.
 ### Avoiding a success-cost confound
 
 A candidate that earns `expand_screening` must not consume resources that make
-later proposal attempts unreachable only in the more successful arm. Before a
-live preregistration, one of two shapes must be reviewed and frozen:
+later proposal attempts unreachable only in the more successful arm. Two
+candidate shapes were considered:
 
 1. an initial-development diagnostic boundary that records the unchanged
    Protocol and Decision result and stops without dispatching expansion; or
 2. an envelope that reserves the full worst-case initial-plus-expanded cost for
    every possible formal candidate in every attempt.
 
-The first shape changes no Decision value and grants no promotion authority;
-it is only an outer study stop. The second preserves ordinary expansion but
-must prove that every declared attempt remains reachable. A stage cap that
-lets strong candidates crowd out later attempts is not an acceptable matched
-design.
+M32 selects the first shape. The next production prerequisite is a default-off
+initial-development diagnostic boundary: after initial Protocol and the
+unchanged Decision are durably recorded, it parks and clears that candidate and
+continues the next declared attempt from fresh B0. It must never dispatch
+expanded screening, validation or frozen stages, and a favorable initial result
+must not reduce later attempt opportunity. This boundary is not implemented by
+the comparator carrier and grants no promotion authority. The second shape is
+not the M32 design; adopting it would require a new pre-outcome review. A stage
+or resource cap that lets strong candidates crowd out later attempts is not an
+acceptable matched design.
 
 ### Terminal and replacement rules
 
@@ -394,9 +409,15 @@ preregistration and explicit authorization.
 
 ## Remaining gates before any live preregistration
 
-- implement and review the pure offline exact-five-block comparator and its
-  cross-block replay/`U_F` reducer without changing downstream authority;
-- choose and review the success-cost control shape;
+- implement and independently review the default-off initial-development
+  diagnostic boundary, including fresh-B0 retirement after every durable
+  initial Protocol/Decision and zero expanded or held-out dispatch;
+- implement and independently review a safe ordinal-only initial-cell producer
+  for paired-effect scoring, without emitting case, seed, path, H, patch or raw
+  body material;
+- implement a provider-/solver-free strict study-root audit that proves every
+  declared attempt remained reachable and invokes the existing single-arm and
+  exact-five-block oracles without creating downstream authority;
 - freeze exact numeric resources from the final implementation and population
   metadata;
 - freeze an outcome-blind five-block population and arm order without exposing

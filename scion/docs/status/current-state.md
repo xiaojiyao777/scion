@@ -697,16 +697,20 @@ The current CVRP work is research-effectiveness M32, not another qualification.
 Carrier `25b78037` implements a default-off, shared-budget, session-local K=2 H
 draft bank; `b0d81ddb` adds count-only proposal-attempt telemetry; and
 `bda346e9` adds a pure provider-/solver-free single-arm effectiveness scorer.
-All three have only implementation and synthetic-test evidence. They provide no
-matched CVRP result, population selection or live authority, and no K=2
-research benefit has yet been observed. The next safe task is the pure offline
-exact-five-block comparator with its cross-block replay/`U_F` guard. Only after
-that comparator is independently reviewed may design-only study preparation
-begin; success-cost shape, exact resources, outcome-blind population,
-preregistration and independent reviews remain separate gates before any live
-authorization. No later H/C-reflection, multi-agent or qualification rung opens
-unless five matched blocks improve both efficiency and the frozen
-development-quality endpoint without evidence leakage.
+Carrier `3e97243d` adds the pure exact-five-block comparator and its cross-block
+replay/`U_F` reducer. All four have only implementation and synthetic-test
+evidence. They provide no matched CVRP result, population selection or live
+authority, and no K=2 research benefit has yet been observed. The selected
+success-cost shape is an initial-development diagnostic boundary that durably
+records unchanged initial Protocol/Decision, then parks and clears the candidate
+and continues from fresh B0 without expanded or held-out dispatch. That
+default-off production boundary, an ordinal-only safe initial-cell producer and
+a strict study-root audit must be implemented and independently reviewed before
+exact resources or an outcome-blind population are frozen. Preregistration and
+independent reviews remain separate gates before any live authorization. No
+later H/C-reflection, multi-agent or qualification rung opens unless five
+matched blocks improve both efficiency and the frozen development-quality
+endpoint without evidence leakage.
 
 The B30 safe selector saw 2,163 tracked paths, filtered 524, skipped all 18
 controlled `.vrp`/`.sol` blobs before read, allowlisted 506, found zero unknown

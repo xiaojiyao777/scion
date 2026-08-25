@@ -724,16 +724,18 @@ unchanged.
 The provider-/solver-free metric contract, M30 calibration row, future
 five-block matched-study gate, freshness rule and claim boundary are frozen in
 the [M32 design](docs/experiments/v0.4/v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md).
-The default-off K=2 implementation, count-only attempt telemetry and pure
-single-arm offline scorer now exist, but no population selection, matched-study
-result or live authority exists. Carrier `25b78037` implements the private
+The default-off K=2 implementation, count-only attempt telemetry, pure
+single-arm offline scorer and pure exact-five-block comparator now exist, but
+no population selection, matched-study result or live authority exists. Carrier
+`25b78037` implements the private
 ordinal K=2 H bank under the existing shared session budget and exports only
 the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
 provider-delta and H/C boundary counts. Carrier `bda346e9` adds a pure
 provider-/solver-free single-arm scorer that closes current-history, replay,
 formal-quality and paired-effect accounting without emitting H, patch, path,
-identity or hash material. These are implementation and synthetic-audit
-results, not evidence that K=2 improves CVRP research.
+identity or hash material. Carrier `3e97243d` adds the pure exact-five-block
+comparator and its cross-block replay/`U_F` reducer. These are implementation
+and synthetic-audit results, not evidence that K=2 improves CVRP research.
 
 - [x] Close the M30 terminal documentation and monitoring-incident record on a
   clean docs-only commit before changing research behavior. Preserve the M30
@@ -782,12 +784,27 @@ results, not evidence that K=2 improves CVRP research.
   physical counts separate from replay-adjusted `D_H/F/G/T/Q/E`, preserve the
   M30 incomplete/history-unavailable calibration boundary, and emit no
   hypothesis, patch, path, identity, hash, case or seed material.
-- [ ] Implement and independently red-team the pure offline exact-five-block
+- [x] Implement and independently red-team the pure offline exact-five-block
   matched comparator. It must call the same single-arm oracle for all ten arms,
   compute the five frozen joint signs plus cross-block H/pair replay and `U_F`
   inside one private in-memory boundary, and return only aggregate counts,
   ratios, signs and fixed availability codes. It creates no GO token, command,
-  population or launch authority.
+  population or launch authority. Carrier `3e97243d` provides this
+  provider-/solver-free comparator with synthetic-only evidence.
+- [ ] Implement and independently red-team a default-off initial-development
+  diagnostic boundary before selecting any study population. After each initial
+  Protocol and unchanged Decision are durably recorded, the boundary must park
+  and clear that candidate and continue from fresh B0 without dispatching
+  expanded screening, validation or frozen stages. A favorable initial result
+  may not consume later proposal-attempt opportunity, and every incomplete or
+  resource terminal remains inconclusive rather than being imputed as a
+  scientific negative.
+- [ ] Implement and independently red-team the safe initial-cell producer and
+  strict study-root audit before any population selection. The producer may
+  project only ordinal paired candidate/B0 values from complete initial
+  Protocol evidence, with no case, seed, path, H, patch or raw body; the audit
+  must prove every declared attempt remained reachable and call the existing
+  single-arm and exact-five-block oracles without adding downstream authority.
 - [ ] Preregister repeated matched `K=1` versus `K=2` development comparisons
   under the same total provider, attempt, solver and hardwall envelopes. Use
   outcome-blind ordinary development populations and hold the current
