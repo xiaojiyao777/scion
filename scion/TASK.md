@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Last updated: 2026-08-24*
+*Last updated: 2026-08-25*
 
 ## Authority and objective
 
@@ -21,7 +21,13 @@ The active objective is retained solver improvement:
 - CVRP is incomplete: no exact candidate has yet completed screening,
   validation and frozen holdout, received deterministic `PROMOTE`, and then
   independently retained an improvement over B0 without feasibility or fleet
-  regression.
+  regression. Scion has produced testable CVRP hypotheses, patches and several
+  complete initial or expanded development screens, but it has not yet
+  demonstrated effective CVRP research under that acceptance standard: no
+  autonomous candidate has completed and survived the held-out funnel, recent
+  qualification attempts have not produced a new candidate eligible to
+  enter it, and too much proposal budget is still spent on repeated, rejected
+  or unfinalized directions per formal candidate.
 
 A valid negative experiment is scientific evidence, not task completion.
 
@@ -315,9 +321,13 @@ The exact design and claim boundary are in the
   single rerun explicitly authorized by the user on the fresh `rerun1` root
   under the unchanged M9 scientific/resource/stop/claim envelope. Any fix or
   preflight failure stops; no third attempt is authorized.
-- [ ] After the development result, select any future formal population by a
-  separately reviewed outcome-blind rule. Keep it unavailable to the Agent and
-  require a new resource envelope and explicit authorization.
+- **SUPERSEDED BY LATER POPULATION-SPECIFIC PREREGISTRATION:** the M9
+  future-population placeholder is no longer a live task or authority.
+  M17-M25 and M30 used their own reviewed fresh/frozen or outcome-blind rules;
+  M26-M28 deliberately reused outcome-exposed development banks under
+  separately frozen seen-bank claim boundaries. Every later formal population
+  remains governed by its own reviewed rule, resource envelope and explicit
+  authorization; no M9 population authority remains live.
 - [x] Run real H and C, current Contract and Verification, problem Protocol,
   Safe Features and deterministic Decision. Provider retry, repair and hidden
   host steering remain zero.
@@ -654,7 +664,7 @@ The exact design is in the
   chains are durably recorded before their mutable workspace/H/patch/hash is
   cleared and the lineage is parked; a positive branch stops before validation
   as `ready_for_postrun_qualification_audit`, not as already qualified.
-- [x] **PREPARED / NOT AUTHORIZED / NOT LAUNCHED:** freeze M30 as the next CVRP
+- [x] Freeze M30 as the next CVRP
   qualification attempt on a metadata-selected fresh-at-start development
   bank. Its first H receives eight ordinary observations plus 42 native history
   rows; six H/C proposal attempts, two verified chains, four screening stages,
@@ -669,13 +679,26 @@ The exact design is in the
   [M30 preregistration](docs/experiments/v0.4/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md).
   M31 exists only as a conditional outcome-blind rule and count-only
   feasibility proof; no M31 case/seed identity is materialized.
-- [ ] **NEXT / REQUIRES CLEAN COMMITTED PREP, TWO RED TEAMS AND EXPLICIT USER
-  AUTHORIZATION:** run the frozen M30 command exactly once. `queue_validate`
-  alone is not success: only exact initial `6/6`, expanded `24/24`, zero
-  failures/fleet regressions, the frozen Decision chain and the sole public
-  exact carrier/source audit may qualify a later independently authorized M31
-  prep. Exit zero is ambiguous by design; exits `20/21/22/124` remain typed
-  infra/resource/incomplete/hardwall terminals and never qualify.
+- [x] **TERMINAL / STOPPED RESOURCE_EXHAUSTED / VALID_INCOMPLETE / NOT
+  QUALIFIED:** execute M30 exactly once from its frozen carrier. It used three
+  proposal attempts, one Verification-passing chain and one formal initial
+  screen. The sole candidate passed Contract, Verification and canary and
+  completed `6/6` valid initial pairs with zero failed-pair classes, but case
+  win/loss/tie `0/2/1`, pair win/loss/tie `1/3/2`, median delta `-5.5` and CI
+  `[-6.5, 0.0]` failed case quality; Decision continued exploration and
+  qualification-only parking
+  removed its executable branch authority. The second H abstained, and the
+  third stopped at its eight-turn H-session cap as
+  `HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED`. The invocation exited `21` after
+  25/60 provider calls and 16 serial solver subprocesses; expanded screening,
+  validation, frozen, promotion and retained comparison were all zero. The
+  frozen postrun auditor returned `QUALIFICATION_CARRIER_UNAVAILABLE`, so the
+  conditional M31 rule expired without identity, preparation, launch, retry or
+  resume authority. A post-terminal monitoring mistake opened SQLite in
+  readonly mode; the only observed metadata change was to `scion.db-shm` after
+  the frozen audit. Cached metadata showed no post-terminal mtime change to the
+  main database or WAL, and the scientific JSON/JSONL/metrics were untouched.
+  No database hash was taken, and nothing was repaired or rerun.
 
 Acceptance: an enabled attempt may spend finite Creative turns but exports at
 most one H and one C. Contract, Verification, Protocol, Safe Features and
@@ -687,6 +710,112 @@ retained comparator incompleteness terminates
 `completed_incomplete / INCOMPLETE_COMPARATOR_EVIDENCE` at
 `stop_stage=retained`; it is not sent to Decision and is never reported as
 `PROMOTED_NOT_RETAINED`.
+
+### M32 - Improve CVRP proposal research effectiveness before another qualification
+
+The next CVRP task is not another qualification run and not a broad multi-agent
+rewrite. M10-M30 show that the deterministic Contract, Verification, Protocol,
+Decision and evidence boundaries can execute and fail closed, while autonomous
+proposal research still yields too few distinct, implementable formal
+candidates per provider call. M32 therefore improves the tainted Creative
+research boundary first and leaves every downstream scientific authority
+unchanged.
+
+- [x] Close the M30 terminal documentation and monitoring-incident record on a
+  clean docs-only commit before changing research behavior. Preserve the M30
+  root as consumed; do not retry, resume or reinterpret its incomplete result.
+- [ ] Correct proposal telemetry so bounded H/C research is not reported as
+  `direct_v3`, and durably project safe attempt-level provider-turn,
+  H-candidate and selected-candidate counts without exposing draft bodies.
+- [ ] Freeze baseline research-throughput and candidate-quality measures before
+  implementation:
+  finalized H per provider call, distinct non-replayed H per attempt, C-ready
+  rate, formal candidate per attempt/provider call, exact H/patch replay rate
+  and initial gate/expand rate, paired-effect distribution and candidate-only
+  runtime-failure rate. The exact throughput and quality endpoints and their
+  repeated-block acceptance rule must be fixed before outcomes. These are
+  development diagnostics, never promotion features or Decision inputs.
+- [ ] Add bounded session-local H candidate slots and safe counters without a
+  new durable ledger, identity, hash, receipt or authority. All slots share the
+  existing turn/read/search/transcript and campaign provider budgets; creating
+  a second slot may not reset or multiply any allowance. Public artifacts may
+  expose only bounded counts and the single exported H.
+- [ ] Add the strict optional configuration contract
+  `max_hypothesis_candidates`: absent or `1` preserves the current bounded H
+  path, explicit `2` enables M32, all other values fail closed, and `2` is the
+  M32 hard maximum. Persist the effective mode and used budget. Any future live
+  use must also declare proposal-attempt, shared provider-call and outer
+  hardwall caps.
+- [ ] Implement the `K=2` H draft bank inside one
+  `HypothesisResearchSession`. The provider may stage two complete structured H
+  values in session-local ordinal slots and finally choose one existing slot;
+  the host may validate structure and exact slot equality but may not rank
+  mechanisms, targets or expected quality. Only the chosen H is exported to
+  formal Hypothesis Contract. The unchosen slot disappears with the tainted
+  session and never enters StepRecord, lineage, research history, workspace or
+  candidate authority.
+- [ ] Add provider-/solver-free red-team coverage for shared-budget accounting,
+  slot immutability, deterministic ordering, unchosen-draft non-persistence,
+  transport/resource interruption and zero validation/frozen leakage. Defaults
+  must preserve the current direct and bounded paths byte-for-byte where their
+  public schema is unchanged.
+- [ ] Preregister repeated matched `K=1` versus `K=2` development comparisons
+  under the same total provider, attempt, solver and hardwall envelopes. Use
+  outcome-blind ordinary development populations and hold the current
+  cross-attempt feedback behavior constant. K=2 advances only after repeated
+  matched blocks improve distinct formal-candidate yield per unit budget and
+  meet the predeclared candidate-quality rule without increasing replay or
+  candidate-only failure. One favorable candidate or throughput uplift alone
+  is not an advance and cannot produce a validation, generalization or CVRP
+  acceptance claim.
+
+Acceptance: the minimal successful M32 result is a provider-/solver-free
+audited, default-off K=2 H session plus repeated preregistered matched-control
+development evidence under the same total resource envelope as K=1 that
+improves both distinct formal-candidate yield per provider call and the frozen
+development-quality endpoint without hidden host selection, draft persistence
+or held-out leakage. Throughput-only uplift is research-throughput evidence,
+not effective-research evidence. Failure or no repeatable joint uplift freezes
+a valid negative result and blocks the next architectural rung. A repeated
+joint uplift is bounded development research-effectiveness evidence only.
+CVRP acceptance still requires a later exact autonomous candidate to complete
+screening, validation and frozen holdout, receive deterministic `PROMOTE`, and
+survive an independent retained-B0 comparison without feasibility or fleet
+regression.
+
+### Conditional CVRP research path after M32
+
+These are later conditional modules, not M32 completion tasks and not current
+launch authority:
+
+- **M33 - Cross-attempt typed reflection:** only after M32 passes, replace the
+  provider-authored C abandonment prose available to later H with a small
+  closed set of hypothesis-level obstruction codes. The current attempt still
+  terminates; the next H is a new attempt. Compare default-off reflection
+  against the K=2 baseline in repeated matched blocks with the same resources,
+  measuring obstruction recurrence, C-ready/formal yield and the same frozen
+  quality endpoints. No same-attempt retry or repair is permitted.
+- **M34 - One bounded same-attempt `H -> C -> H` edge:** consider only if M33
+  improves both efficiency and quality and remaining failures are specifically
+  attributable to H/C implementability mismatch rather than weak algorithms.
+  First amend the architecture authority to distinguish provisional drafts
+  from exported H/C, permit at most one typed revision request, discard the old
+  C draft, rerun H binding from a clean snapshot and charge all H/C work to one
+  cumulative budget. It may not be introduced as an internal retry loop.
+- **M35 - Multi-agent role ablation:** consider researcher/critic/implementer
+  roles only if M32, M33 and a controlled M34 experiment each demonstrate their
+  preregistered joint benefit, yet their proposed candidates remain materially
+  correlated. A failed or no-uplift earlier rung blocks M35. Every output
+  remains tainted, no agent sees
+  validation/frozen/held-out evidence, any Creative selector may choose only a
+  session-local ordinal without rewriting its candidate, and Contract,
+  Verification, Protocol, Safe Features and Decision remain deterministic host
+  authorities.
+- **M36 - New CVRP qualification:** prepare only after a prior rung demonstrates
+  repeatable joint research-effectiveness uplift without budget multiplication
+  or evidence leakage. It requires a new label, fresh outcome-blind selector,
+  independent reviews and separate explicit one-shot authorization; M31 and
+  all expired M29/M30 conditional authority remain unusable.
 
 - [ ] Publish the final full regression record.
 - [ ] Write one cross-problem report separating framework behavior,
@@ -782,3 +911,15 @@ expanded, validation, frozen, promotion or retained stage ran, and no branch
 reached `READY_VALIDATE`. The candidate-independent M29 selector therefore
 expired without materialization and supplies no launch authority. CVRP
 acceptance remains unmet; the M28 root is preserved and consumed.
+
+M30 is also terminal `stopped / execution_resource_exhausted /
+valid_incomplete` after its sole authorized qualification-only invocation. It
+used 25/60 provider calls across three proposal attempts but produced only one
+verified formal candidate. That candidate completed a clean `6/6` initial
+screen and failed case quality; no expanded or held-out stage ran. One later H
+abstained and the final H exhausted its eight-turn session budget. The public
+postrun audit returned `QUALIFICATION_CARRIER_UNAVAILABLE`, and M31 expired
+without materialization. The result strengthens the framework accounting and
+fail-closed evidence, but it does not establish effective CVRP research: Scion
+has not yet produced an autonomous CVRP candidate that qualifies for, let
+alone passes and survives, the validation/frozen/retained acceptance chain.

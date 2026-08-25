@@ -1,15 +1,18 @@
 # CVRP M30 fresh-development qualification-only autonomous continuation preregistration
 
-Status: **PREPARED / NOT AUTHORIZED / NOT LAUNCHED**
+Status: **TERMINAL / STOPPED RESOURCE_EXHAUSTED / VALID_INCOMPLETE / NOT QUALIFIED / CONSUMED**
 
 Campaign label:
 `v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-20260824`
 
-Future campaign root:
+Campaign root:
 `/home/clawd/research/scion-experiments/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-20260824`
 
 Runtime/source base:
 `5d282ea8e9133e0146c47588f2310c9bd2493e50`
+
+Preparation and live carrier:
+`15f69121b83f31aa77c4a6d3cebc3bf1ba6ebaae`
 
 That commit finalizes the reviewed problem-neutral qualification auditor on
 auditor carrier `2cc306e0388ebf47a2e6926c64f38c9db3dcb2d3`, itself based on the
@@ -18,7 +21,9 @@ Its public positive authority is the single
 `audit_qualification_campaign(...)` entry point; the artifacts core is private,
 and the tracked M30 expectation JSON supplies every M30-specific fact.
 Preparation did not call a provider, execute a solver, create the campaign
-root, rank an M31 identity or run the live command below. An early replay
+root, rank an M31 identity or run the live command below. The reviewed command
+was later authorized and consumed exactly once; this document supplies no
+retry, resume or successor authority. An early replay
 inherited the legacy wide seed scan and read 18 tracked controlled synthetic
 `.vrp`/`.sol` bodies, including names assigned to synthetic
 validation/frozen controls. This was a real preparation-process boundary
@@ -26,10 +31,57 @@ violation and is not described as a near-miss. The final safe scanner excludes
 every raw path before `git show`; an independently completed nonraw-only scan
 produced the same 2,962-value union, 82 domain exclusions, five selected seeds
 and exact digests, so the selection, label and salts did not change. No
-external CVRPLIB corpus body or reserved heldout body was opened. The eventual
-preparation commit and two independent red-team reviews are mandatory
-prelaunch gates; this document itself grants no launch, retry, resume or
-successor authority.
+external CVRPLIB corpus body or reserved heldout body was opened. The
+preparation commit and two independent red-team reviews passed before launch;
+they do not grant any later launch, retry, resume or successor authority.
+
+## Terminal result
+
+The frozen command ran exactly once from the preparation/live carrier and
+exited `21`. The preserved public terminal is
+`stopped / execution_resource_exhausted`, with `run_validity=valid_incomplete`,
+qualification disposition `incomplete` and last outcome
+`resource_exhausted / HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED` at
+`proposal_hypothesis`. Durable proposal-attempt, Verification-passing-chain
+and formal-screening-stage counters are `3/1/1`; initial/expanded screening is
+`1/0`, and screening/validation/frozen is `1/0/0`. Scheduled calls, ordinary
+steps and ordinary history are exactly three, with outcomes one evaluated,
+one research-rejected and one resource-exhausted, and zero unknown outcomes.
+
+The sole formal candidate passed Hypothesis Contract, Patch Contract,
+Verification and the normal canary. Initial screening completed all `6/6`
+pairs valid with every failed-pair class and fleet regression zero. Case
+win/loss/tie was `0/2/1`, pair win/loss/tie was `1/3/2`, median total-distance
+delta was `-5.5` and CI was `[-6.5, 0.0]`. Protocol returned
+`fail / SCREENING_FAIL_CASE_QUALITY`; Decision returned `continue_explore`,
+after which qualification-only cleanup removed its mutable
+workspace/H/patch/hash authority and parked the lineage. It did not expand.
+
+The second proposal attempt ended
+`research_rejected / HYPOTHESIS_RESEARCH_ABSTAINED` at
+`proposal_hypothesis`. The third exhausted the local eight-turn H-session cap
+as the terminal resource outcome above. The invocation used 25/60 shared
+provider calls: 19 H turns, five C research turns and one independent C final
+decision. Exactly 16 solver subprocesses ran serially: two Verification, two
+canary and twelve initial-screening subjects. Expanded screening, validation,
+frozen, promotion and retained comparison were all zero; no branch reached
+`READY_VALIDATE`.
+
+The frozen public postrun command returned
+`QUALIFICATION_CARRIER_UNAVAILABLE`, so no Layer-A/B/C success token exists and
+the conditional M31 rule expired without materialization. The actual root
+failed the public terminal Layer-A gate; the auditor did not enter 99-file
+Layer-C source materialization. The campaign root is preserved and consumed
+without retry, resume, branch selection or workspace repair.
+
+After the CLI had naturally exited and the frozen postrun audit had already
+returned unavailable, a read-only monitor mistakenly invoked `sqlite3
+-readonly` on the terminal database. The only observed metadata change was to
+`scion.db-shm`. Cached metadata showed no post-terminal mtime change
+to the main database or WAL; no database hash was taken, and the monitor did
+not repair, delete, retry or rerun anything. This is an operational monitoring
+boundary incident, not campaign evidence. The public status, summary, ordinary
+history and metric artifact were not changed.
 
 ## Scientific question
 
@@ -115,8 +167,8 @@ ordinary same-campaign records.
 Every otherwise acceptable H still must read current source, read and cite the
 candidate-specific lexical top-1 usable history ref in both basis arrays, and
 state its falsification condition. The nearest-history ranker does not judge
-novelty or choose a mechanism. A future provider-safe null-H row may enter the
-general history inventory/read requirement, but has no hypothesis headline and
+novelty or choose a mechanism. A provider-safe null-H row may enter the general
+history inventory/read requirement, but has no hypothesis headline and
 cannot enter nearest-headline ranking. No null-H sentinel patch, protocol or
 decision body is written to the three public status/summary/history surfaces.
 
@@ -360,15 +412,13 @@ Only Layers A, B and C together produce
 `QUALIFIED_FOR_NEW_FIXED_CANDIDATE_FUNNEL`. Any missing/multiple/mismatch produces
 `QUALIFICATION_CARRIER_UNAVAILABLE`; the M30 root remains ordinary development
 evidence, and no person may choose a branch, repair/reapply a patch, substitute
-a workspace or materialize M31. A later, separately authorized M31 prep may
-copy only the exact 99-file B0 and qualified candidate projections to external
-read-only bundles, verify full equality again, and derive every changed-file
-and selected-surface argument mechanically.
+a workspace or materialize M31. The actual M30 root failed Layer A and returned
+the unavailable token, so the conditional successor described here expired.
 
 The M30 replay makes this predicate executable without a provider, solver or
 real raw body. It constructs an isolated synthetic Git repository, synthetic
 campaign root, SQLite lineage database and 99-regular-file B0/candidate pair,
-then calls the same sole public campaign API used for a future real terminal.
+then calls the same sole public campaign API used for the actual terminal.
 Its two positive shapes cover a nonqualifying other-branch formal screen and a
 candidate-negative canary with `Decision.ABANDON`; both include a null-H
 preformal row and one nonmatching historical workspace. M30-specific mutants
@@ -377,16 +427,21 @@ branches. The public auditor additionally enforces the closed three-state
 terminal grammar and branch-hash shape, the closed preformal outcome taxonomy,
 one-to-one Step/history/lineage accounting, and ordered-deduplicated
 Decision/Protocol reason authority; hidden candidate evidence or a second
-qualifying chain fails closed. The final generic auditor suite collects 136 tests; the
-auditor/carrier combined gate is 149 tests and the exact generic postcommit
-gate is 181 tests including qualification-only runtime coverage. Those tests
-also cover durable counters, all
+qualifying chain fails closed. The final generic auditor suite collects 136
+tests; the auditor/carrier combined gate is 149 tests and the exact generic
+postcommit gate is 181 tests including qualification-only runtime coverage.
+Those tests also cover durable counters, all
 formal-bank rows, both expansion shapes, source policy, opaque byte equality,
 canonical Git authority and stable private-copy SQLite/WAL/SHM reads. This
 synthetic replay tests audit logic but is not M30 algorithm evidence and does
-not replace the future audit on the actual terminal.
+not replace the audit on the actual terminal. That actual audit ran once and
+returned unavailable at Layer A.
 
 ## Conditional M31 rule, not a materialized experiment
+
+This rule is now expired because M30 did not qualify. It remains below only as
+the frozen count-only historical rule; it supplies no identity, ranking,
+preparation, launch, recovery or authorization.
 
 The conditional label is
 `v04-cvrp-m31-fixed-candidate-full-funnel-20260824`. Its independent salts are:
@@ -396,7 +451,7 @@ The conditional label is
 
 No M31 case or seed was hashed, ranked, printed or written during M30
 preparation. Only feasibility counts and a candidate-independent rule are
-frozen. If M30 fails any qualification layer, this rule expires.
+frozen. M30 failed the qualification boundary, so this rule expired.
 
 After removing the six M30 cases from the 18-case source universe, exact
 stratum counts are:
@@ -404,22 +459,25 @@ stratum counts are:
 `A20-100=1, B20-100=1, P10-19=1, P20-100=1, X101-200=1,
 X201-350=4, X351-700=2, X701-1001=1`.
 
-If separately authorized after M30 qualification, rank within strata by the
-same canonical case tuple with the independent M31 salt. Select one screening
+The expired rule specified that, only after M30 qualification and separate
+authorization, a future preparation would rank within strata by the same
+canonical case tuple with the independent M31 salt and select one screening
 case in order from A20--100, B20--100, P20--100, X101--200, X201--350 and
-X351--700. Only after conceptually removing those six, select retained cases
-in order from P10--19, X201--350 and X351--700. Count-only feasibility leaves
-three unused cases. The P retained stratum is **P10--19**, not P101--200.
+X351--700. Only after conceptually removing those six would it have selected
+retained cases in order from P10--19, X201--350 and X351--700. Count-only
+feasibility left three unused cases. The P retained stratum was **P10--19**,
+not P101--200.
 
-For seeds, use the same final-base scan and independent closed domain
-`[60000, 79999]`. Exactly 84 tracked values are excluded and 19,916 remain,
-enough for seven, but no rank was computed. On later materialization only, the
-first four would be screening, the next two retained and the seventh strict
-canary. M24 validation/frozen cases and seeds remain the fixed heldout stages.
+For seeds, the expired rule would have used the same final-base scan and
+independent closed domain `[60000, 79999]`. Exactly 84 tracked values were
+excluded and 19,916 remained, enough for seven, but no rank was computed. Only
+after the never-reached materialization boundary would the first four have
+been screening, the next two retained and the seventh strict canary. M24
+validation/frozen cases and seeds would have remained the fixed heldout stages.
 
-The future fixed-candidate driver remains tracked
+The expired rule named the tracked fixed-candidate driver
 `scion/run_fixed_candidate_funnel.py`, with provider/H/C/patch generation,
-Contract and Verification all zero. Its conditional maximum is 86 serial
+Contract and Verification all zero. Its historical conditional maximum was 86 serial
 solver subprocesses: strict canary 2, screening 48, validation 12, frozen 12
 and retained 12. With the correct P10--19 30-second band, retained nominal is
 `2*2*(30+60+90)=720s`; total nominal is `4820s`, communicate-guarded accounting
@@ -479,33 +537,42 @@ safety, not permission to add attempts, calls, chains, stages or retries.
 No M30 result is independent discovery, globally case-unseen evidence,
 mechanism causality, validation, frozen success, promotion, retained
 improvement, production readiness, global CVRP generalization or v0.4
-completion. A positive result only unlocks separately reviewed M31 prep.
+completion. Under the frozen rule, only a positive result could have unlocked
+separately reviewed M31 preparation; the actual result did not trigger it.
 
-## Prelaunch gates
+The actual result supports only the framework claims above and one exact
+fresh-at-start development-bank negative: the single formal candidate did not
+pass the preregistered initial case-quality gate. Three attempts producing one
+formal candidate within 25 provider calls also motivate a separate bounded
+research-effectiveness investigation. They do not establish a causal defect or
+benefit in H/C structure, nearest-history routing or any algorithm mechanism,
+and they do not authorize M31 or another qualification.
 
-Before any authorization, all of the following must hold:
+## Historical prelaunch gates
+
+Before the now-consumed authorization, all of the following had to hold:
 
 - exact runtime/source base `5d282ea8e9133e0146c47588f2310c9bd2493e50`,
-  with no production-source difference in the eventual prep commit and exact
+  with no production-source difference in the preparation commit and exact
   parentage from that base;
-- the tracked strict expectation JSON loads through the production duplicate-
-  key-free schema and names that exact base, source package, caps, banks,
+- the tracked strict expectation JSON loaded through the production duplicate-
+  key-free schema and named that exact base, source package, caps, banks,
   decisions, zero metrics and heldout prohibitions;
-- the final prep is one committed, clean tracked tree and both independent
-  science/privacy and runtime/resource red teams report no P0/P1;
-- the M30 root is absent, M28 root is preserved, and the tracked M30 history
-  copy is byte-equal to M28 ordinary history with exactly 3 lines/54,790 bytes;
-- all controls load through production config types and replay tests reproduce
+- the final preparation was one committed, clean tracked tree and both
+  independent science/privacy and runtime/resource red teams reported no P0/P1;
+- the M30 root was absent, M28 root was preserved, and the tracked M30 history
+  copy was byte-equal to M28 ordinary history with exactly 3 lines/54,790 bytes;
+- all controls loaded through production config types and replay tests reproduced
   the exact selector digests, 8+42 context, caps, resource arithmetic, source
   count and M31 count-only feasibility;
 - selected M30 development case/solution companions and required runtime tools
-  pass the separately reviewed preflight, while validation/frozen/M31 bodies
-  remain unopened before their authorized stage; and
-- no concurrent Scion/candidate process exists, the provider model metadata is
-  checked only after authorization, and the campaign command below is run at
-  most once.
+  passed the separately reviewed preflight, while validation/frozen/M31 bodies
+  remained unopened before their authorized stage; and
+- no concurrent Scion/candidate process existed, the provider model metadata
+  was checked only after authorization, and the campaign command below ran
+  exactly once.
 
-Provider-/solver-free preparation validation is:
+Provider-/solver-free preparation validation was:
 
 ```bash
 cd /home/clawd/research/or-autoresearch-agent
@@ -523,22 +590,22 @@ env PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=/dev/null \
 git diff --check
 ```
 
-These tests may inspect tracked metadata and ordinary public artifacts. They
-must not call the provider, invoke a solver, open validation/frozen/M31 raw
-bodies or create the campaign root.
+These tests inspected tracked metadata and ordinary public artifacts. They did
+not call the provider, invoke a solver, open validation/frozen/M31 raw bodies
+or create the campaign root.
 
 ## Frozen one-shot command
 
-The authorization record must supply the exact reviewed 40-hex preparation
-commit as `AUTHORIZED_M30_PREP_SHA`. It is not inferred from whatever happens
-to be checked out. The exact future shell below validates that commit and all
-input/runtime boundaries before any proxy request. No default may substitute
-for the three qualification limits. Its outer shell performs only the required
-authorization-value expansion before absolute `/usr/bin/env -i` starts
+The consumed authorization record supplied the exact reviewed 40-hex
+preparation commit as `AUTHORIZED_M30_PREP_SHA`; it was not inferred from the
+checkout. The exact frozen shell below validated that commit and all
+input/runtime boundaries before any proxy request. No default substituted for
+the three qualification limits. Its outer shell performed only the required
+authorization-value expansion before absolute `/usr/bin/env -i` started
 `/bin/bash --noprofile --norc`; inherited `GIT_*`, exported shell functions,
-aliases and startup-file configuration therefore cannot enter the authority
-body. Every process/Git producer is checked explicitly; ignored importables
-outside `__pycache__` fail closed, while `PYTHONPYCACHEPREFIX=/dev/null` keeps
+aliases and startup-file configuration therefore could not enter the authority
+body. Every process/Git producer was checked explicitly; ignored importables
+outside `__pycache__` failed closed, while `PYTHONPYCACHEPREFIX=/dev/null` kept
 legacy local cache files outside import authority:
 
 ```bash
@@ -981,23 +1048,26 @@ written to an artifact. Exact exit meanings are: `0` for either the positive
 qualification boundary or a completed valid bounded negative, `20` for
 infrastructure failure, `21` for resource exhaustion, `22` for an incomplete
 qualification terminal and `124` for the outer hardwall. Exit zero alone is
-never qualification. This command is not run during preparation. It has no
-automatic retry, resume, replacement root, validation/frozen tail, M31
-materialization, distribution, deployment, Trust/Hash or v0.4 completion
-authority.
+never qualification. This command was not run during preparation; it later ran
+once under exact explicit authorization, and that one-shot authority is now
+consumed. It has no automatic retry, resume, replacement root,
+validation/frozen tail, M31 materialization, distribution, deployment,
+Trust/Hash or v0.4 completion authority. The actual postrun result was
+unavailable.
 
 ## Frozen postrun qualification command
 
-After the one-shot process is fully terminal, the only command permitted to
-name a qualified carrier is this provider-/solver-free read-only audit. A
-negative/incomplete root fails before source materialization. A positive Layer
-A boundary permits the narrow opaque 99-file comparison described above. The
-same authorization record must supply the exact reviewed preparation commit;
-the wrapper uses the same clean-shell bootstrap, then rechecks that commit, its
+After the one-shot process became fully terminal, the only command permitted
+to name a qualified carrier was this provider-/solver-free read-only audit. A
+negative/incomplete root failed before source materialization; only a positive
+Layer-A boundary would have permitted the narrow opaque 99-file comparison
+described above. The same authorization record supplied the exact reviewed
+preparation commit. The wrapper used the same clean-shell bootstrap, then
+rechecked that commit, its
 sole B30 parent, the clean/scoped-untracked tree, terminal process/root boundary,
 strict-expectation bytes and auditor module origins both before and after the
-public audit. Its success stdout is withheld until those post-audit checks also
-pass:
+public audit. Its success stdout was withheld until those post-audit checks
+also passed:
 
 ```bash
 AUTHORIZED_M30_PREP_SHA="${AUTHORIZED_M30_PREP_SHA:?authorization must name exact reviewed prep commit}"

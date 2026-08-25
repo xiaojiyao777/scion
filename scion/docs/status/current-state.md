@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Last updated: 2026-08-24*
+*Last updated: 2026-08-25*
 
 Read [`../../TASK.md`](../../TASK.md) first. The sole architecture authority is
 [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md).
@@ -16,8 +16,10 @@ retained `v1 -> v2`.
 
 CVRP remains open. B0/v1 is champion. No candidate has completed the declared
 screening -> validation -> frozen -> deterministic promotion -> independent B0
-retention chain. A valid negative observation or partial stage does not close
-the task.
+retention chain. Scion can produce testable hypotheses, patches and development
+screens, but it has not yet demonstrated effective CVRP research under that
+acceptance standard. A valid negative observation or partial stage does not
+close the task.
 
 ## Current boundary
 
@@ -84,6 +86,13 @@ lifecycles.
   expanded or later stage ran, no carrier qualified and conditional M29 was not
   materialized. Its exact terminal and claim boundary remain in its
   [preregistration](../experiments/v0.4/v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md).
+- M30 is terminal `stopped / execution_resource_exhausted / valid_incomplete`.
+  Its only formal candidate completed `6/6` valid initial pairs but failed the
+  preregistered initial case-quality gate; two later H attempts produced no
+  formal chain. No expanded or held-out stage ran, the public carrier audit
+  returned `QUALIFICATION_CARRIER_UNAVAILABLE`, and conditional M31 expired.
+  Its exact terminal and claim boundary remain in its
+  [preregistration](../experiments/v0.4/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md).
 
 ## Active work
 
@@ -659,25 +668,38 @@ bounds EXPLORE H/C proposal attempts, Verification-passing chains and formal
 screening stages; legal exhaustion is completed/valid negative, while a
 positive branch stops before heldout dispatch for postrun audit.
 
-M30 is prepared but neither authorized nor launched. Its outcome-blind
-metadata selector fixes a six-case fresh-at-start development bank, four
-screening seeds and a distinct normal canary seed at the runtime base. The
-first H context is eight observations plus 42 native histories. The exact live
-limits are six proposal attempts, two verified chains, four formal screening
-stages, 60 provider calls and a 28,000-second hardwall. Qualification requires
-one exact `modify` branch to complete initial `6/6` and expanded `24/24` with
-zero failures/fleet regressions and then pass the sole public provider-/solver-
-free auditor using the tracked strict M30 expectation. Only exact token
-`QUALIFIED_FOR_NEW_FIXED_CANDIDATE_FUNNEL` after durable all-formal-bank,
-candidate-carrier, B0 reconstruction and complete path/byte checks is a
-qualification result. The auditor terminal gate precedes history, read-only
-private-copy SQLite/WAL/SHM and opaque base materialization. Its final generic
-suite collected 136 tests; combined auditor/carrier was 149 and the exact
-generic postcommit gate was 181 including qualification-only runtime coverage.
-M31 remains an unmaterialized conditional selector rule; its
-identities may be computed only after M30 qualification and separate
-authorization. See the
-[M30 preregistration](../experiments/v0.4/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md).
+M30 is terminal after its sole authorized qualification-only invocation from
+carrier `15f69121b83f31aa77c4a6d3cebc3bf1ba6ebaae`. It stopped
+`execution_resource_exhausted / valid_incomplete` with exit `21`, qualification
+disposition `incomplete`, proposal/verified-chain/formal-stage counters
+`3/1/1`, initial/expanded counts `1/0`, and screening/validation/frozen counts
+`1/0/0`. The sole formal candidate passed Contract, Verification and canary
+and completed all `6/6` initial pairs valid with every failed-pair class and
+fleet regression zero. Case win/loss/tie `0/2/1`, pair win/loss/tie `1/3/2`,
+median delta `-5.5` and CI `[-6.5, 0.0]` nevertheless failed case quality;
+Decision continued exploration and qualification-only cleanup parked the
+chain. A second H abstained, and a third stopped at the eight-turn H-session
+cap as `HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED`. The run used 25/60 provider
+calls and 16 serial solver subprocesses; expanded screening and every held-out
+stage remained zero.
+
+The sole public postrun audit returned `QUALIFICATION_CARRIER_UNAVAILABLE`.
+M31 therefore expired without identity, preparation, launch, retry or resume
+authority, and the preserved M30 root is consumed. After the CLI had naturally
+exited and the frozen postrun audit had already failed, a monitoring command
+opened SQLite with `-readonly`; the only observed metadata change was to
+`scion.db-shm`. Cached metadata showed no post-terminal mtime change to the main
+database or WAL. No database hash was taken, nothing was repaired or rerun,
+and the public scientific JSON/JSONL/metrics were not changed. See the
+[M30 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md).
+
+The next CVRP work is research-effectiveness M32, not another qualification.
+First correct the misleading `proposal_runtime_mode=direct_v3` projection for
+bounded H/C sessions and freeze throughput plus candidate-quality baselines.
+Then evaluate a default-off, shared-budget, session-local `K=2` H draft bank
+against `K=1`; no later H/C-reflection, multi-agent or qualification rung opens
+unless repeated matched blocks improve both efficiency and the preregistered
+development-quality endpoint without evidence leakage.
 
 The B30 safe selector saw 2,163 tracked paths, filtered 524, skipped all 18
 controlled `.vrp`/`.sol` blobs before read, allowlisted 506, found zero unknown
