@@ -37,8 +37,15 @@ class CodeResearchLimits:
     max_test_result_chars: int = 20_000
     max_tool_result_chars: int = 200_000
     max_transcript_chars: int = 800_000
+    max_hypothesis_candidates: int = 1
 
     def __post_init__(self) -> None:
+        _bounded_int(
+            self.max_hypothesis_candidates,
+            field="max_hypothesis_candidates",
+            minimum=1,
+            maximum=1,
+        )
         _bounded_int(self.max_turns, field="max_turns", minimum=1, maximum=12)
         _bounded_int(
             self.max_read_calls,
@@ -126,8 +133,7 @@ class CodeResearchLimits:
         )
         if self.max_test_total_timeout_sec < self.max_test_suite_timeout_sec:
             raise ValueError(
-                "max_test_total_timeout_sec must be at least "
-                "max_test_suite_timeout_sec"
+                "max_test_total_timeout_sec must be at least max_test_suite_timeout_sec"
             )
         _bounded_int(
             self.max_test_files,
@@ -162,6 +168,7 @@ class CodeResearchLimits:
 
     def to_primitive(self) -> dict[str, int]:
         return {
+            "max_hypothesis_candidates": self.max_hypothesis_candidates,
             "max_turns": self.max_turns,
             "max_read_calls": self.max_read_calls,
             "max_search_calls": self.max_search_calls,
@@ -193,6 +200,7 @@ def normalize_code_research_limits(value: Any) -> CodeResearchLimits:
     if not isinstance(value, Mapping):
         raise TypeError("code research limits must be a mapping")
     allowed = {
+        "max_hypothesis_candidates",
         "max_turns",
         "max_read_calls",
         "max_search_calls",
