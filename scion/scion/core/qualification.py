@@ -4,11 +4,16 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 QUALIFICATION_BOUNDARY_REACHED = "qualification_boundary_reached"
 QUALIFICATION_NOT_REACHED = "qualification_not_reached"
 QUALIFICATION_READY_DISPOSITION = "ready_for_postrun_qualification_audit"
+
+QualificationDevelopmentBoundaryMode = Literal[
+    "qualification_v1",
+    "initial_screening_only_v1",
+]
 
 
 @dataclass(frozen=True)
@@ -18,6 +23,7 @@ class QualificationOnlyConfig:
     max_proposal_attempts: int = 4
     max_verified_candidate_chains: int = 2
     max_formal_screening_stages: int = 4
+    development_boundary_mode: QualificationDevelopmentBoundaryMode = "qualification_v1"
 
     def __post_init__(self) -> None:
         for name in (
@@ -28,6 +34,27 @@ class QualificationOnlyConfig:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ValueError(f"qualification-only {name} must be a positive int")
+        if type(self.development_boundary_mode) is not str or (
+            self.development_boundary_mode
+            not in {"qualification_v1", "initial_screening_only_v1"}
+        ):
+            raise ValueError(
+                "qualification-only development_boundary_mode must be "
+                "qualification_v1 or initial_screening_only_v1"
+            )
+        if self.initial_screening_only and not (
+            self.max_proposal_attempts
+            == self.max_verified_candidate_chains
+            == self.max_formal_screening_stages
+        ):
+            raise ValueError(
+                "initial_screening_only requires all qualification caps to equal "
+                "max_proposal_attempts"
+            )
+
+    @property
+    def initial_screening_only(self) -> bool:
+        return self.development_boundary_mode == "initial_screening_only_v1"
 
     def to_projection(self) -> dict[str, int]:
         return {
@@ -57,16 +84,23 @@ class QualificationProgress:
             disposition = "incomplete"
         else:
             disposition = "pending"
-        return {
+        value: dict[str, Any] = {
             "mode": "qualification_only",
-            "limits": self.config.to_projection(),
-            "proposal_attempts": self.proposal_attempts,
-            "verified_candidate_chains": self.verified_candidate_chains,
-            "formal_screening_stages": self.formal_screening_stages,
-            "initial_screening_stages": self.initial_screening_stages,
-            "expanded_screening_stages": self.expanded_screening_stages,
-            "disposition": disposition,
         }
+        if self.config.initial_screening_only:
+            value["development_boundary_mode"] = self.config.development_boundary_mode
+        value.update(
+            {
+                "limits": self.config.to_projection(),
+                "proposal_attempts": self.proposal_attempts,
+                "verified_candidate_chains": self.verified_candidate_chains,
+                "formal_screening_stages": self.formal_screening_stages,
+                "initial_screening_stages": self.initial_screening_stages,
+                "expanded_screening_stages": self.expanded_screening_stages,
+                "disposition": disposition,
+            }
+        )
+        return value
 
 
 class QualificationProposalBudgetExhausted(RuntimeError):
@@ -110,8 +144,7 @@ class QualificationRuntime:
             and self.proposal_attempts < self.config.max_proposal_attempts
             and len(self.verified_candidate_branch_ids)
             < self.config.max_verified_candidate_chains
-            and self.formal_screening_stages
-            < self.config.max_formal_screening_stages
+            and self.formal_screening_stages < self.config.max_formal_screening_stages
         )
 
     def reserve_proposal_attempt(self) -> None:
@@ -122,11 +155,12 @@ class QualificationRuntime:
         self.proposal_attempts += 1
 
     def authorize_expansion(self, branch_id: str) -> bool:
+        if self.config.initial_screening_only:
+            return False
         return (
             bool(branch_id)
             and branch_id == self.pending_expansion_branch_id
-            and self.formal_screening_stages
-            < self.config.max_formal_screening_stages
+            and self.formal_screening_stages < self.config.max_formal_screening_stages
         )
 
     def record_verified_candidate(self, branch_id: str) -> None:
@@ -142,12 +176,11 @@ class QualificationRuntime:
         self.verified_candidate_branch_ids.add(branch_id)
 
     def record_screening_stage(self, branch_id: str, *, expanded: bool) -> None:
+        if self.config.initial_screening_only and expanded:
+            raise ValueError("initial_screening_only forbids expanded screening stages")
         if branch_id not in self.verified_candidate_branch_ids:
             raise ValueError("qualification screening candidate was not verified")
-        if (
-            self.formal_screening_stages
-            >= self.config.max_formal_screening_stages
-        ):
+        if self.formal_screening_stages >= self.config.max_formal_screening_stages:
             raise ValueError("qualification formal screening stage cap exceeded")
         previous = self.candidate_screening_stage_counts.get(branch_id, 0)
         expected = 1 if expanded else 0
@@ -162,9 +195,27 @@ class QualificationRuntime:
             self.initial_screening_stages += 1
 
     def request_expansion(self, branch_id: str) -> None:
+        if self.config.initial_screening_only:
+            raise ValueError("initial_screening_only forbids expansion requests")
         if self.candidate_screening_stage_counts.get(branch_id) != 1:
             raise ValueError("qualification expansion requires one initial screen")
         self.pending_expansion_branch_id = branch_id
+
+    def validate_initial_screening_retirement(self, branch_id: str) -> None:
+        """Require one exact initial Protocol stage before study retirement."""
+
+        if not self.config.initial_screening_only:
+            raise ValueError("initial screening retirement mode is not enabled")
+        if self.pending_expansion_branch_id is not None:
+            raise ValueError(
+                "initial screening retirement cannot have a pending expansion"
+            )
+        if branch_id not in self.verified_candidate_branch_ids or (
+            self.candidate_screening_stage_counts.get(branch_id) != 1
+        ):
+            raise ValueError(
+                "initial screening retirement requires one verified initial stage"
+            )
 
     def validate_chain_retirement(self, branch_id: str) -> None:
         """Require a pending expansion to retire only its exact branch."""
@@ -183,10 +234,7 @@ class QualificationRuntime:
     def normal_stop_before_dispatch(self) -> tuple[str, str | None] | None:
         pending = self.pending_expansion_branch_id
         if pending is not None:
-            if (
-                self.formal_screening_stages
-                >= self.config.max_formal_screening_stages
-            ):
+            if self.formal_screening_stages >= self.config.max_formal_screening_stages:
                 return QUALIFICATION_NOT_REACHED, pending
             return None
         if not self.can_start_proposal():
@@ -211,6 +259,7 @@ def normalize_qualification_only_config(
         "max_proposal_attempts",
         "max_verified_candidate_chains",
         "max_formal_screening_stages",
+        "development_boundary_mode",
     }
     unknown = set(value) - allowed
     if unknown:

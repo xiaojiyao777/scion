@@ -12,7 +12,7 @@ import threading
 from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from scion.contract.gate import ContractGate
 from scion.core.async_weight_opt import (
@@ -24,6 +24,7 @@ from scion.core.branch_step_runner import BranchStepRunner
 from scion.core.campaign_loop import CampaignLoop
 from scion.core.code_development import CodeDevelopmentEvaluator
 from scion.core.code_research_limits import (
+    CodeResearchLimits,
     normalize_code_research_limits,
     write_code_research_limits,
 )
@@ -43,6 +44,7 @@ from scion.core.proposal_pipeline import (
 )
 from scion.core.proposal_runtime_telemetry import ProposalRuntimeTelemetry
 from scion.core.qualification import (
+    QualificationOnlyConfig,
     QualificationRuntime,
     normalize_qualification_only_config,
 )
@@ -52,6 +54,7 @@ from scion.core.research_rejection_finalizer import ResearchRejectionFinalizer
 from scion.core.research_surface_index import editable_patterns
 from scion.core.resource_envelope import (
     ProviderCallBudget,
+    ResourceEnvelope,
     normalize_resource_envelope,
     write_resource_envelope,
 )
@@ -96,6 +99,66 @@ def _materializer_kwargs_from_problem_spec(
     }
 
 
+def _normalize_campaign_boundaries(
+    *,
+    code_research_limits: Any | None,
+    qualification_only: Any | None,
+    resource_envelope: Any | None,
+) -> tuple[
+    CodeResearchLimits | None,
+    ResourceEnvelope | None,
+    QualificationOnlyConfig | None,
+]:
+    """Validate proposal-study composition before any campaign root is created."""
+
+    normalized_code = (
+        None
+        if code_research_limits is None
+        else normalize_code_research_limits(code_research_limits)
+    )
+    normalized_qualification = normalize_qualification_only_config(qualification_only)
+    k2_candidates = (
+        normalized_code is not None and normalized_code.max_hypothesis_candidates == 2
+    )
+    initial_only = (
+        normalized_qualification is not None
+        and normalized_qualification.initial_screening_only
+    )
+    normalized_resource = None
+    if k2_candidates or initial_only:
+        normalized_resource = normalize_resource_envelope(resource_envelope)
+    if k2_candidates:
+        bounded_resource = cast(ResourceEnvelope, normalized_resource)
+        if normalized_qualification is None:
+            raise ValueError("max_hypothesis_candidates=2 requires qualification_only")
+        if bounded_resource.provider_call_cap is None:
+            raise ValueError(
+                "max_hypothesis_candidates=2 requires resource envelope "
+                "provider_call_cap"
+            )
+        if bounded_resource.outer_hardwall_sec is None:
+            raise ValueError(
+                "max_hypothesis_candidates=2 requires resource envelope "
+                "outer_hardwall_sec"
+            )
+    if initial_only:
+        bounded_resource = cast(ResourceEnvelope, normalized_resource)
+        if normalized_code is None:
+            raise ValueError(
+                "initial_screening_only_v1 requires bounded code_research_limits"
+            )
+        if bounded_resource.provider_call_cap is None:
+            raise ValueError(
+                "initial_screening_only_v1 requires resource envelope provider_call_cap"
+            )
+        if bounded_resource.outer_hardwall_sec is None:
+            raise ValueError(
+                "initial_screening_only_v1 requires resource envelope "
+                "outer_hardwall_sec"
+            )
+    return normalized_code, normalized_resource, normalized_qualification
+
+
 def compose_campaign_services(
     owner: Any,
     *,
@@ -118,34 +181,15 @@ def compose_campaign_services(
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     validate_fresh_campaign_output(campaign_dir)
-    normalized_code_research_limits = (
-        None
-        if code_research_limits is None
-        else normalize_code_research_limits(code_research_limits)
+    (
+        normalized_code_research_limits,
+        normalized_resource_envelope,
+        normalized_qualification_only,
+    ) = _normalize_campaign_boundaries(
+        code_research_limits=code_research_limits,
+        qualification_only=qualification_only,
+        resource_envelope=resource_envelope,
     )
-    k2_hypothesis_candidates = (
-        normalized_code_research_limits is not None
-        and normalized_code_research_limits.max_hypothesis_candidates == 2
-    )
-    normalized_resource_envelope = None
-    normalized_qualification_only = None
-    if k2_hypothesis_candidates:
-        normalized_resource_envelope = normalize_resource_envelope(resource_envelope)
-        normalized_qualification_only = normalize_qualification_only_config(
-            qualification_only
-        )
-        if normalized_qualification_only is None:
-            raise ValueError("max_hypothesis_candidates=2 requires qualification_only")
-        if normalized_resource_envelope.provider_call_cap is None:
-            raise ValueError(
-                "max_hypothesis_candidates=2 requires resource envelope "
-                "provider_call_cap"
-            )
-        if normalized_resource_envelope.outer_hardwall_sec is None:
-            raise ValueError(
-                "max_hypothesis_candidates=2 requires resource envelope "
-                "outer_hardwall_sec"
-            )
     development_suites = (
         ()
         if normalized_code_research_limits is None
@@ -199,11 +243,7 @@ def compose_campaign_services(
             ),
         )
     )
-    owner._qualification_only_config = (
-        normalized_qualification_only
-        if normalized_qualification_only is not None
-        else normalize_qualification_only_config(qualification_only)
-    )
+    owner._qualification_only_config = normalized_qualification_only
     owner._qualification_runtime = (
         QualificationRuntime(owner._qualification_only_config)
         if owner._qualification_only_config is not None
@@ -513,6 +553,9 @@ def compose_campaign_services(
         ),
         qualification_runtime=owner._qualification_runtime,
         park_qualification_chain=owner._park_qualification_chain,
+        retire_initial_screening_study_chain=(
+            owner._retire_initial_screening_study_chain
+        ),
     )
 
 

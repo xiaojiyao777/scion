@@ -73,6 +73,13 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
     },
 }
 
+_INITIAL_SCREENING_RETIREMENT_STATES = {
+    Decision.CONTINUE_EXPLORE: BranchState.EXPLORE,
+    Decision.ABANDON: BranchState.ABANDONED,
+    Decision.EXPAND_SCREENING: BranchState.EXPLORE_EXPAND,
+    Decision.QUEUE_VALIDATE: BranchState.READY_VALIDATE,
+}
+
 
 class BranchController:
     def __init__(self) -> None:
@@ -220,6 +227,23 @@ class BranchController:
         branch.state = BranchState.PARKED_LINEAGE
         branch.hypothesis = None
         branch.updated_at = datetime.now()
+
+    def park_initial_screening_study_branch(
+        self,
+        branch_id: str,
+        decision: Decision,
+    ) -> None:
+        """Retire one durably decided initial-screening study candidate."""
+
+        branch = self._get(branch_id)
+        expected_state = _INITIAL_SCREENING_RETIREMENT_STATES.get(decision)
+        if expected_state is None or branch.state is not expected_state:
+            raise StateTransitionError(
+                "initial screening retirement decision/state mismatch"
+            )
+        branch.state = BranchState.PARKED_LINEAGE
+        branch.hypothesis = None
+        branch.updated_at = datetime.now(tz=branch.updated_at.tzinfo)
 
     def get_code_base(self, branch_id: str) -> str:
         """

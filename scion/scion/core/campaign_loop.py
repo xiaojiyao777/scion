@@ -11,12 +11,25 @@ from scion.core.models import Decision
 from scion.core.qualification import (
     QUALIFICATION_BOUNDARY_REACHED,
     QUALIFICATION_NOT_REACHED,
+    QualificationOnlyConfig,
     QualificationProgress,
     QualificationProposalBudgetExhausted,
     QualificationRuntime,
 )
 from scion.core.run_validity import classify_run_validity
 from scion.core.step_result import StepResult
+
+_INITIAL_SCREENING_STUDY_DECISIONS = frozenset(
+    {
+        Decision.CONTINUE_EXPLORE,
+        Decision.ABANDON,
+        Decision.EXPAND_SCREENING,
+        Decision.QUEUE_VALIDATE,
+    }
+)
+_INITIAL_SCREENING_RETIREMENT_CALLBACK_UNAVAILABLE = (
+    "initial screening retirement callback is unavailable"
+)
 
 
 @dataclass(frozen=True)
@@ -169,8 +182,36 @@ class CampaignLoop:
     wait_weight_opt_all: Callable[[float], None]
     qualification_runtime: QualificationRuntime | None = None
     park_qualification_chain: Callable[[str], None] = lambda _branch_id: None
+    retire_initial_screening_study_chain: Callable[[str, Decision], None] | None = None
     current_result: CampaignRunResult | None = field(init=False, default=None)
     call_in_progress: bool = field(init=False, default=False)
+
+    def _require_initial_screening_retirement_callback(
+        self,
+        qualification_config: QualificationOnlyConfig | None,
+    ) -> None:
+        if (
+            qualification_config is not None
+            and qualification_config.initial_screening_only
+            and self.retire_initial_screening_study_chain is None
+        ):
+            raise RuntimeError(_INITIAL_SCREENING_RETIREMENT_CALLBACK_UNAVAILABLE)
+
+    def _retire_initial_screening_decision(
+        self,
+        *,
+        enabled: bool,
+        branch_id: str,
+        decision: Decision | None,
+    ) -> bool:
+        if not enabled or decision not in _INITIAL_SCREENING_STUDY_DECISIONS:
+            return False
+        assert decision is not None
+        retire = self.retire_initial_screening_study_chain
+        if retire is None:
+            raise RuntimeError(_INITIAL_SCREENING_RETIREMENT_CALLBACK_UNAVAILABLE)
+        retire(branch_id, decision)
+        return True
 
     def run(self, requested_rounds: int) -> CampaignRunResult:
         """Target formal evaluated rounds without retrying a provider outcome."""
@@ -178,10 +219,9 @@ class CampaignLoop:
         requested_rounds = max(1, int(requested_rounds))
         qualification_runtime = self.qualification_runtime
         qualification_config = (
-            qualification_runtime.config
-            if qualification_runtime is not None
-            else None
+            qualification_runtime.config if qualification_runtime is not None else None
         )
+        self._require_initial_screening_retirement_callback(qualification_config)
         if qualification_runtime is not None:
             if qualification_runtime.started:
                 if self.current_result is None or not self.current_result.stop_reason:
@@ -201,6 +241,7 @@ class CampaignLoop:
         unknown_outcome_count = 0
         last_execution_outcome: dict[str, Any] | None = None
         final_reason: str | None = None
+
         def qualification_progress() -> QualificationProgress | None:
             if qualification_runtime is None:
                 return None
@@ -319,9 +360,11 @@ class CampaignLoop:
 
             result_branch_id = str(result.branch_id or "").strip()
             if qualification_runtime is not None:
-                if expected_expansion_branch_id is not None:
-                    if result_branch_id != expected_expansion_branch_id:
-                        final_reason = "qualification_expansion_branch_mismatch"
+                if (
+                    expected_expansion_branch_id is not None
+                    and result_branch_id != expected_expansion_branch_id
+                ):
+                    final_reason = "qualification_expansion_branch_mismatch"
                 if getattr(result, "verification_passed", None) is True:
                     try:
                         qualification_runtime.record_verified_candidate(
@@ -423,6 +466,17 @@ class CampaignLoop:
                     break
                 snapshot()
 
+                if self._retire_initial_screening_decision(
+                    enabled=qualification_runtime.config.initial_screening_only,
+                    branch_id=result_branch_id,
+                    decision=result.decision,
+                ):
+                    self.write_status(
+                        last_result=result,
+                        run_result=snapshot(),
+                    )
+                    continue
+
                 if result.decision is Decision.QUEUE_VALIDATE:
                     final_reason = QUALIFICATION_BOUNDARY_REACHED
                     self.write_status(
@@ -512,8 +566,7 @@ def _is_candidate_canary_rejection(result: StepResult) -> bool:
         result.decision is Decision.ABANDON
         and canary is not None
         and getattr(canary, "passed", None) is False
-        and getattr(canary, "failure_category", "")
-        == CANARY_FAILURE_CATEGORY_CANDIDATE
+        and getattr(canary, "failure_category", "") == CANARY_FAILURE_CATEGORY_CANDIDATE
     )
 
 

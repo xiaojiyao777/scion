@@ -146,6 +146,28 @@ class CampaignManager:
             branch.hypothesis = None
             branch.direction = None
 
+    def _retire_initial_screening_study_chain(
+        self,
+        branch_id: str,
+        decision: Decision,
+    ) -> None:
+        """Retire one initial-only candidate without downstream authority."""
+
+        runtime = self._qualification_runtime
+        if runtime is None:
+            raise RuntimeError("initial screening retirement requires qualification")
+        runtime.validate_initial_screening_retirement(branch_id)
+        branch = self._branch_ctrl.get_branch(branch_id)
+        self._branch_ctrl.park_initial_screening_study_branch(branch_id, decision)
+        try:
+            self._workspace_service.discard_branch_workspace(branch_id)
+        finally:
+            self._branch_workspaces.pop(branch_id, None)
+            self._branch_patches.pop(branch_id, None)
+            branch.current_code_hash = None
+            branch.hypothesis = None
+            branch.direction = None
+
     def _terminal_run_result(self, requested_rounds: int) -> CampaignRunResult:
         """Refresh in-flight qualification counters before terminalization."""
 
