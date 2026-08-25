@@ -1,0 +1,348 @@
+"""Frozen public types and internal facts for M32 postrun scoring."""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, NamedTuple, NoReturn
+
+from scion.core.execution_outcome import ExecutionOutcome
+
+HISTORY_REPLAY_BASIS_UNAVAILABLE = "HISTORY_REPLAY_BASIS_UNAVAILABLE"
+SCIENTIFIC_DELEGATION_INCOMPLETE = "SCIENTIFIC_DELEGATION_INCOMPLETE"
+INITIAL_CELL_DATA_UNAVAILABLE = "INITIAL_CELL_DATA_UNAVAILABLE"
+BLOCK_UNSCORABLE = "BLOCK_UNSCORABLE"
+_REQUEST_KINDS = (
+    "hypothesis",
+    "hypothesis_research_turn",
+    "code",
+    "code_research_turn",
+    "code_research_finalize",
+    "other",
+)
+_OUTCOMES = tuple(member.value for member in ExecutionOutcome)
+_SCIENTIFIC_OUTCOMES = frozenset(
+    {ExecutionOutcome.EVALUATED.value, ExecutionOutcome.RESEARCH_REJECTED.value}
+)
+_INCOMPLETE_REASON_CODES = frozenset(
+    {
+        "HYPOTHESIS_RESEARCH_TRANSCRIPT_EXHAUSTED",
+        "HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED",
+        "HYPOTHESIS_RESEARCH_RESULT_CAP_EXHAUSTED",
+        "CODE_RESEARCH_TRANSCRIPT_EXHAUSTED",
+        "CODE_RESEARCH_TURN_CAP_EXHAUSTED",
+        "CODE_RESEARCH_RESULT_CAP_EXHAUSTED",
+        "PROVIDER_CALL_CAP_EXHAUSTED",
+        "OUTER_HARDWALL_EXCEEDED",
+    }
+)
+_FORBIDDEN_DECISIONS = frozenset({"queue_frozen", "promote", "expand_validation"})
+_SCREENING_DECISIONS = frozenset(
+    {"continue_explore", "abandon", "expand_screening", "queue_validate"}
+)
+_SCREENING_GATES = frozenset({"pass", "fail", "unclear", "expand", "continue"})
+_FORBIDDEN_STAGES = frozenset({"validation", "frozen", "retained"})
+_H_FIELDS = (
+    "text",
+    "change_locus",
+    "action",
+    "target_file",
+    "predicted_direction",
+    "target_weakness",
+    "expected_effect",
+    "suggested_weight",
+)
+_ATTEMPT_COUNTERS = (
+    "hypothesis_candidates_completed",
+    "hypothesis_candidates_selected",
+    "hypotheses_exported",
+    "patches_completed",
+    "code_candidates_ready",
+)
+_SHARED_TERMINAL_FIELDS = (
+    "proposal_runtime",
+    "run_result",
+    "campaign_mode",
+    "proposal_runtime_mode",
+    "n_steps",
+    "total_rounds",
+    "n_experiments",
+    "screened_experiments",
+)
+_INCOMPLETE_STOP_FRAGMENTS = (
+    "HARDWALL",
+    "INTERRUPT",
+    "PROVIDER",
+    "SOLVER",
+    "TRANSCRIPT_EXHAUSTED",
+    "TURN_CAP_EXHAUSTED",
+    "RESULT_CAP_EXHAUSTED",
+)
+
+
+class ResearchEffectivenessInputError(ValueError):
+    """An ordinary artifact failed one fixed, body-free input check."""
+
+    def __init__(self, code: str) -> None:
+        self.code = code
+        super().__init__(code)
+
+
+class InitialCell(NamedTuple):
+    """Identity-free numeric evidence for one physical initial cell."""
+
+    candidate_total_distance: float
+    b0_total_distance: float
+
+
+@dataclass(frozen=True)
+class ResearchEffectivenessExpectation:
+    """Frozen facts that terminal artifacts are not allowed to self-declare."""
+
+    problem_id: str
+    expected_initial_case_count: int
+    expected_initial_pair_count: int
+    a_cap: int
+    p_cap: int
+    max_hypothesis_candidates: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.problem_id, str) or not self.problem_id.strip():
+            raise ValueError("INVALID_EXPECTED_PROBLEM_ID")
+        for name in (
+            "expected_initial_case_count",
+            "expected_initial_pair_count",
+            "a_cap",
+            "p_cap",
+        ):
+            if type(getattr(self, name)) is not int or getattr(self, name) <= 0:
+                raise ValueError("INVALID_RESEARCH_EFFECTIVENESS_EXPECTATION")
+        if type(self.max_hypothesis_candidates) is not int or (
+            self.max_hypothesis_candidates not in {1, 2}
+        ):
+            raise ValueError("INVALID_MAX_HYPOTHESIS_CANDIDATES")
+
+    @property
+    def proposal_runtime_mode(self) -> str:
+        return (
+            "bounded_hypothesis_candidates_v1"
+            if self.max_hypothesis_candidates == 2
+            else "bounded_research_v1"
+        )
+
+
+@dataclass(frozen=True)
+class LoadedHistoryAvailable:
+    """A common frozen replay corpus, including a known-empty corpus."""
+
+    records: tuple[Mapping[str, Any], ...]
+
+    def __post_init__(self) -> None:
+        if type(self.records) is not tuple:
+            raise ValueError("LOADED_HISTORY_RECORDS_MUST_BE_A_TUPLE")
+
+
+@dataclass(frozen=True)
+class LoadedHistoryUnavailable:
+    """An explicit statement that the common replay basis is unavailable."""
+
+    reason: str = HISTORY_REPLAY_BASIS_UNAVAILABLE
+
+    def __post_init__(self) -> None:
+        if self.reason != HISTORY_REPLAY_BASIS_UNAVAILABLE:
+            raise ValueError("INVALID_LOADED_HISTORY_UNAVAILABLE_REASON")
+
+
+@dataclass(frozen=True)
+class _Attempt:
+    round_num: int
+    accounting_state: str
+    budget_admitted: int
+    by_request_kind: dict[str, int]
+    hypothesis_candidates_completed: int
+    hypothesis_candidates_selected: int
+    hypotheses_exported: int
+    patches_completed: int
+    code_candidates_ready: int
+
+
+@dataclass(frozen=True)
+class _ProtocolFacts:
+    n_cases: int
+    total_pairs: int
+    attempted_pairs: int
+    valid_pairs: int
+    failed_pairs: int
+    candidate_failed_pairs: int
+    champion_failed_pairs: int
+    shared_failed_pairs: int
+    bilateral_failed_pairs: int
+    protected_regression: bool
+    gate_outcome: str
+
+    @property
+    def candidate_only_failure(self) -> bool:
+        return self.candidate_failed_pairs - self.bilateral_failed_pairs > 0
+
+    @property
+    def any_failure(self) -> bool:
+        return any(
+            (
+                self.failed_pairs,
+                self.candidate_failed_pairs,
+                self.champion_failed_pairs,
+                self.shared_failed_pairs,
+                self.bilateral_failed_pairs,
+            )
+        )
+
+    def exact_initial_matrix(
+        self, expectation: ResearchEffectivenessExpectation
+    ) -> bool:
+        return (
+            self.n_cases == expectation.expected_initial_case_count
+            and self.total_pairs == expectation.expected_initial_pair_count
+            and self.attempted_pairs == expectation.expected_initial_pair_count
+            and self.valid_pairs == expectation.expected_initial_pair_count
+            and not self.any_failure
+        )
+
+
+@dataclass(frozen=True)
+class _JoinedRow:
+    summary: Mapping[str, Any]
+    history: Mapping[str, Any]
+    attempt: _Attempt | None
+    h_key: tuple[Any, ...] | None
+    patch_key: tuple[tuple[str, str, str], ...] | None
+    protocol: _ProtocolFacts | None
+    expanded: bool
+
+
+@dataclass(frozen=True)
+class _Physical:
+    attempts: tuple[_Attempt, ...]
+    rows: tuple[_JoinedRow, ...]
+    p_charged: int
+    aggregate_by_kind: dict[str, int]
+    initial_rows: tuple[_JoinedRow, ...]
+    incomplete: bool
+
+
+@dataclass(frozen=True)
+class _OriginQuality:
+    candidate_failure: bool = False
+    champion_failure: bool = False
+    shared_failure: bool = False
+    bilateral_failure: bool = False
+    protected_regression: bool = False
+    candidate_only_failure: bool = False
+
+    @property
+    def blocks_quality(self) -> bool:
+        return (
+            self.candidate_failure
+            or self.champion_failure
+            or self.shared_failure
+            or self.bilateral_failure
+            or self.protected_regression
+        )
+
+
+def _h_key(value: Any) -> tuple[Any, ...] | None:
+    if value is None:
+        return None
+    item = _as_mapping(value, "HYPOTHESIS_VALUE_INVALID")
+    if tuple(item) != _H_FIELDS:
+        _fail("HYPOTHESIS_VALUE_INVALID")
+    for field in ("text", "change_locus", "target_weakness", "expected_effect"):
+        if not isinstance(item[field], str):
+            _fail("HYPOTHESIS_VALUE_INVALID")
+    if any(
+        not item[field].strip() for field in ("text", "change_locus", "target_weakness")
+    ):
+        _fail("HYPOTHESIS_REQUIRED_TEXT_INVALID")
+    if item["action"] not in {"modify", "create_new", "remove"}:
+        _fail("HYPOTHESIS_ACTION_INVALID")
+    if item["predicted_direction"] not in {
+        "improve",
+        "tradeoff",
+        "exploratory",
+    }:
+        _fail("HYPOTHESIS_DIRECTION_INVALID")
+    target = item["target_file"]
+    if not isinstance(target, str) or not target.strip():
+        _fail("HYPOTHESIS_TARGET_INVALID")
+    weight = item["suggested_weight"]
+    if weight is not None and (type(weight) is not float or not math.isfinite(weight)):
+        _fail("HYPOTHESIS_WEIGHT_INVALID")
+    return tuple(item[field] for field in _H_FIELDS)
+
+
+def _patch_key(value: Any) -> tuple[tuple[str, str, str], ...] | None:
+    if value is None:
+        return None
+    item = _as_mapping(value, "PATCH_VALUE_INVALID")
+    if set(item) != {"changes"} or not isinstance(item["changes"], list):
+        _fail("PATCH_VALUE_INVALID")
+    changes: list[tuple[str, str, str]] = []
+    for raw in item["changes"]:
+        change = _as_mapping(raw, "PATCH_VALUE_INVALID")
+        if tuple(change) != ("file_path", "action", "source"):
+            _fail("PATCH_VALUE_INVALID")
+        if (
+            not isinstance(change["file_path"], str)
+            or change["action"] not in {"modify", "create", "delete"}
+            or not isinstance(change["source"], str)
+        ):
+            _fail("PATCH_VALUE_INVALID")
+        changes.append((change["file_path"], change["action"], change["source"]))
+    if not changes:
+        _fail("PATCH_VALUE_INVALID")
+    return tuple(changes)
+
+
+def _history_decision(history: Mapping[str, Any]) -> str | None:
+    decision = history.get("decision")
+    if decision is None:
+        return None
+    return str(_as_mapping(decision, "HISTORY_DECISION_INVALID").get("value") or "")
+
+
+def _reject_forbidden_stage(value: Any) -> None:
+    if value is None:
+        return
+    if not isinstance(value, str):
+        _fail("STAGE_VALUE_INVALID")
+    if value.strip().casefold() in _FORBIDDEN_STAGES:
+        _fail("FORBIDDEN_M32_STAGE")
+
+
+def _is_incomplete_reason(value: str) -> bool:
+    normalized = value.strip().upper()
+    return normalized in _INCOMPLETE_REASON_CODES or any(
+        fragment in normalized for fragment in _INCOMPLETE_STOP_FRAGMENTS
+    )
+
+
+def _as_mapping(value: Any, code: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping) or any(not isinstance(key, str) for key in value):
+        _fail(code)
+    return value
+
+
+def _nonnegative_int(value: Any, code: str) -> int:
+    if type(value) is not int or value < 0:
+        _fail(code)
+    return value
+
+
+def _positive_int(value: Any, code: str) -> int:
+    if type(value) is not int or value <= 0:
+        _fail(code)
+    return value
+
+
+def _fail(code: str) -> NoReturn:
+    raise ResearchEffectivenessInputError(code)
