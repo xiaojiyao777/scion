@@ -8,6 +8,7 @@ import pytest
 
 from scion.core.research_history import normalize_research_history_record
 from scion.postrun.research_effectiveness import (
+    CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE,
     HISTORY_REPLAY_BASIS_UNAVAILABLE,
     InitialCell,
     LoadedHistoryAvailable,
@@ -159,7 +160,11 @@ def _canary_record(
     *,
     hypothesis: dict[str, Any] | None = None,
     patch: dict[str, Any] | None = None,
+    canary_code: str = "CANARY_FAILED",
 ) -> dict[str, Any]:
+    decision_reason_codes = ["CANARY_FAILED"]
+    if canary_code != "CANARY_FAILED":
+        decision_reason_codes.append(canary_code)
     return normalize_research_history_record(
         {
             "schema_version": "scion.research_history.step.v1",
@@ -169,12 +174,12 @@ def _canary_record(
             "outcome": {
                 "outcome": "evaluated",
                 "stage": "canary",
-                "reason_code": "CANARY_FAILED",
+                "reason_code": "EVALUATION_COMPLETED",
             },
             "protocol": None,
             "decision": {
                 "value": "abandon",
-                "reason_codes": ["CANARY_FAILED"],
+                "reason_codes": decision_reason_codes,
                 "engine_reason_codes": [],
                 "diagnostic_reason_codes": [],
                 "bypass_reason_codes": [],
@@ -270,13 +275,19 @@ def _summary_step(round_num: int, record: dict[str, Any]) -> dict[str, Any]:
             step["canary_result"] = {
                 "passed": False,
                 "failure_category": "candidate_failure",
+                "reason_codes": [record["decision"]["reason_codes"][-1]],
+                "candidate_attributable_infeasible_pairs": 0,
             }
         step["protocol_result"] = None
         return step
     aggregate = record["protocol"]["evidence"]["objective_outcome"]["aggregate"]
-    step["canary_result"] = {"passed": True}
+    step["canary_result"] = {
+        "passed": True,
+        "candidate_attributable_infeasible_pairs": 0,
+    }
     step["protocol_result"] = {
         "stage": "screening",
+        "candidate_attributable_infeasible_pairs": 0,
         **{
             key: aggregate[key]
             for key in (
@@ -519,6 +530,141 @@ def test_complete_arm_computes_frozen_positive_endpoints() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("shape", "counts", "expected_candidates"),
+    (
+        ("expanded", (1, 1), 1),
+        ("expanded", (0, 1), 1),
+        ("two_origins", (1, 1), 2),
+    ),
+)
+def test_protocol_infeasibility_authority_is_sticky_per_origin_and_independent(
+    shape: str,
+    counts: tuple[int, int],
+    expected_candidates: int,
+) -> None:
+    expectation = _expectation()
+    if shape == "expanded":
+        initial = _screening_record()
+        records = [
+            initial,
+            _screening_record(
+                hypothesis=initial["hypothesis"],
+                patch=initial["patch"],
+                gate="fail",
+                decision="continue_explore",
+            ),
+        ]
+        attempts = [
+            _attempt(
+                1,
+                {"code_research_finalize": 1},
+                completed=1,
+                selected=1,
+                exported=1,
+                patches=1,
+                ready=1,
+            )
+        ]
+        cells = ((InitialCell(90.0, 100.0), InitialCell(90.0, 100.0)),)
+    else:
+        records = [
+            _screening_record(gate="fail", decision="continue_explore"),
+            _screening_record(
+                hypothesis=_hypothesis("second exact hypothesis"),
+                patch=_patch("def improve():\n    return 2\n"),
+                gate="fail",
+                decision="continue_explore",
+            ),
+        ]
+        attempts = [
+            _attempt(
+                round_num,
+                {"code_research_finalize": 1},
+                completed=1,
+                selected=1,
+                exported=1,
+                patches=1,
+                ready=1,
+            )
+            for round_num in (1, 2)
+        ]
+        cells = (
+            (InitialCell(90.0, 100.0), InitialCell(90.0, 100.0)),
+            (InitialCell(95.0, 100.0), InitialCell(95.0, 100.0)),
+        )
+    status, summary = _artifacts(
+        expectation=expectation,
+        records=records,
+        attempts=attempts,
+    )
+    baseline = calculate_research_effectiveness(
+        status=status,
+        summary=summary,
+        current_history=records,
+        loaded_history=LoadedHistoryAvailable(records=()),
+        expectation=expectation,
+        initial_cells=cells,
+    )
+    for step, count in zip(summary["steps"], counts):
+        step["protocol_result"]["candidate_attributable_infeasible_pairs"] = count
+
+    result = calculate_research_effectiveness(
+        status=status,
+        summary=summary,
+        current_history=records,
+        loaded_history=LoadedHistoryAvailable(records=()),
+        expectation=expectation,
+        initial_cells=cells,
+    )
+
+    assert (
+        result["physical"]["candidate_attributable_infeasibility_candidates"]
+        == expected_candidates
+    )
+    assert result["physical"]["candidate_attributable_infeasibility_rate"] == {
+        "numerator": expected_candidates,
+        "denominator": 2,
+        "value": expected_candidates / 2,
+        "status": "FINITE",
+    }
+    assert result["adjusted"] == baseline["adjusted"]
+
+
+def test_candidate_canary_infeasibility_is_one_origin_and_candidate_only() -> None:
+    expectation = _expectation()
+    record = _canary_record()
+    attempts = [
+        _attempt(
+            1,
+            {"hypothesis_research_turn": 1},
+            completed=1,
+            selected=1,
+            exported=1,
+            patches=1,
+            ready=1,
+        )
+    ]
+    status, summary = _artifacts(
+        expectation=expectation,
+        records=[record],
+        attempts=attempts,
+    )
+    summary["steps"][0]["canary_result"]["candidate_attributable_infeasible_pairs"] = 1
+
+    result = calculate_research_effectiveness(
+        status=status,
+        summary=summary,
+        current_history=[record],
+        loaded_history=LoadedHistoryAvailable(records=()),
+        expectation=expectation,
+    )
+
+    assert result["endpoint_status"] == {"value": "complete", "limitations": []}
+    assert result["physical"]["candidate_only_failure_candidates"] == 1
+    assert result["physical"]["candidate_attributable_infeasibility_candidates"] == 1
+
+
 def test_m30_calibration_preserves_physical_counts_and_both_limitations() -> None:
     expectation = _expectation(a_cap=6, p_cap=60)
     formal = _screening_record(gate="fail", decision="continue_explore")
@@ -553,6 +699,10 @@ def test_m30_calibration_preserves_physical_counts_and_both_limitations() -> Non
         stop_reason="execution_resource_exhausted",
         disposition="incomplete",
     )
+    del summary["steps"][0]["canary_result"]["candidate_attributable_infeasible_pairs"]
+    del summary["steps"][0]["protocol_result"][
+        "candidate_attributable_infeasible_pairs"
+    ]
 
     result = calculate_research_effectiveness(
         status=status,
@@ -565,7 +715,11 @@ def test_m30_calibration_preserves_physical_counts_and_both_limitations() -> Non
     assert result["scientific_status"]["value"] == "incomplete"
     assert result["endpoint_status"] == {
         "value": "unavailable",
-        "limitations": ["RUN_INCOMPLETE", HISTORY_REPLAY_BASIS_UNAVAILABLE],
+        "limitations": [
+            "RUN_INCOMPLETE",
+            HISTORY_REPLAY_BASIS_UNAVAILABLE,
+            CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE,
+        ],
     }
     assert result["physical"] | {} == result["physical"]
     assert {
@@ -599,7 +753,93 @@ def test_m30_calibration_preserves_physical_counts_and_both_limitations() -> Non
     assert result["physical"]["within_block_h_replays"] == 0
     assert result["physical"]["within_block_pair_replays"] == 0
     assert result["physical"]["candidate_only_failure_candidates"] == 0
+    assert result["physical"]["candidate_attributable_infeasibility_candidates"] is None
+    assert result["physical"]["candidate_attributable_infeasibility_rate"] == {
+        "numerator": None,
+        "denominator": 6,
+        "value": None,
+        "status": "UNAVAILABLE",
+    }
     assert all(value is None for value in result["adjusted"].values())
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "missing_canary",
+        "canary_bool",
+        "canary_pass_failure_fields",
+        "missing_protocol",
+        "protocol_negative",
+        "protocol_large",
+    ),
+)
+def test_missing_or_invalid_feasibility_authority_is_partial_not_zero(
+    mutation: str,
+) -> None:
+    expectation = _expectation()
+    record = _screening_record()
+    attempts = [
+        _attempt(
+            1,
+            {"code_research_finalize": 1},
+            completed=1,
+            selected=1,
+            exported=1,
+            patches=1,
+            ready=1,
+        )
+    ]
+    status, summary = _artifacts(
+        expectation=expectation,
+        records=[record],
+        attempts=attempts,
+    )
+    baseline = calculate_research_effectiveness(
+        status=status,
+        summary=summary,
+        current_history=[record],
+        loaded_history=LoadedHistoryAvailable(records=()),
+        expectation=expectation,
+        initial_cells=((InitialCell(90.0, 100.0), InitialCell(90.0, 100.0)),),
+    )
+    canary = summary["steps"][0]["canary_result"]
+    protocol = summary["steps"][0]["protocol_result"]
+    if mutation == "missing_canary":
+        del canary["candidate_attributable_infeasible_pairs"]
+    elif mutation == "canary_bool":
+        canary["candidate_attributable_infeasible_pairs"] = False
+    elif mutation == "canary_pass_failure_fields":
+        canary["failure_category"] = "candidate_failure"
+        canary["reason_codes"] = ["CANARY_FAILED"]
+    elif mutation == "missing_protocol":
+        del protocol["candidate_attributable_infeasible_pairs"]
+    elif mutation == "protocol_negative":
+        protocol["candidate_attributable_infeasible_pairs"] = -1
+    else:
+        protocol["candidate_attributable_infeasible_pairs"] = 3
+
+    result = calculate_research_effectiveness(
+        status=status,
+        summary=summary,
+        current_history=[record],
+        loaded_history=LoadedHistoryAvailable(records=()),
+        expectation=expectation,
+        initial_cells=((InitialCell(90.0, 100.0), InitialCell(90.0, 100.0)),),
+    )
+
+    assert result["endpoint_status"] == {
+        "value": "partial",
+        "limitations": [CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE],
+    }
+    assert result["physical"]["candidate_attributable_infeasibility_candidates"] is None
+    assert result["physical"]["candidate_attributable_infeasibility_rate"] == {
+        "numerator": None,
+        "denominator": 2,
+        "value": None,
+        "status": "UNAVAILABLE",
+    }
+    assert result["adjusted"] == baseline["adjusted"]
 
 
 def test_k2_uses_one_attempt_and_shared_provider_budget() -> None:
@@ -771,22 +1011,26 @@ def test_protected_regression_is_history_authority_and_makes_candidate_infinite(
 
 
 @pytest.mark.parametrize(
-    ("cells", "limitation"),
+    ("cells", "limitation", "feasibility_missing"),
     (
-        (None, "INITIAL_CELL_DATA_UNAVAILABLE"),
+        (None, "INITIAL_CELL_DATA_UNAVAILABLE", False),
+        (None, "INITIAL_CELL_DATA_UNAVAILABLE", True),
         (
             ((InitialCell(float("inf"), 100.0), InitialCell(90.0, 100.0)),),
             "BLOCK_UNSCORABLE",
+            False,
         ),
         (
             ((InitialCell(90.0, 0.0), InitialCell(90.0, 100.0)),),
             "BLOCK_UNSCORABLE",
+            False,
         ),
     ),
 )
 def test_e_unavailability_preserves_other_adjusted_endpoints(
     cells: Any,
     limitation: str,
+    feasibility_missing: bool,
 ) -> None:
     expectation = _expectation()
     record = _screening_record()
@@ -804,6 +1048,10 @@ def test_e_unavailability_preserves_other_adjusted_endpoints(
     status, summary = _artifacts(
         expectation=expectation, records=[record], attempts=attempts
     )
+    if feasibility_missing:
+        del summary["steps"][0]["protocol_result"][
+            "candidate_attributable_infeasible_pairs"
+        ]
 
     result = calculate_research_effectiveness(
         status=status,
@@ -815,8 +1063,12 @@ def test_e_unavailability_preserves_other_adjusted_endpoints(
     )
 
     assert result["endpoint_status"] == {
-        "value": "unavailable",
-        "limitations": [limitation],
+        "value": "partial",
+        "limitations": (
+            [CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE, limitation]
+            if feasibility_missing
+            else [limitation]
+        ),
     }
     assert result["adjusted"]["d_h"] == 1
     assert result["adjusted"]["f"] == 1
@@ -1069,6 +1321,163 @@ def test_expanded_canary_continuation_is_joined_without_double_counting(
             "status": "POSITIVE_INFINITY",
             "value": None,
         }
+
+
+@pytest.mark.parametrize(
+    ("canary_code", "fields"),
+    (
+        ("CANARY_CHAMPION_FAILURE", ("champion_failure_candidates",)),
+        (
+            "CANARY_SHARED_FAILURE",
+            ("champion_failure_candidates", "shared_failure_candidates"),
+        ),
+        (
+            "CANARY_BILATERAL_FAILURE",
+            (
+                "candidate_failure_candidates",
+                "champion_failure_candidates",
+                "bilateral_failure_candidates",
+            ),
+        ),
+    ),
+)
+@pytest.mark.parametrize("infeasible_pairs", (0, 1))
+def test_complete_pair_canary_codes_map_quality_without_prose_or_identity(
+    canary_code: str,
+    fields: tuple[str, ...],
+    infeasible_pairs: int,
+) -> None:
+    expectation = _expectation()
+    initial = _screening_record()
+    canary = _canary_record(
+        hypothesis=initial["hypothesis"],
+        patch=initial["patch"],
+        canary_code=canary_code,
+    )
+    attempts = [
+        _attempt(
+            1,
+            {"code_research_finalize": 1},
+            completed=1,
+            selected=1,
+            exported=1,
+            patches=1,
+            ready=1,
+        )
+    ]
+    status, summary = _artifacts(
+        expectation=expectation,
+        records=[initial, canary],
+        attempts=attempts,
+    )
+    summary["steps"][1]["execution_outcome"]["provenance"]["stage"] = "screening"
+    summary["steps"][1]["canary_result"]["details"] = {
+        "failure_kind": "candidate_infeasible",
+        "reason": "CANARY_SHARED_FAILURE",
+    }
+    summary["steps"][1]["canary_result"]["candidate_attributable_infeasible_pairs"] = (
+        infeasible_pairs
+    )
+    for artifact in (status, summary):
+        artifact["run_result"]["last_execution_outcome"]["stage"] = "screening"
+    _set_canary_category(
+        status,
+        summary,
+        step_index=1,
+        category="incomplete_evidence",
+    )
+
+    result = calculate_research_effectiveness(
+        status=status,
+        summary=summary,
+        current_history=[initial, canary],
+        loaded_history=LoadedHistoryAvailable(records=()),
+        expectation=expectation,
+    )
+
+    assert result["scientific_status"]["value"] == "incomplete"
+    expected_limitations = ["RUN_INCOMPLETE"]
+    if infeasible_pairs == 1:
+        expected_limitations.append(CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE)
+    assert result["endpoint_status"] == {
+        "value": "unavailable",
+        "limitations": expected_limitations,
+    }
+    for field in (
+        "candidate_failure_candidates",
+        "champion_failure_candidates",
+        "shared_failure_candidates",
+        "bilateral_failure_candidates",
+    ):
+        assert result["physical"][field] == int(field in fields)
+    assert result["physical"]["candidate_only_failure_candidates"] == 0
+    assert result["physical"]["candidate_attributable_infeasibility_candidates"] == (
+        None if infeasible_pairs else 0
+    )
+
+
+@pytest.mark.parametrize(
+    ("canary_code", "category", "drop_joined_code"),
+    (
+        ("CANARY_CONFIG_ERROR", "configuration_error", False),
+        ("CANARY_CHAMPION_FAILURE", "candidate_failure", False),
+        ("CANARY_FUTURE_UNKNOWN", "candidate_failure", False),
+        ("CANARY_SHARED_FAILURE", "incomplete_evidence", True),
+    ),
+)
+def test_unknown_or_mismatched_canary_zero_is_not_feasibility_authority(
+    canary_code: str,
+    category: str,
+    drop_joined_code: bool,
+) -> None:
+    expectation = _expectation()
+    record = _canary_record(canary_code=canary_code)
+    if drop_joined_code:
+        record["decision"]["reason_codes"] = ["CANARY_FAILED"]
+        record = normalize_research_history_record(record, expected_problem_id="demo")
+    attempts = [
+        _attempt(
+            1,
+            {"hypothesis_research_turn": 1},
+            completed=1,
+            selected=1,
+            exported=1,
+            patches=1,
+            ready=1,
+        )
+    ]
+    status, summary = _artifacts(
+        expectation=expectation,
+        records=[record],
+        attempts=attempts,
+    )
+    if drop_joined_code:
+        summary["steps"][0]["canary_result"]["reason_codes"] = [canary_code]
+    _set_canary_category(status, summary, step_index=0, category=category)
+
+    result = calculate_research_effectiveness(
+        status=status,
+        summary=summary,
+        current_history=[record],
+        loaded_history=LoadedHistoryAvailable(records=()),
+        expectation=expectation,
+    )
+
+    assert result["scientific_status"]["value"] == "incomplete"
+    assert result["endpoint_status"]["limitations"] == [
+        "RUN_INCOMPLETE",
+        CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE,
+    ]
+    assert result["physical"]["candidate_attributable_infeasibility_candidates"] is None
+    assert all(
+        result["physical"][field] == 0
+        for field in (
+            "candidate_failure_candidates",
+            "champion_failure_candidates",
+            "shared_failure_candidates",
+            "bilateral_failure_candidates",
+        )
+    )
 
 
 @pytest.mark.parametrize(

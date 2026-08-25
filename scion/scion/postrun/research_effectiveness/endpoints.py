@@ -8,6 +8,7 @@ from typing import Any
 
 from .models import (
     BLOCK_UNSCORABLE,
+    CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE,
     HISTORY_REPLAY_BASIS_UNAVAILABLE,
     INITIAL_CELL_DATA_UNAVAILABLE,
     SCIENTIFIC_DELEGATION_INCOMPLETE,
@@ -53,7 +54,12 @@ def calculate_research_effectiveness(
         code="CURRENT_HISTORY_INVALID",
     )
     physical = _parse_physical(status_map, summary_map, histories, expectation)
-    physical_output = _physical_output(physical, expectation)
+    feasibility_available = _candidate_feasibility_evidence_available(physical.rows)
+    physical_output = _physical_output(
+        physical,
+        expectation,
+        feasibility_available=feasibility_available,
+    )
 
     limitations: list[str] = []
     loaded: tuple[dict[str, Any], ...] | None
@@ -70,7 +76,9 @@ def calculate_research_effectiveness(
         _fail("INVALID_LOADED_HISTORY_TYPE")
     if physical.incomplete:
         limitations.insert(0, "RUN_INCOMPLETE")
-    if limitations:
+    if not feasibility_available:
+        limitations.append(CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE)
+    if physical.incomplete or loaded is None:
         return _report(
             incomplete=physical.incomplete,
             limitations=limitations,
@@ -97,6 +105,8 @@ def calculate_research_effectiveness(
 def _physical_output(
     physical: _Physical,
     expectation: ResearchEffectivenessExpectation,
+    *,
+    feasibility_available: bool,
 ) -> dict[str, Any]:
     h = sum(attempt.hypotheses_exported for attempt in physical.attempts)
     c_ready = sum(attempt.code_candidates_ready for attempt in physical.attempts)
@@ -108,6 +118,11 @@ def _physical_output(
         for row in physical.initial_rows
     )
     quality = tuple(_origin_quality_by_round(physical.rows).values())
+    infeasibility_candidates = (
+        sum(item.candidate_attributable_infeasibility for item in quality)
+        if feasibility_available
+        else None
+    )
     within_h_replays, within_pair_replays, candidate_only = _current_guard_counts(
         physical.rows
     )
@@ -138,6 +153,7 @@ def _physical_output(
             item.protected_regression for item in quality
         ),
         "candidate_only_failure_candidates": candidate_only,
+        "candidate_attributable_infeasibility_candidates": (infeasibility_candidates),
         "within_block_h_replays": within_h_replays,
         "within_block_pair_replays": within_pair_replays,
         "formal_per_used_attempt": _ratio(formal, len(physical.attempts)),
@@ -156,6 +172,11 @@ def _physical_output(
         "within_block_h_replay_rate": _ratio(within_h_replays, expectation.a_cap),
         "within_block_pair_replay_rate": _ratio(within_pair_replays, expectation.a_cap),
         "candidate_only_failure_rate": _ratio(candidate_only, expectation.a_cap),
+        "candidate_attributable_infeasibility_rate": (
+            _ratio(infeasibility_candidates, expectation.a_cap)
+            if infeasibility_candidates is not None
+            else _unavailable_ratio(expectation.a_cap)
+        ),
     }
 
 
@@ -365,11 +386,24 @@ def _is_g_candidate(
 
 
 def _candidate_only_canary(row: _JoinedRow) -> bool:
-    canary = row.summary.get("canary_result")
-    return bool(
-        isinstance(canary, Mapping)
-        and canary.get("passed") is False
-        and canary.get("failure_category") == "candidate_failure"
+    return row.canary_classification == "candidate"
+
+
+def _candidate_feasibility_evidence_available(
+    rows: tuple[_JoinedRow, ...],
+) -> bool:
+    return all(
+        (
+            row.canary_candidate_attributable_infeasible_pairs is not None
+            if row.summary.get("canary_result") is not None
+            else True
+        )
+        and (
+            row.protocol.candidate_attributable_infeasible_pairs is not None
+            if row.protocol is not None
+            else True
+        )
+        for row in rows
     )
 
 
@@ -431,8 +465,24 @@ def _row_quality_flags(row: _JoinedRow) -> set[str]:
             flags.add("protected_regression")
         if row.protocol.candidate_only_failure:
             flags.add("candidate_only_failure")
+        if row.protocol.candidate_attributable_infeasible_pairs:
+            flags.add("candidate_attributable_infeasibility")
     if _candidate_only_canary(row):
         flags.update(("candidate_failure", "candidate_only_failure"))
+    elif row.canary_classification is not None:
+        flags.update(
+            {
+                "champion": {"champion_failure"},
+                "shared": {"champion_failure", "shared_failure"},
+                "bilateral": {
+                    "candidate_failure",
+                    "champion_failure",
+                    "bilateral_failure",
+                },
+            }.get(row.canary_classification, set())
+        )
+    if row.canary_candidate_attributable_infeasible_pairs:
+        flags.add("candidate_attributable_infeasibility")
     return flags
 
 
@@ -469,13 +519,21 @@ def _report(
     adjusted: dict[str, Any],
 ) -> dict[str, Any]:
     limitations_tuple = tuple(limitations)
+    endpoint_value = "complete"
+    if limitations_tuple:
+        endpoint_value = (
+            "unavailable"
+            if "RUN_INCOMPLETE" in limitations_tuple
+            or HISTORY_REPLAY_BASIS_UNAVAILABLE in limitations_tuple
+            else "partial"
+        )
     return {
         "scientific_status": {
             "value": "incomplete" if incomplete else "complete",
             "reasons": ([SCIENTIFIC_DELEGATION_INCOMPLETE] if incomplete else []),
         },
         "endpoint_status": {
-            "value": "unavailable" if limitations_tuple else "complete",
+            "value": endpoint_value,
             "limitations": list(limitations_tuple),
         },
         "physical": physical,
@@ -494,6 +552,15 @@ def _ratio(
         "denominator": denominator,
         "value": numerator / denominator if denominator else None,
         "status": "FINITE" if denominator else zero_status,
+    }
+
+
+def _unavailable_ratio(denominator: int) -> dict[str, Any]:
+    return {
+        "numerator": None,
+        "denominator": denominator,
+        "value": None,
+        "status": "UNAVAILABLE",
     }
 
 

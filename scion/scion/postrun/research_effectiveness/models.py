@@ -13,6 +13,9 @@ HISTORY_REPLAY_BASIS_UNAVAILABLE = "HISTORY_REPLAY_BASIS_UNAVAILABLE"
 SCIENTIFIC_DELEGATION_INCOMPLETE = "SCIENTIFIC_DELEGATION_INCOMPLETE"
 INITIAL_CELL_DATA_UNAVAILABLE = "INITIAL_CELL_DATA_UNAVAILABLE"
 BLOCK_UNSCORABLE = "BLOCK_UNSCORABLE"
+CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE = (
+    "CANDIDATE_FEASIBILITY_EVIDENCE_UNAVAILABLE"
+)
 _REQUEST_KINDS = (
     "hypothesis",
     "hypothesis_research_turn",
@@ -180,6 +183,7 @@ class _ProtocolFacts:
     bilateral_failed_pairs: int
     protected_regression: bool
     gate_outcome: str
+    candidate_attributable_infeasible_pairs: int | None
 
     @property
     def candidate_only_failure(self) -> bool:
@@ -218,6 +222,8 @@ class _JoinedRow:
     patch_key: tuple[tuple[str, str, str], ...] | None
     protocol: _ProtocolFacts | None
     expanded: bool
+    canary_classification: str | None
+    canary_candidate_attributable_infeasible_pairs: int | None
 
 
 @dataclass(frozen=True)
@@ -238,6 +244,7 @@ class _OriginQuality:
     bilateral_failure: bool = False
     protected_regression: bool = False
     candidate_only_failure: bool = False
+    candidate_attributable_infeasibility: bool = False
 
     @property
     def blocks_quality(self) -> bool:
@@ -248,6 +255,63 @@ class _OriginQuality:
             or self.bilateral_failure
             or self.protected_regression
         )
+
+
+def _canary_classification(
+    step: Mapping[str, Any], history: Mapping[str, Any]
+) -> str | None:
+    raw_canary = step.get("canary_result")
+    if raw_canary is None:
+        return None
+    canary = _as_mapping(raw_canary, "SUMMARY_CANARY_INVALID")
+    if canary.get("passed") is True:
+        return (
+            "unknown"
+            if "failure_category" in canary or "reason_codes" in canary
+            else "passed"
+        )
+    reason_codes = canary.get("reason_codes")
+    decision = history.get("decision")
+    decision_codes = (
+        _as_mapping(decision, "HISTORY_DECISION_INVALID").get("reason_codes")
+        if decision is not None
+        else None
+    )
+    if (
+        not isinstance(reason_codes, list)
+        or len(reason_codes) != 1
+        or not isinstance(reason_codes[0], str)
+        or not isinstance(decision_codes, list)
+        or reason_codes[0] not in decision_codes
+    ):
+        return "unknown"
+    category = canary.get("failure_category")
+    if not isinstance(category, str):
+        return "unknown"
+    return {
+        ("candidate_failure", "CANARY_FAILED"): "candidate",
+        ("incomplete_evidence", "CANARY_CHAMPION_FAILURE"): "champion",
+        ("incomplete_evidence", "CANARY_SHARED_FAILURE"): "shared",
+        ("incomplete_evidence", "CANARY_BILATERAL_FAILURE"): "bilateral",
+    }.get((category, reason_codes[0]), "unknown")
+
+
+def _canary_infeasible_pairs(
+    value: Any,
+    *,
+    classification: str | None,
+) -> int | None:
+    if value is None:
+        return None
+    canary = _as_mapping(value, "SUMMARY_CANARY_INVALID")
+    count = canary.get("candidate_attributable_infeasible_pairs")
+    if type(count) is not int or count not in {0, 1}:
+        return None
+    if classification == "candidate":
+        return count
+    if classification in {"passed", "champion", "shared", "bilateral"}:
+        return 0 if count == 0 else None
+    return None
 
 
 def _h_key(value: Any) -> tuple[Any, ...] | None:

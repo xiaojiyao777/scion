@@ -19,6 +19,8 @@ from .models import (
     ResearchEffectivenessExpectation,
     _as_mapping,
     _Attempt,
+    _canary_classification,
+    _canary_infeasible_pairs,
     _fail,
     _h_key,
     _history_decision,
@@ -146,6 +148,11 @@ def _join_rows(
         _validate_summary_outcome(step.get("execution_outcome"), outcome)
         _validate_canary_row(step, history)
         _validate_reason_evidence(step, history)
+        canary_classification = _canary_classification(step, history)
+        canary_infeasible_pairs = _canary_infeasible_pairs(
+            step.get("canary_result"),
+            classification=canary_classification,
+        )
         decision = _history_decision(history)
         if step.get("decision") != decision:
             _fail("SUMMARY_HISTORY_DECISION_MISMATCH")
@@ -183,6 +190,10 @@ def _join_rows(
                 patch_key=patch_key,
                 protocol=protocol,
                 expanded=expanded,
+                canary_classification=canary_classification,
+                canary_candidate_attributable_infeasible_pairs=(
+                    canary_infeasible_pairs
+                ),
             )
         )
     return tuple(rows), matched_attempt_rounds != set(attempt_by_round)
@@ -438,10 +449,16 @@ def _protocol_facts(summary_value: Any, history_value: Any) -> _ProtocolFacts | 
     regressions = aggregate.get("protected_objective_regressions", ())
     if not isinstance(regressions, (list, tuple)):
         _fail("PROTECTED_REGRESSION_EVIDENCE_INVALID")
+    infeasible_pairs = summary.get("candidate_attributable_infeasible_pairs")
+    if type(infeasible_pairs) is not int or not (
+        0 <= infeasible_pairs <= values["attempted_pairs"]
+    ):
+        infeasible_pairs = None
     return _ProtocolFacts(
         **values,
         protected_regression=bool(regressions),
         gate_outcome=gate,
+        candidate_attributable_infeasible_pairs=infeasible_pairs,
     )
 
 
@@ -777,8 +794,7 @@ def _rows_have_incomplete_reason(rows: tuple[_JoinedRow, ...]) -> bool:
 def _has_incomplete_canary(rows: tuple[_JoinedRow, ...]) -> bool:
     return any(
         row.history["outcome"]["stage"] == "canary"
-        and isinstance(row.summary.get("canary_result"), Mapping)
-        and row.summary["canary_result"].get("failure_category") != "candidate_failure"
+        and row.canary_classification != "candidate"
         for row in rows
     )
 
