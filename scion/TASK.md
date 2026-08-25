@@ -724,18 +724,21 @@ unchanged.
 The provider-/solver-free metric contract, M30 calibration row, future
 five-block matched-study gate, freshness rule and claim boundary are frozen in
 the [M32 design](docs/experiments/v0.4/v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md).
-It is design-only: no K=2 implementation, population selection or live
-authority exists. Telemetry carrier `a3b1ed9b` corrects the campaign-level
-bounded-mode label and aggregate provider-call projection only; it is not K=2
-evidence and does not yet supply the required attempt-level candidate counts.
-Follow-on configuration-skeleton carrier `a2fe7c38` persists effective K=1,
-accepts only absent/explicit `1` and rejects `2` and every other value fail
-closed. It changes no H-session behavior and is likewise not K=2 evidence.
+The default-off K=2 implementation, count-only attempt telemetry and pure
+single-arm offline scorer now exist, but no population selection, matched-study
+result or live authority exists. Carrier `25b78037` implements the private
+ordinal K=2 H bank under the existing shared session budget and exports only
+the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
+provider-delta and H/C boundary counts. Carrier `bda346e9` adds a pure
+provider-/solver-free single-arm scorer that closes current-history, replay,
+formal-quality and paired-effect accounting without emitting H, patch, path,
+identity or hash material. These are implementation and synthetic-audit
+results, not evidence that K=2 improves CVRP research.
 
 - [x] Close the M30 terminal documentation and monitoring-incident record on a
   clean docs-only commit before changing research behavior. Preserve the M30
   root as consumed; do not retry, resume or reinterpret its incomplete result.
-- [ ] Correct proposal telemetry so bounded H/C research is not reported as
+- [x] Correct proposal telemetry so bounded H/C research is not reported as
   `direct_v3`, and durably project safe attempt-level provider-turn,
   H-candidate and selected-candidate counts without exposing draft bodies.
 - [x] Freeze baseline research-throughput and candidate-quality measures before
@@ -748,31 +751,43 @@ closed. It changes no H-session behavior and is likewise not K=2 evidence.
   throughput and quality endpoints and their repeated-block acceptance rule
   must be fixed before outcomes. These are development diagnostics, never
   promotion features or Decision inputs.
-- [ ] Add bounded session-local H candidate slots and safe counters without a
+- [x] Add bounded session-local H candidate slots and safe counters without a
   new durable ledger, identity, hash, receipt or authority. All slots share the
   existing turn/read/search/transcript and campaign provider budgets; creating
   a second slot may not reset or multiply any allowance. Public artifacts may
   expose only bounded counts and the single exported H.
-- [ ] Complete the strict optional configuration contract
-  `max_hypothesis_candidates`. Carrier `a2fe7c38` already makes absent or `1`
-  preserve the current bounded H path, persists effective K=1 and rejects all
-  other values, including `2`, fail closed. M32 must make explicit `2` enable
-  the still-unimplemented K=2 path while keeping `2` as the hard maximum, then
-  persist the effective mode and used budget. Any future live use must also
-  declare proposal-attempt, shared provider-call and outer hardwall caps.
-- [ ] Implement the `K=2` H draft bank inside one
+- [x] Complete the strict optional configuration contract
+  `max_hypothesis_candidates`. Missing or explicit `1` preserves the bounded
+  K=1 path; within qualification-only composition with its bounded
+  proposal-attempt limit and explicit shared provider-call and outer hardwall
+  caps, explicit `2` enables K=2 and remains the hard maximum; every other value
+  fails closed.
+- [x] Implement the `K=2` H draft bank inside one
   `HypothesisResearchSession`. The provider may stage two complete structured H
-  values in session-local ordinal slots and finally choose one existing slot;
-  the host may validate structure and exact slot equality but may not rank
+  values in session-local ordinal slots and either choose one existing slot or
+  abstain. Only a chosen slot can export H. The host may validate structure and
+  exact slot equality but may not rank
   mechanisms, targets or expected quality. Only the chosen H is exported to
-  formal Hypothesis Contract. The unchosen slot disappears with the tainted
-  session and never enters StepRecord, lineage, research history, workspace or
-  candidate authority.
-- [ ] Add provider-/solver-free red-team coverage for shared-budget accounting,
+  formal Hypothesis Contract. Every unselected staged H, including both slots
+  after an abstention, disappears with the tainted session and never enters
+  StepRecord, lineage, research history, workspace or candidate authority.
+- [x] Add provider-/solver-free red-team coverage for shared-budget accounting,
   slot immutability, deterministic ordering, unchosen-draft non-persistence,
   transport/resource interruption and zero validation/frozen leakage. Defaults
   must preserve the current direct and bounded paths byte-for-byte where their
   public schema is unchanged.
+- [x] Implement a pure single-arm postrun scorer that joins terminal status,
+  summary, normalized current history, explicit loaded-history availability,
+  count-only attempt telemetry and ordinal-only initial cells. It must keep
+  physical counts separate from replay-adjusted `D_H/F/G/T/Q/E`, preserve the
+  M30 incomplete/history-unavailable calibration boundary, and emit no
+  hypothesis, patch, path, identity, hash, case or seed material.
+- [ ] Implement and independently red-team the pure offline exact-five-block
+  matched comparator. It must call the same single-arm oracle for all ten arms,
+  compute the five frozen joint signs plus cross-block H/pair replay and `U_F`
+  inside one private in-memory boundary, and return only aggregate counts,
+  ratios, signs and fixed availability codes. It creates no GO token, command,
+  population or launch authority.
 - [ ] Preregister repeated matched `K=1` versus `K=2` development comparisons
   under the same total provider, attempt, solver and hardwall envelopes. Use
   outcome-blind ordinary development populations and hold the current

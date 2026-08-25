@@ -1,6 +1,6 @@
 # CVRP M32 hypothesis-candidate-bank research-effectiveness design
 
-Status: **DESIGN_ONLY / K2_NOT_IMPLEMENTED / NO_POPULATION_SELECTION / NO_LIVE_AUTHORITY**
+Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / NO_POPULATION_SELECTION / NO_LIVE_AUTHORITY**
 
 Date: `2026-08-25`
 
@@ -9,6 +9,15 @@ Telemetry carrier:
 
 Current configuration-skeleton carrier:
 `a2fe7c3830c84a0fc439370434636a61e8a34d47`
+
+K=2 carrier:
+`25b78037034e0f443d030c825fb84badce6513e8`
+
+Attempt-telemetry carrier:
+`b0d81ddbca0f620689b79a38d7f6702da2163dbc`
+
+Single-arm offline-scoring carrier:
+`bda346e96aec47b49e7078533ba781a47a84771a`
 
 This is a measurement and future-study design, not a live preregistration. It
 does not select, rank or materialize a case, seed, salt, population, campaign
@@ -48,16 +57,29 @@ relevant things:
 
 The snapshot contains no prompt, response, H, patch or provider-authored body.
 
-Follow-on carrier `a2fe7c3830c84a0fc439370434636a61e8a34d47` adds only a
-fail-closed configuration skeleton. Missing or explicit
-`max_hypothesis_candidates=1` resolves to effective K=1 and that value is
-included in the persisted limits projection; `2` and every other value are
-still rejected. It changes no H-session behavior.
+Follow-on carrier `a2fe7c3830c84a0fc439370434636a61e8a34d47` added the
+fail-closed configuration skeleton. Carrier
+`25b78037034e0f443d030c825fb84badce6513e8` then made explicit K=2 the only
+additional accepted value and implemented two private ordinal H slots inside
+one existing bounded session. The slots share the original turn, read, search,
+transcript and campaign provider budgets; the provider selects exactly one
+existing slot to export H, or may abstain and export none. Every unselected
+staged H, including both values after abstention, remains only in tainted
+provider traces. K=2 construction is restricted to qualification-only
+composition with its bounded proposal-attempt limit and explicit provider-call
+and hardwall caps.
 
-Neither carrier implements an H candidate bank, K=2, slot staging, slot
-selection, attempt-level provider attribution, attempt-level H-candidate
-counts, a population or a matched experiment. They are design-phase telemetry
-and configuration infrastructure, not K=2 evidence.
+Carrier `b0d81ddbca0f620689b79a38d7f6702da2163dbc` adds count-only
+attempt lifecycle, provider-call deltas and H/C boundary telemetry. Carrier
+`bda346e96aec47b49e7078533ba781a47a84771a` adds a pure single-arm
+provider-/solver-free scorer for the frozen physical, replay-adjusted and
+paired-effect endpoints. Its output contains only counts, ratios and fixed
+availability/status values. It does not emit H, patch, path, identity, hash,
+case or seed material.
+
+These carriers implement and synthetically audit K=2, telemetry and single-arm
+measurement. They do not select a population, execute a matched experiment or
+show that K=2 improves CVRP research.
 
 ## Provider- and solver-free measurement baseline
 
@@ -161,7 +183,8 @@ failure.
 
 ### M30 calibration row
 
-The frozen ordinary/sanitized M30 terminal supplies one golden accounting row:
+A synthetic golden fixture reproduces the published ordinary/sanitized M30
+accounting row without reading or rescoring the preserved M30 root:
 
 - `A_cap=6`, `A_used=3`, `P_cap=60` and `P_charged=25`, with 19 H-research
   turns, five C-research turns and one independent C-final call;
@@ -186,28 +209,40 @@ K=2 counterfactual or evidence that a candidate bank works. No missing
 historical draft or replay count may be inferred from provider traces or
 reconstructed from raw bodies.
 
-### Offline implementation gate
+### Offline implementation status
 
-Before any live design can be prepared, provider-/solver-free tests must prove:
+Provider-/solver-free tests now prove:
 
 - absent K configuration and explicit `K=1` preserve the current bounded H
   path wherever its public schema is unchanged;
 - `K=2` is default-off and the only additional accepted value;
 - two slots share one H-session turn/read/search/transcript/provider budget,
   and staging a second slot resets or enlarges none of them;
-- a slot accepts one complete immutable structured H, and final selection must
-  exactly equal one existing ordinal slot;
+- a slot accepts one complete immutable structured H, and the terminal result
+  must be either an explicit typed abstention or a selected ordinal that
+  exactly equals one existing slot;
 - only the selected H reaches Contract; unselected slots disappear without a
   StepRecord, lineage, history, workspace, public body or candidate authority;
 - provider request-kind totals sum exactly to `P_charged` at intermediate and
   terminal projections;
-- invalid payloads, duplicate staging, attempted overwrite, missing selection,
-  transport interruption and every resource boundary fail closed; and
-- synthetic postrun fixtures reproduce every endpoint and reject double-count,
-  replay-denominator, missing-row and candidate/shared-failure mutations.
+- invalid payloads, duplicate staging, attempted overwrite, a terminal result
+  that is neither typed abstention nor valid selection, transport interruption
+  and every resource boundary fail closed; and
+- synthetic postrun fixtures reproduce every implemented single-arm endpoint
+  and reject double-count, replay-denominator, missing-row and
+  candidate/shared-failure mutations.
 
-Passing this gate establishes instrumentation and non-persistence only. It is
-not research-effectiveness evidence.
+The remaining offline gate is an exact-five-block comparator that applies the
+same single-arm oracle to all ten arms and computes the frozen five signs,
+cross-block replay rates and `U_F` guard inside one private in-memory boundary.
+The body-free single-arm reports are intentionally insufficient to reconstruct
+cross-block replay or `U_F`; the comparator must receive the already-decoded
+ordinary H and ordered-patch evidence for all ten arms at once, compare those
+values only transiently, and never emit an identity, hash, digest, path or
+body. It must emit aggregates only and receive independent red-team review
+before any study preparation. Passing either offline gate establishes
+instrumentation and non-persistence only; it is not research-effectiveness
+evidence.
 
 ## Future matched development study
 
@@ -359,10 +394,8 @@ preregistration and explicit authorization.
 
 ## Remaining gates before any live preregistration
 
-- implement and review the default-off K=2 session without changing downstream
-  authority;
-- finish safe attempt-level telemetry and the provider-/solver-free endpoint
-  calculator;
+- implement and review the pure offline exact-five-block comparator and its
+  cross-block replay/`U_F` reducer without changing downstream authority;
 - choose and review the success-cost control shape;
 - freeze exact numeric resources from the final implementation and population
   metadata;

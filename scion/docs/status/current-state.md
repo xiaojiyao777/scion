@@ -693,12 +693,19 @@ database or WAL. No database hash was taken, nothing was repaired or rerun,
 and the public scientific JSON/JSONL/metrics were not changed. See the
 [M30 preregistration and terminal result](../experiments/v0.4/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md).
 
-The next CVRP work is research-effectiveness M32, not another qualification.
-First correct the misleading `proposal_runtime_mode=direct_v3` projection for
-bounded H/C sessions and freeze throughput plus candidate-quality baselines.
-Then evaluate a default-off, shared-budget, session-local `K=2` H draft bank
-against `K=1`; no later H/C-reflection, multi-agent or qualification rung opens
-unless repeated matched blocks improve both efficiency and the preregistered
+The current CVRP work is research-effectiveness M32, not another qualification.
+Carrier `25b78037` implements a default-off, shared-budget, session-local K=2 H
+draft bank; `b0d81ddb` adds count-only proposal-attempt telemetry; and
+`bda346e9` adds a pure provider-/solver-free single-arm effectiveness scorer.
+All three have only implementation and synthetic-test evidence. They provide no
+matched CVRP result, population selection or live authority, and no K=2
+research benefit has yet been observed. The next safe task is the pure offline
+exact-five-block comparator with its cross-block replay/`U_F` guard. Only after
+that comparator is independently reviewed may design-only study preparation
+begin; success-cost shape, exact resources, outcome-blind population,
+preregistration and independent reviews remain separate gates before any live
+authorization. No later H/C-reflection, multi-agent or qualification rung opens
+unless five matched blocks improve both efficiency and the frozen
 development-quality endpoint without evidence leakage.
 
 The B30 safe selector saw 2,163 tracked paths, filtered 524, skipped all 18
