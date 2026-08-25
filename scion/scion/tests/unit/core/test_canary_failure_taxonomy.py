@@ -27,6 +27,7 @@ def test_canary_configuration_error_replaces_algorithm_failure_code() -> None:
 
     assert normalized.failure_category == CANARY_FAILURE_CATEGORY_CONFIG
     assert normalized.reason_codes == (CANARY_CONFIG_ERROR,)
+    assert normalized.candidate_attributable_infeasible_pairs is None
     assert public_canary_reason_codes(normalized) == (CANARY_CONFIG_ERROR,)
     assert decision_reason_codes_for_canary(
         (CANARY_FAILED,),

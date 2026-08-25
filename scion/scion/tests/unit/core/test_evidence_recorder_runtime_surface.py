@@ -1,5 +1,9 @@
 """Focused tests split from test_evidence_recorder.py."""
 
+from dataclasses import replace
+
+import pytest
+
 from .evidence_recorder_test_support import *  # noqa: F401,F403
 
 
@@ -191,6 +195,97 @@ def test_campaign_summary_exposes_selected_surface_runtime_summary(
     assert surface_summary["fields"]["algorithm_plan"]["present"] == 4
 
 
+@pytest.mark.parametrize(
+    ("passed", "count", "expected"),
+    (
+        (False, 0, 0),
+        (False, 1, 1),
+        (True, 0, 0),
+        (True, 1, None),
+        (False, True, None),
+        (False, -1, None),
+        (False, 2, None),
+        (False, None, None),
+    ),
+)
+def test_campaign_summary_projects_only_canonical_canary_infeasibility_count(
+    tmp_path: Path,
+    passed,
+    count,
+    expected,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    step.canary_result = CanaryResult(
+        passed=passed,
+        details={
+            "candidate_attributable_infeasible_pairs": 1,
+            "failure_kind": "candidate_infeasible_champion_feasible",
+            "failed_case_id": "private-case",
+        },
+        failure_category="candidate_failure" if not passed else "",
+        candidate_attributable_infeasible_pairs=count,
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    payload = summary["steps"][0]["canary_result"]
+    if expected is None:
+        assert "candidate_attributable_infeasible_pairs" not in payload
+    else:
+        assert payload["candidate_attributable_infeasible_pairs"] == expected
+    assert "failure_kind" not in payload
+    assert "failed_case_id" not in payload
+    assert "details" not in payload
+
+
+@pytest.mark.parametrize(
+    ("count", "attempted", "total", "expected"),
+    (
+        (0, 0, 0, 0),
+        (2, 2, 3, 2),
+        (True, 2, 3, None),
+        (-1, 2, 3, None),
+        (3, 2, 3, None),
+        (2, 3, 2, None),
+        (None, 2, 3, None),
+    ),
+)
+def test_campaign_summary_projects_only_bounded_protocol_infeasibility_count(
+    tmp_path: Path,
+    count,
+    attempted,
+    total,
+    expected,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    assert step.protocol_result is not None
+    step.protocol_result = replace(
+        step.protocol_result,
+        stats=replace(
+            step.protocol_result.stats,
+            attempted_pairs=attempted,
+            total_pairs=total,
+        ),
+        candidate_attributable_infeasible_pairs=count,
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    payload = summary["steps"][0]["protocol_result"]
+    if expected is None:
+        assert "candidate_attributable_infeasible_pairs" not in payload
+    else:
+        assert payload["candidate_attributable_infeasible_pairs"] == expected
 
 
 def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(

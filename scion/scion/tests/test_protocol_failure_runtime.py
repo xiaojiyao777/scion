@@ -107,6 +107,35 @@ def test_run_experiment_screening_fail(tmp_path):
     assert result.gate_outcome == "fail"
 
 
+@pytest.mark.parametrize(
+    ("champion_feasible", "expected_count"),
+    ((True, 4), (False, 0)),
+)
+def test_nonpaired_infeasibility_count_is_observational_and_candidate_attributable(
+    tmp_path,
+    champion_feasible,
+    expected_count,
+):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(1, 900, feasible=champion_feasible),
+        _make_run_result(3, 1500, feasible=False),
+    ] * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert result.candidate_attributable_infeasible_pairs == expected_count
+    assert result.stats.failed_pairs == 0
+    assert result.stats.candidate_failed_pairs == 0
+    assert result.stats.valid_pairs == 4
+
+
 def test_candidate_timeout_counts_as_screening_loss_and_is_recorded(tmp_path):
     runner = MagicMock()
     pair = [_make_run_result(1, 900), _make_run_failure("timeout")]

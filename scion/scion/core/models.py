@@ -141,6 +141,7 @@ class CanaryResult:
     details: Dict[str, Any] = field(default_factory=dict)
     failure_category: str = ""
     reason_codes: Tuple[str, ...] = ()
+    candidate_attributable_infeasible_pairs: Optional[int] = None
 
 @dataclass(frozen=True)
 class MetricEvalStats:
@@ -228,6 +229,7 @@ class ProtocolResult:
     case_aggregation_method: str = "seed_vote_majority"
     case_effect_metric: str = ""
     case_equivalence_band: float = 0.0
+    candidate_attributable_infeasible_pairs: Optional[int] = None
 
 
 @dataclass(frozen=True)

@@ -152,6 +152,7 @@ def test_paired_order_is_global_fresh_and_records_complete_a_b_raw(tmp_path):
         str(champion), str(candidate), str(candidate), str(champion)
     ]
     for result, expected in ((ab, "AB"), (ba, "BA")):
+        assert result.candidate_attributable_infeasible_pairs == 0
         raw = json.loads(Path(result.raw_metrics_ref).read_text())
         assert "paired_execution" not in raw
         pair = raw["pairs"][0]["paired_execution"]
@@ -194,12 +195,28 @@ def test_paired_invalid_b_is_counted_and_excluded_from_statistics(
     assert result.stats.failed_pairs == 1
     assert result.stats.candidate_failed_pairs == 1
     assert result.stats.champion_failed_pairs == 0
+    assert result.candidate_attributable_infeasible_pairs == int(
+        failure_mode == "infeasible"
+    )
     assert result.stats.runtime_pairs == 0
     assert result.pair_feedback == ()
     pair = json.loads(Path(result.raw_metrics_ref).read_text())["pairs"][0]
     assert pair["comparison"] == "invalid"
     assert pair["delta"] is None
     assert pair["paired_execution"]["B"]["failure"]
+
+
+def test_paired_bilateral_infeasibility_is_not_candidate_attributable(tmp_path):
+    protocol, runner, candidate, champion = _protocol(tmp_path)
+    runner.results[str(candidate)] = _result(1, feasible=False)
+    runner.results[str(champion)] = _result(2, success=False)
+
+    result = _run(protocol, candidate, champion, _spec(candidate=1))
+
+    assert result.stats.candidate_failed_pairs == 1
+    assert result.stats.champion_failed_pairs == 1
+    assert result.stats.bilateral_failed_pairs == 1
+    assert result.candidate_attributable_infeasible_pairs == 0
 
 
 @pytest.mark.parametrize(

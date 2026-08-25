@@ -15,6 +15,7 @@ def test_run_canary_pass(tmp_path):
     proto = _make_protocol(runner, tmp_path)
     result = proto.run_canary("/cand", "/champ")
     assert result.passed
+    assert result.candidate_attributable_infeasible_pairs == 0
 
 
 def test_run_canary_fail_infeasible(tmp_path):
@@ -27,6 +28,7 @@ def test_run_canary_fail_infeasible(tmp_path):
     proto = _make_protocol(runner, tmp_path)
     result = proto.run_canary("/cand", "/champ")
     assert not result.passed
+    assert result.candidate_attributable_infeasible_pairs == 1
 
 
 def test_run_canary_fail_solver_crash(tmp_path):
@@ -42,6 +44,7 @@ def test_run_canary_fail_solver_crash(tmp_path):
     proto = _make_protocol(runner, tmp_path)
     result = proto.run_canary("/cand", "/champ")
     assert not result.passed
+    assert result.candidate_attributable_infeasible_pairs == 0
     assert result.details["candidate_outcome"]["output_present"] is False
     assert "output_path" not in result.details["candidate_outcome"]
 
@@ -68,6 +71,63 @@ def test_complete_pair_canary_runs_champion_after_candidate_failure(tmp_path):
     assert result.details["pair_failure_scope"] == "candidate"
     assert result.details["candidate_failed_pairs"] == 1
     assert result.details["champion_failed_pairs"] == 0
+    assert result.candidate_attributable_infeasible_pairs == 0
+
+
+def test_complete_pair_canary_counts_only_candidate_attributable_infeasibility(
+    tmp_path,
+):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 900, feasible=False),
+        _make_run_result(2, 1000, feasible=True),
+    ]
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_canary("/cand", "/champ", require_complete_pairs=True)
+
+    assert result.passed is False
+    assert result.details["pair_failure_scope"] == "candidate"
+    assert result.details["failure_attribution"]["candidate_failure_kind"] == (
+        "infeasible"
+    )
+    assert result.candidate_attributable_infeasible_pairs == 1
+
+
+@pytest.mark.parametrize(
+    ("champion_result", "expected_scope"),
+    (
+        (_make_run_result(2, 1000, feasible=False), "shared"),
+        (
+            RunResult(
+                success=False,
+                exit_code=1,
+                stdout="",
+                stderr="champion crash",
+                elapsed_ms=50,
+                error_category="crash",
+            ),
+            "bilateral",
+        ),
+    ),
+)
+def test_complete_pair_canary_excludes_non_candidate_infeasibility_attribution(
+    tmp_path,
+    champion_result,
+    expected_scope,
+):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 900, feasible=False),
+        champion_result,
+    ]
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_canary("/cand", "/champ", require_complete_pairs=True)
+
+    assert result.passed is False
+    assert result.details["pair_failure_scope"] == expected_scope
+    assert result.candidate_attributable_infeasible_pairs == 0
 
 
 def test_complete_pair_canary_success_records_comparator_observed(tmp_path):
@@ -80,6 +140,7 @@ def test_complete_pair_canary_success_records_comparator_observed(tmp_path):
     assert result.passed is True
     assert result.details["complete_pairs_required"] is True
     assert result.details["champion_status"] == "passed"
+    assert result.candidate_attributable_infeasible_pairs == 0
 
 
 def test_complete_pair_canary_rejects_champion_failure(tmp_path):
@@ -103,6 +164,7 @@ def test_complete_pair_canary_rejects_champion_failure(tmp_path):
     assert result.failure_category == "incomplete_evidence"
     assert result.reason_codes == ("CANARY_CHAMPION_FAILURE",)
     assert result.details["pair_failure_scope"] == "champion"
+    assert result.candidate_attributable_infeasible_pairs == 0
 
 
 def test_complete_pair_canary_distinguishes_shared_and_bilateral_failures(tmp_path):
@@ -133,6 +195,7 @@ def test_complete_pair_canary_distinguishes_shared_and_bilateral_failures(tmp_pa
         assert result.details["bilateral_failed_pairs"] == int(expected == "bilateral")
         assert result.details["candidate_failed_pairs"] == int(expected == "bilateral")
         assert result.details["champion_failed_pairs"] == 1
+        assert result.candidate_attributable_infeasible_pairs == 0
 
 
 def test_complete_pair_canary_applies_selected_surface_audit_to_both_arms(tmp_path):
@@ -163,6 +226,7 @@ def test_complete_pair_canary_applies_selected_surface_audit_to_both_arms(tmp_pa
     assert result.passed is False
     assert result.failure_category == "incomplete_evidence"
     assert result.details["pair_failure_scope"] == "shared"
+    assert result.candidate_attributable_infeasible_pairs == 0
 
 
 def test_run_canary_fail_candidate_operator_runtime_error(tmp_path):
@@ -187,6 +251,7 @@ def test_run_canary_fail_candidate_operator_runtime_error(tmp_path):
 
     assert not result.passed
     assert "runtime audit failed" in (result.reason or "")
+    assert result.candidate_attributable_infeasible_pairs == 0
 
 
 def test_run_canary_selected_surface_runtime_fields_are_diagnostic(tmp_path):

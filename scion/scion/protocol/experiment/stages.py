@@ -149,6 +149,7 @@ def run_experiment(
     champion_failed_pairs = 0
     shared_failed_pairs = 0
     bilateral_failed_pairs = 0
+    candidate_attributable_infeasible_pairs = 0
     runtime_ratios: list[float] = []
     runtime_deltas_ms: list[float] = []
     candidate_runtime_categories: dict[str, int] = {}
@@ -499,6 +500,9 @@ def run_experiment(
                         champion_audit=audits["A"],
                         candidate_audit=audits["B"],
                     )
+                    candidate_attributable_infeasible_pairs += int(
+                        _is_candidate_attributable_infeasibility(attribution)
+                    )
                     side = attribution["side"]
                     if side == "candidate":
                         candidate_failed_pairs += 1
@@ -602,6 +606,17 @@ def run_experiment(
                     else None
                 )
 
+            infeasibility_attribution = _paired_failure_attribution(
+                champion_result=champ_r,
+                candidate_result=cand_r,
+                champion_audit=champ_audit_failure,
+                candidate_audit=cand_audit_failure,
+            )
+            candidate_attributable_infeasible_pairs += int(
+                _is_candidate_attributable_infeasibility(
+                    infeasibility_attribution
+                )
+            )
             failure_attribution = _paired_failure_attribution(
                 champion_result=champ_r,
                 candidate_result=cand_r,
@@ -1102,6 +1117,9 @@ def run_experiment(
         runtime_confidence=runtime_confidence,
         runtime_model=runtime_model,
         mechanism_evidence=problem_mechanism_evidence,
+        candidate_attributable_infeasible_pairs=(
+            candidate_attributable_infeasible_pairs
+        ),
     )
     no_objective_effect = (
         stats.wins == 0
@@ -1264,6 +1282,16 @@ def _paired_failure_attribution(
         "champion_failure_kind": str(champion_kind or "execution"),
         "candidate_failure_kind": str(candidate_kind or "execution"),
     }
+
+
+def _is_candidate_attributable_infeasibility(
+    attribution: Mapping[str, str] | None,
+) -> bool:
+    return bool(
+        attribution is not None
+        and attribution.get("attribution") == "candidate"
+        and attribution.get("candidate_failure_kind") == "infeasible"
+    )
 
 
 def _paired_failures_equivalent(

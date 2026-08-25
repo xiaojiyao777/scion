@@ -174,6 +174,7 @@ def run_canary(
                             f"{cand_result.error_category}"
                         ),
                     ),
+                    candidate_attributable_infeasible_pairs=0,
                 )
             cand_audit_issue = runtime_audit_failure_from_result(
                 cand_result,
@@ -217,6 +218,7 @@ def run_canary(
                             f"{case}: {format_runtime_audit_failure(cand_audit_failure)}"
                         ),
                     ),
+                    candidate_attributable_infeasible_pairs=0,
                 )
 
             if champ_result is None:
@@ -271,6 +273,7 @@ def run_canary(
                             f"Candidate infeasible on {case} (champion was feasible)"
                         ),
                     ),
+                    candidate_attributable_infeasible_pairs=1,
                 )
 
             protocol._emit_progress(
@@ -299,6 +302,7 @@ def run_canary(
             ),
             "complete_pairs_required": require_complete_pairs,
         },
+        candidate_attributable_infeasible_pairs=0,
     )
 
 
@@ -387,6 +391,10 @@ def _complete_pair_failure(
         details=details,
         failure_category=failure_category,
         reason_codes=reason_codes,
+        candidate_attributable_infeasible_pairs=int(
+            scope == "candidate"
+            and attribution.get("candidate_failure_kind") == "infeasible"
+        ),
     )
 
 

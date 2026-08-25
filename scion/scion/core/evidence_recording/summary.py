@@ -328,6 +328,23 @@ class CampaignSummaryMixin:
                     pr.candidate_runtime_stop_reasons or {}
                 ),
             }
+            candidate_infeasible_pairs = getattr(
+                pr,
+                "candidate_attributable_infeasible_pairs",
+                None,
+            )
+            if (
+                type(candidate_infeasible_pairs) is int
+                and type(stats.attempted_pairs) is int
+                and type(stats.total_pairs) is int
+                and 0
+                <= candidate_infeasible_pairs
+                <= stats.attempted_pairs
+                <= stats.total_pairs
+            ):
+                step_data["protocol_result"][
+                    "candidate_attributable_infeasible_pairs"
+                ] = candidate_infeasible_pairs
             if _stage_value(pr.stage) == "screening":
                 step_data["protocol_result"].pop("win_rate")
             step_data["protocol_result"].update(_screening_rate_fields(pr))
@@ -363,6 +380,18 @@ def _canary_result_payload(
     reason_codes = tuple(getattr(canary_result, "reason_codes", ()) or ())
     if reason_codes:
         payload["reason_codes"] = list(reason_codes)
+    candidate_infeasible_pairs = getattr(
+        canary_result,
+        "candidate_attributable_infeasible_pairs",
+        None,
+    )
+    passed = getattr(canary_result, "passed", None)
+    if (
+        type(candidate_infeasible_pairs) is int
+        and candidate_infeasible_pairs in {0, 1}
+        and (passed is False or (passed is True and candidate_infeasible_pairs == 0))
+    ):
+        payload["candidate_attributable_infeasible_pairs"] = candidate_infeasible_pairs
     if isinstance(details, Mapping) and details.get("raw_metrics_ref"):
         raw_metrics_ref = public_artifact_ref(
             details["raw_metrics_ref"],
