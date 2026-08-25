@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
 from scion.core.execution_outcome import ExecutionOutcome
-from scion.core.models import StepRecord
+from scion.core.models import (
+    EvalStats,
+    ExperimentStage,
+    PairwiseCaseFeedback,
+    ProtocolResult,
+    StepRecord,
+)
 from scion.core.public_refs import (
     public_artifact_ref,
     public_case_ref,
@@ -25,6 +33,256 @@ logger = logging.getLogger(__name__)
 _REDACTED_PROPOSAL_STAGES = frozenset(
     {"proposal_hypothesis", "proposal_code"}
 )
+_PAIRED_EFFECT_CELLS_SCHEMA = "scion.paired_effect_cells.v1"
+_PAIR_COMPARISONS = frozenset({"win", "loss", "tie"})
+_METRIC_RELATIONS = frozenset({"candidate", "champion", "tie"})
+_METRIC_NAME_RE = re.compile(r"[A-Za-z][A-Za-z0-9_.:-]{0,127}\Z")
+
+
+def _finite_numeric(value: Any) -> bool:
+    if type(value) not in {int, float}:
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, TypeError, ValueError):
+        return False
+
+
+def _ordered_complete_pair_feedback(
+    protocol_result: ProtocolResult,
+) -> tuple[PairwiseCaseFeedback, ...] | None:
+    if (
+        type(protocol_result) is not ProtocolResult
+        or protocol_result.stage is not ExperimentStage.SCREENING
+        or type(protocol_result.stats) is not EvalStats
+        or type(protocol_result.case_ids) is not tuple
+        or type(protocol_result.seed_set) is not tuple
+        or type(protocol_result.pair_feedback) is not tuple
+        or not protocol_result.case_ids
+        or not protocol_result.seed_set
+        or not protocol_result.pair_feedback
+    ):
+        return None
+    if any(
+        type(case_id) is not str or not case_id.strip()
+        for case_id in protocol_result.case_ids
+    ):
+        return None
+    case_basenames = tuple(
+        os.path.basename(case_id) for case_id in protocol_result.case_ids
+    )
+    if any(not basename for basename in case_basenames) or len(
+        set(case_basenames)
+    ) != len(case_basenames):
+        return None
+    seeds = protocol_result.seed_set
+    if any(type(seed) is not int for seed in seeds) or len(set(seeds)) != len(seeds):
+        return None
+    expected_pairs = tuple(
+        (case_id, seed) for case_id in case_basenames for seed in seeds
+    )
+    feedback = protocol_result.pair_feedback
+    if len(feedback) != len(expected_pairs):
+        return None
+    for item, expected in zip(feedback, expected_pairs, strict=True):
+        if (
+            type(item) is not PairwiseCaseFeedback
+            or type(item.case_id) is not str
+            or type(item.seed) is not int
+            or (item.case_id, item.seed) != expected
+        ):
+            return None
+    return feedback
+
+
+def _complete_pair_counts(
+    stats: EvalStats,
+    feedback: tuple[PairwiseCaseFeedback, ...],
+    *,
+    case_count: int,
+) -> bool:
+    count_fields = (
+        stats.n_cases,
+        stats.wins,
+        stats.losses,
+        stats.ties,
+        stats.total_pairs,
+        stats.attempted_pairs,
+        stats.valid_pairs,
+        stats.failed_pairs,
+        stats.candidate_failed_pairs,
+        stats.champion_failed_pairs,
+        stats.shared_failed_pairs,
+        stats.bilateral_failed_pairs,
+        stats.pair_wins,
+        stats.pair_losses,
+        stats.pair_ties,
+    )
+    if any(type(value) is not int for value in count_fields):
+        return False
+    if min(stats.n_cases, stats.wins, stats.losses, stats.ties) < 0 or (
+        stats.wins + stats.losses + stats.ties != stats.n_cases
+    ):
+        return False
+    expected = len(feedback)
+    if not (
+        expected > 0
+        and stats.n_cases == case_count
+        and stats.total_pairs == stats.attempted_pairs == stats.valid_pairs == expected
+        and stats.failed_pairs
+        == stats.candidate_failed_pairs
+        == stats.champion_failed_pairs
+        == stats.shared_failed_pairs
+        == stats.bilateral_failed_pairs
+        == 0
+    ):
+        return False
+    observed = (
+        sum(item.comparison == "win" for item in feedback),
+        sum(item.comparison == "loss" for item in feedback),
+        sum(item.comparison == "tie" for item in feedback),
+    )
+    return observed == (stats.pair_wins, stats.pair_losses, stats.pair_ties)
+
+
+def _metric_values_are_consistent(
+    metric: Any,
+) -> bool:
+    if type(metric.name) is not str or _METRIC_NAME_RE.fullmatch(metric.name) is None:
+        return False
+    if not _finite_numeric(metric.candidate_value) or not _finite_numeric(
+        metric.champion_value
+    ):
+        return False
+    if (
+        not _finite_numeric(metric.signed_delta)
+        or type(metric.relation) is not str
+        or metric.relation not in _METRIC_RELATIONS
+        or type(metric.decisive) is not bool
+    ):
+        return False
+    candidate_value = float(metric.candidate_value)
+    reference_value = float(metric.champion_value)
+    signed_delta = float(metric.signed_delta)
+    if not math.isclose(
+        abs(signed_delta),
+        abs(candidate_value - reference_value),
+    ):
+        return False
+    return not (
+        (metric.relation == "candidate" and signed_delta <= 0.0)
+        or (metric.relation == "champion" and signed_delta >= 0.0)
+    )
+
+
+def _objective_decisive_shape_is_consistent(
+    comparison: Any,
+    metrics: tuple[Any, ...],
+) -> bool:
+    if not _finite_numeric(comparison.scalar_delta):
+        return False
+    metric_names = tuple(metric.name for metric in metrics)
+    if len(set(metric_names)) != len(metric_names):
+        return False
+    decisive = tuple(metric for metric in metrics if metric.decisive)
+    if comparison.outcome == "tie":
+        return comparison.decisive_metric is None and not decisive
+    if (
+        type(comparison.decisive_metric) is not str
+        or _METRIC_NAME_RE.fullmatch(comparison.decisive_metric) is None
+        or len(decisive) != 1
+        or decisive[0].name != comparison.decisive_metric
+    ):
+        return False
+    expected_relation = "candidate" if comparison.outcome == "win" else "champion"
+    return decisive[0].relation == expected_relation
+
+
+def _feedback_matches_objective(feedback: Any, comparison: Any) -> bool:
+    if type(feedback.comparison) is not str:
+        return False
+    if feedback.comparison not in _PAIR_COMPARISONS:
+        return False
+    if type(comparison.outcome) is not str:
+        return False
+    if comparison.outcome != feedback.comparison:
+        return False
+    if not _finite_numeric(feedback.delta) or not _finite_numeric(
+        comparison.scalar_delta
+    ):
+        return False
+    return math.isclose(float(feedback.delta), float(comparison.scalar_delta))
+
+
+def _paired_effect_cell(
+    feedback: PairwiseCaseFeedback,
+    *,
+    metric_name: str,
+) -> dict[str, int | float] | None:
+    from scion.problem.objectives import MetricComparison, ObjectiveComparison
+
+    comparison = feedback.objective_comparison
+    if type(comparison) is not ObjectiveComparison:
+        return None
+    if not _feedback_matches_objective(feedback, comparison):
+        return None
+    metrics = comparison.metrics
+    if type(metrics) is not tuple or any(
+        type(metric) is not MetricComparison for metric in metrics
+    ):
+        return None
+    if any(not _metric_values_are_consistent(metric) for metric in metrics):
+        return None
+    if not _objective_decisive_shape_is_consistent(comparison, metrics):
+        return None
+    matches = tuple(
+        metric
+        for metric in metrics
+        if type(metric.name) is str and metric.name == metric_name
+    )
+    if len(matches) != 1:
+        return None
+    metric = matches[0]
+    return {
+        "candidate_value": metric.candidate_value,
+        "reference_value": metric.champion_value,
+    }
+
+
+def _paired_effect_cells_payload(protocol_result: Any) -> dict[str, Any]:
+    try:
+        feedback = _ordered_complete_pair_feedback(protocol_result)
+        if feedback is None or not _complete_pair_counts(
+            protocol_result.stats,
+            feedback,
+            case_count=len(protocol_result.case_ids),
+        ):
+            return {}
+        if (
+            type(protocol_result.case_aggregation_method) is not str
+            or protocol_result.case_aggregation_method != "paired_effect_median"
+        ):
+            return {}
+        metric_name = protocol_result.case_effect_metric
+        if (
+            type(metric_name) is not str
+            or metric_name != metric_name.strip()
+            or _METRIC_NAME_RE.fullmatch(metric_name) is None
+        ):
+            return {}
+        cells: list[dict[str, int | float]] = []
+        for item in feedback:
+            cell = _paired_effect_cell(item, metric_name=metric_name)
+            if cell is None:
+                return {}
+            cells.append(cell)
+        return {
+            "schema_version": _PAIRED_EFFECT_CELLS_SCHEMA,
+            "metric_name": metric_name,
+            "cells": cells,
+        }
+    except Exception:  # noqa: BLE001 - summary projection must remain no-throw
+        return {}
 
 
 def _redacted_proposal_stage(step: StepRecord) -> str | None:
@@ -345,6 +603,11 @@ class CampaignSummaryMixin:
                 step_data["protocol_result"][
                     "candidate_attributable_infeasible_pairs"
                 ] = candidate_infeasible_pairs
+            paired_effect_cells = _paired_effect_cells_payload(pr)
+            if paired_effect_cells:
+                step_data["protocol_result"]["paired_effect_cells"] = (
+                    paired_effect_cells
+                )
             if _stage_value(pr.stage) == "screening":
                 step_data["protocol_result"].pop("win_rate")
             step_data["protocol_result"].update(_screening_rate_fields(pr))
