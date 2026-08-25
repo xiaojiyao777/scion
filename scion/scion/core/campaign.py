@@ -179,6 +179,7 @@ class CampaignManager:
             self._run_research_environment_preflight()
             return self._campaign_loop.run(requested_rounds=self._requested_rounds)
         except Exception as exc:
+            self._seal_proposal_runtime("unresolved")
             reason = (
                 "preflight_exception"
                 if not getattr(self, "_research_preflight_checked", False)
@@ -219,14 +220,16 @@ class CampaignManager:
             except Exception:
                 logger.exception("Failed to shut down weight opt after requested stop")
         current = self._terminal_run_result(getattr(self, "_requested_rounds", 1))
+        interrupted = (
+            self._campaign_loop.call_in_progress
+            if interrupted_override is None
+            else interrupted_override
+        )
         terminal = current.terminalized(
             self._last_stop_reason,
-            interrupted=(
-                self._campaign_loop.call_in_progress
-                if interrupted_override is None
-                else interrupted_override
-            ),
+            interrupted=interrupted,
         )
+        self._seal_proposal_runtime("interrupted" if interrupted else "unresolved")
         self._campaign_loop.current_result = terminal
         self._campaign_loop.call_in_progress = False
         self._write_terminal_artifacts(terminal)
@@ -339,10 +342,6 @@ class CampaignManager:
             "balance_exhausted": self._balance_exhausted,
             "branches": branch_rows,
         }
-        if bounded_research:
-            state["proposal_runtime"] = {
-                "provider_calls": self._provider_call_budget.snapshot().to_primitive()
-            }
         if self._qualification_only_config is not None:
             state["campaign_mode"] = "qualification_only"
         if measurement_readiness is not None:
@@ -371,8 +370,22 @@ class CampaignManager:
             )
         if current_run is None:
             current_run = self._empty_run_result(getattr(self, "_requested_rounds", 1))
+        if bounded_research:
+            provider_calls = self._provider_call_budget.snapshot()
+            runtime = self._proposal_runtime_telemetry
+            state["proposal_runtime"] = runtime.snapshot(
+                provider_calls,
+                terminal=bool(current_run.stop_reason),
+            ).to_primitive()
         state["run_result"] = current_run.to_projection()
         return state
+
+    def _seal_proposal_runtime(self, state: str) -> None:
+        """Defensively close a bounded attempt at an outer terminal edge."""
+
+        runtime = getattr(self, "_proposal_runtime_telemetry", None)
+        if runtime is not None:
+            runtime.seal_active(state)
 
     def _write_status(
         self,
@@ -723,6 +736,7 @@ class CampaignManager:
     def _write_terminal_artifacts(self, run_result: CampaignRunResult) -> None:
         """Write status and summary from one terminal value and state snapshot."""
 
+        self._seal_proposal_runtime("unresolved")
         state = self.get_state(run_result=run_result)
         projection = state["run_result"]
         try:

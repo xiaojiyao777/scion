@@ -96,6 +96,8 @@ class ProposalPipeline:
     mark_balance_exhausted: Callable[[], None]
     code_research_limits: CodeResearchLimits | None = None
     code_development_evaluator: Any | None = None
+    record_hypothesis_candidate_completed: Callable[[], None] | None = None
+    record_hypothesis_candidate_selected: Callable[[], None] | None = None
     _hypothesis_rejection_counts: dict[str, int] = field(
         default_factory=dict,
         init=False,
@@ -155,6 +157,12 @@ class ProposalPipeline:
                 research_result = HypothesisResearchSession(
                     self.creative,
                     self.code_research_limits,
+                    record_candidate_completed=(
+                        self.record_hypothesis_candidate_completed
+                    ),
+                    record_candidate_selected=(
+                        self.record_hypothesis_candidate_selected
+                    ),
                 ).run(
                     prompt_snapshot,
                     public_sources=public_sources,

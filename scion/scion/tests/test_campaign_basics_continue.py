@@ -203,7 +203,29 @@ class TestCampaignBasics:
                     "code_research_finalize": 0,
                     "other": 0,
                 },
-            }
+            },
+            "attempts": [
+                {
+                    "round_num": 1,
+                    "accounting_state": "closed",
+                    "provider_calls": {
+                        "budget_admitted": 1,
+                        "by_request_kind": {
+                            "hypothesis": 0,
+                            "hypothesis_research_turn": 1,
+                            "code": 0,
+                            "code_research_turn": 0,
+                            "code_research_finalize": 0,
+                            "other": 0,
+                        },
+                    },
+                    "hypothesis_candidates_completed": 0,
+                    "hypothesis_candidates_selected": 0,
+                    "hypotheses_exported": 0,
+                    "patches_completed": 0,
+                    "code_candidates_ready": 0,
+                }
+            ],
         }
         assert result.stop_reason == "execution_blocked_infra"
         assert state["proposal_runtime_mode"] == "bounded_research_v1"

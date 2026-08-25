@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import threading
+from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ from scion.core.promotion_service import PromotionService
 from scion.core.proposal_pipeline import (
     ProposalPipeline,
 )
+from scion.core.proposal_runtime_telemetry import ProposalRuntimeTelemetry
 from scion.core.qualification import (
     QualificationRuntime,
     normalize_qualification_only_config,
@@ -187,6 +189,16 @@ def compose_campaign_services(
         owner._resource_envelope.provider_call_cap
     )
     owner._code_research_limits = normalized_code_research_limits
+    owner._proposal_runtime_telemetry = (
+        None
+        if normalized_code_research_limits is None
+        else ProposalRuntimeTelemetry(
+            owner._provider_call_budget,
+            max_hypothesis_candidates=(
+                normalized_code_research_limits.max_hypothesis_candidates
+            ),
+        )
+    )
     owner._qualification_only_config = (
         normalized_qualification_only
         if normalized_qualification_only is not None
@@ -340,6 +352,16 @@ def compose_campaign_services(
         mark_balance_exhausted=lambda: _mark_balance_exhausted(owner),
         code_research_limits=owner._code_research_limits,
         code_development_evaluator=owner._code_development_evaluator,
+        record_hypothesis_candidate_completed=(
+            owner._proposal_runtime_telemetry.record_hypothesis_candidate_completed
+            if owner._proposal_runtime_telemetry is not None
+            else None
+        ),
+        record_hypothesis_candidate_selected=(
+            owner._proposal_runtime_telemetry.record_hypothesis_candidate_selected
+            if owner._proposal_runtime_telemetry is not None
+            else None
+        ),
     )
     owner._research_rejection_finalizer = ResearchRejectionFinalizer(
         campaign_id=owner._campaign_id,
@@ -412,6 +434,26 @@ def compose_campaign_services(
         reserve_proposal_attempt=(
             owner._qualification_runtime.reserve_proposal_attempt
             if owner._qualification_runtime is not None
+            else (lambda: None)
+        ),
+        proposal_attempt_scope=(
+            owner._proposal_runtime_telemetry.attempt_scope
+            if owner._proposal_runtime_telemetry is not None
+            else (lambda _round_num: nullcontext())
+        ),
+        record_hypothesis_exported=(
+            owner._proposal_runtime_telemetry.record_hypothesis_exported
+            if owner._proposal_runtime_telemetry is not None
+            else (lambda: None)
+        ),
+        record_patch_completed=(
+            owner._proposal_runtime_telemetry.record_patch_completed
+            if owner._proposal_runtime_telemetry is not None
+            else (lambda: None)
+        ),
+        record_code_candidate_ready=(
+            owner._proposal_runtime_telemetry.record_code_candidate_ready
+            if owner._proposal_runtime_telemetry is not None
             else (lambda: None)
         ),
         update_status_progress=owner._update_status_progress,

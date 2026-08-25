@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
@@ -68,6 +68,10 @@ HypothesisResearchResult = HypothesisResearchFinalized | HypothesisResearchAbsta
 
 class HypothesisResearchContextError(ValueError):
     """The frozen H corpus cannot support a safe research session."""
+
+
+def _no_op_candidate_event() -> None:
+    return None
 
 
 def bind_hypothesis_research_turn_tool(
@@ -259,9 +263,26 @@ def bind_hypothesis_research_turn_tool(
 class HypothesisResearchSession:
     """Finite Creative-Layer source/history investigation producing one H."""
 
-    def __init__(self, creative: Any, limits: CodeResearchLimits) -> None:
+    def __init__(
+        self,
+        creative: Any,
+        limits: CodeResearchLimits,
+        *,
+        record_candidate_completed: Callable[[], None] | None = None,
+        record_candidate_selected: Callable[[], None] | None = None,
+    ) -> None:
         self._creative = creative
         self._limits = limits
+        self._record_candidate_completed = (
+            record_candidate_completed
+            if record_candidate_completed is not None
+            else _no_op_candidate_event
+        )
+        self._record_candidate_selected = (
+            record_candidate_selected
+            if record_candidate_selected is not None
+            else _no_op_candidate_event
+        )
         self._budget = BoundedResearchBudget(
             limits,
             label="hypothesis research",
@@ -391,9 +412,17 @@ class HypothesisResearchSession:
                 history_indexes=history_indexes,
             )
             if isinstance(resolution, dict):
+                if (
+                    action == "stage_hypothesis_candidate"
+                    and resolution.get("ok") is True
+                ):
+                    self._record_candidate_completed()
                 self._budget.record_result(resolution)
                 continue
             if isinstance(resolution, HypothesisResearchFinalized):
+                if action == "finalize_hypothesis":
+                    self._record_candidate_completed()
+                self._record_candidate_selected()
                 return resolution
             if action == "abstain":
                 return HypothesisResearchAbstain(payload["reason"])

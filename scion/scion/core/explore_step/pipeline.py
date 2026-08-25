@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, MutableMapping, Optional, Sequence
@@ -38,6 +39,14 @@ from .verification import VerificationMixin
 logger = logging.getLogger(__name__)
 
 
+def _no_op_event() -> None:
+    return None
+
+
+def _no_op_attempt_scope(_round_num: int) -> AbstractContextManager[None]:
+    return nullcontext()
+
+
 __all__ = [
     "ExploreStepPipeline",
 ]
@@ -70,6 +79,12 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
     reserve_proposal_attempt: Callable[[], None] = lambda: None
+    proposal_attempt_scope: Callable[[int], AbstractContextManager[None]] = (
+        _no_op_attempt_scope
+    )
+    record_hypothesis_exported: Callable[[], None] = _no_op_event
+    record_patch_completed: Callable[[], None] = _no_op_event
+    record_code_candidate_ready: Callable[[], None] = _no_op_event
     update_status_progress: Callable[[dict[str, Any] | None], None] = lambda _payload: (
         None
     )
@@ -77,9 +92,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
-        bid = branch.branch_id
         rnum = self.increment_round()
-        h_contract_diagnostics: tuple[dict[str, Any], ...] = ()
         branch.screening_expand_count = 0
         branch.validation_expand_count = 0
 
@@ -89,6 +102,14 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             round_num=rnum,
         )
         self.reserve_proposal_attempt()
+        with self.proposal_attempt_scope(rnum):
+            return self._run_reserved_attempt(branch, rnum)
+
+    def _run_reserved_attempt(self, branch: Branch, rnum: int) -> StepResult:
+        """Run one admitted H/C attempt inside its single telemetry scope."""
+
+        bid = branch.branch_id
+        h_contract_diagnostics: tuple[dict[str, Any], ...] = ()
         hypothesis_attempt = self.generate_hypothesis(branch)
         hypothesis = hypothesis_attempt.proposal
         if hypothesis is None:
@@ -134,6 +155,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     execution_outcome=proposal_outcome,
                 )
             )
+        self.record_hypothesis_exported()
         logger.info(
             "Branch %s R1 hypothesis: locus=%s action=%s target=%s text='%s'",
             bid,
@@ -208,6 +230,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         )
         patch = code_attempt.proposal
         if patch is not None:
+            self.record_patch_completed()
             logger.info(
                 "Branch %s R2 code: file=%s action=%s code_len=%d",
                 bid,
@@ -389,6 +412,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 sync_registry=True,
             )
             workspace = candidate.workspace
+            self.record_code_candidate_ready()
         except Exception as exc:
             logger.warning("Branch %s: apply_patch failed: %s", bid, exc)
             failure_detail = f"apply_patch: {exc}"
