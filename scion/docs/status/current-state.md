@@ -698,19 +698,45 @@ Carrier `25b78037` implements a default-off, shared-budget, session-local K=2 H
 draft bank; `b0d81ddb` adds count-only proposal-attempt telemetry; and
 `bda346e9` adds a pure provider-/solver-free single-arm effectiveness scorer.
 Carrier `3e97243d` adds the pure exact-five-block comparator and its cross-block
-replay/`U_F` reducer. All four have only implementation and synthetic-test
-evidence. They provide no matched CVRP result, population selection or live
-authority, and no K=2 research benefit has yet been observed. The selected
-success-cost shape is an initial-development diagnostic boundary that durably
-records unchanged initial Protocol/Decision, then parks and clears the candidate
-and continues from fresh B0 without expanded or held-out dispatch. That
-default-off production boundary, an ordinal-only safe initial-cell producer and
-a strict study-root audit must be implemented and independently reviewed before
-exact resources or an outcome-blind population are frozen. Preregistration and
-independent reviews remain separate gates before any live authorization. No
-later H/C-reflection, multi-agent or qualification rung opens unless five
-matched blocks improve both efficiency and the frozen development-quality
-endpoint without evidence leakage.
+replay/`U_F` reducer. Carrier `042da9e8` implements the selected default-off
+initial-screening boundary and fresh-B0 retirement; `a8e483bb` adds the
+summary-only ordinal paired-effect cells; `8b7b5988` hardens initial-only
+interruption and authority cleanup; `acff2f0a` adds the strict private decoded
+ten-root audit; and `4256c190` adds bounded no-follow loading and sequential
+revalidation of the three literal public artifacts from ten distinct canonical
+roots. These carriers have implementation, mutation-audit and
+provider-/solver-free writer-roundtrip evidence only. They provide no matched
+CVRP result, population selection or live authority, and no K=2 research
+benefit has yet been observed.
+
+The safe loader proves detached captured bytes and sequential root/leaf
+revalidation, not a simultaneous ten-root snapshot or live freshness. The
+current private path adapter still receives caller-declared expectations and
+loaded history; it does not prove pre-outcome manifest timing, full normalized
+control equality, actual B0 content equality, exact source equality, an
+outcome-blind population or actual arm launch order. The next gate is therefore
+a private pre-run
+`initial_screening_study_controls.json` snapshot and a strict parser/join for
+an ordinary Git-committed manifest. The manifest must replace caller-injected
+expectations/history with each block's pre-outcome frozen basis. For each
+ordered block/arm, its declared-controls projection must equal field-for-field
+the immutable normalized controls that root's runtime consumes and writes to
+its snapshot. Controls declared common by the design must be exact-equal across
+all ten arms, with differences limited to manifest-declared treatment and
+ordinary block, arm,
+root and launch fields. The loader must then join that snapshot's corresponding
+code-research and resource subsets to the independent
+`code_research_limits.json` and `resource_envelope.json` values; known-empty
+available history and typed unavailable history must remain distinct. It
+supplies no self-hash, receipt, nonce, GO token or Scion-side proof of
+preregistration timing. Exact-resource and outcome-blind population freeze
+remain later gates. The status remains
+`NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO`:
+there is no public audit or GO export, CLI or live command; the existing D1 and
+summary public projections remain only their already reviewed count/cell
+fields. No later H/C-reflection, multi-agent or qualification rung opens unless
+five preregistered matched blocks improve both efficiency and the frozen
+development-quality endpoint without evidence leakage.
 
 The B30 safe selector saw 2,163 tracked paths, filtered 524, skipped all 18
 controlled `.vrp`/`.sol` blobs before read, allowlisted 506, found zero unknown

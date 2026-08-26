@@ -725,8 +725,10 @@ The provider-/solver-free metric contract, M30 calibration row, future
 five-block matched-study gate, freshness rule and claim boundary are frozen in
 the [M32 design](docs/experiments/v0.4/v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md).
 The default-off K=2 implementation, count-only attempt telemetry, pure
-single-arm offline scorer and pure exact-five-block comparator now exist, but
-no population selection, matched-study result or live authority exists. Carrier
+single-arm offline scorer, pure exact-five-block comparator, default-off
+initial-screening producer boundary, ordinal-only paired-effect projection,
+strict ten-root artifact audit and safe private root loader now exist, but no
+population selection, matched-study result or live authority exists. Carrier
 `25b78037` implements the private
 ordinal K=2 H bank under the existing shared session budget and exports only
 the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
@@ -734,8 +736,16 @@ provider-delta and H/C boundary counts. Carrier `bda346e9` adds a pure
 provider-/solver-free single-arm scorer that closes current-history, replay,
 formal-quality and paired-effect accounting without emitting H, patch, path,
 identity or hash material. Carrier `3e97243d` adds the pure exact-five-block
-comparator and its cross-block replay/`U_F` reducer. These are implementation
-and synthetic-audit results, not evidence that K=2 improves CVRP research.
+comparator and its cross-block replay/`U_F` reducer. Carrier `042da9e8` adds the
+default-off `initial_screening_only_v1` producer boundary; `a8e483bb` adds the
+ordinal-only paired-effect cells; `8b7b5988` hardens initial-only asynchronous
+terminal cleanup; `acff2f0a` adds the private strict decoded-artifact study
+audit; and `4256c190` adds the private bounded safe-path loader for the ten
+study roots. These are implementation, mutation-audit and provider-/solver-free
+writer-roundtrip results, not evidence that K=2 improves CVRP research.
+The status remains `NO_POPULATION_SELECTION`, `NO_MATCHED_RESULT`,
+`NO_LIVE_AUTHORITY` and `NO_GO`; none of these private carriers is a public
+command or launch path.
 
 - [x] Close the M30 terminal documentation and monitoring-incident record on a
   clean docs-only commit before changing research behavior. Preserve the M30
@@ -791,20 +801,57 @@ and synthetic-audit results, not evidence that K=2 improves CVRP research.
   ratios, signs and fixed availability codes. It creates no GO token, command,
   population or launch authority. Carrier `3e97243d` provides this
   provider-/solver-free comparator with synthetic-only evidence.
-- [ ] Implement and independently red-team a default-off initial-development
+- [x] Implement and independently red-team a default-off initial-development
   diagnostic boundary before selecting any study population. After each initial
   Protocol and unchanged Decision are durably recorded, the boundary must park
   and clear that candidate and continue from fresh B0 without dispatching
   expanded screening, validation or frozen stages. A favorable initial result
   may not consume later proposal-attempt opportunity, and every incomplete or
   resource terminal remains inconclusive rather than being imputed as a
-  scientific negative.
-- [ ] Implement and independently red-team the safe initial-cell producer and
+  scientific negative. Carrier `042da9e8` implements this boundary, and carrier
+  `8b7b5988` closes the initial-only signal, workspace and terminal-accounting
+  races without granting a command or live launch path.
+- [x] Implement and independently red-team the safe initial-cell producer and
   strict study-root audit before any population selection. The producer may
-  project only ordinal paired candidate/B0 values from complete initial
+  project only ordinal paired candidate/B0 values from complete screening
   Protocol evidence, with no case, seed, path, H, patch or raw body; the audit
-  must prove every declared attempt remained reachable and call the existing
-  single-arm and exact-five-block oracles without adding downstream authority.
+  must prove every declared attempt remained reachable before a completed arm
+  can contribute and must keep any exact typed terminal prefix inconclusive,
+  then call the existing single-arm and exact-five-block oracles without adding
+  downstream authority. The generic producer projects any canonical complete
+  screening row in that row's case-major/seed-minor order; only the strict
+  initial-only audit interprets an unexpanded, attempt-joined row as initial,
+  and pre-outcome order/control authority remains an S2c gate.
+  Carrier `a8e483bb` supplies the summary-only ordinal cells, `acff2f0a` audits
+  all ten decoded roots before comparison, and `4256c190` loads only literal
+  `status.json`, `campaign_summary.json` and optional canonical
+  `research_history.jsonl` from ten distinct canonical roots through bounded,
+  no-follow regular-file reads. The loader proves detached bytes plus sequential
+  path revalidation, not a simultaneous ten-root snapshot, live freshness,
+  pre-outcome controls or population authority.
+- [ ] Add one private pre-run normalized
+  `initial_screening_study_controls.json` snapshot and a strict parser/join for
+  an ordinary Git-committed study manifest before selecting a population. The
+  manifest must become the sole source of the five ordered block expectations
+  and each block's explicit loaded-history availability/basis. The K=1 and K=2
+  arms must share that basis within a block, while all five bases are frozen
+  before the first outcome and contain no M32 outcome. Known-empty available
+  history and typed unavailable history are not interchangeable. Remove caller
+  expectation/history injection, and require a three-surface exact join: each
+  ordered block/arm's declared-controls projection in the manifest must equal
+  field-for-field the immutable normalized controls that root's runtime
+  consumes and writes to its snapshot, while the snapshot's overlapping
+  code-research and resource subsets must equal that root's independent
+  `code_research_limits.json` and
+  `resource_envelope.json` values. Controls declared common by the design must
+  be exact-equal across all ten arms; only manifest-declared treatment and
+  ordinary block, arm, root and launch fields may differ. The joined
+  controls include requested model/provider settings, Protocol
+  cases/seeds/order/equivalence/time bands, solver and verification limits,
+  hardwall, and source/B0 content and order; source revision remains an external
+  ordinary fact. This remains package-private with no CLI, live command,
+  self-hash, receipt, nonce, GO token or claim that Scion proves preregistration
+  timing.
 - [ ] Preregister repeated matched `K=1` versus `K=2` development comparisons
   under the same total provider, attempt, solver and hardwall envelopes. Use
   outcome-blind ordinary development populations and hold the current

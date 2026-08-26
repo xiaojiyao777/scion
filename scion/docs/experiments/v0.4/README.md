@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-08-25*
+*Last updated: 2026-08-26*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,7 @@ referenced, not copied into development prompts.
 
 ## Designs
 
-- [CVRP M32 H-candidate-bank research-effectiveness design, default-off K=2 and pure single-arm/exact-five-block offline scoring implemented with no population or live authority](v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md)
+- [CVRP M32 H-candidate-bank research-effectiveness design, default-off K=2/initial-screening producer boundary, ordinal cells, strict ten-root audit and safe private loader implemented with no population, matched result, GO or live authority](v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md)
 
 ## Runs
 

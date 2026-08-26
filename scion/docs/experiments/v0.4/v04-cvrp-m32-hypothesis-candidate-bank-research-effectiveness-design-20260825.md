@@ -1,6 +1,6 @@
 # CVRP M32 hypothesis-candidate-bank research-effectiveness design
 
-Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / NO_POPULATION_SELECTION / NO_LIVE_AUTHORITY**
+Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
 
 Date: `2026-08-25`
 
@@ -21,6 +21,21 @@ Single-arm offline-scoring carrier:
 
 Exact-five-block offline-comparison carrier:
 `3e97243d96df1082246d06c1440c0e2c5480fe28`
+
+Initial-screening producer-boundary carrier:
+`042da9e88d1e85eca4a0a431cd187c5eaae2e3fb`
+
+Ordinal paired-effect-cell carrier:
+`a8e483bb285fb49b3482c797e93792d013470db3`
+
+Initial-only interruption-hardening carrier:
+`8b7b59886ad0ae6b10f2f672df24ecebd66270da`
+
+Strict decoded study-root audit carrier:
+`acff2f0ac3b5f9a8a7c7d56a23f200ca4fd9449e`
+
+Safe study-root loader carrier:
+`4256c190ccf3d75c492ed81c18dcb97ef3072286`
 
 This is a measurement and future-study design, not a live preregistration. It
 does not select, rank or materialize a case, seed, salt, population, campaign
@@ -87,8 +102,43 @@ replay/`U_F` guard inside one private in-memory boundary, and returns aggregate
 counts, ratios, signs and availability values only. It emits no GO token and
 creates no population, command or launch authority.
 
-These carriers implement and synthetically audit K=2, telemetry, single-arm
-measurement and exact-five-block comparison. They do not select a population,
+Carrier `042da9e88d1e85eca4a0a431cd187c5eaae2e3fb` adds the default-off
+`initial_screening_only_v1` boundary. Every returned initial Protocol and
+unchanged Decision is durably recorded before the candidate is parked and its
+candidate authority is cleared; the next attempt starts from fresh B0, and the
+mode dispatches no expanded, validation or frozen stage. Carrier
+`8b7b59886ad0ae6b10f2f672df24ecebd66270da` closes the initial-only signal,
+workspace and post-return accounting races so typed interruption remains
+incomplete without leaving candidate authority. Neither carrier exposes a CLI
+mode or creates live launch authority.
+
+Carrier `a8e483bb285fb49b3482c797e93792d013470db3` adds summary-only,
+ordinal paired-effect cells for any canonical complete screening row, in that
+row's case-major/seed-minor order. It projects only candidate and B0
+`total_distance` values; it emits no case, seed, path, H, patch or raw-metric
+body. Only the later strict adapter interprets those cells as initial evidence
+after joining an initial-only, unexpanded row to its attempt; pre-outcome order
+and control authority remain a later manifest gate. Carrier
+`acff2f0ac3b5f9a8a7c7d56a23f200ca4fd9449e` adds a private strict adapter that
+decodes all ten supplied roots before comparison, joins status, summary,
+history, attempt telemetry, branch inventory and ordinal cells, and delegates
+only structurally valid initial-only roots to the existing single-arm and
+five-block oracles. Its errors remain fixed and body-free.
+
+Carrier `4256c190ccf3d75c492ed81c18dcb97ef3072286` adds the private safe-path
+adapter. It reads only literal `status.json`, `campaign_summary.json` and the
+optional canonical `research_history.jsonl` from ten distinct canonical root
+directories, using bounded no-follow regular-file reads, strict UTF-8/JSON and
+JSONL decoding, non-alias checks and sequential revalidation. It establishes
+detached captured-byte integrity; it does not establish an atomic simultaneous
+ten-root snapshot, current-at-return freshness, pre-outcome control equality or
+population authority. Expectations and loaded-history controls are still
+private caller declarations at this boundary.
+
+Together these carriers implement and audit K=2, telemetry, initial-only
+retirement, ordinal cells, decoded study structure and safe root loading.
+Tests include provider-/solver-free actual-writer roundtrips as well as
+synthetic interruption and mutation matrices; they do not select a population,
 execute a matched experiment or show that K=2 improves CVRP research.
 
 ## Provider- and solver-free measurement baseline
@@ -110,14 +160,14 @@ statistic. Within one arm of one block:
 - `H` is the number of complete H values selected from the session and exported
   to Hypothesis Contract;
 - `D_H` is the number of those selected H values that are exact-distinct from
-  the common frozen loaded history and from earlier selected H values in the
+  that block's frozen loaded history and from earlier selected H values in the
   same arm of the same block;
 - `C_ready` is the number of selected H values that produce a complete ordered
   patch which passes Patch Contract and can be materialized in an isolated
   workspace;
 - `F` is the number of candidates whose selected H itself contributes to
   `D_H`, whose selected-H plus canonical ordered-patch pair is also
-  exact-distinct from the common frozen loaded history and from earlier such
+  exact-distinct from that block's frozen loaded history and from earlier such
   pairs in the same arm of the same block, and which pass Contract,
   Verification and canary and are actually dispatched to initial Protocol;
   and
@@ -157,7 +207,8 @@ After all five blocks terminate, a separate study-wide guard computes, for
 each arm, exact selected-H and exact H+patch repeats against earlier M32 blocks.
 Each rate uses the sum of that arm's five declared `A_cap` values as its fixed
 denominator. The audit also computes `U_F`, the number of exact-distinct formal
-H+patch pairs across all five blocks after excluding the frozen loaded history.
+H+patch pairs across all five blocks after excluding each pair against its own
+block's frozen loaded-history basis.
 These quantities do not alter any block score. A GO additionally requires both
 cross-block replay rates for K=2 to be no higher than K=1 and
 `U_F(K=2) > U_F(K=1)`. Thus one exact candidate repeated across blocks cannot
@@ -251,8 +302,10 @@ reconstruct cross-block replay or `U_F`; the comparator receives already-decoded
 ordinary H and ordered-patch evidence for all ten supplied arms at once,
 compares those values only transiently, and never emits an identity, hash,
 digest, path or body. Its implementation and independent review establish only
-offline accounting, claim fencing and non-persistence; all executed evidence is
-synthetic. They are not a real matched study or research-effectiveness evidence.
+offline accounting, claim fencing and non-persistence. Later study-root tests
+exercise actual campaign artifact writers without a provider, solver, raw case
+population or live study; they remain implementation evidence, not a real
+matched study or research-effectiveness evidence.
 
 ## Future matched development study
 
@@ -316,16 +369,18 @@ candidate shapes were considered:
 2. an envelope that reserves the full worst-case initial-plus-expanded cost for
    every possible formal candidate in every attempt.
 
-M32 selects the first shape. The next production prerequisite is a default-off
+M32 selects the first shape. Carrier
+`042da9e88d1e85eca4a0a431cd187c5eaae2e3fb` implements the default-off
 initial-development diagnostic boundary: after initial Protocol and the
 unchanged Decision are durably recorded, it parks and clears that candidate and
-continues the next declared attempt from fresh B0. It must never dispatch
-expanded screening, validation or frozen stages, and a favorable initial result
-must not reduce later attempt opportunity. This boundary is not implemented by
-the comparator carrier and grants no promotion authority. The second shape is
-not the M32 design; adopting it would require a new pre-outcome review. A stage
-or resource cap that lets strong candidates crowd out later attempts is not an
-acceptable matched design.
+continues the next declared attempt from fresh B0. It never dispatches expanded
+screening, validation or frozen stages, and a favorable initial result does not
+reduce later proposal-attempt opportunity. Carrier
+`8b7b59886ad0ae6b10f2f672df24ecebd66270da` hardens its asynchronous terminal
+cleanup. These are production-boundary implementations and tests, not a live
+study or promotion authority. The second shape is not the M32 design; adopting
+it would require a new pre-outcome review. A stage or resource cap that lets
+strong candidates crowd out later attempts is not an acceptable matched design.
 
 ### Terminal and replacement rules
 
@@ -407,17 +462,44 @@ evidence. This design does not authorize M33, M34, M35, M36 or any new CVRP
 qualification; every later rung remains conditional on its own reviewed
 preregistration and explicit authorization.
 
-## Remaining gates before any live preregistration
+## Completed audit prerequisites and remaining gates
 
-- implement and independently review the default-off initial-development
-  diagnostic boundary, including fresh-B0 retirement after every durable
-  initial Protocol/Decision and zero expanded or held-out dispatch;
-- implement and independently review a safe ordinal-only initial-cell producer
-  for paired-effect scoring, without emitting case, seed, path, H, patch or raw
-  body material;
-- implement a provider-/solver-free strict study-root audit that proves every
-  declared attempt remained reachable and invokes the existing single-arm and
-  exact-five-block oracles without creating downstream authority;
+The default-off initial-development boundary, ordinal-only initial-cell
+producer, strict decoded ten-root audit and private safe root loader are now
+implemented and independently reviewed in carriers `042da9e8`, `a8e483bb`,
+`8b7b5988`, `acff2f0a` and `4256c190`. The postrun audit and loader remain
+private; there is no public audit or GO export, population, matched result, CLI
+or live authority.
+
+Before any live preregistration, the remaining gates are to:
+
+- add and independently review one ordinary Git-committed study manifest and a
+  private pre-run `initial_screening_study_controls.json` snapshot created from
+  the same immutable normalized controls consumed by the runtime; require a
+  three-surface exact join in which each ordered block/arm's declared-controls
+  projection in the manifest equals field-for-field the immutable normalized
+  controls that root's runtime consumes and writes to its snapshot, and the
+  snapshot's overlapping code-research and resource subsets equal that root's
+  independent `code_research_limits.json` and
+  `resource_envelope.json` values; controls declared common by the design must
+  be exact-equal across all ten arms, with differences limited to
+  manifest-declared treatment and ordinary block, arm, root and launch fields;
+- make the manifest the sole source of the ordered five-block expectations and
+  each block's explicit loaded-history availability/basis; the K=1 and K=2 arms
+  must share exactly the same availability/basis within their block, including
+  a distinction between known-empty available history and typed unavailable
+  history, while all five bases are frozen before the first outcome without
+  M32 outcome ingestion;
+- remove caller expectation/history injection and directly join the requested
+  model/provider settings, Protocol cases/seeds/order/equivalence/time bands,
+  solver and verification limits, hardwall, and source/B0 content and order;
+  source revision remains an external ordinary fact, not Scion authority;
+- keep the control snapshot unreachable from H/C prompt, read and search
+  surfaces, and keep the manifest/control postrun loader private; any
+  identity- or body-bearing scientific input remains private and transient,
+  while outputs, errors, status, history and prompts gain no new body. Add no
+  self-hash, receipt, nonce, GO token, preauthorization or claim that Scion
+  proves preregistration timing;
 - freeze exact numeric resources from the final implementation and population
   metadata;
 - freeze an outcome-blind five-block population and arm order without exposing
