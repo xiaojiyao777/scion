@@ -727,8 +727,9 @@ the [M32 design](docs/experiments/v0.4/v04-cvrp-m32-hypothesis-candidate-bank-re
 The default-off K=2 implementation, count-only attempt telemetry, pure
 single-arm offline scorer, pure exact-five-block comparator, default-off
 initial-screening producer boundary, ordinal-only paired-effect projection,
-strict ten-root artifact audit and safe private root loader now exist, but no
-population selection, matched-study result or live authority exists. Carrier
+strict ten-root artifact audit, safe private root loader and private pre-run
+configuration-subset snapshot now exist, but no population selection,
+matched-study result or live authority exists. Carrier
 `25b78037` implements the private
 ordinal K=2 H bank under the existing shared session budget and exports only
 the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
@@ -740,9 +741,16 @@ comparator and its cross-block replay/`U_F` reducer. Carrier `042da9e8` adds the
 default-off `initial_screening_only_v1` producer boundary; `a8e483bb` adds the
 ordinal-only paired-effect cells; `8b7b5988` hardens initial-only asynchronous
 terminal cleanup; `acff2f0a` adds the private strict decoded-artifact study
-audit; and `4256c190` adds the private bounded safe-path loader for the ten
-study roots. These are implementation, mutation-audit and provider-/solver-free
-writer-roundtrip results, not evidence that K=2 improves CVRP research.
+audit; `4256c190` adds the private bounded safe-path loader for the ten study
+roots; and `f2fd0053` adds the package-private, default-off
+`CONFIG_SUBSET_ONLY` `initial_screening_study_controls.json` producer. It
+writes before other campaign-root side effects from detached normalized
+controls, installs those same detached objects at the finite reviewed direct
+seams and revalidates their publication, joins and pristine run state before
+preflight. Its 203 focused tests passed and independent science/privacy and
+red-team review reported P0/P1/P2 = `0/0/0`. These are implementation,
+mutation-audit and provider-/solver-free writer-roundtrip results, not evidence
+that K=2 improves CVRP research.
 The status remains `NO_POPULATION_SELECTION`, `NO_MATCHED_RESULT`,
 `NO_LIVE_AUTHORITY` and `NO_GO`; none of these private carriers is a public
 command or launch path.
@@ -829,9 +837,19 @@ command or launch path.
   no-follow regular-file reads. The loader proves detached bytes plus sequential
   path revalidation, not a simultaneous ten-root snapshot, live freshness,
   pre-outcome controls or population authority.
-- [ ] Add one private pre-run normalized
-  `initial_screening_study_controls.json` snapshot and a strict parser/join for
-  an ordinary Git-committed study manifest before selecting a population. The
+- [x] Add the default-off, package-private pre-run
+  `initial_screening_study_controls.json` configuration-subset snapshot without
+  public, CLI or live authority. Carrier `f2fd0053` records only the normalized
+  qualification, code-research, resource, scheduler and Protocol subset,
+  installs those same detached controls for runtime consumption at the known
+  reviewed direct seams, and revalidates the exact publication, installed joins
+  and pristine state before preflight. It remains `CONFIG_SUBSET_ONLY`: it does
+  not cover requested provider/model policy, ProblemSpec, research input or
+  actual loaded-history consumption, verification, runner or hardwall
+  enforcement, full source or B0 content, a study manifest, population
+  freshness or actual launch order.
+- [ ] Complete S2c control authority with a strict parser/join for an ordinary
+  Git-committed study manifest before selecting a population. The
   manifest must become the sole source of the five ordered block expectations
   and each block's explicit loaded-history availability/basis. The K=1 and K=2
   arms must share that basis within a block, while all five bases are frozen
@@ -839,19 +857,37 @@ command or launch path.
   history and typed unavailable history are not interchangeable. Remove caller
   expectation/history injection, and require a three-surface exact join: each
   ordered block/arm's declared-controls projection in the manifest must equal
-  field-for-field the immutable normalized controls that root's runtime
-  consumes and writes to its snapshot, while the snapshot's overlapping
-  code-research and resource subsets must equal that root's independent
-  `code_research_limits.json` and
+  field-for-field the immutable normalized controls installed for runtime
+  consumption at that root's known reviewed direct seams and written to its
+  snapshot, while the snapshot's overlapping code-research and resource subsets
+  must equal that root's independent `code_research_limits.json` and
   `resource_envelope.json` values. Controls declared common by the design must
   be exact-equal across all ten arms; only manifest-declared treatment and
   ordinary block, arm, root and launch fields may differ. The joined
-  controls include requested model/provider settings, Protocol
-  cases/seeds/order/equivalence/time bands, solver and verification limits,
-  hardwall, and source/B0 content and order; source revision remains an external
-  ordinary fact. This remains package-private with no CLI, live command,
-  self-hash, receipt, nonce, GO token or claim that Scion proves preregistration
-  timing.
+  controls must ultimately add requested provider/model policy, ProblemSpec and
+  actual research-input/history consumption, normalized requested/resolved
+  solver and verification configuration, declared hardwall cap and launcher
+  configuration, and source/B0 content and order; source revision remains an
+  external ordinary fact. Runner/backend runtime enforcement and external
+  hardwall enforcement remain unverified under
+  `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` and
+  `EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`. A first partial manifest
+  implementation may return only a private `CONFIG_SUBSET_JOINED` or
+  validation-success carrier for the fields already proved by `f2fd0053`; it
+  must not call, return or pass through the D3 exact-five-block endpoint and
+  cannot create a matched result. The
+  implementation order is the partial parser, then provider/model, source/B0,
+  requested/resolved solver and verification, declared hardwall/launcher and
+  other full-control joins, followed by a gated comparator schema exercised only
+  on synthetic inputs. These joins do not lift either enforcement limitation.
+  Only after those generic gates exist may an outcome-blind metadata-only
+  population be selected; the study-specific cases, seeds, time/resource
+  arithmetic, actual ordinary manifest and launch order must then be
+  mechanically frozen and independently reviewed before any live authority.
+  Comparator code may therefore precede population selection, but its
+  implementation does not freeze the missing values or the actual study
+  manifest. This remains package-private with no CLI, live command, self-hash,
+  receipt, nonce, GO token or claim that Scion proves preregistration timing.
 - [ ] Preregister repeated matched `K=1` versus `K=2` development comparisons
   under the same total provider, attempt, solver and hardwall envelopes. Use
   outcome-blind ordinary development populations and hold the current

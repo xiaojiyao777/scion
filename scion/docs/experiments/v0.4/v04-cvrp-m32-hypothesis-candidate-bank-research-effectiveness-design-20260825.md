@@ -1,6 +1,6 @@
 # CVRP M32 hypothesis-candidate-bank research-effectiveness design
 
-Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
+Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
 
 Date: `2026-08-25`
 
@@ -36,6 +36,9 @@ Strict decoded study-root audit carrier:
 
 Safe study-root loader carrier:
 `4256c190ccf3d75c492ed81c18dcb97ef3072286`
+
+Initial-screening configuration-subset carrier:
+`f2fd0053e5cb5ed5e880c7e369b3141a9c600d2a`
 
 This is a measurement and future-study design, not a live preregistration. It
 does not select, rank or materialize a case, seed, salt, population, campaign
@@ -135,8 +138,21 @@ ten-root snapshot, current-at-return freshness, pre-outcome control equality or
 population authority. Expectations and loaded-history controls are still
 private caller declarations at this boundary.
 
+Carrier `f2fd0053e5cb5ed5e880c7e369b3141a9c600d2a` adds the package-private,
+default-off `CONFIG_SUBSET_ONLY` pre-run
+`initial_screening_study_controls.json` snapshot. Before other campaign-root
+side effects it detaches and normalizes the bounded qualification,
+code-research, resource, scheduler and Protocol subset, writes the private
+snapshot, installs those same detached objects at the finite reviewed direct
+seams, and gates `run` on exact publication, installed joins and pristine state
+before preflight. Its 203 focused tests passed, and independent science/privacy
+and red-team review reported P0/P1/P2 = `0/0/0`. This is pre-run
+configuration-subset evidence only, not proof of actual execution or
+enforcement throughout the run.
+
 Together these carriers implement and audit K=2, telemetry, initial-only
-retirement, ordinal cells, decoded study structure and safe root loading.
+retirement, ordinal cells, decoded study structure, safe root loading and the
+pre-run configuration subset.
 Tests include provider-/solver-free actual-writer roundtrips as well as
 synthetic interruption and mutation matrices; they do not select a population,
 execute a matched experiment or show that K=2 improves CVRP research.
@@ -465,20 +481,19 @@ preregistration and explicit authorization.
 ## Completed audit prerequisites and remaining gates
 
 The default-off initial-development boundary, ordinal-only initial-cell
-producer, strict decoded ten-root audit and private safe root loader are now
-implemented and independently reviewed in carriers `042da9e8`, `a8e483bb`,
-`8b7b5988`, `acff2f0a` and `4256c190`. The postrun audit and loader remain
-private; there is no public audit or GO export, population, matched result, CLI
-or live authority.
+producer, strict decoded ten-root audit, private safe root loader and private
+configuration-subset snapshot are now implemented and independently reviewed
+in carriers `042da9e8`, `a8e483bb`, `8b7b5988`, `acff2f0a`, `4256c190` and
+`f2fd0053`. The postrun audit and loader remain private; there is no public audit
+or GO export, population, matched result, CLI or live authority.
 
 Before any live preregistration, the remaining gates are to:
 
-- add and independently review one ordinary Git-committed study manifest and a
-  private pre-run `initial_screening_study_controls.json` snapshot created from
-  the same immutable normalized controls consumed by the runtime; require a
-  three-surface exact join in which each ordered block/arm's declared-controls
-  projection in the manifest equals field-for-field the immutable normalized
-  controls that root's runtime consumes and writes to its snapshot, and the
+- add and independently review one ordinary Git-committed study manifest and
+  require a three-surface exact join in which each ordered block/arm's
+  declared-controls projection in the manifest equals field-for-field the
+  immutable normalized controls installed for runtime consumption at that
+  root's known reviewed direct seams and written to its snapshot, and the
   snapshot's overlapping code-research and resource subsets equal that root's
   independent `code_research_limits.json` and
   `resource_envelope.json` values; controls declared common by the design must
@@ -490,10 +505,30 @@ Before any live preregistration, the remaining gates are to:
   a distinction between known-empty available history and typed unavailable
   history, while all five bases are frozen before the first outcome without
   M32 outcome ingestion;
-- remove caller expectation/history injection and directly join the requested
-  model/provider settings, Protocol cases/seeds/order/equivalence/time bands,
-  solver and verification limits, hardwall, and source/B0 content and order;
-  source revision remains an external ordinary fact, not Scion authority;
+- remove caller expectation/history injection. The existing subset already
+  joins its bounded qualification, code-research, resource, scheduler and
+  Protocol controls, but requested provider/model policy, ProblemSpec and
+  actual research-input/history consumption, normalized requested/resolved
+  solver and verification configuration, declared hardwall cap and launcher
+  configuration, and source/B0 content and order remain unproved; source
+  revision remains an external ordinary fact, not Scion authority.
+  Runner/backend runtime enforcement and external hardwall enforcement remain
+  unverified under
+  `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` and
+  `EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`;
+- keep any first partial manifest wrapper validation-only: it may return a
+  private `CONFIG_SUBSET_JOINED` or validation-success carrier, but may not call,
+  return or pass through the D3 exact-five-block endpoint and therefore cannot
+  create a matched result. Implement provider/model, source/B0,
+  requested/resolved solver and verification, declared hardwall/launcher and the
+  other full-control joins next, followed by a gated comparator schema exercised
+  only on synthetic inputs; none of those joins proves runtime enforcement. Only
+  after those generic gates exist may an outcome-blind metadata-only population
+  be selected; then mechanically freeze the study-specific cases, seeds,
+  time/resource arithmetic, actual ordinary manifest and launch order before
+  independent review and any separate live authorization. Implementing
+  comparator code before population selection does not freeze those missing
+  values or the actual study manifest;
 - keep the control snapshot unreachable from H/C prompt, read and search
   surfaces, and keep the manifest/control postrun loader private; any
   identity- or body-bearing scientific input remains private and transient,

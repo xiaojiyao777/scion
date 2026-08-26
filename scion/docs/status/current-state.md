@@ -704,7 +704,14 @@ summary-only ordinal paired-effect cells; `8b7b5988` hardens initial-only
 interruption and authority cleanup; `acff2f0a` adds the strict private decoded
 ten-root audit; and `4256c190` adds bounded no-follow loading and sequential
 revalidation of the three literal public artifacts from ten distinct canonical
-roots. These carriers have implementation, mutation-audit and
+roots. Carrier `f2fd0053` adds the package-private, default-off
+`CONFIG_SUBSET_ONLY` pre-run `initial_screening_study_controls.json` snapshot.
+It is published before other campaign-root side effects from detached
+normalized controls, installs those same detached objects at finite reviewed
+direct seams, and revalidates the publication, installed joins and pristine run
+state before preflight. Its 203 focused tests passed, and independent
+science/privacy and red-team review reported P0/P1/P2 = `0/0/0`. These carriers
+have implementation, mutation-audit and
 provider-/solver-free writer-roundtrip evidence only. They provide no matched
 CVRP result, population selection or live authority, and no K=2 research
 benefit has yet been observed.
@@ -712,25 +719,39 @@ benefit has yet been observed.
 The safe loader proves detached captured bytes and sequential root/leaf
 revalidation, not a simultaneous ten-root snapshot or live freshness. The
 current private path adapter still receives caller-declared expectations and
-loaded history; it does not prove pre-outcome manifest timing, full normalized
-control equality, actual B0 content equality, exact source equality, an
-outcome-blind population or actual arm launch order. The next gate is therefore
-a private pre-run
-`initial_screening_study_controls.json` snapshot and a strict parser/join for
-an ordinary Git-committed manifest. The manifest must replace caller-injected
-expectations/history with each block's pre-outcome frozen basis. For each
-ordered block/arm, its declared-controls projection must equal field-for-field
-the immutable normalized controls that root's runtime consumes and writes to
-its snapshot. Controls declared common by the design must be exact-equal across
-all ten arms, with differences limited to manifest-declared treatment and
-ordinary block, arm,
-root and launch fields. The loader must then join that snapshot's corresponding
+loaded history. The new control snapshot proves only its declared
+configuration subset at pre-run: requested provider/model policy, ProblemSpec,
+actual research-input/history consumption, verification, runner and hardwall
+enforcement, full source/B0 content, an ordinary study manifest, population
+freshness and actual arm launch order remain outside it. The next gate is a
+strict parser/join for an ordinary Git-committed manifest. The manifest must
+replace caller-injected expectations/history with each block's pre-outcome
+frozen basis. For each ordered block/arm, its declared-controls projection must
+equal field-for-field
+the immutable normalized controls installed for runtime consumption at that
+root's known reviewed direct seams and written to its snapshot. Controls
+declared common by the design must be exact-equal across all ten arms, with
+differences limited to manifest-declared treatment and ordinary block, arm, root
+and launch fields. The loader must then join that snapshot's corresponding
 code-research and resource subsets to the independent
 `code_research_limits.json` and `resource_envelope.json` values; known-empty
 available history and typed unavailable history must remain distinct. It
 supplies no self-hash, receipt, nonce, GO token or Scion-side proof of
 preregistration timing. Exact-resource and outcome-blind population freeze
-remain later gates. The status remains
+remain later gates. A partial manifest wrapper may return only a private
+`CONFIG_SUBSET_JOINED` or validation-success carrier; it may not call, return or
+pass through the D3 exact-five-block endpoint and therefore cannot create a
+matched result. Implement provider/model, source/B0, requested/resolved solver
+and verification, declared hardwall/launcher and the other full-control joins
+next, followed by a gated comparator schema exercised only on synthetic inputs.
+These joins do not lift `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED`
+or
+`EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`. Only after those generic gates exist
+may an outcome-blind metadata-only population be selected; then mechanically
+freeze the study-specific cases, seeds, time/resource arithmetic, actual
+ordinary manifest and launch order before independent review and any separate
+live authority. Comparator implementation does not itself freeze those missing
+values or the actual study manifest. The status remains
 `NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO`:
 there is no public audit or GO export, CLI or live command; the existing D1 and
 summary public projections remain only their already reviewed count/cell
