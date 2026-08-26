@@ -34,6 +34,17 @@ from .models import (
     _reject_forbidden_stage,
 )
 from .telemetry import _parse_runtime, _validate_provider_cap_exhaustion
+from .terminal_interrupts import (
+    _expected_failure_categories as _recover_failure_categories,
+)
+from .terminal_interrupts import (
+    _has_one_unprojected_experiment,
+    _is_pre_reservation_interrupt,
+    _is_reserved_pre_attempt_interrupt,
+    _requires_one_unprojected_experiment,
+    _terminal_projection_rows,
+    _verified_candidate_chains,
+)
 
 
 def _validate_terminal_twins(
@@ -98,6 +109,7 @@ def _parse_physical(
     steps = summary.get("steps")
     if not isinstance(steps, list) or len(steps) != len(histories):
         _fail("SUMMARY_HISTORY_CARDINALITY_MISMATCH")
+    assert isinstance(steps, list)
     if status["n_steps"] != len(steps):
         _fail("TERMINAL_STEP_COUNT_MISMATCH")
     rows, join_incomplete = _join_rows(steps, histories, attempts, expectation)
@@ -589,13 +601,16 @@ def _validate_run_result(
     attempts: tuple[_Attempt, ...],
 ) -> bool:
     run = _as_mapping(value, "RUN_RESULT_INVALID")
+    projection_rows = _terminal_projection_rows(run, rows, attempts)
     status, stop_reason = _validate_run_header(run)
-    protocol_rows = _validate_run_protocol_projection(run, rows)
-    outcomes, histogram_mismatch, outcome_incomplete = _run_outcome_facts(run, rows)
-    missing_durable_row = run["scheduled_calls"] != len(rows)
+    protocol_rows = _validate_run_protocol_projection(run, projection_rows)
+    outcomes, histogram_mismatch, outcome_incomplete = _run_outcome_facts(
+        run, projection_rows
+    )
+    missing_durable_row = run["scheduled_calls"] != len(projection_rows)
     last_mismatch = _validate_run_durable_projection(
         run,
-        rows,
+        projection_rows,
         missing_durable_row=missing_durable_row,
     )
     exact_validity = _run_validity_is_exact(run["run_validity"])
@@ -685,7 +700,7 @@ def _run_outcome_facts(
     outcomes = _as_mapping(
         run["execution_outcome_counts"], "RUN_OUTCOME_COUNTS_INVALID"
     )
-    if tuple(outcomes) != _OUTCOMES:
+    if set(outcomes) != set(_OUTCOMES):
         _fail("RUN_OUTCOME_COUNTS_INVALID")
     parsed_outcomes = {
         name: _nonnegative_int(outcomes[name], "RUN_OUTCOME_COUNTS_INVALID")
@@ -826,24 +841,11 @@ def _expected_last_execution_outcome(row: _JoinedRow) -> dict[str, str]:
 def _expected_failure_categories(
     rows: tuple[_JoinedRow, ...],
 ) -> dict[str, int]:
-    counts: Counter[str] = Counter()
-    for row in rows:
-        stage = row.summary.get("failure_stage")
-        detail = row.summary.get("failure_detail")
-        if not stage and not detail:
-            continue
-        outcome = row.history["outcome"]["outcome"]
-        canary = row.summary.get("canary_result")
-        if outcome not in _SCIENTIFIC_OUTCOMES:
-            category = outcome
-        elif isinstance(canary, Mapping) and canary.get("passed") is False:
-            category = canary.get("failure_category")
-        else:
-            category = stage
-        if not isinstance(category, str) or not category:
-            _fail("SUMMARY_FAILURE_CATEGORY_UNRECOVERABLE")
-        counts[category] += 1
-    return dict(counts)
+    expected = _recover_failure_categories(rows)
+    if expected is None:
+        _fail("SUMMARY_FAILURE_CATEGORY_UNRECOVERABLE")
+    assert expected is not None
+    return expected
 
 
 def _validate_terminal_counts(
@@ -864,6 +866,7 @@ def _validate_terminal_counts(
     _validate_qualification_counters(
         qualification,
         limits,
+        status=status,
         rows=rows,
         attempts=attempts,
         protocol_rows=protocol_rows,
@@ -878,14 +881,28 @@ def _validate_terminal_inventory(
     attempts: tuple[_Attempt, ...],
     protocol_rows: tuple[_JoinedRow, ...],
 ) -> None:
-    if status["n_experiments"] != len(protocol_rows) or (
-        status["screened_experiments"] != len(protocol_rows)
+    protocol_count = len(protocol_rows)
+    requires_unprojected = _requires_one_unprojected_experiment(rows)
+    experiment_count_is_valid = (
+        status["n_experiments"] == protocol_count + 1
+        and _has_one_unprojected_experiment(status, rows, attempts)
+        if requires_unprojected
+        else status["n_experiments"] == protocol_count
+        or status["n_experiments"] == protocol_count + 1
+        and _has_one_unprojected_experiment(status, rows, attempts)
+    )
+    if (
+        status["screened_experiments"] != protocol_count
+        or not experiment_count_is_valid
     ):
         _fail("TERMINAL_EXPERIMENT_COUNT_MISMATCH")
     observed_rounds = [int(row.summary["round"]) for row in rows]
     observed_rounds.extend(attempt.round_num for attempt in attempts)
     expected_total_rounds = max(observed_rounds, default=0)
-    if status["total_rounds"] != expected_total_rounds:
+    if status["total_rounds"] != expected_total_rounds and not (
+        _is_pre_reservation_interrupt(status, rows, attempts)
+        or _is_reserved_pre_attempt_interrupt(status, rows, attempts)
+    ):
         _fail("TERMINAL_ROUND_COUNT_MISMATCH")
 
 
@@ -913,6 +930,7 @@ def _validate_qualification_counters(
     qualification: Mapping[str, Any],
     limits: Mapping[str, Any],
     *,
+    status: Mapping[str, Any],
     rows: tuple[_JoinedRow, ...],
     attempts: tuple[_Attempt, ...],
     protocol_rows: tuple[_JoinedRow, ...],
@@ -927,7 +945,10 @@ def _validate_qualification_counters(
         "expanded_screening_stages",
     ):
         _nonnegative_int(qualification.get(field), "QUALIFICATION_COUNTER_INVALID")
-    if qualification["proposal_attempts"] != len(attempts):
+    expected_proposals = len(attempts) + int(
+        _is_reserved_pre_attempt_interrupt(status, rows, attempts)
+    )
+    if qualification["proposal_attempts"] != expected_proposals:
         _fail("QUALIFICATION_ATTEMPT_COUNT_MISMATCH")
     if qualification["formal_screening_stages"] != len(protocol_rows):
         _fail("QUALIFICATION_FORMAL_COUNT_MISMATCH")
@@ -942,9 +963,8 @@ def _validate_qualification_counters(
         > limits["max_formal_screening_stages"]
     ):
         _fail("QUALIFICATION_LIMIT_EXCEEDED")
-    verified_attempts = sum(
-        row.attempt is not None and row.summary.get("verification_passed") is True
-        for row in rows
-    )
-    if qualification["verified_candidate_chains"] != verified_attempts:
+    verified_attempts = _verified_candidate_chains(rows)
+    if verified_attempts is None or (
+        qualification["verified_candidate_chains"] != verified_attempts
+    ):
         _fail("QUALIFICATION_VERIFIED_CHAIN_COUNT_MISMATCH")

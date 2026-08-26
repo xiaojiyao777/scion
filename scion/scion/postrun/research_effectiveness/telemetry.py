@@ -76,7 +76,7 @@ def _parse_provider_calls(value: Any, *, cap: int, aggregate: bool) -> dict[str,
         _fail("PROVIDER_CALLS_INVALID")
     admitted = _nonnegative_int(item["budget_admitted"], "PROVIDER_CALLS_INVALID")
     kinds = _as_mapping(item["by_request_kind"], "PROVIDER_REQUEST_KINDS_INVALID")
-    if tuple(kinds) != _REQUEST_KINDS:
+    if set(kinds) != set(_REQUEST_KINDS):
         _fail("PROVIDER_REQUEST_KINDS_INVALID")
     parsed = {
         kind: _nonnegative_int(kinds[kind], "PROVIDER_REQUEST_KIND_COUNT_INVALID")

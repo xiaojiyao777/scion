@@ -355,6 +355,12 @@ def _artifacts(
     disposition: str = "qualification_not_reached",
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     steps = [_summary_step(index, record) for index, record in enumerate(records, 1)]
+    attempt_rounds = {attempt["round_num"] for attempt in attempts}
+    current_branch_id = ""
+    for step in steps:
+        if step["round"] in attempt_rounds:
+            current_branch_id = f"branch-{step['round']}"
+        step["branch_id"] = current_branch_id
     by_kind = {
         kind: sum(
             attempt["provider_calls"]["by_request_kind"][kind] for attempt in attempts
@@ -372,14 +378,16 @@ def _artifacts(
         "attempts": attempts,
     }
     protocol_count = sum(record["protocol"] is not None for record in records)
-    attempt_rounds = {attempt["round_num"] for attempt in attempts}
     initial_count = sum(
         record["protocol"] is not None and index in attempt_rounds
         for index, record in enumerate(records, 1)
     )
-    verified_count = sum(
-        step["verification_passed"] is True and step["round"] in attempt_rounds
-        for step in steps
+    verified_count = len(
+        {
+            step["branch_id"]
+            for step in steps
+            if step["verification_passed"] is True and step["round"] in attempt_rounds
+        }
     )
     outcomes = {
         name: sum(record["outcome"]["outcome"] == name for record in records)
@@ -390,7 +398,9 @@ def _artifacts(
         if not step["failure_stage"] and not step["failure_detail"]:
             continue
         canary = step.get("canary_result")
-        if record["outcome"]["outcome"] not in {"evaluated", "research_rejected"}:
+        if record["outcome"]["outcome"] == "research_rejected":
+            category = "research_rejected"
+        elif record["outcome"]["outcome"] != "evaluated":
             category = record["outcome"]["outcome"]
         elif isinstance(canary, dict) and canary.get("passed") is False:
             category = str(canary["failure_category"])
