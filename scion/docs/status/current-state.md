@@ -762,6 +762,39 @@ science/privacy and red-team review reported P0/P1/P2 = `0/0/0`. It does not
 call D2, D3 or an endpoint and creates no matched result, population, live
 authority or GO token.
 
+Carrier `1b967d93` adds a separate package-private, default-off, producer-only
+ProblemSpec declaration boundary. It is valid only with both the S2c1 controls
+and S2c3 requested-provider-policy opt-ins and publishes
+`initial_screening_problem_spec.json` as the third private control leaf after
+those two leaves. The leaf canonically projects exactly 30 of the current 31
+`ProblemSpecV1` fields, deliberately excluding `root_dir`. Before the first
+leaf publication, the boundary reconstructs a fresh V1 object, mechanically
+bridges it to a fresh legacy ProblemSpec and constructs a fresh instance of the
+already-loaded exact adapter class. The pre-first-leaf gate validates the
+provisional graph of controls runtime inputs, `ProblemRuntime`, `ContractGate`,
+Protocol and `VerificationGate`. Post-construction registration first
+validates the full installed reviewed seams, including the materializer,
+evaluator, proposal and evidence consumers. Run start then revalidates all
+three publications and those full joins before preflight. Its 42 focused and
+321 combined tests passed, and independent science/privacy and read-only
+consistency review reported P0/P1/P2 = `0/0/0`.
+
+This carrier establishes only that the root-dir-excluded normalized
+declaration is installed at the reviewed local seams. Its exact ordered 11
+limitations preserve `PROBLEM_ADAPTER_UNVERIFIED`,
+`RESEARCH_INPUT_UNVERIFIED`,
+`RUNTIME_RESEARCH_HISTORY_CONSUMPTION_UNVERIFIED`,
+`VERIFICATION_CONFIG_AND_RUNTIME_UNVERIFIED`, `SOURCE_CARRIER_UNVERIFIED`,
+`B0_CONTENT_UNVERIFIED`, `STUDY_MANIFEST_UNVERIFIED`,
+`ROOT_LIFETIME_FRESHNESS_UNVERIFIED`, `MATCHED_RESULT_UNAUTHORIZED`,
+`LIVE_EXECUTION_UNAUTHORIZED` and `STUDY_GO_UNAUTHORIZED`. It does not prove
+adapter behavior, freshness after the run gate, research input or runtime
+history consumption, verification behavior or enforcement, source/B0,
+manifest timing or joins, matched results, population, live authority or GO.
+The existing manifest v1 and v2 schemas, loaders, statuses and limitations are
+unchanged; a separate future v3 must declare and join this ProblemSpec leaf
+across all ten roots.
+
 The original safe loader proves detached captured bytes and sequential
 root/leaf revalidation, not a simultaneous ten-root snapshot or live freshness.
 The manifest wrapper removes caller expectation and history-path injection:
@@ -785,8 +818,9 @@ limitation. V2 retains `STUDY_MANIFEST_UNVERIFIED`, provider
 credential/account, process network/TLS, remote-backend, request-code-constant,
 timeout/retry-enforcement and client-lifetime limitations, both runner and
 external-hardwall enforcement limitations, and matched/live/GO prohibitions.
-ProblemSpec,
-research input, actual runtime history consumption, normalized
+The normalized ProblemSpec declaration now has a producer-only local boundary,
+but neither manifest joins it and adapter behavior remains unverified.
+Research input, actual runtime history consumption, normalized
 requested/resolved solver and verification configuration, runner/backend
 enforcement, declared and external hardwall
 enforcement, launcher configuration, full source/B0 content, population

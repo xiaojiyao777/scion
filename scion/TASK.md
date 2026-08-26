@@ -730,8 +730,9 @@ initial-screening producer boundary, ordinal-only paired-effect projection,
 strict ten-root artifact audit, safe private root loader and private pre-run
 configuration-subset snapshot, manifest-path-only configuration-subset join
 and separate requested-provider-policy producer plus its validation-only v2
-manifest join now exist, but no population selection, matched-study result or
-live authority exists. Carrier
+manifest join, plus a separate producer-only ProblemSpec declaration, now
+exist, but no population selection, matched-study result or live authority
+exists. Carrier
 `25b78037` implements the private
 ordinal K=2 H bank under the existing shared session budget and exports only
 the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
@@ -786,10 +787,28 @@ discards the values. Its sole success is the exact ordered-25
 405 combined v1/v2 manifest/root and 523 full postrun tests passed; a 1,216-case
 producer/decoder differential had zero mismatches, and independent review
 reported P0/P1/P2 = `0/0/0`. It calls neither D2 nor D3 and creates no matched
-result, population, live authority or GO token. Together these carriers provide
-joined-configuration, implementation, mutation-audit and
-provider-/solver-free writer-roundtrip results, not evidence that K=2 improves
-CVRP research.
+result, population, live authority or GO token. Carrier `1b967d93` adds a
+distinct package-private, default-off, producer-only
+`PROBLEM_SPEC_DECLARATION_ONLY` boundary. With both the controls and provider
+opt-ins, it publishes `initial_screening_problem_spec.json` as the third
+private control leaf after the controls and provider leaves. It canonically
+projects 30 of the exact current 31 `ProblemSpecV1` fields, excluding
+`root_dir`, and installs a fresh mechanical legacy bridge and a fresh instance
+of the already-loaded exact adapter class. The pre-first-leaf gate validates
+the provisional five-object graph of controls runtime inputs,
+`ProblemRuntime`, `ContractGate`, Protocol and `VerificationGate`.
+Post-construction registration first validates the full installed reviewed
+seams, including the materializer, evaluator, proposal and evidence consumers;
+run start revalidates all three publications and those full joins before
+preflight. The 42 focused and 321 combined tests passed, and independent
+science/privacy and read-only consistency review reported P0/P1/P2 =
+`0/0/0`. Its exact ordered 11 limitations retain adapter behavior, research
+input, runtime-history consumption, verification, source/B0, manifest,
+post-gate root freshness and matched/live/GO boundaries. It does not upgrade
+either manifest v1 or v2; a separate future v3 is required to declare and join
+this leaf across ten roots. Together these carriers provide
+joined-configuration, implementation, mutation-audit and provider-/solver-free
+writer-roundtrip results, not evidence that K=2 improves CVRP research.
 The status remains `NO_POPULATION_SELECTION`, `NO_MATCHED_RESULT`,
 `NO_LIVE_AUTHORITY` and `NO_GO`; none of these private carriers is a public
 command or launch path.
@@ -945,14 +964,41 @@ command or launch path.
   science/privacy and red-team review reported P0/P1/P2 = `0/0/0`. It does not
   call D2, D3 or an endpoint or create a matched result, population, live
   authority or GO token.
+- [x] Add a separate package-private, default-off producer-only ProblemSpec
+  declaration without changing either manifest version. Carrier `1b967d93`
+  requires the S2c1 and S2c3 opt-ins, writes
+  `initial_screening_problem_spec.json` as the third ordered private control
+  leaf, and projects exactly 30 of the current 31 `ProblemSpecV1` model fields,
+  excluding `root_dir`. It reconstructs a fresh V1 object, a fresh mechanical
+  legacy bridge and a fresh instance of the already-loaded exact adapter class.
+  Before the first leaf, it validates the provisional graph of controls runtime
+  inputs, `ProblemRuntime`, `ContractGate`, Protocol and `VerificationGate`.
+  Post-construction registration first validates the full installed reviewed
+  seams, including the materializer, evaluator, proposal and evidence
+  consumers; run start revalidates all three publications and those full joins
+  before preflight. Its exact ordered 11 limitations retain
+  `PROBLEM_ADAPTER_UNVERIFIED`, `RESEARCH_INPUT_UNVERIFIED`,
+  `RUNTIME_RESEARCH_HISTORY_CONSUMPTION_UNVERIFIED`,
+  `VERIFICATION_CONFIG_AND_RUNTIME_UNVERIFIED`, `SOURCE_CARRIER_UNVERIFIED`,
+  `B0_CONTENT_UNVERIFIED`, `STUDY_MANIFEST_UNVERIFIED`,
+  `ROOT_LIFETIME_FRESHNESS_UNVERIFIED`, `MATCHED_RESULT_UNAUTHORIZED`,
+  `LIVE_EXECUTION_UNAUTHORIZED` and `STUDY_GO_UNAUTHORIZED`. Its 42 focused
+  and 321 combined tests passed, and independent science/privacy and read-only
+  consistency review reported P0/P1/P2 = `0/0/0`. The claim is only the
+  root-dir-excluded normalized declaration installed at reviewed local seams;
+  it does not prove adapter behavior or any retained limitation. Manifest v1
+  and v2 remain byte- and meaning-compatible, and a separate future v3 must
+  declare and join this leaf across ten roots.
 - [ ] Complete the remaining S2c control authority before selecting a
   population. The joined controls now incorporate the separate requested
-  provider/model policy declaration and ten-root leaves, but must still add
-  ProblemSpec and actual research-input/history consumption, normalized
-  requested/resolved solver and verification configuration, declared hardwall
-  cap and launcher configuration, and source/B0 content and order; source
-  revision remains an external ordinary fact. Runner/backend runtime
-  enforcement and external hardwall enforcement remain unverified under
+  provider/model policy declaration and ten-root leaves. The producer-only
+  normalized ProblemSpec declaration is installed locally but remains outside
+  both manifest joins; a separate future v3 must declare and join it across all
+  ten roots. S2c must still add actual research-input/history consumption,
+  normalized requested/resolved solver and verification configuration,
+  declared hardwall cap and launcher configuration, and source/B0 content and
+  order; source revision remains an external ordinary fact. Runner/backend
+  runtime enforcement and external hardwall enforcement remain unverified under
   `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` and
   `EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`. Finish these generic joins first,
   then add a gated comparator schema exercised only on synthetic inputs. These

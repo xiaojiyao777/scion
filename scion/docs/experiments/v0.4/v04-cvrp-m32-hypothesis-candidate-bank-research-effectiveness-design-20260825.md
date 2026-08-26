@@ -1,6 +1,6 @@
 # CVRP M32 hypothesis-candidate-bank research-effectiveness design
 
-Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / CONFIG_SUBSET_MANIFEST_JOIN_IMPLEMENTED / REQUESTED_PROVIDER_POLICY_PRODUCER_IMPLEMENTED / CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_MANIFEST_JOIN_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
+Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / CONFIG_SUBSET_MANIFEST_JOIN_IMPLEMENTED / REQUESTED_PROVIDER_POLICY_PRODUCER_IMPLEMENTED / CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_MANIFEST_JOIN_IMPLEMENTED / PROBLEM_SPEC_DECLARATION_PRODUCER_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
 
 Date: `2026-08-25`
 
@@ -48,6 +48,9 @@ Requested-provider-policy producer carrier:
 
 Configuration-subset plus requested-provider-policy manifest-join carrier:
 `8560a892cac3e540ed4862ee209eaa2640ccba38`
+
+ProblemSpec declaration producer carrier:
+`1b967d938c1c3956a7024d0c9d0aeb35833fef52`
 
 This is a measurement and future-study design, not a live preregistration. It
 does not select, rank or materialize a case, seed, salt, population, campaign
@@ -248,10 +251,50 @@ mismatches, and science/privacy and red-team review reported P0/P1/P2 =
 unchanged: v1 still returns `CONFIG_SUBSET_JOINED` and retains
 `PROVIDER_REQUEST_POLICY_UNVERIFIED`.
 
+Carrier `1b967d938c1c3956a7024d0c9d0aeb35833fef52` adds another separate,
+package-private, default-off, producer-only boundary. It requires both the
+S2c1 controls and S2c3 requested-provider-policy opt-ins and publishes
+`initial_screening_problem_spec.json` as the third private control leaf, after
+the controls and provider-policy leaves. Its scope is
+`PROBLEM_SPEC_DECLARATION_ONLY`. The leaf contains a canonical normalized
+projection of exactly 30 of the current 31 `ProblemSpecV1` model fields:
+`root_dir` is deliberately excluded. Before the first campaign-root leaf is
+written, the boundary reconstructs a fresh `ProblemSpecV1`, mechanically
+bridges it to a fresh legacy ProblemSpec, and constructs a fresh instance of
+the already-loaded exact adapter class. The pre-first-leaf gate validates the
+provisional five-object graph: controls runtime inputs, `ProblemRuntime`,
+`ContractGate`, Protocol and `VerificationGate`. After the remaining services
+are constructed, registration first validates the full installed reviewed
+seams, including the materializer, evaluator, proposal and evidence consumers.
+At run start, the gate revalidates all three publications and the full
+installed joins before preflight.
+
+The declaration's exact ordered 11 limitations are
+`PROBLEM_ADAPTER_UNVERIFIED`, `RESEARCH_INPUT_UNVERIFIED`,
+`RUNTIME_RESEARCH_HISTORY_CONSUMPTION_UNVERIFIED`,
+`VERIFICATION_CONFIG_AND_RUNTIME_UNVERIFIED`, `SOURCE_CARRIER_UNVERIFIED`,
+`B0_CONTENT_UNVERIFIED`, `STUDY_MANIFEST_UNVERIFIED`,
+`ROOT_LIFETIME_FRESHNESS_UNVERIFIED`, `MATCHED_RESULT_UNAUTHORIZED`,
+`LIVE_EXECUTION_UNAUTHORIZED` and `STUDY_GO_UNAUTHORIZED`. Its 42 focused and
+321 combined tests passed, and independent science/privacy and read-only
+consistency review reported P0/P1/P2 = `0/0/0`.
+
+This carrier proves only that the root-dir-excluded normalized declaration was
+mechanically bridged and installed at the reviewed local seams. It does not
+prove adapter behavior, freshness after the run gate, research input or
+runtime research-history consumption, verification behavior or runtime
+enforcement, the source carrier or B0 content, manifest timing or joins, a
+matched result, population, live authority or GO. The S2c1/S2c2 manifest v1
+and S2c4 manifest v2 schemas, loaders, results and limitations are unchanged;
+joining this new declaration and third control leaf across ten roots requires
+a separate future v3 rather than an implicit upgrade of either existing
+manifest boundary.
+
 Together these carriers implement and audit K=2, telemetry, initial-only
 retirement, ordinal cells, decoded study structure, safe root loading and the
 pre-run configuration subset plus its first manifest/root/independent-file
-join, a separate requested-provider-policy producer, and the private v2 join.
+join, a separate requested-provider-policy producer, the private v2 join and a
+separate producer-only ProblemSpec declaration.
 Tests include provider-/solver-free actual-writer roundtrips as well as
 synthetic interruption and mutation matrices; they do not select a population,
 execute a matched experiment or show that K=2 improves CVRP research.
@@ -600,6 +643,20 @@ continue to return their old status and retain
 `PROVIDER_REQUEST_POLICY_UNVERIFIED`; only the separate v2 removes that one
 limitation.
 
+Carrier `1b967d93` adds the separate producer-only
+`PROBLEM_SPEC_DECLARATION_ONLY` leaf. It projects 30 of the exact current 31
+`ProblemSpecV1` fields, excluding `root_dir`, then installs a fresh mechanical
+legacy bridge and a fresh already-loaded exact adapter at the reviewed local
+seams. Its pre-first-leaf gate validates the provisional five-object graph;
+post-construction registration first validates the full installed seams; and
+the run gate revalidates all three leaf publications and those full joins.
+This is not a manifest join and does not upgrade the v1 or v2 schemas. A
+separate future v3 must declare and join the ProblemSpec leaf across all ten
+roots. The exact 11 declaration limitations continue to
+exclude adapter behavior, post-gate freshness, research input and runtime
+history consumption, verification, source/B0, manifest, matched, live and GO
+claims.
+
 Before any live preregistration, the remaining gates are to:
 
 - commit and independently review the actual ordinary manifest in Git, and
@@ -611,11 +668,14 @@ Before any live preregistration, the remaining gates are to:
   ingestion, population freshness or actual arm launch order;
 - extend the generic controls beyond the now-joined bounded qualification,
   code-research, resource, scheduler, Protocol and requested-provider-policy
-  subset. ProblemSpec, actual research-input/history consumption, normalized
-  requested/resolved solver and verification configuration, declared hardwall
-  cap and launcher configuration, and source/B0 content and order remain
-  unproved; source revision remains an external ordinary fact, not Scion
-  authority.
+  subset. The normalized root-dir-excluded ProblemSpec declaration now has a
+  producer-only local installation boundary, but it is not joined by either
+  manifest version and does not prove adapter behavior. A separate v3 must
+  join it. Actual research-input/history consumption, normalized
+  requested/resolved solver and verification configuration, declared
+  hardwall cap and launcher configuration, and source/B0 content and order
+  remain unproved; source revision remains an external ordinary fact, not
+  Scion authority.
   Runner/backend runtime enforcement and external hardwall enforcement remain
   unverified under
   `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` and
