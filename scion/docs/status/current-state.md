@@ -725,8 +725,21 @@ code-research/resource files. One fresh absolute bundle pass revalidates the
 manifest, history files and ten roots, followed by a second fresh absolute
 manifest-only rewalk. All ten roots then receive S2a structural decoding; every
 decoded value is discarded and no history basis is passed to S2a. Its 97
-focused, 523 adjacent and 438 postrun tests passed. These carriers have
-implementation, mutation-audit and
+focused, 523 adjacent and 438 postrun tests passed. Carrier `7ad892eb` adds a
+separate package-private, default-off, producer-only requested-provider-policy
+boundary. With the existing S2c1 opt-in it publishes
+`initial_screening_provider_policy.json` as the independent
+second private leaf under scope `REQUESTED_PROVIDER_POLICY_ONLY`, installs one
+immutable five-request-kind capsule on the same exact `LLMClient` used by the
+reviewed consumers, and revalidates both leaves, the same-client joins and
+pristine state at run start. Its 313 focused and 1,036 adjacent tests passed;
+the sole adjacent failure was the pre-existing hard-coded 15-versus-16
+research-history count debt, and independent review reported P0/P1/P2 =
+`0/0/0`. The boundary records requested local configuration only: it does not
+establish the actual remote backend, account or credential identity, served
+model, process network/TLS environment, request code constants, SDK
+retry/timeout enforcement or `LLMClient` lifetime freshness. Together these
+carriers have implementation, mutation-audit and
 provider-/solver-free writer-roundtrip evidence only. They provide no matched
 CVRP result, population selection or live authority, and no K=2 research
 benefit has yet been observed.
@@ -746,11 +759,23 @@ self-hash, receipt, nonce, GO token or Scion-side proof of preregistration
 timing and does not call or pass through the D2 scorer, D3 comparator or their
 endpoints.
 
-Requested provider/model policy, ProblemSpec, research input, actual runtime
-history consumption, normalized requested/resolved solver and verification
-configuration, runner/backend enforcement, declared and external hardwall
+The requested provider/model policy now has a separate producer, but it is not
+part of the S2c2 ten-root join. The S2c1 controls v1 and S2c2 manifest/join v1
+remain byte- and meaning-compatible and continue to carry
+`PROVIDER_REQUEST_POLICY_UNVERIFIED`. A future separate v2 must read the
+seventh leaf from every one of the ten roots and require one exact common
+policy before it can return the new
+`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED` status. ProblemSpec,
+research input, actual runtime history consumption, normalized
+requested/resolved solver and verification configuration, runner/backend
+enforcement, declared and external hardwall
 enforcement, launcher configuration, full source/B0 content, population
 freshness and actual arm launch order all remain outside the joined subset.
+Provider credential/account identity, process network/TLS environment, remote
+backend identity, request code constants, timeout/retry enforcement and client
+lifetime freshness remain explicit limitations; there is no actual-backend,
+served-model or enforcement claim.
+
 Complete these remaining generic joins first, then add a gated comparator
 schema exercised only on synthetic inputs. None of those joins lifts
 `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` or

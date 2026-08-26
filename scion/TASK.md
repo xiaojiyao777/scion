@@ -728,9 +728,9 @@ The default-off K=2 implementation, count-only attempt telemetry, pure
 single-arm offline scorer, pure exact-five-block comparator, default-off
 initial-screening producer boundary, ordinal-only paired-effect projection,
 strict ten-root artifact audit, safe private root loader and private pre-run
-configuration-subset snapshot and manifest-path-only configuration-subset join
-now exist, but no population selection, matched-study result or live authority
-exists. Carrier
+configuration-subset snapshot, manifest-path-only configuration-subset join
+and separate requested-provider-policy producer now exist, but no population
+selection, matched-study result or live authority exists. Carrier
 `25b78037` implements the private
 ordinal K=2 H bank under the existing shared session budget and exports only
 the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
@@ -760,8 +760,20 @@ manifest, history files and ten roots, followed by a second fresh absolute
 manifest-only rewalk. It then passes all ten roots through the S2a structural
 decoder and discards every decoded value. Its 97 focused, 523 adjacent and 438
 postrun tests passed. It does not pass the history bases to S2a, invoke the D2
-scorer, D3 comparator or either endpoint, or create a matched result. These are
-implementation, mutation-audit and
+scorer, D3 comparator or either endpoint, or create a matched result. Carrier
+`7ad892eb` adds a distinct package-private, default-off, producer-only
+`REQUESTED_PROVIDER_POLICY_ONLY` sidecar. It writes
+`initial_screening_provider_policy.json` as the independent second private
+leaf, binds the exact existing `LLMClient` to one immutable requested-policy
+capsule, freezes the five reviewed request kinds, and revalidates both private
+leaves, the same-client consumer joins and pristine state at the run gate. Its
+313 focused tests and 1,036 adjacent tests passed; the sole adjacent failure
+was the pre-existing hard-coded 15-versus-16 research-history count debt, and
+independent review reported P0/P1/P2 = `0/0/0`. It is not a manifest join and
+does not claim the actual remote backend, account or credential identity,
+served model, network/TLS environment, SDK retry or timeout enforcement, or
+client lifetime freshness. Together these carriers provide
+joined-configuration, implementation, mutation-audit and
 provider-/solver-free writer-roundtrip results, not evidence that K=2 improves
 CVRP research.
 The status remains `NO_POPULATION_SELECTION`, `NO_MATCHED_RESULT`,
@@ -883,9 +895,28 @@ command or launch path.
   It also does not verify ordinary-Git or pre-outcome timing or launch
   execution; call D2, D3 or their endpoints; expose a public/CLI/write path; or
   create a matched result, population, live authority or GO token.
+- [x] Add a separate package-private, default-off requested-provider-policy
+  producer without upgrading the existing configuration-subset schemas or
+  join. Carrier `7ad892eb` requires the explicit S2c1 opt-in, publishes the
+  independent second private leaf with scope `REQUESTED_PROVIDER_POLICY_ONLY`,
+  binds the same exact `LLMClient` used by the reviewed consumers to one
+  immutable capsule for the five fixed request kinds, and gates run on both
+  leaf publications, direct identity joins and pristine state before preflight.
+  Its 313 focused and 1,036 adjacent tests passed; the only adjacent failure was
+  the known HEAD research-history-count debt, and independent review reported
+  P0/P1/P2 = `0/0/0`. This producer makes no actual-backend, account,
+  credential, served-model, network/TLS, code-constant, timeout/retry
+  enforcement or lifetime-freshness claim. The S2c1 controls v1 leaf and S2c2
+  manifest/join v1 remain byte- and meaning-compatible and retain
+  `PROVIDER_REQUEST_POLICY_UNVERIFIED`. A future separate v2 may remove that
+  limitation only after it requires the seventh leaf in every root and proves
+  one exact common requested policy across all ten arms. Only then may it return
+  `CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED`.
+  `MATCHED_RESULT_UNAUTHORIZED`, `LIVE_EXECUTION_UNAUTHORIZED` and
+  `STUDY_GO_UNAUTHORIZED` also remain in force.
 - [ ] Complete the remaining S2c control authority before selecting a
-  population. The joined controls must add requested provider/model policy,
-  ProblemSpec and
+  population. The joined controls must incorporate the separate requested
+  provider/model policy producer, and add ProblemSpec and
   actual research-input/history consumption, normalized requested/resolved
   solver and verification configuration, declared hardwall cap and launcher
   configuration, and source/B0 content and order; source revision remains an
@@ -899,7 +930,10 @@ command or launch path.
   population be selected; the study-specific cases, seeds, time/resource
   arithmetic, actual ordinary manifest and launch order must then be
   mechanically frozen and independently reviewed before any live authority.
-  Comparator code may therefore precede population selection, but its
+  The future provider-policy v2 join must read the seventh leaf from all ten
+  roots and require an exact common policy before returning any new joined
+  status; the existing controls v1 and manifest/join v1 remain unchanged until
+  then. Comparator code may therefore precede population selection, but its
   implementation does not freeze the missing values or the actual study
   manifest. This remains package-private with no CLI, live command, self-hash,
   receipt, nonce, GO token or claim that Scion proves preregistration timing.
