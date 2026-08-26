@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import threading
 from contextlib import nullcontext
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -33,6 +34,7 @@ from scion.core.decision_finalizer import DecisionFinalizer
 from scion.core.evaluation_orchestrator import EvaluationOrchestrator
 from scion.core.evidence_recording import EvidenceRecorder
 from scion.core.explore_step.pipeline import ExploreStepPipeline
+from scion.core.models import ChampionState
 from scion.core.problem_runtime import ProblemRuntime
 from scion.core.production_boundary import (
     validate_fresh_campaign_output,
@@ -72,6 +74,29 @@ from scion.verification.development import (
     declared_development_workspace_paths,
     validate_development_closure_boundary,
 )
+
+
+@dataclass(frozen=True, repr=False)
+class _InitialScreeningControlsSetup:
+    code_research_limits: CodeResearchLimits
+    resource_envelope: ResourceEnvelope
+    qualification: QualificationOnlyConfig
+    protocol_config: Any
+    split_manifest: Any
+    seed_ledger: Any
+    experiment_protocol: Any
+    problem_runtime: ProblemRuntime
+    contract_gate: ContractGate
+    verification_gate: Any
+    development_suites: tuple[Any, ...]
+    development_workspace_paths: tuple[str, ...]
+    development_problem_package_paths: tuple[str, ...]
+    runtime_inputs: Any
+
+    def __repr__(self) -> str:
+        return "_InitialScreeningControlsSetup(<redacted>)"
+
+    __str__ = __repr__
 
 
 def _mark_balance_exhausted(owner: Any) -> None:
@@ -159,6 +184,306 @@ def _normalize_campaign_boundaries(
     return normalized_code, normalized_resource, normalized_qualification
 
 
+def _prepare_initial_screening_controls_setup(
+    *,
+    owner: Any,
+    request: Any,
+    problem_spec: Any,
+    protocol_config: Any,
+    split_manifest: Any,
+    seed_ledger: Any,
+    champion: Any,
+    campaign_dir: str,
+    experiment_protocol: Any,
+    adapter: Any,
+    verification_gate: Any | None,
+    operator_execute_signature: str | None,
+    research_input: Any | None,
+    research_history: Any,
+    resource_envelope: Any | None,
+    code_research_limits: Any | None,
+    qualification_only: Any | None,
+) -> _InitialScreeningControlsSetup:
+    """Publish and return one fixed-error, config-subset runtime setup."""
+
+    from scion.core.initial_screening_study_controls import (
+        _ERROR,
+        _bind_controls_publication,
+        _InitialScreeningStudyControlsError,
+        _prepare_initial_screening_runtime_inputs,
+        _write_initial_screening_study_controls,
+    )
+
+    failed = False
+    result: _InitialScreeningControlsSetup | None = None
+    try:
+        from scion.core.campaign import CampaignManager
+
+        if type(owner) is not CampaignManager:
+            raise TypeError
+        if verification_gate is not None:
+            raise ValueError
+        runtime_inputs = _prepare_initial_screening_runtime_inputs(
+            request=request,
+            qualification=qualification_only,
+            code_research_limits=code_research_limits,
+            resource_envelope=resource_envelope,
+            protocol_config=protocol_config,
+            split_manifest=split_manifest,
+            seed_ledger=seed_ledger,
+            experiment_protocol=experiment_protocol,
+            campaign_dir=campaign_dir,
+        )
+        frozen_config = runtime_inputs.protocol_config
+        frozen_manifest = runtime_inputs.split_manifest
+        frozen_ledger = runtime_inputs.seed_ledger
+        frozen_protocol = runtime_inputs.experiment_protocol
+        if type(champion) is not ChampionState:
+            raise TypeError
+        champion_storage = vars(champion)
+        if type(champion_storage) is not dict or any(
+            type(key) is not str for key in champion_storage
+        ):
+            raise TypeError
+        champion_snapshot_path = champion_storage.get("code_snapshot_path")
+        if (
+            type(champion_snapshot_path) is not str
+            or not champion_snapshot_path
+            or "\x00" in champion_snapshot_path
+        ):
+            raise TypeError
+
+        development_suites = declared_development_suites(problem_spec)
+        development_workspace_paths = declared_development_workspace_paths(problem_spec)
+        development_problem_package_paths = declared_development_problem_package_paths(
+            problem_spec
+        )
+        validate_development_closure_boundary(
+            problem_spec=problem_spec,
+            suites=development_suites,
+            workspace_paths=development_workspace_paths,
+            problem_package_paths=development_problem_package_paths,
+            split_manifest=frozen_manifest,
+            champion_root=champion_snapshot_path,
+        )
+        problem_runtime = ProblemRuntime(
+            problem_spec=problem_spec,
+            adapter=adapter,
+            split_manifest=frozen_manifest,
+            seed_ledger=frozen_ledger,
+            research_input=research_input,
+            research_history=research_history,
+            development_suites=development_suites,
+        )
+        contract_gate = ContractGate(
+            problem_spec,
+            operator_execute_signature=operator_execute_signature,
+            adapter=adapter,
+            champion_snapshot_provider=lambda: getattr(
+                getattr(owner, "_champion", champion),
+                "code_snapshot_path",
+                None,
+            ),
+        )
+        frozen_protocol.set_problem_adapter(adapter)
+        installed_verification_gate = CampaignVerificationFactory.build(
+            problem_spec=problem_spec,
+            verification_gate=verification_gate,
+            experiment_protocol=frozen_protocol,
+            campaign_dir=campaign_dir,
+            adapter=adapter,
+            operator_execute_signature=operator_execute_signature,
+        )
+        validate_production_campaign_boundary(
+            problem_spec=problem_spec,
+            experiment_protocol=frozen_protocol,
+            adapter=adapter,
+            split_manifest=frozen_manifest,
+            seed_ledger=frozen_ledger,
+            verification_gate=installed_verification_gate,
+        )
+        protected_roots = _initial_screening_protected_roots(
+            problem_spec=problem_spec,
+            champion=champion,
+            split_manifest=frozen_manifest,
+            development_suites=development_suites,
+        )
+        publication = _write_initial_screening_study_controls(
+            campaign_dir,
+            runtime_inputs.payload_bytes,
+            protected_roots=protected_roots,
+        )
+        runtime_inputs = _bind_controls_publication(runtime_inputs, publication)
+        result = _InitialScreeningControlsSetup(
+            code_research_limits=runtime_inputs.code_research_limits,
+            resource_envelope=runtime_inputs.resource_envelope,
+            qualification=runtime_inputs.qualification,
+            protocol_config=frozen_config,
+            split_manifest=frozen_manifest,
+            seed_ledger=frozen_ledger,
+            experiment_protocol=frozen_protocol,
+            problem_runtime=problem_runtime,
+            contract_gate=contract_gate,
+            verification_gate=installed_verification_gate,
+            development_suites=development_suites,
+            development_workspace_paths=development_workspace_paths,
+            development_problem_package_paths=development_problem_package_paths,
+            runtime_inputs=runtime_inputs,
+        )
+    except Exception:  # noqa: BLE001 - sanitize the private opt-in boundary
+        failed = True
+    if failed or result is None:
+        raise _InitialScreeningStudyControlsError(_ERROR)
+    return result
+
+
+def _initial_screening_protected_roots(
+    *,
+    problem_spec: Any,
+    champion: Any,
+    split_manifest: Any,
+    development_suites: tuple[Any, ...],
+) -> tuple[str, ...]:
+    spec_v1 = getattr(problem_spec, "spec_v1", problem_spec)
+    candidates = [
+        getattr(champion, "code_snapshot_path", None),
+        getattr(spec_v1, "root_dir", None),
+        *(getattr(split_manifest, "safe_data_roots", ()) or ()),
+        *(getattr(suite, "source_root", None) for suite in development_suites),
+    ]
+    roots: list[str] = []
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        if type(candidate) is not str or not candidate or "\x00" in candidate:
+            raise TypeError
+        root = str(Path(candidate).expanduser().resolve(strict=False))
+        if root not in roots:
+            roots.append(root)
+    return tuple(roots)
+
+
+def _prepare_legacy_campaign_inputs(
+    *,
+    problem_spec: Any,
+    adapter: Any,
+    split_manifest: Any,
+    seed_ledger: Any,
+    champion: Any,
+    campaign_dir: str,
+    research_input: Any | None,
+    research_history: Any,
+    resource_envelope: Any | None,
+    code_research_limits: Any | None,
+    qualification_only: Any | None,
+) -> tuple[
+    CodeResearchLimits | None,
+    ResourceEnvelope | None,
+    QualificationOnlyConfig | None,
+    ProblemRuntime,
+    tuple[Any, ...],
+    tuple[str, ...],
+    tuple[str, ...],
+]:
+    validate_fresh_campaign_output(campaign_dir)
+    normalized_code, normalized_resource, normalized_qualification = (
+        _normalize_campaign_boundaries(
+            code_research_limits=code_research_limits,
+            qualification_only=qualification_only,
+            resource_envelope=resource_envelope,
+        )
+    )
+    development_suites: tuple[Any, ...] = ()
+    development_workspace_paths: tuple[str, ...] = ()
+    development_problem_package_paths: tuple[str, ...] = ()
+    if normalized_code is not None:
+        development_suites = declared_development_suites(problem_spec)
+        development_workspace_paths = declared_development_workspace_paths(problem_spec)
+        development_problem_package_paths = declared_development_problem_package_paths(
+            problem_spec
+        )
+        validate_development_closure_boundary(
+            problem_spec=problem_spec,
+            suites=development_suites,
+            workspace_paths=development_workspace_paths,
+            problem_package_paths=development_problem_package_paths,
+            split_manifest=split_manifest,
+            champion_root=getattr(champion, "code_snapshot_path", None),
+        )
+    problem_runtime = ProblemRuntime(
+        problem_spec=problem_spec,
+        adapter=adapter,
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
+        research_input=research_input,
+        research_history=research_history,
+        development_suites=development_suites,
+    )
+    return (
+        normalized_code,
+        normalized_resource,
+        normalized_qualification,
+        problem_runtime,
+        development_suites,
+        development_workspace_paths,
+        development_problem_package_paths,
+    )
+
+
+def _install_protocol_boundary(
+    owner: Any,
+    *,
+    controls_setup: _InitialScreeningControlsSetup | None,
+    problem_spec: Any,
+    split_manifest: Any,
+    seed_ledger: Any,
+    adapter: Any,
+    verification_gate: Any | None,
+    operator_execute_signature: str | None,
+    campaign_dir: str,
+) -> None:
+    if controls_setup is not None:
+        from scion.core.initial_screening_study_controls import (
+            _bind_controls_metrics_directory,
+        )
+
+        owner._vgate = controls_setup.verification_gate
+        owner._initial_screening_study_controls = _bind_controls_metrics_directory(
+            owner._initial_screening_study_controls
+        )
+        owner._experiment_protocol._progress_callback = owner._on_protocol_progress
+        return
+    os.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)
+    if hasattr(owner._experiment_protocol, "set_problem_adapter"):
+        owner._experiment_protocol.set_problem_adapter(adapter)
+    owner._vgate = CampaignVerificationFactory.build(
+        problem_spec=problem_spec,
+        verification_gate=verification_gate,
+        experiment_protocol=owner._experiment_protocol,
+        campaign_dir=str(campaign_dir),
+        adapter=adapter,
+        operator_execute_signature=operator_execute_signature,
+    )
+    validate_production_campaign_boundary(
+        problem_spec=problem_spec,
+        experiment_protocol=owner._experiment_protocol,
+        adapter=adapter,
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
+        verification_gate=owner._vgate,
+    )
+    if hasattr(owner._experiment_protocol, "set_progress_callback"):
+        owner._experiment_protocol.set_progress_callback(owner._on_protocol_progress)
+
+
+def _initialize_controls_proposal_state(
+    proposal_pipeline: ProposalPipeline,
+    controls_setup: _InitialScreeningControlsSetup | None,
+) -> None:
+    if controls_setup is not None:
+        proposal_pipeline._last_hypothesis_rejection_reason = None
+
+
 def compose_campaign_services(
     owner: Any,
     *,
@@ -178,51 +503,65 @@ def compose_campaign_services(
     resource_envelope: Any | None = None,
     code_research_limits: Any | None = None,
     qualification_only: Any | None = None,
+    _initial_screening_study_controls: Any | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
-    validate_fresh_campaign_output(campaign_dir)
-    (
-        normalized_code_research_limits,
-        normalized_resource_envelope,
-        normalized_qualification_only,
-    ) = _normalize_campaign_boundaries(
-        code_research_limits=code_research_limits,
-        qualification_only=qualification_only,
-        resource_envelope=resource_envelope,
-    )
-    development_suites = (
-        ()
-        if normalized_code_research_limits is None
-        else declared_development_suites(problem_spec)
-    )
-    development_workspace_paths = (
-        ()
-        if normalized_code_research_limits is None
-        else declared_development_workspace_paths(problem_spec)
-    )
-    development_problem_package_paths = (
-        ()
-        if normalized_code_research_limits is None
-        else declared_development_problem_package_paths(problem_spec)
-    )
-    if normalized_code_research_limits is not None:
-        validate_development_closure_boundary(
+    controls_setup: _InitialScreeningControlsSetup | None = None
+    if _initial_screening_study_controls is None:
+        (
+            normalized_code_research_limits,
+            normalized_resource_envelope,
+            normalized_qualification_only,
+            problem_runtime,
+            _development_suites,
+            development_workspace_paths,
+            development_problem_package_paths,
+        ) = _prepare_legacy_campaign_inputs(
             problem_spec=problem_spec,
-            suites=development_suites,
-            workspace_paths=development_workspace_paths,
-            problem_package_paths=development_problem_package_paths,
+            adapter=adapter,
             split_manifest=split_manifest,
-            champion_root=getattr(champion, "code_snapshot_path", None),
+            seed_ledger=seed_ledger,
+            champion=champion,
+            campaign_dir=campaign_dir,
+            research_input=research_input,
+            research_history=research_history,
+            resource_envelope=resource_envelope,
+            code_research_limits=code_research_limits,
+            qualification_only=qualification_only,
         )
-    owner._problem_runtime = ProblemRuntime(
-        problem_spec=problem_spec,
-        adapter=adapter,
-        split_manifest=split_manifest,
-        seed_ledger=seed_ledger,
-        research_input=research_input,
-        research_history=research_history,
-        development_suites=development_suites,
-    )
+    else:
+        controls_setup = _prepare_initial_screening_controls_setup(
+            owner=owner,
+            request=_initial_screening_study_controls,
+            problem_spec=problem_spec,
+            protocol_config=protocol_config,
+            split_manifest=split_manifest,
+            seed_ledger=seed_ledger,
+            champion=champion,
+            campaign_dir=campaign_dir,
+            experiment_protocol=experiment_protocol,
+            adapter=adapter,
+            verification_gate=verification_gate,
+            operator_execute_signature=operator_execute_signature,
+            research_input=research_input,
+            research_history=research_history,
+            resource_envelope=resource_envelope,
+            code_research_limits=code_research_limits,
+            qualification_only=qualification_only,
+        )
+        normalized_code_research_limits = controls_setup.code_research_limits
+        normalized_resource_envelope = controls_setup.resource_envelope
+        normalized_qualification_only = controls_setup.qualification
+        protocol_config = controls_setup.protocol_config
+        split_manifest = controls_setup.split_manifest
+        seed_ledger = controls_setup.seed_ledger
+        experiment_protocol = controls_setup.experiment_protocol
+        problem_runtime = controls_setup.problem_runtime
+        development_workspace_paths = controls_setup.development_workspace_paths
+        development_problem_package_paths = (
+            controls_setup.development_problem_package_paths
+        )
+    owner._problem_runtime = problem_runtime
     owner._protocol_config = protocol_config
     owner._resource_envelope = (
         normalized_resource_envelope
@@ -249,6 +588,10 @@ def compose_campaign_services(
         if owner._qualification_only_config is not None
         else None
     )
+    owner._initial_screening_study_controls_active = controls_setup is not None
+    owner._initial_screening_study_controls = (
+        None if controls_setup is None else controls_setup.runtime_inputs
+    )
     owner._split_manifest = split_manifest
     owner._seed_ledger = seed_ledger
     owner._llm_client = llm_client
@@ -262,16 +605,24 @@ def compose_campaign_services(
     owner._last_stop_reason = None
     owner._external_stop_requested = False
     owner._branch_ctrl = BranchController()
-    owner._scheduler = Scheduler()
-    owner._contract_gate = ContractGate(
-        problem_spec,
-        operator_execute_signature=operator_execute_signature,
-        adapter=adapter,
-        champion_snapshot_provider=lambda: getattr(
-            owner._champion,
-            "code_snapshot_path",
-            None,
-        ),
+    owner._scheduler = (
+        Scheduler()
+        if controls_setup is None
+        else controls_setup.runtime_inputs.scheduler
+    )
+    owner._contract_gate = (
+        ContractGate(
+            problem_spec,
+            operator_execute_signature=operator_execute_signature,
+            adapter=adapter,
+            champion_snapshot_provider=lambda: getattr(
+                owner._champion,
+                "code_snapshot_path",
+                None,
+            ),
+        )
+        if controls_setup is None
+        else controls_setup.contract_gate
     )
     owner._decision_coordinator = DecisionCoordinator(config=protocol_config)
     from scion.core.features import SafeFeatureExtractor
@@ -284,6 +635,7 @@ def compose_campaign_services(
     )
 
     family_taxonomy = getattr(owner._problem_runtime.spec, "family_taxonomy", None)
+    owner._experiment_protocol = experiment_protocol
     owner._materializer = WorkspaceMaterializer(
         campaign_dir,
         **_materializer_kwargs_from_problem_spec(problem_spec),
@@ -301,28 +653,17 @@ def compose_campaign_services(
             operator_execute_signature=operator_execute_signature,
         )
     )
-    owner._experiment_protocol = experiment_protocol
-    if hasattr(owner._experiment_protocol, "set_problem_adapter"):
-        owner._experiment_protocol.set_problem_adapter(adapter)
-    os.makedirs(str(campaign_dir) + "/metrics", exist_ok=True)
-    owner._vgate = CampaignVerificationFactory.build(
+    _install_protocol_boundary(
+        owner,
+        controls_setup=controls_setup,
         problem_spec=problem_spec,
-        verification_gate=verification_gate,
-        experiment_protocol=experiment_protocol,
-        campaign_dir=str(campaign_dir),
-        adapter=adapter,
-        operator_execute_signature=operator_execute_signature,
-    )
-    validate_production_campaign_boundary(
-        problem_spec=problem_spec,
-        experiment_protocol=experiment_protocol,
-        adapter=adapter,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
-        verification_gate=owner._vgate,
+        adapter=adapter,
+        verification_gate=verification_gate,
+        operator_execute_signature=operator_execute_signature,
+        campaign_dir=campaign_dir,
     )
-    if hasattr(owner._experiment_protocol, "set_progress_callback"):
-        owner._experiment_protocol.set_progress_callback(owner._on_protocol_progress)
 
     def _read_promotion_weights(registry_path: str) -> dict[str, float]:
         if (
@@ -404,6 +745,7 @@ def compose_campaign_services(
             else None
         ),
     )
+    _initialize_controls_proposal_state(owner._proposal_pipeline, controls_setup)
     owner._research_rejection_finalizer = ResearchRejectionFinalizer(
         campaign_id=owner._campaign_id,
         registry=owner._registry,
@@ -442,7 +784,11 @@ def compose_campaign_services(
         get_champion=lambda: owner._champion,
         branch_patches=owner._branch_patches,
         branch_workspaces=owner._branch_workspaces,
-        experiment_protocol_provider=lambda: owner._experiment_protocol,
+        experiment_protocol_provider=(
+            owner._provide_experiment_protocol
+            if controls_setup is not None
+            else (lambda: owner._experiment_protocol)
+        ),
         feature_extractor=owner._feature_extractor,
         decision_coordinator=owner._decision_coordinator,
         campaign_id=owner._campaign_id,
@@ -521,7 +867,11 @@ def compose_campaign_services(
         get_champion=lambda: owner._champion,
         branch_workspaces=owner._branch_workspaces,
         branch_patches=owner._branch_patches,
-        experiment_protocol_provider=lambda: owner._experiment_protocol,
+        experiment_protocol_provider=(
+            owner._provide_experiment_protocol
+            if controls_setup is not None
+            else (lambda: owner._experiment_protocol)
+        ),
         contract_gate=owner._contract_gate,
         verification_gate=owner._vgate,
         drain_weight_opt_events=owner._drain_weight_opt_events,
@@ -574,6 +924,15 @@ def compose_campaign_services(
         begin_async_stop_deferral=owner._begin_async_stop_deferral,
         end_async_stop_deferral=owner._end_async_stop_deferral,
     )
+    if controls_setup is not None:
+        from scion.core.initial_screening_study_controls import (
+            _register_initial_screening_controls_owner,
+        )
+
+        _register_initial_screening_controls_owner(
+            owner,
+            owner._initial_screening_study_controls,
+        )
 
 
 def required_service_names() -> tuple[str, ...]:

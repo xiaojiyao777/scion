@@ -47,7 +47,6 @@ from scion.core.workspace_service import CandidateWorkspace
 
 logger = logging.getLogger(__name__)
 
-
 # ---------------------------------------------------------------------------
 # Campaign Manager
 # ---------------------------------------------------------------------------
@@ -90,32 +89,52 @@ class CampaignManager:
         resource_envelope: ResourceEnvelope | dict[str, Any] | None = None,
         code_research_limits: CodeResearchLimits | dict[str, Any] | None = None,
         qualification_only: (QualificationOnlyConfig | Mapping[str, Any] | None) = None,
+        _initial_screening_study_controls: Any | None = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
-        compose_campaign_services(
-            self,
-            problem_spec=problem_spec,
-            protocol_config=protocol_config,
-            split_manifest=split_manifest,
-            seed_ledger=seed_ledger,
-            llm_client=llm_client,
-            champion=champion,
-            campaign_dir=campaign_dir,
-            verification_gate=verification_gate,
-            experiment_protocol=experiment_protocol,
-            adapter=adapter,
-            operator_execute_signature=operator_execute_signature,
-            research_input=research_input,
-            research_history=research_history,
-            resource_envelope=resource_envelope,
-            code_research_limits=code_research_limits,
-            qualification_only=qualification_only,
-        )
+        failed = False
+        try:
+            compose_campaign_services(
+                self,
+                problem_spec=problem_spec,
+                protocol_config=protocol_config,
+                split_manifest=split_manifest,
+                seed_ledger=seed_ledger,
+                llm_client=llm_client,
+                champion=champion,
+                campaign_dir=campaign_dir,
+                verification_gate=verification_gate,
+                experiment_protocol=experiment_protocol,
+                adapter=adapter,
+                operator_execute_signature=operator_execute_signature,
+                research_input=research_input,
+                research_history=research_history,
+                resource_envelope=resource_envelope,
+                code_research_limits=code_research_limits,
+                qualification_only=qualification_only,
+                _initial_screening_study_controls=(_initial_screening_study_controls),
+            )
+        except Exception:
+            if _initial_screening_study_controls is None:
+                raise
+            failed = True
+        if failed:
+            from scion.core.initial_screening_study_controls import (
+                _ERROR,
+                _InitialScreeningStudyControlsError,
+            )
+
+            raise _InitialScreeningStudyControlsError(_ERROR)
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
+
+    def _provide_experiment_protocol(self) -> Any:
+        """Return the package-private protocol installed by composition."""
+
+        return object.__getattribute__(self, "_experiment_protocol")
 
     def _record_step(self, step: StepRecord) -> None:
         """Append one durable step fact to the campaign history."""
@@ -242,6 +261,11 @@ class CampaignManager:
 
     def run(self, requested_rounds: int):
         """Run toward the operator-selected number of formal evaluated rounds."""
+        from scion.core.initial_screening_study_controls_validation import (
+            _validate_initial_screening_requested_rounds,
+        )
+
+        _validate_initial_screening_requested_rounds(requested_rounds, self)
         self._requested_rounds = max(1, int(requested_rounds))
         try:
             self._run_research_environment_preflight()
