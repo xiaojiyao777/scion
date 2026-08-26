@@ -241,7 +241,7 @@ def _install_nested_allowed_literal(spec: ProblemSpecV1, *, wrappers: int) -> No
     )
 
 
-def test_problem_declaration_allows_global_json_depth_24(
+def test_problem_declaration_allows_global_json_depth_23(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -250,7 +250,7 @@ def test_problem_declaration_allows_global_json_depth_24(
         monkeypatch,
         problem_mutator=lambda spec: _install_nested_allowed_literal(
             spec,
-            wrappers=16,
+            wrappers=15,
         ),
     )
 
@@ -258,7 +258,7 @@ def test_problem_declaration_allows_global_json_depth_24(
     assert (tmp_path / "campaign" / _FILENAME).is_file()
 
 
-def test_problem_declaration_rejects_global_json_depth_25_before_adapter_or_root(
+def test_problem_declaration_rejects_global_json_depth_24_before_adapter_or_root(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -282,7 +282,7 @@ def test_problem_declaration_rejects_global_json_depth_25_before_adapter_or_root
             monkeypatch,
             problem_mutator=lambda spec: _install_nested_allowed_literal(
                 spec,
-                wrappers=17,
+                wrappers=16,
             ),
             before_campaign=before_campaign,
         )

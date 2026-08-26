@@ -31,7 +31,7 @@ from scion.protocol.experiment import ExperimentProtocol
 _ERROR = "INITIAL_SCREENING_PROBLEM_SPEC_UNAVAILABLE"
 _FILENAME = "initial_screening_problem_spec.json"
 _MAX_BYTES = 1 << 20
-_MAX_JSON_DEPTH = 24
+_MAX_JSON_DEPTH = 23
 _SCHEMA_VERSION = "scion.initial_screening_problem_spec.declaration.v1"
 _SCOPE = "PROBLEM_SPEC_DECLARATION_ONLY"
 _LIMITATIONS = (
