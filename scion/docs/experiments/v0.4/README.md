@@ -8,7 +8,7 @@ referenced, not copied into development prompts.
 
 ## Designs
 
-- [CVRP M32 H-candidate-bank research-effectiveness design, default-off K=2/initial-screening boundary, ordinal cells, strict ten-root audit, safe private loader, pre-run CONFIG_SUBSET controls, private manifest-path-only CONFIG_SUBSET_JOINED validation and separate producer-only REQUESTED_PROVIDER_POLICY_ONLY sidecar implemented; v1 joins remain unchanged and full control authority, population, matched result, GO and live authority remain absent](v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md)
+- [CVRP M32 H-candidate-bank research-effectiveness design, default-off K=2/initial-screening boundary, ordinal cells, strict ten-root audit, safe private loader, pre-run CONFIG_SUBSET controls, private CONFIG_SUBSET_JOINED v1 validation, producer-only REQUESTED_PROVIDER_POLICY_ONLY sidecar and separate validation-only CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED v2 implemented; v1 remains unchanged and full control authority, population, matched result, GO and live authority remain absent](v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md)
 
 ## Runs
 

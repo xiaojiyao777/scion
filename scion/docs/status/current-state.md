@@ -744,6 +744,24 @@ provider-/solver-free writer-roundtrip evidence only. They provide no matched
 CVRP result, population selection or live authority, and no K=2 research
 benefit has yet been observed.
 
+Carrier `8560a892` adds the separate package-private, manifest-path-only,
+validation-only v2. Its manifest declares one top-level common requested
+provider policy, and every ordered root must supply the seventh private
+`initial_screening_provider_policy.json` leaf with exactly the same raw
+canonical bytes and independently normalized value. The validator normalizes
+all five typed history declarations and reads and canonically normalizes every
+available basis file before any root, distinguishing known-empty available
+from typed unavailable history. The ten seven-leaf roots then share the
+existing bounded, no-follow, non-alias and fresh full-bundle rewalk, followed
+by the second fresh manifest-only rewalk. All ten S2a structural decodes run
+afterward and their values are discarded. The only success is the exact ordered-25
+`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED` mapping. Its 85 focused,
+405 combined v1/v2 manifest/root and 523 full postrun tests passed; the
+1,216-case producer/decoder differential had zero mismatches, and independent
+science/privacy and red-team review reported P0/P1/P2 = `0/0/0`. It does not
+call D2, D3 or an endpoint and creates no matched result, population, live
+authority or GO token.
+
 The original safe loader proves detached captured bytes and sequential
 root/leaf revalidation, not a simultaneous ten-root snapshot or live freshness.
 The manifest wrapper removes caller expectation and history-path injection:
@@ -759,13 +777,15 @@ self-hash, receipt, nonce, GO token or Scion-side proof of preregistration
 timing and does not call or pass through the D2 scorer, D3 comparator or their
 endpoints.
 
-The requested provider/model policy now has a separate producer, but it is not
-part of the S2c2 ten-root join. The S2c1 controls v1 and S2c2 manifest/join v1
-remain byte- and meaning-compatible and continue to carry
-`PROVIDER_REQUEST_POLICY_UNVERIFIED`. A future separate v2 must read the
-seventh leaf from every one of the ten roots and require one exact common
-policy before it can return the new
-`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED` status. ProblemSpec,
+The requested provider/model policy now has both its separate producer and the
+separate v2 ten-root join. The S2c1 controls v1 and S2c2 manifest/join v1
+remain byte- and meaning-compatible, return their old status and continue to
+carry `PROVIDER_REQUEST_POLICY_UNVERIFIED`; only v2 removes that one
+limitation. V2 retains `STUDY_MANIFEST_UNVERIFIED`, provider
+credential/account, process network/TLS, remote-backend, request-code-constant,
+timeout/retry-enforcement and client-lifetime limitations, both runner and
+external-hardwall enforcement limitations, and matched/live/GO prohibitions.
+ProblemSpec,
 research input, actual runtime history consumption, normalized
 requested/resolved solver and verification configuration, runner/backend
 enforcement, declared and external hardwall

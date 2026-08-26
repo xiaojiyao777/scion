@@ -1,6 +1,6 @@
 # CVRP M32 hypothesis-candidate-bank research-effectiveness design
 
-Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / CONFIG_SUBSET_MANIFEST_JOIN_IMPLEMENTED / REQUESTED_PROVIDER_POLICY_PRODUCER_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
+Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / CONFIG_SUBSET_MANIFEST_JOIN_IMPLEMENTED / REQUESTED_PROVIDER_POLICY_PRODUCER_IMPLEMENTED / CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_MANIFEST_JOIN_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
 
 Date: `2026-08-25`
 
@@ -45,6 +45,9 @@ Configuration-subset manifest-join carrier:
 
 Requested-provider-policy producer carrier:
 `7ad892eb303cae035edc35b1360dbb9b1d1e3b6a`
+
+Configuration-subset plus requested-provider-policy manifest-join carrier:
+`8560a892cac3e540ed4862ee209eaa2640ccba38`
 
 This is a measurement and future-study design, not a live preregistration. It
 does not select, rank or materialize a case, seed, salt, population, campaign
@@ -213,10 +216,42 @@ those boundaries as
 `MATCHED_RESULT_UNAUTHORIZED`, `LIVE_EXECUTION_UNAUTHORIZED` and
 `STUDY_GO_UNAUTHORIZED` remain in force.
 
+Carrier `8560a892cac3e540ed4862ee209eaa2640ccba38` adds a wholly separate,
+package-private, validation-only v2 manifest boundary. Its top-level manifest
+contains one common `declared_provider_policy` intended to be frozen before
+outcomes; the validator does not prove its Git, commit or write timing. Each of
+the ten ordered roots must expose `initial_screening_provider_policy.json` as
+its seventh private leaf. The validator independently normalizes the frozen
+provider-policy v1 grammar and requires both the raw canonical bytes and the
+normalized value of every leaf to equal the single declaration, with no K or
+population mask. It normalizes all five typed history declarations and reads
+and canonically normalizes every available basis file before any root,
+preserving the distinction between known-empty available and typed unavailable
+history. It reads all seven leaves for each root through one held root
+descriptor, includes the new leaf in bounds, non-alias checks and the full
+fresh bundle rewalk, then performs the second manifest-only rewalk. Only after
+those joins and rewalks does it run all ten S2a structural decodes, whose values
+are discarded.
+
+The sole success is the fixed private
+`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED` mapping with its exact
+ordered 25 limitations. This v2 removes only
+`PROVIDER_REQUEST_POLICY_UNVERIFIED`; it retains
+`STUDY_MANIFEST_UNVERIFIED`, the credential/account, process network/TLS,
+remote-backend, request-code-constant, timeout/retry-enforcement and client
+lifetime limitations, both runner and external-hardwall enforcement
+limitations, and the matched/live/GO prohibitions. Its 85 focused tests, 405
+combined v1/v2 manifest/root tests and 523 full postrun tests passed; an
+independent 1,216-case producer-versus-decoder differential had zero
+mismatches, and science/privacy and red-team review reported P0/P1/P2 =
+`0/0/0`. The S2c1 controls v1 and S2c2 manifest/join v1 bytes and meanings are
+unchanged: v1 still returns `CONFIG_SUBSET_JOINED` and retains
+`PROVIDER_REQUEST_POLICY_UNVERIFIED`.
+
 Together these carriers implement and audit K=2, telemetry, initial-only
 retirement, ordinal cells, decoded study structure, safe root loading and the
 pre-run configuration subset plus its first manifest/root/independent-file
-join, and a separate requested-provider-policy producer.
+join, a separate requested-provider-policy producer, and the private v2 join.
 Tests include provider-/solver-free actual-writer roundtrips as well as
 synthetic interruption and mutation matrices; they do not select a population,
 execute a matched experiment or show that K=2 improves CVRP research.
@@ -556,12 +591,14 @@ matched result, CLI or live authority.
 
 Carrier `7ad892eb` adds the separate producer-only
 `REQUESTED_PROVIDER_POLICY_ONLY` leaf, same-client immutable capsule and
-pre-run gate; it does not upgrade either earlier schema or join. The S2c1
-controls v1 and S2c2 manifest/join v1 remain byte- and meaning-compatible and
-continue to retain `PROVIDER_REQUEST_POLICY_UNVERIFIED`. Only a future separate
-v2 that reads this seventh leaf from all ten roots and requires one exact common
-requested policy may remove that limitation or emit the new
-`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED` status.
+pre-run gate; it does not upgrade either earlier schema or join. Carrier
+`8560a892` adds the separate validation-only v2 described above, reads the
+seventh leaf from every root and requires one exact common policy before
+returning `CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED`. The S2c1
+controls v1 and S2c2 manifest/join v1 remain byte- and meaning-compatible,
+continue to return their old status and retain
+`PROVIDER_REQUEST_POLICY_UNVERIFIED`; only the separate v2 removes that one
+limitation.
 
 Before any live preregistration, the remaining gates are to:
 
@@ -572,13 +609,13 @@ Before any live preregistration, the remaining gates are to:
   injection and no claim that their body-bearing files are Git-tracked. The
   validator does not prove Git identity, commit timing, absence of M32 outcome
   ingestion, population freshness or actual arm launch order;
-- extend the generic controls beyond the existing bounded qualification,
-  code-research, resource, scheduler and Protocol subset by joining the new
-  requested provider/model policy producer across the ten roots. ProblemSpec,
-  actual research-input/history consumption, normalized requested/resolved
-  solver and verification configuration, declared hardwall cap and launcher
-  configuration, and source/B0 content and order remain unproved; source
-  revision remains an external ordinary fact, not Scion authority.
+- extend the generic controls beyond the now-joined bounded qualification,
+  code-research, resource, scheduler, Protocol and requested-provider-policy
+  subset. ProblemSpec, actual research-input/history consumption, normalized
+  requested/resolved solver and verification configuration, declared hardwall
+  cap and launcher configuration, and source/B0 content and order remain
+  unproved; source revision remains an external ordinary fact, not Scion
+  authority.
   Runner/backend runtime enforcement and external hardwall enforcement remain
   unverified under
   `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` and
@@ -586,9 +623,9 @@ Before any live preregistration, the remaining gates are to:
   identity, network/TLS environment, request code constants, timeout/retry
   enforcement and client lifetime freshness also remain unproved; there is no
   actual-backend, served-model or enforcement claim;
-- preserve the implementation order: finish the seventh provider-policy leaf
-  and all-ten exact-common join, source/B0, requested/resolved solver and
-  verification,
+- preserve the implementation order: after the completed seventh
+  provider-policy leaf and all-ten exact-common join, finish source/B0,
+  requested/resolved solver and verification,
   declared-hardwall/launcher and other full-control joins; then add a gated
   comparator schema exercised only on synthetic inputs; then select an
   outcome-blind metadata-only population; and only then mechanically freeze the
