@@ -728,8 +728,9 @@ The default-off K=2 implementation, count-only attempt telemetry, pure
 single-arm offline scorer, pure exact-five-block comparator, default-off
 initial-screening producer boundary, ordinal-only paired-effect projection,
 strict ten-root artifact audit, safe private root loader and private pre-run
-configuration-subset snapshot now exist, but no population selection,
-matched-study result or live authority exists. Carrier
+configuration-subset snapshot and manifest-path-only configuration-subset join
+now exist, but no population selection, matched-study result or live authority
+exists. Carrier
 `25b78037` implements the private
 ordinal K=2 H bank under the existing shared session budget and exports only
 the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
@@ -748,9 +749,21 @@ writes before other campaign-root side effects from detached normalized
 controls, installs those same detached objects at the finite reviewed direct
 seams and revalidates their publication, joins and pristine run state before
 preflight. Its 203 focused tests passed and independent science/privacy and
-red-team review reported P0/P1/P2 = `0/0/0`. These are implementation,
-mutation-audit and provider-/solver-free writer-roundtrip results, not evidence
-that K=2 improves CVRP research.
+red-team review reported P0/P1/P2 = `0/0/0`. Carrier `94455954` adds the
+package-private, default-off, manifest-path-only `CONFIG_SUBSET_JOINED`
+validator. It normalizes the manifest's exact five typed history declarations
+and reads/canonically normalizes every available basis file before opening any
+outcome root, then safely joins ten bounded six-leaf root surfaces to their
+manifest-declared controls, root snapshots and independent
+code-research/resource files. One fresh absolute bundle pass revalidates the
+manifest, history files and ten roots, followed by a second fresh absolute
+manifest-only rewalk. It then passes all ten roots through the S2a structural
+decoder and discards every decoded value. Its 97 focused, 523 adjacent and 438
+postrun tests passed. It does not pass the history bases to S2a, invoke the D2
+scorer, D3 comparator or either endpoint, or create a matched result. These are
+implementation, mutation-audit and
+provider-/solver-free writer-roundtrip results, not evidence that K=2 improves
+CVRP research.
 The status remains `NO_POPULATION_SELECTION`, `NO_MATCHED_RESULT`,
 `NO_LIVE_AUTHORITY` and `NO_GO`; none of these private carriers is a public
 command or launch path.
@@ -848,39 +861,41 @@ command or launch path.
   actual loaded-history consumption, verification, runner or hardwall
   enforcement, full source or B0 content, a study manifest, population
   freshness or actual launch order.
-- [ ] Complete S2c control authority with a strict parser/join for an ordinary
-  Git-committed study manifest before selecting a population. The
-  manifest must become the sole source of the five ordered block expectations
-  and each block's explicit loaded-history availability/basis. The K=1 and K=2
-  arms must share that basis within a block, while all five bases are frozen
-  before the first outcome and contain no M32 outcome. Known-empty available
-  history and typed unavailable history are not interchangeable. Remove caller
-  expectation/history injection, and require a three-surface exact join: each
-  ordered block/arm's declared-controls projection in the manifest must equal
-  field-for-field the immutable normalized controls installed for runtime
-  consumption at that root's known reviewed direct seams and written to its
-  snapshot, while the snapshot's overlapping code-research and resource subsets
-  must equal that root's independent `code_research_limits.json` and
-  `resource_envelope.json` values. Controls declared common by the design must
-  be exact-equal across all ten arms; only manifest-declared treatment and
-  ordinary block, arm, root and launch fields may differ. The joined
-  controls must ultimately add requested provider/model policy, ProblemSpec and
+- [x] Add the first private manifest/control join without opening the rest of
+  S2c. Carrier `94455954` accepts only an explicit absolute manifest path and
+  returns only the fixed `CONFIG_SUBSET_JOINED` mapping, including the exact
+  ordered 20 limitations. The manifest is the sole source of its five ordered
+  block expectations and five explicit loaded-history availability/bases; its
+  history and root locators are relative POSIX tokens beneath the held manifest
+  parent, with no caller history/root-path injection. All five typed
+  declarations are normalized and every available basis file is read and
+  canonically normalized before any of the ten roots; each K=1/K=2 pair shares
+  one typed basis, while known-empty available and typed unavailable histories
+  remain distinct. Each ordered arm's declared controls exactly join its root
+  snapshot, whose overlapping code-research and resource subsets exactly join
+  independent `code_research_limits.json` and `resource_envelope.json` files;
+  common controls are exact-equal across all arms and only the eight declared
+  population paths plus K vary across blocks. After all joins, one fresh
+  absolute bundle pass revalidates the manifest, history files and all ten
+  roots, followed by a second fresh absolute manifest-only rewalk. The
+  validator structurally decodes all ten S2a roots and discards those values;
+  it does not pass the history bases to S2a or prove their runtime consumption.
+  It also does not verify ordinary-Git or pre-outcome timing or launch
+  execution; call D2, D3 or their endpoints; expose a public/CLI/write path; or
+  create a matched result, population, live authority or GO token.
+- [ ] Complete the remaining S2c control authority before selecting a
+  population. The joined controls must add requested provider/model policy,
+  ProblemSpec and
   actual research-input/history consumption, normalized requested/resolved
   solver and verification configuration, declared hardwall cap and launcher
   configuration, and source/B0 content and order; source revision remains an
   external ordinary fact. Runner/backend runtime enforcement and external
   hardwall enforcement remain unverified under
   `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` and
-  `EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`. A first partial manifest
-  implementation may return only a private `CONFIG_SUBSET_JOINED` or
-  validation-success carrier for the fields already proved by `f2fd0053`; it
-  must not call, return or pass through the D3 exact-five-block endpoint and
-  cannot create a matched result. The
-  implementation order is the partial parser, then provider/model, source/B0,
-  requested/resolved solver and verification, declared hardwall/launcher and
-  other full-control joins, followed by a gated comparator schema exercised only
-  on synthetic inputs. These joins do not lift either enforcement limitation.
-  Only after those generic gates exist may an outcome-blind metadata-only
+  `EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`. Finish these generic joins first,
+  then add a gated comparator schema exercised only on synthetic inputs. These
+  joins do not lift either enforcement limitation. Only after those generic
+  gates and synthetic comparator tests exist may an outcome-blind metadata-only
   population be selected; the study-specific cases, seeds, time/resource
   arithmetic, actual ordinary manifest and launch order must then be
   mechanically frozen and independently reviewed before any live authority.

@@ -710,48 +710,57 @@ It is published before other campaign-root side effects from detached
 normalized controls, installs those same detached objects at finite reviewed
 direct seams, and revalidates the publication, installed joins and pristine run
 state before preflight. Its 203 focused tests passed, and independent
-science/privacy and red-team review reported P0/P1/P2 = `0/0/0`. These carriers
-have implementation, mutation-audit and
+science/privacy and red-team review reported P0/P1/P2 = `0/0/0`. Carrier
+`94455954` adds a package-private, default-off, manifest-path-only validator
+that returns only the fixed `CONFIG_SUBSET_JOINED` mapping, including the exact
+ordered 20 limitations. The caller provides only the absolute manifest path; manifest-owned
+relative POSIX history/root locators resolve beneath its held parent. The
+validator normalizes all five typed loaded-history declarations and reads and
+canonically normalizes every available basis file before opening any outcome
+root, with one shared history object for each K=1/K=2 pair and a strict
+distinction between known-empty available and typed unavailable history. It
+then safely reads ten distinct six-leaf root surfaces and exactly joins
+manifest-declared controls, each root snapshot and the independent
+code-research/resource files. One fresh absolute bundle pass revalidates the
+manifest, history files and ten roots, followed by a second fresh absolute
+manifest-only rewalk. All ten roots then receive S2a structural decoding; every
+decoded value is discarded and no history basis is passed to S2a. Its 97
+focused, 523 adjacent and 438 postrun tests passed. These carriers have
+implementation, mutation-audit and
 provider-/solver-free writer-roundtrip evidence only. They provide no matched
 CVRP result, population selection or live authority, and no K=2 research
 benefit has yet been observed.
 
-The safe loader proves detached captured bytes and sequential root/leaf
-revalidation, not a simultaneous ten-root snapshot or live freshness. The
-current private path adapter still receives caller-declared expectations and
-loaded history. The new control snapshot proves only its declared
-configuration subset at pre-run: requested provider/model policy, ProblemSpec,
-actual research-input/history consumption, verification, runner and hardwall
-enforcement, full source/B0 content, an ordinary study manifest, population
-freshness and actual arm launch order remain outside it. The next gate is a
-strict parser/join for an ordinary Git-committed manifest. The manifest must
-replace caller-injected expectations/history with each block's pre-outcome
-frozen basis. For each ordered block/arm, its declared-controls projection must
-equal field-for-field
-the immutable normalized controls installed for runtime consumption at that
-root's known reviewed direct seams and written to its snapshot. Controls
-declared common by the design must be exact-equal across all ten arms, with
-differences limited to manifest-declared treatment and ordinary block, arm, root
-and launch fields. The loader must then join that snapshot's corresponding
-code-research and resource subsets to the independent
-`code_research_limits.json` and `resource_envelope.json` values; known-empty
-available history and typed unavailable history must remain distinct. It
-supplies no self-hash, receipt, nonce, GO token or Scion-side proof of
-preregistration timing. Exact-resource and outcome-blind population freeze
-remain later gates. A partial manifest wrapper may return only a private
-`CONFIG_SUBSET_JOINED` or validation-success carrier; it may not call, return or
-pass through the D3 exact-five-block endpoint and therefore cannot create a
-matched result. Implement provider/model, source/B0, requested/resolved solver
-and verification, declared hardwall/launcher and the other full-control joins
-next, followed by a gated comparator schema exercised only on synthetic inputs.
-These joins do not lift `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED`
-or
-`EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`. Only after those generic gates exist
-may an outcome-blind metadata-only population be selected; then mechanically
-freeze the study-specific cases, seeds, time/resource arithmetic, actual
-ordinary manifest and launch order before independent review and any separate
-live authority. Comparator implementation does not itself freeze those missing
-values or the actual study manifest. The status remains
+The original safe loader proves detached captured bytes and sequential
+root/leaf revalidation, not a simultaneous ten-root snapshot or live freshness.
+The manifest wrapper removes caller expectation and history-path injection:
+manifest-owned relative POSIX history/root locators resolve only beneath a held
+manifest-parent bundle, while the caller supplies only the absolute manifest
+path. It normalizes all five typed history declarations and reads and
+canonicalizes the files for available bases before any root. Those bases are
+not passed to S2a and do not prove actual runtime history consumption. One
+fresh absolute bundle pass revalidates the manifest, history files and all ten
+roots, followed by a second fresh absolute manifest-only rewalk. The wrapper
+returns the fixed mapping with its exact ordered 20 limitations; it supplies no
+self-hash, receipt, nonce, GO token or Scion-side proof of preregistration
+timing and does not call or pass through the D2 scorer, D3 comparator or their
+endpoints.
+
+Requested provider/model policy, ProblemSpec, research input, actual runtime
+history consumption, normalized requested/resolved solver and verification
+configuration, runner/backend enforcement, declared and external hardwall
+enforcement, launcher configuration, full source/B0 content, population
+freshness and actual arm launch order all remain outside the joined subset.
+Complete these remaining generic joins first, then add a gated comparator
+schema exercised only on synthetic inputs. None of those joins lifts
+`PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` or
+`EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`. Only after those generic gates and
+synthetic comparator tests exist may an outcome-blind metadata-only population
+be selected. Then mechanically freeze the study-specific cases, seeds,
+time/resource arithmetic, actual ordinary manifest and launch order before
+independent review and any separate live authority. Comparator implementation
+does not itself freeze those missing values or the actual study manifest. The
+status remains
 `NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO`:
 there is no public audit or GO export, CLI or live command; the existing D1 and
 summary public projections remain only their already reviewed count/cell

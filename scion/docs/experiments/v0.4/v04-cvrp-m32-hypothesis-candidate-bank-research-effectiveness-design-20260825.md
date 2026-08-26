@@ -1,6 +1,6 @@
 # CVRP M32 hypothesis-candidate-bank research-effectiveness design
 
-Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
+Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / CONFIG_SUBSET_MANIFEST_JOIN_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
 
 Date: `2026-08-25`
 
@@ -39,6 +39,9 @@ Safe study-root loader carrier:
 
 Initial-screening configuration-subset carrier:
 `f2fd0053e5cb5ed5e880c7e369b3141a9c600d2a`
+
+Configuration-subset manifest-join carrier:
+`94455954aceced50d31a943cf3185290edb813f4`
 
 This is a measurement and future-study design, not a live preregistration. It
 does not select, rank or materialize a case, seed, salt, population, campaign
@@ -150,9 +153,39 @@ and red-team review reported P0/P1/P2 = `0/0/0`. This is pre-run
 configuration-subset evidence only, not proof of actual execution or
 enforcement throughout the run.
 
+Carrier `94455954aceced50d31a943cf3185290edb813f4` adds one package-private,
+default-off, manifest-path-only validator that returns only the fixed
+`CONFIG_SUBSET_JOINED` mapping, including the exact ordered 20 limitations. The caller
+supplies only the absolute manifest path; all history and root locators are
+manifest-owned relative POSIX tokens resolved beneath a held manifest-parent
+bundle. The manifest is the sole source of the exact five ordered block
+expectations and five typed loaded-history declarations. The validator
+normalizes all five declarations and reads and canonically normalizes every
+available basis file before opening any outcome root. It distinguishes
+known-empty available history from typed unavailable history and shares one
+normalized basis between the K=1 and K=2 arms in each block.
+
+The validator then reads ten distinct bounded six-leaf artifact surfaces:
+`status.json`, `campaign_summary.json`,
+`initial_screening_study_controls.json`, `code_research_limits.json`,
+`resource_envelope.json` and optional `research_history.jsonl`. Each
+manifest-declared controls projection exactly joins the corresponding root
+snapshot; the snapshot's overlapping code-research and resource subsets exactly
+join the two independent files. Common controls are exact-equal across all ten
+arms, with only K and the eight manifest-declared population paths varying
+across blocks. After all joins, one fresh absolute bundle pass revalidates the
+manifest, history files and all ten roots, followed by a second fresh absolute
+manifest-only rewalk. All ten roots then pass through the S2a structural
+decoder; the ten decoded values are discarded, and the loaded bases are not
+passed to S2a or treated as proof of runtime consumption. The 97 focused
+manifest tests, 523 adjacent tests and 438 postrun tests passed. The wrapper
+does not call or pass through the D2 scorer, D3 comparator or their endpoints
+and creates no matched result, population, live authority or GO token.
+
 Together these carriers implement and audit K=2, telemetry, initial-only
 retirement, ordinal cells, decoded study structure, safe root loading and the
-pre-run configuration subset.
+pre-run configuration subset plus its first manifest/root/independent-file
+join.
 Tests include provider-/solver-free actual-writer roundtrips as well as
 synthetic interruption and mutation matrices; they do not select a population,
 execute a matched experiment or show that K=2 improves CVRP research.
@@ -484,30 +517,24 @@ The default-off initial-development boundary, ordinal-only initial-cell
 producer, strict decoded ten-root audit, private safe root loader and private
 configuration-subset snapshot are now implemented and independently reviewed
 in carriers `042da9e8`, `a8e483bb`, `8b7b5988`, `acff2f0a`, `4256c190` and
-`f2fd0053`. The postrun audit and loader remain private; there is no public audit
-or GO export, population, matched result, CLI or live authority.
+`f2fd0053`. Carrier `94455954` adds the first strict manifest/root/independent
+file join for that configuration subset. The manifest loader remains private
+and validation-only: its ten S2a decodes are discarded and it never invokes D2,
+D3 or either endpoint. There is no public audit or GO export, population,
+matched result, CLI or live authority.
 
 Before any live preregistration, the remaining gates are to:
 
-- add and independently review one ordinary Git-committed study manifest and
-  require a three-surface exact join in which each ordered block/arm's
-  declared-controls projection in the manifest equals field-for-field the
-  immutable normalized controls installed for runtime consumption at that
-  root's known reviewed direct seams and written to its snapshot, and the
-  snapshot's overlapping code-research and resource subsets equal that root's
-  independent `code_research_limits.json` and
-  `resource_envelope.json` values; controls declared common by the design must
-  be exact-equal across all ten arms, with differences limited to
-  manifest-declared treatment and ordinary block, arm, root and launch fields;
-- make the manifest the sole source of the ordered five-block expectations and
-  each block's explicit loaded-history availability/basis; the K=1 and K=2 arms
-  must share exactly the same availability/basis within their block, including
-  a distinction between known-empty available history and typed unavailable
-  history, while all five bases are frozen before the first outcome without
-  M32 outcome ingestion;
-- remove caller expectation/history injection. The existing subset already
-  joins its bounded qualification, code-research, resource, scheduler and
-  Protocol controls, but requested provider/model policy, ProblemSpec and
+- commit and independently review the actual ordinary manifest in Git, and
+  separately freeze and externally review its five private history bases before
+  the first outcome. The bases remain private/transient and are referenced only
+  through manifest-owned relative POSIX locators, with no caller history-path
+  injection and no claim that their body-bearing files are Git-tracked. The
+  validator does not prove Git identity, commit timing, absence of M32 outcome
+  ingestion, population freshness or actual arm launch order;
+- complete the generic controls beyond the existing bounded qualification,
+  code-research, resource, scheduler and Protocol subset. Requested
+  provider/model policy, ProblemSpec and
   actual research-input/history consumption, normalized requested/resolved
   solver and verification configuration, declared hardwall cap and launcher
   configuration, and source/B0 content and order remain unproved; source
@@ -516,25 +543,26 @@ Before any live preregistration, the remaining gates are to:
   unverified under
   `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` and
   `EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`;
-- keep any first partial manifest wrapper validation-only: it may return a
-  private `CONFIG_SUBSET_JOINED` or validation-success carrier, but may not call,
-  return or pass through the D3 exact-five-block endpoint and therefore cannot
-  create a matched result. Implement provider/model, source/B0,
-  requested/resolved solver and verification, declared hardwall/launcher and the
-  other full-control joins next, followed by a gated comparator schema exercised
-  only on synthetic inputs; none of those joins proves runtime enforcement. Only
-  after those generic gates exist may an outcome-blind metadata-only population
-  be selected; then mechanically freeze the study-specific cases, seeds,
-  time/resource arithmetic, actual ordinary manifest and launch order before
+- preserve the implementation order: finish the generic provider/model,
+  source/B0, requested/resolved solver and verification,
+  declared-hardwall/launcher and other full-control joins; then add a gated
+  comparator schema exercised only on synthetic inputs; then select an
+  outcome-blind metadata-only population; and only then mechanically freeze the
+  study-specific cases, seeds, time/resource arithmetic, actual ordinary
+  manifest and launch order before
   independent review and any separate live authorization. Implementing
-  comparator code before population selection does not freeze those missing
-  values or the actual study manifest;
+  comparator code before metadata-only population selection does not freeze
+  those missing values or the actual study manifest, and none of the generic
+  joins proves runtime enforcement;
 - keep the control snapshot unreachable from H/C prompt, read and search
-  surfaces, and keep the manifest/control postrun loader private; any
-  identity- or body-bearing scientific input remains private and transient,
-  while outputs, errors, status, history and prompts gain no new body. Add no
-  self-hash, receipt, nonce, GO token, preauthorization or claim that Scion
-  proves preregistration timing;
+  surfaces, and keep the manifest/control postrun loader private. Body-bearing
+  history bases remain private/transient and are not Git-tracked;
+  identity-bearing manifest/control data is confined to the reviewed private
+  manifest and in-memory loader. This carrier projects no manifest, control or
+  history identity/body into its fixed return/error and adds none to status,
+  prompt or history; the existing ordinary ProtocolResult/summary case/seed
+  projections remain unchanged. Add no self-hash, receipt, nonce, GO token,
+  preauthorization or claim that Scion proves preregistration timing;
 - freeze exact numeric resources from the final implementation and population
   metadata;
 - freeze an outcome-blind five-block population and arm order without exposing
