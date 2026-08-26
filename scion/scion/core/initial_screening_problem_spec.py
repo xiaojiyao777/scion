@@ -31,6 +31,7 @@ from scion.protocol.experiment import ExperimentProtocol
 _ERROR = "INITIAL_SCREENING_PROBLEM_SPEC_UNAVAILABLE"
 _FILENAME = "initial_screening_problem_spec.json"
 _MAX_BYTES = 1 << 20
+_MAX_JSON_DEPTH = 24
 _SCHEMA_VERSION = "scion.initial_screening_problem_spec.declaration.v1"
 _SCOPE = "PROBLEM_SPEC_DECLARATION_ONLY"
 _LIMITATIONS = (
@@ -186,6 +187,7 @@ def _canonical_problem_spec_payload(spec_v1: ProblemSpecV1) -> bytes:
         "limitations": list(_LIMITATIONS),
         "problem_spec_v1": projection,
     }
+    _validate_problem_payload_json(payload)
     encoded = (
         json.dumps(
             payload,
@@ -493,6 +495,7 @@ def _freeze_problem_spec_inputs(
         raise TypeError
     if _freeze_tree(source_v1) != _freeze_tree(frozen_v1):
         raise ValueError
+    payload_bytes = _canonical_problem_spec_payload(frozen_v1)
     fresh_adapter = _freeze_adapter(adapter, source_v1, frozen_v1)
     _validate_all_model_surfaces()
     _validate_bridge_authority()
@@ -521,7 +524,6 @@ def _freeze_problem_spec_inputs(
         or operator_execute_signature != bridged_signature
     ):
         raise ValueError
-    payload_bytes = _canonical_problem_spec_payload(frozen_v1)
     adapter_fingerprint = _adapter_authority_key(fresh_adapter, frozen_v1)
     frozen_key = _authority_value_key(
         spec_v1=frozen_v1,
@@ -876,6 +878,34 @@ def _validate_tree(value: Any, active: set[int] | None = None) -> None:
         raise TypeError
     finally:
         stack.remove(identity)
+
+
+def _validate_problem_payload_json(
+    value: Any,
+    depth: int = 0,
+    in_allowed_literals: bool = False,
+) -> None:
+    if depth > _MAX_JSON_DEPTH:
+        raise ValueError
+    if value is None or type(value) in {str, bool, int}:
+        return
+    if type(value) is float:
+        if not math.isfinite(value):
+            raise ValueError
+        return
+    if type(value) is list or (type(value) is tuple and not in_allowed_literals):
+        for item in value:
+            _validate_problem_payload_json(item, depth + 1, in_allowed_literals)
+        return
+    if type(value) is dict:
+        if any(type(key) is not str for key in value):
+            raise TypeError
+        for key, item in value.items():
+            _validate_problem_payload_json(
+                item, depth + 1, in_allowed_literals or key == "allowed_literals"
+            )
+        return
+    raise TypeError
 
 
 def _project_model(value: BaseModel) -> dict[str, Any]:

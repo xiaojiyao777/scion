@@ -3,7 +3,9 @@ from __future__ import annotations
 import builtins
 import copy
 import json
+import math
 import stat
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +54,7 @@ from scion.problem.spec import (
     OperatorInterfaceSpec,
     ProblemAdapterRef,
     ProblemSpecV1,
+    ResearchSurfaceReturnValueSpec,
     SearchSpaceSpec,
 )
 from scion.proposal.llm.client import LLMClient
@@ -132,8 +135,17 @@ def test_problem_spec_declaration_is_exact_root_free_canonical_payload() -> None
 def _problem_manager(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    *,
+    problem_mutator: Callable[[ProblemSpecV1], None] | None = None,
+    before_campaign: Callable[[ProblemSpecV1, ProblemSpecBridge, Any], None]
+    | None = None,
 ) -> CampaignManager:
-    _spec_v1, bridge, adapter = _cvrp_inputs()
+    spec_v1, bridge, adapter = _cvrp_inputs()
+    if problem_mutator is not None:
+        problem_mutator(spec_v1)
+        bridge = bridge_problem_spec_v1(spec_v1)
+    if before_campaign is not None:
+        before_campaign(spec_v1, bridge, adapter)
     config = _protocol_config()
     manifest = _split()
     ledger = _ledger()
@@ -217,6 +229,106 @@ def test_problem_spec_opt_in_publishes_third_leaf_before_runtime_side_effects(
     assert manager._problem_runtime.spec.spec_v1 is (
         manager._initial_screening_problem_spec.spec_v1
     )
+
+
+def _install_nested_allowed_literal(spec: ProblemSpecV1, *, wrappers: int) -> None:
+    assert spec.research_surfaces is not None
+    value: Any = 0
+    for _index in range(wrappers):
+        value = [value]
+    spec.research_surfaces[0].interface.return_values["result"] = (
+        ResearchSurfaceReturnValueSpec(allowed_literals=[value])
+    )
+
+
+def test_problem_declaration_allows_global_json_depth_24(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = _problem_manager(
+        tmp_path,
+        monkeypatch,
+        problem_mutator=lambda spec: _install_nested_allowed_literal(
+            spec,
+            wrappers=16,
+        ),
+    )
+
+    assert manager._initial_screening_problem_spec is not None
+    assert (tmp_path / "campaign" / _FILENAME).is_file()
+
+
+def test_problem_declaration_rejects_global_json_depth_25_before_adapter_or_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    adapter_calls = 0
+
+    def before_campaign(
+        _spec: ProblemSpecV1,
+        _bridge: ProblemSpecBridge,
+        adapter: Any,
+    ) -> None:
+        def bomb(_self: Any, _spec_v1: ProblemSpecV1) -> None:
+            nonlocal adapter_calls
+            adapter_calls += 1
+            raise AssertionError("fresh adapter constructor ran")
+
+        monkeypatch.setattr(type(adapter), "__init__", bomb)
+
+    with pytest.raises(_InitialScreeningProblemSpecError) as caught:
+        _problem_manager(
+            tmp_path,
+            monkeypatch,
+            problem_mutator=lambda spec: _install_nested_allowed_literal(
+                spec,
+                wrappers=17,
+            ),
+            before_campaign=before_campaign,
+        )
+
+    _fixed_problem_error(caught.value)
+    assert adapter_calls == 0
+    assert not (tmp_path / "campaign").exists()
+
+
+@pytest.mark.parametrize("literal", [("tuple",), math.nan, math.inf])
+def test_problem_declaration_rejects_nonexact_or_nonfinite_json_literals_pre_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    literal: Any,
+) -> None:
+    adapter_calls = 0
+
+    def mutate(spec: ProblemSpecV1) -> None:
+        assert spec.research_surfaces is not None
+        spec.research_surfaces[0].interface.return_values["result"] = (
+            ResearchSurfaceReturnValueSpec(allowed_literals=[literal])
+        )
+
+    def before_campaign(
+        _spec: ProblemSpecV1,
+        _bridge: ProblemSpecBridge,
+        adapter: Any,
+    ) -> None:
+        def bomb(_self: Any, _spec_v1: ProblemSpecV1) -> None:
+            nonlocal adapter_calls
+            adapter_calls += 1
+            raise AssertionError("fresh adapter constructor ran")
+
+        monkeypatch.setattr(type(adapter), "__init__", bomb)
+
+    with pytest.raises(_InitialScreeningProblemSpecError) as caught:
+        _problem_manager(
+            tmp_path,
+            monkeypatch,
+            problem_mutator=mutate,
+            before_campaign=before_campaign,
+        )
+
+    _fixed_problem_error(caught.value)
+    assert adapter_calls == 0
+    assert not (tmp_path / "campaign").exists()
 
 
 @pytest.mark.parametrize("close_target", ["attached", "root"])
