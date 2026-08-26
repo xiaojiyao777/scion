@@ -34,7 +34,6 @@ from scion.core.decision_finalizer import DecisionFinalizer
 from scion.core.evaluation_orchestrator import EvaluationOrchestrator
 from scion.core.evidence_recording import EvidenceRecorder
 from scion.core.explore_step.pipeline import ExploreStepPipeline
-from scion.core.models import ChampionState
 from scion.core.problem_runtime import ProblemRuntime
 from scion.core.production_boundary import (
     validate_fresh_campaign_output,
@@ -203,138 +202,34 @@ def _prepare_initial_screening_controls_setup(
     resource_envelope: Any | None,
     code_research_limits: Any | None,
     qualification_only: Any | None,
+    problem_declaration: Any | None = None,
 ) -> _InitialScreeningControlsSetup:
     """Publish and return one fixed-error, config-subset runtime setup."""
 
-    from scion.core.initial_screening_study_controls import (
-        _ERROR,
-        _bind_controls_publication,
-        _InitialScreeningStudyControlsError,
-        _prepare_initial_screening_runtime_inputs,
-        _write_initial_screening_study_controls,
+    from scion.core.initial_screening_controls_composition import (
+        _prepare_initial_screening_controls_setup_impl,
     )
 
-    failed = False
-    result: _InitialScreeningControlsSetup | None = None
-    try:
-        from scion.core.campaign import CampaignManager
-
-        if type(owner) is not CampaignManager:
-            raise TypeError
-        if verification_gate is not None:
-            raise ValueError
-        runtime_inputs = _prepare_initial_screening_runtime_inputs(
-            request=request,
-            qualification=qualification_only,
-            code_research_limits=code_research_limits,
-            resource_envelope=resource_envelope,
-            protocol_config=protocol_config,
-            split_manifest=split_manifest,
-            seed_ledger=seed_ledger,
-            experiment_protocol=experiment_protocol,
-            campaign_dir=campaign_dir,
-        )
-        frozen_config = runtime_inputs.protocol_config
-        frozen_manifest = runtime_inputs.split_manifest
-        frozen_ledger = runtime_inputs.seed_ledger
-        frozen_protocol = runtime_inputs.experiment_protocol
-        if type(champion) is not ChampionState:
-            raise TypeError
-        champion_storage = vars(champion)
-        if type(champion_storage) is not dict or any(
-            type(key) is not str for key in champion_storage
-        ):
-            raise TypeError
-        champion_snapshot_path = champion_storage.get("code_snapshot_path")
-        if (
-            type(champion_snapshot_path) is not str
-            or not champion_snapshot_path
-            or "\x00" in champion_snapshot_path
-        ):
-            raise TypeError
-
-        development_suites = declared_development_suites(problem_spec)
-        development_workspace_paths = declared_development_workspace_paths(problem_spec)
-        development_problem_package_paths = declared_development_problem_package_paths(
-            problem_spec
-        )
-        validate_development_closure_boundary(
-            problem_spec=problem_spec,
-            suites=development_suites,
-            workspace_paths=development_workspace_paths,
-            problem_package_paths=development_problem_package_paths,
-            split_manifest=frozen_manifest,
-            champion_root=champion_snapshot_path,
-        )
-        problem_runtime = ProblemRuntime(
-            problem_spec=problem_spec,
-            adapter=adapter,
-            split_manifest=frozen_manifest,
-            seed_ledger=frozen_ledger,
-            research_input=research_input,
-            research_history=research_history,
-            development_suites=development_suites,
-        )
-        contract_gate = ContractGate(
-            problem_spec,
-            operator_execute_signature=operator_execute_signature,
-            adapter=adapter,
-            champion_snapshot_provider=lambda: getattr(
-                getattr(owner, "_champion", champion),
-                "code_snapshot_path",
-                None,
-            ),
-        )
-        frozen_protocol.set_problem_adapter(adapter)
-        installed_verification_gate = CampaignVerificationFactory.build(
-            problem_spec=problem_spec,
-            verification_gate=verification_gate,
-            experiment_protocol=frozen_protocol,
-            campaign_dir=campaign_dir,
-            adapter=adapter,
-            operator_execute_signature=operator_execute_signature,
-        )
-        validate_production_campaign_boundary(
-            problem_spec=problem_spec,
-            experiment_protocol=frozen_protocol,
-            adapter=adapter,
-            split_manifest=frozen_manifest,
-            seed_ledger=frozen_ledger,
-            verification_gate=installed_verification_gate,
-        )
-        protected_roots = _initial_screening_protected_roots(
-            problem_spec=problem_spec,
-            champion=champion,
-            split_manifest=frozen_manifest,
-            development_suites=development_suites,
-        )
-        publication = _write_initial_screening_study_controls(
-            campaign_dir,
-            runtime_inputs.payload_bytes,
-            protected_roots=protected_roots,
-        )
-        runtime_inputs = _bind_controls_publication(runtime_inputs, publication)
-        result = _InitialScreeningControlsSetup(
-            code_research_limits=runtime_inputs.code_research_limits,
-            resource_envelope=runtime_inputs.resource_envelope,
-            qualification=runtime_inputs.qualification,
-            protocol_config=frozen_config,
-            split_manifest=frozen_manifest,
-            seed_ledger=frozen_ledger,
-            experiment_protocol=frozen_protocol,
-            problem_runtime=problem_runtime,
-            contract_gate=contract_gate,
-            verification_gate=installed_verification_gate,
-            development_suites=development_suites,
-            development_workspace_paths=development_workspace_paths,
-            development_problem_package_paths=development_problem_package_paths,
-            runtime_inputs=runtime_inputs,
-        )
-    except Exception:  # noqa: BLE001 - sanitize the private opt-in boundary
-        failed = True
-    if failed or result is None:
-        raise _InitialScreeningStudyControlsError(_ERROR)
-    return result
+    return _prepare_initial_screening_controls_setup_impl(
+        owner=owner,
+        request=request,
+        problem_spec=problem_spec,
+        protocol_config=protocol_config,
+        split_manifest=split_manifest,
+        seed_ledger=seed_ledger,
+        champion=champion,
+        campaign_dir=campaign_dir,
+        experiment_protocol=experiment_protocol,
+        adapter=adapter,
+        verification_gate=verification_gate,
+        operator_execute_signature=operator_execute_signature,
+        research_input=research_input,
+        research_history=research_history,
+        resource_envelope=resource_envelope,
+        code_research_limits=code_research_limits,
+        qualification_only=qualification_only,
+        problem_declaration=problem_declaration,
+    )
 
 
 def _initial_screening_protected_roots(
@@ -527,13 +422,36 @@ def compose_campaign_services(
     qualification_only: Any | None = None,
     _initial_screening_study_controls: Any | None = None,
     _initial_screening_provider_policy: Any | None = None,
+    _initial_screening_problem_spec: Any | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
-    provider_policy_inputs = _prepare_provider_policy_inputs(
-        _initial_screening_provider_policy,
-        _initial_screening_study_controls,
-        llm_client,
-    )
+    declarations = None
+    if _initial_screening_problem_spec is None:
+        provider_policy_inputs = _prepare_provider_policy_inputs(
+            _initial_screening_provider_policy,
+            _initial_screening_study_controls,
+            llm_client,
+        )
+    else:
+        from scion.core.initial_screening_declaration_composition import (
+            _prepare_initial_screening_declarations,
+        )
+
+        declarations = _prepare_initial_screening_declarations(
+            controls_request=_initial_screening_study_controls,
+            provider_request=_initial_screening_provider_policy,
+            problem_request=_initial_screening_problem_spec,
+            llm_client=llm_client,
+            problem_spec=problem_spec,
+            adapter=adapter,
+            operator_execute_signature=operator_execute_signature,
+            experiment_protocol=experiment_protocol,
+        )
+        provider_policy_inputs = declarations.provider_policy
+        problem_spec = declarations.runtime_problem_spec
+        adapter = declarations.runtime_adapter
+        operator_execute_signature = declarations.runtime_operator_execute_signature
+        experiment_protocol = declarations.runtime_experiment_protocol
     controls_setup: _InitialScreeningControlsSetup | None = None
     if _initial_screening_study_controls is None:
         (
@@ -558,36 +476,50 @@ def compose_campaign_services(
             qualification_only=qualification_only,
         )
     else:
-        controls_setup = _prepare_initial_screening_controls_setup(
-            owner=owner,
-            request=_initial_screening_study_controls,
-            problem_spec=problem_spec,
-            protocol_config=protocol_config,
-            split_manifest=split_manifest,
-            seed_ledger=seed_ledger,
-            champion=champion,
-            campaign_dir=campaign_dir,
-            experiment_protocol=experiment_protocol,
-            adapter=adapter,
-            verification_gate=verification_gate,
-            operator_execute_signature=operator_execute_signature,
-            research_input=research_input,
-            research_history=research_history,
-            resource_envelope=resource_envelope,
-            code_research_limits=code_research_limits,
-            qualification_only=qualification_only,
-        )
-        if provider_policy_inputs is not None:
-            from scion.core.initial_screening_study_provider_policy import (
-                _publish_initial_screening_provider_policy,
+        controls_arguments = {
+            "owner": owner,
+            "request": _initial_screening_study_controls,
+            "problem_spec": problem_spec,
+            "protocol_config": protocol_config,
+            "split_manifest": split_manifest,
+            "seed_ledger": seed_ledger,
+            "champion": champion,
+            "campaign_dir": campaign_dir,
+            "experiment_protocol": experiment_protocol,
+            "adapter": adapter,
+            "verification_gate": verification_gate,
+            "operator_execute_signature": operator_execute_signature,
+            "research_input": research_input,
+            "research_history": research_history,
+            "resource_envelope": resource_envelope,
+            "code_research_limits": code_research_limits,
+            "qualification_only": qualification_only,
+        }
+        if declarations is not None:
+            controls_arguments["problem_declaration"] = declarations.problem_spec
+        controls_setup = _prepare_initial_screening_controls_setup(**controls_arguments)
+        if declarations is None:
+            if provider_policy_inputs is not None:
+                from scion.core.initial_screening_study_provider_policy import (
+                    _publish_initial_screening_provider_policy,
+                )
+
+                provider_policy_inputs = _publish_initial_screening_provider_policy(
+                    provider_policy_inputs,
+                    controls_setup.runtime_inputs.publication,
+                )
+                owner._initial_screening_provider_policy_active = True
+                owner._initial_screening_provider_policy = provider_policy_inputs
+        else:
+            from scion.core.initial_screening_declaration_composition import (
+                _install_initial_screening_declaration_carriers,
+                _publish_initial_screening_declarations,
             )
 
-            provider_policy_inputs = _publish_initial_screening_provider_policy(
-                provider_policy_inputs,
-                controls_setup.runtime_inputs.publication,
+            declarations = _publish_initial_screening_declarations(
+                declarations, controls_setup
             )
-            owner._initial_screening_provider_policy_active = True
-            owner._initial_screening_provider_policy = provider_policy_inputs
+            _install_initial_screening_declaration_carriers(owner, declarations)
         normalized_code_research_limits = controls_setup.code_research_limits
         normalized_resource_envelope = controls_setup.resource_envelope
         normalized_qualification_only = controls_setup.qualification
@@ -963,21 +895,28 @@ def compose_campaign_services(
         begin_async_stop_deferral=owner._begin_async_stop_deferral,
         end_async_stop_deferral=owner._end_async_stop_deferral,
     )
-    if controls_setup is not None:
-        from scion.core.initial_screening_study_controls import (
-            _register_initial_screening_controls_owner,
+    if declarations is None:
+        if controls_setup is not None:
+            from scion.core.initial_screening_study_controls import (
+                _register_initial_screening_controls_owner,
+            )
+
+            _register_initial_screening_controls_owner(
+                owner,
+                owner._initial_screening_study_controls,
+            )
+        if provider_policy_inputs is not None:
+            from scion.core.initial_screening_study_provider_policy import (
+                _finalize_initial_screening_provider_policy,
+            )
+
+            _finalize_initial_screening_provider_policy(owner, provider_policy_inputs)
+    else:
+        from scion.core.initial_screening_declaration_composition import (
+            _finalize_initial_screening_declarations,
         )
 
-        _register_initial_screening_controls_owner(
-            owner,
-            owner._initial_screening_study_controls,
-        )
-    if provider_policy_inputs is not None:
-        from scion.core.initial_screening_study_provider_policy import (
-            _finalize_initial_screening_provider_policy,
-        )
-
-        _finalize_initial_screening_provider_policy(owner, provider_policy_inputs)
+        _finalize_initial_screening_declarations(owner, controls_setup, declarations)
 
 
 def required_service_names() -> tuple[str, ...]:

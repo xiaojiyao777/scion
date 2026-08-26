@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import math
+import sys
+import weakref
 from _thread import LockType
 from dataclasses import fields
-from types import MethodType
+from types import MethodType, ModuleType
 from typing import Any, cast
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
@@ -63,6 +65,43 @@ _SUPPORTED_MODELS = {
     ObjectiveMetricSpec,
     ObjectivePolicySpec,
 }
+
+
+def _weak_registry_contains_owner(registry: Any, owner: Any) -> bool:
+    """Scan one exact weak registry by identity without owner hash/equality."""
+
+    if type(registry) is not weakref.WeakKeyDictionary:
+        raise TypeError
+    references = weakref.WeakKeyDictionary.keyrefs(registry)
+    if type(references) is not list or any(
+        type(reference) is not weakref.ReferenceType for reference in references
+    ):
+        raise TypeError
+    return any(reference() is owner for reference in references)
+
+
+def _loaded_problem_boundary_storage() -> dict[str, Any] | None:
+    module = sys.modules.get("scion.core.initial_screening_problem_spec")
+    if module is None:
+        return None
+    if type(module) is not ModuleType:
+        raise TypeError
+    storage = vars(module)
+    if type(storage) is not dict or any(type(key) is not str for key in storage):
+        raise TypeError
+    return storage
+
+
+def _loaded_problem_error_type() -> Any | None:
+    storage = _loaded_problem_boundary_storage()
+    return None if storage is None else storage.get("_InitialScreeningProblemSpecError")
+
+
+def _loaded_problem_owner_is_registered(owner: Any) -> bool:
+    storage = _loaded_problem_boundary_storage()
+    return storage is not None and _weak_registry_contains_owner(
+        storage.get("_REGISTERED_OWNERS"), owner
+    )
 
 
 def _validate_dataclass_instance(value: Any, expected_type: type) -> None:

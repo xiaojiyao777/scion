@@ -34,11 +34,14 @@ from scion.core.initial_screening_study_controls_io import (
     _validate_private_child_directory,
 )
 from scion.core.initial_screening_study_controls_shapes import (
+    _loaded_problem_error_type,
+    _loaded_problem_owner_is_registered,
     _validate_dataclass_instance,
     _validate_model_instance,
     _validate_objective_shapes,
     _validate_pristine_storage_shapes,
     _validate_protocol_wrapper_shape,
+    _weak_registry_contains_owner,
 )
 from scion.core.initial_screening_study_provider_policy import (
     _ERROR as _PROVIDER_ERROR,
@@ -96,6 +99,10 @@ _DIRECT_SERVICE_TYPES = {
 }
 
 
+class _ProblemMarkerMissingError(RuntimeError):
+    """Internal signal for a registered problem owner with cleared markers."""
+
+
 def _validate_initial_screening_requested_rounds(
     requested_rounds: Any,
     owner: Any,
@@ -104,14 +111,28 @@ def _validate_initial_screening_requested_rounds(
 
     failed = False
     provider_failed = False
+    problem_failed = False
     try:
         _validate_registered_run(requested_rounds, owner)
     except _InitialScreeningProviderPolicyError:
         provider_failed = True
-    except Exception:  # noqa: BLE001 - preserve the fixed controls boundary
-        failed = True
+    except Exception as error:  # noqa: BLE001 - preserve fixed private boundaries
+        problem_error_type = _loaded_problem_error_type()
+        problem_failed = type(error) is _ProblemMarkerMissingError or (
+            problem_error_type is not None and type(error) is problem_error_type
+        )
+        failed = not problem_failed
     if provider_failed:
         raise _InitialScreeningProviderPolicyError(_PROVIDER_ERROR)
+    if problem_failed:
+        from scion.core.initial_screening_problem_spec import (
+            _ERROR as _PROBLEM_ERROR,
+        )
+        from scion.core.initial_screening_problem_spec import (
+            _InitialScreeningProblemSpecError,
+        )
+
+        raise _InitialScreeningProblemSpecError(_PROBLEM_ERROR)
     if failed:
         raise _InitialScreeningStudyControlsError(_ERROR)
 
@@ -125,6 +146,22 @@ def _validate_registered_run(requested_rounds: Any, owner: Any) -> None:
     )
 
     provider_state = _prepare_provider_policy_run_validation(owner)
+    problem_marker_keys = {
+        "_initial_screening_problem_spec_active",
+        "_initial_screening_problem_spec",
+    }
+    if problem_marker_keys & set(owner_storage):
+        from scion.core.initial_screening_problem_spec_validation import (
+            _prepare_problem_spec_run_validation,
+            _validate_problem_spec_installed_runtime,
+            _validate_problem_spec_publication,
+        )
+
+        problem_state = _prepare_problem_spec_run_validation(owner, owner_storage)
+    else:
+        if _loaded_problem_owner_is_registered(owner):
+            raise _ProblemMarkerMissingError
+        problem_state = None
     marker_keys = {
         "_initial_screening_study_controls_active",
         "_initial_screening_study_controls",
@@ -135,7 +172,7 @@ def _validate_registered_run(requested_rounds: Any, owner: Any) -> None:
     runtime_inputs = owner_storage["_initial_screening_study_controls"]
     baseline = _registered_baseline(owner, active, runtime_inputs)
     if baseline is None:
-        if provider_state is not None:
+        if provider_state is not None or problem_state is not None:
             raise ValueError
         return
     _validate_baseline_shape(baseline)
@@ -165,6 +202,12 @@ def _validate_registered_run(requested_rounds: Any, owner: Any) -> None:
     )
     if provider_state is not None:
         _validate_provider_policy_publication(provider_state, publication)
+    if problem_state is not None:
+        if provider_state is None:
+            raise ValueError
+        _validate_problem_spec_publication(
+            problem_state, runtime_inputs, provider_state
+        )
     _validate_private_child_directory(
         publication,
         "metrics",
@@ -173,6 +216,8 @@ def _validate_registered_run(requested_rounds: Any, owner: Any) -> None:
     _validate_installed_runtime(owner, runtime_inputs, baseline)
     if provider_state is not None:
         _validate_provider_policy_installed_runtime(provider_state, owner)
+    if problem_state is not None:
+        _validate_problem_spec_installed_runtime(problem_state, owner)
 
 
 def _registered_baseline(
@@ -183,7 +228,12 @@ def _registered_baseline(
     from scion.core.campaign import CampaignManager
 
     if type(owner) is not CampaignManager:
-        _validate_unregistered_legacy(owner, active, runtime_inputs)
+        if (
+            _weak_registry_contains_owner(_REGISTERED_OWNERS, owner)
+            or active is not False
+            or runtime_inputs is not None
+        ):
+            raise TypeError
         return None
     if type(_REGISTERED_OWNERS) is not weakref.WeakKeyDictionary:
         raise TypeError
@@ -193,24 +243,6 @@ def _registered_baseline(
     if type(baseline) is not _RegisteredControlsBaseline:
         raise TypeError
     return baseline
-
-
-def _validate_unregistered_legacy(
-    owner: Any,
-    active: Any,
-    runtime_inputs: Any,
-) -> None:
-    if type(_REGISTERED_OWNERS) is not weakref.WeakKeyDictionary:
-        raise TypeError
-    references = weakref.WeakKeyDictionary.keyrefs(_REGISTERED_OWNERS)
-    if type(references) is not list or any(
-        type(reference) is not weakref.ReferenceType for reference in references
-    ):
-        raise TypeError
-    if any(reference() is owner for reference in references):
-        raise TypeError
-    if active is not False or runtime_inputs is not None:
-        raise TypeError
 
 
 def _campaign_owner_storage(owner: Any) -> dict[str, Any]:

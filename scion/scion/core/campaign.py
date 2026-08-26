@@ -91,11 +91,13 @@ class CampaignManager:
         qualification_only: (QualificationOnlyConfig | Mapping[str, Any] | None) = None,
         _initial_screening_study_controls: Any | None = None,
         _initial_screening_provider_policy: Any | None = None,
+        _initial_screening_problem_spec: Any | None = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
         failed = False
         provider_policy_failed = False
+        problem_spec_failed = False
         try:
             compose_campaign_services(
                 self,
@@ -117,21 +119,37 @@ class CampaignManager:
                 qualification_only=qualification_only,
                 _initial_screening_study_controls=(_initial_screening_study_controls),
                 _initial_screening_provider_policy=(_initial_screening_provider_policy),
+                _initial_screening_problem_spec=(_initial_screening_problem_spec),
             )
         except Exception as error:
             from scion.core.initial_screening_study_provider_policy import (
                 _InitialScreeningProviderPolicyError,
             )
 
+            if _initial_screening_problem_spec is not None:
+                from scion.core.initial_screening_problem_spec import (
+                    _InitialScreeningProblemSpecError,
+                )
+
+                problem_spec_failed = type(error) is _InitialScreeningProblemSpecError
             provider_policy_failed = type(error) is _InitialScreeningProviderPolicyError
             if (
                 _initial_screening_study_controls is None
                 and _initial_screening_provider_policy is None
+                and _initial_screening_problem_spec is None
                 and not provider_policy_failed
+                and not problem_spec_failed
             ):
                 raise
             failed = True
         if failed:
+            if problem_spec_failed or _initial_screening_problem_spec is not None:
+                from scion.core.initial_screening_problem_spec import (
+                    _ERROR,
+                    _InitialScreeningProblemSpecError,
+                )
+
+                raise _InitialScreeningProblemSpecError(_ERROR)
             if provider_policy_failed or _initial_screening_provider_policy is not None:
                 from scion.core.initial_screening_study_provider_policy import (
                     _ERROR,
