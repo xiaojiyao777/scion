@@ -235,8 +235,8 @@ class ProposalRuntimeTelemetry:
                     self._active.faulted = True
                 return False
             attempt = _Attempt(round_num=round_num, start=start)
-            self._attempts.append(attempt)
             self._active = attempt
+            self._attempts.append(attempt)
             return True
 
     def _finish(self, state: ProposalAttemptAccountingState) -> None:

@@ -85,9 +85,16 @@ def _load_research_histories(
 class _CampaignSignalStop(KeyboardInterrupt):
     """Raised by the CLI signal handler to stop the active campaign."""
 
-    def __init__(self, signum: int, reason: str) -> None:
+    def __init__(
+        self,
+        signum: int,
+        reason: str,
+        *,
+        interrupted_override: bool | None = None,
+    ) -> None:
         self.signum = signum
         self.reason = reason
+        self.interrupted_override = interrupted_override
         self.exit_status = (
             _OUTER_HARDWALL_EXIT_STATUS
             if reason == _OUTER_HARDWALL_REASON
@@ -171,7 +178,33 @@ def _campaign_signal_handlers(
             signame = signal.Signals(signum).name
             reason = f"signal:{signame}"
         manager.request_stop(reason)
-        raise _CampaignSignalStop(signum, reason)
+        should_defer = getattr(
+            manager,
+            "_should_defer_async_stop_exception",
+            None,
+        )
+        if callable(should_defer) and should_defer():
+            return
+        interrupted_hint = getattr(
+            manager,
+            "_async_stop_interrupted_hint",
+            None,
+        )
+        projected_hint = (
+            interrupted_hint(reason) if callable(interrupted_hint) else None
+        )
+        interrupted_override = (
+            projected_hint
+            if projected_hint is not None
+            else True
+            if reason == _OUTER_HARDWALL_REASON
+            else None
+        )
+        raise _CampaignSignalStop(
+            signum,
+            reason,
+            interrupted_override=interrupted_override,
+        )
 
     for signum in (signal.SIGTERM, signal.SIGINT):
         previous[signum] = signal.getsignal(signum)
@@ -191,8 +224,24 @@ _INCOMPLETE_QUALIFICATION_EXIT_STATUS = 22
 def _completion_from_run_result(result: Any) -> tuple[int, str]:
     completed = bool(getattr(result, "completed", False))
     stopped_reason = str(getattr(result, "stop_reason", "") or "")
-    failure_categories = dict(getattr(result, "failure_categories", {}) or {})
     qualification = getattr(result, "qualification", None)
+    qualification_config = getattr(qualification, "config", None)
+    initial_screening_only = bool(
+        qualification_config is not None
+        and getattr(qualification_config, "initial_screening_only", False)
+    )
+    signal_exit_status = (
+        {
+            _OUTER_HARDWALL_REASON: _OUTER_HARDWALL_EXIT_STATUS,
+            "signal:SIGINT": 128 + int(signal.SIGINT),
+            "signal:SIGTERM": 128 + int(signal.SIGTERM),
+        }.get(stopped_reason)
+        if initial_screening_only
+        else None
+    )
+    if signal_exit_status is not None:
+        return signal_exit_status, stopped_reason
+    failure_categories = dict(getattr(result, "failure_categories", {}) or {})
     if completed:
         if qualification is not None:
             return 0, stopped_reason
@@ -668,9 +717,7 @@ def register_run_command(app: typer.Typer) -> None:
             except _CampaignSignalStop as exc:
                 mgr.finalize_requested_stop(
                     exc.reason,
-                    interrupted_override=(
-                        True if exc.reason == _OUTER_HARDWALL_REASON else None
-                    ),
+                    interrupted_override=exc.interrupted_override,
                 )
                 typer.echo(f"Campaign stopped: {exc.reason}", err=True)
                 raise typer.Exit(code=exc.exit_status)

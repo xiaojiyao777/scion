@@ -348,6 +348,196 @@ def test_staging_keeps_branch_and_durable_workspace_untouched(
     assert set(vars(applied)) == {"workspace", "source_digest"}
 
 
+def test_branch_lease_cleans_return_to_owner_store_interrupt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, branch, _, materializer, workspaces, _, _ = _staging_service(tmp_path)
+    service.discard_branch_workspace(branch.branch_id)
+    create_workspace = materializer.create_branch_workspace
+
+    def interrupt_after_materializer_return(
+        branch_id: str,
+        source_snapshot: str,
+    ) -> str:
+        workspace = create_workspace(branch_id, source_snapshot)
+        assert Path(workspace).absolute() in materializer._inflight_branch_workspaces
+        raise KeyboardInterrupt("materializer-return:branch")
+
+    monkeypatch.setattr(
+        materializer,
+        "create_branch_workspace",
+        interrupt_after_materializer_return,
+    )
+
+    with pytest.raises(KeyboardInterrupt, match="materializer-return:branch"):
+        service.setup_workspace(branch)
+
+    assert workspaces == {}
+    assert not any((tmp_path / "campaign" / "workspaces").iterdir())
+    assert materializer._inflight_branch_workspaces == set()
+
+
+def test_candidate_lease_cleans_return_to_owner_store_interrupt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _, _, materializer, _, _, base_workspace = _staging_service(tmp_path)
+    create_candidate = materializer.create_candidate_workspace
+
+    def interrupt_after_materializer_return(source_workspace: str) -> str:
+        candidate = create_candidate(source_workspace)
+        assert Path(candidate) in materializer._inflight_candidate_workspaces
+        raise KeyboardInterrupt("materializer-return:candidate")
+
+    monkeypatch.setattr(
+        materializer,
+        "create_candidate_workspace",
+        interrupt_after_materializer_return,
+    )
+
+    with pytest.raises(KeyboardInterrupt, match="materializer-return:candidate"):
+        service.apply_candidate_patch(base_workspace, _candidate_patch())
+
+    assert Path(base_workspace).is_dir()
+    assert not any((tmp_path / "campaign" / "candidate_workspaces").iterdir())
+    assert materializer._inflight_candidate_workspaces == set()
+
+
+def test_relative_campaign_preserves_branch_and_candidate_path_semantics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    source = Path("champion")
+    source.mkdir()
+    (source / "solver.py").write_text("VALUE = 0\n", encoding="utf-8")
+    materializer = WorkspaceMaterializer("relative-campaign")
+
+    branch_workspace = materializer.create_branch_workspace("branch-1", str(source))
+    assert branch_workspace == "relative-campaign/workspaces/branch-1"
+    assert not Path(branch_workspace).is_absolute()
+    materializer.claim_branch_workspace("branch-1", branch_workspace)
+
+    candidate_workspace = materializer.create_candidate_workspace(branch_workspace)
+    assert Path(candidate_workspace).is_absolute()
+    assert Path(candidate_workspace).parent == (
+        tmp_path / "relative-campaign" / "candidate_workspaces"
+    )
+    materializer.cleanup_candidate_workspace(candidate_workspace)
+
+
+def test_branch_workspace_symlink_never_deletes_its_in_root_target(
+    tmp_path: Path,
+) -> None:
+    campaign = tmp_path / "campaign"
+    source = tmp_path / "champion"
+    source.mkdir()
+    (source / "solver.py").write_text("VALUE = 0\n", encoding="utf-8")
+    materializer = WorkspaceMaterializer(str(campaign))
+    target = campaign / "workspaces" / "branch-target"
+    target.mkdir()
+    marker = target / "target-marker.txt"
+    marker.write_text("survive\n", encoding="utf-8")
+    alias = campaign / "workspaces" / "branch-alias"
+    alias.symlink_to(target, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="symlinked branch workspace"):
+        materializer.create_branch_workspace("branch-alias", str(source))
+
+    assert alias.is_symlink()
+    assert marker.read_text(encoding="utf-8") == "survive\n"
+    materializer.cleanup_branch_workspace("branch-alias")
+    assert not alias.exists()
+    assert marker.read_text(encoding="utf-8") == "survive\n"
+
+
+@pytest.mark.parametrize("kind", ("branch", "candidate"))
+def test_materializer_partial_copy_interrupt_cleans_lease_and_tree(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    kind: str,
+) -> None:
+    campaign = tmp_path / "campaign"
+    source = tmp_path / "champion"
+    source.mkdir()
+    (source / "solver.py").write_text("VALUE = 0\n", encoding="utf-8")
+    materializer = WorkspaceMaterializer(str(campaign))
+    if kind == "candidate":
+        branch_workspace = materializer.create_branch_workspace(
+            "branch-1",
+            str(source),
+        )
+        materializer.claim_branch_workspace("branch-1", branch_workspace)
+        source_path = branch_workspace
+    else:
+        source_path = str(source)
+
+    def interrupt_copy(_src, destination, **_kwargs) -> None:
+        dest = Path(destination)
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "partial.txt").write_text("partial\n", encoding="utf-8")
+        raise KeyboardInterrupt("copy interrupted")
+
+    monkeypatch.setattr("scion.runtime.workspace.shutil.copytree", interrupt_copy)
+
+    with pytest.raises(KeyboardInterrupt, match="copy interrupted"):
+        if kind == "branch":
+            materializer.create_branch_workspace("branch-2", source_path)
+        else:
+            materializer.create_candidate_workspace(source_path)
+
+    assert materializer._inflight_branch_workspaces == set()
+    assert materializer._inflight_candidate_workspaces == set()
+    if kind == "branch":
+        assert not (campaign / "workspaces" / "branch-2").exists()
+    else:
+        assert not any((campaign / "candidate_workspaces").iterdir())
+
+
+def test_legacy_materializer_without_lease_api_preserves_workspace_lifecycle(
+    tmp_path: Path,
+) -> None:
+    service, branch, controller, materializer, workspaces, _, base_workspace = (
+        _staging_service(tmp_path)
+    )
+
+    class LegacyMaterializer:
+        def create_branch_workspace(self, branch_id: str, source: str) -> str:
+            return materializer.create_branch_workspace(branch_id, source)
+
+        def create_candidate_workspace(self, source: str) -> str:
+            return materializer.create_candidate_workspace(source)
+
+        def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
+            return materializer.apply_patch(workspace, patch)
+
+        def cleanup_candidate_workspace(self, workspace: str) -> None:
+            materializer.cleanup_candidate_workspace(workspace)
+
+        def freeze_snapshot(self, workspace: str) -> None:
+            materializer.freeze_snapshot(workspace)
+
+        def compute_code_hash(self, workspace: str) -> str:
+            return materializer.compute_code_hash(workspace)
+
+        def cleanup(self, workspace: str) -> None:
+            materializer.cleanup(workspace)
+
+    service.materializer = LegacyMaterializer()  # type: ignore[assignment]
+    rejected = service.apply_candidate_patch(base_workspace, _candidate_patch())
+    service.reject_candidate(rejected)
+    assert not Path(rejected.workspace).exists()
+
+    accepted = service.apply_candidate_patch(base_workspace, _candidate_patch(2))
+    assert service.verify_candidate(accepted) == accepted
+    assert service.accept_candidate(branch, accepted) == accepted.workspace
+    assert workspaces[branch.branch_id] == accepted.workspace
+    assert controller.get_branch(branch.branch_id).current_code_hash == (
+        accepted.source_digest
+    )
+
+
 def test_accept_candidate_binds_exact_staging_value_as_branch_source(
     tmp_path: Path,
 ) -> None:

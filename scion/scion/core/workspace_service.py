@@ -20,6 +20,10 @@ logger = logging.getLogger(__name__)
 class WorkspaceMaterializerLike(Protocol):
     def create_branch_workspace(self, branch_id: str, source_snapshot: str) -> str: ...
 
+    def cleanup_branch_workspace(self, branch_id: str) -> None: ...
+
+    def claim_branch_workspace(self, branch_id: str, workspace: str) -> None: ...
+
     def apply_patch(self, workspace: str, patch: PatchProposal) -> str: ...
 
     def create_candidate_workspace(
@@ -28,6 +32,10 @@ class WorkspaceMaterializerLike(Protocol):
     ) -> str: ...
 
     def cleanup_candidate_workspace(self, candidate_workspace: str) -> None: ...
+
+    def claim_candidate_workspace(self, candidate_workspace: str) -> None: ...
+
+    def cleanup_inflight_workspaces(self) -> None: ...
 
     def freeze_snapshot(self, path: str) -> None: ...
 
@@ -80,12 +88,28 @@ class WorkspaceService:
         self.discard_branch_workspace(bid)
         with self.champion_lock:
             source_snapshot = self.get_champion().code_snapshot_path
+        workspace: str | None = None
         try:
             workspace = self.materializer.create_branch_workspace(bid, source_snapshot)
+            self.branch_workspaces[bid] = workspace
+            self._claim_branch_workspace(bid, workspace)
         except Exception as exc:
+            self.branch_workspaces.pop(bid, None)
+            try:
+                self._cleanup_branch_workspace(bid, workspace)
+            except Exception as cleanup_exc:
+                raise RuntimeError(
+                    "branch workspace cleanup failed after setup error"
+                ) from cleanup_exc
             logger.error("Branch %s: workspace creation failed: %s", bid, exc)
             return None
-        self.branch_workspaces[bid] = workspace
+        except BaseException:
+            self.branch_workspaces.pop(bid, None)
+            try:
+                self._cleanup_branch_workspace(bid, workspace)
+            except Exception:
+                logger.exception("Branch %s: interrupted workspace cleanup failed", bid)
+            raise
         return workspace
 
     def apply_candidate_patch(
@@ -95,23 +119,31 @@ class WorkspaceService:
         *,
         hypothesis: HypothesisProposal | None = None,
         sync_registry: bool = False,
+        on_candidate_ready: Callable[[CandidateWorkspace], None] | None = None,
     ) -> CandidateWorkspace:
         """Apply a research patch to isolated staging, never the durable base."""
 
-        candidate = self.materializer.create_candidate_workspace(
-            base_workspace,
-        )
+        candidate: str | None = None
         try:
+            candidate = self.materializer.create_candidate_workspace(
+                base_workspace,
+            )
             code_hash = self.materializer.apply_patch(candidate, patch)
             if sync_registry and hypothesis is not None:
                 self.sync_pool_registry(candidate, hypothesis, patch)
+            value = CandidateWorkspace(
+                workspace=candidate,
+                source_digest=code_hash,
+            )
+            if on_candidate_ready is not None:
+                on_candidate_ready(value)
         except BaseException:
-            self.materializer.cleanup_candidate_workspace(candidate)
+            if candidate is not None:
+                self.materializer.cleanup_candidate_workspace(candidate)
+            else:
+                self.discard_inflight_workspaces()
             raise
-        return CandidateWorkspace(
-            workspace=candidate,
-            source_digest=code_hash,
-        )
+        return value
 
     def accept_candidate(
         self,
@@ -125,6 +157,7 @@ class WorkspaceService:
         self.materializer.freeze_snapshot(candidate.workspace)
         self.branch_workspaces[bid] = candidate.workspace
         self.branch_controller.accept_verified_code(bid, candidate.source_digest)
+        self._claim_candidate_workspace(candidate.workspace)
         if previous and previous != candidate.workspace:
             try:
                 self.materializer.cleanup(previous)
@@ -160,8 +193,39 @@ class WorkspaceService:
     def discard_branch_workspace(self, branch_id: str) -> None:
         workspace = self.branch_workspaces.pop(branch_id, None)
         if not workspace:
+            cleanup = getattr(self.materializer, "cleanup_branch_workspace", None)
+            if callable(cleanup):
+                cleanup(branch_id)
             return
         self.materializer.cleanup(workspace)
+
+    def discard_inflight_workspaces(self) -> None:
+        """Remove unclaimed branch/candidate leases after a BaseException."""
+
+        cleanup = getattr(self.materializer, "cleanup_inflight_workspaces", None)
+        if callable(cleanup):
+            cleanup()
+
+    def _claim_branch_workspace(self, branch_id: str, workspace: str) -> None:
+        claim = getattr(self.materializer, "claim_branch_workspace", None)
+        if callable(claim):
+            claim(branch_id, workspace)
+
+    def _claim_candidate_workspace(self, workspace: str) -> None:
+        claim = getattr(self.materializer, "claim_candidate_workspace", None)
+        if callable(claim):
+            claim(workspace)
+
+    def _cleanup_branch_workspace(
+        self,
+        branch_id: str,
+        workspace: str | None,
+    ) -> None:
+        cleanup = getattr(self.materializer, "cleanup_branch_workspace", None)
+        if callable(cleanup):
+            cleanup(branch_id)
+        elif workspace is not None:
+            self.materializer.cleanup(workspace)
 
     def sync_pool_registry(
         self,

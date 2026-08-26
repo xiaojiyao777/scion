@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import signal
+from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -8,6 +10,12 @@ from typing import Any
 
 import pytest
 
+from scion.cli.commands.init_run import (
+    _campaign_signal_handlers,
+    _CampaignOuterHardwall,
+    _CampaignSignalStop,
+    _completion_from_run_result,
+)
 from scion.core.branch import BranchController, StateTransitionError
 from scion.core.campaign_loop import CampaignLoop
 from scion.core.code_research_limits import CodeResearchLimits
@@ -42,6 +50,20 @@ from scion.tests.campaign_test_support import (
 
 _INITIAL_ONLY_MODE: QualificationDevelopmentBoundaryMode = "initial_screening_only_v1"
 _ATTEMPT_CAP = 6
+
+
+def _invoke_after_return(
+    function: Callable[..., Any],
+    callback: Callable[[Any], None],
+) -> Callable[..., Any]:
+    """Interrupt after an owner callee returns but before its caller receives it."""
+
+    def wrapped(*args: Any, **kwargs: Any) -> Any:
+        value = function(*args, **kwargs)
+        callback(value)
+        raise AssertionError("signal callback returned after owner callee")
+
+    return wrapped
 
 
 class _NoCallClient:
@@ -123,6 +145,52 @@ def _install_synthetic_bounded_proposals(cm: Any, *, candidates: int) -> None:
 
     cm._explore_step_pipeline.generate_hypothesis = generate_hypothesis
     cm._explore_step_pipeline.generate_code = generate_code
+
+
+def _single_initial_only_campaign(tmp_path: Path) -> Any:
+    protocol = MockExperimentProtocol(
+        results=[_make_protocol_result(ExperimentStage.SCREENING, "pass")]
+    )
+    manager = _campaign(
+        tmp_path,
+        experiment_protocol=protocol,
+        qualification_only=_initial_only_config(attempt_cap=2),
+        resource_envelope=_envelope(),
+        code_research_limits=_limits(),
+    )
+    _install_synthetic_bounded_proposals(manager, candidates=1)
+    return manager
+
+
+def _assert_safe_deferred_terminal(
+    manager: Any,
+    terminal: Any,
+    *,
+    reason: str,
+) -> None:
+    assert terminal.stop_reason == reason
+    assert terminal.completed is False
+    assert terminal.scheduled_calls == 1
+    assert terminal.evaluated_rounds == 1
+    assert terminal.execution_outcome_counts["evaluated"] == 1
+    assert terminal.execution_outcome_counts["interrupted"] == 0
+    assert terminal.unknown_outcome_count == 0
+    qualification = terminal.to_projection()["qualification"]
+    assert qualification["proposal_attempts"] == 1
+    assert qualification["verified_candidate_chains"] == 1
+    assert qualification["formal_screening_stages"] == 1
+    assert qualification["initial_screening_stages"] == 1
+    assert qualification["expanded_screening_stages"] == 0
+    assert qualification["disposition"] == "incomplete"
+    assert len(manager._step_history) == 1
+    branch = manager._branch_ctrl.get_branch(manager._step_history[0].branch_id)
+    assert branch.state is BranchState.PARKED_LINEAGE
+    assert branch.current_code_hash is None
+    assert branch.hypothesis is None
+    assert branch.direction is None
+    assert manager._branch_workspaces == {}
+    assert manager._branch_patches == {}
+    assert manager._async_stop_deferral_depth == 0
 
 
 def test_default_config_and_projection_remain_byte_compatible() -> None:
@@ -428,6 +496,52 @@ def test_direct_legacy_qualification_loop_allows_missing_retirement_callback() -
     assert terminal.completed is True
 
 
+def test_legacy_loop_keeps_result_reason_precedence_over_late_stop_request() -> None:
+    runtime = QualificationRuntime(
+        QualificationOnlyConfig(
+            max_proposal_attempts=1,
+            max_verified_candidate_chains=1,
+            max_formal_screening_stages=1,
+        )
+    )
+    stop_requested = False
+
+    def run_one_step() -> StepResult:
+        nonlocal stop_requested
+        runtime.reserve_proposal_attempt()
+        stop_requested = True
+        return StepResult(
+            action="explore",
+            branch_id="branch-legacy",
+            decision=Decision.QUEUE_VALIDATE,
+            verification_passed=True,
+            protocol_result=_make_protocol_result(ExperimentStage.SCREENING, "pass"),
+            execution_outcome=ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.EVALUATED,
+                reason_code="EVALUATION_COMPLETED",
+                provenance={"stage": "screening"},
+            ),
+        )
+
+    loop = CampaignLoop(
+        write_status=lambda **_kwargs: None,
+        drain_weight_opt_events=lambda: None,
+        should_stop=lambda: stop_requested,
+        get_last_stop_reason=lambda: "late_programmatic_stop",
+        set_last_stop_reason=lambda _reason: None,
+        run_one_step=run_one_step,
+        write_terminal_artifacts=lambda _result: None,
+        get_final_wait_timeout=lambda: 0.0,
+        wait_weight_opt_all=lambda _timeout: None,
+        qualification_runtime=runtime,
+    )
+
+    terminal = loop.run(requested_rounds=99)
+
+    assert terminal.stop_reason == QUALIFICATION_BOUNDARY_REACHED
+    assert terminal.completed is True
+
+
 @pytest.mark.parametrize(
     ("requested_rounds", "candidates"),
     ((1, 1), (_ATTEMPT_CAP, 1), (99, 1), (1, 2)),
@@ -672,3 +786,804 @@ def test_outer_stop_before_a_is_incomplete_and_does_not_impute_attempts(
     assert qualification["expanded_screening_stages"] == 0
     assert qualification["disposition"] == "incomplete"
     assert protocol.experiment_call_count == 1
+
+
+@pytest.mark.parametrize("checkpoint", ("post_return", "pre_retire"))
+def test_initial_only_signal_defers_through_post_return_retirement(
+    tmp_path: Path,
+    checkpoint: str,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+
+    with _campaign_signal_handlers(cm):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+        if checkpoint == "post_return":
+            run_one_step = cm._campaign_loop.run_one_step
+
+            def run_then_signal() -> StepResult:
+                result = run_one_step()
+                handler(signal.SIGTERM, None)
+                return result
+
+            cm._campaign_loop.run_one_step = run_then_signal
+        else:
+            record_screening = cm._qualification_runtime.record_screening_stage
+
+            def account_then_signal(branch_id: str, *, expanded: bool) -> None:
+                record_screening(branch_id, expanded=expanded)
+                handler(signal.SIGTERM, None)
+
+            cm._qualification_runtime.record_screening_stage = account_then_signal
+        terminal = cm.run(requested_rounds=99)
+
+    _assert_safe_deferred_terminal(cm, terminal, reason="signal:SIGTERM")
+    assert _completion_from_run_result(terminal) == (143, "signal:SIGTERM")
+
+
+def test_initial_only_signal_defers_between_history_and_memory_step_writes(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    history_writer = cm._evidence_recorder._research_history_writer
+    assert history_writer is not None
+    append_step = history_writer.append_step
+
+    with _campaign_signal_handlers(cm):
+        handler = signal.getsignal(signal.SIGINT)
+        assert callable(handler)
+
+        def append_then_signal(step: Any) -> None:
+            append_step(step)
+            assert cm._step_history == []
+            handler(signal.SIGINT, None)
+
+        history_writer.append_step = append_then_signal
+        terminal = cm.run(requested_rounds=99)
+
+    _assert_safe_deferred_terminal(cm, terminal, reason="signal:SIGINT")
+    history = (
+        (tmp_path / "campaign" / "research_history.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+    assert len(history) == len(cm._step_history) == 1
+    assert _completion_from_run_result(terminal) == (130, "signal:SIGINT")
+
+
+def test_initial_only_inflight_signal_still_raises_for_cli_finalization(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+
+    with _campaign_signal_handlers(cm):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def signal_during_dispatch(_branch: Any) -> Any:
+            handler(signal.SIGTERM, None)
+            raise AssertionError("signal handler returned during true dispatch")
+
+        cm._explore_step_pipeline.generate_hypothesis = signal_during_dispatch
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    assert raised.value.reason == "signal:SIGTERM"
+    assert cm._step_history == []
+    assert cm._campaign_loop.call_in_progress is True
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+    assert terminal.scheduled_calls == 1
+    assert terminal.execution_outcome_counts["interrupted"] == 1
+
+
+def test_initial_only_pre_admission_hardwall_has_no_phantom_dispatch(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    hardwall = _CampaignOuterHardwall(None)
+    hardwall.expired.set()
+    write_status = cm._campaign_loop.write_status
+    writes = 0
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def signal_after_final_stop_check(**kwargs: Any) -> None:
+            nonlocal writes
+            writes += 1
+            write_status(**kwargs)
+            if writes == 2:
+                handler(signal.SIGTERM, None)
+
+        cm._campaign_loop.write_status = signal_after_final_stop_check
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    assert raised.value.interrupted_override is False
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert terminal.scheduled_calls == 0
+    assert terminal.execution_outcome_counts["interrupted"] == 0
+    assert status["total_rounds"] == 0
+    assert status["branches"] == []
+    assert status["proposal_runtime"]["attempts"] == []
+    assert status["run_result"]["qualification"]["proposal_attempts"] == 0
+
+
+@pytest.mark.parametrize("checkpoint", ("before_runner", "before_round"))
+def test_initial_only_dispatch_admission_interrupt_has_no_d1_or_authority(
+    tmp_path: Path,
+    checkpoint: str,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    hardwall = _CampaignOuterHardwall(None)
+    hardwall.expired.set()
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        if checkpoint == "before_runner":
+
+            def signal_before_runner() -> StepResult:
+                handler(signal.SIGTERM, None)
+                raise AssertionError("signal handler returned before runner")
+
+            cm._campaign_loop.run_one_step = signal_before_runner
+        else:
+
+            def signal_before_round(_branch: Any) -> StepResult:
+                handler(signal.SIGTERM, None)
+                raise AssertionError("signal handler returned before round")
+
+            cm._branch_step_runner.run_explore_step = signal_before_round
+
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    assert raised.value.interrupted_override is True
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert terminal.scheduled_calls == 1
+    assert terminal.execution_outcome_counts["interrupted"] == 1
+    assert status["total_rounds"] == 0
+    assert status["proposal_runtime"]["attempts"] == []
+    assert status["run_result"]["qualification"]["proposal_attempts"] == 0
+    assert "current_progress" not in status
+    assert cm._branch_workspaces == {}
+    assert cm._branch_patches == {}
+    if checkpoint == "before_runner":
+        assert status["branches"] == []
+    else:
+        assert len(status["branches"]) == 1
+        assert status["branches"][0]["state"] == "explore"
+        assert status["branches"][0]["current_code_hash"] is None
+        assert status["branches"][0]["direction"] is None
+
+
+def test_initial_only_reserved_pre_attempt_interrupt_is_body_free(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    hardwall = _CampaignOuterHardwall(None)
+    hardwall.expired.set()
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def signal_after_reservation(_round_num: int):
+            handler(signal.SIGTERM, None)
+            raise AssertionError("signal handler returned after reservation")
+
+        cm._explore_step_pipeline.proposal_attempt_scope = signal_after_reservation
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert terminal.scheduled_calls == 1
+    assert terminal.execution_outcome_counts["interrupted"] == 1
+    assert status["total_rounds"] == 1
+    assert status["proposal_runtime"]["attempts"] == []
+    assert status["run_result"]["qualification"]["proposal_attempts"] == 1
+    assert "current_progress" not in status
+    assert len(status["branches"]) == 1
+    assert status["branches"][0]["state"] == "explore"
+    assert cm._branch_workspaces == {}
+    assert cm._branch_patches == {}
+
+
+def test_initial_only_pre_reservation_interrupt_keeps_proposal_count_unchanged(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    hardwall = _CampaignOuterHardwall(None)
+    hardwall.expired.set()
+    update_progress = cm._explore_step_pipeline.update_status_progress
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def signal_from_proposal_heartbeat(payload: dict[str, Any] | None) -> None:
+            if payload is not None and payload.get("phase") == "proposal_hypothesis":
+                handler(signal.SIGTERM, None)
+            update_progress(payload)
+
+        cm._explore_step_pipeline.update_status_progress = (
+            signal_from_proposal_heartbeat
+        )
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert terminal.scheduled_calls == 1
+    assert terminal.execution_outcome_counts["interrupted"] == 1
+    assert status["total_rounds"] == 1
+    assert status["run_result"]["qualification"]["proposal_attempts"] == 0
+    assert status["proposal_runtime"]["attempts"] == []
+    assert status["n_steps"] == 0
+    assert "current_progress" not in status
+    assert len(status["branches"]) == 1
+    assert status["branches"][0]["state"] == "explore"
+    assert status["branches"][0]["current_code_hash"] is None
+    assert cm._branch_workspaces == {}
+    assert cm._branch_patches == {}
+
+
+@pytest.mark.parametrize(
+    "checkpoint",
+    ("admitted", "pre_reservation", "reserved"),
+)
+def test_initial_only_interrupt_shapes_preserve_a_completed_prefix(
+    tmp_path: Path,
+    checkpoint: str,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    hardwall = _CampaignOuterHardwall(None)
+    hardwall.expired.set()
+    calls = 0
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+        if checkpoint == "admitted":
+            run_one_step = cm._campaign_loop.run_one_step
+
+            def stop_second_dispatch() -> StepResult:
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    handler(signal.SIGTERM, None)
+                return run_one_step()
+
+            cm._campaign_loop.run_one_step = stop_second_dispatch
+        elif checkpoint == "reserved":
+            attempt_scope = cm._explore_step_pipeline.proposal_attempt_scope
+
+            def stop_second_reservation(round_num: int):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    handler(signal.SIGTERM, None)
+                return attempt_scope(round_num)
+
+            cm._explore_step_pipeline.proposal_attempt_scope = stop_second_reservation
+        else:
+            update_progress = cm._explore_step_pipeline.update_status_progress
+
+            def stop_second_heartbeat(payload: dict[str, Any] | None) -> None:
+                nonlocal calls
+                if (
+                    payload is not None
+                    and payload.get("phase") == "proposal_hypothesis"
+                ):
+                    calls += 1
+                    if calls == 2:
+                        handler(signal.SIGTERM, None)
+                update_progress(payload)
+
+            cm._explore_step_pipeline.update_status_progress = stop_second_heartbeat
+
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert terminal.scheduled_calls == 2
+    assert terminal.evaluated_rounds == 1
+    assert terminal.execution_outcome_counts["evaluated"] == 1
+    assert terminal.execution_outcome_counts["interrupted"] == 1
+    assert terminal.last_execution_outcome == {
+        "outcome": "interrupted",
+        "reason_code": "OUTER_HARDWALL_EXCEEDED",
+        "stage": "campaign",
+    }
+    assert status["n_steps"] == 1
+    assert len(status["proposal_runtime"]["attempts"]) == 1
+    assert status["proposal_runtime"]["attempts"][0]["accounting_state"] == "closed"
+    qualification = status["run_result"]["qualification"]
+    expected_rounds = 1 if checkpoint == "admitted" else 2
+    expected_proposals = 2 if checkpoint == "reserved" else 1
+    assert status["total_rounds"] == expected_rounds
+    assert qualification["proposal_attempts"] == expected_proposals
+    assert status.get("current_progress") is None
+    assert status["branches"][0]["state"] == "parked_lineage"
+    assert status["branches"][0]["current_code_hash"] is None
+    first_step = cm._step_history[0]
+    assert first_step.decision is not None
+    summary = json.loads(
+        (tmp_path / "campaign" / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    for artifact in (status, summary):
+        assert artifact["last_result"]["branch_id"] == first_step.branch_id
+        assert artifact["last_result"]["decision"] == first_step.decision.value
+        assert artifact["last_result"]["execution_outcome"] == {
+            "outcome": "evaluated",
+            "reason_code": "EVALUATION_COMPLETED",
+            "stage": "screening",
+        }
+    history = [
+        json.loads(line)
+        for line in (tmp_path / "campaign" / "research_history.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(history) == 1
+    assert history[0]["decision"]["value"] == first_step.decision.value
+    assert history[0]["outcome"] == {
+        "outcome": "evaluated",
+        "reason_code": "EVALUATION_COMPLETED",
+        "stage": "screening",
+    }
+    if checkpoint == "admitted":
+        assert len(status["branches"]) == 1
+    else:
+        assert len(status["branches"]) == 2
+        assert status["branches"][1]["state"] == "explore"
+        assert status["branches"][1]["current_code_hash"] is None
+
+
+def test_initial_only_candidate_service_return_gap_cleans_leased_trees(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+
+    with _campaign_signal_handlers(cm):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+        pipeline = cm._explore_step_pipeline
+
+        def interrupt_after_service_return(candidate: Any) -> None:
+            assert candidate in pipeline._active_candidates.values()
+            assert Path(candidate.workspace) in (
+                cm._materializer._inflight_candidate_workspaces
+            )
+            handler(signal.SIGTERM, None)
+
+        pipeline.apply_patch = _invoke_after_return(
+            pipeline.apply_patch,
+            interrupt_after_service_return,
+        )
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert status["proposal_runtime"]["attempts"][0]["accounting_state"] == (
+        "interrupted"
+    )
+    assert "current_progress" not in status
+    assert cm._explore_step_pipeline._active_candidates == {}
+    assert cm._branch_workspaces == {}
+    assert cm._branch_patches == {}
+    assert cm._materializer._inflight_branch_workspaces == set()
+    assert cm._materializer._inflight_candidate_workspaces == set()
+    assert not any((tmp_path / "campaign" / "workspaces").iterdir())
+    assert not any((tmp_path / "campaign" / "candidate_workspaces").iterdir())
+
+
+@pytest.mark.parametrize(
+    "checkpoint",
+    (
+        "workspace_store",
+        "verification_store",
+        "verify_store",
+        "evaluation_store",
+        "precommit",
+    ),
+)
+def test_initial_only_candidate_stage_interrupts_clear_all_authority(
+    tmp_path: Path,
+    checkpoint: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+
+    with _campaign_signal_handlers(cm):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        if checkpoint == "precommit":
+            begin_commit = cm._explore_step_pipeline.begin_result_commit
+            begin_calls = 0
+
+            def signal_before_commit() -> None:
+                nonlocal begin_calls
+                begin_calls += 1
+                if begin_calls == 1:
+                    handler(signal.SIGTERM, None)
+                begin_commit()
+
+            cm._explore_step_pipeline.begin_result_commit = signal_before_commit
+            with pytest.raises(_CampaignSignalStop) as raised:
+                cm.run(requested_rounds=99)
+        else:
+            pipeline = cm._explore_step_pipeline
+
+            def interrupt_after_return(_value: Any) -> None:
+                handler(signal.SIGTERM, None)
+
+            if checkpoint == "workspace_store":
+                pipeline.setup_workspace = _invoke_after_return(
+                    pipeline.setup_workspace,
+                    interrupt_after_return,
+                )
+            elif checkpoint == "verification_store":
+                from scion.core.explore_step import pipeline as pipeline_module
+
+                monkeypatch.setattr(
+                    pipeline_module,
+                    "run_verification_gate",
+                    _invoke_after_return(
+                        pipeline_module.run_verification_gate,
+                        interrupt_after_return,
+                    ),
+                )
+            elif checkpoint == "verify_store":
+                pipeline.verify_candidate = _invoke_after_return(
+                    pipeline.verify_candidate,
+                    interrupt_after_return,
+                )
+            else:
+                assert checkpoint == "evaluation_store"
+                pipeline.evaluate = _invoke_after_return(
+                    pipeline.evaluate,
+                    interrupt_after_return,
+                )
+            with pytest.raises(_CampaignSignalStop) as raised:
+                cm.run(requested_rounds=99)
+
+    assert raised.value.interrupted_override is True
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert status["run_result"]["scheduled_calls"] == 1
+    assert status["run_result"]["execution_outcome_counts"]["interrupted"] == 1
+    assert status["run_result"]["qualification"]["proposal_attempts"] == 1
+    assert status["total_rounds"] == 1
+    assert status["n_steps"] == 0
+    assert status["proposal_runtime"]["attempts"][0]["accounting_state"] == (
+        "interrupted"
+    )
+    assert "current_progress" not in status
+    assert len(status["branches"]) == 1
+    assert status["branches"][0]["state"] == "explore"
+    assert status["branches"][0]["current_code_hash"] is None
+    assert status["branches"][0]["direction"] is None
+    assert cm._explore_step_pipeline._active_candidates == {}
+    assert cm._branch_workspaces == {}
+    assert cm._branch_patches == {}
+    assert cm._async_stop_deferral_depth == 0
+    assert cm._materializer._inflight_branch_workspaces == set()
+    assert cm._materializer._inflight_candidate_workspaces == set()
+    assert not any((tmp_path / "campaign" / "workspaces").iterdir())
+    assert not any((tmp_path / "campaign" / "candidate_workspaces").iterdir())
+
+
+@pytest.mark.parametrize(
+    ("protocol_result", "expected_decision"),
+    (
+        (
+            _make_protocol_result(ExperimentStage.SCREENING, "fail"),
+            Decision.CONTINUE_EXPLORE,
+        ),
+        (_candidate_failure_result(), Decision.ABANDON),
+        (
+            _make_protocol_result(ExperimentStage.SCREENING, "expand"),
+            Decision.EXPAND_SCREENING,
+        ),
+        (
+            _make_protocol_result(ExperimentStage.SCREENING, "pass"),
+            Decision.QUEUE_VALIDATE,
+        ),
+    ),
+)
+def test_initial_only_deferred_signal_preserves_each_decision_before_retirement(
+    tmp_path: Path,
+    protocol_result: Any,
+    expected_decision: Decision,
+) -> None:
+    cm = _campaign(
+        tmp_path,
+        experiment_protocol=MockExperimentProtocol(results=[protocol_result]),
+        qualification_only=_initial_only_config(attempt_cap=2),
+        resource_envelope=_envelope(),
+        code_research_limits=_limits(),
+    )
+    _install_synthetic_bounded_proposals(cm, candidates=1)
+    finalize = cm._explore_step_pipeline.apply_decision_and_finalize
+
+    with _campaign_signal_handlers(cm):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def finalize_then_signal(*args: Any, **kwargs: Any) -> StepResult:
+            result = finalize(*args, **kwargs)
+            handler(signal.SIGTERM, None)
+            return result
+
+        cm._explore_step_pipeline.apply_decision_and_finalize = finalize_then_signal
+        terminal = cm.run(requested_rounds=99)
+
+    _assert_safe_deferred_terminal(cm, terminal, reason="signal:SIGTERM")
+    assert [step.decision for step in cm._step_history] == [expected_decision]
+    branch_id = cm._step_history[0].branch_id
+    events = [
+        event
+        for event in cm._registry.query_by_branch(branch_id)
+        if event["event_kind"] == "experiment"
+    ]
+    assert len(events) == 1
+    assert events[0]["decision"] == expected_decision.value
+
+
+def test_initial_only_deferred_hardwall_overrides_natural_execution_break(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+
+    def resource_stop(_branch: Any) -> ProposalAttempt[HypothesisProposal]:
+        return ProposalAttempt.failure(
+            ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESOURCE_EXHAUSTED,
+                reason_code="HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED",
+                provenance={"stage": "proposal_hypothesis"},
+            )
+        )
+
+    cm._explore_step_pipeline.generate_hypothesis = resource_stop
+    run_one_step = cm._campaign_loop.run_one_step
+    hardwall = _CampaignOuterHardwall(None)
+    hardwall.expired.set()
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def result_then_hardwall() -> StepResult:
+            result = run_one_step()
+            handler(signal.SIGTERM, None)
+            return result
+
+        cm._campaign_loop.run_one_step = result_then_hardwall
+        terminal = cm.run(requested_rounds=99)
+
+    assert terminal.stop_reason == "OUTER_HARDWALL_EXCEEDED"
+    assert terminal.scheduled_calls == 1
+    assert terminal.execution_outcome_counts["resource_exhausted"] == 1
+    assert terminal.execution_outcome_counts["interrupted"] == 0
+    assert cm._async_stop_deferral_depth == 0
+
+
+def test_initial_only_terminal_wait_hardwall_raises_without_phantom_accounting(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    hardwall = _CampaignOuterHardwall(None)
+    hardwall.expired.set()
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def signal_during_terminal_wait(_timeout: float) -> None:
+            assert cm._async_stop_deferral_depth == 0
+            handler(signal.SIGTERM, None)
+
+        cm._campaign_loop.wait_weight_opt_all = signal_during_terminal_wait
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    assert raised.value.interrupted_override is False
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+    assert terminal.stop_reason == "OUTER_HARDWALL_EXCEEDED"
+    assert terminal.scheduled_calls == 2
+    assert terminal.evaluated_rounds == 2
+    assert terminal.execution_outcome_counts["evaluated"] == 2
+    assert terminal.execution_outcome_counts["interrupted"] == 0
+    assert _completion_from_run_result(terminal) == (
+        124,
+        "OUTER_HARDWALL_EXCEEDED",
+    )
+
+
+def test_initial_only_between_calls_hardwall_has_no_phantom_attempt(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    hardwall = _CampaignOuterHardwall(None)
+    stop_checks = 0
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def stop_between_calls() -> bool:
+            nonlocal stop_checks
+            stop_checks += 1
+            if stop_checks == 2:
+                hardwall.expired.set()
+                handler(signal.SIGTERM, None)
+            return cm.should_stop()
+
+        cm._campaign_loop.should_stop = stop_between_calls
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    assert raised.value.interrupted_override is False
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+
+    _assert_safe_deferred_terminal(
+        cm,
+        terminal,
+        reason="OUTER_HARDWALL_EXCEEDED",
+    )
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert status["total_rounds"] == 1
+    assert status["n_steps"] == 1
+    assert _completion_from_run_result(terminal) == (
+        124,
+        "OUTER_HARDWALL_EXCEEDED",
+    )
+
+
+def test_initial_only_zero_dispatch_hardwall_remains_an_immediate_interrupt(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+    hardwall = _CampaignOuterHardwall(None)
+    hardwall.expired.set()
+
+    with _campaign_signal_handlers(cm, hardwall=hardwall):
+        handler = signal.getsignal(signal.SIGTERM)
+        assert callable(handler)
+
+        def signal_during_preflight() -> None:
+            handler(signal.SIGTERM, None)
+
+        cm._run_research_environment_preflight = signal_during_preflight
+        with pytest.raises(_CampaignSignalStop) as raised:
+            cm.run(requested_rounds=99)
+
+    cm.finalize_requested_stop(
+        raised.value.reason,
+        interrupted_override=raised.value.interrupted_override,
+    )
+    terminal = cm._campaign_loop.current_result
+    assert terminal is not None
+    projection = terminal.to_projection()
+    assert terminal.stop_reason == "OUTER_HARDWALL_EXCEEDED"
+    assert terminal.scheduled_calls == 1
+    assert terminal.evaluated_rounds == 0
+    assert terminal.execution_outcome_counts["interrupted"] == 1
+    assert terminal.unknown_outcome_count == 0
+    assert terminal.last_execution_outcome == {
+        "outcome": "interrupted",
+        "reason_code": "OUTER_HARDWALL_EXCEEDED",
+        "stage": "campaign",
+    }
+    assert terminal.terminal_exception is None
+    assert raised.value.interrupted_override is True
+    assert projection["qualification"]["proposal_attempts"] == 0
+    assert projection["qualification"]["formal_screening_stages"] == 0
+    assert projection["qualification"]["disposition"] == "incomplete"
+    assert cm._step_history == []
+    status = json.loads(
+        (tmp_path / "campaign" / "status.json").read_text(encoding="utf-8")
+    )
+    assert status["total_rounds"] == 0
+    assert status["n_steps"] == 0
+    assert status["n_experiments"] == 0
+    assert status["branches"] == []
+
+
+def test_initial_only_ready_counter_failure_discards_all_workspace_leases(
+    tmp_path: Path,
+) -> None:
+    cm = _single_initial_only_campaign(tmp_path)
+
+    def fail_ready_counter() -> None:
+        raise OSError("ready counter unavailable")
+
+    cm._explore_step_pipeline.record_code_candidate_ready = fail_ready_counter
+    terminal = cm.run(requested_rounds=99)
+
+    assert terminal.stop_reason == "execution_blocked_infra"
+    assert terminal.execution_outcome_counts["blocked_infra"] == 1
+    assert len(cm._step_history) == 1
+    branch = cm._branch_ctrl.get_branch(cm._step_history[0].branch_id)
+    assert branch.state is BranchState.BLOCKED_INFRA
+    assert branch.current_code_hash is None
+    assert branch.hypothesis is None
+    assert branch.direction is None
+    assert cm._branch_workspaces == {}
+    assert cm._branch_patches == {}
+    assert cm._materializer._inflight_branch_workspaces == set()
+    assert cm._materializer._inflight_candidate_workspaces == set()
+    assert not any((tmp_path / "campaign" / "workspaces").iterdir())
+    assert not any((tmp_path / "campaign" / "candidate_workspaces").iterdir())

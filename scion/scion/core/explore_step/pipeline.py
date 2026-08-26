@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
-from contextlib import AbstractContextManager, nullcontext
-from dataclasses import dataclass
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager, nullcontext
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, MutableMapping, Optional, Sequence
 
@@ -78,6 +79,9 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         EvaluationExecutionResult,
     ]
     apply_decision_and_finalize: Callable[..., StepResult]
+    discard_branch_workspace: Callable[[str], None] = lambda _branch_id: None
+    discard_inflight_workspaces: Callable[[], None] = _no_op_event
+    initial_screening_only: bool = False
     reserve_proposal_attempt: Callable[[], None] = lambda: None
     proposal_attempt_scope: Callable[[int], AbstractContextManager[None]] = (
         _no_op_attempt_scope
@@ -85,28 +89,49 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     record_hypothesis_exported: Callable[[], None] = _no_op_event
     record_patch_completed: Callable[[], None] = _no_op_event
     record_code_candidate_ready: Callable[[], None] = _no_op_event
+    begin_result_commit: Callable[[], None] = _no_op_event
+    end_result_commit: Callable[[], None] = _no_op_event
     update_status_progress: Callable[[dict[str, Any] | None], None] = lambda _payload: (
         None
     )
     step_history: Sequence[StepRecord] = ()
+    _active_candidates: dict[str, CandidateWorkspace] = field(
+        init=False,
+        default_factory=dict,
+        repr=False,
+    )
+
+    @contextmanager
+    def _result_commit(self) -> Iterator[None]:
+        self.begin_result_commit()
+        try:
+            yield
+        finally:
+            self.end_result_commit()
 
     def run(self, branch: Branch) -> StepResult:
         """Run the full EXPLORE/EXPLORE_EXPAND branch step."""
-        rnum = self.increment_round()
-        branch.screening_expand_count = 0
-        branch.validation_expand_count = 0
+        try:
+            rnum = self.increment_round()
+            branch.screening_expand_count = 0
+            branch.validation_expand_count = 0
 
-        self._emit_status_progress(
-            branch,
-            phase="proposal_hypothesis",
-            round_num=rnum,
-        )
-        self.reserve_proposal_attempt()
-        with self.proposal_attempt_scope(rnum):
-            return self._run_reserved_attempt(branch, rnum)
+            self._emit_status_progress(
+                branch,
+                phase="proposal_hypothesis",
+                round_num=rnum,
+            )
+            self.reserve_proposal_attempt()
+            with self.proposal_attempt_scope(rnum):
+                return self._run_reserved_attempt_inner(branch, rnum)
+        except BaseException:
+            self._discard_candidate_after_exception(branch, None)
+            raise
+        finally:
+            self._active_candidates.pop(branch.branch_id, None)
 
-    def _run_reserved_attempt(self, branch: Branch, rnum: int) -> StepResult:
-        """Run one admitted H/C attempt inside its single telemetry scope."""
+    def _run_reserved_attempt_inner(self, branch: Branch, rnum: int) -> StepResult:
+        """Execute one reserved attempt behind its fail-closed cleanup shell."""
 
         bid = branch.branch_id
         h_contract_diagnostics: tuple[dict[str, Any], ...] = ()
@@ -118,43 +143,46 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 raise RuntimeError(
                     "hypothesis attempt missing proposal and execution outcome"
                 )
-            failure_detail = proposal_outcome.detail or "hypothesis generation failed"
-            self._record_execution_outcome(
-                branch,
-                proposal_outcome,
-                event_kind="proposal_execution_outcome",
-            )
-            durable_outcome = ExecutionOutcomeRecord(
-                outcome=proposal_outcome.outcome,
-                reason_code=proposal_outcome.reason_code,
-                provenance={"stage": "proposal_hypothesis"},
-            )
-            self.record_step(
-                StepRecord(
-                    round_num=rnum,
-                    branch_id=bid,
-                    hypothesis=None,
-                    patch=None,
-                    contract_passed=None,
-                    verification_passed=None,
-                    protocol_result=None,
-                    decision=None,
-                    failure_stage="proposal_hypothesis",
-                    failure_detail=durable_outcome.reason_code,
-                    execution_outcome=durable_outcome,
+            with self._result_commit():
+                failure_detail = (
+                    proposal_outcome.detail or "hypothesis generation failed"
                 )
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason=failure_detail,
-                    failure_stage="proposal_hypothesis",
-                    failure_detail=failure_detail,
-                    failure_category=proposal_outcome.outcome.value,
-                    execution_outcome=proposal_outcome,
+                self._record_execution_outcome(
+                    branch,
+                    proposal_outcome,
+                    event_kind="proposal_execution_outcome",
                 )
-            )
+                durable_outcome = ExecutionOutcomeRecord(
+                    outcome=proposal_outcome.outcome,
+                    reason_code=proposal_outcome.reason_code,
+                    provenance={"stage": "proposal_hypothesis"},
+                )
+                self.record_step(
+                    StepRecord(
+                        round_num=rnum,
+                        branch_id=bid,
+                        hypothesis=None,
+                        patch=None,
+                        contract_passed=None,
+                        verification_passed=None,
+                        protocol_result=None,
+                        decision=None,
+                        failure_stage="proposal_hypothesis",
+                        failure_detail=durable_outcome.reason_code,
+                        execution_outcome=durable_outcome,
+                    )
+                )
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason=failure_detail,
+                        failure_stage="proposal_hypothesis",
+                        failure_detail=failure_detail,
+                        failure_category=proposal_outcome.outcome.value,
+                        execution_outcome=proposal_outcome,
+                    )
+                )
         self.record_hypothesis_exported()
         logger.info(
             "Branch %s R1 hypothesis: locus=%s action=%s target=%s text='%s'",
@@ -174,49 +202,50 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         c_result = self._validate_hypothesis(branch, hypothesis)
         h_contract_diagnostics = diagnostic_checks(c_result)
         if not c_result.passed:
-            logger.info(
-                "Branch %s: hypothesis contract failed: %s",
-                bid,
-                c_result.failure_reason,
-            )
-            failure_stage = "hypothesis_contract"
-            failure_detail = c_result.failure_reason
-            contract_outcome = self._record_contract_failure(
-                c_result,
-                stage=failure_stage,
-            )
-            self.finalize_research_rejection(
-                branch=branch,
-                rejection_phase=failure_stage,
-                outcome=contract_outcome,
-            )
-            self.record_step(
-                StepRecord(
-                    round_num=rnum,
-                    branch_id=bid,
-                    hypothesis=hypothesis,
-                    patch=None,
-                    contract_passed=False,
-                    verification_passed=False,
-                    protocol_result=None,
-                    decision=None,
-                    failure_stage=failure_stage,
-                    failure_detail=failure_detail,
-                    contract_diagnostics=h_contract_diagnostics,
-                    execution_outcome=contract_outcome,
+            with self._result_commit():
+                logger.info(
+                    "Branch %s: hypothesis contract failed: %s",
+                    bid,
+                    c_result.failure_reason,
                 )
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason="hypothesis contract rejected",
-                    failure_stage=failure_stage,
-                    failure_detail=failure_detail,
-                    failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
-                    execution_outcome=contract_outcome,
+                failure_stage = "hypothesis_contract"
+                failure_detail = c_result.failure_reason
+                contract_outcome = self._record_contract_failure(
+                    c_result,
+                    stage=failure_stage,
                 )
-            )
+                self.finalize_research_rejection(
+                    branch=branch,
+                    rejection_phase=failure_stage,
+                    outcome=contract_outcome,
+                )
+                self.record_step(
+                    StepRecord(
+                        round_num=rnum,
+                        branch_id=bid,
+                        hypothesis=hypothesis,
+                        patch=None,
+                        contract_passed=False,
+                        verification_passed=False,
+                        protocol_result=None,
+                        decision=None,
+                        failure_stage=failure_stage,
+                        failure_detail=failure_detail,
+                        contract_diagnostics=h_contract_diagnostics,
+                        execution_outcome=contract_outcome,
+                    )
+                )
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason="hypothesis contract rejected",
+                        failure_stage=failure_stage,
+                        failure_detail=failure_detail,
+                        failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
+                        execution_outcome=contract_outcome,
+                    )
+                )
 
         self._emit_status_progress(
             branch,
@@ -245,45 +274,46 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 raise RuntimeError(
                     "code attempt missing proposal and execution outcome"
                 )
-            detailed_failure = proposal_outcome.detail or "code generation failed"
-            if proposal_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED:
-                self.finalize_research_rejection(
-                    branch=branch,
-                    rejection_phase="proposal_code",
-                    outcome=proposal_outcome,
+            with self._result_commit():
+                detailed_failure = proposal_outcome.detail or "code generation failed"
+                if proposal_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED:
+                    self.finalize_research_rejection(
+                        branch=branch,
+                        rejection_phase="proposal_code",
+                        outcome=proposal_outcome,
+                    )
+                else:
+                    self._record_execution_outcome(
+                        branch,
+                        proposal_outcome,
+                        event_kind="proposal_execution_outcome",
+                    )
+                self.record_step(
+                    StepRecord(
+                        round_num=rnum,
+                        branch_id=bid,
+                        hypothesis=hypothesis,
+                        patch=None,
+                        contract_passed=True,
+                        verification_passed=False,
+                        protocol_result=None,
+                        decision=None,
+                        failure_stage="proposal_code",
+                        failure_detail=detailed_failure,
+                        execution_outcome=proposal_outcome,
+                    )
                 )
-            else:
-                self._record_execution_outcome(
-                    branch,
-                    proposal_outcome,
-                    event_kind="proposal_execution_outcome",
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason=detailed_failure or proposal_outcome.reason_code,
+                        failure_stage="proposal_code",
+                        failure_detail=detailed_failure,
+                        failure_category=proposal_outcome.outcome.value,
+                        execution_outcome=proposal_outcome,
+                    )
                 )
-            self.record_step(
-                StepRecord(
-                    round_num=rnum,
-                    branch_id=bid,
-                    hypothesis=hypothesis,
-                    patch=None,
-                    contract_passed=True,
-                    verification_passed=False,
-                    protocol_result=None,
-                    decision=None,
-                    failure_stage="proposal_code",
-                    failure_detail=detailed_failure,
-                    execution_outcome=proposal_outcome,
-                )
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason=detailed_failure or proposal_outcome.reason_code,
-                    failure_stage="proposal_code",
-                    failure_detail=detailed_failure,
-                    failure_category=proposal_outcome.outcome.value,
-                    execution_outcome=proposal_outcome,
-                )
-            )
 
         self._emit_status_progress(
             branch,
@@ -298,52 +328,53 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             base_snapshot_path=self.branch_workspaces.get(bid),
         )
         if not p_result.passed:
-            logger.info(
-                "Branch %s: patch contract failed: %s",
-                bid,
-                p_result.failure_reason,
-            )
-            contract_outcome = self._record_contract_failure(
-                p_result,
-                stage="patch_contract",
-                patch=patch,
-            )
-            self.finalize_research_rejection(
-                branch=branch,
-                rejection_phase="patch_contract",
-                outcome=contract_outcome,
-                patch=patch,
-            )
-            self.record_step(
-                StepRecord(
-                    round_num=rnum,
-                    branch_id=bid,
-                    hypothesis=hypothesis,
+            with self._result_commit():
+                logger.info(
+                    "Branch %s: patch contract failed: %s",
+                    bid,
+                    p_result.failure_reason,
+                )
+                contract_outcome = self._record_contract_failure(
+                    p_result,
+                    stage="patch_contract",
                     patch=patch,
-                    contract_passed=False,
-                    verification_passed=False,
-                    protocol_result=None,
-                    decision=None,
-                    failure_stage="patch_contract",
-                    failure_detail=p_result.failure_reason,
-                    contract_diagnostics=(
-                        *h_contract_diagnostics,
-                        *diagnostic_checks(p_result),
-                    ),
-                    execution_outcome=contract_outcome,
                 )
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason="patch contract rejected",
-                    failure_stage="patch_contract",
-                    failure_detail=p_result.failure_reason,
-                    failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
-                    execution_outcome=contract_outcome,
+                self.finalize_research_rejection(
+                    branch=branch,
+                    rejection_phase="patch_contract",
+                    outcome=contract_outcome,
+                    patch=patch,
                 )
-            )
+                self.record_step(
+                    StepRecord(
+                        round_num=rnum,
+                        branch_id=bid,
+                        hypothesis=hypothesis,
+                        patch=patch,
+                        contract_passed=False,
+                        verification_passed=False,
+                        protocol_result=None,
+                        decision=None,
+                        failure_stage="patch_contract",
+                        failure_detail=p_result.failure_reason,
+                        contract_diagnostics=(
+                            *h_contract_diagnostics,
+                            *diagnostic_checks(p_result),
+                        ),
+                        execution_outcome=contract_outcome,
+                    )
+                )
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason="patch contract rejected",
+                        failure_stage="patch_contract",
+                        failure_detail=p_result.failure_reason,
+                        failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
+                        execution_outcome=contract_outcome,
+                    )
+                )
 
         self._emit_status_progress(
             branch,
@@ -354,49 +385,51 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
         )
         workspace = self.setup_workspace(branch)
         if workspace is None:
-            workspace_outcome = ExecutionOutcomeRecord(
-                outcome=ExecutionOutcome.BLOCKED_INFRA,
-                reason_code="WORKSPACE_SETUP_FAILED",
-                detail="workspace setup failed",
-                provenance={"stage": "workspace_setup"},
-            )
-            self._record_execution_outcome(
-                branch,
-                workspace_outcome,
-                event_kind="workspace_execution_outcome",
-            )
-            self.record_step(
-                StepRecord(
-                    round_num=rnum,
-                    branch_id=bid,
-                    hypothesis=hypothesis,
-                    patch=patch,
-                    contract_passed=True,
-                    verification_passed=False,
-                    protocol_result=None,
-                    decision=None,
-                    failure_stage="workspace",
-                    failure_detail="workspace setup failed",
-                    execution_outcome=workspace_outcome,
+            with self._result_commit():
+                workspace_outcome = ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.BLOCKED_INFRA,
+                    reason_code="WORKSPACE_SETUP_FAILED",
+                    detail="workspace setup failed",
+                    provenance={"stage": "workspace_setup"},
                 )
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason="workspace setup failed",
-                    failure_stage="workspace",
-                    failure_detail="workspace setup failed",
-                    failure_category=ExecutionOutcome.BLOCKED_INFRA.value,
-                    execution_outcome=workspace_outcome,
+                self._record_execution_outcome(
+                    branch,
+                    workspace_outcome,
+                    event_kind="workspace_execution_outcome",
                 )
-            )
+                self.record_step(
+                    StepRecord(
+                        round_num=rnum,
+                        branch_id=bid,
+                        hypothesis=hypothesis,
+                        patch=patch,
+                        contract_passed=True,
+                        verification_passed=False,
+                        protocol_result=None,
+                        decision=None,
+                        failure_stage="workspace",
+                        failure_detail="workspace setup failed",
+                        execution_outcome=workspace_outcome,
+                    )
+                )
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason="workspace setup failed",
+                        failure_stage="workspace",
+                        failure_detail="workspace setup failed",
+                        failure_category=ExecutionOutcome.BLOCKED_INFRA.value,
+                        execution_outcome=workspace_outcome,
+                    )
+                )
 
         candidate_parent_scope = (
             "retained_branch_head"
             if self.branch_controller.get_code_base(bid) == "branch_workspace"
             else "declared_champion"
         )
+        candidate: CandidateWorkspace | None = None
         try:
             self._emit_status_progress(
                 branch,
@@ -410,53 +443,58 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 patch,
                 hypothesis=hypothesis,
                 sync_registry=True,
+                on_candidate_ready=lambda value: self._active_candidates.__setitem__(
+                    bid,
+                    value,
+                ),
             )
             workspace = candidate.workspace
             self.record_code_candidate_ready()
         except Exception as exc:
-            logger.warning("Branch %s: apply_patch failed: %s", bid, exc)
-            failure_detail = f"apply_patch: {exc}"
-            workspace_outcome = ExecutionOutcomeRecord(
-                outcome=ExecutionOutcome.BLOCKED_INFRA,
-                reason_code="PATCH_MATERIALIZATION_FAILED",
-                detail=failure_detail,
-                provenance={
-                    "stage": "patch_materialization",
-                    "error_type": type(exc).__name__,
-                },
-            )
-            self._record_execution_outcome(
-                branch,
-                workspace_outcome,
-                event_kind="workspace_execution_outcome",
-            )
-            self.record_step(
-                StepRecord(
-                    round_num=rnum,
-                    branch_id=bid,
-                    hypothesis=hypothesis,
-                    patch=patch,
-                    contract_passed=True,
-                    verification_passed=False,
-                    protocol_result=None,
-                    decision=None,
-                    failure_stage="workspace",
-                    failure_detail=failure_detail,
-                    execution_outcome=workspace_outcome,
+            self._discard_candidate_after_exception(branch, candidate)
+            with self._result_commit():
+                logger.warning("Branch %s: apply_patch failed: %s", bid, exc)
+                failure_detail = f"apply_patch: {exc}"
+                workspace_outcome = ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.BLOCKED_INFRA,
+                    reason_code="PATCH_MATERIALIZATION_FAILED",
+                    detail=failure_detail,
+                    provenance={
+                        "stage": "patch_materialization",
+                        "error_type": type(exc).__name__,
+                    },
                 )
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason="apply_patch failed",
-                    failure_stage="workspace",
-                    failure_detail=failure_detail,
-                    failure_category=ExecutionOutcome.BLOCKED_INFRA.value,
-                    execution_outcome=workspace_outcome,
+                self._record_execution_outcome(
+                    branch,
+                    workspace_outcome,
+                    event_kind="workspace_execution_outcome",
                 )
-            )
-
+                self.record_step(
+                    StepRecord(
+                        round_num=rnum,
+                        branch_id=bid,
+                        hypothesis=hypothesis,
+                        patch=patch,
+                        contract_passed=True,
+                        verification_passed=False,
+                        protocol_result=None,
+                        decision=None,
+                        failure_stage="workspace",
+                        failure_detail=failure_detail,
+                        execution_outcome=workspace_outcome,
+                    )
+                )
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason="apply_patch failed",
+                        failure_stage="workspace",
+                        failure_detail=failure_detail,
+                        failure_category=ExecutionOutcome.BLOCKED_INFRA.value,
+                        execution_outcome=workspace_outcome,
+                    )
+                )
         champion = self.get_champion()
         champ_ws = champion.code_snapshot_path if champion else ""
         self._emit_status_progress(
@@ -466,76 +504,76 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             hypothesis=hypothesis,
             patch=patch,
         )
-        try:
-            vresult = run_verification_gate(
-                self.verification_gate,
-                workspace,
-                champ_ws,
-                patch,
-                hypothesis=hypothesis,
-            )
-        except Exception:
-            self._discard_candidate_after_exception(branch, candidate)
-            raise
+        vresult = run_verification_gate(
+            self.verification_gate,
+            workspace,
+            champ_ws,
+            patch,
+            hypothesis=hypothesis,
+        )
         if not vresult.passed:
-            return self._finish_status_progress(
-                self._handle_verification_failure(
-                    branch=branch,
-                    rnum=rnum,
-                    patch=patch,
-                    hypothesis=hypothesis,
-                    vresult=vresult,
-                    candidate=candidate,
+            with self._result_commit():
+                return self._finish_status_progress(
+                    self._handle_verification_failure(
+                        branch=branch,
+                        rnum=rnum,
+                        patch=patch,
+                        hypothesis=hypothesis,
+                        vresult=vresult,
+                        candidate=candidate,
+                    )
                 )
-            )
 
         try:
             candidate = self.verify_candidate(candidate)
         except Exception as exc:
-            try:
-                self.reject_candidate(candidate)
-            except Exception:
-                logger.exception("Branch %s: failed to discard invalid candidate", bid)
-            outcome = ExecutionOutcomeRecord(
-                outcome=ExecutionOutcome.BLOCKED_INFRA,
-                reason_code="CANDIDATE_VERIFICATION_FAILED",
-                detail=str(exc),
-                provenance={
-                    "stage": "candidate_verification",
-                    "exception_type": type(exc).__name__,
-                },
-            )
-            self._record_execution_outcome(
-                branch,
-                outcome,
-                event_kind="workspace_execution_outcome",
-            )
-            self.record_step(
-                StepRecord(
-                    round_num=rnum,
-                    branch_id=bid,
-                    hypothesis=hypothesis,
-                    patch=patch,
-                    contract_passed=True,
-                    verification_passed=True,
-                    protocol_result=None,
-                    decision=None,
-                    failure_stage="workspace",
-                    failure_detail=str(exc),
-                    execution_outcome=outcome,
+            with self._result_commit():
+                try:
+                    self.reject_candidate(candidate)
+                except Exception:
+                    logger.exception(
+                        "Branch %s: failed to discard invalid candidate", bid
+                    )
+                outcome = ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.BLOCKED_INFRA,
+                    reason_code="CANDIDATE_VERIFICATION_FAILED",
+                    detail=str(exc),
+                    provenance={
+                        "stage": "candidate_verification",
+                        "exception_type": type(exc).__name__,
+                    },
                 )
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="explore",
-                    branch_id=bid,
-                    reason=str(exc),
-                    failure_stage="workspace",
-                    failure_detail=str(exc),
-                    failure_category=ExecutionOutcome.BLOCKED_INFRA.value,
-                    execution_outcome=outcome,
+                self._record_execution_outcome(
+                    branch,
+                    outcome,
+                    event_kind="workspace_execution_outcome",
                 )
-            )
+                self.record_step(
+                    StepRecord(
+                        round_num=rnum,
+                        branch_id=bid,
+                        hypothesis=hypothesis,
+                        patch=patch,
+                        contract_passed=True,
+                        verification_passed=True,
+                        protocol_result=None,
+                        decision=None,
+                        failure_stage="workspace",
+                        failure_detail=str(exc),
+                        execution_outcome=outcome,
+                    )
+                )
+                return self._finish_status_progress(
+                    StepResult(
+                        action="explore",
+                        branch_id=bid,
+                        reason=str(exc),
+                        failure_stage="workspace",
+                        failure_detail=str(exc),
+                        failure_category=ExecutionOutcome.BLOCKED_INFRA.value,
+                        execution_outcome=outcome,
+                    )
+                )
         workspace = candidate.workspace
 
         # Keep the verified candidate in staging until Protocol produces a
@@ -548,42 +586,43 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             BranchState.STALE,
             BranchState.STALE_WEIGHT_UPDATE,
         ):
-            # The candidate has not reached Protocol. Discard its staging tree
-            # and close this attempt as not evaluated.
-            self.reject_candidate(candidate)
-            branch.hypothesis = None
-            self.branch_patches.pop(bid, None)
-            self.branch_controller.reconcile_stale(
-                bid,
-                success=False,
-                new_champion=self.get_champion(),
-            )
-            logger.info(
-                "Branch %s: marked stale by async weight-opt during explore - closed",
-                bid,
-            )
-            stale_outcome = ExecutionOutcomeRecord(
-                outcome=ExecutionOutcome.NOT_EVALUATED,
-                reason_code="BRANCH_STALE_DURING_EXPLORE",
-                detail="stale_during_explore",
-                provenance={"stage": "verification"},
-            )
-            record_execution_outcome_event(
-                registry=self.registry,
-                campaign_id=self.campaign_id,
-                branch_id=bid,
-                record=stale_outcome,
-                event_kind="explore_not_evaluated_outcome",
-            )
-            return self._finish_status_progress(
-                StepResult(
-                    action="skip",
-                    branch_id=bid,
-                    reason="stale_during_explore",
-                    verification_passed=True,
-                    execution_outcome=stale_outcome,
+            with self._result_commit():
+                # The candidate has not reached Protocol. Discard its staging tree
+                # and close this attempt as not evaluated.
+                self.reject_candidate(candidate)
+                branch.hypothesis = None
+                self.branch_patches.pop(bid, None)
+                self.branch_controller.reconcile_stale(
+                    bid,
+                    success=False,
+                    new_champion=self.get_champion(),
                 )
-            )
+                logger.info(
+                    "Branch %s: marked stale by async weight-opt during explore - closed",
+                    bid,
+                )
+                stale_outcome = ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.NOT_EVALUATED,
+                    reason_code="BRANCH_STALE_DURING_EXPLORE",
+                    detail="stale_during_explore",
+                    provenance={"stage": "verification"},
+                )
+                record_execution_outcome_event(
+                    registry=self.registry,
+                    campaign_id=self.campaign_id,
+                    branch_id=bid,
+                    record=stale_outcome,
+                    event_kind="explore_not_evaluated_outcome",
+                )
+                return self._finish_status_progress(
+                    StepResult(
+                        action="skip",
+                        branch_id=bid,
+                        reason="stale_during_explore",
+                        verification_passed=True,
+                        execution_outcome=stale_outcome,
+                    )
+                )
 
         self.branch_controller.next_stage(bid)
         self._emit_status_progress(
@@ -593,17 +632,48 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             hypothesis=hypothesis,
             patch=patch,
         )
+        commit_started = False
         try:
             evaluation = self.evaluate(
                 branch,
                 workspace,
                 hypothesis,
             )
-        except BaseException:
-            self._discard_candidate_after_exception(branch, candidate)
-            raise
+            self.begin_result_commit()
+            commit_started = True
+            return self._commit_evaluation_result(
+                branch=branch,
+                rnum=rnum,
+                hypothesis=hypothesis,
+                patch=patch,
+                contract_result=p_result,
+                verification_result=vresult,
+                candidate=candidate,
+                candidate_parent_scope=candidate_parent_scope,
+                h_contract_diagnostics=h_contract_diagnostics,
+                evaluation=evaluation,
+            )
+        finally:
+            if commit_started:
+                self.end_result_commit()
+
+    def _commit_evaluation_result(
+        self,
+        *,
+        branch: Branch,
+        rnum: int,
+        hypothesis: HypothesisProposal,
+        patch: PatchProposal,
+        contract_result: Any,
+        verification_result: Any,
+        candidate: CandidateWorkspace,
+        candidate_parent_scope: str,
+        h_contract_diagnostics: tuple[dict[str, Any], ...],
+        evaluation: EvaluationExecutionResult,
+    ) -> StepResult:
         if not isinstance(evaluation, EvaluationExecutionResult):
             raise TypeError("evaluate callback must return EvaluationExecutionResult")
+        bid = branch.branch_id
         decision = evaluation.decision
         protocol_result = evaluation.protocol_result
         canary_result = evaluation.canary_result
@@ -646,7 +716,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                     ),
                     contract_diagnostics=(
                         *h_contract_diagnostics,
-                        *diagnostic_checks(p_result),
+                        *diagnostic_checks(contract_result),
                     ),
                     decision_reason_codes=None,
                     **provenance,
@@ -663,8 +733,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             hypothesis=hypothesis,
             protocol_result=protocol_result,
             canary_result=canary_result,
-            contract_result=p_result,
-            verification_result=vresult,
+            contract_result=contract_result,
+            verification_result=verification_result,
             action_label="explore",
             decision_reason_codes=evaluation.decision_reason_codes,
             patch=patch,
@@ -706,7 +776,7 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 failure_detail=failure_detail,
                 contract_diagnostics=(
                     *h_contract_diagnostics,
-                    *diagnostic_checks(p_result),
+                    *diagnostic_checks(contract_result),
                 ),
                 decision_reason_codes=(
                     evaluation.decision_reason_codes
@@ -724,17 +794,57 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
     def _discard_candidate_after_exception(
         self,
         branch: Branch,
-        candidate: CandidateWorkspace,
+        candidate: CandidateWorkspace | None,
     ) -> None:
-        """Discard isolated staging without masking the triggering exception."""
+        """Clear initial-only candidate authority without masking an exception."""
 
-        try:
-            self.reject_candidate(candidate)
-        except Exception:
-            logger.exception(
-                "Branch %s: candidate cleanup failed after exception",
-                branch.branch_id,
-            )
+        with self._result_commit():
+            candidate = candidate or self._active_candidates.get(branch.branch_id)
+            if candidate is not None:
+                try:
+                    self.reject_candidate(candidate)
+                except Exception:
+                    logger.exception(
+                        "Branch %s: candidate cleanup failed after exception",
+                        branch.branch_id,
+                    )
+            if not self.initial_screening_only:
+                return
+            bid = branch.branch_id
+            try:
+                self.discard_branch_workspace(bid)
+            except Exception:
+                logger.exception(
+                    "Branch %s: base workspace cleanup failed after exception",
+                    bid,
+                )
+            finally:
+                self.branch_workspaces.pop(bid, None)
+            try:
+                self.discard_inflight_workspaces()
+            except Exception:
+                logger.exception(
+                    "Branch %s: inflight workspace cleanup failed after exception",
+                    bid,
+                )
+            self.branch_patches.pop(bid, None)
+            champion = self.get_champion()
+            branch.state = BranchState.EXPLORE
+            if champion is not None:
+                branch.base_champion_id = champion.version
+                branch.weight_revision = champion.weight_revision
+            branch.current_code_hash = None
+            branch.hypothesis = None
+            branch.direction = None
+            branch.screening_expand_count = 0
+            branch.validation_expand_count = 0
+            try:
+                self.update_status_progress(None)
+            except Exception:
+                logger.debug(
+                    "Failed to clear explore progress after exception",
+                    exc_info=True,
+                )
 
     def _record_execution_outcome(
         self,

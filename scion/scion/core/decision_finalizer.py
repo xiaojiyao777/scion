@@ -60,6 +60,7 @@ class DecisionFinalizer:
     discard_branch_workspace: Callable[[str], None]
     accept_candidate: Callable[[Branch, CandidateWorkspace], str] | None = None
     reject_candidate: Callable[[CandidateWorkspace], Any] | None = None
+    initial_screening_only: bool = False
     registry: Any = None
     campaign_id: str = ""
 
@@ -364,6 +365,18 @@ class DecisionFinalizer:
             branch.branch_id,
             error,
         )
+        if self.initial_screening_only:
+            try:
+                self.discard_branch_workspace(branch.branch_id)
+            except Exception:
+                logger.exception(
+                    "Branch %s: failed to discard authority after event failure",
+                    branch.branch_id,
+                )
+            self.branch_patches.pop(branch.branch_id, None)
+            branch.current_code_hash = None
+            branch.hypothesis = None
+            branch.direction = None
         block_branch_after_execution(branch, record)
         return StepResult(
             action=action_label,  # type: ignore[arg-type]

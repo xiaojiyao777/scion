@@ -165,6 +165,45 @@ def test_terminal_snapshot_rejects_active_or_unattributed_provider_calls() -> No
         runtime.snapshot(budget.snapshot(), terminal=True)
 
 
+def test_interrupt_after_active_before_attempt_publication_seals_only_orphan() -> None:
+    budget = ProviderCallBudget(10)
+    runtime = ProposalRuntimeTelemetry(budget, max_hypothesis_candidates=1)
+
+    class InterruptBeforeAppend(list[object]):
+        def append(self, _value: object) -> None:
+            raise KeyboardInterrupt("active-before-publication")
+
+    runtime._attempts = InterruptBeforeAppend()  # type: ignore[assignment]
+
+    with pytest.raises(KeyboardInterrupt, match="active-before-publication"):
+        runtime.attempt_scope(1).__enter__()
+    runtime.seal_active("interrupted")
+
+    snapshot = runtime.snapshot(budget.snapshot(), terminal=True)
+    assert snapshot.attempts == ()
+
+
+def test_interrupt_after_attempt_publication_seals_published_attempt() -> None:
+    budget = ProviderCallBudget(10)
+    runtime = ProposalRuntimeTelemetry(budget, max_hypothesis_candidates=1)
+
+    class InterruptAfterAppend(list[object]):
+        def append(self, value: object) -> None:
+            super().append(value)
+            raise KeyboardInterrupt("published-before-scope-return")
+
+    runtime._attempts = InterruptAfterAppend()  # type: ignore[assignment]
+
+    with pytest.raises(KeyboardInterrupt, match="published-before-scope-return"):
+        runtime.attempt_scope(1).__enter__()
+    runtime.seal_active("interrupted")
+
+    snapshot = runtime.snapshot(budget.snapshot(), terminal=True)
+    assert len(snapshot.attempts) == 1
+    assert snapshot.attempts[0].round_num == 1
+    assert snapshot.attempts[0].accounting_state == "interrupted"
+
+
 def test_projection_has_only_the_frozen_public_schema() -> None:
     budget = ProviderCallBudget(3)
     runtime = ProposalRuntimeTelemetry(budget, max_hypothesis_candidates=2)

@@ -373,6 +373,7 @@ def compose_campaign_services(
 
     owner._balance_exhausted = False
     owner._research_preflight_checked = False
+    owner._async_stop_deferral_depth = 0
 
     owner._champion_lock = threading.Lock()
     owner._workspace_service = WorkspaceService(
@@ -428,6 +429,10 @@ def compose_campaign_services(
         discard_branch_workspace=owner._workspace_service.discard_branch_workspace,
         accept_candidate=owner._workspace_service.accept_candidate,
         reject_candidate=owner._workspace_service.reject_candidate,
+        initial_screening_only=(
+            owner._qualification_only_config is not None
+            and owner._qualification_only_config.initial_screening_only
+        ),
         registry=owner._registry,
         campaign_id=owner._campaign_id,
     )
@@ -468,6 +473,14 @@ def compose_campaign_services(
         apply_patch=owner._workspace_service.apply_candidate_patch,
         verify_candidate=owner._workspace_service.verify_candidate,
         reject_candidate=owner._workspace_service.reject_candidate,
+        discard_branch_workspace=owner._workspace_service.discard_branch_workspace,
+        discard_inflight_workspaces=(
+            owner._workspace_service.discard_inflight_workspaces
+        ),
+        initial_screening_only=(
+            owner._qualification_only_config is not None
+            and owner._qualification_only_config.initial_screening_only
+        ),
         finalize_research_rejection=owner._research_rejection_finalizer.finalize,
         evaluate=owner._evaluate,
         apply_decision_and_finalize=owner._apply_decision_and_finalize,
@@ -496,6 +509,8 @@ def compose_campaign_services(
             if owner._proposal_runtime_telemetry is not None
             else (lambda: None)
         ),
+        begin_result_commit=owner._begin_async_stop_deferral,
+        end_result_commit=owner._end_async_stop_deferral,
         update_status_progress=owner._update_status_progress,
         step_history=owner._step_history,
     )
@@ -556,6 +571,8 @@ def compose_campaign_services(
         retire_initial_screening_study_chain=(
             owner._retire_initial_screening_study_chain
         ),
+        begin_async_stop_deferral=owner._begin_async_stop_deferral,
+        end_async_stop_deferral=owner._end_async_stop_deferral,
     )
 
 

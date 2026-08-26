@@ -183,8 +183,11 @@ class CampaignLoop:
     qualification_runtime: QualificationRuntime | None = None
     park_qualification_chain: Callable[[str], None] = lambda _branch_id: None
     retire_initial_screening_study_chain: Callable[[str, Decision], None] | None = None
+    begin_async_stop_deferral: Callable[[], None] = lambda: None
+    end_async_stop_deferral: Callable[[], None] = lambda: None
     current_result: CampaignRunResult | None = field(init=False, default=None)
     call_in_progress: bool = field(init=False, default=False)
+    _post_return_deferral_active: bool = field(init=False, default=False)
 
     def _require_initial_screening_retirement_callback(
         self,
@@ -213,7 +216,41 @@ class CampaignLoop:
         retire(branch_id, decision)
         return True
 
+    def _begin_post_return_deferral(self) -> None:
+        if self._post_return_deferral_active:
+            return
+        self.begin_async_stop_deferral()
+        self._post_return_deferral_active = True
+
+    def _end_post_return_deferral(self) -> None:
+        if not self._post_return_deferral_active:
+            return
+        self.end_async_stop_deferral()
+        self._post_return_deferral_active = False
+
+    def _apply_deferred_initial_only_stop(
+        self,
+        qualification_config: QualificationOnlyConfig | None,
+        final_reason: str | None,
+    ) -> str | None:
+        if (
+            qualification_config is None
+            or not qualification_config.initial_screening_only
+        ):
+            return final_reason
+        if not self.should_stop():
+            return final_reason
+        return self.get_last_stop_reason() or "termination condition met"
+
     def run(self, requested_rounds: int) -> CampaignRunResult:
+        """Run and release every post-return signal deferral path."""
+
+        try:
+            return self._run(requested_rounds)
+        finally:
+            self._end_post_return_deferral()
+
+    def _run(self, requested_rounds: int) -> CampaignRunResult:
         """Target formal evaluated rounds without retrying a provider outcome."""
 
         requested_rounds = max(1, int(requested_rounds))
@@ -284,6 +321,7 @@ class CampaignLoop:
 
         self.write_status(run_result=snapshot())
         while qualification_config is not None or evaluated_rounds < requested_rounds:
+            self._end_post_return_deferral()
             self.drain_weight_opt_events()
             if self.should_stop():
                 final_reason = (
@@ -319,6 +357,7 @@ class CampaignLoop:
                 )
                 self.write_status(run_result=snapshot(stop_reason=final_reason))
                 break
+            self._begin_post_return_deferral()
             self.call_in_progress = False
             outcome_record = result.execution_outcome
             outcome = outcome_record.outcome if outcome_record is not None else None
@@ -519,6 +558,11 @@ class CampaignLoop:
                 final_reason = result.reason or "stopped"
                 break
 
+        self._end_post_return_deferral()
+        final_reason = self._apply_deferred_initial_only_stop(
+            qualification_config,
+            final_reason,
+        )
         if final_reason is None:
             final_reason = (
                 QUALIFICATION_NOT_REACHED

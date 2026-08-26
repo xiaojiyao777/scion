@@ -333,6 +333,38 @@ def test_lineage_failure_blocks_after_applied_candidate() -> None:
     assert fixture[5][branch.branch_id] is fixture[7]
 
 
+def test_initial_only_lineage_failure_clears_applied_candidate_authority() -> None:
+    fixture = _fixture()
+    finalizer, controller, branch, hypothesis = fixture[:4]
+    workspaces, patches = fixture[4:6]
+    finalizer.initial_screening_only = True
+    finalizer.record_step_lineage = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+        OSError("lineage unavailable")
+    )
+
+    result = finalizer.apply(
+        branch=branch,
+        decision=Decision.QUEUE_VALIDATE,
+        hypothesis=hypothesis,
+        protocol_result=_screening_protocol("pass"),
+        canary_result=CanaryResult(passed=True),
+        contract_result=ContractResult(passed=True, checks=()),
+        verification_result=VerificationResult(passed=True, checks=()),
+        action_label="explore",
+        decision_reason_codes=("SCREENING_RESULT",),
+        **_candidate_kwargs(fixture),
+    )
+
+    assert result.execution_outcome is not None
+    assert result.execution_outcome.reason_code == "EXPERIMENT_EVENT_WRITE_FAILED"
+    assert controller.get_branch(branch.branch_id).state is BranchState.BLOCKED_INFRA
+    assert workspaces == {}
+    assert branch.branch_id not in patches
+    assert branch.current_code_hash is None
+    assert branch.hypothesis is None
+    assert branch.direction is None
+
+
 def test_accept_failure_writes_no_experiment_event() -> None:
     fixture = _fixture()
     finalizer, _controller, branch, hypothesis = fixture[:4]

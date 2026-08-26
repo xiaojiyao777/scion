@@ -119,7 +119,53 @@ class CampaignManager:
 
     def _record_step(self, step: StepRecord) -> None:
         """Append one durable step fact to the campaign history."""
-        self._evidence_recorder.record_step(step, self._step_history)
+        self._begin_async_stop_deferral()
+        try:
+            self._evidence_recorder.record_step(step, self._step_history)
+        finally:
+            self._end_async_stop_deferral()
+
+    def _initial_screening_async_stop_deferral_enabled(self) -> bool:
+        config = getattr(self, "_qualification_only_config", None)
+        return bool(config is not None and config.initial_screening_only)
+
+    def _begin_async_stop_deferral(self) -> None:
+        """Defer an initial-only signal across one producer critical section."""
+
+        if self._initial_screening_async_stop_deferral_enabled():
+            self._async_stop_deferral_depth += 1
+
+    def _end_async_stop_deferral(self) -> None:
+        """Close one producer critical section without underflowing its latch."""
+
+        if (
+            self._initial_screening_async_stop_deferral_enabled()
+            and self._async_stop_deferral_depth > 0
+        ):
+            self._async_stop_deferral_depth -= 1
+
+    def _should_defer_async_stop_exception(self) -> bool:
+        """Return whether a signal must wait for an initial-only safe boundary."""
+
+        if not self._initial_screening_async_stop_deferral_enabled():
+            return False
+        loop = getattr(self, "_campaign_loop", None)
+        current = getattr(loop, "current_result", None)
+        if current is None:
+            return False
+        if self._async_stop_deferral_depth > 0:
+            return True
+        return len(self._step_history) > current.scheduled_calls
+
+    def _async_stop_interrupted_hint(self, reason: str) -> bool | None:
+        """Project whether an immediate CLI stop interrupted admitted work."""
+
+        if not self._initial_screening_async_stop_deferral_enabled():
+            return None
+        loop = getattr(self, "_campaign_loop", None)
+        if getattr(loop, "current_result", None) is None:
+            return reason == "OUTER_HARDWALL_EXCEEDED"
+        return bool(loop.call_in_progress)
 
     def _park_qualification_chain(self, branch_id: str) -> None:
         """Retire one failed chain without retaining an executable patch base."""
