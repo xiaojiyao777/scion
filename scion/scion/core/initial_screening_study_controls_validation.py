@@ -40,6 +40,12 @@ from scion.core.initial_screening_study_controls_shapes import (
     _validate_pristine_storage_shapes,
     _validate_protocol_wrapper_shape,
 )
+from scion.core.initial_screening_study_provider_policy import (
+    _ERROR as _PROVIDER_ERROR,
+)
+from scion.core.initial_screening_study_provider_policy import (
+    _InitialScreeningProviderPolicyError,
+)
 from scion.core.problem_runtime import ProblemRuntime
 from scion.core.proposal_pipeline import ProposalPipeline
 from scion.core.proposal_runtime_telemetry import (
@@ -97,16 +103,28 @@ def _validate_initial_screening_requested_rounds(
     """Fail before preflight unless the registered root and runtime remain exact."""
 
     failed = False
+    provider_failed = False
     try:
         _validate_registered_run(requested_rounds, owner)
-    except Exception:  # noqa: BLE001 - sanitize the private run gate
+    except _InitialScreeningProviderPolicyError:
+        provider_failed = True
+    except Exception:  # noqa: BLE001 - preserve the fixed controls boundary
         failed = True
+    if provider_failed:
+        raise _InitialScreeningProviderPolicyError(_PROVIDER_ERROR)
     if failed:
         raise _InitialScreeningStudyControlsError(_ERROR)
 
 
 def _validate_registered_run(requested_rounds: Any, owner: Any) -> None:
     owner_storage = _campaign_owner_storage(owner)
+    from scion.core.initial_screening_study_provider_policy_validation import (
+        _prepare_provider_policy_run_validation,
+        _validate_provider_policy_installed_runtime,
+        _validate_provider_policy_publication,
+    )
+
+    provider_state = _prepare_provider_policy_run_validation(owner)
     marker_keys = {
         "_initial_screening_study_controls_active",
         "_initial_screening_study_controls",
@@ -117,6 +135,8 @@ def _validate_registered_run(requested_rounds: Any, owner: Any) -> None:
     runtime_inputs = owner_storage["_initial_screening_study_controls"]
     baseline = _registered_baseline(owner, active, runtime_inputs)
     if baseline is None:
+        if provider_state is not None:
+            raise ValueError
         return
     _validate_baseline_shape(baseline)
     registered = baseline.runtime_inputs_ref()
@@ -143,12 +163,16 @@ def _validate_registered_run(requested_rounds: Any, owner: Any) -> None:
         filename=_FILENAME,
         max_bytes=_MAX_BYTES,
     )
+    if provider_state is not None:
+        _validate_provider_policy_publication(provider_state, publication)
     _validate_private_child_directory(
         publication,
         "metrics",
         baseline.metrics_directory_fingerprint,
     )
     _validate_installed_runtime(owner, runtime_inputs, baseline)
+    if provider_state is not None:
+        _validate_provider_policy_installed_runtime(provider_state, owner)
 
 
 def _registered_baseline(

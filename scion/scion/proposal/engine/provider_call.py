@@ -10,6 +10,9 @@ from typing import Any, Dict
 
 from scion.core.resource_envelope import ProviderCallBudget
 from scion.proposal.llm.errors import LLMFormatError
+from scion.proposal.llm.study_policy import (
+    _resolve_initial_screening_study_policy_entry,
+)
 
 from .trace import _client_request_policy, _TraceWriter
 
@@ -71,6 +74,12 @@ class ProviderCaller:
             or max_response_bytes <= 0
         ):
             raise ValueError("max_response_bytes must be a positive integer or null")
+        frozen_policy_entry = _resolve_initial_screening_study_policy_entry(
+            self._client,
+            request_kind=request_kind,
+            tool=tool,
+            model=self._model,
+        )
         if self._provider_call_budget is not None:
             self._provider_call_budget.consume(request_kind=request_kind)
         _reset_client_call_observations(self._client)
@@ -78,19 +87,22 @@ class ProviderCaller:
 
         rendered_system_blocks = [dict(block) for block in snapshot.system_blocks]
         trace = _TraceWriter(self._trace_dir)
-        request_policy = _client_request_policy(
+        request_policy = _client_request_policy_for_policy_entry(
             self._client,
             request_kind=request_kind,
             tool=tool,
             model=self._model,
+            entry=frozen_policy_entry,
         )
         started_at = datetime.now().isoformat()
         try:
-            raw = self._call_provider(
+            raw = _call_provider_for_policy_entry(
+                self,
                 request_kind=request_kind,
                 prompt=snapshot.user_prompt,
                 tool=tool,
                 system_blocks=rendered_system_blocks,
+                entry=frozen_policy_entry,
             )
         except KeyboardInterrupt as exc:
             response_diagnostics = _client_response_diagnostics(self._client)
@@ -181,7 +193,19 @@ class ProviderCaller:
         prompt: str,
         tool: Dict[str, Any],
         system_blocks: list[dict[str, Any]],
+        _initial_screening_study_policy_entry: Any | None = None,
     ) -> Dict[str, Any]:
+        if _initial_screening_study_policy_entry is not None:
+            return self._client.call_with_tool(
+                prompt,
+                tool,
+                self._model,
+                system_blocks=system_blocks,
+                request_kind=request_kind,
+                _initial_screening_study_policy_entry=(
+                    _initial_screening_study_policy_entry
+                ),
+            )
         return self._client.call_with_tool(
             prompt,
             tool,
@@ -189,6 +213,55 @@ class ProviderCaller:
             system_blocks=system_blocks,
             request_kind=request_kind,
         )
+
+
+def _call_provider_for_policy_entry(
+    owner: ProviderCaller,
+    *,
+    request_kind: str,
+    prompt: str,
+    tool: Dict[str, Any],
+    system_blocks: list[dict[str, Any]],
+    entry: Any | None,
+) -> Dict[str, Any]:
+    if entry is None:
+        return owner._call_provider(
+            request_kind=request_kind,
+            prompt=prompt,
+            tool=tool,
+            system_blocks=system_blocks,
+        )
+    return owner._call_provider(
+        request_kind=request_kind,
+        prompt=prompt,
+        tool=tool,
+        system_blocks=system_blocks,
+        _initial_screening_study_policy_entry=entry,
+    )
+
+
+def _client_request_policy_for_policy_entry(
+    client: Any,
+    *,
+    request_kind: str,
+    tool: Dict[str, Any],
+    model: str,
+    entry: Any | None,
+) -> Dict[str, Any]:
+    if entry is None:
+        return _client_request_policy(
+            client,
+            request_kind=request_kind,
+            tool=tool,
+            model=model,
+        )
+    return _client_request_policy(
+        client,
+        request_kind=request_kind,
+        tool=tool,
+        model=model,
+        _initial_screening_study_policy_entry=entry,
+    )
 
 
 def _write_terminal_trace_best_effort(

@@ -142,6 +142,270 @@ def _validate_controls_publication(
         os.close(current_fd)
 
 
+def _publish_attached_control(
+    publication: _ControlsPublication,
+    payload: bytes,
+    *,
+    filename: str,
+    first_filename: str,
+    max_bytes: int,
+) -> tuple[int, int, int, int]:
+    """Publish one second literal leaf, rolling back only known fresh inodes."""
+
+    if type(publication) is not _ControlsPublication or type(payload) is not bytes:
+        raise TypeError
+    _validate_child_name(filename)
+    _validate_child_name(first_filename)
+    if filename == first_filename or len(payload) > max_bytes:
+        raise ValueError
+    directory_flags = _required_flags(
+        "O_RDONLY",
+        "O_DIRECTORY",
+        "O_NOFOLLOW",
+        "O_CLOEXEC",
+    )
+    leaf_flags = _required_flags(
+        "O_WRONLY",
+        "O_CREAT",
+        "O_EXCL",
+        "O_NOFOLLOW",
+        "O_CLOEXEC",
+    )
+    parts = publication.campaign_dir.split("/")[1:]
+    root_fd = _open_expected_root(
+        parts,
+        publication.directory_fingerprints,
+        directory_flags,
+    )
+    attached_fd: int | None = None
+    try:
+        root_stat = os.fstat(root_fd)
+        _validate_root(root_stat)
+        _validate_existing_first_leaf(root_fd, publication, first_filename)
+        _require_exact_names(root_fd, (first_filename,))
+        attached_fd = os.open(filename, leaf_flags, 0o600, dir_fd=root_fd)
+        before = os.fstat(attached_fd)
+        _validate_leaf(before, expected_size=0)
+        offset = 0
+        while offset < len(payload):
+            written = os.write(attached_fd, payload[offset:])
+            if written <= 0:
+                raise OSError
+            offset += written
+        os.fsync(attached_fd)
+        after = os.fstat(attached_fd)
+        _validate_leaf(after, expected_size=len(payload), expected=before)
+        os.fsync(root_fd)
+        _validate_root(os.fstat(root_fd), expected=root_stat)
+        fingerprint = _leaf_fingerprint(after)
+        _verify_leaf_bytes(
+            root_fd,
+            filename=filename,
+            leaf_fingerprint=fingerprint,
+            payload=payload,
+            max_bytes=max_bytes,
+        )
+        _validate_existing_first_leaf(root_fd, publication, first_filename)
+        _require_exact_names(root_fd, (first_filename, filename))
+        _validate_attached_control_publication(
+            publication,
+            payload,
+            fingerprint,
+            filename=filename,
+            first_filename=first_filename,
+            require_only_control_leaves=True,
+            max_bytes=max_bytes,
+        )
+    except BaseException:
+        try:
+            _rollback_two_leaf_publication(
+                root_fd,
+                publication,
+                first_filename=first_filename,
+                attached_filename=filename,
+                attached_fd=attached_fd,
+            )
+        except BaseException as ignored_cleanup_error:  # noqa: BLE001 - best effort
+            del ignored_cleanup_error
+        raise
+    finally:
+        try:
+            if attached_fd is not None:
+                os.close(attached_fd)
+        finally:
+            os.close(root_fd)
+    return fingerprint
+
+
+def _validate_attached_control_publication(
+    publication: _ControlsPublication,
+    payload: bytes,
+    leaf_fingerprint: tuple[int, int, int, int],
+    *,
+    filename: str,
+    first_filename: str,
+    require_only_control_leaves: bool,
+    max_bytes: int,
+) -> None:
+    if (
+        type(publication) is not _ControlsPublication
+        or type(payload) is not bytes
+        or type(leaf_fingerprint) is not tuple
+        or len(leaf_fingerprint) != 4
+        or any(type(value) is not int for value in leaf_fingerprint)
+    ):
+        raise TypeError
+    _validate_child_name(filename)
+    _validate_child_name(first_filename)
+    if filename == first_filename or type(require_only_control_leaves) is not bool:
+        raise ValueError
+    if len(payload) > max_bytes:
+        raise ValueError
+    flags = _required_flags(
+        "O_RDONLY",
+        "O_DIRECTORY",
+        "O_NOFOLLOW",
+        "O_CLOEXEC",
+    )
+    parts = publication.campaign_dir.split("/")[1:]
+    for _ in range(2):
+        root_fd = _open_expected_root(
+            parts,
+            publication.directory_fingerprints,
+            flags,
+        )
+        try:
+            _validate_root(os.fstat(root_fd))
+            _verify_leaf_bytes(
+                root_fd,
+                filename=filename,
+                leaf_fingerprint=leaf_fingerprint,
+                payload=payload,
+                max_bytes=max_bytes,
+            )
+            _validate_existing_first_leaf(root_fd, publication, first_filename)
+            if require_only_control_leaves:
+                _require_exact_names(root_fd, (first_filename, filename))
+        finally:
+            os.close(root_fd)
+
+
+def _validate_absent_private_child(
+    publication: _ControlsPublication,
+    name: str,
+) -> None:
+    """Require a literal child to remain absent under the held campaign root."""
+
+    if type(publication) is not _ControlsPublication:
+        raise TypeError
+    _validate_child_name(name)
+    flags = _required_flags(
+        "O_RDONLY",
+        "O_DIRECTORY",
+        "O_NOFOLLOW",
+        "O_CLOEXEC",
+    )
+    parts = publication.campaign_dir.split("/")[1:]
+    for _ in range(2):
+        root_fd = _open_expected_root(
+            parts,
+            publication.directory_fingerprints,
+            flags,
+        )
+        try:
+            _validate_root(os.fstat(root_fd))
+            try:
+                os.stat(name, dir_fd=root_fd, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            raise ValueError
+        finally:
+            os.close(root_fd)
+
+
+def _validate_existing_first_leaf(
+    root_fd: int,
+    publication: _ControlsPublication,
+    filename: str,
+) -> None:
+    current = os.stat(filename, dir_fd=root_fd, follow_symlinks=False)
+    _validate_leaf(current, expected_size=current.st_size)
+    if _leaf_fingerprint(current) != publication.leaf_fingerprint:
+        raise ValueError
+
+
+def _require_exact_names(fd: int, expected: tuple[str, ...]) -> None:
+    names: list[str] = []
+    with os.scandir(fd) as entries:
+        for _ in range(len(expected) + 1):
+            entry = next(entries, None)
+            if entry is None:
+                break
+            name = entry.name
+            if type(name) is not str:
+                raise TypeError
+            names.append(name)
+    if len(names) != len(expected) or frozenset(names) != frozenset(expected):
+        raise ValueError
+
+
+def _rollback_two_leaf_publication(
+    root_fd: int,
+    publication: _ControlsPublication,
+    *,
+    first_filename: str,
+    attached_filename: str,
+    attached_fd: int | None,
+) -> None:
+    root_stat = os.fstat(root_fd)
+    _validate_root(root_stat)
+    expected_names = (
+        (first_filename,)
+        if attached_fd is None
+        else (first_filename, attached_filename)
+    )
+    _require_exact_names(root_fd, expected_names)
+    _validate_existing_first_leaf(root_fd, publication, first_filename)
+    if attached_fd is not None:
+        held = os.fstat(attached_fd)
+        _validate_leaf(held, expected_size=held.st_size)
+        attached = os.stat(
+            attached_filename,
+            dir_fd=root_fd,
+            follow_symlinks=False,
+        )
+        _validate_leaf(attached, expected_size=attached.st_size, expected=held)
+        os.unlink(attached_filename, dir_fd=root_fd)
+    os.unlink(first_filename, dir_fd=root_fd)
+    os.fsync(root_fd)
+    _require_empty_directory(root_fd)
+    _remove_empty_published_root(publication, root_stat)
+
+
+def _remove_empty_published_root(
+    publication: _ControlsPublication,
+    root_stat: os.stat_result,
+) -> None:
+    flags = _required_flags(
+        "O_RDONLY",
+        "O_DIRECTORY",
+        "O_NOFOLLOW",
+        "O_CLOEXEC",
+    )
+    parts = publication.campaign_dir.split("/")[1:]
+    parent_fd = _open_expected_root(
+        parts[:-1],
+        publication.directory_fingerprints[:-1],
+        flags,
+    )
+    try:
+        _validate_root_name(parent_fd, parts[-1], root_stat)
+        os.rmdir(parts[-1], dir_fd=parent_fd)
+        os.fsync(parent_fd)
+    finally:
+        os.close(parent_fd)
+
+
 def _create_private_child_directory(
     publication: _ControlsPublication,
     name: str,

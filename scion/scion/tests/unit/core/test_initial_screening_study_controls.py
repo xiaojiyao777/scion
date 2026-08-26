@@ -155,6 +155,8 @@ def _manager(
     manager_type: type[CampaignManager] = CampaignManager,
     champion_snapshot_path: Any | None = None,
     boundary_overrides: dict[str, Any] | None = None,
+    llm_client: Any | None = None,
+    provider_policy_request: Any | None = None,
 ) -> tuple[CampaignManager, dict[str, Any], dict[str, Any]]:
     champion_root = tmp_path / "champion"
     (champion_root / "operators").mkdir(parents=True, exist_ok=True)
@@ -213,7 +215,7 @@ def _manager(
         protocol_config=config,
         split_manifest=manifest,
         seed_ledger=ledger,
-        llm_client=_NoCallClient(),
+        llm_client=_NoCallClient() if llm_client is None else llm_client,
         champion=ChampionState(
             version=1,
             operator_pool={},
@@ -231,6 +233,7 @@ def _manager(
         resource_envelope=resource_input,
         code_research_limits=code_limits_input,
         _initial_screening_study_controls=request,
+        _initial_screening_provider_policy=provider_policy_request,
     )
     return (
         manager,

@@ -1,4 +1,5 @@
 """Request policy resolution for LLMClient."""
+
 from __future__ import annotations
 
 from typing import Any, Dict
@@ -13,12 +14,14 @@ from .config import (
     _request_kind_env_key,
 )
 
-
 _PROVIDER_MANAGED_OUTPUT = "provider_managed"
 _PROVIDER_NATIVE_REQUIRED_OUTPUT = "provider_native_required"
 
 
 class PolicyMixin:
+    model: str
+    timeout_sec: float
+
     def resolve_request_policy(
         self,
         *,
@@ -36,6 +39,23 @@ class PolicyMixin:
         Anthropic's SDK requires ``max_tokens``; that provider-native transport
         requirement is reported explicitly and is not a Scion retry policy.
         """
+        from .study_policy import (
+            _has_installed_initial_screening_study_policy,
+            _resolve_initial_screening_study_policy_entry,
+        )
+
+        if _has_installed_initial_screening_study_policy(self):
+            if type(request_kind) is not str or type(tool) is not dict:
+                raise ValueError
+            entry = _resolve_initial_screening_study_policy_entry(
+                self,
+                request_kind=request_kind,
+                tool=tool,
+                model=self.model if model is None else model,
+            )
+            if entry is None:
+                raise ValueError
+            return entry.to_projection()
         normalized = _normalize_request_kind(request_kind=request_kind, tool=tool)
         timeout_sec = self.timeout_sec
 
@@ -63,13 +83,9 @@ class PolicyMixin:
                 else _PROVIDER_NATIVE_REQUIRED_OUTPUT
             ),
             "output_token_parameter": (
-                "omitted"
-                if provider_managed_output
-                else "max_tokens"
+                "omitted" if provider_managed_output else "max_tokens"
             ),
             "provider_transport_output_ceiling_tokens": (
-                None
-                if provider_managed_output
-                else _ANTHROPIC_REQUIRED_MAX_TOKENS
+                None if provider_managed_output else _ANTHROPIC_REQUIRED_MAX_TOKENS
             ),
         }

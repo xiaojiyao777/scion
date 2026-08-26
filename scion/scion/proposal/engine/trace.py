@@ -107,7 +107,21 @@ def _client_request_policy(
     request_kind: str,
     tool: Dict[str, Any],
     model: str,
+    _initial_screening_study_policy_entry: Any | None = None,
 ) -> Dict[str, Any]:
+    if _initial_screening_study_policy_entry is not None:
+        from scion.proposal.llm.study_policy import (
+            _installed_initial_screening_study_policy,
+        )
+
+        _installed_initial_screening_study_policy(
+            client,
+            _initial_screening_study_policy_entry,
+        )
+        projection = _initial_screening_study_policy_entry.to_projection()
+        if type(projection) is not dict:
+            raise TypeError
+        return projection
     resolver = getattr(client, "resolve_request_policy", None)
     if not callable(resolver):
         return {}

@@ -1,9 +1,10 @@
 """Public single-attempt LLM client orchestration."""
+
 from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict
+from typing import Any, Dict, NoReturn
 
 from .config import (
     _DEFAULT_BASE_URL,
@@ -113,34 +114,70 @@ class LLMClient(PolicyMixin, TransportMixin):
         model: str | None = None,
         system_blocks: "list[dict] | None" = None,
         request_kind: str | None = None,
+        *,
+        _initial_screening_study_policy_entry: Any | None = None,
     ) -> Dict[str, Any]:
         """Execute one tool transport call and return its typed input dict.
 
         Supports both Anthropic (Claude) and OpenAI (GPT) models.
         """
-        effective_model = model or self.model
-        self.reset_call_observations()
-        policy = self.resolve_request_policy(
+        from .study_policy import (
+            _has_installed_initial_screening_study_policy,
+            _validate_initial_screening_study_policy_entry,
+        )
+
+        if _has_installed_initial_screening_study_policy(self):
+            if model is not None and type(model) is not str:
+                raise ValueError
+            effective_model = self.model if model is None else model
+        else:
+            effective_model = model or self.model
+        frozen_entry = _validate_initial_screening_study_policy_entry(
+            self,
+            _initial_screening_study_policy_entry,
             request_kind=request_kind,
             tool=tool,
             model=effective_model,
         )
+        self.reset_call_observations()
+        if frozen_entry is None:
+            policy = self.resolve_request_policy(
+                request_kind=request_kind,
+                tool=tool,
+                model=effective_model,
+            )
+        else:
+            policy = frozen_entry.to_projection()
         timeout_sec = policy["timeout_sec"]
         attempt_started_at = time.monotonic()
         try:
             with _llm_hard_timeout(timeout_sec):
-                result = self._tool_call_once(
-                    prompt,
-                    tool,
-                    effective_model,
-                    system_blocks,
-                    timeout_sec,
-                )
+                if frozen_entry is None:
+                    result = self._tool_call_once(
+                        prompt,
+                        tool,
+                        effective_model,
+                        system_blocks,
+                        timeout_sec,
+                    )
+                else:
+                    result = self._tool_call_once(
+                        prompt,
+                        tool,
+                        effective_model,
+                        system_blocks,
+                        timeout_sec,
+                        _initial_screening_study_policy_entry=frozen_entry,
+                    )
             required = tool.get("input_schema", {}).get("required", [])
             if not required:
-                required = tool.get("function", {}).get("parameters", {}).get(
-                    "required",
-                    [],
+                required = (
+                    tool.get("function", {})
+                    .get("parameters", {})
+                    .get(
+                        "required",
+                        [],
+                    )
                 )
             missing = [key for key in required if key not in result]
             if missing:
@@ -164,7 +201,7 @@ class LLMClient(PolicyMixin, TransportMixin):
         *,
         attempt_started_at: float,
         timeout_sec: float,
-    ) -> None:
+    ) -> NoReturn:
         masked_timeout = _masked_hard_timeout_error(
             exc,
             attempt_started_at=attempt_started_at,

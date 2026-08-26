@@ -484,6 +484,28 @@ def _initialize_controls_proposal_state(
         proposal_pipeline._last_hypothesis_rejection_reason = None
 
 
+def _prepare_provider_policy_inputs(
+    request: Any,
+    controls_request: Any,
+    llm_client: Any,
+) -> Any | None:
+    from scion.core.initial_screening_study_provider_policy import (
+        _ERROR as _PROVIDER_POLICY_ERROR,
+    )
+    from scion.core.initial_screening_study_provider_policy import (
+        _InitialScreeningProviderPolicyError,
+        _prepare_initial_screening_provider_policy,
+        _reject_reused_provider_client_without_marker,
+    )
+
+    _reject_reused_provider_client_without_marker(request, llm_client)
+    if request is None:
+        return None
+    if controls_request is None:
+        raise _InitialScreeningProviderPolicyError(_PROVIDER_POLICY_ERROR)
+    return _prepare_initial_screening_provider_policy(request, llm_client)
+
+
 def compose_campaign_services(
     owner: Any,
     *,
@@ -504,8 +526,14 @@ def compose_campaign_services(
     code_research_limits: Any | None = None,
     qualification_only: Any | None = None,
     _initial_screening_study_controls: Any | None = None,
+    _initial_screening_provider_policy: Any | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
+    provider_policy_inputs = _prepare_provider_policy_inputs(
+        _initial_screening_provider_policy,
+        _initial_screening_study_controls,
+        llm_client,
+    )
     controls_setup: _InitialScreeningControlsSetup | None = None
     if _initial_screening_study_controls is None:
         (
@@ -549,6 +577,17 @@ def compose_campaign_services(
             code_research_limits=code_research_limits,
             qualification_only=qualification_only,
         )
+        if provider_policy_inputs is not None:
+            from scion.core.initial_screening_study_provider_policy import (
+                _publish_initial_screening_provider_policy,
+            )
+
+            provider_policy_inputs = _publish_initial_screening_provider_policy(
+                provider_policy_inputs,
+                controls_setup.runtime_inputs.publication,
+            )
+            owner._initial_screening_provider_policy_active = True
+            owner._initial_screening_provider_policy = provider_policy_inputs
         normalized_code_research_limits = controls_setup.code_research_limits
         normalized_resource_envelope = controls_setup.resource_envelope
         normalized_qualification_only = controls_setup.qualification
@@ -933,6 +972,12 @@ def compose_campaign_services(
             owner,
             owner._initial_screening_study_controls,
         )
+    if provider_policy_inputs is not None:
+        from scion.core.initial_screening_study_provider_policy import (
+            _finalize_initial_screening_provider_policy,
+        )
+
+        _finalize_initial_screening_provider_policy(owner, provider_policy_inputs)
 
 
 def required_service_names() -> tuple[str, ...]:

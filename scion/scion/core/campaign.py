@@ -90,10 +90,12 @@ class CampaignManager:
         code_research_limits: CodeResearchLimits | dict[str, Any] | None = None,
         qualification_only: (QualificationOnlyConfig | Mapping[str, Any] | None) = None,
         _initial_screening_study_controls: Any | None = None,
+        _initial_screening_provider_policy: Any | None = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
         failed = False
+        provider_policy_failed = False
         try:
             compose_campaign_services(
                 self,
@@ -114,12 +116,29 @@ class CampaignManager:
                 code_research_limits=code_research_limits,
                 qualification_only=qualification_only,
                 _initial_screening_study_controls=(_initial_screening_study_controls),
+                _initial_screening_provider_policy=(_initial_screening_provider_policy),
             )
-        except Exception:
-            if _initial_screening_study_controls is None:
+        except Exception as error:
+            from scion.core.initial_screening_study_provider_policy import (
+                _InitialScreeningProviderPolicyError,
+            )
+
+            provider_policy_failed = type(error) is _InitialScreeningProviderPolicyError
+            if (
+                _initial_screening_study_controls is None
+                and _initial_screening_provider_policy is None
+                and not provider_policy_failed
+            ):
                 raise
             failed = True
         if failed:
+            if provider_policy_failed or _initial_screening_provider_policy is not None:
+                from scion.core.initial_screening_study_provider_policy import (
+                    _ERROR,
+                    _InitialScreeningProviderPolicyError,
+                )
+
+                raise _InitialScreeningProviderPolicyError(_ERROR)
             from scion.core.initial_screening_study_controls import (
                 _ERROR,
                 _InitialScreeningStudyControlsError,
