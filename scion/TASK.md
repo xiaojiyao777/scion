@@ -730,9 +730,9 @@ initial-screening producer boundary, ordinal-only paired-effect projection,
 strict ten-root artifact audit, safe private root loader and private pre-run
 configuration-subset snapshot, manifest-path-only configuration-subset join
 and separate requested-provider-policy producer plus its validation-only v2
-manifest join, plus a separate producer-only ProblemSpec declaration, now
-exist, but no population selection, matched-study result or live authority
-exists. Carrier
+manifest join, plus a separate producer-only ProblemSpec declaration and its
+validation-only v3 manifest join, now exist, but no population selection,
+matched-study result or live authority exists. Carrier
 `25b78037` implements the private
 ordinal K=2 H bank under the existing shared session budget and exports only
 the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
@@ -805,8 +805,26 @@ science/privacy and read-only consistency review reported P0/P1/P2 =
 `0/0/0`. Its exact ordered 11 limitations retain adapter behavior, research
 input, runtime-history consumption, verification, source/B0, manifest,
 post-gate root freshness and matched/live/GO boundaries. It does not upgrade
-either manifest v1 or v2; a separate future v3 is required to declare and join
-this leaf across ten roots. Together these carriers provide
+either manifest v1 or v2. The complete declaration is bounded to JSON depth 23
+at prerequisite base `cb749795`, so embedding it one level below the v3
+manifest root remains within the existing depth-24 manifest envelope. Carrier
+`76702588` adds the wholly separate package-private, manifest-path-only,
+validation-only v3. One top-level common declared ProblemSpec must equal the
+raw canonical bytes and independently normalized value of the eighth private
+leaf in all ten roots, while the existing controls and requested-provider
+joins remain exact. The ten bounded eight-leaf roots share one held descriptor
+per root and participate in global non-alias checks and the integrated fresh
+manifest/history/ten-root rewalk. A held-parent fingerprint check and second
+fresh manifest-only rewalk follow. Only afterward are all ten S2a roots
+structurally decoded and discarded. Its sole success is the fixed
+`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_AND_PROBLEM_SPEC_DECLARATION_JOINED`
+mapping with the exact ordered 24 limitations. Its 76 focused, 258 combined
+v1/v2/v3 and 599 full postrun tests passed; a 2,206-variant independent
+producer/decoder differential found zero decoder rejections among 1,602 unique
+publishable declaration byte strings, and both independent reviews reported
+P0/P1/P2 = `0/0/0`. V1 and v2 tracked bytes, statuses and limitations remain
+unchanged. V3 calls neither D2 nor D3 and creates no matched result,
+population, live authority or GO token. Together these carriers provide
 joined-configuration, implementation, mutation-audit and provider-/solver-free
 writer-roundtrip results, not evidence that K=2 improves CVRP research.
 The status remains `NO_POPULATION_SELECTION`, `NO_MATCHED_RESULT`,
@@ -987,14 +1005,33 @@ command or launch path.
   consistency review reported P0/P1/P2 = `0/0/0`. The claim is only the
   root-dir-excluded normalized declaration installed at reviewed local seams;
   it does not prove adapter behavior or any retained limitation. Manifest v1
-  and v2 remain byte- and meaning-compatible, and a separate future v3 must
-  declare and join this leaf across ten roots.
+  and v2 remain byte- and meaning-compatible.
+- [x] Add a separate package-private, manifest-path-only validation v3 without
+  changing v1 or v2. After the depth-23 declaration/depth-24 manifest envelope
+  prerequisite at base `cb749795`, carrier `76702588` requires one top-level
+  common declared ProblemSpec and joins its raw canonical bytes and independent
+  frozen normalization to `initial_screening_problem_spec.json` as the eighth
+  private leaf in all ten roots. The same held root descriptor reads all eight
+  leaves; the new leaf participates in the existing caps, global non-alias
+  checks and integrated fresh manifest/history/ten-root rewalk. A held-parent
+  fingerprint check and second fresh manifest-only rewalk follow. Controls
+  retain their type-aware objective/measurement overlap joins. All ten S2a
+  structural decodes run only after the joins and both fresh passes, and all
+  decoded values are discarded. The only success is the fixed
+  `CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_AND_PROBLEM_SPEC_DECLARATION_JOINED`
+  mapping with the exact ordered 24 limitations. The 76 focused, 258 combined
+  v1/v2/v3 and 599 full postrun tests passed; the 2,206-variant differential
+  produced 1,602 unique publishable declaration byte strings with zero decoder
+  rejections, and two independent reviews reported P0/P1/P2 = `0/0/0`. Only
+  this v3 removes `PROBLEM_SPEC_UNVERIFIED`; it retains adapter, research-input,
+  runtime-history-consumption, verification, source/B0, manifest/pre-outcome,
+  enforcement, root-freshness and matched/live/GO limitations. It invokes no
+  D2, D3 or endpoint and creates no matched result, population, live authority
+  or GO token. V1 and v2 bytes, APIs, statuses and limitations are unchanged.
 - [ ] Complete the remaining S2c control authority before selecting a
-  population. The joined controls now incorporate the separate requested
-  provider/model policy declaration and ten-root leaves. The producer-only
-  normalized ProblemSpec declaration is installed locally but remains outside
-  both manifest joins; a separate future v3 must declare and join it across all
-  ten roots. S2c must still add actual research-input/history consumption,
+  population. The separate v3 now joins the requested provider/model policy
+  and normalized root-dir-excluded ProblemSpec declarations to all ten roots.
+  S2c must still add actual research-input/history consumption,
   normalized requested/resolved solver and verification configuration,
   declared hardwall cap and launcher configuration, and source/B0 content and
   order; source revision remains an external ordinary fact. Runner/backend
@@ -1007,8 +1044,8 @@ command or launch path.
   population be selected; the study-specific cases, seeds, time/resource
   arithmetic, actual ordinary manifest and launch order must then be
   mechanically frozen and independently reviewed before any live authority.
-  The existing controls v1 and manifest/join v1 remain unchanged. Comparator
-  code may therefore precede population selection, but its
+  The existing controls/manifest v1 and manifest v2 remain unchanged.
+  Comparator code may therefore precede population selection, but its
   implementation does not freeze the missing values or the actual study
   manifest. This remains package-private with no CLI, live command, self-hash,
   receipt, nonce, GO token or claim that Scion proves preregistration timing.

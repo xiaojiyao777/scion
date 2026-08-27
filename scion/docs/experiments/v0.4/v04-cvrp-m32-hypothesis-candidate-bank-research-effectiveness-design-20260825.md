@@ -1,6 +1,6 @@
 # CVRP M32 hypothesis-candidate-bank research-effectiveness design
 
-Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / CONFIG_SUBSET_MANIFEST_JOIN_IMPLEMENTED / REQUESTED_PROVIDER_POLICY_PRODUCER_IMPLEMENTED / CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_MANIFEST_JOIN_IMPLEMENTED / PROBLEM_SPEC_DECLARATION_PRODUCER_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
+Status: **STUDY_DESIGN_ONLY / K2_DEFAULT_OFF_IMPLEMENTED / SINGLE_ARM_OFFLINE_SCORER_IMPLEMENTED / EXACT_FIVE_BLOCK_OFFLINE_COMPARATOR_IMPLEMENTED / INITIAL_SCREENING_BOUNDARY_IMPLEMENTED / ORDINAL_SCREENING_CELLS_IMPLEMENTED / STRICT_DECODED_ARTIFACT_STUDY_ROOT_AUDIT_IMPLEMENTED / SAFE_ROOT_LOADER_IMPLEMENTED / CONFIG_SUBSET_CONTROLS_IMPLEMENTED / CONFIG_SUBSET_MANIFEST_JOIN_IMPLEMENTED / REQUESTED_PROVIDER_POLICY_PRODUCER_IMPLEMENTED / CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_MANIFEST_JOIN_IMPLEMENTED / PROBLEM_SPEC_DECLARATION_PRODUCER_IMPLEMENTED / CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_AND_PROBLEM_SPEC_DECLARATION_MANIFEST_JOIN_IMPLEMENTED / NO_POPULATION_SELECTION / NO_MATCHED_RESULT / NO_LIVE_AUTHORITY / NO_GO**
 
 Date: `2026-08-25`
 
@@ -51,6 +51,13 @@ Configuration-subset plus requested-provider-policy manifest-join carrier:
 
 ProblemSpec declaration producer carrier:
 `1b967d938c1c3956a7024d0c9d0aeb35833fef52`
+
+ProblemSpec declaration/manifest depth-envelope base:
+`cb7497950e99d23e705ee308e9223c466f23bda7`
+
+Configuration-subset, requested-provider-policy and ProblemSpec-declaration
+manifest-join carrier:
+`76702588573958241ca861b99a8684e2f46a2bb4`
 
 This is a measurement and future-study design, not a live preregistration. It
 does not select, rank or materialize a case, seed, salt, population, campaign
@@ -283,18 +290,59 @@ This carrier proves only that the root-dir-excluded normalized declaration was
 mechanically bridged and installed at the reviewed local seams. It does not
 prove adapter behavior, freshness after the run gate, research input or
 runtime research-history consumption, verification behavior or runtime
-enforcement, the source carrier or B0 content, manifest timing or joins, a
+enforcement, the source carrier or B0 content, manifest timing, a
 matched result, population, live authority or GO. The S2c1/S2c2 manifest v1
 and S2c4 manifest v2 schemas, loaders, results and limitations are unchanged;
-joining this new declaration and third control leaf across ten roots requires
-a separate future v3 rather than an implicit upgrade of either existing
-manifest boundary.
+this producer does not implicitly upgrade either existing manifest boundary.
+
+Prerequisite base `cb7497950e99d23e705ee308e9223c466f23bda7` bounds the
+complete ProblemSpec declaration leaf to JSON depth 23. Embedding that leaf as
+one v3 manifest member therefore reaches at most the unchanged manifest
+depth-24 boundary. Carrier `76702588573958241ca861b99a8684e2f46a2bb4` then
+adds a wholly separate package-private, manifest-path-only, validation-only v3
+boundary. The top-level manifest contains one common
+`declared_problem_spec`. Each of the ten ordered roots must expose
+`initial_screening_problem_spec.json` as its eighth private leaf, and each leaf
+must equal the declaration in both raw canonical bytes and the independently
+decoded frozen value. The decoder is a frozen postrun grammar and does not
+import the producer, Pydantic models, bridge or adapter/runtime validators.
+
+Every root's eight leaves are read through one held descriptor. The new leaf
+participates in the existing per-leaf and aggregate bounds, private-mode checks,
+global non-alias audit and integrated fresh manifest/history/ten-root rewalk;
+a held-parent fingerprint check and second fresh manifest-only rewalk follow.
+The requested-provider-policy v2 joins are preserved. The controls join also
+checks the declaration's objective metrics and objective policy at all arms,
+plus the reviewed measurement-consumer overlap when governance is enabled.
+Only after both fresh passes does the validator run all ten S2a structural
+decodes; every decoded value is discarded.
+
+The sole success is the fixed private
+`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_AND_PROBLEM_SPEC_DECLARATION_JOINED`
+mapping with the exact ordered 24 limitations. It removes only
+`PROBLEM_SPEC_UNVERIFIED` relative to v2. It retains
+`PROBLEM_ADAPTER_UNVERIFIED`, research-input and runtime-history-consumption
+limitations, verification and both enforcement limitations, source/B0,
+manifest/Git/pre-outcome timing, population freshness and actual launch-order
+limitations, root lifetime freshness, and the matched/live/GO prohibitions.
+Its 76 focused, 258 combined v1/v2/v3 and 599 full postrun tests passed. An
+independent 2,206-variant producer-versus-decoder differential yielded 1,602
+unique publishable declaration byte strings and zero decoder rejections; both
+independent reviews reported P0/P1/P2 = `0/0/0`.
+
+This v3 proves only the private structural declaration join. It does not prove
+adapter behavior, research-input or history consumption, verification or
+runtime enforcement, source/B0 content, ordinary-Git or pre-outcome timing,
+population freshness, actual launch order, a matched result, live authority or
+GO. It calls no D2, D3 or endpoint. V1 and v2 tracked bytes, APIs, statuses and
+limitations are unchanged.
 
 Together these carriers implement and audit K=2, telemetry, initial-only
 retirement, ordinal cells, decoded study structure, safe root loading and the
 pre-run configuration subset plus its first manifest/root/independent-file
 join, a separate requested-provider-policy producer, the private v2 join and a
-separate producer-only ProblemSpec declaration.
+separate producer-only ProblemSpec declaration plus its private structural v3
+join.
 Tests include provider-/solver-free actual-writer roundtrips as well as
 synthetic interruption and mutation matrices; they do not select a population,
 execute a matched experiment or show that K=2 improves CVRP research.
@@ -651,11 +699,27 @@ seams. Its pre-first-leaf gate validates the provisional five-object graph;
 post-construction registration first validates the full installed seams; and
 the run gate revalidates all three leaf publications and those full joins.
 This is not a manifest join and does not upgrade the v1 or v2 schemas. A
-separate future v3 must declare and join the ProblemSpec leaf across all ten
-roots. The exact 11 declaration limitations continue to
-exclude adapter behavior, post-gate freshness, research input and runtime
+separate v3 now declares and joins the ProblemSpec leaf across all ten roots
+without changing those schemas. The exact 11 declaration limitations continue
+to exclude adapter behavior, post-gate freshness, research input and runtime
 history consumption, verification, source/B0, manifest, matched, live and GO
 claims.
+
+Prerequisite base `cb749795` closes the declaration/manifest depth envelope at
+23/24. Carrier `76702588` adds that separate validation-only v3, reads the
+eighth private leaf from every root through the same held root descriptor and
+requires both raw and independently normalized equality to the one common
+manifest declaration. It includes the new leaf in bounds, global non-alias
+checks and integrated fresh manifest/history/ten-root rewalk, preserves the v2
+policy joins, and validates the reviewed ProblemSpec/control overlaps. A
+held-parent fingerprint check and second fresh manifest-only rewalk follow;
+then it structurally decodes and discards all ten S2a roots. Its only success is
+the exact ordered-24
+`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_AND_PROBLEM_SPEC_DECLARATION_JOINED`
+mapping. Its 76 focused, 258 combined and 599 postrun tests and 2,206-variant
+differential passed, with both independent reviews at P0/P1/P2 = `0/0/0`.
+V1/v2 tracked bytes and results are unchanged; v3 calls no D2, D3 or endpoint
+and creates no matched result, population, live authority or GO token.
 
 Before any live preregistration, the remaining gates are to:
 
@@ -667,11 +731,11 @@ Before any live preregistration, the remaining gates are to:
   validator does not prove Git identity, commit timing, absence of M32 outcome
   ingestion, population freshness or actual arm launch order;
 - extend the generic controls beyond the now-joined bounded qualification,
-  code-research, resource, scheduler, Protocol and requested-provider-policy
-  subset. The normalized root-dir-excluded ProblemSpec declaration now has a
-  producer-only local installation boundary, but it is not joined by either
-  manifest version and does not prove adapter behavior. A separate v3 must
-  join it. Actual research-input/history consumption, normalized
+  code-research, resource, scheduler, Protocol, requested-provider-policy and
+  ProblemSpec-declaration subsets. The normalized root-dir-excluded ProblemSpec
+  declaration now has a producer-only local installation boundary and a
+  separate private structural v3 join, but adapter behavior remains unverified.
+  Actual research-input/history consumption, normalized
   requested/resolved solver and verification configuration, declared
   hardwall cap and launcher configuration, and source/B0 content and order
   remain unproved; source revision remains an external ordinary fact, not

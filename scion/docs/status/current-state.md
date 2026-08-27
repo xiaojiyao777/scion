@@ -790,10 +790,42 @@ limitations preserve `PROBLEM_ADAPTER_UNVERIFIED`,
 `LIVE_EXECUTION_UNAUTHORIZED` and `STUDY_GO_UNAUTHORIZED`. It does not prove
 adapter behavior, freshness after the run gate, research input or runtime
 history consumption, verification behavior or enforcement, source/B0,
-manifest timing or joins, matched results, population, live authority or GO.
+manifest timing, matched results, population, live authority or GO.
 The existing manifest v1 and v2 schemas, loaders, statuses and limitations are
-unchanged; a separate future v3 must declare and join this ProblemSpec leaf
-across all ten roots.
+unchanged; the producer does not implicitly upgrade either manifest.
+
+The ProblemSpec declaration/manifest depth prerequisite is base `cb749795`:
+the complete declaration leaf is bounded to JSON depth 23, so its one-level
+embedding remains within the unchanged depth-24 manifest parser. Carrier
+`76702588` adds the wholly separate package-private, manifest-path-only,
+validation-only v3. Its top level contains one common declared ProblemSpec,
+and all ten ordered roots must expose `initial_screening_problem_spec.json` as
+the eighth private leaf with identical raw canonical bytes and independently
+decoded frozen value. The decoder is independent of the producer, Pydantic,
+bridge and adapter/runtime validators.
+
+Each root's eight leaves are read through one held descriptor and participate
+in bounded I/O, private-leaf checks, the global non-alias audit, integrated
+fresh manifest/history/ten-root rewalk. A held-parent fingerprint check and
+second fresh manifest-only rewalk follow. V2 provider-policy joins remain
+exact, and the reviewed ProblemSpec objective/measurement projections join the
+controls. Only then are all ten S2a roots structurally decoded and discarded.
+The sole success is the fixed
+`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_AND_PROBLEM_SPEC_DECLARATION_JOINED`
+mapping with the exact ordered 24 limitations. The 76 focused, 258 combined
+v1/v2/v3 and 599 full postrun tests passed; an independent 2,206-variant
+producer/decoder differential produced 1,602 unique publishable declaration
+byte strings with zero decoder rejections, and both independent reviews
+reported P0/P1/P2 = `0/0/0`.
+
+V3 removes only `PROBLEM_SPEC_UNVERIFIED` relative to v2. It retains adapter,
+research-input, runtime-history-consumption, verification, source/B0,
+manifest/Git/pre-outcome, provider/remote/enforcement, population/launch-order,
+root-lifetime and matched/live/GO limitations. It calls no D2, D3 or endpoint
+and does not create a matched result, population, live authority or GO token.
+This is a private structural declaration join, not evidence of adapter
+behavior, consumption, enforcement, source/B0 content or preregistration
+timing. V1 and v2 tracked bytes, APIs, statuses and limitations are unchanged.
 
 The original safe loader proves detached captured bytes and sequential
 root/leaf revalidation, not a simultaneous ten-root snapshot or live freshness.
@@ -818,12 +850,12 @@ limitation. V2 retains `STUDY_MANIFEST_UNVERIFIED`, provider
 credential/account, process network/TLS, remote-backend, request-code-constant,
 timeout/retry-enforcement and client-lifetime limitations, both runner and
 external-hardwall enforcement limitations, and matched/live/GO prohibitions.
-The normalized ProblemSpec declaration now has a producer-only local boundary,
-but neither manifest joins it and adapter behavior remains unverified.
-Research input, actual runtime history consumption, normalized
-requested/resolved solver and verification configuration, runner/backend
-enforcement, declared and external hardwall
-enforcement, launcher configuration, full source/B0 content, population
+The normalized ProblemSpec declaration now has both a producer-only local
+boundary and the separate private structural v3 join, while adapter behavior
+remains unverified. Research input, actual runtime history consumption,
+normalized requested/resolved solver and verification configuration,
+runner/backend enforcement, declared and external hardwall enforcement,
+launcher configuration, full source/B0 content, population
 freshness and actual arm launch order all remain outside the joined subset.
 Provider credential/account identity, process network/TLS environment, remote
 backend identity, request code constants, timeout/retry enforcement and client
