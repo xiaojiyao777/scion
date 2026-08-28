@@ -6,8 +6,9 @@ import math
 import sys
 import weakref
 from _thread import LockType
+from collections.abc import Callable
 from dataclasses import fields
-from types import MethodType, ModuleType
+from types import MappingProxyType, MethodType, ModuleType
 from typing import Any, cast
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
@@ -99,6 +100,39 @@ def _loaded_problem_error_type() -> Any | None:
 
 def _loaded_problem_owner_is_registered(owner: Any) -> bool:
     storage = _loaded_problem_boundary_storage()
+    return storage is not None and _weak_registry_contains_owner(
+        storage.get("_REGISTERED_OWNERS"), owner
+    )
+
+
+def _loaded_research_context_boundary_storage() -> dict[str, Any] | None:
+    module_name = "scion.core.initial_screening_research_context_validation"
+    modules = sys.modules
+    if type(modules) is not dict or any(type(key) is not str for key in modules):
+        raise TypeError
+    module = modules.get(module_name)
+    if module is None:
+        return None
+    if type(module) is not ModuleType:
+        raise TypeError
+    storage = vars(module)
+    if (
+        type(storage) is not dict
+        or any(type(key) is not str for key in storage)
+        or type(storage.get("__name__")) is not str
+        or storage.get("__name__") != module_name
+    ):
+        raise TypeError
+    return storage
+
+
+def _loaded_research_context_error_type() -> Any | None:
+    storage = _loaded_research_context_boundary_storage()
+    return None if storage is None else storage.get("_RESEARCH_CONTEXT_ERROR")
+
+
+def _loaded_research_context_owner_is_registered(owner: Any) -> bool:
+    storage = _loaded_research_context_boundary_storage()
     return storage is not None and _weak_registry_contains_owner(
         storage.get("_REGISTERED_OWNERS"), owner
     )
@@ -520,4 +554,168 @@ def _has_exact_methods(
             getattr(expected_type, name),
         )
         for name in names
+    )
+
+
+def _make_module_builtin_guard(
+    module: Any,
+    module_name: Any,
+    sys_module: Any,
+    modules: Any,
+    names: Any,
+    public_name: Any,
+    names_name: Any = None,
+    type_anchor: Any = type,
+    vars_anchor: Any = vars,
+    module_type: Any = ModuleType,
+    dict_type: Any = dict,
+    tuple_type: Any = tuple,
+    str_type: Any = str,
+    error_type: Any = TypeError,
+) -> Callable[[], None]:
+    def validate() -> None:
+        if (
+            type_anchor(module) is not module_type
+            or type_anchor(sys_module) is not module_type
+            or type_anchor(module_name) is not str_type
+            or type_anchor(modules) is not dict_type
+            or type_anchor(names) is not tuple_type
+            or type_anchor(public_name) is not str_type
+            or (names_name is not None and type_anchor(names_name) is not str_type)
+        ):
+            raise error_type
+        storage, sys_storage = vars_anchor(module), vars_anchor(sys_module)
+        for value in (storage, sys_storage, modules):
+            if type_anchor(value) is not dict_type:
+                raise error_type
+            for key in value:
+                if type_anchor(key) is not str_type:
+                    raise error_type
+        if (
+            type_anchor(storage.get("__name__")) is not str_type
+            or storage["__name__"] != module_name
+            or sys_storage.get("modules") is not modules
+            or modules.get(module_name) is not module
+            or (names_name is not None and storage.get(names_name) is not names)
+            or storage.get(public_name) is not validate
+        ):
+            raise error_type
+        for name in names:
+            if type_anchor(name) is not str_type or name in storage:
+                raise error_type
+
+    return validate
+
+
+_RESEARCH_VALIDATION_BUILTIN_NAMES = tuple(
+    str.split(
+        "BaseException TypeError ValueError all any bool bytes dict float int len list "
+        "set str tuple type vars zip",
+        " ",
+    )
+)
+
+
+def _make_research_validation_builtin_guard(
+    module: Any,
+    sys_module: Any,
+    modules: Any,
+    names: Any = _RESEARCH_VALIDATION_BUILTIN_NAMES,
+    vars_anchor: Any = vars,
+) -> Callable[[], None]:
+    return _make_module_builtin_guard(
+        module,
+        vars_anchor(module)["__name__"],
+        sys_module,
+        modules,
+        names,
+        "_validate_validation_builtin_guard",
+    )
+
+
+def _research_validation_anchor_items(value: Any) -> tuple[tuple[Any, Any], ...]:
+    if type(value) is not dict:
+        raise TypeError
+    for key in value:
+        if (
+            type(key) is not tuple
+            or len(key) != 2
+            or type(key[0]) is not type
+            or type(key[1]) is not str
+        ):
+            raise TypeError
+    return tuple(value.items())
+
+
+def _same_research_validation_anchor_items(value: Any, expected: Any) -> bool:
+    if type(value) is not dict or type(expected) is not tuple:
+        return False
+    current = _research_validation_anchor_items(value)
+    if len(current) != len(expected):
+        return False
+    for current_item, expected_item in zip(current, expected):
+        if type(expected_item) is not tuple or len(expected_item) != 2:
+            return False
+        current_key, current_value = current_item
+        expected_key, expected_value = expected_item
+        if (
+            type(expected_key) is not tuple
+            or len(expected_key) != 2
+            or current_key[0] is not expected_key[0]
+            or current_key[1] != expected_key[1]
+            or current_value is not expected_value
+        ):
+            return False
+    return True
+
+
+def _same_research_validation_key(left: Any, right: Any) -> bool:
+    if type(left) is not type(right):
+        return False
+    if type(left) is tuple:
+        return len(left) == len(right) and all(
+            _same_research_validation_key(left_item, right_item)
+            for left_item, right_item in zip(left, right)
+        )
+    if type(left) is float:
+        return left.hex() == right.hex()
+    if left is None or type(left) in {str, bytes, bool, int}:
+        return left == right
+    return left is right
+
+
+def _research_validation_class_surface(value: type[Any]) -> tuple[Any, ...]:
+    if type(value) is not type:
+        raise TypeError
+    storage = vars(value)
+    if type(storage) is not MappingProxyType or any(
+        type(name) is not str for name in storage
+    ):
+        raise TypeError
+    return (
+        value,
+        type.__getattribute__(value, "__name__"),
+        type.__getattribute__(value, "__qualname__"),
+        type.__getattribute__(value, "__module__"),
+        type.__getattribute__(value, "__mro__"),
+    )
+
+
+def _research_validation_is_empty_tuple(value: Any) -> bool:
+    return type(value) is tuple and len(value) == 0
+
+
+def _research_validation_int_tuple(value: Any, length: int) -> bool:
+    return (
+        type(value) is tuple
+        and len(value) == length
+        and all(type(item) is int for item in value)
+    )
+
+
+def _research_validation_directory_fingerprints(value: Any) -> bool:
+    return (
+        type(value) is tuple
+        and bool(value)
+        and all(_research_validation_int_tuple(item, 2) for item in value)
     )

@@ -1,15 +1,21 @@
-"""Private pre-run validation for initial-screening config-subset controls."""
-
 from __future__ import annotations
 
 import os
+import sys
 import weakref
 from _thread import LockType
+from collections.abc import Callable
 from dataclasses import fields
-from types import GetSetDescriptorType, MethodType
+from types import FunctionType, GetSetDescriptorType, MethodType, ModuleType
 from typing import Any, cast
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
+from scion.core import (
+    initial_screening_study_controls_run_validation as run_validation_module,
+)
+from scion.core import (
+    initial_screening_study_provider_policy_validation as provider_validation_module,
+)
 from scion.core.branch import BranchController
 from scion.core.branch_step_runner import BranchStepRunner
 from scion.core.campaign_loop import CampaignLoop
@@ -19,12 +25,8 @@ from scion.core.decision_finalizer import DecisionFinalizer
 from scion.core.evaluation_orchestrator import EvaluationOrchestrator
 from scion.core.explore_step.pipeline import ExploreStepPipeline
 from scion.core.initial_screening_study_controls import (
-    _ERROR,
-    _FILENAME,
-    _MAX_BYTES,
     _REGISTERED_OWNERS,
     _InitialScreeningRuntimeInputs,
-    _InitialScreeningStudyControlsError,
     _RegisteredControlsBaseline,
     _runtime_payload_bytes,
 )
@@ -34,20 +36,12 @@ from scion.core.initial_screening_study_controls_io import (
     _validate_private_child_directory,
 )
 from scion.core.initial_screening_study_controls_shapes import (
-    _loaded_problem_error_type,
-    _loaded_problem_owner_is_registered,
     _validate_dataclass_instance,
     _validate_model_instance,
     _validate_objective_shapes,
     _validate_pristine_storage_shapes,
     _validate_protocol_wrapper_shape,
     _weak_registry_contains_owner,
-)
-from scion.core.initial_screening_study_provider_policy import (
-    _ERROR as _PROVIDER_ERROR,
-)
-from scion.core.initial_screening_study_provider_policy import (
-    _InitialScreeningProviderPolicyError,
 )
 from scion.core.problem_runtime import ProblemRuntime
 from scion.core.proposal_pipeline import ProposalPipeline
@@ -70,6 +64,51 @@ from scion.proposal.engine.provider_call import ProviderCaller
 from scion.protocol.experiment import ExperimentProtocol
 from scion.verification.gate import VerificationGate
 
+_RUN_VALIDATION_MODULE_NAME = (
+    "scion.core.initial_screening_study_controls_run_validation"
+)
+if type(run_validation_module) is not ModuleType:
+    raise TypeError
+_RUN_VALIDATION_STORAGE = vars(run_validation_module)
+if (
+    type(_RUN_VALIDATION_STORAGE) is not dict
+    or any(type(name) is not str for name in _RUN_VALIDATION_STORAGE)
+    or type(_RUN_VALIDATION_STORAGE.get("__name__")) is not str
+    or _RUN_VALIDATION_STORAGE["__name__"] != _RUN_VALIDATION_MODULE_NAME
+):
+    raise TypeError
+_RUN_VALIDATION_ENTRY = _RUN_VALIDATION_STORAGE.get("_validate_initial_screening_run")
+if type(_RUN_VALIDATION_ENTRY) is not FunctionType:
+    raise TypeError
+_RUN_PUBLICATION_HOOKS = (
+    _validate_controls_publication,
+    _validate_private_child_directory,
+)
+
+
+def _make_run_dispatch_store(
+    error_type: Any = TypeError,
+) -> tuple[Callable[[Any], None], Callable[[], Any]]:
+    authority: Any = None
+
+    def install(value: Any) -> None:
+        nonlocal authority
+        if authority is not None:
+            raise error_type
+        authority = value
+
+    def read() -> Any:
+        if authority is None:
+            raise error_type
+        return authority
+
+    return install, read
+
+
+_install_run_dispatch_authority, _read_run_dispatch_authority = (
+    _make_run_dispatch_store()
+)
+del _make_run_dispatch_store
 _DIRECT_SERVICE_TYPES = {
     "_initial_screening_study_controls": _InitialScreeningRuntimeInputs,
     "_protocol_config": ProtocolConfig,
@@ -99,125 +138,50 @@ _DIRECT_SERVICE_TYPES = {
 }
 
 
-class _ProblemMarkerMissingError(RuntimeError):
-    """Internal signal for a registered problem owner with cleared markers."""
-
-
 def _validate_initial_screening_requested_rounds(
     requested_rounds: Any,
     owner: Any,
+    caller_binding_valid: Any = True,
+    run_module: ModuleType = run_validation_module,
+    run_name: str = _RUN_VALIDATION_MODULE_NAME,
+    run_entry: Any = _RUN_VALIDATION_ENTRY,
+    sys_module: ModuleType = sys,
+    sys_modules: dict[str, Any] = sys.modules,
+    dispatch_reader: Callable[[], Any] = _read_run_dispatch_authority,
+    safe_ops: Any = (type, vars, any, ModuleType, FunctionType, dict, str),
 ) -> None:
-    """Fail before preflight unless the registered root and runtime remain exact."""
-
-    failed = False
-    provider_failed = False
-    problem_failed = False
-    try:
-        _validate_registered_run(requested_rounds, owner)
-    except _InitialScreeningProviderPolicyError:
-        provider_failed = True
-    except Exception as error:  # noqa: BLE001 - preserve fixed private boundaries
-        problem_error_type = _loaded_problem_error_type()
-        problem_failed = type(error) is _ProblemMarkerMissingError or (
-            problem_error_type is not None and type(error) is problem_error_type
+    type_fn, vars_fn, any_fn, module_type, function_type, dict_type, str_type = safe_ops
+    modules_shaped = type_fn(run_module) is module_type is type_fn(sys_module)
+    run_storage = vars_fn(run_module) if modules_shaped else {}
+    sys_storage = vars_fn(sys_module) if modules_shaped else {}
+    if not (
+        (caller_binding_valid is True or caller_binding_valid is None)
+        and modules_shaped
+        and not (
+            type_fn(run_storage) is not dict_type
+            or any_fn(type_fn(name) is not str_type for name in run_storage)
+            or type_fn(sys_storage) is not dict_type
+            or any_fn(type_fn(name) is not str_type for name in sys_storage)
+            or type_fn(run_name) is not str_type
+            or type_fn(run_storage.get("__name__")) is not str_type
+            or run_storage["__name__"] != run_name
+            or type_fn(sys_modules) is not dict_type
+            or any_fn(type_fn(name) is not str_type for name in sys_modules)
+            or sys_storage.get("modules") is not sys_modules
+            or sys_modules.get(run_name) is not run_module
+            or type_fn(run_entry) is not function_type
+            or run_storage.get("_validate_initial_screening_run") is not run_entry
         )
-        failed = not problem_failed
-    if provider_failed:
-        raise _InitialScreeningProviderPolicyError(_PROVIDER_ERROR)
-    if problem_failed:
-        from scion.core.initial_screening_problem_spec import (
-            _ERROR as _PROBLEM_ERROR,
-        )
-        from scion.core.initial_screening_problem_spec import (
-            _InitialScreeningProblemSpecError,
-        )
-
-        raise _InitialScreeningProblemSpecError(_PROBLEM_ERROR)
-    if failed:
-        raise _InitialScreeningStudyControlsError(_ERROR)
-
-
-def _validate_registered_run(requested_rounds: Any, owner: Any) -> None:
-    owner_storage = _campaign_owner_storage(owner)
-    from scion.core.initial_screening_study_provider_policy_validation import (
-        _prepare_provider_policy_run_validation,
-        _validate_provider_policy_installed_runtime,
-        _validate_provider_policy_publication,
-    )
-
-    provider_state = _prepare_provider_policy_run_validation(owner)
-    problem_marker_keys = {
-        "_initial_screening_problem_spec_active",
-        "_initial_screening_problem_spec",
-    }
-    if problem_marker_keys & set(owner_storage):
-        from scion.core.initial_screening_problem_spec_validation import (
-            _prepare_problem_spec_run_validation,
-            _validate_problem_spec_installed_runtime,
-            _validate_problem_spec_publication,
-        )
-
-        problem_state = _prepare_problem_spec_run_validation(owner, owner_storage)
-    else:
-        if _loaded_problem_owner_is_registered(owner):
-            raise _ProblemMarkerMissingError
-        problem_state = None
-    marker_keys = {
-        "_initial_screening_study_controls_active",
-        "_initial_screening_study_controls",
-    }
-    if not marker_keys.issubset(owner_storage):
-        raise TypeError
-    active = owner_storage["_initial_screening_study_controls_active"]
-    runtime_inputs = owner_storage["_initial_screening_study_controls"]
-    baseline = _registered_baseline(owner, active, runtime_inputs)
-    if baseline is None:
-        if provider_state is not None or problem_state is not None:
-            raise ValueError
-        return
-    _validate_baseline_shape(baseline)
-    registered = baseline.runtime_inputs_ref()
-    if (
-        active is not True
-        or type(runtime_inputs) is not _InitialScreeningRuntimeInputs
-        or runtime_inputs is not registered
-        or type(requested_rounds) is not int
     ):
-        raise ValueError
-    _validate_runtime_and_publication_shape(runtime_inputs)
-    if requested_rounds != baseline.requested_rounds:
-        raise ValueError
-    publication = _validate_carrier_against_baseline(runtime_inputs, baseline)
-    _validate_claimed_controls_structural_shape(runtime_inputs, owner)
-    if (
-        type(getattr(owner, "_campaign_dir", None)) is not str
-        or owner._campaign_dir != baseline.campaign_dir
-    ):
-        raise ValueError
-    _validate_controls_publication(
-        publication,
-        baseline.payload_bytes,
-        filename=_FILENAME,
-        max_bytes=_MAX_BYTES,
-    )
-    if provider_state is not None:
-        _validate_provider_policy_publication(provider_state, publication)
-    if problem_state is not None:
-        if provider_state is None:
-            raise ValueError
-        _validate_problem_spec_publication(
-            problem_state, runtime_inputs, provider_state
-        )
-    _validate_private_child_directory(
-        publication,
-        "metrics",
-        baseline.metrics_directory_fingerprint,
-    )
-    _validate_installed_runtime(owner, runtime_inputs, baseline)
-    if provider_state is not None:
-        _validate_provider_policy_installed_runtime(provider_state, owner)
-    if problem_state is not None:
-        _validate_problem_spec_installed_runtime(problem_state, owner)
+        caller_binding_valid = False
+    valid, dispatch = caller_binding_valid, dispatch_reader()
+    run_entry(requested_rounds, owner, caller_valid=valid, controls_dispatch=dispatch)
+
+
+_REQUESTED_ROUNDS_CALLER_AUTHORITY = (
+    "_validate_initial_screening_requested_rounds",
+    _validate_initial_screening_requested_rounds,
+)
 
 
 def _registered_baseline(
@@ -994,3 +958,42 @@ def _has_exact_methods(
         )
         for name in names
     )
+
+
+_CONTROLS_RUN_DISPATCH_NAMES = (
+    "_campaign_owner_storage",
+    "_registered_baseline",
+    "_validate_baseline_shape",
+    "_validate_carrier_against_baseline",
+    "_validate_claimed_controls_structural_shape",
+    "_validate_controls_publication",
+    "_validate_installed_runtime",
+    "_validate_private_child_directory",
+    "_validate_runtime_and_publication_shape",
+)
+_PROVIDER_RUN_DISPATCH_NAMES = (
+    "_prepare_provider_policy_run_validation",
+    "_validate_provider_policy_publication",
+    "_validate_provider_policy_installed_runtime",
+)
+_CONTROLS_SELF_MODULE = sys.modules[__name__]
+_CONTROLS_SELF_NAME = vars(_CONTROLS_SELF_MODULE)["__name__"]
+_PROVIDER_VALIDATION_NAME = vars(provider_validation_module)["__name__"]
+_install_run_dispatch_authority(
+    (
+        _CONTROLS_SELF_MODULE,
+        _CONTROLS_SELF_NAME,
+        _CONTROLS_RUN_DISPATCH_NAMES,
+        tuple(
+            vars(_CONTROLS_SELF_MODULE)[name] for name in _CONTROLS_RUN_DISPATCH_NAMES
+        ),
+        provider_validation_module,
+        _PROVIDER_VALIDATION_NAME,
+        _PROVIDER_RUN_DISPATCH_NAMES,
+        tuple(
+            vars(provider_validation_module)[name]
+            for name in _PROVIDER_RUN_DISPATCH_NAMES
+        ),
+    )
+)
+del _install_run_dispatch_authority

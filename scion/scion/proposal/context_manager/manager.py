@@ -12,7 +12,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from types import FunctionType, ModuleType
+from typing import Any
 
 from scion.config.problem import ProblemSpec
 from scion.contract.patch_paths import matches_config_pattern
@@ -94,6 +95,82 @@ _MEASUREMENT_PRIVATE_FIELDS = frozenset(
         "phase_telemetry",
     }
 )
+_RESEARCH_CONTEXT_EDGE_AUTHORITY_HOLDER: None = None
+
+
+def _make_hypothesis_context_edge_authority() -> tuple[Any, Any, Any]:
+    authority: Any = None
+    type_fn, tuple_type, len_fn = type, tuple, len
+    function_type, module_type, vars_fn = FunctionType, ModuleType, vars
+
+    def install(reader: Any, entries: Any) -> None:
+        nonlocal authority
+        if (
+            authority is not None
+            or type_fn(reader) is not function_type
+            or type_fn(entries) is not tuple_type
+            or len_fn(entries) != 2
+            or reader() is not entries
+        ):
+            raise TypeError
+        authority = entries
+
+    def read() -> Any:
+        return authority
+
+    def bind(original: Any) -> Any:
+        def bound(
+            self,
+            branch: Branch,
+            champion: ChampionState,
+            problem_spec: ProblemSpec,
+            step_history: list[StepRecord] | None = None,
+            branch_workspace: str | None = None,
+        ) -> dict[str, Any]:
+            self_storage = vars_fn(self)
+            active = "_initial_screening_research_context_capsule" in self_storage
+            edge_authority = read() if active else None
+            if active and edge_authority is None:
+                from scion.core import (
+                    initial_screening_research_context_edges as edges_module,
+                )
+
+                if type_fn(edges_module) is not module_type:
+                    raise TypeError
+                edge_authority = read()
+            if active:
+                if edge_authority is None:
+                    raise TypeError
+                materializer = edge_authority[1][1]()
+            else:
+                materializer = None
+            return original(
+                self,
+                branch,
+                champion,
+                problem_spec,
+                step_history,
+                branch_workspace,
+                _research_context_edge_authority=(self_storage, materializer)
+                if active
+                else None,
+            )
+
+        bound.__name__ = original.__name__
+        bound.__qualname__ = original.__qualname__
+        bound.__module__ = original.__module__
+        bound.__doc__ = original.__doc__
+        return bound
+
+    return install, read, bind
+
+
+(
+    _install_research_context_edge_authority,
+    _read_research_context_edge_authority,
+    _bind_hypothesis_context_edge_authority,
+) = _make_hypothesis_context_edge_authority()
+del _make_hypothesis_context_edge_authority
 
 
 def _filter_hypothesis_prompt_steps(
@@ -157,13 +234,16 @@ class ContextManager:
         )
         return tuple(bounded_projection["observations"])
 
+    @_bind_hypothesis_context_edge_authority
     def build_hypothesis_context(
         self,
         branch: Branch,
         champion: ChampionState,
         problem_spec: ProblemSpec,
-        step_history: Optional[list[StepRecord]] = None,
-        branch_workspace: Optional[str] = None,
+        step_history: list[StepRecord] | None = None,
+        branch_workspace: str | None = None,
+        *,
+        _research_context_edge_authority: Any = None,
     ) -> dict[str, Any]:
         """Return the V3 round-one research context.
 
@@ -269,17 +349,27 @@ class ContextManager:
         )
         if measurement:
             context["problem_measurement_diagnostics"] = measurement
-        if self._research_input is not None:
-            context["research_question"] = {
-                "current_question": self._research_input["current_question"],
-            }
-        if self._prior_research_observations:
-            context["prior_research_observations"] = list(
-                self._prior_research_observations
-            )
-        if self._research_history:
-            context["prior_research_history"] = provider_research_history(
-                self._research_history,
+        edge_state = _research_context_edge_authority
+        context_manager_storage = vars(self) if edge_state is None else edge_state[0]
+        capsule_name = "_initial_screening_research_context_capsule"
+        if capsule_name not in context_manager_storage:
+            if self._research_input is not None:
+                context["research_question"] = {
+                    "current_question": self._research_input["current_question"],
+                }
+            if self._prior_research_observations:
+                context["prior_research_observations"] = list(
+                    self._prior_research_observations
+                )
+            if self._research_history:
+                context["prior_research_history"] = provider_research_history(
+                    self._research_history,
+                )
+        else:
+            materialize_research_context = edge_state[1]
+
+            context.update(
+                materialize_research_context(context_manager_storage[capsule_name])
             )
         guidance = materialize_solver_design_prompt_guidance(
             provider,
@@ -296,8 +386,8 @@ class ContextManager:
         hypothesis: HypothesisProposal,
         champion: ChampionState,
         problem_spec: ProblemSpec,
-        branch_workspace: Optional[str] = None,
-        step_history: Optional[list[StepRecord]] = None,
+        branch_workspace: str | None = None,
+        step_history: list[StepRecord] | None = None,
         development_suites: Sequence[Any] = (),
     ) -> dict[str, Any]:
         """Return the V3 round-two implementation context only."""
@@ -334,9 +424,7 @@ class ContextManager:
             else None
         )
         problem_id = str(
-            getattr(adapter_spec, "id", None)
-            or getattr(problem_spec, "name", "")
-            or ""
+            getattr(adapter_spec, "id", None) or getattr(problem_spec, "name", "") or ""
         ).strip()
         qualified_module_prefixes = (
             (f"scion.problems.{problem_id}.",) if problem_id else ()
@@ -497,7 +585,7 @@ def _build_objective_policy_guidance(adapter_spec: Any | None) -> dict[str, Any]
     if adapter_spec is None:
         return {}
     objectives = sorted(
-        list(getattr(adapter_spec, "objectives", []) or []),
+        getattr(adapter_spec, "objectives", []) or [],
         key=lambda item: getattr(item, "priority", 0),
     )
     policy = getattr(adapter_spec, "objective_policy", None)
@@ -825,7 +913,7 @@ def _problem_measurement_diagnostics(
     if callable(hook):
         try:
             adapter_payload = hook()
-        except Exception:
+        except Exception:  # noqa: BLE001 - optional problem-owned projection
             adapter_payload = None
         if isinstance(adapter_payload, Mapping):
             projected = _project_measurement_payload(adapter_payload)

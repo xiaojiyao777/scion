@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import sys
 import weakref
 from dataclasses import dataclass, fields
-from types import MethodType
+from types import MethodType, ModuleType
 from typing import Any, cast
 
 from scion.config.problem import ProblemSpec
 from scion.contract.gate import ContractGate
 from scion.contract.surface_access import SurfaceAccess
+from scion.core import initial_screening_problem_spec as problem_boundary_module
 from scion.core.code_development import CodeDevelopmentEvaluator
 from scion.core.evidence_recording.recorder import EvidenceRecorder
 from scion.core.initial_screening_problem_spec import (
@@ -32,6 +34,9 @@ from scion.core.initial_screening_problem_spec_anchors import (
 from scion.core.initial_screening_problem_spec_io import (
     _validate_third_control_publication,
 )
+from scion.core.initial_screening_study_controls_run_validation import (
+    _register_problem_run_authority,
+)
 from scion.core.operator_interface import (
     OperatorExecuteSignature,
     parse_execute_signature,
@@ -44,6 +49,25 @@ from scion.proposal.context_manager import ContextManager
 from scion.protocol.experiment import ExperimentProtocol
 from scion.runtime.workspace import WorkspaceMaterializer
 from scion.verification.gate import VerificationGate
+
+_SELF_VALIDATION_MODULE_NAME = "scion.core.initial_screening_problem_spec_validation"
+if (
+    type(sys.modules) is not dict
+    or any(type(name) is not str for name in sys.modules)
+    or type(__name__) is not str
+):
+    raise TypeError
+_SELF_VALIDATION_MODULE = sys.modules.get(__name__)
+if type(_SELF_VALIDATION_MODULE) is not ModuleType:
+    raise TypeError
+_SELF_VALIDATION_STORAGE = vars(_SELF_VALIDATION_MODULE)
+if (
+    type(_SELF_VALIDATION_STORAGE) is not dict
+    or any(type(name) is not str for name in _SELF_VALIDATION_STORAGE)
+    or type(_SELF_VALIDATION_STORAGE.get("__name__")) is not str
+    or _SELF_VALIDATION_STORAGE["__name__"] != _SELF_VALIDATION_MODULE_NAME
+):
+    raise TypeError
 
 
 @dataclass(frozen=True, repr=False)
@@ -332,6 +356,10 @@ def _prepare_problem_spec_run_validation_unchecked(
     ):
         raise _InitialScreeningProblemSpecError(_ERROR)
     _validate_runtime_shape(runtime_inputs)
+    _validate_problem_controls_join(
+        runtime_inputs,
+        owner_storage.get("_initial_screening_study_controls"),
+    )
     baseline = weakref.WeakKeyDictionary.get(_REGISTERED_OWNERS, owner)
     if type(baseline) is not _RegisteredProblemSpecBaseline:
         raise _InitialScreeningProblemSpecError(_ERROR)
@@ -344,8 +372,8 @@ def _prepare_problem_spec_run_validation_unchecked(
         or baseline.adapter_ref() is not runtime_inputs.adapter
     ):
         raise _InitialScreeningProblemSpecError(_ERROR)
-    services = _service_values(owner_storage)
-    _validate_nested_service_shapes(services)
+    services, research_capsule = _service_values(owner_storage)
+    _validate_nested_service_shapes(services, research_capsule)
     return _ProblemSpecRunState(runtime_inputs, baseline)
 
 
@@ -382,7 +410,9 @@ def _validate_problem_spec_publication_unchecked(
     baseline = state.baseline
     runtime_inputs = state.runtime_inputs
     publication = runtime_inputs.publication
-    controls_publication = controls_inputs.publication
+    controls_publication = _validate_problem_controls_join(
+        runtime_inputs, controls_inputs
+    )
     provider_baseline = provider_state.baseline
     if (
         type(publication) is not _ProblemSpecPublication
@@ -390,6 +420,8 @@ def _validate_problem_spec_publication_unchecked(
         or publication.directory_fingerprints != baseline.directory_fingerprints
         or publication.leaf_fingerprint != baseline.leaf_fingerprint
         or controls_publication.campaign_dir != publication.campaign_dir
+        or controls_publication.directory_fingerprints
+        != publication.directory_fingerprints
     ):
         raise _InitialScreeningProblemSpecError(_ERROR)
     _validate_third_control_publication(
@@ -429,8 +461,12 @@ def _validate_problem_spec_installed_runtime_unchecked(
     _problem_inputs_pristine_key(runtime_inputs)
     owner_storage = vars(owner)
     _exact_storage(owner_storage, set(owner_storage))
-    services = _service_values(owner_storage)
-    nested = _validate_nested_service_shapes(services)
+    _validate_problem_controls_join(
+        runtime_inputs,
+        owner_storage.get("_initial_screening_study_controls"),
+    )
+    services, research_capsule = _service_values(owner_storage)
+    nested = _validate_nested_service_shapes(services, research_capsule)
     spec = runtime_inputs.problem_spec
     spec_v1 = runtime_inputs.spec_v1
     adapter = runtime_inputs.adapter
@@ -497,6 +533,16 @@ def _validate_problem_spec_installed_runtime_unchecked(
     ):
         raise ValueError
     _validate_materializer(materializer, spec)
+    _register_problem_run_authority(
+        owner,
+        _SELF_VALIDATION_MODULE,
+        problem_boundary_module,
+        _prepare_problem_spec_run_validation,
+        _validate_problem_spec_publication,
+        _validate_problem_spec_installed_runtime,
+        _InitialScreeningProblemSpecError,
+        _ERROR,
+    )
 
 
 def _validate_problem_spec_baseline(state: _ProblemSpecRunState) -> None:
@@ -514,22 +560,27 @@ def _validate_problem_spec_baseline(state: _ProblemSpecRunState) -> None:
         raise ValueError
 
 
-def _service_values(owner_storage: dict[str, Any]) -> dict[str, Any]:
+def _service_values(owner_storage: dict[str, Any]) -> tuple[dict[str, Any], Any | None]:
     if not set(_SERVICE_SHAPES).issubset(owner_storage):
         raise TypeError
+    research_capsule = _research_context_capsule(owner_storage)
     services = {name: owner_storage[name] for name in _SERVICE_SHAPES}
     for name, (expected_type, keys, methods) in _SERVICE_SHAPES.items():
         service = services[name]
         if type(service) is not expected_type:
             raise TypeError
-        _exact_storage(vars(service), keys)
+        expected_keys = keys
+        if name == "_problem_runtime" and research_capsule is not None:
+            expected_keys = keys | {"_initial_screening_research_context_capsule"}
+        _exact_storage(vars(service), expected_keys)
         if not _has_exact_methods(service, expected_type, methods):
             raise TypeError
-    return services
+    return services, research_capsule
 
 
 def _validate_nested_service_shapes(
     services: dict[str, Any],
+    research_capsule: Any | None,
 ) -> tuple[ContextManager, SurfaceAccess, ResearchHistoryWriter]:
     problem_runtime = services["_problem_runtime"]
     contract = services["_contract_gate"]
@@ -537,16 +588,21 @@ def _validate_nested_service_shapes(
     ctx = vars(problem_runtime)["_ctx_manager"]
     surface = vars(contract)["_surface_access"]
     writer = vars(evidence)["_research_history_writer"]
+    capsule_name = "_initial_screening_research_context_capsule"
+    runtime_storage = vars(problem_runtime)
+    context_keys = {
+        "_adapter",
+        "_research_input",
+        "_prior_research_observations",
+        "_research_history",
+    }
+    if research_capsule is not None:
+        context_keys = context_keys | {capsule_name}
     nested_shapes = (
         (
             ctx,
             ContextManager,
-            {
-                "_adapter",
-                "_research_input",
-                "_prior_research_observations",
-                "_research_history",
-            },
+            context_keys,
             ("build_hypothesis_context", "build_code_context"),
         ),
         (
@@ -568,7 +624,119 @@ def _validate_nested_service_shapes(
         _exact_storage(vars(value), keys)
         if not _has_exact_methods(value, expected_type, methods):
             raise TypeError
+    context_storage = vars(ctx)
+    if research_capsule is not None and (
+        runtime_storage[capsule_name] is not research_capsule
+        or context_storage[capsule_name] is not research_capsule
+    ):
+        raise ValueError
     return ctx, surface, writer
+
+
+def _research_context_capsule(owner_storage: dict[str, Any]) -> Any | None:
+    active_name = "_initial_screening_research_context_active"
+    inputs_name = "_initial_screening_research_context"
+    marker_names = {active_name, inputs_name}
+    present = marker_names & set(owner_storage)
+    if not present:
+        return None
+    if present != marker_names or owner_storage[active_name] is not True:
+        raise TypeError
+    inputs = owner_storage[inputs_name]
+    inputs_type, capsule_type = _loaded_research_context_types()
+    if type(inputs) is not inputs_type:
+        raise TypeError
+    storage = vars(inputs)
+    if (
+        type(storage) is not dict
+        or any(type(key) is not str for key in storage)
+        or set(storage)
+        != {"request_snapshot", "capsule", "payload_bytes", "publication"}
+        or type(storage["capsule"]) is not capsule_type
+    ):
+        raise TypeError
+    return storage["capsule"]
+
+
+def _loaded_research_context_types() -> tuple[type, type]:
+    module_name = "scion.core.initial_screening_research_context_capsule"
+    modules = sys.modules
+    if type(modules) is not dict or any(type(key) is not str for key in modules):
+        raise TypeError
+    module = modules.get(module_name)
+    if type(module) is not ModuleType:
+        raise TypeError
+    storage = vars(module)
+    if (
+        type(storage) is not dict
+        or any(type(key) is not str for key in storage)
+        or type(storage.get("__name__")) is not str
+        or storage.get("__name__") != module_name
+    ):
+        raise TypeError
+    inputs_type = storage.get("_InitialScreeningResearchContextInputs")
+    capsule_type = storage.get("_InitialScreeningResearchContextCapsule")
+    if type(inputs_type) is not type or type(capsule_type) is not type:
+        raise TypeError
+    return inputs_type, capsule_type
+
+
+def _validate_problem_controls_join(
+    runtime_inputs: Any,
+    controls_inputs: Any,
+) -> Any:
+    from scion.core.initial_screening_study_controls import (
+        _InitialScreeningRuntimeInputs,
+    )
+    from scion.core.initial_screening_study_controls_io import (
+        _ControlsPublication,
+    )
+
+    if (
+        type(runtime_inputs) is not _InitialScreeningProblemSpecInputs
+        or type(controls_inputs) is not _InitialScreeningRuntimeInputs
+    ):
+        raise TypeError
+    problem_storage = vars(runtime_inputs)
+    controls_storage = vars(controls_inputs)
+    if (
+        type(problem_storage) is not dict
+        or any(type(key) is not str for key in problem_storage)
+        or set(problem_storage)
+        != {field.name for field in fields(_InitialScreeningProblemSpecInputs)}
+        or type(controls_storage) is not dict
+        or any(type(key) is not str for key in controls_storage)
+        or set(controls_storage)
+        != {field.name for field in fields(_InitialScreeningRuntimeInputs)}
+    ):
+        raise TypeError
+    problem_publication = problem_storage["publication"]
+    controls_publication = controls_storage["publication"]
+    if (
+        type(problem_publication) is not _ProblemSpecPublication
+        or type(controls_publication) is not _ControlsPublication
+    ):
+        raise TypeError
+    problem_publication_storage = vars(problem_publication)
+    controls_publication_storage = vars(controls_publication)
+    expected_keys = {"campaign_dir", "directory_fingerprints", "leaf_fingerprint"}
+    _exact_storage(problem_publication_storage, expected_keys)
+    _exact_storage(controls_publication_storage, expected_keys)
+    problem_directories = problem_publication_storage["directory_fingerprints"]
+    controls_directories = controls_publication_storage["directory_fingerprints"]
+    if (
+        type(problem_publication_storage["campaign_dir"]) is not str
+        or not _directory_fingerprints(problem_directories)
+        or not _int_tuple(problem_publication_storage["leaf_fingerprint"], 4)
+        or type(controls_publication_storage["campaign_dir"]) is not str
+        or not _directory_fingerprints(controls_directories)
+        or not _int_tuple(controls_publication_storage["leaf_fingerprint"], 4)
+        or problem_publication_storage["campaign_dir"]
+        != controls_publication_storage["campaign_dir"]
+        or problem_directories != controls_directories
+    ):
+        raise ValueError
+    return controls_publication
 
 
 def _validate_materializer(materializer: Any, spec: ProblemSpec) -> None:

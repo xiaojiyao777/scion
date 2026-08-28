@@ -1,9 +1,4 @@
-"""Campaign service composition helpers.
-
-This module owns the constructor-time wiring for CampaignManager.  The manager
-remains the public facade and callback owner; service construction lives here so
-new runtime boundaries do not keep growing campaign.py.
-"""
+"""Campaign service composition helpers."""
 
 from __future__ import annotations
 
@@ -203,59 +198,69 @@ def _prepare_initial_screening_controls_setup(
     code_research_limits: Any | None,
     qualification_only: Any | None,
     problem_declaration: Any | None = None,
+    research_context: Any | None = None,
 ) -> _InitialScreeningControlsSetup:
     """Publish and return one fixed-error, config-subset runtime setup."""
 
-    from scion.core.initial_screening_controls_composition import (
-        _prepare_initial_screening_controls_setup_impl,
-    )
+    from scion.core import initial_screening_controls_composition as controls_module
 
-    return _prepare_initial_screening_controls_setup_impl(
-        owner=owner,
-        request=request,
-        problem_spec=problem_spec,
-        protocol_config=protocol_config,
-        split_manifest=split_manifest,
-        seed_ledger=seed_ledger,
-        champion=champion,
-        campaign_dir=campaign_dir,
-        experiment_protocol=experiment_protocol,
-        adapter=adapter,
-        verification_gate=verification_gate,
-        operator_execute_signature=operator_execute_signature,
-        research_input=research_input,
-        research_history=research_history,
-        resource_envelope=resource_envelope,
-        code_research_limits=code_research_limits,
-        qualification_only=qualification_only,
-        problem_declaration=problem_declaration,
-    )
-
-
-def _initial_screening_protected_roots(
-    *,
-    problem_spec: Any,
-    champion: Any,
-    split_manifest: Any,
-    development_suites: tuple[Any, ...],
-) -> tuple[str, ...]:
-    spec_v1 = getattr(problem_spec, "spec_v1", problem_spec)
-    candidates = [
-        getattr(champion, "code_snapshot_path", None),
-        getattr(spec_v1, "root_dir", None),
-        *(getattr(split_manifest, "safe_data_roots", ()) or ()),
-        *(getattr(suite, "source_root", None) for suite in development_suites),
-    ]
-    roots: list[str] = []
-    for candidate in candidates:
-        if candidate is None:
-            continue
-        if type(candidate) is not str or not candidate or "\x00" in candidate:
+    if research_context is None:
+        _prepare_initial_screening_controls_setup_impl = (
+            controls_module._prepare_initial_screening_controls_setup_impl
+        )
+    else:
+        controls_storage = vars(controls_module)
+        bindings = controls_storage.get("_CONTROLS_COMPOSITION_EDGE_BINDINGS")
+        validator = controls_storage.get("_validate_controls_composition_edges")
+        if (
+            type(controls_storage) is not dict
+            or any(type(key) is not str for key in controls_storage)
+            or type(bindings) is not tuple
+            or type(validator) is not type(_prepare_initial_screening_controls_setup)
+        ):
             raise TypeError
-        root = str(Path(candidate).expanduser().resolve(strict=False))
-        if root not in roots:
-            roots.append(root)
-    return tuple(roots)
+        matches = tuple(
+            item
+            for item in bindings
+            if (
+                type(item) is tuple
+                and len(item) == 2
+                and item[0] == "_prepare_initial_screening_controls_setup_impl"
+            )
+        )
+        if len(matches) != 1:
+            raise TypeError
+        _prepare_initial_screening_controls_setup_impl = matches[0][1]
+        cast(Any, validator)()
+        if (
+            controls_storage.get("_prepare_initial_screening_controls_setup_impl")
+            is not _prepare_initial_screening_controls_setup_impl
+        ):
+            raise TypeError
+
+    arguments: dict[str, Any] = {
+        "owner": owner,
+        "request": request,
+        "problem_spec": problem_spec,
+        "protocol_config": protocol_config,
+        "split_manifest": split_manifest,
+        "seed_ledger": seed_ledger,
+        "champion": champion,
+        "campaign_dir": campaign_dir,
+        "experiment_protocol": experiment_protocol,
+        "adapter": adapter,
+        "verification_gate": verification_gate,
+        "operator_execute_signature": operator_execute_signature,
+        "research_input": research_input,
+        "research_history": research_history,
+        "resource_envelope": resource_envelope,
+        "code_research_limits": code_research_limits,
+        "qualification_only": qualification_only,
+        "problem_declaration": problem_declaration,
+    }
+    if research_context is not None:
+        arguments["research_context"] = research_context
+    return _prepare_initial_screening_controls_setup_impl(**arguments)
 
 
 def _prepare_legacy_campaign_inputs(
@@ -423,10 +428,14 @@ def compose_campaign_services(
     _initial_screening_study_controls: Any | None = None,
     _initial_screening_provider_policy: Any | None = None,
     _initial_screening_problem_spec: Any | None = None,
+    _initial_screening_research_context: Any | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     declarations = None
-    if _initial_screening_problem_spec is None:
+    if (
+        _initial_screening_problem_spec is None
+        and _initial_screening_research_context is None
+    ):
         provider_policy_inputs = _prepare_provider_policy_inputs(
             _initial_screening_provider_policy,
             _initial_screening_study_controls,
@@ -437,16 +446,25 @@ def compose_campaign_services(
             _prepare_initial_screening_declarations,
         )
 
-        declarations = _prepare_initial_screening_declarations(
-            controls_request=_initial_screening_study_controls,
-            provider_request=_initial_screening_provider_policy,
-            problem_request=_initial_screening_problem_spec,
-            llm_client=llm_client,
-            problem_spec=problem_spec,
-            adapter=adapter,
-            operator_execute_signature=operator_execute_signature,
-            experiment_protocol=experiment_protocol,
-        )
+        declaration_arguments = {
+            "controls_request": _initial_screening_study_controls,
+            "provider_request": _initial_screening_provider_policy,
+            "problem_request": _initial_screening_problem_spec,
+            "llm_client": llm_client,
+            "problem_spec": problem_spec,
+            "adapter": adapter,
+            "operator_execute_signature": operator_execute_signature,
+            "experiment_protocol": experiment_protocol,
+        }
+        if _initial_screening_research_context is not None:
+            declaration_arguments.update(
+                {
+                    "research_request": _initial_screening_research_context,
+                    "research_input": research_input,
+                    "research_history": research_history,
+                }
+            )
+        declarations = _prepare_initial_screening_declarations(**declaration_arguments)
         provider_policy_inputs = declarations.provider_policy
         problem_spec = declarations.runtime_problem_spec
         adapter = declarations.runtime_adapter
@@ -497,6 +515,8 @@ def compose_campaign_services(
         }
         if declarations is not None:
             controls_arguments["problem_declaration"] = declarations.problem_spec
+            if declarations.research_context is not None:
+                controls_arguments["research_context"] = declarations.research_context
         controls_setup = _prepare_initial_screening_controls_setup(**controls_arguments)
         if declarations is None:
             if provider_policy_inputs is not None:
@@ -914,9 +934,39 @@ def compose_campaign_services(
     else:
         from scion.core.initial_screening_declaration_composition import (
             _finalize_initial_screening_declarations,
+            _install_initial_screening_research_context_owner,
         )
 
+        _install_initial_screening_research_context_owner(owner, declarations)
         _finalize_initial_screening_declarations(owner, controls_setup, declarations)
+
+
+def _branch_state_row(branch: Any) -> dict[str, Any]:
+    return {
+        "id": branch.branch_id,
+        "state": branch.state.value,
+        "base_champion_id": branch.base_champion_id,
+        "current_code_hash": branch.current_code_hash,
+        "weight_revision": getattr(branch, "weight_revision", 0),
+        "direction": branch.direction,
+        "failure_codes": list(branch.failure_codes or ()),
+        "created_at": branch.created_at.isoformat(),
+        "updated_at": branch.updated_at.isoformat(),
+    }
+
+
+def _sync_branch_progress_from_rows(
+    progress: dict[str, Any],
+    branch_rows: list[dict[str, Any]],
+) -> dict[str, Any]:
+    branch_id = str(progress.get("branch_id") or "")
+    merged = dict(progress)
+    for row in branch_rows:
+        if str(row.get("id") or "") != branch_id:
+            continue
+        merged["branch_state"] = row.get("state")
+        break
+    return merged
 
 
 def required_service_names() -> tuple[str, ...]:
@@ -928,3 +978,16 @@ def required_service_names() -> tuple[str, ...]:
         "_proposal_pipeline",
         "_campaign_loop",
     )
+
+
+_CAMPAIGN_SERVICES_COMPOSE_BINDING = (
+    "compose_campaign_services",
+    compose_campaign_services,
+)
+_CAMPAIGN_COMPOSITION_ACTIVE_EDGE_BINDINGS = (
+    _CAMPAIGN_SERVICES_COMPOSE_BINDING,
+    (
+        "_prepare_initial_screening_controls_setup",
+        _prepare_initial_screening_controls_setup,
+    ),
+)
