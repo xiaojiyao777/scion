@@ -262,6 +262,21 @@ def test_llm_client_strips_config_values(monkeypatch):
     assert client.base_url == "https://aihubmix.com"
 
 
+def test_llm_client_defaults_to_local_codex_proxy_and_sol(monkeypatch):
+    for name in (
+        "SCION_MODEL",
+        "SCION_BASE_URL",
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_BASE_URL",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    client = LLMClient()
+
+    assert client.model == "gpt-5.6-sol"
+    assert client.base_url == "http://127.0.0.1:8080"
+
+
 def test_deepseek_v4pro_max_alias_sets_reasoning_effort(monkeypatch):
     monkeypatch.setenv("SCION_MODEL", "v4pro-max")
     monkeypatch.delenv("SCION_REASONING_EFFORT", raising=False)
@@ -917,7 +932,7 @@ def test_code_tool_policy_contains_only_transport_and_output_facts(monkeypatch):
     monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
     monkeypatch.delenv("SCION_LLM_CODE_TIMEOUT_SEC", raising=False)
 
-    client = LLMClient(timeout_sec=60)
+    client = LLMClient(model="claude-test", timeout_sec=60)
     policy = client.resolve_request_policy(
         tool={"name": "generate_patch", "input_schema": {"required": []}},
     )
@@ -943,7 +958,7 @@ def test_code_tool_policy_ignores_removed_retry_env(monkeypatch):
 
 
 def test_code_tool_timeout_is_typed_and_does_not_duplicate_prompt():
-    client = LLMClient(timeout_sec=60)
+    client = LLMClient(model="claude-test", timeout_sec=60)
     tool = {"name": "generate_patch", "input_schema": {"required": []}}
     fake_anthropic_client = MagicMock()
     fake_anthropic_client.messages.create.side_effect = LLMTimeoutError("slow")
@@ -959,7 +974,7 @@ def test_code_tool_timeout_is_typed_and_does_not_duplicate_prompt():
 
 
 def test_code_tool_provider_error_is_typed_after_one_call_without_sleep():
-    client = LLMClient(timeout_sec=60)
+    client = LLMClient(model="claude-test", timeout_sec=60)
     tool = {
         "name": "generate_patch",
         "input_schema": {"required": ["file_path", "action", "code_content"]},
@@ -982,7 +997,7 @@ def test_code_tool_provider_error_is_typed_after_one_call_without_sleep():
 
 
 def test_code_tool_502_html_is_provider_fault_after_one_call():
-    client = LLMClient(timeout_sec=60)
+    client = LLMClient(model="claude-test", timeout_sec=60)
     tool = {
         "name": "generate_patch",
         "input_schema": {"required": ["file_path", "action", "code_content"]},

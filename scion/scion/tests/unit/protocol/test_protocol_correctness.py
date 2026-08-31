@@ -31,11 +31,9 @@ from scion.protocol.experiment.selection import _select_evenly_spaced_cases
 from scion.protocol.experiment.selection import select_cases
 from scion.protocol.experiment.selection import validate_requested_screening_expansion
 from scion.protocol.experiment.feedback import _protected_objective_regressions
-from scion.problem.bridge import (
-    legacy_problem_spec_from_v1,
-    load_problem_spec_v1_from_yaml,
-)
+from scion.problem.loader import load_problem_adapter, load_problem_spec_v1_from_yaml
 from scion.problem.spec import ObjectiveMetricSpec
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 
 # ---------------------------------------------------------------------------
@@ -237,12 +235,14 @@ def _make_proto(runner, config, manifest, ledger, tmp_path) -> ExperimentProtoco
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=(
-            ObjectiveMetricSpec(
-                name="subcategory_splits", direction="minimize", priority=1
-            ),
-            ObjectiveMetricSpec(
-                name="total_cost", direction="minimize", priority=2
+        adapter=protocol_test_adapter(
+            (
+                ObjectiveMetricSpec(
+                    name="subcategory_splits", direction="minimize", priority=1
+                ),
+                ObjectiveMetricSpec(
+                    name="total_cost", direction="minimize", priority=2
+                ),
             ),
         ),
     )
@@ -758,7 +758,7 @@ def test_screening_pair_ledger_persists_candidate_and_champion_runtime(
         / "cvrp"
         / "problem-v1.yaml"
     )
-    problem_spec = legacy_problem_spec_from_v1(load_problem_spec_v1_from_yaml(spec_path))
+    adapter = load_problem_adapter(load_problem_spec_v1_from_yaml(spec_path))
     proto = ExperimentProtocol(
         protocol_config=minimal_config,
         split_manager=SplitManager(_strict_manifest(minimal_manifest, tmp_path)),
@@ -766,8 +766,7 @@ def test_screening_pair_ledger_persists_candidate_and_champion_runtime(
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=problem_spec.objectives,
-        problem_spec=problem_spec,
+        adapter=adapter,
     )
 
     result = proto.run_experiment(

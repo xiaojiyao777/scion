@@ -77,7 +77,8 @@ class _ObservationProjector:
 
 
 class _Adapter:
-    def __init__(self) -> None:
+    def __init__(self, spec: Any | None = None) -> None:
+        self.spec = spec
         self.projector = _ObservationProjector()
 
     def prior_research_observation_provider(self) -> _ObservationProjector:
@@ -276,8 +277,7 @@ def test_problem_runtime_keeps_one_detached_ordinary_input(tmp_path: Path) -> No
         "observations": [{"result": ["failure"]}],
     }
     runtime = ProblemRuntime(
-        problem_spec=spec,
-        adapter=_Adapter(),
+        adapter=_Adapter(spec),
         research_input=supplied,
     )
     supplied["observations"][0]["result"].append("mutated")

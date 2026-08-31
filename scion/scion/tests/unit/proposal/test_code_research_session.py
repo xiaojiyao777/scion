@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+
 from scion.core.code_research_limits import (
     CodeResearchLimits,
     load_code_research_limits,
@@ -17,6 +18,7 @@ from scion.core.models import (
     ChampionState,
     HypothesisProposal,
     PatchProposal,
+    executable_patch_value,
 )
 from scion.core.proposal_pipeline import ProposalPipeline
 from scion.core.resource_envelope import (
@@ -161,9 +163,7 @@ def _run(
     return session, client
 
 
-def _passing_development_test(
-    _patch, _remaining, _corpus, _falsifier_source=None
-):
+def _passing_development_test(_patch, _remaining, _corpus, _falsifier_source=None):
     return {
         "outcome": "passed",
         "checks": [{"name": "D3_unit_tests", "outcome": "passed"}],
@@ -212,7 +212,7 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
     assert session.provider_calls_used == 6
 
 
-def test_test_patch_falsifier_is_non_evidentiary_and_not_replayed() -> None:
+def test_failed_falsifier_rejects_exact_patch_without_replaying_source() -> None:
     sentinel = "PROVIDER_PROBE_SOURCE_SENTINEL"
     observed: list[tuple[PatchProposal, str | None, dict[str, str]]] = []
     session, client = _run(
@@ -237,15 +237,209 @@ def test_test_patch_falsifier_is_non_evidentiary_and_not_replayed() -> None:
 
     session._test_patch = test_patch
 
-    result = session.run(_snapshot())
+    with pytest.raises(
+        ProposalValidationError,
+        match="falsifier-rejected draft",
+    ):
+        session.run(_snapshot())
 
-    assert isinstance(result, PatchProposal)
     assert observed[0][0].code_content.endswith("return value + 1\n")
     assert observed[0][1] is not None and sentinel in observed[0][1]
     assert observed[0][2][_TARGET_PATH] == _TARGET_SOURCE
     assert '"falsifier_outcome":"failed"' in client.calls[2]["system_text"]
     assert sentinel not in client.calls[2]["system_text"]
     assert "falsifier_source" not in client.calls[2]["system_text"]
+
+
+@pytest.mark.parametrize(
+    "later_falsifier_outcome",
+    [None, "passed", "inconclusive", "unavailable"],
+)
+def test_failed_falsifier_cannot_be_bypassed_by_later_weak_probe(
+    later_falsifier_outcome: str | None,
+) -> None:
+    test_results = iter(
+        (
+            {
+                **_passing_development_test(None, 1.0, {}),
+                "falsifier_outcome": "failed",
+            },
+            {
+                **_passing_development_test(None, 1.0, {}),
+                **(
+                    {"falsifier_outcome": later_falsifier_outcome}
+                    if later_falsifier_outcome is not None
+                    else {}
+                ),
+            },
+        )
+    )
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {
+                "action": "test_patch",
+                "falsifier_source": "def test_counterexample(): assert False",
+            },
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "abandon", "reason": "counterexample still applies"},
+        ],
+        limits=CodeResearchLimits(max_turns=4, max_test_calls=2),
+    )
+    session._test_patch = lambda *_args: next(test_results)
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, CodeResearchAbandon)
+    assert "latest_draft_falsifier_failed" in client.calls[4]["system_text"]
+    assert "frozen_ready_patch" not in client.calls[-1]["system_text"]
+
+
+def test_identical_revise_cannot_clear_failed_falsifier() -> None:
+    test_results = iter(
+        (
+            {
+                **_passing_development_test(None, 1.0, {}),
+                "falsifier_outcome": "failed",
+            },
+            _passing_development_test(None, 1.0, {}),
+        )
+    )
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {
+                "action": "test_patch",
+                "falsifier_source": "def test_counterexample(): assert False",
+            },
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "abandon", "reason": "must change the patch value"},
+        ],
+        limits=CodeResearchLimits(max_turns=5, max_test_calls=2),
+    )
+    session._test_patch = lambda *_args: next(test_results)
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, CodeResearchAbandon)
+    assert "latest_draft_falsifier_failed" in client.calls[5]["system_text"]
+
+
+@pytest.mark.parametrize("hint_location", ["primary", "additional"])
+def test_test_hint_only_revise_cannot_clear_failed_falsifier(
+    hint_location: str,
+) -> None:
+    rejected_patch = _patch()
+    rejected_patch["test_hint"] = "first authoring hint"
+    rejected_patch["additional_changes"] = [_patch(_SUPPORT_PATH)]
+    rejected_patch["additional_changes"][0]["test_hint"] = "first support hint"
+    revised_patch = deepcopy(rejected_patch)
+    if hint_location == "primary":
+        revised_patch["test_hint"] = "rewritten authoring hint"
+    else:
+        revised_patch["additional_changes"][0]["test_hint"] = "rewritten support hint"
+    test_results = iter(
+        (
+            {
+                **_passing_development_test(None, 1.0, {}),
+                "falsifier_outcome": "failed",
+            },
+            _passing_development_test(None, 1.0, {}),
+        )
+    )
+    tested_patches: list[PatchProposal] = []
+    session, client = _run(
+        [
+            {"action": "read_source", "path": _SUPPORT_PATH},
+            {"action": "revise", "patch": rejected_patch},
+            {
+                "action": "test_patch",
+                "falsifier_source": "def test_counterexample(): assert False",
+            },
+            {"action": "revise", "patch": revised_patch},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "abandon", "reason": "only test_hint changed"},
+        ],
+        limits=CodeResearchLimits(max_turns=6, max_test_calls=2),
+    )
+
+    def test_patch(patch, *_args):
+        tested_patches.append(deepcopy(patch))
+        return next(test_results)
+
+    session._test_patch = test_patch
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, CodeResearchAbandon)
+    assert tested_patches[0] != tested_patches[1]
+    source_before = {
+        _TARGET_PATH: _TARGET_SOURCE,
+        _SUPPORT_PATH: _SUPPORT_SOURCE,
+    }
+    rejected_value = executable_patch_value(
+        tested_patches[0], source_before_by_path=source_before
+    )
+    assert rejected_value == executable_patch_value(
+        tested_patches[1], source_before_by_path=source_before
+    )
+    changed_source_before = dict(source_before)
+    changed_source_before[_TARGET_PATH] = "def improve(value):\n    return -value\n"
+    assert rejected_value != executable_patch_value(
+        tested_patches[1], source_before_by_path=changed_source_before
+    )
+    assert "latest_draft_falsifier_failed" in client.calls[6]["system_text"]
+
+
+def test_different_patch_can_pass_host_checks_after_falsifier_rejection() -> None:
+    revised_patch = _patch()
+    revised_patch["new_string"] = "return value + 2"
+    test_results = iter(
+        (
+            {
+                **_passing_development_test(None, 1.0, {}),
+                "falsifier_outcome": "failed",
+            },
+            _passing_development_test(None, 1.0, {}),
+        )
+    )
+    tested_patches: list[PatchProposal] = []
+    session, _client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {
+                "action": "test_patch",
+                "falsifier_source": "def test_counterexample(): assert False",
+            },
+            {"action": "revise", "patch": revised_patch},
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"outcome": "finalize_patch"},
+        ],
+        limits=CodeResearchLimits(max_turns=5, max_test_calls=2),
+    )
+
+    def test_patch(patch, *_args):
+        tested_patches.append(deepcopy(patch))
+        return next(test_results)
+
+    session._test_patch = test_patch
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, PatchProposal)
+    assert result.code_content.endswith("return value + 2\n")
+    assert len(tested_patches) == 2
+    assert tested_patches[0] != tested_patches[1]
+    assert executable_patch_value(
+        tested_patches[0], source_before_by_path={_TARGET_PATH: _TARGET_SOURCE}
+    ) != executable_patch_value(
+        tested_patches[1], source_before_by_path={_TARGET_PATH: _TARGET_SOURCE}
+    )
 
 
 def test_test_patch_falsifier_shares_the_host_test_call_cap() -> None:

@@ -1,0 +1,63 @@
+version: 0.4-cvrp-history-matched-development-v1
+case_aggregation: paired_effect_median
+case_equivalence_band: 0.0
+
+screening:
+  n_cases_modify: 3
+  n_cases_create: 3
+  n_seeds: 2
+  expand_n_seeds: 2
+  expand_to_modify: 6
+  expand_to_create: 6
+  require_expanded_for_pass: true
+
+validation:
+  n_cases: 1
+  n_seeds: 1
+  expand_to: 1
+
+frozen:
+  n_cases: 1
+  n_seeds: 1
+
+canary:
+  cases:
+    - data/tiny_canary.json
+  seeds:
+    - 61991
+
+runtime:
+  max_runtime_ratio: 2.0
+  tie_speedup_ratio: 0.75
+  tie_min_runtime_pairs: 1
+  time_limits:
+    stage_defaults:
+      canary: 10
+      screening: 30
+      validation: 30
+      frozen: 30
+    rules: []
+
+gates:
+  screening:
+    win_rate_min: 0.6
+    median_delta_min: practical_delta_screen
+    bootstrap_ci_low_min: 0.0
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2
+    initial_quality_expansion:
+      min_net_case_score: 0.125
+      max_case_loss_rate: 0.25
+      require_ci_high_at_practical_delta: true
+  validation:
+    win_rate_min: 0.66
+    median_delta_min: practical_delta_validate
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 1000
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2
+  frozen:
+    bootstrap_ci_low_min: 0.0
+    canary_required: true
+    min_net_case_score: 0.25
+    max_case_loss_rate: 0.2

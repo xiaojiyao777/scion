@@ -28,8 +28,9 @@ def test_cvrp_hypothesis_guidance_is_open_and_algorithm_owned() -> None:
     assert "CVRP-owned causal path" in rendered
     assert "paired and case-level total_distance" in rendered
     assert "Use MDE only when a matched calibration exists" in rendered
-    assert "R3 has no matched MDE or power estimate" in rendered
-    assert "same-seed A/A result checks only obvious false-pass" in rendered
+    assert "A same-seed A/A check can expose an obvious false-pass path" in rendered
+    assert "does not establish MDE or power" in rendered
+    assert "R3" not in rendered
     assert "generic Scion core" in rendered
     assert "nearest reviewed mechanism" not in rendered
     assert "CMT2/CMT4" not in rendered

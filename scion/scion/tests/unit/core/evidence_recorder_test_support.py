@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 
 from scion.core.campaign_loop import CampaignRunResult
-from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.evidence_recording import EvidenceRecorder
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
     Branch,
     BranchState,
@@ -19,8 +19,8 @@ from scion.core.models import (
     ExperimentStage,
     HypothesisProposal,
     OperatorConfig,
-    PatchProposal,
     PairwiseCaseFeedback,
+    PatchProposal,
     ProtocolResult,
     StepRecord,
     VerificationResult,
@@ -100,6 +100,9 @@ def _step(raw_metrics_ref: str = "/tmp/raw_metrics.json") -> StepRecord:
         failure_stage=None,
         failure_detail=None,
         decision_reason_codes=("screening_positive",),
+        base_champion_version=6,
+        base_source_ref="branch:branch-1:accepted-head:1",
+        changed_files=("operators/local_search.py",),
         execution_outcome=ExecutionOutcomeRecord(
             outcome=ExecutionOutcome.EVALUATED,
             reason_code="PROTOCOL_EVALUATED",

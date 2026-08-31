@@ -44,6 +44,10 @@ class LineageRegistry:
                     timestamp              TEXT NOT NULL,
                     event_kind             TEXT DEFAULT 'experiment',
                     code_hash              TEXT,
+                    base_champion_version  INTEGER,
+                    base_source_ref        TEXT,
+                    changed_files_json     TEXT,
+                    selected_hypothesis_research_basis_json TEXT,
                     patch_action           TEXT,
                     patch_file             TEXT,
                     hypothesis_text        TEXT,
@@ -82,6 +86,21 @@ class LineageRegistry:
                     created_at             TEXT DEFAULT (datetime('now'))
                 )
             """)
+            existing_event_columns = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(experiment_events)")
+            }
+            for column_name, column_type in (
+                ("base_champion_version", "INTEGER"),
+                ("base_source_ref", "TEXT"),
+                ("changed_files_json", "TEXT"),
+                ("selected_hypothesis_research_basis_json", "TEXT"),
+            ):
+                if column_name not in existing_event_columns:
+                    conn.execute(
+                        f"ALTER TABLE experiment_events "
+                        f"ADD COLUMN {column_name} {column_type}"
+                    )
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS weight_optimizations (
                     optimization_id        TEXT PRIMARY KEY,
@@ -140,6 +159,10 @@ class LineageRegistry:
         event_kind: str = "execution_outcome",
         stage: str = "",
         extra_fields: Optional[Mapping[str, Any]] = None,
+        event_id: str | None = None,
+        timestamp: str | None = None,
+        decision: str | None = None,
+        decision_reason: str | None = None,
     ) -> str:
         """Append the authoritative typed outcome event for one attempt."""
         if not isinstance(record, ExecutionOutcomeRecord):
@@ -178,6 +201,14 @@ class LineageRegistry:
                 primitive["provenance"], sort_keys=True
             ),
         }
+        if event_id is not None:
+            event["event_id"] = event_id
+        if timestamp is not None:
+            event["timestamp"] = timestamp
+        if decision is not None:
+            event["decision"] = decision
+        if decision_reason is not None:
+            event["decision_reason"] = decision_reason
         event.update(extras)
         return self._insert_event(event)
 

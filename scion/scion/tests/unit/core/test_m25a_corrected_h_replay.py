@@ -347,8 +347,8 @@ def test_corrected_h_replay_gets_enum_feedback_reads_history_and_finalizes() -> 
     )
 
     assert "finalize_hypothesis" not in _action_names(client.calls[0])
-    assert "finalize_hypothesis" not in _action_names(client.calls[1])
-    assert "finalize_hypothesis" not in _action_names(client.calls[2])
+    assert "finalize_hypothesis" in _action_names(client.calls[1])
+    assert "finalize_hypothesis" in _action_names(client.calls[2])
     assert fixture["expected"]["feedback_reason"] in client.calls[2]["system_text"]
     assert (
         fixture["actions"][1]["hypothesis_text_override"]
@@ -361,7 +361,7 @@ def test_corrected_h_replay_gets_enum_feedback_reads_history_and_finalizes() -> 
     final_schema = _action_schema(client.calls[3], "finalize_hypothesis")
     basis_schema = final_schema["properties"]["research_basis"]
     assert "falsification_condition" in basis_schema["required"]
-    assert basis_schema["properties"]["nearest_prior_refs"]["minItems"] == 1
+    assert "minItems" not in basis_schema["properties"]["nearest_prior_refs"]
     assert basis_schema["properties"]["nearest_prior_refs"]["items"]["enum"] == [
         "history-0001"
     ]

@@ -8,10 +8,10 @@ import pytest
 
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.models import ExperimentStage, RunResult, SolverOutput
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.protocol.experiment.selection import resolve_case_path_details
-from scion.problem.spec import ObjectiveMetricSpec
-
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 _METRIC_SPECS = (
     ObjectiveMetricSpec(name="subcategory_splits", direction="minimize", priority=1),
@@ -152,7 +152,7 @@ def test_warehouse_prod_canary_paths_run_under_strict_protocol(
         runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=_METRIC_SPECS,
+        adapter=protocol_test_adapter(_METRIC_SPECS),
     )
 
     result = proto.run_canary(
@@ -190,7 +190,7 @@ def _protocol(
         runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=_METRIC_SPECS,
+        adapter=protocol_test_adapter(_METRIC_SPECS),
     )
 
 

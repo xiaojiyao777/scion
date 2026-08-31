@@ -2,7 +2,7 @@
   "budgets": "budgets.json",
   "final_manifest": "manifests/final.json",
   "models": [
-    "gpt-5.6-terra"
+    "gpt-5.6-sol"
   ],
   "policy": {
     "bks_gap_usage": "final_report_only",
@@ -15,7 +15,7 @@
   },
   "problem_id": "cvrp",
   "protocol": "protocol.yaml",
-  "rounds_per_campaign": 16,
+  "rounds_per_campaign": 20,
   "schema": "scion.cvrp_formal_matrix.v1",
   "seed_ledger": "seed_ledger.yaml",
   "split_manifest": "split_manifest.yaml",

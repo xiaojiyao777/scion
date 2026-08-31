@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Generic, Protocol, TypeVar
 
@@ -18,6 +19,7 @@ class ProposalAttempt(Generic[ProposalT]):
 
     proposal: ProposalT | None = None
     execution_outcome: ExecutionOutcomeRecord | None = None
+    selected_hypothesis_research_basis: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
         if (self.proposal is None) == (self.execution_outcome is None):
@@ -25,16 +27,45 @@ class ProposalAttempt(Generic[ProposalT]):
                 "proposal attempt must contain exactly one of proposal or "
                 "execution_outcome"
             )
+        if self.selected_hypothesis_research_basis is not None:
+            if self.proposal is None:
+                raise ValueError(
+                    "a failed proposal attempt cannot carry a selected "
+                    "hypothesis research basis"
+                )
+            if not isinstance(self.proposal, HypothesisProposal):
+                raise TypeError(
+                    "only a selected hypothesis attempt can carry a research basis"
+                )
+            if not isinstance(self.selected_hypothesis_research_basis, dict):
+                raise TypeError(
+                    "selected_hypothesis_research_basis must be a primitive mapping"
+                )
+            object.__setattr__(
+                self,
+                "selected_hypothesis_research_basis",
+                deepcopy(self.selected_hypothesis_research_basis),
+            )
 
     @classmethod
-    def success(cls, proposal: ProposalT) -> "ProposalAttempt[ProposalT]":
-        return cls(proposal=proposal)
+    def success(
+        cls,
+        proposal: ProposalT,
+        *,
+        selected_hypothesis_research_basis: dict[str, Any] | None = None,
+    ) -> ProposalAttempt[ProposalT]:
+        return cls(
+            proposal=proposal,
+            selected_hypothesis_research_basis=(
+                selected_hypothesis_research_basis
+            ),
+        )
 
     @classmethod
     def failure(
         cls,
         execution_outcome: ExecutionOutcomeRecord,
-    ) -> "ProposalAttempt[ProposalT]":
+    ) -> ProposalAttempt[ProposalT]:
         return cls(execution_outcome=execution_outcome)
 
 

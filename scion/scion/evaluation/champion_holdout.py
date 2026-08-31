@@ -121,17 +121,18 @@ def build_champion_heldout_protocol(
 ) -> Any:
     """Build the ProblemSpecV1-backed, cache-free frozen Protocol."""
     from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
-    from scion.problem.bridge import (
-        bridge_problem_spec_v1,
+    from scion.problem.loader import (
+        load_problem_adapter,
         load_problem_spec_v1_from_yaml,
     )
     from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
     from scion.runtime.runner import ResourceLimits
     from scion.runtime.subprocess_runner import LocalSubprocessRunner
 
-    bridge = bridge_problem_spec_v1(load_problem_spec_v1_from_yaml(problem_yaml_path))
+    adapter = load_problem_adapter(load_problem_spec_v1_from_yaml(problem_yaml_path))
+    problem_spec = adapter.spec
     config = ProtocolConfig.from_yaml(protocol_path).with_problem_measurement(
-        bridge.problem_spec, governance_mode="on"
+        problem_spec, governance_mode="on"
     )
     split = SplitManifest.from_yaml(split_path)
     seeds = SeedLedgerConfig.from_yaml(seeds_path)
@@ -145,7 +146,7 @@ def build_champion_heldout_protocol(
     limit = time_limit_sec
     runner = InfeasibleAsFailureRunner(
         LocalSubprocessRunner(ResourceLimits(timeout_sec=limit + 15)),
-        metric_names=tuple(metric.name for metric in bridge.metric_specs),
+        metric_names=tuple(metric.name for metric in problem_spec.objectives),
     )
     protocol = ExperimentProtocol(
         protocol_config=config,
@@ -154,9 +155,7 @@ def build_champion_heldout_protocol(
         runner=runner,
         time_limit_sec=limit,
         metrics_dir=str(Path(metrics_dir).resolve()),
-        metric_specs=bridge.metric_specs,
-        objective_policy=bridge.objective_policy,
-        problem_spec=bridge.problem_spec,
+        adapter=adapter,
     )
     selected = (
         protocol._select_cases(ExperimentStage.FROZEN, "modify", 0),

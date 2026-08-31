@@ -1,5 +1,4 @@
 """Provider transport methods for LLMClient."""
-
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +6,7 @@ import inspect
 import json
 import logging
 import re
-from typing import Any, Coroutine, Dict, NoReturn, cast
+from typing import Any, Dict
 
 from .config import (
     _ANTHROPIC_REQUIRED_MAX_TOKENS,
@@ -54,7 +53,9 @@ def _utf8_size(value: str) -> int | None:
 
 
 def _openai_argument_observations(arguments: Any) -> dict[str, Any]:
-    observations: dict[str, Any] = {"arguments_value_type": type(arguments).__name__}
+    observations: dict[str, Any] = {
+        "arguments_value_type": type(arguments).__name__
+    }
     if isinstance(arguments, str):
         observations["arguments_representation"] = "sdk_argument_string_utf8"
         arguments_bytes = _utf8_size(arguments)
@@ -72,15 +73,6 @@ def _openai_argument_observations(arguments: Any) -> dict[str, Any]:
 
 
 class TransportMixin:
-    model: str
-    reasoning_effort: str
-    api_key: str
-    base_url: str
-    _last_usage_metadata: dict[str, Any] | None
-    _last_response_diagnostics: dict[str, Any] | None
-    _anthropic_client: Any
-    _openai_client: Any
-
     def close_provider_clients(self) -> None:
         """Close cached provider SDK clients and release their HTTP transports."""
         errors: list[Exception] = []
@@ -108,7 +100,7 @@ class TransportMixin:
             aclose = getattr(client, "aclose", None)
             close_result = aclose() if callable(aclose) else None
         if inspect.isawaitable(close_result):
-            asyncio.run(cast(Coroutine[Any, Any, Any], close_result))
+            asyncio.run(close_result)
 
     def _tool_call_once(
         self,
@@ -117,49 +109,10 @@ class TransportMixin:
         model: str,
         system_blocks: "list[dict] | None",
         timeout_sec: float,
-        *,
-        _initial_screening_study_policy_entry: Any | None = None,
     ) -> Dict[str, Any]:
         """Execute one tool call and return the provider's typed payload."""
-        frozen_entry = _initial_screening_study_policy_entry
-        if frozen_entry is not None:
-            from .study_policy import (
-                _installed_initial_screening_study_policy,
-            )
-
-            capsule = _installed_initial_screening_study_policy(self, frozen_entry)
-            if (
-                type(model) is not str
-                or model != capsule.requested_model
-                or type(tool) is not dict
-                or type(tool.get("name")) is not str
-                or tool["name"] != frozen_entry.tool_name
-                or type(timeout_sec) is not float
-                or timeout_sec != frozen_entry.timeout_sec
-            ):
-                raise ValueError
-            use_openai = frozen_entry.provider == "openai_compatible"
-        else:
-            use_openai = _is_openai_model(model)
-        if use_openai:
-            if frozen_entry is None:
-                return self._tool_call_once_openai(
-                    prompt,
-                    tool,
-                    model,
-                    system_blocks,
-                    timeout_sec,
-                )
+        if _is_openai_model(model):
             return self._tool_call_once_openai(
-                prompt,
-                tool,
-                model,
-                system_blocks,
-                timeout_sec,
-                _initial_screening_study_policy_entry=frozen_entry,
-            )
-        if frozen_entry is None:
-            return self._tool_call_once_anthropic(
                 prompt,
                 tool,
                 model,
@@ -172,27 +125,12 @@ class TransportMixin:
             model,
             system_blocks,
             timeout_sec,
-            _initial_screening_study_policy_entry=frozen_entry,
         )
 
     def _tool_call_once_anthropic(
-        self,
-        prompt,
-        tool,
-        model,
-        system_blocks,
-        timeout_sec,
-        *,
-        _initial_screening_study_policy_entry=None,
+        self, prompt, tool, model, system_blocks, timeout_sec,
     ) -> Dict[str, Any]:
-        if _initial_screening_study_policy_entry is None:
-            client = self._get_anthropic_client()
-        else:
-            client = self._get_anthropic_client(
-                _initial_screening_study_policy_entry=(
-                    _initial_screening_study_policy_entry
-                )
-            )
+        client = self._get_anthropic_client()
         kwargs: Dict[str, Any] = {
             "model": model,
             "max_tokens": _ANTHROPIC_REQUIRED_MAX_TOKENS,
@@ -257,19 +195,9 @@ class TransportMixin:
         )
 
     def _tool_call_once_openai(
-        self,
-        prompt,
-        tool,
-        model,
-        system_blocks,
-        timeout_sec,
-        *,
-        _initial_screening_study_policy_entry=None,
+        self, prompt, tool, model, system_blocks, timeout_sec,
     ) -> Dict[str, Any]:
-        client = _openai_client_for_policy_entry(
-            self,
-            _initial_screening_study_policy_entry,
-        )
+        client = self._get_openai_client()
         # Merge system blocks into user prompt to avoid incompatibility
         # (some models like minimax reject system messages + tool_use together)
         user_content = prompt
@@ -294,14 +222,12 @@ class TransportMixin:
         }
 
         response = client.chat.completions.create(
-            **_openai_chat_kwargs_for_policy_entry(
-                self,
+            **self._openai_chat_kwargs(
                 model=model,
                 messages=messages,
                 timeout_sec=timeout_sec,
                 tools=[openai_tool],
                 tool_choice={"type": "function", "function": {"name": tool_name}},
-                entry=_initial_screening_study_policy_entry,
             )
         )
 
@@ -371,7 +297,6 @@ class TransportMixin:
         timeout_sec: float,
         tools: list[Dict[str, Any]] | None = None,
         tool_choice: Dict[str, Any] | None = None,
-        _initial_screening_study_policy_entry: Any | None = None,
     ) -> Dict[str, Any]:
         kwargs: Dict[str, Any] = {
             "model": model,
@@ -380,53 +305,17 @@ class TransportMixin:
         }
         if tools is not None:
             kwargs["tools"] = tools
-        omit_tool_choice = _is_deepseek_model(str(model or ""))
-        if _initial_screening_study_policy_entry is not None:
-            from .study_policy import (
-                _installed_initial_screening_study_policy,
-            )
-
-            capsule = _installed_initial_screening_study_policy(
-                self,
-                _initial_screening_study_policy_entry,
-            )
-            omit_tool_choice = capsule.request_body_policy.tool_choice == "omitted"
-        if tool_choice is not None and not omit_tool_choice:
+        if tool_choice is not None and not _is_deepseek_model(str(model or "")):
             kwargs["tool_choice"] = tool_choice
-        reasoning_effort = _openai_reasoning_for_policy_entry(
-            self,
-            model,
-            _initial_screening_study_policy_entry,
-        )
+        reasoning_effort = self._openai_reasoning_effort(model)
         if reasoning_effort:
             kwargs["reasoning_effort"] = reasoning_effort
-        extra_body = _openai_extra_body_for_policy_entry(
-            self,
-            model,
-            _initial_screening_study_policy_entry,
-        )
+        extra_body = self._openai_extra_body(model)
         if extra_body:
             kwargs["extra_body"] = extra_body
         return kwargs
 
-    def _openai_reasoning_effort(
-        self,
-        model: str,
-        *,
-        _initial_screening_study_policy_entry: Any | None = None,
-    ) -> str:
-        if _initial_screening_study_policy_entry is not None:
-            from .study_policy import (
-                _installed_initial_screening_study_policy,
-            )
-
-            capsule = _installed_initial_screening_study_policy(
-                self,
-                _initial_screening_study_policy_entry,
-            )
-            if model != capsule.requested_model:
-                raise ValueError
-            return capsule.effective_reasoning_effort
+    def _openai_reasoning_effort(self, model: str) -> str:
         effort = self.reasoning_effort
         if not effort:
             return ""
@@ -446,28 +335,7 @@ class TransportMixin:
             return normalized
         return ""
 
-    def _openai_extra_body(
-        self,
-        model: str,
-        *,
-        _initial_screening_study_policy_entry: Any | None = None,
-    ) -> Dict[str, Any]:
-        if _initial_screening_study_policy_entry is not None:
-            from .study_policy import (
-                _installed_initial_screening_study_policy,
-            )
-
-            capsule = _installed_initial_screening_study_policy(
-                self,
-                _initial_screening_study_policy_entry,
-            )
-            if model != capsule.requested_model:
-                raise ValueError
-            return (
-                {"thinking": {"type": "enabled"}}
-                if capsule.thinking_mode == "enabled"
-                else {}
-            )
+    def _openai_extra_body(self, model: str) -> Dict[str, Any]:
         if not _is_deepseek_model(str(model or "")):
             return {}
         if not self._openai_reasoning_effort(model):
@@ -575,9 +443,8 @@ class TransportMixin:
             "prompt_cache_hit_tokens": cache_read,
             "prompt_cache_miss_tokens": cache_miss,
         }
-
     @staticmethod
-    def _raise_classified(exc: Exception) -> NoReturn:
+    def _raise_classified(exc: Exception) -> None:
         """Classify one raw SDK exception at the transport boundary."""
         if isinstance(exc, LLMError):
             raise exc
@@ -599,52 +466,32 @@ class TransportMixin:
             raise LLMAuthError(f"API authentication failed: {exc}") from exc
         if status_code == 429 or "rate_limit" in err_str or "ratelimit" in err_str:
             retry_after = _parse_retry_after(exc)
-            raise LLMRateLimitError(
-                f"Rate limited: {exc}", retry_after=retry_after
-            ) from exc
+            raise LLMRateLimitError(f"Rate limited: {exc}", retry_after=retry_after) from exc
         if _is_transport_exception(exc, err_str=err_str, type_name=type_name):
             raise LLMTransportError(f"Provider transport failed: {exc}") from exc
-        if (status_code is not None and 500 <= status_code <= 599) or (
-            _is_transient_provider_error(err_str)
+        if status_code == 409 or (
+            status_code is not None and 500 <= status_code <= 599
+        ) or (
+            status_code is None and _is_transient_provider_error(err_str)
         ):
             raise LLMProviderError(f"Provider request failed: {exc}") from exc
         raise LLMError(f"API error: {exc}") from exc
 
-    def _get_anthropic_client(
-        self,
-        *,
-        _initial_screening_study_policy_entry: Any | None = None,
-    ) -> Any:
+    def _get_anthropic_client(self) -> Any:
         if self._anthropic_client is not None:
             return self._anthropic_client
         try:
             import anthropic
-
-            base_url = self.base_url
-            if _initial_screening_study_policy_entry is not None:
-                from .study_policy import (
-                    _installed_initial_screening_study_policy,
-                )
-
-                capsule = _installed_initial_screening_study_policy(
-                    self,
-                    _initial_screening_study_policy_entry,
-                )
-                base_url = capsule.effective_sdk_base_url
             self._anthropic_client = anthropic.Anthropic(
                 api_key=self.api_key,
-                base_url=base_url,
+                base_url=self.base_url,
                 max_retries=0,
             )
-            if _initial_screening_study_policy_entry is None:
-                logger.info(
-                    "Anthropic client initialized: model=%s base_url=%s "
-                    "sdk_retries=disabled",
-                    self.model,
-                    self.base_url,
-                )
-            else:
-                logger.info("Anthropic study client initialized: sdk_retries=disabled")
+            logger.info(
+                "Anthropic client initialized: model=%s base_url=%s sdk_retries=disabled",
+                self.model,
+                self.base_url,
+            )
             return self._anthropic_client
         except ImportError as exc:
             raise LLMError(
@@ -652,109 +499,31 @@ class TransportMixin:
                 "Use MockLLMClient for tests, or: pip install anthropic"
             ) from exc
 
-    def _get_openai_client(
-        self,
-        *,
-        _initial_screening_study_policy_entry: Any | None = None,
-    ) -> Any:
+    def _get_openai_client(self) -> Any:
         if self._openai_client is not None:
             return self._openai_client
         try:
             import openai
-
-            if _initial_screening_study_policy_entry is None:
-                base = self.base_url.rstrip("/")
-                if "api.deepseek.com" in base:
-                    base = "https://api.deepseek.com" if base.endswith("/v1") else base
-                elif not base.endswith("/v1"):
-                    base += "/v1"
-            else:
-                from .study_policy import (
-                    _installed_initial_screening_study_policy,
-                )
-
-                capsule = _installed_initial_screening_study_policy(
-                    self,
-                    _initial_screening_study_policy_entry,
-                )
-                base = capsule.effective_sdk_base_url
+            base = self.base_url.rstrip("/")
+            if "api.deepseek.com" in base:
+                base = "https://api.deepseek.com" if base.endswith("/v1") else base
+            elif not base.endswith("/v1"):
+                base += "/v1"
             self._openai_client = openai.OpenAI(
                 api_key=self.api_key,
                 base_url=base,
                 max_retries=0,
             )
-            if _initial_screening_study_policy_entry is None:
-                logger.info(
-                    "OpenAI client initialized: model=%s base_url=%s "
-                    "sdk_retries=disabled",
-                    self.model,
-                    base,
-                )
-            else:
-                logger.info("OpenAI study client initialized: sdk_retries=disabled")
+            logger.info(
+                "OpenAI client initialized: model=%s base_url=%s sdk_retries=disabled",
+                self.model,
+                base,
+            )
             return self._openai_client
         except ImportError as exc:
             raise LLMError(
                 "The 'openai' package is not installed. pip install openai"
             ) from exc
-
-
-def _openai_client_for_policy_entry(owner: Any, entry: Any) -> Any:
-    if entry is None:
-        return owner._get_openai_client()
-    return owner._get_openai_client(
-        _initial_screening_study_policy_entry=entry,
-    )
-
-
-def _openai_chat_kwargs_for_policy_entry(
-    owner: Any,
-    *,
-    model: str,
-    messages: list[Dict[str, Any]],
-    timeout_sec: float,
-    tools: list[Dict[str, Any]] | None,
-    tool_choice: Dict[str, Any] | None,
-    entry: Any,
-) -> Dict[str, Any]:
-    if entry is None:
-        return owner._openai_chat_kwargs(
-            model=model,
-            messages=messages,
-            timeout_sec=timeout_sec,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-    return owner._openai_chat_kwargs(
-        model=model,
-        messages=messages,
-        timeout_sec=timeout_sec,
-        tools=tools,
-        tool_choice=tool_choice,
-        _initial_screening_study_policy_entry=entry,
-    )
-
-
-def _openai_reasoning_for_policy_entry(owner: Any, model: str, entry: Any) -> str:
-    if entry is None:
-        return owner._openai_reasoning_effort(model)
-    return owner._openai_reasoning_effort(
-        model,
-        _initial_screening_study_policy_entry=entry,
-    )
-
-
-def _openai_extra_body_for_policy_entry(
-    owner: Any,
-    model: str,
-    entry: Any,
-) -> Dict[str, Any]:
-    if entry is None:
-        return owner._openai_extra_body(model)
-    return owner._openai_extra_body(
-        model,
-        _initial_screening_study_policy_entry=entry,
-    )
 
 
 def _provider_status_code(exc: Exception, *, raw_error: str) -> int | None:

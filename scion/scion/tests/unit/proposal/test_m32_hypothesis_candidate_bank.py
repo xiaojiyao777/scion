@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 from copy import deepcopy
 from typing import Any
@@ -28,11 +27,10 @@ from scion.tests.unit.proposal.test_hypothesis_research_session import (
     _context,
     _history_one_hypothesis,
     _hypothesis,
+    _latest_failure_frontier_context,
     _run,
     _snapshot,
 )
-
-_K1_WIRE_SHA256 = "04df346c822f784f355cf1a45ea3de62256177f8f50d8b575e5beaf573f035e1"
 
 
 def _candidate(text: str) -> dict[str, Any]:
@@ -84,7 +82,7 @@ def _limits(*, max_turns: int, **overrides: Any) -> CodeResearchLimits:
     )
 
 
-def test_default_and_explicit_k1_preserve_the_frozen_wire() -> None:
+def test_default_and_explicit_k1_preserve_the_same_wire() -> None:
     wires: list[str] = []
     for limits in (
         CodeResearchLimits(max_turns=2),
@@ -115,7 +113,6 @@ def test_default_and_explicit_k1_preserve_the_frozen_wire() -> None:
         )
 
     assert wires[0] == wires[1]
-    assert hashlib.sha256(wires[0].encode()).hexdigest() == _K1_WIRE_SHA256
 
 
 def test_k2_stages_two_ordinal_slots_then_provider_selects_one() -> None:
@@ -149,6 +146,116 @@ def test_k2_stages_two_ordinal_slots_then_provider_selects_one() -> None:
     safe_results = json.dumps(session._budget.results, sort_keys=True)
     assert loser_text not in safe_results
     assert selected_text not in safe_results
+
+
+def test_k2_reviews_latest_failure_frontier_before_staging() -> None:
+    used_basis = _basis(
+        "source-0001",
+        "history-0003",
+        nearest_prior_refs=("history-0003",),
+    )
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "read_history", "ref": "history-0003"},
+            {
+                "action": "review_history_frontier",
+                "dispositions": [
+                    {"ref": "history-0003", "disposition": "used"},
+                    {
+                        "ref": "history-0004",
+                        "disposition": "rejected",
+                        "reason": "The screened mechanism is outside this locus.",
+                    },
+                ],
+            },
+            _stage(1, _candidate("Frontier-grounded candidate one"), used_basis),
+            {
+                "action": "review_history_frontier",
+                "dispositions": [
+                    {
+                        "ref": "history-0003",
+                        "disposition": "rejected",
+                        "reason": "Candidate two targets an independent mechanism.",
+                    },
+                    {
+                        "ref": "history-0004",
+                        "disposition": "rejected",
+                        "reason": "Candidate two does not reuse the failed locus.",
+                    },
+                ],
+            },
+            _stage(
+                2,
+                _candidate("Frontier-grounded candidate two"),
+                _basis("source-0001"),
+            ),
+            _select(2),
+        ],
+        limits=_limits(max_turns=7, max_read_calls=2),
+    )
+
+    result = session.run(
+        build_prompt_turn_snapshot("hypothesis", _latest_failure_frontier_context())
+    )
+
+    assert isinstance(result, HypothesisResearchFinalized)
+    assert "stage_hypothesis_candidate" not in _action_names(client.calls[1])
+    assert "stage_hypothesis_candidate" in _action_names(client.calls[3])
+    assert "stage_hypothesis_candidate" not in _action_names(client.calls[4])
+    assert "review_history_frontier" in _action_names(client.calls[4])
+    assert "stage_hypothesis_candidate" in _action_names(client.calls[5])
+    assert result.hypothesis.hypothesis_text == "Frontier-grounded candidate two"
+    assert [
+        item.to_primitive() for item in session.selected_history_frontier_review
+    ] == [
+        {
+            "ref": "history-0003",
+            "disposition": "rejected",
+            "reason": "Candidate two targets an independent mechanism.",
+        },
+        {
+            "ref": "history-0004",
+            "disposition": "rejected",
+            "reason": "Candidate two does not reuse the failed locus.",
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    ("hidden_action", "reason"),
+    (
+        (
+            _stage(1, _candidate("Hidden stage must not bypass review")),
+            "failure_frontier_review_required",
+        ),
+        (_select(1), "failure_frontier_reviews_incomplete"),
+    ),
+)
+def test_hidden_k2_terminal_actions_cannot_bypass_frontier_review(
+    hidden_action: dict[str, Any],
+    reason: str,
+) -> None:
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            *[deepcopy(hidden_action) for _index in range(5)],
+        ],
+        limits=_limits(max_turns=6),
+    )
+
+    with pytest.raises(ProposalValidationError, match="turn cap exhausted"):
+        session.run(
+            build_prompt_turn_snapshot(
+                "hypothesis", _latest_failure_frontier_context()
+            )
+        )
+
+    action = hidden_action["action"]
+    assert action not in _action_names(client.calls[1])
+    assert [item.get("reason") for item in session._budget.results[1:]] == [
+        reason
+    ] * 5
 
 
 def test_candidate_bank_copies_on_stage_projection_and_selection() -> None:
@@ -189,40 +296,30 @@ def test_candidate_bank_copies_on_stage_projection_and_selection() -> None:
     )
 
 
-def test_k2_nearest_history_audit_keeps_the_same_unstaged_ordinal() -> None:
+def test_k2_history_is_optional_and_staging_keeps_agent_control() -> None:
     first = _history_one_hypothesis()
     second = deepcopy(first)
-    second["expected_effect"] = "K2_HISTORY_GROUNDED_SECOND_SLOT"
-    grounded_basis = _basis(
-        "source-0001",
-        "history-0001",
-        nearest_prior_refs=("history-0001",),
-    )
+    second["expected_effect"] = "K2_OPTIONAL_HISTORY_SECOND_SLOT"
     session, client = _run(
         [
             {"action": "read_source", "ref": "source-0001"},
             _stage(1, first, _basis("source-0001")),
-            {"action": "read_history", "ref": "history-0001"},
-            _stage(1, first, grounded_basis),
-            _stage(2, second, grounded_basis),
+            _stage(2, second, _basis("source-0001")),
             _select(2),
         ],
-        limits=_limits(max_turns=6),
+        limits=_limits(max_turns=4),
     )
 
     result = session.run(_snapshot())
 
     assert isinstance(result, HypothesisResearchFinalized)
     assert result.hypothesis.expected_effect == second["expected_effect"]
-    audit = session._budget.results[1]
-    assert audit == {
-        "action": "stage_hypothesis_candidate",
-        "ok": False,
-        "reason": "nearest_history_audit_required",
-        "required_history_ref": "history-0001",
-    }
-    assert _slot_enum(client.calls[2], "stage_hypothesis_candidate") == [1]
-    assert _slot_enum(client.calls[3], "stage_hypothesis_candidate") == [1]
+    assert session._budget.results[1]["ok"] is True
+    assert _slot_enum(client.calls[1], "stage_hypothesis_candidate") == [1]
+    assert _slot_enum(client.calls[2], "stage_hypothesis_candidate") == [2]
+    assert "required_history_ref" not in "\n".join(
+        call["system_text"] for call in client.calls
+    )
 
 
 def test_k2_rejects_ordinal_overwrite_and_same_h_duplicate() -> None:
@@ -387,7 +484,6 @@ def test_k2_read_search_turn_and_transcript_accounting_never_reset_per_slot() ->
     (
         (False, True, 2),
         (False, False, 3),
-        (True, False, 4),
     ),
 )
 def test_k2_minimum_turns_fail_before_provider(

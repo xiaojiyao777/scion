@@ -6,9 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 if str(PACKAGE_ROOT) not in sys.path:
@@ -27,7 +28,7 @@ from scion.measurement.aa_calibration import (
     resolve_calibration_time_limit_sec,
     runtime_policy_summary,
 )
-from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
+from scion.problem.loader import load_problem_adapter, load_problem_spec_v1_from_yaml
 from scion.problem.objectives import compare_lexicographic, compare_weighted_sum
 from scion.protocol.experiment.selection import (
     SeedLedger,
@@ -45,10 +46,10 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     problem_v1_path = Path(args.problem_v1).expanduser().resolve(strict=False)
     protocol_path = Path(args.protocol).expanduser().resolve(strict=False)
-    spec_v1 = load_problem_spec_v1_from_yaml(problem_v1_path)
-    bridge = bridge_problem_spec_v1(spec_v1)
+    adapter = load_problem_adapter(load_problem_spec_v1_from_yaml(problem_v1_path))
+    problem_spec = adapter.spec
     protocol = ProtocolConfig.from_yaml(protocol_path).with_problem_measurement(
-        bridge.problem_spec
+        problem_spec
     )
     split = SplitManifest.from_yaml(args.split)
     activation = activate_declared_problem_data_root(
@@ -94,9 +95,9 @@ def main(argv: list[str] | None = None) -> int:
     records = _collect_records(
         protocol=protocol,
         stage=stage,
-        problem_spec=bridge.problem_spec,
-        metric_specs=bridge.metric_specs,
-        objective_policy=bridge.objective_policy,
+        problem_spec=problem_spec,
+        metric_specs=tuple(problem_spec.objectives),
+        objective_policy=problem_spec.objective_policy,
         runner=runner,
         workspace=Path(args.champion_workspace).resolve(),
         cases=cases,
@@ -106,16 +107,16 @@ def main(argv: list[str] | None = None) -> int:
         runtime_policy=args.runtime_policy,
         replicates=args.replicates,
         seed_offset=args.seed_offset,
-        measurement_metric=spec_v1.measurement.effect_scale.metric,
-        measurement_unit=spec_v1.measurement.effect_scale.unit,
+        measurement_metric=problem_spec.measurement.effect_scale.metric,
+        measurement_unit=problem_spec.measurement.effect_scale.unit,
         selected_surface=args.selected_surface,
     )
     payload = build_aa_noise_floor_payload(
         records=records,
-        problem_id=spec_v1.id,
+        problem_id=problem_spec.id,
         stage=stage.value,
-        metric=spec_v1.measurement.effect_scale.metric,
-        unit=spec_v1.measurement.effect_scale.unit,
+        metric=problem_spec.measurement.effect_scale.metric,
+        unit=problem_spec.measurement.effect_scale.unit,
         win_rate_min=protocol.gates.screening.win_rate_min,
         practical_delta=protocol.screening_min_practical_delta,
         calibrated_at=datetime.now(timezone.utc).isoformat(),

@@ -59,7 +59,7 @@ def _write_synthetic_vrp(tmp_path: Path) -> Path:
     path.with_suffix(".sol").write_text(
         "\n".join(
             [
-                "Route #1: 2 3 4",
+                "Route #1: 1 2 3",
                 "Cost : 40",
                 "",
             ]

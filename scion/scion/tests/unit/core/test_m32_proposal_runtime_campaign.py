@@ -12,10 +12,6 @@ import pytest
 
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.models import ContractResult
-from scion.core.qualification import (
-    QualificationOnlyConfig,
-    QualificationProposalBudgetExhausted,
-)
 from scion.core.resource_envelope import ResourceEnvelope
 from scion.proposal.llm_client import LLMProviderError
 from scion.tests.campaign_test_support import (
@@ -172,7 +168,6 @@ def test_k2_counts_only_accepted_slots_and_loser_stays_trace_only(
     cm = _campaign(
         tmp_path,
         llm_client=_K2CodeFailureClient(loser=loser, selected=selected),
-        qualification_only=QualificationOnlyConfig(max_proposal_attempts=1),
         resource_envelope=ResourceEnvelope(
             provider_call_cap=10,
             outer_hardwall_sec=60,
@@ -308,7 +303,7 @@ def test_provider_interrupt_is_counted_and_scope_closes_interrupted(
     cm = _campaign(
         tmp_path,
         llm_client=_InterruptClient(),
-        code_research_limits=CodeResearchLimits(max_turns=1),
+        code_research_limits=CodeResearchLimits(max_turns=2),
         resource_envelope=ResourceEnvelope(provider_call_cap=2),
     )
 
@@ -324,7 +319,7 @@ def test_provider_interrupt_is_counted_and_scope_closes_interrupted(
     assert runtime["provider_calls"]["budget_admitted"] == 1
 
 
-def test_order_is_heartbeat_then_reserve_then_begin_and_exception_is_unresolved(
+def test_order_is_heartbeat_then_begin_and_exception_is_unresolved(
     tmp_path: Path,
 ) -> None:
     cm = _campaign(
@@ -335,17 +330,12 @@ def test_order_is_heartbeat_then_reserve_then_begin_and_exception_is_unresolved(
     pipeline = cm._explore_step_pipeline
     events: list[str] = []
     original_status = pipeline.update_status_progress
-    original_reserve = pipeline.reserve_proposal_attempt
     original_scope = pipeline.proposal_attempt_scope
 
     def status(payload: dict[str, Any] | None) -> None:
         if payload is not None and payload.get("phase") == "proposal_hypothesis":
             events.append("heartbeat")
         original_status(payload)
-
-    def reserve() -> None:
-        events.append("reserve")
-        original_reserve()
 
     @contextmanager
     def scope(round_num: int) -> Iterator[None]:
@@ -354,7 +344,6 @@ def test_order_is_heartbeat_then_reserve_then_begin_and_exception_is_unresolved(
             yield
 
     pipeline.update_status_progress = status
-    pipeline.reserve_proposal_attempt = reserve
     pipeline.proposal_attempt_scope = scope
     pipeline.generate_hypothesis = lambda _branch: (_ for _ in ()).throw(
         RuntimeError("synthetic unhandled explore failure")
@@ -363,27 +352,9 @@ def test_order_is_heartbeat_then_reserve_then_begin_and_exception_is_unresolved(
     with pytest.raises(RuntimeError, match="unhandled explore failure"):
         cm.run(1)
 
-    runtime, _status, _summary = _runtime_artifacts(cm, tmp_path)
-    assert events[:3] == ["heartbeat", "reserve", "begin"]
+    runtime, status, summary = _runtime_artifacts(cm, tmp_path)
+    assert events[:2] == ["heartbeat", "begin"]
     assert runtime["attempts"][0]["accounting_state"] == "unresolved"
     assert runtime["attempts"][0]["provider_calls"]["budget_admitted"] == 0
-
-
-def test_qualification_reserve_failure_creates_no_attempt_row(tmp_path: Path) -> None:
-    cm = _campaign(
-        tmp_path,
-        qualification_only=QualificationOnlyConfig(max_proposal_attempts=1),
-        code_research_limits=CodeResearchLimits(max_turns=1),
-        resource_envelope=ResourceEnvelope(
-            provider_call_cap=2,
-            outer_hardwall_sec=30,
-        ),
-    )
-    cm._explore_step_pipeline.reserve_proposal_attempt = lambda: (_ for _ in ()).throw(
-        QualificationProposalBudgetExhausted("synthetic reserve rejection")
-    )
-
-    cm.run(1)
-    runtime, _status, _summary = _runtime_artifacts(cm, tmp_path)
-    assert runtime["attempts"] == []
-    assert runtime["provider_calls"]["budget_admitted"] == 0
+    assert "current_progress" not in status
+    assert "current_progress" not in summary

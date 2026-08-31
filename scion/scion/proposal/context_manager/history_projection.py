@@ -11,7 +11,14 @@ from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import StepRecord
 
 _PRE_PROTOCOL_STAGES = frozenset(
-    {"hypothesis_contract", "proposal_code", "patch_contract", "verification"}
+    {
+        "hypothesis_contract",
+        "proposal_code",
+        "patch_contract",
+        "reconcile_source",
+        "reconcile_apply",
+        "verification",
+    }
 )
 _STAGE_REASON_CODES = {
     "hypothesis_contract": frozenset({"HYPOTHESIS_CONTRACT_REJECTED"}),
@@ -26,6 +33,8 @@ _STAGE_REASON_CODES = {
         }
     ),
     "patch_contract": frozenset({"PATCH_CONTRACT_REJECTED"}),
+    "reconcile_source": frozenset({"RECONCILE_SOURCE_CONFLICT"}),
+    "reconcile_apply": frozenset({"RECONCILE_APPLY_FAILED"}),
     "verification": frozenset(
         {"VERIFICATION_LIGHT_REJECTED", "VERIFICATION_HEAVY_REJECTED"}
     ),
@@ -142,13 +151,17 @@ def normalize_proposal_screening_observation(value: Any) -> dict[str, Any]:
 
 def proposal_pre_protocol_observations(
     steps: Sequence[StepRecord],
+    *,
+    current_branch_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Project ordinary pre-Protocol rejection facts for the next H call.
 
     ``steps`` is already the append-ordered in-process campaign record.  Keep
     every eligible observation in that order and never query a second durable
-    source or compact repeated attempts.  Free-form failure prose, patch source,
-    paths, metadata, and identities deliberately remain outside this boundary.
+    source or compact repeated attempts.  Ordinary round and current/sibling
+    relation let the H-only research corpus retain chronology across screening
+    observations.  Free-form failure prose, patch source, paths, metadata, and
+    identities deliberately remain outside this boundary.
     """
 
     observations: list[dict[str, Any]] = []
@@ -163,6 +176,13 @@ def proposal_pre_protocol_observations(
             continue
         observations.append(
             {
+                "round_num": step.round_num,
+                "relation": (
+                    "current"
+                    if current_branch_id is None
+                    or step.branch_id == current_branch_id
+                    else "sibling"
+                ),
                 "hypothesis": _pre_protocol_hypothesis(step),
                 "patch": _pre_protocol_patch(step),
                 "outcome": _pre_protocol_outcome(step),

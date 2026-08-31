@@ -18,6 +18,9 @@ _STAGE_REJECTION_REASONS = frozenset(
         "candidate_payload_invalid",
         "candidate_slot_already_staged",
         "candidate_slot_out_of_order",
+        "frontier_rejected_refs_cited",
+        "failure_frontier_review_required",
+        "frontier_used_refs_not_cited",
         "hypothesis_invalid",
         "nearest_prior_refs_not_read_and_cited",
         "read_refs_not_read",
@@ -29,6 +32,7 @@ _SELECTION_REJECTION_REASONS = frozenset(
         "candidate_selection_invalid",
         "candidate_slot_not_staged",
         "candidate_slots_incomplete",
+        "failure_frontier_reviews_incomplete",
     }
 )
 

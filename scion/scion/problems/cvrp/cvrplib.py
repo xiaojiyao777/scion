@@ -1,14 +1,15 @@
 """Small CVRPLIB parser owned by the Scion CVRP adapter boundary."""
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass
 from pathlib import Path
-import re
 
 from scion.problems.cvrp.models import CvrpInstance, CvrpNode
 
-
 _SECTION_NAMES = {
+    "EDGE_WEIGHT_SECTION",
     "NODE_COORD_SECTION",
     "DEMAND_SECTION",
     "DEPOT_SECTION",
@@ -27,7 +28,7 @@ class CvrplibSolution:
 
 
 def load_cvrplib_instance(path: str | Path) -> CvrpInstance:
-    """Load an EUC_2D CVRPLIB ``.vrp`` file into Scion's zero-based model."""
+    """Load a supported CVRPLIB ``.vrp`` file into Scion's zero-based model."""
     vrp_path = Path(path)
     header, sections = _read_vrp_file(vrp_path)
 
@@ -35,30 +36,69 @@ def load_cvrplib_instance(path: str | Path) -> CvrpInstance:
     dimension = _parse_positive_int(_required_field(header, "DIMENSION"), "DIMENSION")
     capacity = _parse_positive_int(_required_field(header, "CAPACITY"), "CAPACITY")
     edge_weight_type = _required_field(header, "EDGE_WEIGHT_TYPE").upper()
-    if edge_weight_type != "EUC_2D":
+    if edge_weight_type not in {"EUC_2D", "EXPLICIT"}:
         raise ValueError(
             "unsupported CVRPLIB EDGE_WEIGHT_TYPE "
-            f"{edge_weight_type!r}; only EUC_2D is supported"
+            f"{edge_weight_type!r}; supported types are EUC_2D and "
+            "EXPLICIT/LOWER_ROW"
         )
 
-    coords = _parse_node_coords(_required_section(sections, "NODE_COORD_SECTION"))
     demands = _parse_demands(_required_section(sections, "DEMAND_SECTION"))
     depot_ids = _parse_depots(_required_section(sections, "DEPOT_SECTION"))
-
-    if len(coords) != dimension:
+    if len(demands) != dimension:
         raise ValueError(
-            f"CVRPLIB DIMENSION is {dimension}, but NODE_COORD_SECTION has {len(coords)} nodes"
+            f"CVRPLIB DIMENSION is {dimension}, but DEMAND_SECTION has "
+            f"{len(demands)} nodes"
         )
-    if set(coords) != set(demands):
-        raise ValueError("CVRPLIB NODE_COORD_SECTION and DEMAND_SECTION node ids differ")
     if len(depot_ids) != 1:
         raise ValueError("CVRPLIB parser supports exactly one depot")
 
     raw_depot_id = depot_ids[0]
-    if raw_depot_id not in coords:
-        raise ValueError(f"CVRPLIB depot id {raw_depot_id} is not in NODE_COORD_SECTION")
+    if raw_depot_id not in demands:
+        raise ValueError(f"CVRPLIB depot id {raw_depot_id} is not in DEMAND_SECTION")
 
-    id_map = _build_zero_based_id_map(tuple(sorted(coords)), raw_depot_id)
+    edge_weights = None
+    if edge_weight_type == "EUC_2D":
+        coords = _parse_node_coords(
+            _required_section(sections, "NODE_COORD_SECTION")
+        )
+        if len(coords) != dimension:
+            raise ValueError(
+                f"CVRPLIB DIMENSION is {dimension}, but NODE_COORD_SECTION has "
+                f"{len(coords)} nodes"
+            )
+        if set(coords) != set(demands):
+            raise ValueError(
+                "CVRPLIB NODE_COORD_SECTION and DEMAND_SECTION node ids differ"
+            )
+    else:
+        edge_weight_format = _required_field(header, "EDGE_WEIGHT_FORMAT").upper()
+        if edge_weight_format != "LOWER_ROW":
+            raise ValueError(
+                "unsupported CVRPLIB EDGE_WEIGHT_FORMAT "
+                f"{edge_weight_format!r}; only LOWER_ROW is supported"
+            )
+        raw_ids = tuple(sorted(demands))
+        if raw_ids != tuple(range(1, dimension + 1)):
+            raise ValueError(
+                "EXPLICIT/LOWER_ROW CVRPLIB node ids must be consecutive from 1"
+            )
+        raw_matrix = _parse_lower_row(
+            _required_section(sections, "EDGE_WEIGHT_SECTION"), dimension
+        )
+        if "NODE_COORD_SECTION" in sections:
+            coords = _parse_node_coords(sections["NODE_COORD_SECTION"])
+            if set(coords) != set(demands):
+                raise ValueError(
+                    "CVRPLIB NODE_COORD_SECTION and DEMAND_SECTION node ids differ"
+                )
+        else:
+            coords = {raw_id: (0.0, 0.0) for raw_id in raw_ids}
+
+    raw_ids = tuple(sorted(demands))
+    id_map = _build_zero_based_id_map(raw_ids, raw_depot_id)
+    if edge_weight_type == "EXPLICIT":
+        edge_weights = _reorder_edge_weights(raw_matrix, raw_ids, id_map)
     nodes = tuple(
         CvrpNode(
             id=id_map[raw_id],
@@ -68,9 +108,8 @@ def load_cvrplib_instance(path: str | Path) -> CvrpInstance:
         )
         for raw_id in sorted(coords, key=lambda node_id: id_map[node_id])
     )
-    use_integer_cost = all(
-        x.is_integer() and y.is_integer()
-        for x, y in coords.values()
+    use_integer_cost = edge_weights is not None or all(
+        x.is_integer() and y.is_integer() for x, y in coords.values()
     )
 
     bks = None
@@ -79,8 +118,7 @@ def load_cvrplib_instance(path: str | Path) -> CvrpInstance:
     if solution_path.exists():
         solution = parse_cvrplib_solution(
             solution_path,
-            id_map=id_map,
-            raw_depot_id=raw_depot_id,
+            customer_count=dimension - 1,
         )
         bks = solution.cost
         bks_routes = len(solution.routes)
@@ -94,16 +132,16 @@ def load_cvrplib_instance(path: str | Path) -> CvrpInstance:
         bks=bks,
         bks_routes=bks_routes,
         use_integer_cost=use_integer_cost,
+        edge_weights=edge_weights,
     )
 
 
 def parse_cvrplib_solution(
     path: str | Path,
     *,
-    id_map: dict[int, int],
-    raw_depot_id: int,
+    customer_count: int,
 ) -> CvrplibSolution:
-    """Parse a CVRPLIB ``.sol`` file and map routes to Scion node ids."""
+    """Parse normalized CVRPLIB solution customer ids into Scion routes."""
     routes: list[tuple[int, ...]] = []
     cost: float | None = None
     with open(path, encoding="utf-8") as f:
@@ -116,8 +154,7 @@ def parse_cvrplib_solution(
                 routes.append(
                     _parse_solution_route(
                         route_match.group("route"),
-                        id_map=id_map,
-                        raw_depot_id=raw_depot_id,
+                        customer_count=customer_count,
                         line_number=line_number,
                     )
                 )
@@ -227,6 +264,54 @@ def _parse_depots(lines: list[str]) -> tuple[int, ...]:
     return tuple(depots)
 
 
+def _parse_lower_row(
+    lines: list[str], dimension: int
+) -> tuple[tuple[float, ...], ...]:
+    values: list[float] = []
+    for line in lines:
+        for token in line.split():
+            try:
+                value = float(token)
+            except ValueError as exc:
+                raise ValueError(
+                    f"invalid CVRPLIB EDGE_WEIGHT_SECTION value: {token!r}"
+                ) from exc
+            if not math.isfinite(value) or value < 0:
+                raise ValueError(
+                    f"invalid CVRPLIB EDGE_WEIGHT_SECTION value: {token!r}"
+                )
+            values.append(value)
+    expected = dimension * (dimension - 1) // 2
+    if len(values) != expected:
+        raise ValueError(
+            f"CVRPLIB LOWER_ROW expects {expected} weights, got {len(values)}"
+        )
+    matrix = [[0.0 for _ in range(dimension)] for _ in range(dimension)]
+    cursor = 0
+    for row in range(1, dimension):
+        for column in range(row):
+            value = values[cursor]
+            cursor += 1
+            matrix[row][column] = value
+            matrix[column][row] = value
+    return tuple(tuple(row) for row in matrix)
+
+
+def _reorder_edge_weights(
+    raw_matrix: tuple[tuple[float, ...], ...],
+    raw_ids: tuple[int, ...],
+    id_map: dict[int, int],
+) -> tuple[tuple[float, ...], ...]:
+    dimension = len(raw_ids)
+    normalized = [[0.0 for _ in range(dimension)] for _ in range(dimension)]
+    for raw_row_index, raw_row_id in enumerate(raw_ids):
+        for raw_column_index, raw_column_id in enumerate(raw_ids):
+            normalized[id_map[raw_row_id]][id_map[raw_column_id]] = raw_matrix[
+                raw_row_index
+            ][raw_column_index]
+    return tuple(tuple(row) for row in normalized)
+
+
 def _parse_node_id(value: str, section_name: str) -> int:
     raw_id = int(value)
     if raw_id <= 0:
@@ -248,22 +333,24 @@ def _build_zero_based_id_map(raw_ids: tuple[int, ...], raw_depot_id: int) -> dic
 def _parse_solution_route(
     route_text: str,
     *,
-    id_map: dict[int, int],
-    raw_depot_id: int,
+    customer_count: int,
     line_number: int,
 ) -> tuple[int, ...]:
     route: list[int] = []
     for token in route_text.split():
-        raw_id = int(token)
-        if raw_id == raw_depot_id:
-            continue
         try:
-            route.append(id_map[raw_id])
-        except KeyError as exc:
+            customer_id = int(token)
+        except ValueError as exc:
             raise ValueError(
-                "CVRPLIB solution route references unknown node "
-                f"{raw_id} on line {line_number}"
+                "CVRPLIB solution route has invalid customer id "
+                f"{token!r} on line {line_number}"
             ) from exc
+        if customer_id < 1 or customer_id > customer_count:
+            raise ValueError(
+                "CVRPLIB solution route references customer id "
+                f"{customer_id} outside 1..{customer_count} on line {line_number}"
+            )
+        route.append(customer_id)
     if not route:
         raise ValueError(f"CVRPLIB solution route on line {line_number} has no customers")
     return tuple(route)

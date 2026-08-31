@@ -1,19 +1,22 @@
 from __future__ import annotations
+
 import random
-from typing import Mapping, Sequence, List, Literal, Tuple
+from collections.abc import Mapping, Sequence
+from typing import Literal
 
 from scion.core.models import EvalStats, MetricEvalStats
 
 
 def compute_eval_stats(
-    comparisons: List[Literal["win", "loss", "tie"]],
-    deltas: List[float],
+    comparisons: list[Literal["win", "loss", "tie"]],
+    deltas: list[float],
     n_boot: int = 1000,
     alpha: float = 0.05,
     *,
     metric_deltas: Sequence[Mapping[str, float]] | None = None,
     metric_order: Sequence[str] | None = None,
     effect_metric: str | None = None,
+    allow_empty_metric_evidence: bool = False,
 ) -> EvalStats:
     """Compute EvalStats from per-case comparisons and deltas.
 
@@ -21,7 +24,10 @@ def compute_eval_stats(
     is provided, ``median_delta`` and its CI are selected from that predeclared
     problem-owned metric. Lexicographic direction remains represented by the
     case comparisons; a higher-priority nonzero row cannot shadow the declared
-    practical-effect metric.
+    practical-effect metric. ``allow_empty_metric_evidence`` is reserved for
+    typed negative outcomes where no solver pair produced an objective row; it
+    never permits a declared effect metric to be absent when any metric evidence
+    exists.
     """
     n = len(comparisons)
     wins = comparisons.count("win")
@@ -78,14 +84,20 @@ def compute_eval_stats(
                 None,
             )
             if selected is None:
-                raise ValueError(
-                    "effect_metric is absent from computed metric statistics: "
-                    f"{normalized_effect_metric!r}"
-                )
-            statistical_metric = selected.metric_name
-            ci_low, ci_high = selected.ci_low, selected.ci_high
-            median_delta = selected.median_delta
-            statistical_status = _statistical_status(selected)
+                has_any_metric_evidence = any(bool(row) for row in metric_deltas)
+                if not (
+                    allow_empty_metric_evidence
+                    and not has_any_metric_evidence
+                ):
+                    raise ValueError(
+                        "effect_metric is absent from computed metric statistics: "
+                        f"{normalized_effect_metric!r}"
+                    )
+            else:
+                statistical_metric = selected.metric_name
+                ci_low, ci_high = selected.ci_low, selected.ci_high
+                median_delta = selected.median_delta
+                statistical_status = _statistical_status(selected)
 
     return EvalStats(
         n_cases=n,
@@ -125,18 +137,18 @@ def _median(values: Sequence[float]) -> float:
 
 
 def bootstrap_ci(
-    deltas: List[float],
+    deltas: list[float],
     n_boot: int = 1000,
     alpha: float = 0.05,
     seed: int = 42,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Bootstrap confidence interval for the median delta."""
     if not deltas:
         return (0.0, 0.0)
 
     rng = random.Random(seed)
     n = len(deltas)
-    boot_medians: List[float] = []
+    boot_medians: list[float] = []
 
     for _ in range(n_boot):
         sample = [rng.choice(deltas) for _ in range(n)]

@@ -57,7 +57,6 @@ def register_weight_commands(app: typer.Typer) -> None:
             raise typer.Exit(code=1)
 
         from scion.config.problem import (
-            ProblemSpec,
             ProtocolConfig,
             SeedLedgerConfig,
             SplitManifest,
@@ -68,28 +67,19 @@ def register_weight_commands(app: typer.Typer) -> None:
         from scion.runtime.pool_manager import read_weights
         from scion.runtime.subprocess_runner import LocalSubprocessRunner
 
-        spec = ProblemSpec.from_yaml(str(problem_yaml))
-        problem_v1 = None
         problem_dir = problem_yaml.parent
-        metric_specs = None
-        problem_v1_path = problem_dir / "problem-v1.yaml"
-        if problem_v1_path.exists():
-            try:
-                from scion.problem.bridge import (
-                    bridge_problem_spec_v1,
-                    load_problem_spec_v1_from_yaml,
-                )
+        try:
+            from scion.cli.commands.init_run import _load_cli_problem_adapter
 
-                problem_v1 = load_problem_spec_v1_from_yaml(problem_v1_path)
-                bridge = bridge_problem_spec_v1(problem_v1)
-                spec = bridge.problem_spec
-                metric_specs = bridge.metric_specs
-            except Exception as exc:
-                typer.echo(
-                    f"ERROR: failed to load problem-v1 objective specs: {exc}",
-                    err=True,
-                )
-                raise typer.Exit(code=1)
+            adapter = _load_cli_problem_adapter(problem_yaml)
+        except Exception as exc:
+            typer.echo(
+                f"ERROR: failed to load problem-v1 adapter: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        spec = adapter.spec
+        metric_specs = tuple(spec.objectives)
 
         if protocol:
             proto_cfg = ProtocolConfig.from_yaml(protocol)
@@ -100,7 +90,7 @@ def register_weight_commands(app: typer.Typer) -> None:
                 if proto_path.exists()
                 else ProtocolConfig()
             )
-        proto_cfg = proto_cfg.with_problem_measurement(problem_v1 or spec)
+        proto_cfg = proto_cfg.with_problem_measurement(spec)
 
         if split:
             split_manifest = SplitManifest.from_yaml(split)

@@ -19,6 +19,7 @@ from scion.protocol.stats import compute_eval_stats, bootstrap_ci
 from scion.protocol.gates import GateResult, screening_gate, validation_gate, frozen_gate
 from scion.protocol.experiment import SplitManager, SeedLedger, ExperimentProtocol
 from scion.problem.spec import ObjectiveMetricSpec
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 
 _METRIC_SPECS = (
@@ -221,8 +222,10 @@ def _make_protocol(runner, tmp_path, problem_spec=None) -> ExperimentProtocol:
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=_METRIC_SPECS,
-        problem_spec=problem_spec,
+        adapter=protocol_test_adapter(
+            _METRIC_SPECS,
+            problem_spec=problem_spec,
+        ),
     )
 
 

@@ -1,9 +1,9 @@
 """CVRP data models used by the Scion adapter and tiny fixtures."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import math
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -25,6 +25,28 @@ class CvrpInstance:
     bks: float | None = None
     bks_routes: int | None = None
     use_integer_cost: bool = True
+    edge_weights: tuple[tuple[float, ...], ...] | None = None
+
+    def __post_init__(self) -> None:
+        if self.edge_weights is None:
+            return
+        dimension = len(self.nodes)
+        if self.node_ids != tuple(range(dimension)):
+            raise ValueError(
+                "edge-weight matrices require consecutive zero-based node ids"
+            )
+        if len(self.edge_weights) != dimension or any(
+            len(row) != dimension for row in self.edge_weights
+        ):
+            raise ValueError("edge-weight matrix dimensions must match nodes")
+        for row_index, row in enumerate(self.edge_weights):
+            for column_index, value in enumerate(row):
+                if not math.isfinite(value) or value < 0:
+                    raise ValueError("edge-weight matrix values must be finite and nonnegative")
+                if row_index == column_index and value != 0:
+                    raise ValueError("edge-weight matrix diagonal must be zero")
+                if value != self.edge_weights[column_index][row_index]:
+                    raise ValueError("edge-weight matrix must be symmetric")
 
     @property
     def node_ids(self) -> tuple[int, ...]:
@@ -46,6 +68,13 @@ class CvrpInstance:
         return self._node(node_id).demand
 
     def distance(self, i: int, j: int) -> float:
+        if self.edge_weights is not None:
+            dimension = len(self.edge_weights)
+            if i < 0 or i >= dimension:
+                raise KeyError(f"unknown node id: {i}")
+            if j < 0 or j >= dimension:
+                raise KeyError(f"unknown node id: {j}")
+            return self.edge_weights[i][j]
         a = self._node(i)
         b = self._node(j)
         d = math.hypot(a.x - b.x, a.y - b.y)
@@ -107,6 +136,14 @@ class CvrpInstance:
                 else None
             ),
             use_integer_cost=bool(data.get("use_integer_cost", True)),
+            edge_weights=(
+                tuple(
+                    tuple(float(value) for value in row)
+                    for row in data["edge_weights"]
+                )
+                if data.get("edge_weights") is not None
+                else None
+            ),
         )
 
 

@@ -1,7 +1,8 @@
 """Generic metadata helpers shared by verification runtime checks."""
 from __future__ import annotations
 
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 
 def requires_adapter_for_runtime(
@@ -17,10 +18,12 @@ def requires_adapter_for_runtime(
         return False
     if bool(getattr(problem_spec, "requires_adapter_for_runtime", False)):
         return True
-    return (
-        getattr(problem_spec, "spec_version", None) == "problem-v1"
-        and bool(getattr(problem_spec, "adapter_import_path", ""))
-    )
+    if getattr(problem_spec, "spec_version", None) != "problem-v1":
+        return False
+    direct = str(getattr(problem_spec, "adapter_import_path", "") or "").strip()
+    adapter_ref = getattr(problem_spec, "adapter", None)
+    nested = str(getattr(adapter_ref, "import_path", "") or "").strip()
+    return bool(direct or nested)
 
 
 def declared_objective_metric_names(problem_spec: Any | None) -> tuple[str, ...]:

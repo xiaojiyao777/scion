@@ -1,10 +1,9 @@
 """Public single-attempt LLM client orchestration."""
-
 from __future__ import annotations
 
 import os
 import time
-from typing import Any, Dict, NoReturn
+from typing import Any, Dict
 
 from .config import (
     _DEFAULT_BASE_URL,
@@ -26,7 +25,8 @@ from .transport import TransportMixin
 class LLMClient(PolicyMixin, TransportMixin):
     """LLM API client where one public call owns one transport call.
 
-    Uses Anthropic SDK with configurable base_url for aihubmix proxy.
+    Uses the OpenAI-compatible local Codex proxy by default; explicit model and
+    endpoint configuration can still select another supported transport.
 
     Provider SDK retries are unconditionally disabled.  Format, timeout, rate,
     transport, provider, authentication, and balance faults are returned as
@@ -38,7 +38,7 @@ class LLMClient(PolicyMixin, TransportMixin):
     2. Environment variables: SCION_API_KEY, SCION_BASE_URL, SCION_MODEL
     3. Timeout env vars: SCION_LLM_TIMEOUT_SEC and request-kind timeout vars
     4. Fallback env vars: ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL
-    5. Defaults: aihubmix endpoint, claude-sonnet-4-6
+    5. Defaults: local Codex proxy, gpt-5.6-sol
     """
 
     def __init__(
@@ -114,70 +114,34 @@ class LLMClient(PolicyMixin, TransportMixin):
         model: str | None = None,
         system_blocks: "list[dict] | None" = None,
         request_kind: str | None = None,
-        *,
-        _initial_screening_study_policy_entry: Any | None = None,
     ) -> Dict[str, Any]:
         """Execute one tool transport call and return its typed input dict.
 
         Supports both Anthropic (Claude) and OpenAI (GPT) models.
         """
-        from .study_policy import (
-            _has_installed_initial_screening_study_policy,
-            _validate_initial_screening_study_policy_entry,
-        )
-
-        if _has_installed_initial_screening_study_policy(self):
-            if model is not None and type(model) is not str:
-                raise ValueError
-            effective_model = self.model if model is None else model
-        else:
-            effective_model = model or self.model
-        frozen_entry = _validate_initial_screening_study_policy_entry(
-            self,
-            _initial_screening_study_policy_entry,
+        effective_model = model or self.model
+        self.reset_call_observations()
+        policy = self.resolve_request_policy(
             request_kind=request_kind,
             tool=tool,
             model=effective_model,
         )
-        self.reset_call_observations()
-        if frozen_entry is None:
-            policy = self.resolve_request_policy(
-                request_kind=request_kind,
-                tool=tool,
-                model=effective_model,
-            )
-        else:
-            policy = frozen_entry.to_projection()
         timeout_sec = policy["timeout_sec"]
         attempt_started_at = time.monotonic()
         try:
             with _llm_hard_timeout(timeout_sec):
-                if frozen_entry is None:
-                    result = self._tool_call_once(
-                        prompt,
-                        tool,
-                        effective_model,
-                        system_blocks,
-                        timeout_sec,
-                    )
-                else:
-                    result = self._tool_call_once(
-                        prompt,
-                        tool,
-                        effective_model,
-                        system_blocks,
-                        timeout_sec,
-                        _initial_screening_study_policy_entry=frozen_entry,
-                    )
+                result = self._tool_call_once(
+                    prompt,
+                    tool,
+                    effective_model,
+                    system_blocks,
+                    timeout_sec,
+                )
             required = tool.get("input_schema", {}).get("required", [])
             if not required:
-                required = (
-                    tool.get("function", {})
-                    .get("parameters", {})
-                    .get(
-                        "required",
-                        [],
-                    )
+                required = tool.get("function", {}).get("parameters", {}).get(
+                    "required",
+                    [],
                 )
             missing = [key for key in required if key not in result]
             if missing:
@@ -201,7 +165,7 @@ class LLMClient(PolicyMixin, TransportMixin):
         *,
         attempt_started_at: float,
         timeout_sec: float,
-    ) -> NoReturn:
+    ) -> None:
         masked_timeout = _masked_hard_timeout_error(
             exc,
             attempt_started_at=attempt_started_at,

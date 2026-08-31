@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 import pytest
+
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import BranchState, HypothesisProposal, StepRecord
 from scion.core.resource_envelope import ProviderCallCapExhausted
 from scion.proposal.engine import ProposalValidationError
+from scion.proposal.hypothesis_research_basis import (
+    HypothesisResearchBasis,
+    HypothesisResearchFinalized,
+)
 from scion.proposal.llm_client import LLMFormatError, LLMTransportError
 
 from .proposal_pipeline_test_support import FakeCreative, _pipeline
@@ -56,6 +61,144 @@ class _ManyRejectionsCreative(FakeCreative):
         return self.hypothesis
 
 
+def test_direct_h_rejects_latest_live_failure_frontier_before_provider() -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _balance = _pipeline(creative=creative)
+    original_builder = runtime.build_hypothesis_context
+
+    def build_context(**kwargs):
+        context = original_builder(**kwargs)
+        context["experiment_history"] = [
+            {
+                "latest_round": 2,
+                "relation": "current",
+                "proposal_intent": {
+                    "hypothesis_text": "The latest measured mechanism failed.",
+                },
+                "experiment_evidence": {
+                    "stage": "screening",
+                    "protocol_outcome": {
+                        "gate_outcome": "fail",
+                        "reason_codes": ["SCREENING_FAIL_CASE_QUALITY"],
+                    },
+                },
+            }
+        ]
+        return context
+
+    runtime.build_hypothesis_context = build_context
+
+    attempt = pipeline.generate_hypothesis(branch)
+
+    assert attempt.proposal is None
+    assert attempt.execution_outcome is not None
+    assert attempt.execution_outcome.outcome is ExecutionOutcome.NOT_EVALUATED
+    assert attempt.execution_outcome.reason_code == "PROPOSAL_CONTEXT_INVALID"
+    assert "requires bounded hypothesis research" in attempt.execution_outcome.detail
+    assert creative.hypothesis_calls == 0
+
+
+def test_direct_h_allows_live_history_when_latest_round_has_no_failure() -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _balance = _pipeline(creative=creative)
+    original_builder = runtime.build_hypothesis_context
+
+    def build_context(**kwargs):
+        context = original_builder(**kwargs)
+        context["pre_protocol_observations"] = [
+            {
+                "round_num": 1,
+                "relation": "current",
+                "hypothesis": {"hypothesis_text": "An earlier rejected attempt."},
+                "patch": {"present": False},
+                "outcome": {
+                    "stage": "proposal_code",
+                    "reason_code": "PATCH_PROPOSAL_INVALID",
+                    "checks": [],
+                },
+            }
+        ]
+        context["experiment_history"] = [
+            {
+                "latest_round": 2,
+                "relation": "current",
+                "proposal_intent": {
+                    "hypothesis_text": "The latest measured mechanism passed.",
+                },
+                "experiment_evidence": {
+                    "stage": "screening",
+                    "protocol_outcome": {
+                        "gate_outcome": "pass",
+                        "reason_codes": ["SCREENING_PASS"],
+                    },
+                },
+            }
+        ]
+        return context
+
+    runtime.build_hypothesis_context = build_context
+
+    attempt = pipeline.generate_hypothesis(branch)
+
+    assert attempt.proposal is creative.hypothesis
+    assert attempt.execution_outcome is None
+    assert attempt.selected_hypothesis_research_basis is None
+    assert creative.hypothesis_calls == 1
+
+
+def test_selected_h_attempt_attaches_agent_authored_history_frontier_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _balance = _pipeline(creative=creative)
+    runtime.hypothesis_research_public_sources = lambda: ()
+    runtime.hypothesis_research_source_prefixes = lambda: ()
+    pipeline.code_research_limits = CodeResearchLimits(max_turns=1)
+
+    class _Disposition:
+        def to_primitive(self):
+            return {
+                "ref": "history-0009",
+                "disposition": "rejected",
+                "reason": "The failed mechanism does not match this H.",
+            }
+
+    class _Session:
+        selected_history_frontier_review = (_Disposition(),)
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def run(self, *_args, **_kwargs):
+            return HypothesisResearchFinalized(
+                hypothesis=creative.hypothesis,
+                research_basis=HypothesisResearchBasis(
+                    read_refs=("source-0001",),
+                    nearest_prior_refs=(),
+                    material_delta="Change the selected mechanism.",
+                    alternatives_considered=("Keep the current mechanism.",),
+                    observable_prediction="Screening should improve.",
+                    falsification_condition=("Reject if screening does not improve."),
+                ),
+            )
+
+    monkeypatch.setattr(
+        "scion.core.proposal_pipeline.facade.HypothesisResearchSession",
+        _Session,
+    )
+
+    attempt = pipeline.generate_hypothesis(branch)
+
+    assert attempt.selected_hypothesis_research_basis is not None
+    assert attempt.selected_hypothesis_research_basis["history_review"] == [
+        {
+            "ref": "history-0009",
+            "disposition": "rejected",
+            "reason": "The failed mechanism does not match this H.",
+        }
+    ]
+
+
 def test_fresh_sibling_h_does_not_use_rejection_as_repair_steering() -> None:
     pipeline, fresh_branch, runtime, _balance = _pipeline()
     pipeline.step_history.append(
@@ -75,6 +218,9 @@ def test_fresh_sibling_h_does_not_use_rejection_as_repair_steering() -> None:
             decision=None,
             failure_stage="verification",
             failure_detail="V5_solution_consistency",
+            base_champion_version=1,
+            base_source_ref="champion:v1",
+            changed_files=(),
             execution_outcome=ExecutionOutcomeRecord(
                 outcome=ExecutionOutcome.RESEARCH_REJECTED,
                 reason_code="VERIFICATION_HEAVY_REJECTED",
@@ -297,7 +443,7 @@ def test_bounded_h_transcript_exhaustion_stops_before_provider_dispatch() -> Non
     runtime.hypothesis_research_public_sources = lambda: ()
     runtime.hypothesis_research_source_prefixes = lambda: ()
     pipeline.code_research_limits = CodeResearchLimits(
-        max_turns=1,
+        max_turns=2,
         max_transcript_chars=2_000,
     )
 

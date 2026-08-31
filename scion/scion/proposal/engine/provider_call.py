@@ -1,17 +1,20 @@
-"""Provider calls with one best-effort terminal trace for direct V3."""
+"""Bounded provider dispatches with one terminal trace per actual attempt."""
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict
 
 from scion.core.resource_envelope import ProviderCallBudget
-from scion.proposal.llm.errors import LLMFormatError
-from scion.proposal.llm.study_policy import (
-    _resolve_initial_screening_study_policy_entry,
+from scion.proposal.llm.errors import (
+    LLMFormatError,
+    LLMProviderError,
+    LLMTimeoutError,
+    LLMTransportError,
 )
 
 from .trace import _client_request_policy, _TraceWriter
@@ -52,11 +55,14 @@ class ProviderCaller:
         *,
         trace_dir: str | None,
         provider_call_budget: ProviderCallBudget | None = None,
+        provider_transient_retries: int = 0,
     ) -> None:
+        _validate_provider_transient_retries(provider_transient_retries)
         self._client = client
         self._model = model
         self._trace_dir = trace_dir
         self._provider_call_budget = provider_call_budget
+        self._provider_transient_retries = provider_transient_retries
 
     def call(
         self,
@@ -66,7 +72,7 @@ class ProviderCaller:
         snapshot: PromptTurnSnapshot,
         max_response_bytes: int | None = None,
     ) -> Dict[str, Any]:
-        """Call once, write one terminal trace, and return the provider value."""
+        """Dispatch one frozen request with the configured transient retry bound."""
 
         if max_response_bytes is not None and (
             isinstance(max_response_bytes, bool)
@@ -74,37 +80,102 @@ class ProviderCaller:
             or max_response_bytes <= 0
         ):
             raise ValueError("max_response_bytes must be a positive integer or null")
-        frozen_policy_entry = _resolve_initial_screening_study_policy_entry(
-            self._client,
-            request_kind=request_kind,
-            tool=tool,
-            model=self._model,
-        )
-        if self._provider_call_budget is not None:
-            self._provider_call_budget.consume(request_kind=request_kind)
-        _reset_client_call_observations(self._client)
         structured_context = snapshot.structured_context
-
         rendered_system_blocks = [dict(block) for block in snapshot.system_blocks]
         trace = _TraceWriter(self._trace_dir)
-        request_policy = _client_request_policy_for_policy_entry(
+        _reset_client_call_observations(self._client)
+        request_policy = _client_request_policy(
             self._client,
             request_kind=request_kind,
             tool=tool,
             model=self._model,
-            entry=frozen_policy_entry,
         )
-        started_at = datetime.now().isoformat()
-        try:
-            raw = _call_provider_for_policy_entry(
-                self,
-                request_kind=request_kind,
-                prompt=snapshot.user_prompt,
-                tool=tool,
-                system_blocks=rendered_system_blocks,
-                entry=frozen_policy_entry,
-            )
-        except KeyboardInterrupt as exc:
+        for attempt_index in range(self._provider_transient_retries + 1):
+            if attempt_index:
+                _reset_client_call_observations(self._client)
+            started_at = datetime.now().isoformat()
+            if self._provider_call_budget is not None:
+                self._provider_call_budget.consume(request_kind=request_kind)
+            try:
+                raw = self._call_provider(
+                    request_kind=request_kind,
+                    prompt=snapshot.user_prompt,
+                    tool=deepcopy(tool),
+                    system_blocks=deepcopy(rendered_system_blocks),
+                )
+            except KeyboardInterrupt as exc:
+                response_diagnostics = _client_response_diagnostics(self._client)
+                _write_terminal_trace_best_effort(
+                    trace,
+                    request_kind=request_kind,
+                    model=self._model,
+                    tool=tool,
+                    prompt=snapshot.user_prompt,
+                    system_blocks=rendered_system_blocks,
+                    context=structured_context,
+                    started_at=started_at,
+                    client=self._client,
+                    ok=False,
+                    error="provider_call_interrupted",
+                    error_type=type(exc).__name__,
+                    request_policy=request_policy,
+                    provider_response_diagnostics=response_diagnostics,
+                    attempt_index=attempt_index,
+                )
+                raise
+            except Exception as exc:
+                response_diagnostics = _client_response_diagnostics(self._client)
+                retry_planned = (
+                    _is_retryable_provider_error(exc)
+                    and attempt_index < self._provider_transient_retries
+                )
+                _write_terminal_trace_best_effort(
+                    trace,
+                    request_kind=request_kind,
+                    model=self._model,
+                    tool=tool,
+                    prompt=snapshot.user_prompt,
+                    system_blocks=rendered_system_blocks,
+                    context=structured_context,
+                    started_at=started_at,
+                    client=self._client,
+                    ok=False,
+                    error=str(exc),
+                    error_type=type(exc).__name__,
+                    request_policy=request_policy,
+                    provider_response_diagnostics=response_diagnostics,
+                    attempt_index=attempt_index,
+                )
+                if retry_planned:
+                    continue
+                raise
+
+            if max_response_bytes is not None and _json_size_exceeds(
+                raw, max_response_bytes
+            ):
+                error = ProviderResponseSizeExceeded(
+                    "provider response exceeds explicit byte bound: "
+                    f"max_response_bytes={max_response_bytes}"
+                )
+                _write_terminal_trace_best_effort(
+                    trace,
+                    request_kind=request_kind,
+                    model=self._model,
+                    tool=tool,
+                    prompt=snapshot.user_prompt,
+                    system_blocks=rendered_system_blocks,
+                    context=structured_context,
+                    started_at=started_at,
+                    client=self._client,
+                    ok=False,
+                    error=str(error),
+                    error_type=type(error).__name__,
+                    request_policy=request_policy,
+                    provider_response_diagnostics=None,
+                    attempt_index=attempt_index,
+                )
+                raise error
+
             response_diagnostics = _client_response_diagnostics(self._client)
             _write_terminal_trace_best_effort(
                 trace,
@@ -116,75 +187,15 @@ class ProviderCaller:
                 context=structured_context,
                 started_at=started_at,
                 client=self._client,
-                ok=False,
-                error="provider_call_interrupted",
-                error_type=type(exc).__name__,
+                ok=True,
+                response=raw,
                 request_policy=request_policy,
                 provider_response_diagnostics=response_diagnostics,
+                attempt_index=attempt_index,
             )
-            raise
-        except Exception as exc:
-            response_diagnostics = _client_response_diagnostics(self._client)
-            _write_terminal_trace_best_effort(
-                trace,
-                request_kind=request_kind,
-                model=self._model,
-                tool=tool,
-                prompt=snapshot.user_prompt,
-                system_blocks=rendered_system_blocks,
-                context=structured_context,
-                started_at=started_at,
-                client=self._client,
-                ok=False,
-                error=str(exc),
-                error_type=type(exc).__name__,
-                request_policy=request_policy,
-                provider_response_diagnostics=response_diagnostics,
-            )
-            raise
+            return raw
 
-        if max_response_bytes is not None and _json_size_exceeds(
-            raw, max_response_bytes
-        ):
-            error = ProviderResponseSizeExceeded(
-                "provider response exceeds explicit byte bound: "
-                f"max_response_bytes={max_response_bytes}"
-            )
-            _write_terminal_trace_best_effort(
-                trace,
-                request_kind=request_kind,
-                model=self._model,
-                tool=tool,
-                prompt=snapshot.user_prompt,
-                system_blocks=rendered_system_blocks,
-                context=structured_context,
-                started_at=started_at,
-                client=self._client,
-                ok=False,
-                error=str(error),
-                error_type=type(error).__name__,
-                request_policy=request_policy,
-                provider_response_diagnostics=None,
-            )
-            raise error
-
-        response_diagnostics = _client_response_diagnostics(self._client)
-        _write_terminal_trace_best_effort(
-            trace,
-            request_kind=request_kind,
-            model=self._model,
-            tool=tool,
-            prompt=snapshot.user_prompt,
-            system_blocks=rendered_system_blocks,
-            context=structured_context,
-            started_at=started_at,
-            client=self._client,
-            ok=True,
-            response=raw,
-            request_policy=request_policy,
-            provider_response_diagnostics=response_diagnostics,
-        )
-        return raw
+        raise AssertionError("provider retry loop ended without a terminal result")
 
     def _call_provider(
         self,
@@ -193,19 +204,7 @@ class ProviderCaller:
         prompt: str,
         tool: Dict[str, Any],
         system_blocks: list[dict[str, Any]],
-        _initial_screening_study_policy_entry: Any | None = None,
     ) -> Dict[str, Any]:
-        if _initial_screening_study_policy_entry is not None:
-            return self._client.call_with_tool(
-                prompt,
-                tool,
-                self._model,
-                system_blocks=system_blocks,
-                request_kind=request_kind,
-                _initial_screening_study_policy_entry=(
-                    _initial_screening_study_policy_entry
-                ),
-            )
         return self._client.call_with_tool(
             prompt,
             tool,
@@ -213,55 +212,6 @@ class ProviderCaller:
             system_blocks=system_blocks,
             request_kind=request_kind,
         )
-
-
-def _call_provider_for_policy_entry(
-    owner: ProviderCaller,
-    *,
-    request_kind: str,
-    prompt: str,
-    tool: Dict[str, Any],
-    system_blocks: list[dict[str, Any]],
-    entry: Any | None,
-) -> Dict[str, Any]:
-    if entry is None:
-        return owner._call_provider(
-            request_kind=request_kind,
-            prompt=prompt,
-            tool=tool,
-            system_blocks=system_blocks,
-        )
-    return owner._call_provider(
-        request_kind=request_kind,
-        prompt=prompt,
-        tool=tool,
-        system_blocks=system_blocks,
-        _initial_screening_study_policy_entry=entry,
-    )
-
-
-def _client_request_policy_for_policy_entry(
-    client: Any,
-    *,
-    request_kind: str,
-    tool: Dict[str, Any],
-    model: str,
-    entry: Any | None,
-) -> Dict[str, Any]:
-    if entry is None:
-        return _client_request_policy(
-            client,
-            request_kind=request_kind,
-            tool=tool,
-            model=model,
-        )
-    return _client_request_policy(
-        client,
-        request_kind=request_kind,
-        tool=tool,
-        model=model,
-        _initial_screening_study_policy_entry=entry,
-    )
 
 
 def _write_terminal_trace_best_effort(
@@ -281,6 +231,7 @@ def _write_terminal_trace_best_effort(
     error_type: str | None = None,
     request_policy: Dict[str, Any] | None = None,
     provider_response_diagnostics: Mapping[str, Any] | None,
+    attempt_index: int,
 ) -> None:
     try:
         trace.write_terminal(
@@ -298,8 +249,9 @@ def _write_terminal_trace_best_effort(
             llm_usage=_client_usage_metadata(client),
             request_policy=request_policy,
             provider_response_diagnostics=provider_response_diagnostics,
+            attempt_index=attempt_index,
         )
-    except BaseException:  # tracing must not change the provider result
+    except Exception:  # tracing failures must not change the provider result
         return
 
 
@@ -333,6 +285,17 @@ def _client_response_diagnostics(client: Any) -> dict[str, Any] | None:
     except Exception:  # noqa: BLE001 - diagnostics must not affect provider behavior
         return None
     return dict(diagnostics) if isinstance(diagnostics, Mapping) else None
+
+
+def _validate_provider_transient_retries(value: Any) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError("provider_transient_retries must be an integer")
+    if value not in {0, 1}:
+        raise ValueError("provider_transient_retries must be zero or one")
+
+
+def _is_retryable_provider_error(exc: Exception) -> bool:
+    return isinstance(exc, (LLMTimeoutError, LLMTransportError, LLMProviderError))
 
 
 def _json_size_exceeds(value: Any, maximum: int) -> bool:

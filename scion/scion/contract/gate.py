@@ -3,19 +3,10 @@ from __future__ import annotations
 
 import ast
 import time
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any, Callable, List, Mapping
 
 from scion.config.problem import ProblemSpec
-from scion.core.operator_interface import parse_execute_signature
-from scion.core.paths import normalize_relative_patch_path
-from scion.core.models import (
-    CheckResult,
-    ContractResult,
-    HypothesisProposal,
-    PatchProposal,
-    patch_file_changes,
-)
 from scion.contract.checks.randomness import check_non_rng_random
 from scion.contract.checks.security import (
     check_import_whitelist,
@@ -32,13 +23,21 @@ from scion.contract.hypothesis_checks import (
     check_hypothesis_schema,
 )
 from scion.contract.patch_graph import PatchSetGraph
-from scion.contract.result_payload import (
-    build_result as _build_result,
-    check_result as _cr,
-    prefix_checks as _prefix_checks,
-)
+from scion.contract.result_payload import build_result as _build_result
+from scion.contract.result_payload import check_result as _cr
+from scion.contract.result_payload import prefix_checks as _prefix_checks
 from scion.contract.surface_access import SurfaceAccess
 from scion.contract.surface_interface import check_surface_interface
+from scion.core.models import (
+    CheckResult,
+    ContractResult,
+    HypothesisProposal,
+    PatchProposal,
+    patch_file_changes,
+)
+from scion.core.operator_interface import parse_execute_signature
+from scion.core.paths import normalize_relative_patch_path
+
 
 def _normalize_source_overrides(
     source_overrides: Mapping[str, str] | None,
@@ -78,11 +77,13 @@ class ContractGate:
         champion_snapshot_path: str | None = None,
         champion_snapshot_provider: Callable[[], str | None] | None = None,
         source_overrides: Mapping[str, str] | None = None,
-        adapter: Any = None,
     ) -> None:
         self._spec = problem_spec
-        self._adapter = adapter
-        self._operator_signature = parse_execute_signature(operator_execute_signature)
+        declared_interface = getattr(problem_spec, "operator_interface", None)
+        declared_signature = getattr(declared_interface, "execute_signature", None)
+        self._operator_signature = parse_execute_signature(
+            operator_execute_signature or declared_signature
+        )
         self._champion_snapshot_path = champion_snapshot_path
         self._champion_snapshot_provider = champion_snapshot_provider
         self._source_overrides = _normalize_source_overrides(source_overrides)
@@ -100,7 +101,7 @@ class ContractGate:
         base_file_overrides: Mapping[str, str] | None = None,
     ) -> ContractResult:
         """Validate the provider hypothesis against host-owned boundaries."""
-        checks: List[CheckResult] = []
+        checks: list[CheckResult] = []
         source_root = (
             str(base_snapshot_path or "").strip()
             or self._current_champion_snapshot_path()
@@ -144,7 +145,7 @@ class ContractGate:
         base_file_overrides: Mapping[str, str] | None = None,
     ) -> ContractResult:
         """Validate typed patch ownership, syntax, interface, and safety."""
-        checks: List[CheckResult] = []
+        checks: list[CheckResult] = []
         base_file_content = self._file_content_provider(
             base_snapshot_path,
             source_overrides=base_file_overrides,
@@ -191,8 +192,8 @@ class ContractGate:
         enforce_hypothesis_target: bool,
         patch_graph: PatchSetGraph | None,
         base_file_content: Callable[[str], str | None] | None = None,
-    ) -> List[CheckResult]:
-        checks: List[CheckResult] = []
+    ) -> list[CheckResult]:
+        checks: list[CheckResult] = []
         checks.append(self._c4_file_whitelist(patch))
         checks.append(self._c5_frozen_files(patch))
         checks.append(
@@ -423,7 +424,7 @@ class ContractGate:
             root = Path(snapshot_path).expanduser().resolve(strict=False)
             path = (root / file_rel).resolve(strict=False)
             path.relative_to(root)
-        except Exception:
+        except Exception:  # noqa: BLE001 - invalid source roots are unavailable
             return None
         if not path.is_file():
             return None
@@ -436,7 +437,7 @@ class ContractGate:
         if self._champion_snapshot_provider is not None:
             try:
                 value = self._champion_snapshot_provider()
-            except Exception:
+            except Exception:  # noqa: BLE001 - provider is a best-effort source
                 value = None
             if value:
                 return str(value)

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
-from typing import Any, Dict, Iterable
+from collections.abc import Iterable
+from datetime import datetime, timezone
+from typing import Any
 
 from scion.contract.result_payload import diagnostic_checks
+from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
     Branch,
     CanaryResult,
@@ -18,8 +20,12 @@ from scion.core.models import (
     PatchProposal,
     ProtocolResult,
     VerificationResult,
+    patch_file_changes,
 )
 from scion.core.public_refs import public_artifact_ref, public_case_ref
+from scion.core.selected_hypothesis_basis import (
+    canonical_selected_hypothesis_research_basis_json,
+)
 
 from .artifact_refs import _screening_rate_fields
 
@@ -41,8 +47,11 @@ class LineageRecorderMixin:
         decision: Decision,
         champion: ChampionState,
         decision_reason_codes: Iterable[str] | None = None,
+        base_champion_version: int,
+        base_source_ref: str,
+        changed_files: Iterable[str],
         event_id: str | None = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Build the experiment event payload currently written to lineage."""
         stats = protocol_result.stats if protocol_result else None
         raw_metrics_internal_ref = (
@@ -67,12 +76,34 @@ class LineageRecorderMixin:
         reason_codes = tuple(
             dict.fromkeys((*tuple(decision_reason_codes or ()), *protocol_reason_codes))
         )
-        del champion
+        changed_file_values = tuple(dict.fromkeys(changed_files))
+        if type(base_champion_version) is not int or base_champion_version < 0:
+            raise ValueError("lineage base_champion_version is invalid")
+        if not isinstance(base_source_ref, str) or not base_source_ref.strip():
+            raise ValueError("lineage base_source_ref is required")
+        patch_files = (
+            tuple(change.file_path for change in patch_file_changes(patch))
+            if patch is not None
+            else ()
+        )
+        if not set(patch_files).issubset(changed_file_values):
+            raise ValueError("lineage changed_files omit a patch file")
+        event_stage = (
+            protocol_result.stage.value if protocol_result is not None else "canary"
+        )
         event = {
             "campaign_id": self.campaign_id,
             "branch_id": branch.branch_id,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "code_hash": code_hash,
+            "base_champion_version": base_champion_version,
+            "base_source_ref": base_source_ref,
+            "changed_files_json": json.dumps(list(changed_file_values)),
+            "selected_hypothesis_research_basis_json": (
+                canonical_selected_hypothesis_research_basis_json(
+                    branch.selected_hypothesis_research_basis
+                )
+            ),
             "patch_action": patch.action if patch else "",
             "patch_file": patch.file_path if patch else "",
             "hypothesis_text": hypothesis.hypothesis_text or "",
@@ -95,7 +126,7 @@ class LineageRecorderMixin:
                 else "not_run"
             ),
             "canary_result": "passed" if canary_result.passed else "failed",
-            "stage": protocol_result.stage.value if protocol_result else "",
+            "stage": event_stage,
             "case_ids": json.dumps(public_case_ids) if protocol_result else "[]",
             "seed_set": json.dumps(list(protocol_result.seed_set))
             if protocol_result
@@ -109,6 +140,13 @@ class LineageRecorderMixin:
             "decision_reason": json.dumps(list(reason_codes)),
             "model_id": self.model_id,
             "protocol_version": self.protocol_version,
+            "execution_outcome": ExecutionOutcome.EVALUATED.value,
+            "execution_outcome_reason_code": "EVALUATION_COMPLETED",
+            "execution_outcome_detail": "",
+            "execution_outcome_provenance_json": json.dumps(
+                {"stage": event_stage},
+                sort_keys=True,
+            ),
         }
         event.update(_screening_rate_fields(protocol_result))
         if event_id:
@@ -129,6 +167,9 @@ class LineageRecorderMixin:
         decision: Decision,
         champion: ChampionState,
         decision_reason_codes: Iterable[str] | None = None,
+        base_champion_version: int,
+        base_source_ref: str,
+        changed_files: Iterable[str],
         event_id: str | None = None,
         strict: bool = False,
     ) -> str | None:
@@ -145,12 +186,56 @@ class LineageRecorderMixin:
             decision=decision,
             champion=champion,
             decision_reason_codes=decision_reason_codes,
+            base_champion_version=base_champion_version,
+            base_source_ref=base_source_ref,
+            changed_files=changed_files,
             event_id=event_id,
         )
         if self.registry is None:
             return None
 
         try:
+            typed_writer = getattr(self.registry, "record_execution_outcome", None)
+            if callable(typed_writer):
+                protected = {
+                    "event_id",
+                    "timestamp",
+                    "event_kind",
+                    "campaign_id",
+                    "branch_id",
+                    "stage",
+                    "execution_outcome",
+                    "execution_outcome_reason_code",
+                    "execution_outcome_detail",
+                    "execution_outcome_provenance_json",
+                    "decision",
+                    "decision_reason",
+                }
+                extra_fields = {
+                    key: value for key, value in event.items() if key not in protected
+                }
+                outcome = ExecutionOutcomeRecord.from_primitive(
+                    {
+                        "outcome": event["execution_outcome"],
+                        "reason_code": event["execution_outcome_reason_code"],
+                        "detail": event["execution_outcome_detail"],
+                        "provenance": json.loads(
+                            event["execution_outcome_provenance_json"]
+                        ),
+                    }
+                )
+                return typed_writer(
+                    campaign_id=event["campaign_id"],
+                    branch_id=event["branch_id"],
+                    record=outcome,
+                    event_kind=event.get("event_kind", "experiment"),
+                    stage=event["stage"],
+                    decision=event["decision"],
+                    decision_reason=event["decision_reason"],
+                    extra_fields=extra_fields,
+                    event_id=event.get("event_id"),
+                    timestamp=event["timestamp"],
+                )
             return self.registry.record_event(event)
         except (
             Exception

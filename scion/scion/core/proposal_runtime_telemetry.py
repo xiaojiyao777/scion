@@ -127,7 +127,7 @@ class ProposalRuntimeTelemetry:
         self._lock = threading.Lock()
 
     def attempt_scope(self, round_num: int) -> AbstractContextManager[None]:
-        """Return one scope beginning after qualification admission."""
+        """Return one scope for an admitted proposal attempt."""
 
         return _AttemptScope(self, round_num)
 

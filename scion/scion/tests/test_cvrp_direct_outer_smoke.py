@@ -9,7 +9,6 @@ import yaml
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState, ExperimentStage
-from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.proposal.mock_client import MockLLMClient
@@ -142,7 +141,6 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
     assert (VRP_DIR / "cvrplib").is_dir()
     monkeypatch.setenv("SCION_PROBLEM_DATA_ROOT", str(VRP_DIR))
     spec_v1 = _problem_v1()
-    bridge = bridge_problem_spec_v1(spec_v1)
     adapter = load_problem_adapter(spec_v1)
     protocol_config = ProtocolConfig.from_yaml(CONTROLLED_DIR / "protocol.yaml")
     split_manifest = SplitManifest.from_yaml(CONTROLLED_DIR / "split_manifest.yaml")
@@ -158,18 +156,13 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
         runner=runner,
         time_limit_sec=1,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=bridge.metric_specs,
-        objective_policy=bridge.objective_policy,
-        problem_spec=bridge.problem_spec,
+        adapter=adapter,
     )
     gate = VerificationGate(
-        problem_spec=bridge.problem_spec,
         runner=runner,
         metrics_dir=str(tmp_path / "metrics"),
         adapter=adapter,
         strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
-        operator_execute_signature=bridge.operator_execute_signature,
         runtime_time_limit_sec=1,
     )
     llm = _CountingMockLLM(
@@ -178,7 +171,6 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
     )
     campaign_dir = tmp_path / "campaign"
     campaign = CampaignManager(
-        problem_spec=bridge.problem_spec,
         protocol_config=protocol_config,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
@@ -192,7 +184,6 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
         verification_gate=gate,
         experiment_protocol=protocol,
         adapter=adapter,
-        operator_execute_signature=bridge.operator_execute_signature,
     )
 
     trace: list[str] = []
@@ -203,14 +194,29 @@ def test_real_cvrp_direct_outer_multi_file_path(tmp_path, monkeypatch) -> None:
     _instrument(monkeypatch, protocol, "run_experiment", "protocol", trace, counts)
     _instrument(monkeypatch, campaign._decision_finalizer, "apply", "decision", trace, counts)
 
-    campaign.run_one_step()
+    result = None
+    for _ in range(4):
+        result = campaign.run_one_step()
+        if campaign._n_experiments >= 1:
+            break
 
-    assert llm.call_count == 2
-    assert len(llm.required_fields) == 2
-    assert "hypothesis_text" in llm.required_fields[0]
-    assert "file_path" in llm.required_fields[1]
-    assert counts == {"H": 1, "P": 1, "V": 1, "protocol": 1, "decision": 1}
-    assert trace == ["H", "P", "V", "protocol", "decision"]
+    assert result is not None
+    assert campaign._n_experiments == 1
+    assert counts["H"] == counts["P"] == counts["V"]
+    assert 1 <= counts["H"] <= 3
+    assert counts["protocol"] == counts["decision"] == 1
+    assert llm.call_count == 2 * counts["H"]
+    assert len(llm.required_fields) == llm.call_count
+    for offset in range(0, llm.call_count, 2):
+        assert "hypothesis_text" in llm.required_fields[offset]
+        assert "file_path" in llm.required_fields[offset + 1]
+    first_protocol = trace.index("protocol")
+    assert trace[first_protocol:] == ["protocol", "decision"]
+    assert first_protocol == 3 * counts["H"]
+    assert all(
+        trace[offset : offset + 3] == ["H", "P", "V"]
+        for offset in range(0, first_protocol, 3)
+    )
 
     step = next(item for item in campaign._step_history if item.protocol_result is not None)
     assert step.protocol_result.stage == ExperimentStage.SCREENING

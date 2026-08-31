@@ -6,21 +6,39 @@ import json
 import os
 import sqlite3
 import uuid
+from copy import deepcopy
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any, Dict, List
+from typing import Any
+
 import pytest
 
-from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
-from scion.core.campaign import CampaignManager, StepResult
-from scion.core.models import (
-    Branch, BranchState, CanaryResult, ChampionState, Decision,
-    EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
+from scion.config.problem import (
+    ProblemSpec,
+    ProtocolConfig,
+    SearchSpace,
+    SeedLedgerConfig,
+    SplitManifest,
 )
-from scion.proposal.mock_client import MockLLMClient
+from scion.core.campaign import CampaignManager, StepResult
+from scion.core.code_research_limits import CodeResearchLimits
+from scion.core.models import (
+    Branch,
+    BranchState,
+    CanaryResult,
+    ChampionState,
+    CheckResult,
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    ProtocolResult,
+    VerificationResult,
+)
 from scion.problem.spec import ObjectiveMetricSpec
+from scion.proposal.mock_client import MockLLMClient
+from scion.verification.development import DevelopmentCheckRun
 from scion.verification.gate import VerificationGate
 
+from .protocol_adapter_test_support import protocol_test_adapter
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -173,7 +191,11 @@ def _protocol_reason_code(stage: ExperimentStage, gate_outcome: str) -> str:
 class MockExperimentProtocol:
     """Configurable mock ExperimentProtocol for campaign tests."""
 
-    def __init__(self, results: List[ProtocolResult], canary_pass: bool = True) -> None:
+    def __init__(
+        self,
+        results: list[ProtocolResult],
+        canary_pass: bool = True,
+    ) -> None:
         self._results = list(results)
         self._canary_pass = canary_pass
         self.canary_call_count = 0
@@ -184,6 +206,12 @@ class MockExperimentProtocol:
             ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
         )
         self._problem_spec = None
+
+    def set_problem_adapter(self, adapter: Any) -> None:
+        self._problem_spec = adapter.spec
+        objectives = getattr(adapter.spec, "objectives", None)
+        if objectives:
+            self._metric_specs = tuple(objectives)
 
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         self.canary_call_count += 1
@@ -237,14 +265,264 @@ class AlwaysFailVerificationGate(VerificationGate):
         )
 
 
+class _DeterministicBoundedResearchClient:
+    """Adapt direct H/C fixtures to the real bounded K1 tool protocol.
+
+    Campaign lifecycle tests still own their direct response sequences.  This
+    adapter only supplies the deterministic read/review/test/ready actions that
+    a bounded research session requires around those responses. Depending on
+    the test, it either reads/cites or explicitly rejects every latest frontier
+    ref rather than bypassing the production guard.
+    """
+
+    def __init__(
+        self,
+        direct_client: Any,
+        *,
+        failure_frontier_disposition: str = "rejected",
+    ) -> None:
+        if failure_frontier_disposition not in {"rejected", "used"}:
+            raise ValueError("failure frontier disposition must be rejected or used")
+        self.direct_client = direct_client
+        self.failure_frontier_disposition = failure_frontier_disposition
+        self.model = getattr(
+            direct_client,
+            "model",
+            "deterministic-bounded-campaign-research",
+        )
+        self.request_kinds: list[str] = []
+        self.responses: list[dict[str, Any]] = []
+
+    def call_with_tool(
+        self,
+        prompt: str,
+        tool: dict[str, Any],
+        model: str | None = None,
+        system_blocks: list[dict[str, Any]] | None = None,
+        request_kind: str | None = None,
+    ) -> dict[str, Any]:
+        if request_kind is None:
+            raise AssertionError("bounded campaign request_kind is required")
+        self.request_kinds.append(request_kind)
+        response = self._bounded_response(
+            prompt,
+            tool,
+            model=model,
+            system_blocks=system_blocks,
+            request_kind=request_kind,
+        )
+        self.responses.append(deepcopy(response))
+        return response
+
+    def _bounded_response(
+        self,
+        prompt: str,
+        tool: dict[str, Any],
+        *,
+        model: str | None,
+        system_blocks: list[dict[str, Any]] | None,
+        request_kind: str,
+    ) -> dict[str, Any]:
+        blocks = system_blocks or []
+        if request_kind == "hypothesis_research_turn":
+            state = _bounded_research_state(
+                blocks,
+                heading="## Bounded Hypothesis Research State\n",
+            )
+            visible_sources = state["visible_sources"]
+            if not visible_sources:
+                source = next(
+                    item for item in state["source_index"] if item["available"]
+                )
+                return {"action": "read_source", "ref": source["ref"]}
+            frontier = state["failure_frontier"]
+            if frontier["required"] and not frontier["reviewed"]:
+                if self.failure_frontier_disposition == "used":
+                    visible_history_refs = {
+                        item["ref"] for item in state["visible_history"]
+                    }
+                    unread_ref = next(
+                        (
+                            ref
+                            for ref in frontier["refs"]
+                            if ref not in visible_history_refs
+                        ),
+                        None,
+                    )
+                    if unread_ref is not None:
+                        return {"action": "read_history", "ref": unread_ref}
+                return {
+                    "action": "review_history_frontier",
+                    "dispositions": [
+                        (
+                            {"ref": ref, "disposition": "used"}
+                            if self.failure_frontier_disposition == "used"
+                            else {
+                                "ref": ref,
+                                "disposition": "rejected",
+                                "reason": (
+                                    "Not used by this deterministic lifecycle fixture."
+                                ),
+                            }
+                        )
+                        for ref in frontier["refs"]
+                    ],
+                }
+            hypothesis_schema = _bounded_action_schema(
+                tool,
+                "finalize_hypothesis",
+            )["properties"]["hypothesis"]
+            hypothesis = self._direct_response(
+                prompt,
+                hypothesis_schema,
+                model=model,
+                system_blocks=blocks,
+                request_kind="hypothesis",
+            )
+            return {
+                "action": "finalize_hypothesis",
+                "hypothesis": hypothesis,
+                "research_basis": {
+                    "read_refs": [
+                        *(item["ref"] for item in visible_sources),
+                        *(item["ref"] for item in state["visible_history"]),
+                    ],
+                    "nearest_prior_refs": [
+                        item["ref"] for item in state["visible_history"]
+                    ],
+                    "material_delta": (
+                        "Exercise the fixture-selected mechanism as a fresh H."
+                    ),
+                    "alternatives_considered": [
+                        "Keep the current fixture mechanism unchanged."
+                    ],
+                    "observable_prediction": (
+                        "The configured campaign lifecycle outcome will differ."
+                    ),
+                    "falsification_condition": (
+                        "Reject if the configured verification or Protocol check fails."
+                    ),
+                },
+            }
+        if request_kind == "code_research_turn":
+            state = _bounded_research_state(
+                blocks,
+                heading="## Bounded Code Research State\n",
+            )
+            turn_index = state["turn_index"]
+            if turn_index == 0:
+                patch_schema = _bounded_action_schema(tool, "revise")["properties"][
+                    "patch"
+                ]
+                patch = self._direct_response(
+                    prompt,
+                    patch_schema,
+                    model=model,
+                    system_blocks=blocks,
+                    request_kind="code",
+                )
+                return {"action": "revise", "patch": patch}
+            if turn_index == 1:
+                return {"action": "test_patch"}
+            if turn_index == 2:
+                return {"action": "ready"}
+            raise AssertionError(f"unexpected bounded code turn: {turn_index}")
+        if request_kind == "code_research_finalize":
+            return {"outcome": "finalize_patch"}
+        raise AssertionError(f"unexpected request kind: {request_kind}")
+
+    def _direct_response(
+        self,
+        prompt: str,
+        schema: dict[str, Any],
+        *,
+        model: str | None,
+        system_blocks: list[dict[str, Any]],
+        request_kind: str,
+    ) -> dict[str, Any]:
+        return self.direct_client.call_with_tool(
+            prompt,
+            {
+                "name": f"fixture_{request_kind}",
+                "input_schema": deepcopy(schema),
+            },
+            model,
+            system_blocks=system_blocks,
+            request_kind=request_kind,
+        )
+
+
+class _PassingBoundedDevelopmentEvaluator:
+    """Keep legacy campaign fixtures focused on their outer verification gate."""
+
+    def evaluate(self, **_kwargs: Any) -> DevelopmentCheckRun:
+        return DevelopmentCheckRun(outcome="passed")
+
+
+def _bounded_research_state(
+    system_blocks: list[dict[str, Any]],
+    *,
+    heading: str,
+) -> dict[str, Any]:
+    for block in reversed(system_blocks):
+        text = block.get("text")
+        if isinstance(text, str) and text.startswith(heading):
+            value = json.loads(text.removeprefix(heading))
+            if isinstance(value, dict):
+                return value
+    raise AssertionError(f"missing bounded research state: {heading.strip()}")
+
+
+def _bounded_action_schema(
+    tool: dict[str, Any],
+    action: str,
+) -> dict[str, Any]:
+    for schema in tool["input_schema"]["oneOf"]:
+        action_schema = schema.get("properties", {}).get("action", {})
+        if action in action_schema.get("enum", []):
+            return schema
+    raise AssertionError(f"bounded action is unavailable: {action}")
+
+
+def _bounded_campaign(
+    tmp_path: Path,
+    *,
+    llm_client: Any | None = None,
+    failure_frontier_disposition: str = "rejected",
+    **kwargs: Any,
+) -> tuple[CampaignManager, _DeterministicBoundedResearchClient]:
+    """Create a K1 campaign using real bounded H/C session state machines."""
+
+    direct_client = llm_client or MockLLMClient(
+        hypothesis_response=_VALID_HYPOTHESIS,
+        patch_response=_VALID_PATCH,
+    )
+    bounded_client = _DeterministicBoundedResearchClient(
+        direct_client,
+        failure_frontier_disposition=failure_frontier_disposition,
+    )
+    cm = _campaign(
+        tmp_path,
+        llm_client=bounded_client,
+        code_research_limits=CodeResearchLimits(
+            max_turns=(4 if failure_frontier_disposition == "used" else 3)
+        ),
+        **kwargs,
+    )
+    evaluator = _PassingBoundedDevelopmentEvaluator()
+    cm._code_development_evaluator = evaluator
+    cm._proposal_pipeline.code_development_evaluator = evaluator
+    return cm, bounded_client
+
+
 def _campaign(
     tmp_path: Path,
     llm_client: Any = None,
     experiment_protocol: Any = None,
     verification_gate: Any = None,
-    qualification_only: Any = None,
     resource_envelope: Any = None,
     code_research_limits: Any = None,
+    research_history: Any = (),
 ) -> CampaignManager:
     # Create minimal champion code directory
     code_dir = tmp_path / "champion_code"
@@ -256,14 +534,20 @@ def _campaign(
     spec = _make_problem_spec(str(code_dir))
     champion = _make_champion(str(code_dir))
     protocol = experiment_protocol or MockExperimentProtocol(results=[])
-    protocol._problem_spec = spec
     if not getattr(protocol, "_metric_specs", None):
         protocol._metric_specs = (
             ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
         )
+    spec = spec.model_copy(
+        update={"objectives": tuple(protocol._metric_specs)}
+    )
+    protocol._problem_spec = spec
+    adapter = protocol_test_adapter(
+        protocol._metric_specs,
+        problem_spec=spec,
+    )
 
     return CampaignManager(
-        problem_spec=spec,
         protocol_config=_make_protocol_config(),
         split_manifest=_make_split_manifest().model_copy(
             update={"canary": ["canary-case"]}
@@ -277,8 +561,8 @@ def _campaign(
         campaign_dir=campaign_dir,
         verification_gate=verification_gate or AlwaysPassVerificationGate(),
         experiment_protocol=protocol,
-        adapter=SimpleNamespace(spec=spec),
-        qualification_only=qualification_only,
+        adapter=adapter,
+        research_history=research_history,
         resource_envelope=resource_envelope,
         code_research_limits=code_research_limits,
     )

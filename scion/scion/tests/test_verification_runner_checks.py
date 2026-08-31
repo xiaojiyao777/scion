@@ -91,7 +91,10 @@ class TestVerificationGateTestChecks:
         """V3_unit_tests and V4_regression_tests appear when runner+spec set."""
         spec = _make_spec()
         runner = _mock_runner()
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
         patch = _make_patch(_VALID_CODE)
         result = gate.run(str(tmp_path), str(tmp_path), patch)
         check_names = [c.name for c in result.checks]
@@ -114,7 +117,10 @@ class TestVerificationGateTestChecks:
         spec = _make_spec()
         spec = spec.model_copy(update={"unit_test_path": str(test_file)})
         runner = _mock_runner()
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
         patch = _make_patch(_VALID_CODE)
         result = gate.run(str(tmp_path), str(tmp_path), patch)
         assert result.passed is False
@@ -131,7 +137,10 @@ class TestVerificationGateTestChecks:
         test_file.write_text("def test_ok(): pass\n")
         spec = _make_spec().model_copy(update={"unit_test_path": str(test_file)})
         runner = _mock_runner()
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
         monkeypatch.setattr(
             verification_tests.importlib.util,
             "find_spec",

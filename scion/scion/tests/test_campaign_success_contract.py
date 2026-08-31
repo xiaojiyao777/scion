@@ -4,7 +4,7 @@ from scion.core.branch import StateTransitionError
 from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.scheduler import Scheduler
 
-from .campaign_test_support import *  # noqa: F401,F403
+from .campaign_test_support import *
 
 
 def _assert_single_typed_terminal(
@@ -36,7 +36,11 @@ def _assert_single_typed_terminal(
     assert step.protocol_result is None
     assert step.failure_stage == failure_stage
 
-    outcomes = cm._registry.query_execution_outcomes(branch_id=result.branch_id)
+    outcomes = [
+        item
+        for item in cm._registry.query_execution_outcomes(branch_id=result.branch_id)
+        if item["event_kind"] == event_kind
+    ]
     assert len(outcomes) == 1
     assert outcomes[0]["event_kind"] == event_kind
     assert outcomes[0]["stage"] == event_stage
@@ -303,6 +307,12 @@ class TestContractFailure:
         )
         branch = cm._branch_ctrl.get_branch(result.branch_id)
         assert branch.hypothesis is None
+        row = next(
+            row
+            for row in cm._registry.query_by_branch(result.branch_id)
+            if row["event_kind"] == "workspace_execution_outcome"
+        )
+        assert row["selected_hypothesis_research_basis_json"] is None
 
     def test_patch_materialization_failure_is_one_typed_terminal(self, tmp_path):
         """Post-Contract filesystem failure is not a research rejection."""
@@ -391,7 +401,7 @@ class TestContractFailure:
                 del request_kind
                 return self.call(prompt, tool.get("input_schema", {}), model, system_blocks)
 
-        cm = _campaign(
+        cm, _bounded_client = _bounded_campaign(
             tmp_path,
             llm_client=SequencedLLM(),
             experiment_protocol=MockExperimentProtocol(

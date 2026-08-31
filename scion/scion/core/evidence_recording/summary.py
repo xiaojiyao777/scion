@@ -8,6 +8,7 @@ import math
 import os
 import re
 import tempfile
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, Iterable, Mapping
 
@@ -476,6 +477,12 @@ class CampaignSummaryMixin:
                 if hypothesis is not None
                 else None
             ),
+            "selected_hypothesis_research_basis": deepcopy(
+                step.selected_hypothesis_research_basis
+            ),
+            "base_champion_version": step.base_champion_version,
+            "base_source_ref": step.base_source_ref,
+            "changed_files": list(step.changed_files),
         }
         if execution_outcome is not None:
             step_data["execution_outcome"] = execution_outcome
@@ -586,23 +593,22 @@ class CampaignSummaryMixin:
                     pr.candidate_runtime_stop_reasons or {}
                 ),
             }
-            candidate_infeasible_pairs = getattr(
-                pr,
+            for field_name in (
                 "candidate_attributable_infeasible_pairs",
-                None,
-            )
-            if (
-                type(candidate_infeasible_pairs) is int
-                and type(stats.attempted_pairs) is int
-                and type(stats.total_pairs) is int
-                and 0
-                <= candidate_infeasible_pairs
-                <= stats.attempted_pairs
-                <= stats.total_pairs
+                "candidate_only_timeout_pairs",
+                "candidate_only_invalid_output_pairs",
             ):
-                step_data["protocol_result"][
-                    "candidate_attributable_infeasible_pairs"
-                ] = candidate_infeasible_pairs
+                pair_count = getattr(pr, field_name, None)
+                if (
+                    type(pair_count) is int
+                    and type(stats.attempted_pairs) is int
+                    and type(stats.total_pairs) is int
+                    and 0
+                    <= pair_count
+                    <= stats.attempted_pairs
+                    <= stats.total_pairs
+                ):
+                    step_data["protocol_result"][field_name] = pair_count
             paired_effect_cells = _paired_effect_cells_payload(pr)
             if paired_effect_cells:
                 step_data["protocol_result"]["paired_effect_cells"] = (

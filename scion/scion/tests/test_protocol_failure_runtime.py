@@ -153,6 +153,8 @@ def test_candidate_timeout_counts_as_screening_loss_and_is_recorded(tmp_path):
     assert result.stats.valid_pairs == 0
     assert result.stats.failed_pairs == 4
     assert result.stats.candidate_failed_pairs == 4
+    assert result.candidate_only_timeout_pairs == 4
+    assert result.candidate_only_invalid_output_pairs == 0
     assert len(result.pair_feedback) == 4
     assert all(item.comparison == "loss" for item in result.pair_feedback)
     assert "failed_pairs=4" in result.exposed_summary
@@ -205,6 +207,8 @@ FileNotFoundError: [Errno 2] No such file or directory: 'cvrplib/A/A-n32-k5.vrp'
     assert result.pair_feedback == ()
     assert result.candidate_runtime_failure_categories == {}
     assert result.candidate_first_runtime_failure is None
+    assert result.candidate_only_timeout_pairs == 0
+    assert result.candidate_only_invalid_output_pairs == 0
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert raw["candidate_failed_pairs"] == 0
     assert raw["champion_failed_pairs"] == 4
@@ -452,6 +456,8 @@ def test_missing_output_records_both_elapsed_values(tmp_path):
     raw = json.loads(open(result.raw_metrics_ref).read())
     assert result.stats.candidate_failed_pairs == 4
     assert result.stats.champion_failed_pairs == 0
+    assert result.candidate_only_timeout_pairs == 0
+    assert result.candidate_only_invalid_output_pairs == 4
     assert raw["failed_pairs"] == 4
     assert raw["candidate_failed_pairs"] == 4
     assert raw["champion_failed_pairs"] == 0
@@ -553,6 +559,8 @@ def test_both_missing_outputs_count_one_failed_pair_and_both_sides(tmp_path):
     assert result.stats.champion_failed_pairs == 1
     assert result.stats.shared_failed_pairs == 1
     assert result.stats.bilateral_failed_pairs == 0
+    assert result.candidate_only_timeout_pairs == 0
+    assert result.candidate_only_invalid_output_pairs == 0
     decision = _decision_for_screening_result(result)
     assert decision.decision is Decision.CONTINUE_EXPLORE
     assert decision.reason_codes == ("SCREENING_PARTIAL_CHAMPION_EVIDENCE",)
@@ -717,6 +725,8 @@ def test_frozen_dual_timeout_is_explicit_and_not_candidate_only(tmp_path):
     assert result.stats.failed_pairs == 1
     assert result.stats.champion_failed_pairs == 1
     assert result.stats.candidate_failed_pairs == 0
+    assert result.candidate_only_timeout_pairs == 0
+    assert result.candidate_only_invalid_output_pairs == 0
     assert result.reason_codes == (
         "INCOMPLETE_EVIDENCE",
         "CHAMPION_RUNTIME_FAILURE",

@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 import pytest
+
 from .evidence_recorder_test_support import *  # noqa: F401,F403
 
 
@@ -130,6 +131,13 @@ def test_public_summary_and_status_redact_nested_diagnostics_and_branches(
     assert status["branches"][0]["diagnostics"]["trace_uri_note"] == (
         "trace uri traces/branch-1.json"
     )
+    assert summary["steps"][0]["base_champion_version"] == 6
+    assert summary["steps"][0]["base_source_ref"] == (
+        "branch:branch-1:accepted-head:1"
+    )
+    assert summary["steps"][0]["changed_files"] == [
+        "operators/local_search.py"
+    ]
 
 
 def test_promotion_lineage_payload_is_one_plain_experiment_event(
@@ -156,6 +164,9 @@ def test_promotion_lineage_payload_is_one_plain_experiment_event(
         decision=Decision.PROMOTE,
         champion=_champion(version=8),
         decision_reason_codes=("frozen_positive", "runtime_ok"),
+        base_champion_version=6,
+        base_source_ref="branch:branch-1:accepted-head:1",
+        changed_files=("operators/local_search.py",),
     )
 
     assert event["branch_id"] == "branch-1"
@@ -195,6 +206,12 @@ def test_lineage_event_keeps_research_facts_without_replay_identity_mirror(
         protocol_result=protocol_result,
         decision=Decision.PROMOTE,
         champion=_champion(),
+        base_champion_version=6,
+        base_source_ref="branch:branch-1:accepted-head:2",
+        changed_files=(
+            "operators/local_search.py",
+            "operators/new_move.py",
+        ),
     )
     assert event["campaign_id"] == "camp-1"
     assert event["branch_id"] == "branch-1"
@@ -205,6 +222,12 @@ def test_lineage_event_keeps_research_facts_without_replay_identity_mirror(
     assert event["raw_metrics_ref"] == "metrics/formal.json"
     assert event["protocol_version"] == "protocol-v3"
     assert event["decision"] == "promote"
+    assert event["base_champion_version"] == 6
+    assert event["base_source_ref"] == "branch:branch-1:accepted-head:2"
+    assert json.loads(event["changed_files_json"]) == [
+        "operators/local_search.py",
+        "operators/new_move.py",
+    ]
     assert "audit_payload_json" not in event
 
 
@@ -224,10 +247,18 @@ def test_lineage_event_without_protocol_has_no_missing_identity_state(
         protocol_result=None,
         decision=Decision.ABANDON,
         champion=_champion(),
+        base_champion_version=6,
+        base_source_ref="champion:v6",
+        changed_files=("operators/local_search.py",),
     )
 
     assert event["code_hash"] == "candidate-hash"
-    assert event["stage"] == ""
+    assert event["stage"] == "canary"
+    assert event["execution_outcome"] == "evaluated"
+    assert event["execution_outcome_reason_code"] == "EVALUATION_COMPLETED"
+    assert json.loads(event["execution_outcome_provenance_json"]) == {
+        "stage": "canary"
+    }
     assert json.loads(event["case_ids"]) == []
     assert json.loads(event["seed_set"]) == []
     assert event["raw_metrics_ref"] == ""
@@ -259,12 +290,20 @@ def test_db_experiment_event_uses_public_raw_metrics_ref_without_audit_envelope(
         protocol_result=_protocol_result(str(metrics_path)),
         decision=Decision.ABANDON,
         champion=_champion(),
+        base_champion_version=6,
+        base_source_ref="champion:v6",
+        changed_files=("operators/local_search.py",),
     )
 
     rows = registry.query_by_branch("branch-1")
     event = next(row for row in rows if row["event_kind"] == "experiment")
 
     assert event["raw_metrics_ref"] == "metrics/screening-metrics.json"
+    assert event["base_champion_version"] == 6
+    assert event["base_source_ref"] == "champion:v6"
+    assert json.loads(event["changed_files_json"]) == [
+        "operators/local_search.py"
+    ]
     assert not contains_absolute_path(event["raw_metrics_ref"])
     assert "audit_payload_json" not in event
 
@@ -290,6 +329,9 @@ def test_strict_lineage_event_write_failure_raises_directly(
             protocol_result=_protocol_result(str(tmp_path / "metrics.json")),
             decision=Decision.PROMOTE,
             champion=_champion(),
+            base_champion_version=6,
+            base_source_ref="champion:v6",
+            changed_files=("operators/local_search.py",),
             strict=True,
         )
 

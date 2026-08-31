@@ -26,6 +26,7 @@ from scion.protocol.experiment.feedback import (
 )
 from scion.protocol.experiment.selection import select_seeds
 from scion.protocol.gates import screening_gate
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 
 def _pair(
@@ -407,12 +408,14 @@ def test_experiment_persists_recomputable_corrected_case_measurement(
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=(
-            ObjectiveMetricSpec(
-                name="fleet_violation", direction="minimize", priority=1
-            ),
-            ObjectiveMetricSpec(
-                name="total_distance", direction="minimize", priority=2
+        adapter=protocol_test_adapter(
+            (
+                ObjectiveMetricSpec(
+                    name="fleet_violation", direction="minimize", priority=1
+                ),
+                ObjectiveMetricSpec(
+                    name="total_distance", direction="minimize", priority=2
+                ),
             ),
         ),
     )
@@ -511,12 +514,14 @@ def test_experiment_candidate_failure_remains_typed_measurement_evidence(
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=(
-            ObjectiveMetricSpec(
-                name="fleet_violation", direction="minimize", priority=1
-            ),
-            ObjectiveMetricSpec(
-                name="total_distance", direction="minimize", priority=2
+        adapter=protocol_test_adapter(
+            (
+                ObjectiveMetricSpec(
+                    name="fleet_violation", direction="minimize", priority=1
+                ),
+                ObjectiveMetricSpec(
+                    name="total_distance", direction="minimize", priority=2
+                ),
             ),
         ),
     )

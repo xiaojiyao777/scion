@@ -89,6 +89,9 @@ def _verified_source_step(
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(target,),
         decision_reason_codes=("SCREENING_FAIL",),
     )
 
@@ -204,8 +207,14 @@ def test_direct_cvrp_hypothesis_context_is_open_algorithm_guidance() -> None:
     assert "No prepared file or mechanism is mandatory" in rendered
     assert "Runtime errors may explain failed outcomes" in rendered
     assert "Use MDE only when a matched calibration exists" in rendered
-    assert "R3 has no matched MDE or power estimate" in rendered
-    assert "same-seed A/A result checks only obvious false-pass" in rendered
+    assert "A same-seed A/A check can expose an obvious false-pass path" in rendered
+    assert "does not establish MDE or power" in rendered
+    provider_guidance = "\n".join(
+        context["proposal_renderer_inputs"]["solver_design_prompt_guidance"][
+            "hypothesis_guidance"
+        ]
+    )
+    assert "R3" not in provider_guidance
     assert "research_question" not in context
     assert "prior_research_observations" not in context
     assert "smallest complete causal implementation" in rendered

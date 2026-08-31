@@ -2,45 +2,51 @@
 
 Owns:
 
-  - ``_spec``          — the static ``ProblemSpec``
-  - ``_adapter``       — optional problem adapter
+  - ``_adapter``       — the required problem boundary
+  - ``_spec``          — the definition exposed by that adapter
   - ``_ctx_manager``   — adapter-aware ``ContextManager``
 
 Also provides thin context-render wrappers (``build_hypothesis_context`` /
 ``build_code_context``) that pre-fill the
-``problem_spec`` argument when delegating to the underlying ContextManager,
-so campaign-side callers do not thread ``self._spec`` through every call.
+``problem_spec`` argument from the adapter when delegating to the underlying
+ContextManager, so campaign-side callers do not carry a second problem object.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from typing import Any, Optional
+from typing import Any
 
 from scion.core.research_history import (
     normalize_research_history_record,
     problem_id_from_spec,
 )
 from scion.core.research_input import normalize_research_input
+from scion.problem.contracts import ProblemAdapter
+from scion.problem.loader import adapter_package_prefixes
 
 
 class ProblemRuntime:
-    """Owns problem spec + adapter + ContextManager."""
+    """Own the adapter-defined problem boundary and proposal context service."""
 
     def __init__(
         self,
         *,
-        problem_spec: Any,
-        adapter: Optional[Any] = None,
+        adapter: ProblemAdapter,
         split_manifest: Any | None = None,
         seed_ledger: Any | None = None,
         research_input: Any | None = None,
         research_history: Sequence[Mapping[str, Any]] = (),
         development_suites: tuple[Any, ...] = (),
     ) -> None:
-        self._spec = problem_spec
+        if adapter is None:
+            raise TypeError("ProblemRuntime requires a problem adapter")
+        problem_spec = getattr(adapter, "spec", None)
+        if problem_spec is None:
+            raise TypeError("problem adapter must expose its problem spec")
         self._adapter = adapter
+        self._spec = problem_spec
         self._split_manifest = split_manifest
         self._seed_ledger = seed_ledger
         self._research_input = (
@@ -71,7 +77,7 @@ class ProblemRuntime:
         return self._spec
 
     @property
-    def adapter(self) -> Optional[Any]:
+    def adapter(self) -> ProblemAdapter:
         return self._adapter
 
     @property
@@ -105,11 +111,11 @@ class ProblemRuntime:
     # ------------------------------------------------------------------
 
     def build_hypothesis_context(self, **kwargs):
-        kwargs.setdefault("problem_spec", self._spec)
+        kwargs["problem_spec"] = self._spec
         return self._ctx_manager.build_hypothesis_context(**kwargs)
 
     def build_code_context(self, **kwargs):
-        kwargs.setdefault("problem_spec", self._spec)
+        kwargs["problem_spec"] = self._spec
         kwargs.setdefault("development_suites", self._development_suites)
         return self._ctx_manager.build_code_context(**kwargs)
 
@@ -156,6 +162,6 @@ class ProblemRuntime:
         return tuple(records)
 
     def hypothesis_research_source_prefixes(self) -> tuple[str, ...]:
-        """Return the host-known problem package prefix for source adjacency."""
+        """Return adapter-declared package prefixes for source adjacency."""
 
-        return (f"scion.problems.{problem_id_from_spec(self._spec)}.",)
+        return adapter_package_prefixes(self._spec)

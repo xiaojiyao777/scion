@@ -13,8 +13,10 @@ from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
     load_problem_spec_v1_from_yaml,
 )
+from scion.problem.loader import (
+    load_problem_spec_v1_from_yaml as load_problem_spec_v1_direct,
+)
 from scion.problem.spec import ParameterSearchSpec, ProblemSpecV1
-
 
 PROBLEMS_DIR = Path(__file__).resolve().parents[1] / "problems"
 
@@ -26,6 +28,11 @@ def _load_spec(path: Path, *, canary_case_path: str = "") -> ProblemSpecV1:
     if canary_case_path:
         data["canary_case_path"] = canary_case_path
     return ProblemSpecV1(**data)
+
+
+def test_bridge_reexports_the_authoritative_loader() -> None:
+    assert load_problem_spec_v1_from_yaml is load_problem_spec_v1_direct
+    assert load_problem_spec_v1_from_yaml.__module__ == "scion.problem.loader"
 
 
 def test_toy_tsp_bridge_maps_legacy_problem_spec_fields() -> None:

@@ -10,15 +10,28 @@ from typing import Any, List
 
 import pytest
 
-from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
+from scion.config.problem import (
+    ProblemSpec,
+    ProtocolConfig,
+    SearchSpace,
+    SeedLedgerConfig,
+    SplitManifest,
+)
 from scion.core.campaign import CampaignManager
 from scion.core.models import (
-    CanaryResult, ChampionState,
-    EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
+    CanaryResult,
+    ChampionState,
+    CheckResult,
+    EvalStats,
+    ExperimentStage,
+    ProtocolResult,
+    VerificationResult,
 )
-from scion.proposal.mock_client import MockLLMClient
 from scion.problem.spec import ObjectiveMetricSpec
+from scion.proposal.mock_client import MockLLMClient
 from scion.verification.gate import VerificationGate
+
+from .campaign_test_support import _bounded_campaign
 
 # ---------------------------------------------------------------------------
 # Shared helpers (mirroring test_campaign.py conventions)
@@ -121,6 +134,12 @@ class _MockExperimentProtocol:
         )
         self._problem_spec = None
 
+    def set_problem_adapter(self, adapter: Any) -> None:
+        self._problem_spec = adapter.spec
+        objectives = getattr(adapter.spec, "objectives", None)
+        if objectives:
+            self._metric_specs = tuple(objectives)
+
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         self.canary_call_count += 1
         return CanaryResult(passed=self._canary_pass, reason=None)
@@ -162,7 +181,6 @@ def _build_campaign(
     protocol._problem_spec = spec
 
     return CampaignManager(
-        problem_spec=spec,
         protocol_config=ProtocolConfig(
             screening_n=6,
             screening_win_rate_threshold=0.66,
@@ -242,10 +260,11 @@ class TestFullMockCampaign:
             ]
             * 5
         )
-        cm = _build_campaign(
+        cm, bounded_client = _bounded_campaign(
             tmp_path,
             llm_client=client,
             experiment_protocol=protocol,
+            failure_frontier_disposition="used",
         )
 
         results = []
@@ -260,6 +279,31 @@ class TestFullMockCampaign:
         )
         assert protocol.experiment_call_count >= 2
         assert client.call_count >= 4
+        assert "hypothesis_research_turn" in bounded_client.request_kinds
+        assert "code_research_turn" in bounded_client.request_kinds
+        research_actions = [
+            response.get("action", response.get("outcome"))
+            for response in bounded_client.responses
+        ]
+        review_index = research_actions.index("review_history_frontier")
+        assert "read_source" in research_actions[:review_index]
+        assert "read_history" in research_actions[:review_index]
+        assert "finalize_hypothesis" in research_actions[review_index + 1 :]
+        assert all(
+            item["disposition"] == "used"
+            for item in bounded_client.responses[review_index]["dispositions"]
+        )
+        code_actions = [
+            action
+            for action in research_actions
+            if action in {"revise", "test_patch", "ready", "finalize_patch"}
+        ]
+        assert code_actions[:4] == [
+            "revise",
+            "test_patch",
+            "ready",
+            "finalize_patch",
+        ]
         branch = cm._branch_ctrl.get_branch(results[-1].branch_id)
         workspace = Path(cm._branch_workspaces[branch.branch_id])
         assert branch.current_code_hash is not None

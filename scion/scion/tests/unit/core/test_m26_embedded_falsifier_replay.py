@@ -7,9 +7,11 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from scion.cli.commands.init_run import _load_research_input
 from scion.core.code_research_limits import CodeResearchLimits
-from scion.core.models import Branch, BranchState, ChampionState, PatchProposal
+from scion.core.models import Branch, BranchState, ChampionState
 from scion.core.research_history import load_research_histories
 from scion.problem.bridge import (
     legacy_problem_spec_from_v1,
@@ -22,10 +24,13 @@ from scion.problems.cvrp.prior_research_observation import (
 from scion.proposal.code_research_session import CodeResearchSession
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_snapshot import freeze_proposal_context
-from scion.proposal.engine import CreativeLayer, build_prompt_turn_snapshot
+from scion.proposal.engine import (
+    CreativeLayer,
+    ProposalValidationError,
+    build_prompt_turn_snapshot,
+)
 from scion.proposal.hypothesis_research_corpus import (
     build_hypothesis_research_corpus,
-    nearest_history_headline_ref,
 )
 
 _SCION_ROOT = Path(__file__).resolve().parents[4]
@@ -217,7 +222,7 @@ def test_m26_real_context_has_five_observations_then_thirty_five_history() -> No
     )
 
 
-def test_m26_h1_h2_headlines_replay_to_later_terminal_and_exact_prior() -> None:
+def test_m26_h1_h2_history_indexes_remain_complete_without_host_ranking() -> None:
     fixture = _fixture()
     research_input = _load_research_input(_M26_INPUT)
     history = load_research_histories(
@@ -243,30 +248,31 @@ def test_m26_h1_h2_headlines_replay_to_later_terminal_and_exact_prior() -> None:
         problem_spec=legacy_problem_spec_from_v1(spec),
     )
     provider_context = freeze_proposal_context("hypothesis", context).provider_context()
-    candidates = fixture["nearest_history_candidates"]
     expected_refs = fixture["expected"]["nearest_history_refs"]
 
     _, h1_histories, _ = build_hypothesis_research_corpus(provider_context)
-    h1_ref = nearest_history_headline_ref(
-        candidates[0], tuple(entry["index"] for entry in h1_histories)
-    )
     assert (
         h1_histories[30]["index"]["hypothesis"]
         == (h1_histories[31]["index"]["hypothesis"])
     )
-    assert h1_ref == expected_refs[0] == "history-0032"
+    assert expected_refs[0] == "history-0032"
+    assert expected_refs[0] in {entry["ref"] for entry in h1_histories}
 
     h2_context = deepcopy(provider_context)
-    h2_context["experiment_history"] = [{"proposal_intent": candidates[0]}]
+    h2_context["experiment_history"] = [
+        {
+            "latest_round": 1,
+            "relation": "current",
+            "proposal_intent": fixture["nearest_history_candidates"][0],
+        }
+    ]
     _, h2_histories, _ = build_hypothesis_research_corpus(h2_context)
-    h2_ref = nearest_history_headline_ref(
-        candidates[1], tuple(entry["index"] for entry in h2_histories)
-    )
     assert len(h2_histories) == 41
-    assert h2_ref == expected_refs[1] == "history-0034"
+    assert expected_refs[1] == "history-0034"
+    assert expected_refs[1] in {entry["ref"] for entry in h2_histories}
 
 
-def test_m26_falsifier_is_a_non_evidentiary_enum_and_source_is_not_replayed() -> None:
+def test_m26_failed_falsifier_is_fail_closed_and_source_is_not_replayed() -> None:
     fixture = _fixture()
     source = fixture["source"]
     probe = fixture["falsifier"]
@@ -312,10 +318,12 @@ def test_m26_falsifier_is_a_non_evidentiary_enum_and_source_is_not_replayed() ->
         },
     )
 
-    result = session.run(snapshot)
+    with pytest.raises(
+        ProposalValidationError,
+        match="falsifier-rejected draft",
+    ):
+        session.run(snapshot)
 
-    assert isinstance(result, PatchProposal)
-    assert result.code_content.endswith("return value + 1\n")
     assert observed_probe_sources == [probe["source"]]
     assert len(client.calls) == fixture["expected"]["code_research_provider_calls"]
     for call in client.calls[2:]:

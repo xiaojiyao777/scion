@@ -157,21 +157,21 @@ def test_project_prompt_rejects_phase_mismatch_and_unknown_kind() -> None:
         subject.project_prompt("repair", snapshot)
 
 
-def test_hypothesis_prompt_requests_material_evidence_grounded_refinement() -> None:
+def test_hypothesis_prompt_keeps_history_optional_and_non_directive() -> None:
     snapshot = freeze_proposal_context("hypothesis", _hypothesis_context())
 
     projection = subject.project_prompt("hypothesis", snapshot)
     system_text = "\n".join(block["text"] for block in projection.system_blocks)
 
     assert "algorithmically material hypothesis" in system_text
-    assert (
-        "one evidence-grounded mechanism-level change or refinement"
-        in projection.user_prompt
+    assert "History is optional research evidence" in projection.user_prompt
+    assert "cite records you actually read, or ignore it" in projection.user_prompt
+    assert "does not prescribe a mechanism, action, target" in projection.user_prompt
+    assert "mechanisms already evaluated in experiment_history" not in (
+        projection.user_prompt
     )
-    assert "mechanisms already evaluated in experiment_history" in projection.user_prompt
-    assert "Reusing an evaluated target is allowed" in projection.user_prompt
-    assert "semantically equivalent rewrite is not a refinement" in projection.user_prompt
-    assert "materially different mechanism" not in projection.user_prompt
+    assert "current research frontier" not in projection.user_prompt
+    assert "Otherwise pivot" not in projection.user_prompt
 
 
 def test_prompt_projection_has_no_authority_or_capability_dependency() -> None:

@@ -44,7 +44,7 @@ _PRIORITY_TIERS: tuple[frozenset[BranchState], ...] = (
 )
 _RESEARCH_STATES = frozenset({BranchState.EXPLORE})
 _TERMINAL_STATES = frozenset(
-    {BranchState.PROMOTED, BranchState.ABANDONED, BranchState.PARKED_LINEAGE}
+    {BranchState.PROMOTED, BranchState.ABANDONED}
 )
 # V3 sections 11.1 and 12.2: keep depth within a direction while allowing up to
 # three naturally divergent directions.  Slot admission remains evidence-blind.

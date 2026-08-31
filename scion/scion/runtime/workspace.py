@@ -8,7 +8,6 @@ import os
 import shutil
 import stat
 import tempfile
-import uuid
 from collections.abc import Callable
 from pathlib import Path
 from typing import Iterable, Optional
@@ -68,8 +67,6 @@ class WorkspaceMaterializer:
         self._champions_dir.mkdir(parents=True, exist_ok=True)
         self._archive_dir = self._campaign_dir / "archive"
         self._archive_dir.mkdir(parents=True, exist_ok=True)
-        self._inflight_branch_workspaces: set[Path] = set()
-        self._inflight_candidate_workspaces: set[Path] = set()
 
     # ------------------------------------------------------------------
     # Public API
@@ -93,30 +90,28 @@ class WorkspaceMaterializer:
             raise FileNotFoundError(f"code_base does not exist: {code_base}")
 
         dest = self._workspaces_dir / branch_id
-        leased_dest = Path(os.path.abspath(dest))
+        absolute_dest = Path(os.path.abspath(dest))
         workspace_root = Path(os.path.abspath(self._workspaces_dir))
-        if leased_dest.parent != workspace_root:
+        if absolute_dest.parent != workspace_root:
             raise ValueError("refusing to create an invalid branch workspace")
         if dest.is_symlink():
             raise ValueError("refusing to replace a symlinked branch workspace")
+        complete = False
         try:
-            self._inflight_branch_workspaces.add(leased_dest)
             if dest.exists():
                 shutil.rmtree(dest)
             shutil.copytree(src, dest, symlinks=False)
             # Ensure workspace is writable even if copied from a read-only champion
             # snapshot.
             _make_tree_writable(dest)
-        except BaseException:
-            try:
-                self._cleanup_leased_tree(
-                    leased_dest,
-                    leases=self._inflight_branch_workspaces,
+            complete = True
+            return str(dest)
+        finally:
+            if not complete:
+                self._cleanup_tree_best_effort(
+                    absolute_dest,
+                    context="interrupted branch workspace",
                 )
-            except Exception:
-                logger.exception("Failed to clean interrupted branch workspace")
-            raise
-        return str(dest)
 
     def create_candidate_workspace(
         self,
@@ -129,89 +124,19 @@ class WorkspaceMaterializer:
             raise FileNotFoundError(
                 f"candidate source workspace does not exist: {source_workspace}"
             )
-        candidate = self._reserve_candidate_workspace()
+        candidate = self._fresh_candidate_workspace(prefix="candidate-")
+        complete = False
         try:
             shutil.copytree(src, candidate, symlinks=False, dirs_exist_ok=True)
             _make_tree_writable(candidate)
-        except BaseException:
-            try:
-                self._cleanup_leased_tree(
-                    Path(os.path.abspath(candidate)),
-                    leases=self._inflight_candidate_workspaces,
-                )
-            except Exception:
-                logger.exception("Failed to clean interrupted candidate workspace")
-            raise
-        return str(candidate)
-
-    def _reserve_candidate_workspace(self) -> Path:
-        """Lease a random candidate path before its first filesystem mutation."""
-
-        candidate_root = Path(os.path.abspath(self._candidate_workspaces_dir))
-        while True:
-            candidate = candidate_root / f"candidate-{uuid.uuid4().hex}"
-            leased_candidate = Path(os.path.abspath(candidate))
-            if leased_candidate in self._inflight_candidate_workspaces:
-                continue
-            try:
-                self._inflight_candidate_workspaces.add(leased_candidate)
-                candidate.mkdir(mode=0o700)
-            except FileExistsError:
-                self._inflight_candidate_workspaces.discard(leased_candidate)
-                continue
-            except BaseException:
-                try:
-                    self._cleanup_leased_tree(
-                        leased_candidate,
-                        leases=self._inflight_candidate_workspaces,
-                    )
-                except Exception:
-                    logger.exception(
-                        "Failed to clean interrupted candidate reservation"
-                    )
-                raise
-            return candidate
-
-    def claim_branch_workspace(self, branch_id: str, workspace: str) -> None:
-        """Release a branch lease after its owner mapping is durable in memory."""
-
-        expected = Path(os.path.abspath(self._workspaces_dir / branch_id))
-        value = Path(os.path.abspath(workspace))
-        if value != expected or value not in self._inflight_branch_workspaces:
-            raise ValueError("branch workspace does not match an inflight lease")
-        if not value.is_dir():
-            raise FileNotFoundError("leased branch workspace is unavailable")
-        self._inflight_branch_workspaces.remove(value)
-
-    def claim_candidate_workspace(self, candidate_workspace: str) -> None:
-        """Release a candidate lease only after Decision binds its workspace."""
-
-        candidate = self._validated_candidate_path(candidate_workspace)
-        if candidate not in self._inflight_candidate_workspaces:
-            raise ValueError("candidate workspace does not match an inflight lease")
-        if not candidate.is_dir():
-            raise FileNotFoundError("leased candidate workspace is unavailable")
-        self._inflight_candidate_workspaces.remove(candidate)
-
-    def cleanup_inflight_workspaces(self) -> None:
-        """Best-effort removal of every unclaimed workspace after interruption."""
-
-        for candidate in tuple(self._inflight_candidate_workspaces):
-            try:
-                self._cleanup_leased_tree(
+            complete = True
+            return str(candidate)
+        finally:
+            if not complete:
+                self._cleanup_tree_best_effort(
                     candidate,
-                    leases=self._inflight_candidate_workspaces,
+                    context="interrupted candidate workspace",
                 )
-            except Exception:
-                logger.exception("Failed to clean inflight candidate workspace")
-        for workspace in tuple(self._inflight_branch_workspaces):
-            try:
-                self._cleanup_leased_tree(
-                    workspace,
-                    leases=self._inflight_branch_workspaces,
-                )
-            except Exception:
-                logger.exception("Failed to clean inflight branch workspace")
 
     def cleanup_branch_workspace(self, branch_id: str) -> None:
         """Remove one deterministic branch destination after interrupted setup."""
@@ -220,27 +145,18 @@ class WorkspaceMaterializer:
         workspace_root = Path(os.path.abspath(self._workspaces_dir))
         if dest.parent != workspace_root:
             raise ValueError("refusing to clean an invalid branch workspace")
-        self._cleanup_leased_tree(
-            dest,
-            leases=self._inflight_branch_workspaces,
-        )
+        self._cleanup_tree(dest)
 
     def create_empty_candidate_workspace(self) -> str:
         """Create an empty isolated candidate for an explicit public closure."""
 
-        return tempfile.mkdtemp(
-            prefix="candidate-development-",
-            dir=self._candidate_workspaces_dir,
-        )
+        return str(self._fresh_candidate_workspace(prefix="candidate-development-"))
 
     def cleanup_candidate_workspace(self, candidate_workspace: str) -> None:
         """Delete an isolated candidate without touching its durable base."""
 
         candidate = self._validated_candidate_path(candidate_workspace)
-        self._cleanup_leased_tree(
-            candidate,
-            leases=self._inflight_candidate_workspaces,
-        )
+        self._cleanup_tree(candidate)
 
     def _validated_candidate_path(self, candidate_workspace: str) -> Path:
         candidate = Path(os.path.abspath(candidate_workspace))
@@ -249,14 +165,24 @@ class WorkspaceMaterializer:
             raise ValueError("refusing to clean a non-candidate workspace")
         return candidate
 
+    def _fresh_candidate_workspace(self, *, prefix: str) -> Path:
+        candidate_root = Path(os.path.abspath(self._candidate_workspaces_dir))
+        return Path(tempfile.mkdtemp(prefix=prefix, dir=candidate_root))
+
     @staticmethod
-    def _cleanup_leased_tree(path: Path, *, leases: set[Path]) -> None:
+    def _cleanup_tree(path: Path) -> None:
         if path.is_symlink():
             path.unlink()
         elif path.exists():
             _make_tree_writable(path)
             shutil.rmtree(path)
-        leases.discard(path)
+
+    @classmethod
+    def _cleanup_tree_best_effort(cls, path: Path, *, context: str) -> None:
+        try:
+            cls._cleanup_tree(path)
+        except Exception:
+            logger.exception("Failed to clean %s", context)
 
     def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
         """Materialize every preflighted change in an isolated workspace.
@@ -422,7 +348,7 @@ class WorkspaceMaterializer:
         return str(archive_dest)
 
     def compute_code_hash(self, workspace: str) -> str:
-        """Compute one content digest over the editable files.
+        """Compute one content digest over runnable candidate files.
 
         Args:
             workspace: Absolute path to the workspace.
@@ -431,7 +357,11 @@ class WorkspaceMaterializer:
             Hex-encoded SHA-256 string.
         """
         ws = Path(workspace)
-        return _hash_files(ws, self._editable_files(ws))
+        files = self._editable_files(ws)
+        registry_path = ws / "registry.yaml"
+        if registry_path.is_file():
+            files.append(registry_path)
+        return _hash_files(ws, files)
 
     def create_mutable_staging(self, source_workspace: str) -> str:
         """Create a writable staging copy of source_workspace.

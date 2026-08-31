@@ -1,10 +1,18 @@
 """Focused tests split from test_protocol.py."""
 
-from .protocol_test_support import *  # noqa: F401,F403
+from pathlib import Path
+
 from scion.core.models import PairwiseCaseFeedback
+from scion.problem.bridge import load_problem_spec_v1_from_yaml
+from scion.problem.loader import load_problem_adapter
 from scion.problem.objectives import MetricComparison, ObjectiveComparison
-from scion.protocol.experiment.feedback import _extract_case_features
-from scion.protocol.experiment.feedback import _aggregate_pairs_to_case_level
+from scion.protocol.experiment.feedback import (
+    _aggregate_pairs_to_case_level,
+    _extract_case_features,
+)
+
+from .protocol_test_support import *
+
 
 def test_lexicographic_compare_win_by_splits():
     cand = {"subcategory_splits": 2, "total_cost": 1000}
@@ -42,7 +50,7 @@ def test_compute_delta_negative():
 
 
 def test_legacy_evaluation_source_is_problem_agnostic():
-    import scion.protocol.evaluation as evaluation
+    from scion.protocol import evaluation
 
     src = inspect.getsource(evaluation)
     assert "DEPRECATED" in src
@@ -115,11 +123,41 @@ def test_compute_eval_stats_basic():
         ),
     ),
 )
-def test_case_features_expose_cvrplib_dimension_without_reading_benchmark(
+def test_cvrp_adapter_exposes_cvrplib_dimension_without_reading_benchmark(
     case_path,
     expected,
 ):
-    assert _extract_case_features(case_path) == expected
+    problem_root = Path(__file__).resolve().parents[1] / "problems" / "cvrp"
+    adapter = load_problem_adapter(
+        load_problem_spec_v1_from_yaml(problem_root / "problem-v1.yaml")
+    )
+
+    assert _extract_case_features(case_path, adapter=adapter) == expected
+
+
+def test_generic_case_features_do_not_guess_problem_semantics() -> None:
+    assert _extract_case_features("cvrplib/A/A-n64-k9.vrp") == {
+        "path_stem": "A-n64-k9",
+        "size_bucket": "unknown",
+    }
+    assert _extract_case_features("cases/small-instance.json") == {
+        "path_stem": "small-instance",
+        "size_bucket": "unknown",
+    }
+
+
+def test_warehouse_adapter_does_not_inherit_cvrplib_case_features() -> None:
+    problem_root = (
+        Path(__file__).resolve().parents[1] / "problems" / "warehouse_delivery"
+    )
+    adapter = load_problem_adapter(
+        load_problem_spec_v1_from_yaml(problem_root / "problem-v1.yaml")
+    )
+
+    assert _extract_case_features("cvrplib/A/A-n64-k9.vrp", adapter=adapter) == {
+        "path_stem": "A-n64-k9",
+        "size_bucket": "unknown",
+    }
 
 
 def test_stats_select_predeclared_effect_metric_and_retain_all_rows():
@@ -211,6 +249,35 @@ def test_stats_reject_missing_declared_effect_metric():
         )
 
 
+def test_stats_allow_explicit_empty_metric_evidence_without_fabricating_metric():
+    stats = compute_eval_stats(
+        ["loss", "loss"],
+        [-1.0, -1.0],
+        metric_deltas=[{}, {}],
+        metric_order=["total_distance"],
+        effect_metric="total_distance",
+        allow_empty_metric_evidence=True,
+    )
+
+    assert stats.n_cases == 2
+    assert stats.losses == 2
+    assert stats.median_delta == -1.0
+    assert (stats.ci_low, stats.ci_high) == (-1.0, -1.0)
+    assert stats.statistical_metric is None
+    assert stats.statistical_status is None
+    assert stats.metric_stats == ()
+
+    with pytest.raises(ValueError, match="effect_metric is absent"):
+        compute_eval_stats(
+            ["loss"],
+            [-1.0],
+            metric_deltas=[{"unrelated_metric": -1.0}],
+            metric_order=["total_distance"],
+            effect_metric="total_distance",
+            allow_empty_metric_evidence=True,
+        )
+
+
 def test_effect_metric_positive_status_accepts_zero_ci_lower_bound():
     stats = compute_eval_stats(
         ["win", "win", "win"],
@@ -240,7 +307,7 @@ def test_bootstrap_ci_all_positive():
 def test_bootstrap_ci_all_negative():
     """When all deltas are negative, ci_high should be < 0."""
     deltas = [-10.0, -20.0, -15.0]
-    ci_low, ci_high = bootstrap_ci(deltas)
+    _ci_low, ci_high = bootstrap_ci(deltas)
     assert ci_high < 0, f"Expected ci_high < 0 but got {ci_high}"
 
 

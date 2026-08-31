@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Mapping, Sequence
+from collections.abc import Mapping, Sequence
+from typing import Any
 
 
 class CvrpSolverDesignProvider:
@@ -54,7 +55,16 @@ class CvrpSolverDesignProvider:
                 "intervention, never as an adapter for an unrelated mechanism."
             ),
         }
-        return guidance.get(normalized, "")
+        target_guidance = guidance.get(normalized, "")
+        development_guidance = (
+            " For a performance-mechanism change, use a self-authored "
+            "development falsifier to exercise the exact proposed path and assert "
+            "a direct functional consequence of activation. Also falsify deadline "
+            "behavior at the largest public synthetic shape in the declared "
+            "regression tests. Do not treat emitted telemetry alone as activation "
+            "proof, and do not infer any formal Protocol case, seed, or outcome."
+        )
+        return f"{target_guidance}{development_guidance}".strip()
 
     def solver_design_hypothesis_guidance(self, context: Any) -> Sequence[str]:
         del context
@@ -72,10 +82,11 @@ class CvrpSolverDesignProvider:
             (
                 "Use paired and case-level total_distance, feasibility, route "
                 "count, and confidence intervals together. Use MDE only when a "
-                "matched calibration exists; R3 has no matched MDE or power "
-                "estimate. Its same-seed A/A result checks only obvious "
-                "false-pass behavior. Runtime errors may explain failed "
-                "outcomes but do not replace objective evidence."
+                "matched calibration exists for the active estimator and "
+                "population. A same-seed A/A check can expose an obvious "
+                "false-pass path but does not establish MDE or power. Runtime "
+                "errors may explain failed outcomes but do not replace objective "
+                "evidence."
             ),
             (
                 "Do not propose generic Scion core, metadata, contract, gate, "

@@ -1,19 +1,24 @@
 from __future__ import annotations
 
 import inspect
+import json
+import os
 import signal
-from types import SimpleNamespace
+from pathlib import Path
 
 import pytest
 
 from scion.cli.commands.init_run import (
     _campaign_signal_handlers,
+    _CampaignOuterHardwall,
     _CampaignSignalStop,
-    _completion_from_run_result,
+    _run_campaign_with_signal_finalization,
     register_run_command,
 )
 from scion.core.campaign_composition import compose_campaign_services
+from scion.core.campaign_loop import CampaignRunResult
 from scion.core.production_boundary import validate_fresh_campaign_output
+from scion.proposal.engine.provider_call import _write_terminal_trace_best_effort
 
 
 class _Manager:
@@ -37,46 +42,121 @@ def test_cli_signal_handler_records_stop_before_exit() -> None:
     assert raised.value.reason == "signal:SIGTERM"
 
 
-@pytest.mark.parametrize(
-    ("reason", "exit_status"),
-    (
-        ("OUTER_HARDWALL_EXCEEDED", 124),
-        ("signal:SIGINT", 130),
-        ("signal:SIGTERM", 143),
-    ),
-)
-def test_deferred_signal_completion_preserves_cli_exit_status(
-    reason: str,
-    exit_status: int,
+@pytest.mark.skipif(not hasattr(signal, "SIGHUP"), reason="SIGHUP unavailable")
+def test_cli_sighup_records_typed_stop_before_terminal_exit() -> None:
+    manager = _Manager()
+
+    with _campaign_signal_handlers(manager):
+        handler = signal.getsignal(signal.SIGHUP)
+        assert callable(handler)
+        with pytest.raises(_CampaignSignalStop) as raised:
+            handler(signal.SIGHUP, None)
+
+    assert manager.reasons == ["signal:SIGHUP"]
+    assert raised.value.reason == "signal:SIGHUP"
+    assert raised.value.exit_status == 128 + int(signal.SIGHUP)
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGHUP"), reason="SIGHUP unavailable")
+def test_cli_keeps_signal_handlers_until_terminal_artifact_is_written(
+    tmp_path: Path,
 ) -> None:
-    result = SimpleNamespace(
-        completed=False,
-        stop_reason=reason,
-        failure_categories={},
-        qualification=SimpleNamespace(
-            config=SimpleNamespace(initial_screening_only=True)
-        ),
-        last_execution_outcome=None,
-    )
+    status_path = tmp_path / "status.json"
 
-    assert _completion_from_run_result(result) == (exit_status, reason)
+    class _FinalizingManager(_Manager):
+        def run(self, *, requested_rounds: int) -> CampaignRunResult:
+            assert requested_rounds == 1
+            os.kill(os.getpid(), signal.SIGHUP)
+            raise AssertionError("SIGHUP must interrupt the active campaign")
+
+        def finalize_requested_stop(
+            self,
+            reason: str,
+            *,
+            interrupted_override: bool | None = None,
+        ) -> None:
+            assert interrupted_override is None
+            os.kill(os.getpid(), signal.SIGTERM)
+            terminal = CampaignRunResult.empty(1).terminalized(
+                reason,
+                interrupted=True,
+            )
+            status_path.write_text(
+                json.dumps({"run_result": terminal.to_projection()}),
+                encoding="utf-8",
+            )
+
+    manager = _FinalizingManager()
+    with pytest.raises(_CampaignSignalStop) as raised:
+        _run_campaign_with_signal_finalization(
+            manager,
+            requested_rounds=1,
+            hardwall=_CampaignOuterHardwall(None),
+        )
+
+    assert raised.value.reason == "signal:SIGHUP"
+    assert manager.reasons == ["signal:SIGHUP"]
+    run_result = json.loads(status_path.read_text(encoding="utf-8"))["run_result"]
+    assert run_result["status"] == "stopped"
+    assert run_result["stop_reason"] == "signal:SIGHUP"
+    assert run_result["execution_outcome_counts"]["interrupted"] == 1
+    assert run_result["last_execution_outcome"] == {
+        "outcome": "interrupted",
+        "reason_code": "EXTERNAL_STOP_REQUESTED",
+        "stage": "campaign",
+    }
 
 
-def test_legacy_qualification_signal_reason_keeps_legacy_completion() -> None:
-    result = SimpleNamespace(
-        completed=False,
-        stop_reason="OUTER_HARDWALL_EXCEEDED",
-        failure_categories={},
-        qualification=SimpleNamespace(
-            config=SimpleNamespace(initial_screening_only=False)
-        ),
-        last_execution_outcome=None,
-    )
+@pytest.mark.skipif(not hasattr(signal, "SIGHUP"), reason="SIGHUP unavailable")
+def test_provider_trace_does_not_swallow_real_terminal_signal() -> None:
+    class _SignalTrace:
+        def write_terminal(self, **_kwargs) -> None:
+            os.kill(os.getpid(), signal.SIGHUP)
 
-    assert _completion_from_run_result(result) == (
-        22,
-        "incomplete_qualification_stop:OUTER_HARDWALL_EXCEEDED",
-    )
+    class _TraceInterruptedManager(_Manager):
+        def __init__(self) -> None:
+            super().__init__()
+            self.finalized: list[tuple[str, bool | None]] = []
+
+        def run(self, *, requested_rounds: int) -> CampaignRunResult:
+            assert requested_rounds == 1
+            _write_terminal_trace_best_effort(
+                _SignalTrace(),
+                request_kind="hypothesis",
+                model="test-model",
+                tool={},
+                prompt="test prompt",
+                system_blocks=[],
+                context={},
+                started_at="2026-08-30T00:00:00",
+                client=object(),
+                ok=True,
+                provider_response_diagnostics=None,
+                attempt_index=0,
+            )
+            raise AssertionError("SIGHUP must escape best-effort trace writing")
+
+        def finalize_requested_stop(
+            self,
+            reason: str,
+            *,
+            interrupted_override: bool | None = None,
+        ) -> None:
+            self.finalized.append((reason, interrupted_override))
+            os.kill(os.getpid(), signal.SIGTERM)
+
+    manager = _TraceInterruptedManager()
+    with pytest.raises(_CampaignSignalStop) as raised:
+        _run_campaign_with_signal_finalization(
+            manager,
+            requested_rounds=1,
+            hardwall=_CampaignOuterHardwall(None),
+        )
+
+    assert raised.value.reason == "signal:SIGHUP"
+    assert raised.value.exit_status == 128 + int(signal.SIGHUP)
+    assert manager.reasons == ["signal:SIGHUP"]
+    assert manager.finalized == [("signal:SIGHUP", None)]
 
 
 def test_composition_owns_the_production_boundary_check() -> None:

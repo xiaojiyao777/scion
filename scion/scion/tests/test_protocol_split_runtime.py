@@ -12,7 +12,7 @@ def test_experiment_protocol_constructor_does_not_create_metrics_dir(tmp_path):
         seed_ledger=SeedLedger(_make_ledger()),
         runner=MagicMock(),
         metrics_dir=str(metrics_dir),
-        metric_specs=_METRIC_SPECS,
+        adapter=protocol_test_adapter(_METRIC_SPECS),
     )
 
     assert protocol.metrics_dir == str(metrics_dir)
@@ -102,7 +102,7 @@ def test_run_experiment_uses_protocol_stage_time_limit_override(tmp_path):
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=_METRIC_SPECS,
+        adapter=protocol_test_adapter(_METRIC_SPECS),
     )
 
     result = proto.run_experiment(

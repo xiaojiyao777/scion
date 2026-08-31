@@ -176,17 +176,28 @@ def _campaign(
     campaign_dir = str(tmp_path / "campaign")
     spec = _make_problem_spec(str(code_dir))
     champion = _make_champion(str(code_dir))
-    protocol = experiment_protocol or SimpleNamespace(
-        runner=object(),
-        config=_make_protocol_config(),
-        _metric_specs=(
-            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
-        ),
-        _problem_spec=spec,
-    )
+    protocol = experiment_protocol
+    if protocol is None:
+        protocol = SimpleNamespace(
+            runner=object(),
+            config=_make_protocol_config(),
+            _metric_specs=(
+                ObjectiveMetricSpec(
+                    name="cost", direction="minimize", priority=1
+                ),
+            ),
+            _problem_spec=spec,
+        )
+
+        def bind_problem_adapter(adapter: Any) -> None:
+            protocol._problem_spec = adapter.spec
+            declared = getattr(adapter.spec, "objectives", None)
+            if declared:
+                protocol._metric_specs = tuple(declared)
+
+        protocol.set_problem_adapter = bind_problem_adapter
 
     return CampaignManager(
-        problem_spec=spec,
         protocol_config=_make_protocol_config(),
         split_manifest=_make_split_manifest().model_copy(
             update={"canary": ["canary-case"]}
@@ -291,7 +302,7 @@ class TestT5WeightOptEvalCount:
 # ---------------------------------------------------------------------------
 
 class TestT6BalanceExhaustedStop:
-    """LLMBalanceError must set stopped_reason='api_balance_exhausted'."""
+    """LLMBalanceError must set run_result.stop_reason consistently."""
 
     def test_llm_balance_error_exists(self):
         """LLMBalanceError must be importable from llm_client."""
@@ -318,7 +329,7 @@ class TestT6BalanceExhaustedStop:
         assert cm._last_stop_reason == "api_balance_exhausted"
 
     def test_stopped_reason_api_balance_exhausted(self, tmp_path):
-        """campaign_summary must record stopped_reason='api_balance_exhausted' on balance error."""
+        """Terminal summary records the typed balance-exhausted stop reason."""
         from scion.proposal.llm_client import LLMBalanceError as _BalanceError
 
         class BalanceExhaustedMockClient:
@@ -331,13 +342,13 @@ class TestT6BalanceExhaustedStop:
         cm = _campaign(tmp_path, llm_client=BalanceExhaustedMockClient())
         cm.run_one_step()
         assert cm.should_stop() is True
-        # Simulate the summary write
-        cm._write_campaign_summary()
+        cm.finalize_requested_stop()
         import json
         from pathlib import Path as _Path
         summary_path = _Path(str(tmp_path / "campaign")) / "campaign_summary.json"
         assert summary_path.exists()
         summary = json.loads(summary_path.read_text())
-        assert summary.get("stopped_reason") == "api_balance_exhausted", (
-            f"Expected 'api_balance_exhausted', got {summary.get('stopped_reason')}"
+        stop_reason = summary.get("run_result", {}).get("stop_reason")
+        assert stop_reason == "api_balance_exhausted", (
+            f"Expected 'api_balance_exhausted', got {stop_reason}"
         )

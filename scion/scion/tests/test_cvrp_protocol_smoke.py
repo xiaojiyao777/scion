@@ -14,7 +14,7 @@ from scion.config.problem import (
 )
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState, ExperimentStage
-from scion.problem.bridge import bridge_problem_spec_v1, load_problem_spec_v1_from_yaml
+from scion.problem.bridge import load_problem_spec_v1_from_yaml
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.proposal.mock_client import MockLLMClient
@@ -51,7 +51,7 @@ def _problem_v1() -> ProblemSpecV1:
 
 def _make_protocol(tmp_path: Path) -> tuple[ExperimentProtocol, ProblemSpecV1]:
     spec_v1 = _problem_v1()
-    bridge = bridge_problem_spec_v1(spec_v1)
+    adapter = load_problem_adapter(spec_v1)
     protocol = ProtocolConfig.from_yaml(CVRP_DIR / "protocol.yaml")
     split_manifest = SplitManifest.from_yaml(CVRP_DIR / "split_manifest.yaml")
     seed_ledger = SeedLedgerConfig.from_yaml(CVRP_DIR / "seed_ledger.yaml")
@@ -64,9 +64,7 @@ def _make_protocol(tmp_path: Path) -> tuple[ExperimentProtocol, ProblemSpecV1]:
             runner=runner,
             time_limit_sec=1,
             metrics_dir=str(tmp_path / "metrics"),
-            metric_specs=bridge.metric_specs,
-            objective_policy=bridge.objective_policy,
-            problem_spec=bridge.problem_spec,
+            adapter=adapter,
         ),
         spec_v1,
     )
@@ -110,7 +108,7 @@ def test_cvrp_local_subprocess_runner_outputs_route_objective() -> None:
 
 def test_cvrp_protocol_canary_passes_with_adapter_valid_outputs(tmp_path: Path) -> None:
     proto, spec_v1 = _make_protocol(tmp_path)
-    adapter = load_problem_adapter(spec_v1)
+    adapter = proto._problem_adapter
 
     result = proto.run_canary(str(CVRP_DIR), str(CVRP_DIR))
 
@@ -173,8 +171,30 @@ def test_cvrp_screening_keeps_static_case_coverage_when_all_solver_pairs_fail(
         selected_surface="solver_design",
     )
 
+    assert result.gate_outcome == "fail"
+    assert result.reason_codes == ("SCREENING_FAIL_WIN_RATE",)
+    assert result.stats.n_cases == 2
+    assert result.stats.losses == 2
+    assert result.stats.median_delta == -1.0
+    assert (result.stats.ci_low, result.stats.ci_high) == (-1.0, -1.0)
+    assert result.stats.statistical_metric is None
+    assert result.stats.statistical_status is None
+    assert result.stats.metric_stats == ()
     assert result.stats.valid_pairs == 0
     assert result.stats.candidate_failed_pairs == 4
+    raw_metrics = json.loads(Path(result.raw_metrics_ref).read_text())
+    assert raw_metrics["complete"] is True
+    assert raw_metrics["case_ids"] == [
+        "data/tiny_5.json",
+        "data/tiny_6.json",
+    ]
+    assert len(raw_metrics["case_level_results"]) == 2
+    assert all(
+        row["comparison"] == "loss"
+        and row["delta"] == -1.0
+        and row["metric_deltas"] == {}
+        for row in raw_metrics["case_level_results"]
+    )
     evidence = result.mechanism_evidence["evidence"]
     assert evidence["coverage"]["provider_inputs"] == 2
     assert evidence["coverage"]["runtime_pairs"] == 0
@@ -329,10 +349,8 @@ def test_cvrp_protocol_solver_design_metrics_preserve_phase_runtime_fields(
 
 def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Path) -> None:
     proto, spec_v1 = _make_protocol(tmp_path)
-    bridge = bridge_problem_spec_v1(spec_v1)
     adapter = load_problem_adapter(spec_v1)
     runner = proto.runner
-    problem_spec = bridge.problem_spec
     champion = ChampionState(
         version=1,
         operator_pool={},
@@ -360,16 +378,12 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
         ),
     )
     gate = VerificationGate(
-        problem_spec=problem_spec,
         runner=runner,
         metrics_dir=str(tmp_path / "metrics"),
         adapter=adapter,
         strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
-        operator_execute_signature=bridge.operator_execute_signature,
     )
     campaign = CampaignManager(
-        problem_spec=problem_spec,
         protocol_config=ProtocolConfig.from_yaml(CVRP_DIR / "protocol.yaml"),
         split_manifest=SplitManifest.from_yaml(CVRP_DIR / "split_manifest.yaml"),
         seed_ledger=SeedLedgerConfig.from_yaml(CVRP_DIR / "seed_ledger.yaml"),
@@ -379,7 +393,6 @@ def test_cvrp_campaign_manager_reaches_real_screening_with_mock_llm(tmp_path: Pa
         verification_gate=gate,
         experiment_protocol=proto,
         adapter=adapter,
-        operator_execute_signature=bridge.operator_execute_signature,
     )
 
     result = campaign.run_one_step()

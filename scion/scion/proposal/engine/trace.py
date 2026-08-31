@@ -33,9 +33,10 @@ class _TraceWriter:
         llm_usage: Dict[str, Any] | None = None,
         request_policy: Dict[str, Any] | None = None,
         provider_response_diagnostics: Mapping[str, Any] | None = None,
-    ) -> None:
+        attempt_index: int | None = None,
+    ) -> str | None:
         if not self._trace_dir:
-            return
+            return None
         os.makedirs(self._trace_dir, exist_ok=True)
         file_stem = (
             f"{datetime.now().strftime('%Y%m%dT%H%M%S%f')}_"
@@ -61,6 +62,8 @@ class _TraceWriter:
             or tool.get("function", {}).get("parameters"),
             "ok": ok,
         }
+        if attempt_index is not None:
+            payload["attempt_index"] = attempt_index
         if response is not None:
             payload["response"] = response
         if error is not None:
@@ -76,6 +79,7 @@ class _TraceWriter:
                 provider_response_diagnostics
             )
         _write_json_atomic(path, payload)
+        return path
 
 
 def _write_json_atomic(path: str, payload: Dict[str, Any]) -> None:
@@ -107,21 +111,7 @@ def _client_request_policy(
     request_kind: str,
     tool: Dict[str, Any],
     model: str,
-    _initial_screening_study_policy_entry: Any | None = None,
 ) -> Dict[str, Any]:
-    if _initial_screening_study_policy_entry is not None:
-        from scion.proposal.llm.study_policy import (
-            _installed_initial_screening_study_policy,
-        )
-
-        _installed_initial_screening_study_policy(
-            client,
-            _initial_screening_study_policy_entry,
-        )
-        projection = _initial_screening_study_policy_entry.to_projection()
-        if type(projection) is not dict:
-            raise TypeError
-        return projection
     resolver = getattr(client, "resolve_request_policy", None)
     if not callable(resolver):
         return {}

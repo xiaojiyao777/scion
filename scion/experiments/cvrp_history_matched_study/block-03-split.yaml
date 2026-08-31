@@ -1,0 +1,17 @@
+version: 0.4-cvrp-history-matched-block-03
+# Same fixed outcome-blind synthetic generation policy as block-01.
+safe_data_roots:
+  - ../../../vrp
+screening:
+  - scion_generated/cvrp_history_matched_v1/block_03_pos_0_radial_n0073_s43001.json
+  - scion_generated/cvrp_history_matched_v1/block_03_pos_1_uniform_n0149_s43002.json
+  - scion_generated/cvrp_history_matched_v1/block_03_pos_2_clustered_n0273_s43003.json
+  - scion_generated/cvrp_history_matched_v1/block_03_pos_3_radial_n0393_s43004.json
+  - scion_generated/cvrp_history_matched_v1/block_03_pos_4_uniform_n0513_s43005.json
+  - scion_generated/cvrp_history_matched_v1/block_03_pos_5_clustered_n0753_s43006.json
+validation:
+  - cvrplib/B/B-n50-k7.vrp
+frozen:
+  - cvrplib/X/X-n573-k30.vrp
+canary:
+  - data/tiny_canary.json

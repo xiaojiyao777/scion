@@ -14,7 +14,6 @@ from scion.core.models import (
     DecisionFeatures,
     ExperimentStage,
 )
-from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.proposal.mock_client import MockLLMClient
@@ -117,7 +116,6 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
     monkeypatch,
 ) -> None:
     spec_v1 = _problem_v1()
-    bridge = bridge_problem_spec_v1(spec_v1)
     adapter = load_problem_adapter(spec_v1)
     protocol_config = ProtocolConfig.from_yaml(FIXTURE_DIR / "protocol.yaml")
     split_manifest = SplitManifest.from_yaml(FIXTURE_DIR / "split_manifest.yaml")
@@ -130,18 +128,13 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
         runner=runner,
         time_limit_sec=2,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=bridge.metric_specs,
-        objective_policy=bridge.objective_policy,
-        problem_spec=bridge.problem_spec,
+        adapter=adapter,
     )
     gate = VerificationGate(
-        problem_spec=bridge.problem_spec,
         runner=runner,
         metrics_dir=str(tmp_path / "metrics"),
         adapter=adapter,
         strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
-        operator_execute_signature=bridge.operator_execute_signature,
         runtime_time_limit_sec=2,
     )
     response = {**_hypothesis_response(), "change_locus": "route_level"}
@@ -150,7 +143,6 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
         patch_response=_patch_response(),
     )
     campaign = CampaignManager(
-        problem_spec=bridge.problem_spec,
         protocol_config=protocol_config,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
@@ -164,7 +156,6 @@ def test_provider_surface_enum_rejects_invalid_locus_before_outer_contract(
         verification_gate=gate,
         experiment_protocol=protocol,
         adapter=adapter,
-        operator_execute_signature=bridge.operator_execute_signature,
     )
     counts: dict[str, int] = {}
     trace: list[str] = []
@@ -221,7 +212,6 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
     monkeypatch,
 ) -> None:
     spec_v1 = _problem_v1()
-    bridge = bridge_problem_spec_v1(spec_v1)
     adapter = load_problem_adapter(spec_v1)
     protocol_config = ProtocolConfig.from_yaml(FIXTURE_DIR / "protocol.yaml")
     split_manifest = SplitManifest.from_yaml(FIXTURE_DIR / "split_manifest.yaml")
@@ -234,18 +224,13 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
         runner=runner,
         time_limit_sec=2,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=bridge.metric_specs,
-        objective_policy=bridge.objective_policy,
-        problem_spec=bridge.problem_spec,
+        adapter=adapter,
     )
     gate = VerificationGate(
-        problem_spec=bridge.problem_spec,
         runner=runner,
         metrics_dir=str(tmp_path / "metrics"),
         adapter=adapter,
         strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
-        operator_execute_signature=bridge.operator_execute_signature,
         runtime_time_limit_sec=2,
     )
     llm = _CountingMockLLM(
@@ -254,7 +239,6 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
     )
     campaign_dir = tmp_path / "campaign"
     campaign = CampaignManager(
-        problem_spec=bridge.problem_spec,
         protocol_config=protocol_config,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
@@ -268,7 +252,6 @@ def test_real_warehouse_campaign_direct_v3_outer_path_is_lossless(
         verification_gate=gate,
         experiment_protocol=protocol,
         adapter=adapter,
-        operator_execute_signature=bridge.operator_execute_signature,
     )
 
     trace: list[str] = []

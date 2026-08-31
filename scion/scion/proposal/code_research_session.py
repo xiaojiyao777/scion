@@ -12,7 +12,11 @@ from scion.core.code_research_limits import (
     MAX_CODE_RESEARCH_PROBE_SOURCE_CHARS,
     CodeResearchLimits,
 )
-from scion.core.models import PatchProposal
+from scion.core.models import (
+    ExecutablePatchValue,
+    PatchProposal,
+    executable_patch_value,
+)
 from scion.core.paths import normalize_relative_patch_path
 from scion.proposal.bounded_research import (
     BoundedMatchCollector,
@@ -90,12 +94,14 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
             "Take exactly one bounded source-research action. read_source reveals "
             "one exact source from the listed source corpus; search_source performs "
             "case-sensitive literal search only; revise stages a typed draft; "
-            "test_patch optionally runs one self-authored non-evidentiary pytest "
-            "hint, then runs host-selected public development checks on that draft; "
-            "the hint outcome never directly determines readiness; all work shares "
-            "the existing test budget. ready (with no patch field) freezes only "
-            "the latest draft whose "
-            "latest test_patch outcome passed; "
+            "test_patch optionally runs one self-authored pytest falsifier, then "
+            "runs host-selected public development checks on that draft; a failed "
+            "falsifier permanently rejects that executable patch value for this "
+            "session (test_hint text cannot change that value), "
+            "while any other falsifier outcome does not establish readiness; all "
+            "work shares the existing test budget. ready (with no patch field) "
+            "freezes only the latest non-rejected draft whose latest test_patch "
+            "host-check outcome passed; "
             "patch that a later independent final decision may confirm."
         ),
         "input_schema": {
@@ -254,7 +260,7 @@ class CodeResearchSession:
         corpus = research_files_from_context(
             {"editable_source_context": source_context}
         )
-        target, initial_paths = _source_inventory(source_context)
+        _target, initial_paths = _source_inventory(source_context)
         visible_paths = {path for path in initial_paths if path in corpus}
         draft_patch: PatchProposal | None = None
         draft_raw: Mapping[str, Any] | None = None
@@ -263,6 +269,7 @@ class CodeResearchSession:
         last_test_outcome: str | None = None
         ready_patch: PatchProposal | None = None
         ready_raw: Mapping[str, Any] | None = None
+        falsifier_rejected_patches: list[ExecutablePatchValue] = []
 
         for turn_index in range(self._limits.max_turns):
             context = self._provider_context(
@@ -282,13 +289,15 @@ class CodeResearchSession:
                     "Choose exactly one bounded research action. Use read_source "
                     "for exact current source, search_source for case-sensitive "
                     "literal discovery, revise to stage a complete typed draft, "
-                    "test_patch to optionally run one self-authored, "
-                    "non-evidentiary pytest hint and then the host-selected checks "
-                    "on that draft. The hint outcome never directly determines "
-                    "readiness; all work shares the existing test budget. Use ready "
-                    "to freeze the latest candidate. Do not assume filesystem or "
-                    "command access. ready has no patch field and is valid only "
-                    "after the latest draft passes test_patch."
+                    "test_patch to optionally run one self-authored pytest falsifier "
+                    "and then the host-selected checks on that draft. A failed "
+                    "falsifier permanently rejects that executable patch value for "
+                    "this session; changing test_hint text cannot clear it. Passing, "
+                    "inconclusive, unavailable, or omitted "
+                    "falsifiers do not establish readiness; host checks must still "
+                    "pass. Use ready to freeze the latest non-rejected candidate. "
+                    "Do not assume filesystem or command access. ready has no patch "
+                    "field."
                 ),
             )
             raw = self._call_provider(
@@ -345,7 +354,35 @@ class CodeResearchSession:
                 last_test_outcome = (
                     str(result.get("outcome")) if result.get("ok") else None
                 )
-                if last_test_outcome == "passed" and draft_patch is not None:
+                if (
+                    result.get("ok") is True
+                    and result.get("falsifier_outcome") == "failed"
+                    and draft_patch is not None
+                    and not _patch_is_rejected(
+                        draft_patch,
+                        falsifier_rejected_patches,
+                        source_before_by_path=editable_corpus,
+                    )
+                ):
+                    falsifier_rejected_patches.append(
+                        executable_patch_value(
+                            draft_patch,
+                            source_before_by_path=editable_corpus,
+                        )
+                    )
+                draft_falsifier_rejected = (
+                    draft_patch is not None
+                    and _patch_is_rejected(
+                        draft_patch,
+                        falsifier_rejected_patches,
+                        source_before_by_path=editable_corpus,
+                    )
+                )
+                if (
+                    last_test_outcome == "passed"
+                    and draft_patch is not None
+                    and not draft_falsifier_rejected
+                ):
                     ready_patch = deepcopy(draft_patch)
                     ready_raw = deepcopy(dict(draft_raw or {}))
                 else:
@@ -354,6 +391,12 @@ class CodeResearchSession:
             else:
                 if draft_patch is None:
                     result = _tool_error("ready", "draft_required")
+                elif _patch_is_rejected(
+                    draft_patch,
+                    falsifier_rejected_patches,
+                    source_before_by_path=editable_corpus,
+                ):
+                    result = _tool_error("ready", "latest_draft_falsifier_failed")
                 elif (
                     last_tested_revision != draft_revision
                     or last_test_outcome != "passed"
@@ -398,9 +441,30 @@ class CodeResearchSession:
         decision = _parse_final_decision(final_raw)
         if decision.outcome == "abandon":
             return CodeResearchAbandon(reason=decision.reason or "abandoned")
+        if draft_patch is not None and _patch_is_rejected(
+            draft_patch,
+            falsifier_rejected_patches,
+            source_before_by_path=editable_corpus,
+        ):
+            raise ProposalValidationError(
+                "finalize_patch cannot confirm a falsifier-rejected draft"
+            )
         if ready_patch is None:
             raise ProposalValidationError(
                 "finalize_patch requires the latest draft to pass development checks"
+            )
+        if (
+            draft_patch != ready_patch
+            or last_tested_revision != draft_revision
+            or last_test_outcome != "passed"
+            or _patch_is_rejected(
+                ready_patch,
+                falsifier_rejected_patches,
+                source_before_by_path=editable_corpus,
+            )
+        ):
+            raise ProposalValidationError(
+                "finalize_patch cannot confirm a falsifier-rejected draft"
             )
         return deepcopy(ready_patch)
 
@@ -494,9 +558,7 @@ class CodeResearchSession:
             ):
                 return _tool_error("test_patch", "falsifier_source_invalid")
             if len(falsifier_source) > MAX_CODE_RESEARCH_PROBE_SOURCE_CHARS:
-                return _tool_error(
-                    "test_patch", "falsifier_source_char_cap_exhausted"
-                )
+                return _tool_error("test_patch", "falsifier_source_char_cap_exhausted")
             try:
                 falsifier_source.encode("utf-8")
             except UnicodeError:
@@ -860,6 +922,21 @@ def _string_chars(value: Any) -> int:
         elif isinstance(item, (list, tuple)):
             stack.extend(item)
     return total
+
+
+def _patch_is_rejected(
+    patch: PatchProposal,
+    rejected_patches: list[ExecutablePatchValue],
+    *,
+    source_before_by_path: Mapping[str, str],
+) -> bool:
+    """Use ordinary executable-value equality for this session's veto list."""
+
+    value = executable_patch_value(
+        patch,
+        source_before_by_path=source_before_by_path,
+    )
+    return any(value == rejected for rejected in rejected_patches)
 
 
 def _bounded_test_projection(

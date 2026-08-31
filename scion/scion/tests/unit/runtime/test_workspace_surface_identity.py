@@ -5,8 +5,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from scion.core.research_surface_index import editable_patterns
 from scion.core.models import PatchProposal
+from scion.core.research_surface_index import editable_patterns
 from scion.runtime.workspace import (
     FrozenFileError,
     WorkspaceMaterializer,
@@ -204,7 +204,7 @@ def test_explicit_operators_policies_patterns_keep_legacy_behavior(
     ]
 
 
-def test_registry_changes_code_digest_only_when_declared_editable(tmp_path: Path) -> None:
+def test_registry_always_changes_candidate_content_digest(tmp_path: Path) -> None:
     ws = _workspace(tmp_path)
     materializer = WorkspaceMaterializer(
         str(tmp_path / "campaign"),
@@ -214,7 +214,7 @@ def test_registry_changes_code_digest_only_when_declared_editable(tmp_path: Path
     code_hash = materializer.compute_code_hash(str(ws))
     _write(ws / "registry.yaml", "operators:\n- name: changed\n")
 
-    assert materializer.compute_code_hash(str(ws)) == code_hash
+    assert materializer.compute_code_hash(str(ws)) != code_hash
 
     registry_materializer = WorkspaceMaterializer(
         str(tmp_path / "campaign-registry"),

@@ -69,14 +69,16 @@ class CreativeLayer:
         *,
         trace_dir: str | None = None,
         provider_call_budget: ProviderCallBudget | None = None,
+        provider_transient_retries: int = 0,
     ) -> None:
         self._client = llm_client
-        self._model = model or getattr(llm_client, "model", None) or "claude-opus-4-6"
+        self._model = model or getattr(llm_client, "model", None) or "gpt-5.6-sol"
         self._provider_calls = ProviderCaller(
             self._client,
             self._model,
             trace_dir=trace_dir,
             provider_call_budget=provider_call_budget,
+            provider_transient_retries=provider_transient_retries,
         )
 
     def generate_direct_hypothesis(

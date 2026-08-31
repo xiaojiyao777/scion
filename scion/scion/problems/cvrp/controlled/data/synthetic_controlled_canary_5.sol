@@ -1,3 +1,3 @@
-Route #1: 2 3
-Route #2: 4 5
+Route #1: 1 2
+Route #2: 3 4
 Cost : 20

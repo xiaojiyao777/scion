@@ -111,7 +111,6 @@ def test_terminal_states_release_slots() -> None:
     branches = [
         _branch(BranchState.PROMOTED, "promoted"),
         _branch(BranchState.ABANDONED, "abandoned"),
-        _branch(BranchState.PARKED_LINEAGE, "historical-parked"),
     ]
     inventory = active_slot_inventory(branches, max_active_branches=1)
     assert inventory == {"used": 0, "max": 1, "available": 1, "branch_ids": []}

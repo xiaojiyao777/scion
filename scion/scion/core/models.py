@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -8,6 +9,9 @@ from typing import Any, Dict, List, Literal, Optional, Tuple
 from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
+)
+from scion.core.selected_hypothesis_basis import (
+    normalize_selected_hypothesis_research_basis,
 )
 
 # --- Branch & Campaign Enums ---
@@ -23,7 +27,6 @@ class BranchState(Enum):
     FROZEN_TESTING = "frozen_testing"
     PROMOTED = "promoted"
     ABANDONED = "abandoned"
-    PARKED_LINEAGE = "parked_lineage"
     STALE = "stale"
     STALE_WEIGHT_UPDATE = "stale_weight_update"  # J4: re-screen needed after weight opt
     BLOCKED_INFRA = "blocked_infra"
@@ -83,6 +86,64 @@ class PatchProposal:
         return patch_file_changes(self)
 
 
+@dataclass
+class ExecutablePatchFileChange:
+    """One materialized filesystem change, without authoring-only metadata."""
+
+    file_path: str
+    action: Literal["modify", "create", "delete"]
+    source_before: str | None
+    source_after: str
+
+
+@dataclass
+class ExecutablePatchValue:
+    """Plain value consumed by workspace execution for one patch proposal."""
+
+    changes: tuple[ExecutablePatchFileChange, ...]
+
+
+@dataclass(frozen=True)
+class AcceptedFileBeforeSource:
+    """Plain source observed immediately before one accepted file change."""
+
+    file_path: str
+    source: str | None
+
+
+@dataclass(frozen=True)
+class AcceptedBranchChange:
+    """One ordinary accepted H/C increment in a branch research head."""
+
+    hypothesis: HypothesisProposal
+    patch: PatchProposal
+    before_sources: tuple[AcceptedFileBeforeSource, ...]
+    changed_files: tuple[str, ...] = ()
+    selected_hypothesis_research_basis: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        changed_files = self.changed_files or tuple(
+            dict.fromkeys(
+                change.file_path for change in patch_file_changes(self.patch)
+            )
+        )
+        if (
+            any(not isinstance(path, str) or not path.strip() for path in changed_files)
+            or len(set(changed_files)) != len(changed_files)
+        ):
+            raise ValueError(
+                "accepted change changed_files must be unique non-empty paths"
+            )
+        patch_paths = {
+            change.file_path for change in patch_file_changes(self.patch)
+        }
+        if not patch_paths.issubset(changed_files):
+            raise ValueError(
+                "accepted change changed_files must include every patch file"
+            )
+        object.__setattr__(self, "changed_files", changed_files)
+
+
 def patch_file_changes(patch: PatchProposal) -> Tuple[PatchFileChange, ...]:
     """Return primary plus additional file changes for a patch proposal."""
     changes = [
@@ -108,6 +169,33 @@ def patch_file_changes(patch: PatchProposal) -> Tuple[PatchFileChange, ...]:
                 )
             )
     return tuple(changes)
+
+
+def executable_patch_value(
+    patch: PatchProposal,
+    *,
+    source_before_by_path: Mapping[str, str],
+) -> ExecutablePatchValue:
+    """Return the complete execution value, excluding non-executable test hints.
+
+    Typed-edit selectors have already been materialized into full-file source by
+    the time a ``PatchProposal`` exists.  Unique file changes are sorted by path
+    because choosing one of them as the proposal's primary change does not alter
+    the resulting filesystem state.
+    """
+
+    changes = sorted(patch_file_changes(patch), key=lambda change: change.file_path)
+    return ExecutablePatchValue(
+        changes=tuple(
+            ExecutablePatchFileChange(
+                file_path=change.file_path,
+                action=change.action,
+                source_before=source_before_by_path.get(change.file_path),
+                source_after=change.code_content,
+            )
+            for change in changes
+        )
+    )
 
 
 # --- Results & Stats ---
@@ -230,6 +318,8 @@ class ProtocolResult:
     case_effect_metric: str = ""
     case_equivalence_band: float = 0.0
     candidate_attributable_infeasible_pairs: Optional[int] = None
+    candidate_only_timeout_pairs: Optional[int] = None
+    candidate_only_invalid_output_pairs: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -373,6 +463,12 @@ class Branch:
     current_code_hash: Optional[str] = None
     # Current ordinary H value for in-process validation/frozen/stale work.
     hypothesis: Optional[HypothesisProposal] = None
+    # Tainted research evidence for the current accepted H. It is copied only
+    # into StepRecord artifacts and is never a Protocol or Decision input.
+    selected_hypothesis_research_basis: dict[str, Any] | None = None
+    # Accepted H/C increments are replayed in order when this head becomes stale.
+    # They are plain research values, not identities or lifecycle authorities.
+    accepted_changes: List[AcceptedBranchChange] = field(default_factory=list)
     # Stage-specific counts for preregistered Protocol sample expansion. A new
     # hypothesis resets them; evaluation increments the active stage count.
     screening_expand_count: int = 0
@@ -382,6 +478,33 @@ class Branch:
     updated_at: datetime = field(default_factory=datetime.now)
     direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text}'
     weight_revision: int = 0  # weight revision this branch was last evaluated against
+
+
+def branch_base_source_ref(branch: Branch) -> str:
+    """Return a plain, human-readable label for the branch's current code base."""
+
+    if branch.current_code_hash is not None or branch.accepted_changes:
+        return (
+            f"branch:{branch.branch_id}:accepted-head:"
+            f"{len(branch.accepted_changes)}"
+        )
+    return f"champion:v{branch.base_champion_id}"
+
+
+def branch_changed_files(
+    branch: Branch,
+    patch: PatchProposal | None = None,
+) -> Tuple[str, ...]:
+    """Return every file changed from the branch's declared champion base."""
+
+    ordered: Dict[str, None] = {}
+    for accepted in branch.accepted_changes:
+        for file_path in accepted.changed_files:
+            ordered.setdefault(file_path, None)
+    if patch is not None:
+        for change in patch_file_changes(patch):
+            ordered.setdefault(change.file_path, None)
+    return tuple(ordered)
 
 # --- Solver Output ---
 
@@ -470,6 +593,9 @@ class StepRecord:
     decision: Optional[Decision]
     failure_stage: Optional[str]
     failure_detail: Optional[str]
+    base_champion_version: int
+    base_source_ref: str
+    changed_files: Tuple[str, ...]
     decision_reason_codes: Optional[Tuple[str, ...]] = None
     decision_engine_reason_codes: Tuple[str, ...] = ()
     diagnostic_reason_codes: Tuple[str, ...] = ()
@@ -480,12 +606,54 @@ class StepRecord:
         Literal["declared_champion", "retained_branch_head"]
     ] = None
     execution_outcome: ExecutionOutcomeRecord | None = None
+    selected_hypothesis_research_basis: dict[str, Any] | None = None
 
     def __post_init__(self) -> None:
+        if (
+            type(self.base_champion_version) is not int
+            or self.base_champion_version < 0
+        ):
+            raise ValueError("base_champion_version must be a non-negative integer")
+        if (
+            not isinstance(self.base_source_ref, str)
+            or not self.base_source_ref.strip()
+            or "\n" in self.base_source_ref
+        ):
+            raise ValueError("base_source_ref must be one non-empty text line")
+        if self.hypothesis is None and self.patch is not None:
+            raise ValueError("a hypothesis-free step cannot carry a patch")
+        if self.patch is not None and not isinstance(self.patch, PatchProposal):
+            raise TypeError("patch must be a PatchProposal")
+        current_patch_files = (
+            tuple(change.file_path for change in patch_file_changes(self.patch))
+            if self.patch is not None
+            else ()
+        )
+        if (
+            not isinstance(self.changed_files, tuple)
+            or any(
+                not isinstance(path, str) or not path.strip()
+                for path in self.changed_files
+            )
+            or len(set(self.changed_files)) != len(self.changed_files)
+        ):
+            raise ValueError("changed_files must be an ordered tuple of unique paths")
+        if not set(current_patch_files).issubset(self.changed_files):
+            raise ValueError("changed_files must include every current patch file")
+        self.selected_hypothesis_research_basis = (
+            normalize_selected_hypothesis_research_basis(
+                self.selected_hypothesis_research_basis
+            )
+        )
         record = self.execution_outcome
         if record is not None and not isinstance(record, ExecutionOutcomeRecord):
             raise TypeError("execution_outcome must be an ExecutionOutcomeRecord")
         if self.hypothesis is None:
+            if self.selected_hypothesis_research_basis is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry a selected hypothesis "
+                    "research basis"
+                )
             if record is None:
                 raise ValueError(
                     "a hypothesis-free step requires an execution outcome"
@@ -544,11 +712,22 @@ class StepRecord:
                     "a hypothesis-free step provenance must contain only its stage"
                 )
         if record is not None and record.outcome is not ExecutionOutcome.EVALUATED:
-            if self.decision is not None:
+            committed_promotion_event_failure = (
+                record.reason_code
+                in {
+                    "PROMOTION_EVENT_WRITE_FAILED",
+                    "PROMOTION_COMMITTED_BOOKKEEPING_FAILED",
+                }
+                and self.decision is Decision.PROMOTE
+            )
+            if self.decision is not None and not committed_promotion_event_failure:
                 raise ValueError(
                     "non-evaluated execution outcome cannot carry a Decision"
                 )
-            if self.protocol_result is not None:
+            if (
+                self.protocol_result is not None
+                and not committed_promotion_event_failure
+            ):
                 raise ValueError(
                     "non-evaluated execution outcome cannot carry a ProtocolResult"
                 )

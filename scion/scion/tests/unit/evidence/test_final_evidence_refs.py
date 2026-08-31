@@ -19,7 +19,6 @@ from scion.evidence import (
 )
 from scion.problems.cvrp.evidence import CvrpEvidencePackageResult
 
-
 _ARTIFACT_KEYS = (
     "manifest",
     "final_quality_json",
@@ -105,6 +104,9 @@ def _step() -> StepRecord:
         decision=Decision.ABANDON,
         failure_stage=None,
         failure_detail=None,
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
     )
 
 

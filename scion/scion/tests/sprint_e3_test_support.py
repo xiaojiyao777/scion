@@ -13,11 +13,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scion.core.models import (
-    Decision, EvalStats, ExperimentStage, HypothesisProposal,
-    PairwiseCaseFeedback, CaseAggregateFeedback,
-    ProtocolResult, StepRecord, VerificationResult, CheckResult,
+    CaseAggregateFeedback,
+    CheckResult,
+    Decision,
+    EvalStats,
+    ExperimentStage,
+    HypothesisProposal,
+    PairwiseCaseFeedback,
+    ProtocolResult,
+    StepRecord,
+    VerificationResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -55,6 +61,9 @@ def _make_step(
         decision=decision,
         failure_stage=failure_stage,
         failure_detail=failure_detail,
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
     )
 
 

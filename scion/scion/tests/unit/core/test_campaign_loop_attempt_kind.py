@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+
 from scion.core.campaign import CampaignManager
 from scion.core.campaign_loop import CampaignLoop
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
@@ -235,11 +236,16 @@ def test_repeated_research_rejections_are_audited_and_schedule_forward() -> None
     assert "requested_rounds_completed" in run.stopped
 
 
-def test_state_only_step_schedules_forward_through_36_stages() -> None:
+def test_typed_reconcile_housekeeping_schedules_forward_through_36_stages() -> None:
     state_only_result = StepResult(
         action="reconcile",
         branch_id="old-promoted-peer",
         reason="no patch to reconcile",
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.NOT_EVALUATED,
+            reason_code="RECONCILE_NO_ACCEPTED_CHANGES",
+            provenance={"stage": "reconcile"},
+        ),
     )
     stages = ("screening", "validation", "frozen")
     formal_results = [
@@ -253,6 +259,7 @@ def test_state_only_step_schedules_forward_through_36_stages() -> None:
     status = run.statuses[-1]
     assert status["evaluated_rounds"] == 36
     assert status["scheduled_calls"] == 36
+    assert status["execution_outcome_counts"]["not_evaluated"] == 0
     assert status["protocol_stage_counts"] == {
         "screening": 12,
         "validation": 12,

@@ -96,8 +96,8 @@ def test_campaign_run_preflights_missing_verification_pytest_before_proposal(
     tests_dir.mkdir()
     (tests_dir / "test_operators.py").write_text("def test_ok(): pass\n")
     cm._vgate = VerificationGate(
-        problem_spec=cm._problem_runtime.spec,
         runner=object(),
+        adapter=cm._problem_runtime.adapter,
     )
     monkeypatch.setattr(
         verification_tests.importlib.util,

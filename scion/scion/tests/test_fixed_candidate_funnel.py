@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 import run_fixed_candidate_funnel as driver
 from scion.core.models import CanaryResult, Decision, ExperimentStage, RunResult
 
@@ -80,8 +81,7 @@ def _prepared(tmp_path: Path) -> driver.Prepared:
         seed_config=_seeds(),
         retained_split_manifest=retained_manifest,
         retained_seed_config=retained_seeds,
-        bridge=SimpleNamespace(),
-        adapter=SimpleNamespace(),
+        adapter=SimpleNamespace(spec=SimpleNamespace()),
         envelope=_envelope(),
     )
 
@@ -583,20 +583,13 @@ def test_protocol_uses_the_same_nondefault_fallback_as_the_resource_envelope(
         protocol_config=SimpleNamespace(
             with_problem_measurement=lambda *_args, **_kwargs: "config"
         ),
-        bridge=SimpleNamespace(
-            problem_spec="problem",
-            metric_specs="metrics",
-            objective_policy="objective",
-        ),
+        adapter=SimpleNamespace(spec="problem"),
     )
     captured = {}
 
     class Protocol:
         def __init__(self, *_args, **kwargs):
             captured.update(kwargs)
-
-        def set_problem_adapter(self, adapter):
-            captured["adapter"] = adapter
 
     monkeypatch.setattr(driver, "ExperimentProtocol", Protocol)
     monkeypatch.setattr(driver, "SplitManager", lambda value: value)
@@ -605,6 +598,7 @@ def test_protocol_uses_the_same_nondefault_fallback_as_the_resource_envelope(
     driver._make_protocol(prepared, _Runner(), tmp_path, retained=False)
 
     assert captured["time_limit_sec"] == 17
+    assert captured["adapter"] is prepared.adapter
 
 
 def test_runner_budget_stops_before_an_extra_delegate_dispatch(tmp_path):

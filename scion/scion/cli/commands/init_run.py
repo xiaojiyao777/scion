@@ -13,14 +13,46 @@ from pathlib import Path
 from typing import Any, Optional, Self
 
 import typer
+import yaml
 
 from scion.cli.commands.data_roots import (
     activate_declared_problem_data_root,
     validate_declared_problem_data_cases,
     with_declared_problem_data_roots,
 )
+from scion.problem.contracts import ProblemAdapter
 
 logger = logging.getLogger(__name__)
+
+
+def _load_cli_problem_adapter(problem_yaml: Path) -> ProblemAdapter:
+    """Load the adapter that owns the CLI campaign's sole problem spec."""
+
+    try:
+        payload = yaml.safe_load(problem_yaml.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError(
+            f"cannot read problem definition: {problem_yaml}: {exc}"
+        ) from exc
+    if not isinstance(payload, dict):
+        raise TypeError(f"problem definition must be a YAML mapping: {problem_yaml}")
+    problem_v1_path = (
+        problem_yaml
+        if payload.get("spec_version") == "problem-v1"
+        else problem_yaml.parent / "problem-v1.yaml"
+    )
+    if not problem_v1_path.exists():
+        raise ValueError(
+            "adapter-backed problem-v1 definition is required; expected "
+            f"{problem_v1_path}"
+        )
+
+    from scion.problem.loader import (
+        load_problem_adapter,
+        load_problem_spec_v1_from_yaml,
+    )
+
+    return load_problem_adapter(load_problem_spec_v1_from_yaml(problem_v1_path))
 
 
 def _load_research_input(path: Path) -> dict[str, Any]:
@@ -168,37 +200,23 @@ def _campaign_signal_handlers(
     *,
     hardwall: _CampaignOuterHardwall | None = None,
 ):
-    """Install minimal SIGTERM/SIGINT handlers for a running campaign."""
+    """Install minimal terminal-signal handlers for a running campaign."""
     previous: dict[int, object] = {}
+    stop_raised = False
 
     def _handler(signum: int, _frame) -> None:
+        nonlocal stop_raised
+        if stop_raised:
+            return
+        stop_raised = True
         if hardwall is not None and hardwall.expired.is_set():
             reason = _OUTER_HARDWALL_REASON
         else:
             signame = signal.Signals(signum).name
             reason = f"signal:{signame}"
         manager.request_stop(reason)
-        should_defer = getattr(
-            manager,
-            "_should_defer_async_stop_exception",
-            None,
-        )
-        if callable(should_defer) and should_defer():
-            return
-        interrupted_hint = getattr(
-            manager,
-            "_async_stop_interrupted_hint",
-            None,
-        )
-        projected_hint = (
-            interrupted_hint(reason) if callable(interrupted_hint) else None
-        )
         interrupted_override = (
-            projected_hint
-            if projected_hint is not None
-            else True
-            if reason == _OUTER_HARDWALL_REASON
-            else None
+            True if reason == _OUTER_HARDWALL_REASON else None
         )
         raise _CampaignSignalStop(
             signum,
@@ -206,7 +224,10 @@ def _campaign_signal_handlers(
             interrupted_override=interrupted_override,
         )
 
-    for signum in (signal.SIGTERM, signal.SIGINT):
+    handled_signals = [signal.SIGTERM, signal.SIGINT]
+    if hasattr(signal, "SIGHUP"):
+        handled_signals.append(signal.SIGHUP)
+    for signum in handled_signals:
         previous[signum] = signal.getsignal(signum)
         signal.signal(signum, _handler)
     try:
@@ -216,35 +237,34 @@ def _campaign_signal_handlers(
             signal.signal(signum, handler)
 
 
+def _run_campaign_with_signal_finalization(
+    manager: Any,
+    *,
+    requested_rounds: int,
+    hardwall: _CampaignOuterHardwall,
+) -> Any:
+    """Keep terminal handlers installed until a caught stop is durable."""
+
+    with _campaign_signal_handlers(manager, hardwall=hardwall), hardwall:
+        try:
+            return manager.run(requested_rounds=requested_rounds)
+        except _CampaignSignalStop as exc:
+            manager.finalize_requested_stop(
+                exc.reason,
+                interrupted_override=exc.interrupted_override,
+            )
+            raise
+
+
 _INCOMPLETE_INFRA_STOP_EXIT_STATUS = 20
 _RESOURCE_EXHAUSTED_EXIT_STATUS = 21
-_INCOMPLETE_QUALIFICATION_EXIT_STATUS = 22
 
 
 def _completion_from_run_result(result: Any) -> tuple[int, str]:
     completed = bool(getattr(result, "completed", False))
     stopped_reason = str(getattr(result, "stop_reason", "") or "")
-    qualification = getattr(result, "qualification", None)
-    qualification_config = getattr(qualification, "config", None)
-    initial_screening_only = bool(
-        qualification_config is not None
-        and getattr(qualification_config, "initial_screening_only", False)
-    )
-    signal_exit_status = (
-        {
-            _OUTER_HARDWALL_REASON: _OUTER_HARDWALL_EXIT_STATUS,
-            "signal:SIGINT": 128 + int(signal.SIGINT),
-            "signal:SIGTERM": 128 + int(signal.SIGTERM),
-        }.get(stopped_reason)
-        if initial_screening_only
-        else None
-    )
-    if signal_exit_status is not None:
-        return signal_exit_status, stopped_reason
     failure_categories = dict(getattr(result, "failure_categories", {}) or {})
     if completed:
-        if qualification is not None:
-            return 0, stopped_reason
         return 0, "command_returned"
     last_execution_outcome = dict(getattr(result, "last_execution_outcome", None) or {})
     if last_execution_outcome.get("outcome") == "resource_exhausted":
@@ -256,18 +276,14 @@ def _completion_from_run_result(result: Any) -> tuple[int, str]:
         last_execution_outcome.get("outcome") == "blocked_infra"
         or stopped_reason == "api_balance_exhausted"
         or any(
-        "infra" in str(category).lower() or "provider" in str(category).lower()
-        for category in failure_categories
+            "infra" in str(category).lower()
+            or "provider" in str(category).lower()
+            for category in failure_categories
         )
     ):
         return (
             _INCOMPLETE_INFRA_STOP_EXIT_STATUS,
             f"incomplete_infra_stop:{stopped_reason}",
-        )
-    if qualification is not None:
-        return (
-            _INCOMPLETE_QUALIFICATION_EXIT_STATUS,
-            f"incomplete_qualification_stop:{stopped_reason}",
         )
     return 0, "command_returned"
 
@@ -277,25 +293,12 @@ def _campaign_start_message(
     problem_name: str,
     requested_rounds: int,
     mock_llm: bool,
-    qualification_config: Any | None,
 ) -> str:
-    """Preserve the ordinary CLI line and append opt-in qualification facts."""
+    """Render the ordinary direct-campaign start line."""
 
-    qualification_suffix = ""
-    if qualification_config is not None:
-        qualification_suffix = (
-            ", mode=qualification_only"
-            ", max_proposal_attempts="
-            f"{qualification_config.max_proposal_attempts}"
-            ", max_verified_candidate_chains="
-            f"{qualification_config.max_verified_candidate_chains}"
-            ", max_formal_screening_stages="
-            f"{qualification_config.max_formal_screening_stages}"
-        )
     return (
         f"Starting campaign: {problem_name} "
-        f"(requested_rounds={requested_rounds}, mock_llm={mock_llm}"
-        f"{qualification_suffix})"
+        f"(requested_rounds={requested_rounds}, mock_llm={mock_llm})"
     )
 
 
@@ -311,32 +314,6 @@ def register_run_command(app: typer.Typer) -> None:
             10,
             "--rounds",
             help="Target number of typed formal protocol evaluated rounds",
-        ),
-        qualification_only: bool = typer.Option(
-            False,
-            "--qualification-only",
-            help=(
-                "Stop at the READY_VALIDATE boundary without dispatching "
-                "validation or frozen stages"
-            ),
-        ),
-        max_proposal_attempts: int | None = typer.Option(
-            None,
-            "--max-proposal-attempts",
-            min=1,
-            help="Qualification-only maximum fresh H/C proposal attempts",
-        ),
-        max_verified_candidate_chains: int | None = typer.Option(
-            None,
-            "--max-verified-candidate-chains",
-            min=1,
-            help="Qualification-only maximum verified candidate chains",
-        ),
-        max_formal_screening_stages: int | None = typer.Option(
-            None,
-            "--max-formal-screening-stages",
-            min=1,
-            help="Qualification-only maximum initial plus expanded screens",
         ),
         campaign_dir: str = typer.Option(
             "campaign_out",
@@ -378,6 +355,16 @@ def register_run_command(app: typer.Typer) -> None:
             min=1,
             help="Maximum actual proposal provider requests for this invocation",
         ),
+        provider_transient_retries: int = typer.Option(
+            0,
+            "--provider-transient-retries",
+            min=0,
+            max=1,
+            help=(
+                "Immediate Scion retries per frozen request for typed transient "
+                "provider failures (0 or 1; SDK retries remain disabled)"
+            ),
+        ),
         outer_hardwall_sec: int | None = typer.Option(
             None,
             "--outer-hardwall-sec",
@@ -413,41 +400,6 @@ def register_run_command(app: typer.Typer) -> None:
         """
         campaign_path = Path(campaign_dir).resolve()
 
-        from scion.core.qualification import QualificationOnlyConfig
-
-        qualification_limit_values = (
-            max_proposal_attempts,
-            max_verified_candidate_chains,
-            max_formal_screening_stages,
-        )
-        if not qualification_only and any(
-            value is not None for value in qualification_limit_values
-        ):
-            typer.echo(
-                "ERROR: qualification limit options require --qualification-only",
-                err=True,
-            )
-            raise typer.Exit(code=1)
-        qualification_config = (
-            QualificationOnlyConfig(
-                max_proposal_attempts=(
-                    4 if max_proposal_attempts is None else max_proposal_attempts
-                ),
-                max_verified_candidate_chains=(
-                    2
-                    if max_verified_candidate_chains is None
-                    else max_verified_candidate_chains
-                ),
-                max_formal_screening_stages=(
-                    4
-                    if max_formal_screening_stages is None
-                    else max_formal_screening_stages
-                ),
-            )
-            if qualification_only
-            else None
-        )
-
         problem_yaml = Path(problem).resolve()
         if not problem_yaml.exists():
             typer.echo(f"ERROR: problem.yaml not found: {problem_yaml}", err=True)
@@ -476,48 +428,28 @@ def register_run_command(app: typer.Typer) -> None:
             resource_envelope = ResourceEnvelope(
                 provider_call_cap=provider_call_cap,
                 outer_hardwall_sec=outer_hardwall_sec,
+                provider_transient_retries=provider_transient_retries,
             )
         except (TypeError, ValueError) as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1)
         from scion.config.problem import (
-            ProblemSpec,
             ProtocolConfig,
             SeedLedgerConfig,
             SplitManifest,
         )
 
-        spec = ProblemSpec.from_yaml(str(problem_yaml))
         problem_dir = problem_yaml.parent
-        adapter = None
-        metric_specs = None
-        objective_policy = None
-        operator_execute_signature = None
-        problem_v1 = None
-        problem_v1_path = problem_dir / "problem-v1.yaml"
-        if problem_v1_path.exists():
-            try:
-                from scion.problem.bridge import (
-                    bridge_problem_spec_v1,
-                    load_problem_spec_v1_from_yaml,
-                )
-                from scion.problem.loader import load_problem_adapter
-
-                problem_v1 = load_problem_spec_v1_from_yaml(problem_v1_path)
-                bridge = bridge_problem_spec_v1(problem_v1)
-                spec = bridge.problem_spec
-                adapter = load_problem_adapter(problem_v1)
-                metric_specs = bridge.metric_specs
-                objective_policy = bridge.objective_policy
-                operator_execute_signature = bridge.operator_execute_signature
-            except typer.Exit:
-                raise
-            except Exception as exc:
-                typer.echo(
-                    f"ERROR: failed to load problem-v1 adapter: {exc}",
-                    err=True,
-                )
-                raise typer.Exit(code=1)
+        try:
+            adapter = _load_cli_problem_adapter(problem_yaml)
+        except Exception as exc:
+            typer.echo(
+                f"ERROR: failed to load problem-v1 adapter: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        spec = adapter.spec
+        problem_v1 = spec
         try:
             research_history_value = _load_research_histories(
                 [Path(path) for path in (research_history or [])],
@@ -592,17 +524,12 @@ def register_run_command(app: typer.Typer) -> None:
             validate_requested_screening_expansion,
         )
         from scion.runtime.subprocess_runner import LocalSubprocessRunner
-        from scion.verification.gate import VerificationGate
 
         try:
             validate_requested_screening_expansion(
                 config=proto_cfg,
                 split_manifest=split_manifest,
-                requested_rounds=(
-                    qualification_config.max_formal_screening_stages
-                    if qualification_config is not None
-                    else rounds
-                ),
+                requested_rounds=rounds,
             )
         except ValueError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
@@ -617,7 +544,6 @@ def register_run_command(app: typer.Typer) -> None:
             if time_limit_sec is not None
             else getattr(getattr(spec, "solver", None), "time_limit_sec", 300)
         )
-        effective_metric_specs = metric_specs if metric_specs else None
         try:
             experiment_protocol = ExperimentProtocol(
                 proto_cfg,
@@ -626,24 +552,11 @@ def register_run_command(app: typer.Typer) -> None:
                 runner,
                 time_limit_sec=effective_time_limit,
                 metrics_dir=metrics_dir,
-                metric_specs=effective_metric_specs,
-                objective_policy=objective_policy,
-                problem_spec=spec,
+                adapter=adapter,
             )
         except ValueError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1)
-        verification_gate = VerificationGate(
-            spec,
-            runner,
-            metrics_dir=metrics_dir,
-            adapter=adapter,
-            strict_runtime_checks=True,
-            require_adapter_for_runtime=True,
-            allow_adapter_runtime_fallback=False,
-            operator_execute_signature=operator_execute_signature,
-            max_runtime_ratio=proto_cfg.runtime.max_runtime_ratio,
-        )
         from scion.core.models import ChampionState
         from scion.runtime.pool_manager import read_registry
 
@@ -683,42 +596,40 @@ def register_run_command(app: typer.Typer) -> None:
 
         try:
             mgr = CampaignManager(
-                problem_spec=spec,
                 protocol_config=proto_cfg,
                 split_manifest=split_manifest,
                 seed_ledger=seed_ledger,
                 llm_client=llm_client,
                 champion=champion,
                 campaign_dir=str(campaign_path),
-                verification_gate=verification_gate,
                 experiment_protocol=experiment_protocol,
                 adapter=adapter,
-                operator_execute_signature=operator_execute_signature,
                 research_input=research_input_value,
                 research_history=research_history_value,
                 resource_envelope=resource_envelope,
                 code_research_limits=code_research_limits_value,
-                qualification_only=qualification_config,
             )
 
             requested_rounds = rounds
             typer.echo(
                 _campaign_start_message(
-                    problem_name=spec.name,
+                    problem_name=(
+                        getattr(spec, "display_name", None)
+                        or getattr(spec, "name", None)
+                        or getattr(spec, "id", "problem")
+                    ),
                     requested_rounds=requested_rounds,
                     mock_llm=mock_llm,
-                    qualification_config=qualification_config,
                 )
             )
             try:
                 hardwall = _CampaignOuterHardwall(resource_envelope.outer_hardwall_sec)
-                with _campaign_signal_handlers(mgr, hardwall=hardwall), hardwall:
-                    run_result = mgr.run(requested_rounds=requested_rounds)
-            except _CampaignSignalStop as exc:
-                mgr.finalize_requested_stop(
-                    exc.reason,
-                    interrupted_override=exc.interrupted_override,
+                run_result = _run_campaign_with_signal_finalization(
+                    mgr,
+                    requested_rounds=requested_rounds,
+                    hardwall=hardwall,
                 )
+            except _CampaignSignalStop as exc:
                 typer.echo(f"Campaign stopped: {exc.reason}", err=True)
                 raise typer.Exit(code=exc.exit_status)
             else:
@@ -741,5 +652,6 @@ __all__ = [
     "_load_code_research_limits",
     "_load_research_histories",
     "_load_research_input",
+    "_run_campaign_with_signal_finalization",
     "register_run_command",
 ]

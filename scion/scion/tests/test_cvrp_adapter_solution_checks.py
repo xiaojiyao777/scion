@@ -103,7 +103,6 @@ def test_tiny_solver_output_is_adapter_valid(cvrp_adapter: ProblemAdapter) -> No
 def test_strict_adapter_backed_verification_gate_passes_cvrp_tiny(
     cvrp_adapter: ProblemAdapter,
 ) -> None:
-    canary = str(TINY_5)
     raw = _raw([[1, 2], [3, 4]])
     calls: list[tuple[str, int]] = []
 
@@ -128,32 +127,17 @@ def test_strict_adapter_backed_verification_gate_passes_cvrp_tiny(
                 error_category=None,
             )
 
-    spec = ProblemSpec(
-        name="cvrp",
-        root_dir=str(CVRP_DIR),
-        canary_case_path=canary,
-        operator_categories=["route_local", "route_pair", "ruin_recreate"],
-        search_space=SearchSpace(
-            editable=["operators/*.py"],
-            frozen=["solver.py", "models.py", "adapter.py", "operators/base.py"],
-            import_whitelist=["__future__", "math", "random", "typing"],
-        ),
-    )
     gate = VerificationGate(
-        problem_spec=spec,
         runner=StaticRunner(),
         adapter=cvrp_adapter,
         strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
-        operator_execute_signature="execute(self, solution, instance, rng) -> CvrpSolution",
     )
     patch = PatchProposal(
-        file_path="operators/noop.py",
-        action="create",
+        file_path="policies/baseline_algorithm.py",
+        action="modify",
         code_content=(
-            "class NoOp:\n"
-            "    def execute(self, solution, instance, rng):\n"
-            "        return solution\n"
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    return context.nearest_neighbor()\n"
         ),
     )
 

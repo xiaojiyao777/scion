@@ -20,22 +20,19 @@ import yaml
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.campaign import CampaignManager
 from scion.core.models import ChampionState
-from scion.core.telemetry_validation import screened_experiment_effective
+from scion.core.telemetry_validation import formal_screening_attempted
 from scion.evidence import attach_final_evidence_package
+from scion.problem.loader import load_problem_adapter
+from scion.problem.spec import ProblemSpecV1
 from scion.problems.cvrp.evidence import (
     CvrpManifestEvaluationConfig,
     load_cvrp_case_manifest,
     write_cvrp_manifest_final_evidence_package,
 )
-from scion.problem.bridge import bridge_problem_spec_v1
-from scion.problem.loader import load_problem_adapter
-from scion.problem.spec import ProblemSpecV1
-from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.proposal.mock_client import MockLLMClient
+from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.runtime.runner import ResourceLimits
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
-from scion.verification.gate import VerificationGate
-
 
 SCION_ROOT = Path(__file__).resolve().parent
 CVRP_DIR = SCION_ROOT / "scion" / "problems" / "cvrp"
@@ -157,25 +154,26 @@ def _mock_llm() -> MockLLMClient:
             },
         },
         patch_response=_baseline_algorithm_solve_patch(
-            (
-                "def solve(instance, rng, time_limit_sec, context):\n"
-                "    ordered = tuple(sorted(instance.customer_ids))\n"
-                "    if ordered and instance.route_load(ordered) <= instance.capacity:\n"
-                "        solution = context.make_solution((ordered,))\n"
-                "    else:\n"
-                "        solution = context.nearest_neighbor()\n"
-                "    context.record_iteration('controlled_order_probe', 1)\n"
-                "    context.record_move('controlled_order_probe', attempted=1, accepted=1, delta=0.0)\n"
-                "    context.set_stop_reason('controlled_order_completed')\n"
-                "    return solution\n"
-            )
+            "def solve(instance, rng, time_limit_sec, context):\n"
+            "    ordered = tuple(sorted(instance.customer_ids))\n"
+            "    if ordered and instance.route_load(ordered) <= instance.capacity:\n"
+            "        solution = context.make_solution((ordered,))\n"
+            "    else:\n"
+            "        solution = context.nearest_neighbor()\n"
+            "    context.record_iteration('controlled_order_probe', 1)\n"
+            "    context.record_move('controlled_order_probe', attempted=1, accepted=1, delta=0.0)\n"
+            "    context.set_stop_reason('controlled_order_completed')\n"
+            "    return solution\n"
         ),
     )
 
 
 def _make_campaign(output_dir: Path) -> CampaignManager:
     spec_v1 = _problem_v1()
-    protocol_config = ProtocolConfig.from_yaml(CONTROLLED_DIR / "protocol.yaml")
+    adapter = load_problem_adapter(spec_v1)
+    protocol_config = ProtocolConfig.from_yaml(
+        CONTROLLED_DIR / "protocol.yaml"
+    ).with_problem_measurement(adapter.spec, governance_mode="on")
     split_manifest = SplitManifest.from_yaml(CONTROLLED_DIR / "split_manifest.yaml")
     seed_ledger = SeedLedgerConfig.from_yaml(CONTROLLED_DIR / "seed_ledger.yaml")
     runner = LocalSubprocessRunner(ResourceLimits(timeout_sec=10, memory_mb=1024))
@@ -186,40 +184,23 @@ def _make_campaign(output_dir: Path) -> CampaignManager:
         runner=runner,
         time_limit_sec=1,
         metrics_dir=str(output_dir / "metrics"),
-        metric_specs=tuple(spec_v1.objectives),
-        objective_policy=spec_v1.objective_policy,
-        require_metric_specs=True,
-        problem_spec=spec_v1,
+        adapter=adapter,
     )
 
-    bridge = bridge_problem_spec_v1(spec_v1)
-    adapter = load_problem_adapter(spec_v1)
     champion = ChampionState(
         version=1,
         operator_pool={},
         code_snapshot_path=str(CVRP_DIR),
     )
-    gate = VerificationGate(
-        problem_spec=bridge.problem_spec,
-        runner=protocol.runner,
-        metrics_dir=str(output_dir / "metrics"),
-        adapter=adapter,
-        strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
-        operator_execute_signature=bridge.operator_execute_signature,
-    )
     return CampaignManager(
-        problem_spec=bridge.problem_spec,
         protocol_config=protocol_config,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
         llm_client=_mock_llm(),
         champion=champion,
         campaign_dir=str(output_dir / "campaign"),
-        verification_gate=gate,
         experiment_protocol=protocol,
         adapter=adapter,
-        operator_execute_signature=bridge.operator_execute_signature,
     )
 
 
@@ -229,8 +210,7 @@ def _write_final_evidence(
     campaign: CampaignManager,
     champion_snapshot: Path,
 ) -> Any:
-    spec_v1 = _problem_v1()
-    adapter = load_problem_adapter(spec_v1)
+    adapter = campaign._problem_runtime.adapter
     runner = LocalSubprocessRunner(ResourceLimits(timeout_sec=10, memory_mb=1024))
     final_manifest = load_cvrp_case_manifest(CONTROLLED_DIR / "manifests" / "final.json")
     return write_cvrp_manifest_final_evidence_package(
@@ -264,17 +244,17 @@ def _validate_smoke_success(
         for step in campaign._step_history
         if getattr(step, "protocol_result", None) is not None
     ]
-    effective_steps = [
+    screening_steps = [
         step
         for step in protocol_steps
-        if screened_experiment_effective(step.protocol_result)
+        if formal_screening_attempted(step.protocol_result)
     ]
 
     reasons: list[str] = []
     if not protocol_steps:
         reasons.append("no campaign step reached ExperimentProtocol")
-    if not effective_steps:
-        reasons.append("no campaign step counted as an effective screened experiment")
+    if not screening_steps:
+        reasons.append("no campaign step reached formal screening")
 
     n_cases = int(final_quality.get("n_cases", 0) or 0)
     n_ok = int(final_quality.get("n_ok", 0) or 0)

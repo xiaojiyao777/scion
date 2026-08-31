@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any
 
 from scion.config.problem import (
@@ -11,13 +10,15 @@ from scion.config.problem import (
     SeedLedgerConfig,
     SplitManifest,
 )
+from scion.core import campaign_composition
 from scion.core.campaign import CampaignManager
-import scion.core.campaign_composition as campaign_composition
 from scion.core.models import ChampionState
+from scion.problem.loader import (
+    load_problem_adapter,
+    load_problem_spec_v1_from_yaml,
+)
 from scion.proposal.mock_client import MockLLMClient
-from scion.problem.spec import ObjectiveMetricSpec
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
-
 
 SOLVER_DESIGN_PATTERNS = (
     "policies/baseline_algorithm.py",
@@ -101,9 +102,13 @@ def test_campaign_composition_passes_cvrp_solver_design_editable_patterns(
 
     monkeypatch.setattr(campaign_composition, "WorkspaceMaterializer", FakeMaterializer)
 
-    cvrp_spec = ProblemSpec.from_yaml(
-        str(Path(__file__).resolve().parents[2] / "problems" / "cvrp" / "problem.yaml")
+    cvrp_spec = load_problem_spec_v1_from_yaml(
+        Path(__file__).resolve().parents[2]
+        / "problems"
+        / "cvrp"
+        / "problem-v1.yaml"
     )
+    adapter = load_problem_adapter(cvrp_spec)
     champion_root = tmp_path / "champion"
     champion_root.mkdir()
     split = SplitManifest(
@@ -121,16 +126,10 @@ def test_campaign_composition_passes_cvrp_solver_design_editable_patterns(
         SeedLedger(seeds),
         runner=object(),
         metrics_dir=str(tmp_path / "protocol-metrics"),
-        metric_specs=(
-            ObjectiveMetricSpec(
-                name="total_distance", direction="minimize", priority=1
-            ),
-        ),
-        problem_spec=cvrp_spec,
+        adapter=adapter,
     )
 
     manager = CampaignManager(
-        problem_spec=cvrp_spec,
         protocol_config=ProtocolConfig(),
         split_manifest=split,
         seed_ledger=seeds,
@@ -142,7 +141,7 @@ def test_campaign_composition_passes_cvrp_solver_design_editable_patterns(
         ),
         campaign_dir=str(tmp_path / "campaign"),
         experiment_protocol=experiment_protocol,
-        adapter=SimpleNamespace(spec=cvrp_spec),
+        adapter=adapter,
     )
 
     assert manager._materializer is instances[0]

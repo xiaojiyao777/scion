@@ -38,6 +38,7 @@ class ResourceEnvelope:
 
     provider_call_cap: int | None = None
     outer_hardwall_sec: int | None = None
+    provider_transient_retries: int = 0
 
     def __post_init__(self) -> None:
         _validate_optional_positive_int(
@@ -48,6 +49,7 @@ class ResourceEnvelope:
             self.outer_hardwall_sec,
             field="outer_hardwall_sec",
         )
+        _validate_provider_transient_retries(self.provider_transient_retries)
 
     def to_primitive(self) -> dict[str, int]:
         value: dict[str, int] = {}
@@ -55,6 +57,8 @@ class ResourceEnvelope:
             value["provider_call_cap"] = self.provider_call_cap
         if self.outer_hardwall_sec is not None:
             value["outer_hardwall_sec"] = self.outer_hardwall_sec
+        if self.provider_transient_retries:
+            value["provider_transient_retries"] = self.provider_transient_retries
         return value
 
 
@@ -67,13 +71,18 @@ def normalize_resource_envelope(value: Any | None) -> ResourceEnvelope:
         return value
     if not isinstance(value, Mapping):
         raise TypeError("resource envelope must be a mapping")
-    allowed = {"provider_call_cap", "outer_hardwall_sec"}
+    allowed = {
+        "provider_call_cap",
+        "outer_hardwall_sec",
+        "provider_transient_retries",
+    }
     unknown = [key for key in value if key not in allowed]
     if unknown:
         raise ValueError(f"unsupported resource envelope field: {unknown[0]}")
     return ResourceEnvelope(
         provider_call_cap=value.get("provider_call_cap"),
         outer_hardwall_sec=value.get("outer_hardwall_sec"),
+        provider_transient_retries=value.get("provider_transient_retries", 0),
     )
 
 
@@ -173,6 +182,13 @@ def _validate_optional_positive_int(value: Any, *, field: str) -> None:
         raise TypeError(f"{field} must be an integer or null")
     if value <= 0:
         raise ValueError(f"{field} must be greater than zero")
+
+
+def _validate_provider_transient_retries(value: Any) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError("provider_transient_retries must be an integer")
+    if value not in {0, 1}:
+        raise ValueError("provider_transient_retries must be zero or one")
 
 
 __all__ = [

@@ -6,13 +6,11 @@ from typing import Any
 
 from scion.core.models import Branch, BranchState
 
-
 _NON_ACTIVE_STATES = frozenset(
     {
         BranchState.BLOCKED_INFRA,
         BranchState.PROMOTED,
         BranchState.ABANDONED,
-        BranchState.PARKED_LINEAGE,
     }
 )
 

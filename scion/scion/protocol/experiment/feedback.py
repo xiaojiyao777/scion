@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import math
 import os
-import re
 import statistics
 from collections import defaultdict
-from collections.abc import Sequence
-from typing import Any, Dict, List, Literal
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal
 
 from scion.core.models import (
     CaseAggregateFeedback,
@@ -15,8 +15,9 @@ from scion.core.models import (
 
 from .types import CaseLevelResult
 
-
-_CVRPLIB_DIMENSION_RE = re.compile(r"(?:^|-)n(?P<dimension>\d+)(?:-|$)", re.I)
+_MAX_PROBLEM_CASE_FEATURES = 32
+_MAX_PROBLEM_CASE_FEATURE_KEY_CHARS = 64
+_MAX_PROBLEM_CASE_FEATURE_TEXT_CHARS = 256
 
 
 def _pair_feedback_counts(pairs: Sequence[PairwiseCaseFeedback]) -> dict[str, Any]:
@@ -57,7 +58,7 @@ def _protected_objective_regressions(
 
 
 def _aggregate_pairs_to_case_level(
-    pairs: List[PairwiseCaseFeedback],
+    pairs: list[PairwiseCaseFeedback],
     *,
     aggregation: Literal[
         "seed_vote_majority",
@@ -65,12 +66,12 @@ def _aggregate_pairs_to_case_level(
     ] = "seed_vote_majority",
     effect_metric: str = "",
     equivalence_band: float = 0.0,
-) -> List[CaseLevelResult]:
+) -> list[CaseLevelResult]:
     """Reduce each case's paired seeds using the preregistered method.
 
     T2: This is the core of the case-level statistical unit change.
     """
-    by_case: Dict[str, List[PairwiseCaseFeedback]] = defaultdict(list)
+    by_case: dict[str, list[PairwiseCaseFeedback]] = defaultdict(list)
     for p in pairs:
         by_case[p.case_id].append(p)
 
@@ -205,32 +206,48 @@ def _median_metric_deltas(
     }
 
 
-def _extract_case_features(case_path: str) -> dict:
-    """Extract observational path facts for proposal feedback."""
+def _extract_case_features(case_path: str, *, adapter: Any = None) -> dict[str, Any]:
+    """Return generic path facts plus an optional problem-owned projection."""
+
     stem = os.path.splitext(os.path.basename(case_path))[0]
-    size_bucket = "unknown"
-    for tag in ("xlarge", "large", "medium", "small"):
-        if tag in stem.lower():
-            size_bucket = tag
-            break
-    features: dict[str, Any] = {"path_stem": stem, "size_bucket": size_bucket}
-    dimension_match = _CVRPLIB_DIMENSION_RE.search(stem)
-    if dimension_match is not None:
-        dimension = int(dimension_match.group("dimension"))
-        features["dimension"] = dimension
-        if dimension <= 100:
-            features["size_bucket"] = "n_le_100"
-        elif dimension <= 149:
-            features["size_bucket"] = "n_101_149"
-        elif dimension <= 250:
-            features["size_bucket"] = "n_150_250"
-        else:
-            features["size_bucket"] = "n_ge_251"
+    features: dict[str, Any] = {"path_stem": stem, "size_bucket": "unknown"}
+    provider = getattr(adapter, "extract_case_features", None)
+    if not callable(provider):
+        return features
+    try:
+        projected = provider(case_path)
+    except Exception:  # noqa: BLE001 - adapter diagnostics must not abort a run
+        return features
+    features.update(_normalize_problem_case_features(projected))
     return features
 
 
+def _normalize_problem_case_features(value: Any) -> dict[str, Any]:
+    """Bound one adapter projection to small JSON-scalar feedback facts."""
+
+    if not isinstance(value, Mapping):
+        return {}
+    result: dict[str, Any] = {}
+    for raw_key, raw_value in value.items():
+        if len(result) >= _MAX_PROBLEM_CASE_FEATURES:
+            break
+        key = str(raw_key).strip()
+        if not key or len(key) > _MAX_PROBLEM_CASE_FEATURE_KEY_CHARS:
+            continue
+        if isinstance(raw_value, str):
+            normalized: Any = raw_value[:_MAX_PROBLEM_CASE_FEATURE_TEXT_CHARS]
+        elif isinstance(raw_value, (bool, int)) or (
+            isinstance(raw_value, float) and math.isfinite(raw_value)
+        ):
+            normalized = raw_value
+        else:
+            continue
+        result[key] = normalized
+    return result
+
+
 def _aggregate_case_feedback(
-    pairs: List[PairwiseCaseFeedback],
+    pairs: list[PairwiseCaseFeedback],
     *,
     aggregation: Literal[
         "seed_vote_majority",
@@ -238,7 +255,7 @@ def _aggregate_case_feedback(
     ] = "seed_vote_majority",
     effect_metric: str = "",
     equivalence_band: float = 0.0,
-) -> List[CaseAggregateFeedback]:
+) -> list[CaseAggregateFeedback]:
     """Group pair feedback by case_id and compute per-case aggregates."""
     by_case: dict[str, list[PairwiseCaseFeedback]] = defaultdict(list)
     for p in pairs:

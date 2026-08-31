@@ -40,11 +40,22 @@ class StepResult:
         if record is not None and not isinstance(record, ExecutionOutcomeRecord):
             raise TypeError("execution_outcome must be an ExecutionOutcomeRecord")
         if record is not None and record.outcome is not ExecutionOutcome.EVALUATED:
-            if self.decision is not None:
+            committed_promotion_event_failure = (
+                record.reason_code
+                in {
+                    "PROMOTION_EVENT_WRITE_FAILED",
+                    "PROMOTION_COMMITTED_BOOKKEEPING_FAILED",
+                }
+                and self.decision is Decision.PROMOTE
+            )
+            if self.decision is not None and not committed_promotion_event_failure:
                 raise ValueError(
                     "non-evaluated execution outcome cannot carry a Decision"
                 )
-            if self.protocol_result is not None:
+            if (
+                self.protocol_result is not None
+                and not committed_promotion_event_failure
+            ):
                 raise ValueError(
                     "non-evaluated execution outcome cannot carry a ProtocolResult"
                 )

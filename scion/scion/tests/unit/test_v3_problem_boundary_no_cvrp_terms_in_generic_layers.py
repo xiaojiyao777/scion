@@ -4,7 +4,6 @@ import ast
 import re
 from pathlib import Path
 
-
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
 GENERIC_LAYER_DIRS = (
     "core",
@@ -21,6 +20,7 @@ FORBIDDEN_PATTERNS = {
     "cvrp": re.compile(
         r"\bCVRP\b|\bcvrp\b|\bCvrpSolution\b|from_cvrp_solution"
     ),
+    "cvrplib": re.compile(r"cvrplib", re.IGNORECASE),
     "alns": re.compile(r"\bALNS\b|\balns\b"),
     "vns": re.compile(r"\bVNS\b|\bvns\b"),
     "alns_vns_solver": re.compile(r"_ALNSVNSSolver"),
@@ -61,6 +61,7 @@ LEGACY_ALLOWLIST: dict[tuple[str, str], str] = {
     ("core/branch_step_runner.py", "capacity"): "branch scheduler capacity action",
     ("core/scheduler.py", "capacity"): "branch portfolio capacity, not problem capacity",
     ("core/scheduling/status.py", "capacity"): "branch scheduler capacity, not problem capacity",
+    ("proposal/bounded_research.py", "capacity"): "bounded corpus budget, not problem capacity",
 }
 
 

@@ -7,7 +7,7 @@ import uuid as _uuid_mod
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import replace
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any
 
 from scion.core.models import (
     EvalStats,
@@ -93,7 +93,7 @@ SCREENING_PARTIAL_CHAMPION_EVIDENCE = "SCREENING_PARTIAL_CHAMPION_EVIDENCE"
 
 
 def run_experiment(
-    protocol: "ExperimentProtocol",
+    protocol: ExperimentProtocol,
     stage: ExperimentStage,
     candidate_ws: str,
     champion_ws: str,
@@ -141,15 +141,17 @@ def run_experiment(
     raw_ref = os.path.join(protocol.metrics_dir, f"{_uuid_mod.uuid4()}.json")
 
     # Collect pair feedback grouped by case
-    pairs_by_case: Dict[str, List[PairwiseCaseFeedback]] = defaultdict(list)
-    raw_pairs: List[dict] = []
-    raw_failures: List[dict] = []
+    pairs_by_case: dict[str, list[PairwiseCaseFeedback]] = defaultdict(list)
+    raw_pairs: list[dict] = []
+    raw_failures: list[dict] = []
     failed_pairs = 0
     candidate_failed_pairs = 0
     champion_failed_pairs = 0
     shared_failed_pairs = 0
     bilateral_failed_pairs = 0
     candidate_attributable_infeasible_pairs = 0
+    candidate_only_timeout_pairs = 0
+    candidate_only_invalid_output_pairs = 0
     runtime_ratios: list[float] = []
     runtime_deltas_ms: list[float] = []
     candidate_runtime_categories: dict[str, int] = {}
@@ -295,6 +297,13 @@ def run_experiment(
                     "champion_failed_pairs": champion_failed_pairs,
                     "shared_failed_pairs": shared_failed_pairs,
                     "bilateral_failed_pairs": bilateral_failed_pairs,
+                    "candidate_attributable_infeasible_pairs": (
+                        candidate_attributable_infeasible_pairs
+                    ),
+                    "candidate_only_timeout_pairs": candidate_only_timeout_pairs,
+                    "candidate_only_invalid_output_pairs": (
+                        candidate_only_invalid_output_pairs
+                    ),
                     "screening_evidence_status": _screening_evidence_status(
                         stage=stage,
                         complete=True,
@@ -414,7 +423,10 @@ def run_experiment(
     _progress(None, None)
 
     for case in cases:
-        case_features = _extract_case_features(case)
+        case_features = _extract_case_features(
+            case,
+            adapter=getattr(protocol, "_problem_adapter", None),
+        )
         for seed in seeds:
             attempted_pairs += 1
             resolved_for_case = resolved_case_paths[case]
@@ -502,6 +514,16 @@ def run_experiment(
                     )
                     candidate_attributable_infeasible_pairs += int(
                         _is_candidate_attributable_infeasibility(attribution)
+                    )
+                    candidate_only_timeout_pairs += int(
+                        _is_candidate_only_timeout(attribution, cand_r)
+                    )
+                    candidate_only_invalid_output_pairs += int(
+                        _is_candidate_only_invalid_output(
+                            attribution,
+                            cand_r,
+                            audits["B"],
+                        )
                     )
                     side = attribution["side"]
                     if side == "candidate":
@@ -623,6 +645,16 @@ def run_experiment(
                 champion_audit=champ_audit_failure,
                 candidate_audit=cand_audit_failure,
                 include_infeasible=False,
+            )
+            candidate_only_timeout_pairs += int(
+                _is_candidate_only_timeout(failure_attribution, cand_r)
+            )
+            candidate_only_invalid_output_pairs += int(
+                _is_candidate_only_invalid_output(
+                    failure_attribution,
+                    cand_r,
+                    cand_audit_failure,
+                )
             )
             if failure_attribution is not None:
                 failed_pairs += 1
@@ -879,6 +911,11 @@ def run_experiment(
             metric_deltas=[r.metric_deltas or {} for r in case_level_results],
             metric_order=metric_order,
             effect_metric=effect_metric,
+            allow_empty_metric_evidence=(
+                valid_pairs == 0
+                and bool(case_level_results)
+                and all(not row.metric_deltas for row in case_level_results)
+            ),
         )
 
     protected_objective_regressions = _protected_objective_regressions(
@@ -1053,7 +1090,7 @@ def run_experiment(
 
     # Build case-level feedback for screening only
     case_fb: tuple = ()
-    pattern: "ScreeningPatternSummary | None" = None
+    pattern: ScreeningPatternSummary | None = None
     if stage == ExperimentStage.SCREENING and all_pair_feedback:
         case_fb = tuple(
             _aggregate_case_feedback(
@@ -1071,9 +1108,27 @@ def run_experiment(
         runtime_pairs=problem_runtime_pairs,
         proposal_subject=proposal_subject,
         runtime_pairs_complete=(failed_pairs == 0),
-        problem_spec=protocol._problem_spec,
+        problem_spec=(
+            protocol._problem_spec
+            if getattr(protocol, "_problem_adapter", None) is None
+            else None
+        ),
         adapter=getattr(protocol, "_problem_adapter", None),
     )
+    pair_level_safety_counts = {
+        "candidate_attributable_infeasible_pairs": (
+            candidate_attributable_infeasible_pairs
+        ),
+        "candidate_only_timeout_pairs": candidate_only_timeout_pairs,
+        "candidate_only_invalid_output_pairs": (
+            candidate_only_invalid_output_pairs
+        ),
+    }
+    for field_name, count in pair_level_safety_counts.items():
+        if type(count) is not int or not 0 <= count <= attempted_pairs:
+            raise ValueError(
+                f"{field_name} must be between zero and attempted_pairs"
+            )
     result = ProtocolResult(
         stage=stage,
         stats=stats,
@@ -1119,6 +1174,10 @@ def run_experiment(
         mechanism_evidence=problem_mechanism_evidence,
         candidate_attributable_infeasible_pairs=(
             candidate_attributable_infeasible_pairs
+        ),
+        candidate_only_timeout_pairs=candidate_only_timeout_pairs,
+        candidate_only_invalid_output_pairs=(
+            candidate_only_invalid_output_pairs
         ),
     )
     no_objective_effect = (
@@ -1292,6 +1351,44 @@ def _is_candidate_attributable_infeasibility(
         and attribution.get("attribution") == "candidate"
         and attribution.get("candidate_failure_kind") == "infeasible"
     )
+
+
+def _is_candidate_only_timeout(
+    attribution: Mapping[str, str] | None,
+    candidate_result: RunResult,
+) -> bool:
+    return bool(
+        attribution is not None
+        and attribution.get("attribution") == "candidate"
+        and attribution.get("candidate_failure_kind") == "process"
+        and _normalized_failure_category(candidate_result.error_category) == "timeout"
+    )
+
+
+def _is_candidate_only_invalid_output(
+    attribution: Mapping[str, str] | None,
+    candidate_result: RunResult,
+    candidate_audit: Mapping[str, Any] | None,
+) -> bool:
+    if attribution is None or attribution.get("attribution") != "candidate":
+        return False
+    kind = attribution.get("candidate_failure_kind")
+    if kind == "missing_output":
+        return True
+    if kind == "runtime_audit" and candidate_audit is not None:
+        return (
+            _candidate_audit_failure_category(dict(candidate_audit))
+            == "invalid_output"
+        )
+    return bool(
+        kind == "process"
+        and _normalized_failure_category(candidate_result.error_category)
+        == "invalid_output"
+    )
+
+
+def _normalized_failure_category(value: Any) -> str:
+    return str(value or "").strip().lower().replace("-", "_")
 
 
 def _paired_failures_equivalent(

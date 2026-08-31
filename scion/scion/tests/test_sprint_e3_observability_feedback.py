@@ -13,12 +13,15 @@ class TestT06ObservabilityFields:
         from scion.proposal.mock_client import MockLLMClient
         from scion.problem.spec import ObjectiveMetricSpec
         from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
-        from types import SimpleNamespace
+        from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
         op_dir = tmp_path / "operators"
         op_dir.mkdir()
         (op_dir / "local_search.py").write_text("class LocalSearch: pass\n")
 
+        metric_specs = (
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        )
         spec = ProblemSpec(
             name="test",
             root_dir=str(tmp_path),
@@ -29,6 +32,7 @@ class TestT06ObservabilityFields:
                 import_whitelist=["random"],
             ),
         )
+        adapter = protocol_test_adapter(metric_specs, problem_spec=spec)
         champion = ChampionState(
             version=1, operator_pool={},
             code_snapshot_path=str(tmp_path),
@@ -48,13 +52,9 @@ class TestT06ObservabilityFields:
             SeedLedger(seeds),
             runner=object(),
             metrics_dir=str(tmp_path / "protocol-metrics"),
-            metric_specs=(
-                ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
-            ),
-            problem_spec=spec,
+            adapter=adapter,
         )
         mgr = CampaignManager(
-            problem_spec=spec,
             protocol_config=ProtocolConfig(),
             split_manifest=split,
             seed_ledger=seeds,
@@ -62,7 +62,7 @@ class TestT06ObservabilityFields:
             champion=champion,
             campaign_dir=str(tmp_path / "campaign"),
             experiment_protocol=experiment_protocol,
-            adapter=SimpleNamespace(spec=spec),
+            adapter=adapter,
         )
         return mgr
 

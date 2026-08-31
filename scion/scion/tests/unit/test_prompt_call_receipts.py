@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from scion.core.models import (
     Branch,
     BranchState,
@@ -650,12 +651,16 @@ def test_external_cvrp_research_input_reaches_actual_hypothesis_provider_request
     ):
         assert hidden_detail not in provider_bytes
     assert "algorithmically material hypothesis" in provider_bytes
+    assert "History is optional research evidence" in provider_prompt
     assert (
-        "one evidence-grounded mechanism-level change or refinement" in provider_prompt
+        "does not prescribe a mechanism, action, target, or research direction"
+        in provider_prompt
     )
-    assert "mechanisms already evaluated in experiment_history" in provider_prompt
-    assert "Reusing an evaluated target is allowed" in provider_prompt
-    assert "semantically equivalent rewrite is not a refinement" in provider_prompt
+    assert "research frontier" not in provider_prompt
+    assert "incremental algorithmic delta" not in provider_prompt
+    assert "mechanisms already evaluated in experiment_history" not in provider_prompt
+    assert "Reusing an evaluated target is allowed" not in provider_prompt
+    assert "semantically equivalent rewrite is not a refinement" not in provider_prompt
     assert "materially different mechanism" not in provider_bytes
     trace = _single_trace(tmp_path)
     traced_provider_bytes = json.dumps(
@@ -792,6 +797,9 @@ def test_actual_h_provider_gets_latest_cvrp_evidence_once(
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
     )
     context = ContextManager(adapter=adapter).build_hypothesis_context(
         branch=branch,

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 
 import pytest
+
 from scion.core.models import (
     Decision,
     EvalStats,
@@ -75,6 +76,9 @@ def _screening_step(
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
     )
 
 

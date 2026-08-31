@@ -312,7 +312,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         proto._problem_spec = problem_spec
         cm_adapter = self._adapter_for(problem_spec)
         cm = CampaignManager(
-            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),
@@ -337,7 +336,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         proto = self._production_protocol(problem_spec=problem_spec)
         proto.runner = None
         cm = CampaignManager(
-            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),
@@ -368,10 +366,10 @@ class TestProgrammaticRuntimeVerificationDefault:
 
     def test_production_campaign_requires_experiment_protocol(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._problem_runtime.spec)
 
         with pytest.raises(ValueError, match="experiment_protocol is required"):
             CampaignManager(
-                problem_spec=self._production_spec(base._problem_runtime.spec),
                 protocol_config=ProtocolConfig(),
                 split_manifest=self._production_split(),
                 seed_ledger=self._production_seeds(),
@@ -382,7 +380,34 @@ class TestProgrammaticRuntimeVerificationDefault:
                 champion=base._champion,
                 campaign_dir=str(tmp_path / "production-no-protocol"),
                 experiment_protocol=None,
-                adapter=object(),
+                adapter=self._adapter_for(problem_spec),
+            )
+
+    def test_campaign_requires_protocol_to_accept_the_problem_adapter(self, tmp_path):
+        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._problem_runtime.spec)
+        protocol_without_adapter_binding = SimpleNamespace(
+            runner=object(),
+            config=ProtocolConfig(),
+            _metric_specs=self._metric_specs(),
+        )
+
+        with pytest.raises(
+            TypeError,
+            match=r"experiment_protocol\.set_problem_adapter is required",
+        ):
+            CampaignManager(
+                protocol_config=ProtocolConfig(),
+                split_manifest=self._production_split(),
+                seed_ledger=self._production_seeds(),
+                llm_client=MockLLMClient(
+                    hypothesis_response=_VALID_HYPOTHESIS,
+                    patch_response=_VALID_PATCH,
+                ),
+                champion=base._champion,
+                campaign_dir=str(tmp_path / "production-no-adapter-bind"),
+                experiment_protocol=protocol_without_adapter_binding,
+                adapter=self._adapter_for(problem_spec),
             )
 
     def test_production_campaign_rejects_parameter_search(self, tmp_path):
@@ -395,7 +420,6 @@ class TestProgrammaticRuntimeVerificationDefault:
             match=r"parameter_search\.enabled must be false",
         ):
             CampaignManager(
-                problem_spec=problem_spec,
                 protocol_config=ProtocolConfig(),
                 split_manifest=self._production_split(),
                 seed_ledger=self._production_seeds(),
@@ -413,14 +437,15 @@ class TestProgrammaticRuntimeVerificationDefault:
 
     def test_production_campaign_requires_split_seed_canary_evidence(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._problem_runtime.spec)
         proto = _MockProtocol()
         proto.runner = object()
         proto.config = ProtocolConfig()
         proto._metric_specs = self._metric_specs()
+        proto._problem_spec = problem_spec
 
         with pytest.raises(ValueError, match="split_manifest.canary is required"):
             CampaignManager(
-                problem_spec=self._production_spec(base._problem_runtime.spec),
                 protocol_config=ProtocolConfig(),
                 split_manifest=SplitManifest(
                     screening=["screening-case"],
@@ -436,15 +461,15 @@ class TestProgrammaticRuntimeVerificationDefault:
                 champion=base._champion,
                 campaign_dir=str(tmp_path / "production-no-canary"),
                 experiment_protocol=proto,
-                adapter=object(),
+                adapter=self._adapter_for(problem_spec),
             )
 
     def test_production_campaign_rejects_dummy_metric_specs(self, tmp_path):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._problem_runtime.spec)
 
         with pytest.raises(ValueError, match=r"metric_specs\[0\]\.name is required"):
             CampaignManager(
-                problem_spec=self._production_spec(base._problem_runtime.spec),
                 protocol_config=ProtocolConfig(),
                 split_manifest=self._production_split(),
                 seed_ledger=self._production_seeds(),
@@ -456,55 +481,36 @@ class TestProgrammaticRuntimeVerificationDefault:
                 campaign_dir=str(tmp_path / "production-dummy-metrics"),
                 experiment_protocol=self._production_protocol(
                     metric_specs=(object(),),
+                    problem_spec=problem_spec,
                 ),
-                adapter=object(),
+                adapter=self._adapter_for(problem_spec),
             )
 
-    def test_production_campaign_rejects_protocol_problem_spec_mismatch(
+    def test_production_campaign_binds_adapter_over_protocol_problem_input(
         self,
         tmp_path,
     ):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
+        problem_spec = self._production_spec(base._problem_runtime.spec)
+        protocol = self._production_protocol(
+            problem_spec=SimpleNamespace(id="other_problem"),
+        )
 
-        with pytest.raises(
-            ValueError,
-            match="experiment_protocol.problem_spec must match",
-        ):
-            CampaignManager(
-                problem_spec=self._production_spec(base._problem_runtime.spec),
-                protocol_config=ProtocolConfig(),
-                split_manifest=self._production_split(),
-                seed_ledger=self._production_seeds(),
-                llm_client=MockLLMClient(
-                    hypothesis_response=_VALID_HYPOTHESIS,
-                    patch_response=_VALID_PATCH,
-                ),
-                champion=base._champion,
-                campaign_dir=str(tmp_path / "production-protocol-spec-mismatch"),
-                experiment_protocol=self._production_protocol(
-                    problem_spec=SimpleNamespace(id="other_problem"),
-                ),
-                adapter=object(),
-            )
+        CampaignManager(
+            protocol_config=ProtocolConfig(),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "production-protocol-spec-binding"),
+            experiment_protocol=protocol,
+            adapter=self._adapter_for(problem_spec),
+        )
 
-    def test_production_campaign_rejects_adapter_spec_mismatch(self, tmp_path):
-        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
-
-        with pytest.raises(ValueError, match="adapter.spec must match"):
-            CampaignManager(
-                problem_spec=self._production_spec(base._problem_runtime.spec),
-                protocol_config=ProtocolConfig(),
-                split_manifest=self._production_split(),
-                seed_ledger=self._production_seeds(),
-                llm_client=MockLLMClient(
-                    hypothesis_response=_VALID_HYPOTHESIS,
-                    patch_response=_VALID_PATCH,
-                ),
-                champion=base._champion,
-                campaign_dir=str(tmp_path / "production-adapter-spec-mismatch"),
-                experiment_protocol=self._production_protocol(),
-                adapter=SimpleNamespace(spec=SimpleNamespace(id="other_problem")),
-            )
+        assert protocol._problem_spec is problem_spec
 
     def test_production_boundary_accepts_same_id_without_spec_hash_parity(
         self,
@@ -517,7 +523,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         )
 
         errors = production_boundary_errors(
-            problem_spec=campaign_spec,
             experiment_protocol=self._production_protocol(
                 problem_spec=protocol_spec,
             ),
@@ -527,28 +532,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         )
 
         assert errors == ()
-
-    def test_production_boundary_rejects_different_adapter_problem_id(
-        self,
-        tmp_path,
-    ):
-        base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
-        campaign_spec = self._production_spec(base._problem_runtime.spec)
-        adapter_spec = SimpleNamespace(id="other_problem")
-
-        errors = production_boundary_errors(
-            problem_spec=campaign_spec,
-            experiment_protocol=self._production_protocol(
-                problem_spec=campaign_spec,
-            ),
-            adapter=self._adapter_for(adapter_spec),
-            split_manifest=self._production_split(),
-            seed_ledger=self._production_seeds(),
-        )
-
-        assert any(
-            "adapter.spec must match campaign problem" in error for error in errors
-        )
 
     def test_production_boundary_ignores_adapter_self_declared_problem_hash(
         self,
@@ -562,7 +545,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         )
 
         errors = production_boundary_errors(
-            problem_spec=campaign_spec,
             experiment_protocol=self._production_protocol(
                 problem_spec=campaign_spec,
             ),
@@ -581,7 +563,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         campaign_spec = self._production_spec(base._problem_runtime.spec)
 
         errors = production_boundary_errors(
-            problem_spec=campaign_spec,
             experiment_protocol=self._production_protocol(
                 problem_spec=campaign_spec,
             ),
@@ -604,7 +585,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         seed_ledger = self._production_seeds()
 
         errors = production_boundary_errors(
-            problem_spec=campaign_spec,
             experiment_protocol=protocol,
             adapter=adapter,
             split_manifest=split_manifest,
@@ -619,7 +599,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         campaign_spec = self._production_spec(base._problem_runtime.spec)
 
         errors = production_boundary_errors(
-            problem_spec=campaign_spec,
             experiment_protocol=self._production_protocol(
                 problem_spec=campaign_spec,
             ),
@@ -637,7 +616,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         campaign_spec.parameter_search.enabled = True
 
         errors = production_boundary_errors(
-            problem_spec=campaign_spec,
             experiment_protocol=self._production_protocol(
                 problem_spec=campaign_spec,
             ),
@@ -650,32 +628,34 @@ class TestProgrammaticRuntimeVerificationDefault:
             "parameter_search.enabled must be false for direct-v3 production campaigns"
         ) in errors
 
-    def test_production_campaign_rejects_metric_names_mismatch(self, tmp_path):
+    def test_production_campaign_binds_adapter_metrics_over_protocol_input(
+        self,
+        tmp_path,
+    ):
         base = _campaign(tmp_path, verification_gate=_AlwaysPassVerification())
         problem_spec = self._production_spec(base._problem_runtime.spec).model_copy(
             update={"objectives": self._metric_specs("cost")}
         )
+        protocol = self._production_protocol(
+            metric_specs=self._metric_specs("quality"),
+            problem_spec=problem_spec,
+        )
 
-        with pytest.raises(
-            ValueError,
-            match="metric_specs must match problem_spec.objectives names",
-        ):
-            CampaignManager(
-                problem_spec=problem_spec,
-                protocol_config=ProtocolConfig(),
-                split_manifest=self._production_split(),
-                seed_ledger=self._production_seeds(),
-                llm_client=MockLLMClient(
-                    hypothesis_response=_VALID_HYPOTHESIS,
-                    patch_response=_VALID_PATCH,
-                ),
-                champion=base._champion,
-                campaign_dir=str(tmp_path / "production-metric-mismatch"),
-                experiment_protocol=self._production_protocol(
-                    metric_specs=self._metric_specs("quality"),
-                ),
-                adapter=object(),
-            )
+        CampaignManager(
+            protocol_config=ProtocolConfig(),
+            split_manifest=self._production_split(),
+            seed_ledger=self._production_seeds(),
+            llm_client=MockLLMClient(
+                hypothesis_response=_VALID_HYPOTHESIS,
+                patch_response=_VALID_PATCH,
+            ),
+            champion=base._champion,
+            campaign_dir=str(tmp_path / "production-metric-binding"),
+            experiment_protocol=protocol,
+            adapter=self._adapter_for(problem_spec),
+        )
+
+        assert tuple(metric.name for metric in protocol._metric_specs) == ("cost",)
 
     def test_protocol_time_limit_configures_verification_runtime_budget(
         self,
@@ -685,7 +665,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         problem_spec = self._production_spec(base._problem_runtime.spec)
 
         cm = CampaignManager(
-            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),
@@ -710,7 +689,6 @@ class TestProgrammaticRuntimeVerificationDefault:
         problem_spec = self._production_spec(base._problem_runtime.spec)
 
         cm = CampaignManager(
-            problem_spec=problem_spec,
             protocol_config=ProtocolConfig(),
             split_manifest=self._production_split(),
             seed_ledger=self._production_seeds(),

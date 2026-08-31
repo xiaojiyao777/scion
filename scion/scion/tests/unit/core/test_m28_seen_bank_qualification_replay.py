@@ -24,7 +24,6 @@ from scion.problems.cvrp.prior_research_observation import (
 from scion.proposal.engine import build_prompt_turn_snapshot
 from scion.proposal.hypothesis_research_corpus import (
     build_hypothesis_research_corpus,
-    nearest_history_headline_ref,
 )
 from scion.proposal.hypothesis_research_session import (
     HypothesisResearchFinalized,
@@ -691,26 +690,13 @@ def test_conditional_m29_resource_rule_includes_strict_canary() -> None:
     assert 8000 - conservative_elapsed_seconds == 1374
 
 
-def test_m28_actual_context_routes_fixed_top1_then_accepts_read_and_cited_ref() -> None:
+def test_m28_actual_context_allows_finalize_without_host_routed_history() -> None:
     fixture = _fixture()
     _research_input, _history, context = _provider_context(fixture)
-    _sources, indexed_history, _compact = build_hypothesis_research_corpus(context)
-    history_indexes = tuple(entry["index"] for entry in indexed_history)
-    required_ref = nearest_history_headline_ref(
-        fixture["hypothesis"],
-        history_indexes,
-    )
-    assert required_ref == fixture["expected"]["generic_fake_h_required_ref"]
-
     first_basis = _basis(
         fixture,
         read_refs=["source-0001"],
         nearest_prior_refs=[],
-    )
-    accepted_basis = _basis(
-        fixture,
-        read_refs=["source-0001", required_ref],
-        nearest_prior_refs=[required_ref],
     )
     creative = _SequenceCreative(
         [
@@ -719,12 +705,6 @@ def test_m28_actual_context_routes_fixed_top1_then_accepts_read_and_cited_ref() 
                 "action": "finalize_hypothesis",
                 "hypothesis": fixture["hypothesis"],
                 "research_basis": first_basis,
-            },
-            {"action": "read_history", "ref": required_ref},
-            {
-                "action": "finalize_hypothesis",
-                "hypothesis": fixture["hypothesis"],
-                "research_basis": accepted_basis,
             },
         ]
     )
@@ -736,44 +716,23 @@ def test_m28_actual_context_routes_fixed_top1_then_accepts_read_and_cited_ref() 
     result = session.run(build_prompt_turn_snapshot("hypothesis", context))
 
     assert isinstance(result, HypothesisResearchFinalized)
-    assert result.research_basis.read_refs == ("source-0001", required_ref)
-    assert result.research_basis.nearest_prior_refs == (required_ref,)
-    assert session.provider_calls_used == fixture["expected"]["provider_turns"]
-    assert len(creative.contexts) == fixture["expected"]["provider_turns"]
+    assert result.research_basis.read_refs == ("source-0001",)
+    assert result.research_basis.nearest_prior_refs == ()
+    assert session.provider_calls_used == 2
+    assert len(creative.contexts) == 2
     assert "finalize_hypothesis" not in _action_names(creative.snapshots[0])
     assert "finalize_hypothesis" in _action_names(creative.snapshots[1])
-
-    audit_feedback = creative.contexts[2]["hypothesis_research"]["tool_results"][-1]
-    assert audit_feedback == {
-        "action": "finalize_hypothesis",
-        "ok": False,
-        "reason": fixture["expected"]["feedback_reason"],
-        "required_history_ref": required_ref,
-    }
-    serialized_feedback = json.dumps(audit_feedback, sort_keys=True)
-    assert fixture["hypothesis"]["hypothesis_text"] not in serialized_feedback
-    assert "score" not in serialized_feedback.casefold()
-    assert "match_text" not in serialized_feedback.casefold()
-    assert "headline" not in serialized_feedback.casefold()
-    assert "patch" not in serialized_feedback.casefold()
-    assert creative.contexts[2]["hypothesis_research"]["visible_history"] == []
-    assert [
-        entry["ref"]
-        for entry in creative.contexts[3]["hypothesis_research"]["visible_history"]
-    ] == [required_ref]
+    assert "required_history_ref" not in json.dumps(creative.contexts, sort_keys=True)
 
 
-def test_m28_actual_context_accepts_a_preemptive_top1_read_without_audit_trigger() -> (
+def test_m28_actual_context_accepts_an_agent_selected_history_read() -> (
     None
 ):
     fixture = _fixture()
     _research_input, _history, context = _provider_context(fixture)
     _sources, indexed_history, _compact = build_hypothesis_research_corpus(context)
-    required_ref = nearest_history_headline_ref(
-        fixture["hypothesis"],
-        tuple(entry["index"] for entry in indexed_history),
-    )
-    assert required_ref == fixture["expected"]["generic_fake_h_required_ref"]
+    required_ref = fixture["expected"]["generic_fake_h_required_ref"]
+    assert required_ref in {entry["ref"] for entry in indexed_history}
     accepted_basis = _basis(
         fixture,
         read_refs=["source-0001", required_ref],

@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import uuid
 from datetime import datetime
 from typing import Dict, List
@@ -73,14 +74,6 @@ _DECISION_TRANSITIONS: Dict[Decision, Dict[BranchState, BranchState]] = {
     },
 }
 
-_INITIAL_SCREENING_RETIREMENT_STATES = {
-    Decision.CONTINUE_EXPLORE: BranchState.EXPLORE,
-    Decision.ABANDON: BranchState.ABANDONED,
-    Decision.EXPAND_SCREENING: BranchState.EXPLORE_EXPAND,
-    Decision.QUEUE_VALIDATE: BranchState.READY_VALIDATE,
-}
-
-
 class BranchController:
     def __init__(self) -> None:
         self._branches: Dict[str, Branch] = {}
@@ -99,20 +92,29 @@ class BranchController:
     def apply_decision(self, branch_id: str, decision: Decision) -> None:
         """Apply a Decision to a branch, performing the appropriate state transition."""
         branch = self._get(branch_id)
-
-        if decision == Decision.ABANDON:
-            branch.state = BranchState.ABANDONED
-            branch.updated_at = datetime.now()
-            return
-
-        transitions = _DECISION_TRANSITIONS.get(decision, {})
-        new_state = transitions.get(branch.state)
-        if new_state is None:
-            raise StateTransitionError(
-                f"Invalid transition: state={branch.state.value} + decision={decision.value}"
-            )
+        new_state = self.require_decision_transition(branch_id, decision)
         branch.state = new_state
         branch.updated_at = datetime.now()
+
+    def require_decision_transition(
+        self,
+        branch_id: str,
+        decision: Decision,
+        *,
+        state: BranchState | None = None,
+    ) -> BranchState:
+        """Return the transition target without mutating branch authority."""
+
+        current_state = state or self._get(branch_id).state
+        if decision is Decision.ABANDON:
+            return BranchState.ABANDONED
+        new_state = _DECISION_TRANSITIONS.get(decision, {}).get(current_state)
+        if new_state is None:
+            raise StateTransitionError(
+                "Invalid transition: "
+                f"state={current_state.value} + decision={decision.value}"
+            )
+        return new_state
 
     def schedule_branch(self, branch_id: str) -> None:
         """
@@ -200,51 +202,6 @@ class BranchController:
             branch.state = BranchState.ABANDONED
         branch.updated_at = datetime.now()
 
-    def park_qualification_branch(self, branch_id: str) -> None:
-        """Remove one failed qualification chain from future scheduling.
-
-        The ordinary Decision and lineage row are already durable when this is
-        called.  Parking is an orchestration disposition, not a replacement
-        scientific Decision.  The campaign owner separately removes all
-        executable workspace and patch authority after this transition.
-        """
-
-        branch = self._get(branch_id)
-        if branch.state is BranchState.PARKED_LINEAGE:
-            return
-        if branch.state in {
-            BranchState.READY_VALIDATE,
-            BranchState.VALIDATING,
-            BranchState.VALIDATING_EXPAND,
-            BranchState.READY_FROZEN,
-            BranchState.FROZEN_TESTING,
-            BranchState.PROMOTED,
-        }:
-            raise StateTransitionError(
-                "qualification failure cannot park branch in state "
-                f"{branch.state.value}"
-            )
-        branch.state = BranchState.PARKED_LINEAGE
-        branch.hypothesis = None
-        branch.updated_at = datetime.now()
-
-    def park_initial_screening_study_branch(
-        self,
-        branch_id: str,
-        decision: Decision,
-    ) -> None:
-        """Retire one durably decided initial-screening study candidate."""
-
-        branch = self._get(branch_id)
-        expected_state = _INITIAL_SCREENING_RETIREMENT_STATES.get(decision)
-        if expected_state is None or branch.state is not expected_state:
-            raise StateTransitionError(
-                "initial screening retirement decision/state mismatch"
-            )
-        branch.state = BranchState.PARKED_LINEAGE
-        branch.hypothesis = None
-        branch.updated_at = datetime.now(tz=branch.updated_at.tzinfo)
-
     def get_code_base(self, branch_id: str) -> str:
         """
         Return the code-base identifier for the branch (§4.5):
@@ -283,7 +240,6 @@ class BranchController:
         terminal = {
             BranchState.PROMOTED,
             BranchState.ABANDONED,
-            BranchState.PARKED_LINEAGE,
         }
         return [b for b in self._branches.values() if b.state not in terminal]
 

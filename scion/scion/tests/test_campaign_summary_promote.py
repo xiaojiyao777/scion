@@ -25,7 +25,11 @@ def _assert_single_promotion_terminal(cm, result, *, reason_code: str) -> None:
     assert step.decision is None
     assert step.protocol_result is None
 
-    outcomes = cm._registry.query_execution_outcomes(branch_id=result.branch_id)
+    outcomes = [
+        item
+        for item in cm._registry.query_execution_outcomes(branch_id=result.branch_id)
+        if item["event_kind"] == "promotion_execution_outcome"
+    ]
     assert len(outcomes) == 1
     assert outcomes[0]["event_kind"] == "promotion_execution_outcome"
     assert outcomes[0]["stage"] == "promotion"

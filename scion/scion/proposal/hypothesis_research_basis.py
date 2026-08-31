@@ -28,6 +28,18 @@ class HypothesisResearchBasis:
     observable_prediction: str
     falsification_condition: str
 
+    def to_primitive(self) -> dict[str, Any]:
+        """Return the ordinary tainted artifact projection for the selected H."""
+
+        return {
+            "read_refs": list(self.read_refs),
+            "nearest_prior_refs": list(self.nearest_prior_refs),
+            "material_delta": self.material_delta,
+            "alternatives_considered": list(self.alternatives_considered),
+            "observable_prediction": self.observable_prediction,
+            "falsification_condition": self.falsification_condition,
+        }
+
 
 @dataclass(frozen=True)
 class HypothesisResearchFinalized:

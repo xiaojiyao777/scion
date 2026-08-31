@@ -8,6 +8,8 @@ import pytest
 
 from scion.core.branch import BranchController
 from scion.core.models import (
+    AcceptedBranchChange,
+    AcceptedFileBeforeSource,
     ChampionState,
     HypothesisProposal,
     OperatorConfig,
@@ -176,6 +178,13 @@ def test_modify_exports_candidate_registry_without_touching_source(
 
     pool = read_registry(str(Path(applied.workspace) / "registry.yaml"))
     assert set(pool) == {"ls"}
+    assert applied.before_sources == (
+        AcceptedFileBeforeSource(
+            file_path="operators/ls.py",
+            source="class LocalSearch:\n    version = 1\n",
+        ),
+    )
+    assert applied.changed_files == ("operators/ls.py", "registry.yaml")
     assert (durable / "registry.yaml").read_bytes() == registry_bytes
     service.reject_candidate(applied)
 
@@ -218,6 +227,21 @@ def test_create_operator_uses_only_pool_registry_writer(
     assert export_calls == [applied.workspace]
     assert set(pool) == {"ls", "new_move"}
     assert sum(operator.weight for operator in pool.values()) == pytest.approx(1.0)
+    assert applied.changed_files == (
+        "operators/new_move.py",
+        "registry.yaml",
+    )
+    registry_path = candidate / "registry.yaml"
+    exact_registry = registry_path.read_bytes()
+    assert service.verify_candidate(applied) == applied
+    registry_path.write_bytes(exact_registry + b"\n")
+    with pytest.raises(
+        RuntimeError,
+        match="candidate changed between Verification and Protocol",
+    ):
+        service.verify_candidate(applied)
+    registry_path.write_bytes(exact_registry)
+    assert service.verify_candidate(applied) == applied
     service.reject_candidate(applied)
 
 
@@ -253,6 +277,197 @@ def test_registry_export_failure_rejects_candidate_materialization(
 
     candidate_root = tmp_path / "campaign" / "candidate_workspaces"
     assert not any(candidate_root.iterdir())
+
+
+def test_sequential_candidate_patches_preserve_created_operator_activation(
+    tmp_path: Path,
+) -> None:
+    from scion.runtime.pool_manager import read_registry
+
+    service, _branch, durable, _ = _registry_service(tmp_path)
+    created = service.apply_candidate_patch(
+        str(durable),
+        PatchProposal(
+            file_path="operators/new_move.py",
+            action="create",
+            code_content="class NewMove:\n    pass\n",
+        ),
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Add a new move.",
+            change_locus="local_search",
+            action="create_new",
+            target_file="operators/new_move.py",
+            suggested_weight=0.2,
+        ),
+        sync_registry=True,
+    )
+    # Continued work is grounded in the accepted candidate catalogue, not a
+    # reconstructed or stale champion-side copy.
+    service.get_champion().operator_pool.clear()
+
+    modified = service.apply_candidate_patch(
+        created.workspace,
+        PatchProposal(
+            file_path="operators/ls.py",
+            action="modify",
+            code_content="class RefinedLocalSearch:\n    version = 2\n",
+        ),
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Refine the existing move.",
+            change_locus="local_search",
+            action="modify",
+            target_file="operators/ls.py",
+        ),
+        sync_registry=True,
+    )
+
+    pool = read_registry(str(Path(modified.workspace) / "registry.yaml"))
+    assert set(pool) == {"ls", "new_move"}
+    assert pool["ls"].class_name == "RefinedLocalSearch"
+    assert pool["new_move"].class_name == "NewMove"
+    assert created.changed_files == (
+        "operators/new_move.py",
+        "registry.yaml",
+    )
+    assert modified.changed_files == ("operators/ls.py", "registry.yaml")
+    service.reject_candidate(modified)
+    service.reject_candidate(created)
+
+
+def test_candidate_captures_each_touched_file_before_source(tmp_path: Path) -> None:
+    service, _branch, durable, _ = _registry_service(tmp_path)
+    applied = service.apply_candidate_patch(
+        str(durable),
+        PatchProposal(
+            file_path="operators/ls.py",
+            action="modify",
+            code_content="class LocalSearch:\n    version = 2\n",
+            additional_changes=(
+                PatchFileChange(
+                    file_path="operators/new_move.py",
+                    action="create",
+                    code_content="class NewMove:\n    pass\n",
+                ),
+            ),
+        ),
+    )
+
+    assert applied.before_sources == (
+        AcceptedFileBeforeSource(
+            file_path="operators/ls.py",
+            source="class LocalSearch:\n    version = 1\n",
+        ),
+        AcceptedFileBeforeSource(
+            file_path="operators/new_move.py",
+            source=None,
+        ),
+    )
+    service.reject_candidate(applied)
+
+
+def test_reconcile_source_conflict_detects_same_file_sibling_drift(
+    tmp_path: Path,
+) -> None:
+    service, _branch, durable, _ = _registry_service(tmp_path)
+    staging = service.create_reconcile_workspace(str(durable))
+    shared_file = Path(staging) / "operators" / "ls.py"
+    shared_file.write_text(
+        "class LocalSearch:\n    sibling_version = 7\n",
+        encoding="utf-8",
+    )
+    hypothesis = HypothesisProposal(
+        hypothesis_text="Change the old local-search source.",
+        change_locus="local_search",
+        action="modify",
+        target_file="operators/ls.py",
+    )
+    accepted_change = AcceptedBranchChange(
+        hypothesis=hypothesis,
+        patch=PatchProposal(
+            file_path="operators/ls.py",
+            action="modify",
+            code_content="class LocalSearch:\n    branch_version = 2\n",
+        ),
+        before_sources=(
+            AcceptedFileBeforeSource(
+                file_path="operators/ls.py",
+                source="class LocalSearch:\n    version = 1\n",
+            ),
+        ),
+    )
+
+    conflicts = service.reconcile_source_conflicts(staging, accepted_change)
+
+    assert conflicts == ("operators/ls.py",)
+    assert "sibling_version = 7" in shared_file.read_text(encoding="utf-8")
+    service.discard_reconcile_workspace(staging)
+
+
+def test_reconcile_create_then_modify_uses_one_workspace_and_registry(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scion.runtime.pool_manager import read_registry
+
+    service, _branch, durable, _ = _registry_service(tmp_path)
+    staging = service.create_reconcile_workspace(str(durable))
+    create_hypothesis = HypothesisProposal(
+        hypothesis_text="Add a new move.",
+        change_locus="local_search",
+        action="create_new",
+        target_file="operators/new_move.py",
+        suggested_weight=0.2,
+    )
+    service.apply_reconcile_change(
+        staging,
+        PatchProposal(
+            file_path="operators/new_move.py",
+            action="create",
+            code_content="class NewMove:\n    version = 1\n",
+        ),
+        hypothesis=create_hypothesis,
+    )
+    service.apply_reconcile_change(
+        staging,
+        PatchProposal(
+            file_path="operators/new_move.py",
+            action="modify",
+            code_content="class NewMove:\n    version = 2\n",
+        ),
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Refine the new move.",
+            change_locus="local_search",
+            action="modify",
+            target_file="operators/new_move.py",
+        ),
+    )
+
+    pool = read_registry(str(Path(staging) / "registry.yaml"))
+    assert set(pool) == {"ls", "new_move"}
+    assert pool["new_move"].class_name == "NewMove"
+    assert (Path(staging) / "operators" / "new_move.py").read_text(
+        encoding="utf-8"
+    ) == "class NewMove:\n    version = 2\n"
+    digest_calls: list[str] = []
+    compute_code_hash = service.materializer.compute_code_hash
+
+    def count_digest(workspace: str) -> str:
+        digest_calls.append(workspace)
+        return compute_code_hash(workspace)
+
+    monkeypatch.setattr(service.materializer, "compute_code_hash", count_digest)
+    candidate = service.seal_reconcile_candidate(
+        staging,
+        base_workspace=str(durable),
+        changed_files=("operators/new_move.py",),
+    )
+    service.verify_candidate(candidate)
+    assert digest_calls == [staging, staging]
+    assert candidate.changed_files == (
+        "operators/new_move.py",
+        "registry.yaml",
+    )
+    service.discard_reconcile_workspace(staging)
 
 
 def test_rejected_created_operator_preserves_durable_registry_and_source(
@@ -345,63 +560,12 @@ def test_staging_keeps_branch_and_durable_workspace_untouched(
     assert workspaces[branch.branch_id] == base_workspace
     assert branch.current_code_hash is None
     assert service.setup_workspace(branch) == base_workspace
-    assert set(vars(applied)) == {"workspace", "source_digest"}
-
-
-def test_branch_lease_cleans_return_to_owner_store_interrupt(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    service, branch, _, materializer, workspaces, _, _ = _staging_service(tmp_path)
-    service.discard_branch_workspace(branch.branch_id)
-    create_workspace = materializer.create_branch_workspace
-
-    def interrupt_after_materializer_return(
-        branch_id: str,
-        source_snapshot: str,
-    ) -> str:
-        workspace = create_workspace(branch_id, source_snapshot)
-        assert Path(workspace).absolute() in materializer._inflight_branch_workspaces
-        raise KeyboardInterrupt("materializer-return:branch")
-
-    monkeypatch.setattr(
-        materializer,
-        "create_branch_workspace",
-        interrupt_after_materializer_return,
-    )
-
-    with pytest.raises(KeyboardInterrupt, match="materializer-return:branch"):
-        service.setup_workspace(branch)
-
-    assert workspaces == {}
-    assert not any((tmp_path / "campaign" / "workspaces").iterdir())
-    assert materializer._inflight_branch_workspaces == set()
-
-
-def test_candidate_lease_cleans_return_to_owner_store_interrupt(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    service, _, _, materializer, _, _, base_workspace = _staging_service(tmp_path)
-    create_candidate = materializer.create_candidate_workspace
-
-    def interrupt_after_materializer_return(source_workspace: str) -> str:
-        candidate = create_candidate(source_workspace)
-        assert Path(candidate) in materializer._inflight_candidate_workspaces
-        raise KeyboardInterrupt("materializer-return:candidate")
-
-    monkeypatch.setattr(
-        materializer,
-        "create_candidate_workspace",
-        interrupt_after_materializer_return,
-    )
-
-    with pytest.raises(KeyboardInterrupt, match="materializer-return:candidate"):
-        service.apply_candidate_patch(base_workspace, _candidate_patch())
-
-    assert Path(base_workspace).is_dir()
-    assert not any((tmp_path / "campaign" / "candidate_workspaces").iterdir())
-    assert materializer._inflight_candidate_workspaces == set()
+    assert set(vars(applied)) == {
+        "workspace",
+        "source_digest",
+        "before_sources",
+        "changed_files",
+    }
 
 
 def test_relative_campaign_preserves_branch_and_candidate_path_semantics(
@@ -417,7 +581,6 @@ def test_relative_campaign_preserves_branch_and_candidate_path_semantics(
     branch_workspace = materializer.create_branch_workspace("branch-1", str(source))
     assert branch_workspace == "relative-campaign/workspaces/branch-1"
     assert not Path(branch_workspace).is_absolute()
-    materializer.claim_branch_workspace("branch-1", branch_workspace)
 
     candidate_workspace = materializer.create_candidate_workspace(branch_workspace)
     assert Path(candidate_workspace).is_absolute()
@@ -453,7 +616,7 @@ def test_branch_workspace_symlink_never_deletes_its_in_root_target(
 
 
 @pytest.mark.parametrize("kind", ("branch", "candidate"))
-def test_materializer_partial_copy_interrupt_cleans_lease_and_tree(
+def test_materializer_partial_copy_interrupt_cleans_tree(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     kind: str,
@@ -468,7 +631,6 @@ def test_materializer_partial_copy_interrupt_cleans_lease_and_tree(
             "branch-1",
             str(source),
         )
-        materializer.claim_branch_workspace("branch-1", branch_workspace)
         source_path = branch_workspace
     else:
         source_path = str(source)
@@ -487,22 +649,44 @@ def test_materializer_partial_copy_interrupt_cleans_lease_and_tree(
         else:
             materializer.create_candidate_workspace(source_path)
 
-    assert materializer._inflight_branch_workspaces == set()
-    assert materializer._inflight_candidate_workspaces == set()
     if kind == "branch":
         assert not (campaign / "workspaces" / "branch-2").exists()
     else:
         assert not any((campaign / "candidate_workspaces").iterdir())
 
 
-def test_legacy_materializer_without_lease_api_preserves_workspace_lifecycle(
+def test_candidate_patch_interrupt_cleans_staging_and_preserves_base(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, _, _, materializer, _, _, base_workspace = _staging_service(tmp_path)
+
+    def interrupt_apply(workspace: str, _patch: PatchProposal) -> str:
+        (Path(workspace) / "operators" / "partial.py").write_text(
+            "PARTIAL = True\n",
+            encoding="utf-8",
+        )
+        raise KeyboardInterrupt("patch interrupted")
+
+    monkeypatch.setattr(materializer, "apply_ephemeral_patch", interrupt_apply)
+
+    with pytest.raises(KeyboardInterrupt, match="patch interrupted"):
+        service.apply_candidate_patch(base_workspace, _candidate_patch())
+
+    assert Path(base_workspace).is_dir()
+    assert not (Path(base_workspace) / "operators" / "partial.py").exists()
+    candidate_root = tmp_path / "campaign" / "candidate_workspaces"
+    assert not any(candidate_root.iterdir())
+
+
+def test_plain_materializer_preserves_candidate_accept_and_reject_lifecycle(
     tmp_path: Path,
 ) -> None:
     service, branch, controller, materializer, workspaces, _, base_workspace = (
         _staging_service(tmp_path)
     )
 
-    class LegacyMaterializer:
+    class PlainMaterializer:
         def create_branch_workspace(self, branch_id: str, source: str) -> str:
             return materializer.create_branch_workspace(branch_id, source)
 
@@ -511,6 +695,13 @@ def test_legacy_materializer_without_lease_api_preserves_workspace_lifecycle(
 
         def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
             return materializer.apply_patch(workspace, patch)
+
+        def apply_ephemeral_patch(
+            self,
+            workspace: str,
+            patch: PatchProposal,
+        ) -> None:
+            materializer.apply_ephemeral_patch(workspace, patch)
 
         def cleanup_candidate_workspace(self, workspace: str) -> None:
             materializer.cleanup_candidate_workspace(workspace)
@@ -524,7 +715,7 @@ def test_legacy_materializer_without_lease_api_preserves_workspace_lifecycle(
         def cleanup(self, workspace: str) -> None:
             materializer.cleanup(workspace)
 
-    service.materializer = LegacyMaterializer()  # type: ignore[assignment]
+    service.materializer = PlainMaterializer()  # type: ignore[assignment]
     rejected = service.apply_candidate_patch(base_workspace, _candidate_patch())
     service.reject_candidate(rejected)
     assert not Path(rejected.workspace).exists()
@@ -618,6 +809,71 @@ def test_freeze_failure_leaves_branch_and_source_mapping_untouched(
     assert (
         Path(base_workspace) / "operators" / "solver.py"
     ).read_text() == "VALUE = 0\n"
+
+
+def test_accept_controller_failure_rolls_back_partial_candidate_binding(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, branch, controller, materializer, workspaces, _, base_workspace = (
+        _staging_service(tmp_path)
+    )
+    parent_hash = materializer.compute_code_hash(base_workspace)
+    controller.accept_verified_code(branch.branch_id, parent_hash)
+    applied = service.apply_candidate_patch(base_workspace, _candidate_patch())
+    original_accept = controller.accept_verified_code
+
+    def mutate_then_fail(branch_id: str, code_hash: str) -> None:
+        original_accept(branch_id, code_hash)
+        raise OSError("branch binding unavailable")
+
+    monkeypatch.setattr(controller, "accept_verified_code", mutate_then_fail)
+
+    with pytest.raises(OSError, match="branch binding unavailable"):
+        service.accept_candidate(branch, applied)
+
+    assert workspaces[branch.branch_id] == base_workspace
+    assert branch.current_code_hash == parent_hash
+    assert Path(base_workspace).is_dir()
+    assert not Path(applied.workspace).exists()
+
+
+def test_discard_failure_retains_durable_workspace_mapping(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, branch, _, materializer, workspaces, _, base_workspace = (
+        _staging_service(tmp_path)
+    )
+
+    def fail_cleanup(_workspace: str) -> None:
+        raise OSError("durable cleanup unavailable")
+
+    monkeypatch.setattr(materializer, "cleanup", fail_cleanup)
+
+    with pytest.raises(OSError, match="durable cleanup unavailable"):
+        service.discard_branch_workspace(branch.branch_id)
+
+    assert workspaces[branch.branch_id] == base_workspace
+    assert Path(base_workspace).is_dir()
+
+
+def test_setup_discard_failure_returns_none_and_clears_workspace_mapping(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, branch, _, materializer, workspaces, _, base_workspace = (
+        _staging_service(tmp_path)
+    )
+
+    def fail_cleanup(_workspace: str) -> None:
+        raise OSError("old branch cleanup unavailable")
+
+    monkeypatch.setattr(materializer, "cleanup", fail_cleanup)
+
+    assert service.setup_workspace(branch) is None
+    assert branch.branch_id not in workspaces
+    assert not Path(base_workspace).exists()
 
 
 def test_verification_boundary_rejects_candidate_hash_drift(

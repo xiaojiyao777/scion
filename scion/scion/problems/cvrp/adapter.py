@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.spec import ProblemSpecV1
@@ -62,6 +63,13 @@ class CvrpAdapter:
     @property
     def spec(self) -> ProblemSpecV1:
         return self._spec
+
+    def extract_case_features(self, case_path: str) -> Mapping[str, Any]:
+        """Return CVRP-owned proposal feedback derived from a case path."""
+
+        from scion.problems.cvrp.case_features import extract_case_features
+
+        return extract_case_features(case_path)
 
     def solver_design_prompt_provider(self) -> Any:
         from scion.problems.cvrp.solver_design_provider import (

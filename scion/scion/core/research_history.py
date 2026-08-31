@@ -16,6 +16,9 @@ from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import ExperimentStage, StepRecord, patch_file_changes
 from scion.core.paths import normalize_relative_patch_path
 from scion.core.research_input import is_sensitive_research_key
+from scion.core.selected_hypothesis_basis import (
+    normalize_selected_hypothesis_research_basis,
+)
 
 RESEARCH_HISTORY_SCHEMA = "scion.research_history.step.v1"
 MAX_RESEARCH_HISTORY_FILES = 16
@@ -30,12 +33,14 @@ _TOP = frozenset(
         "schema_version",
         "problem_id",
         "hypothesis",
+        "selected_hypothesis_research_basis",
         "patch",
         "outcome",
         "protocol",
         "decision",
     }
 )
+_TOP_REQUIRED = _TOP - {"selected_hypothesis_research_basis"}
 _HYPOTHESIS = frozenset(
     {
         "text",
@@ -142,6 +147,9 @@ def project_research_history_step(
             "schema_version": RESEARCH_HISTORY_SCHEMA,
             "problem_id": problem_id,
             "hypothesis": _hypothesis(step),
+            "selected_hypothesis_research_basis": (
+                step.selected_hypothesis_research_basis
+            ),
             "patch": _patch(step),
             "outcome": _outcome(step),
             "protocol": _screening_protocol(step),
@@ -220,7 +228,7 @@ def provider_research_history(
 def normalize_research_history_record(
     value: Any, *, expected_problem_id: str
 ) -> dict[str, Any]:
-    record = _mapping(value, _TOP, path="$")
+    record = _mapping(value, _TOP, required=_TOP_REQUIRED, path="$")
     if record["schema_version"] != RESEARCH_HISTORY_SCHEMA:
         raise ValueError("unsupported research history schema")
     expected = _token(expected_problem_id, field="expected_problem_id")
@@ -233,6 +241,11 @@ def normalize_research_history_record(
         "schema_version": RESEARCH_HISTORY_SCHEMA,
         "problem_id": problem_id,
         "hypothesis": _normalize_hypothesis(record["hypothesis"]),
+        "selected_hypothesis_research_basis": (
+            normalize_selected_hypothesis_research_basis(
+                record.get("selected_hypothesis_research_basis")
+            )
+        ),
         "patch": _normalize_patch(record["patch"]),
         "outcome": _normalize_outcome(record["outcome"]),
         "protocol": _normalize_protocol(record["protocol"]),
@@ -250,7 +263,21 @@ def _is_held_out(step: StepRecord) -> bool:
     if step.protocol_result is not None:
         stages.append(step.protocol_result.stage)
     if step.execution_outcome is not None:
-        stages.append(step.execution_outcome.provenance.get("stage"))
+        provenance = step.execution_outcome.provenance
+        stages.extend(
+            (
+                provenance.get("stage"),
+                provenance.get("protocol_stage"),
+            )
+        )
+        completed_protocol = provenance.get("completed_protocol")
+        if isinstance(completed_protocol, Mapping):
+            stages.append(completed_protocol.get("stage"))
+        interrupted_outcome = provenance.get("interrupted_outcome")
+        if isinstance(interrupted_outcome, Mapping):
+            interrupted_provenance = interrupted_outcome.get("provenance")
+            if isinstance(interrupted_provenance, Mapping):
+                stages.append(interrupted_provenance.get("stage"))
     return any(
         str(getattr(stage, "value", stage) or "").strip().lower() in _HELD_OUT
         for stage in stages
@@ -381,6 +408,10 @@ def _validate_record_relationships(record: Mapping[str, Any]) -> None:
     if record["hypothesis"] is not None:
         _validate_hypothesis_record(record)
         return
+    if record["selected_hypothesis_research_basis"] is not None:
+        raise ValueError(
+            "hypothesis-free research history cannot carry a selected basis"
+        )
     if any(record[field] is not None for field in ("patch", "protocol", "decision")):
         raise ValueError(
             "hypothesis-free research history cannot carry patch, Protocol, "
@@ -388,7 +419,11 @@ def _validate_record_relationships(record: Mapping[str, Any]) -> None:
         )
     outcome = record["outcome"]
     if not isinstance(outcome, Mapping):
-        raise ValueError("hypothesis-free research history requires an outcome")
+        # A malformed record is rejected as one invalid evidence value regardless
+        # of which nested field has the wrong runtime shape.
+        raise ValueError(  # noqa: TRY004
+            "hypothesis-free research history requires an outcome"
+        )
     if set(outcome) != _OUTCOME_REQUIRED:
         raise ValueError(
             "hypothesis-free research history outcome must contain only "
@@ -405,7 +440,9 @@ def _validate_record_relationships(record: Mapping[str, Any]) -> None:
 def _validate_hypothesis_record(record: Mapping[str, Any]) -> None:
     outcome = record["outcome"]
     if not isinstance(outcome, Mapping):
-        raise ValueError("research history with a hypothesis requires an outcome")
+        raise ValueError(  # noqa: TRY004
+            "research history with a hypothesis requires an outcome"
+        )
     if outcome["stage"] == "proposal_hypothesis":
         raise ValueError(
             "proposal_hypothesis research history cannot carry a hypothesis"

@@ -25,6 +25,7 @@ from scion.evaluation.champion_holdout import (
 from scion.problem.spec import ObjectiveMetricSpec
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
 from scion.runtime.subprocess_runner import LocalSubprocessRunner
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 
 def _run(
@@ -229,8 +230,10 @@ def test_formal_counts_invalid_output_on_its_arm(
         InfeasibleAsFailureRunner(_SequenceRunner(results), metric_names=("cost",)),
         1,
         str(tmp_path / "metrics"),
-        metric_specs=(
-            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        adapter=protocol_test_adapter(
+            (
+                ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+            )
         ),
     )
     result = protocol.run_experiment(

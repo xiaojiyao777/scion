@@ -8,6 +8,13 @@ from scion.verification.gate import VerificationGate
 
 
 class _PassingAdapter:
+    def __init__(self, spec: ProblemSpec) -> None:
+        self._spec = spec
+
+    @property
+    def spec(self) -> ProblemSpec:
+        return self._spec
+
     def load_instance(self, instance_path: str) -> object:
         return object()
 
@@ -125,12 +132,11 @@ def test_verification_shares_one_candidate_run_and_only_repeats_for_determinism(
         },
     }
     runner = _CountingRunner(raw)
+    spec = _spec(tmp_path)
     gate = VerificationGate(
-        problem_spec=_spec(tmp_path),
         runner=runner,
-        adapter=_PassingAdapter(),
+        adapter=_PassingAdapter(spec),
         strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
     )
 
     result = gate.run(

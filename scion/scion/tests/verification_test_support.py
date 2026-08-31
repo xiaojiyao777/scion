@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Optional
@@ -30,7 +31,7 @@ from scion.verification.feasibility import check_feasibility
 from scion.verification.objective import check_objective
 from scion.verification.nondeterminism import check_nondeterminism
 from scion.verification.perf_guard import check_perf
-from scion.problem.contracts import CheckReport, SolverArtifact
+from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 
@@ -176,6 +177,74 @@ def _with_objectives(spec: ProblemSpec, *names: str) -> ProblemSpec:
     return spec
 
 
+class _VerificationTestAdapter:
+    """Problem-neutral, complete adapter used by public Gate integration tests."""
+
+    def __init__(self, spec: Any) -> None:
+        self._spec = spec
+
+    @property
+    def spec(self) -> Any:
+        return self._spec
+
+    def render_problem_summary(self) -> str:
+        return "verification test problem"
+
+    def render_operator_interface(self) -> str:
+        return "verification test interface"
+
+    def load_instance(self, instance_path: str) -> dict[str, str]:
+        return {"instance_path": instance_path}
+
+    def deserialize_solver_output(
+        self,
+        raw_output: Mapping[str, Any],
+        instance: Any,
+    ) -> SolverArtifact:
+        del instance
+        return SolverArtifact(
+            raw_output=raw_output,
+            objective=dict(raw_output.get("objective") or {}),
+            feasible=bool(raw_output.get("feasible", False)),
+            normalized_solution=raw_output.get("solution"),
+        )
+
+    def check_solution_consistency(
+        self,
+        artifact: SolverArtifact,
+        instance: Any,
+    ) -> CheckReport:
+        del artifact, instance
+        return CheckReport(passed=True)
+
+    def check_feasibility(
+        self,
+        artifact: SolverArtifact,
+        instance: Any,
+    ) -> CheckReport:
+        del instance
+        return CheckReport(passed=artifact.feasible)
+
+    def recompute_objective(
+        self,
+        artifact: SolverArtifact,
+        instance: Any,
+    ) -> dict[str, int | float]:
+        del instance
+        return dict(artifact.objective)
+
+    def estimate_lower_bound(
+        self,
+        metric_name: str,
+        instance_paths: Sequence[str],
+    ) -> LowerBoundEstimate | None:
+        del metric_name, instance_paths
+
+
+def _verification_test_adapter(spec: Any) -> _VerificationTestAdapter:
+    return _VerificationTestAdapter(spec)
+
+
 def _solver_output_dict(splits: int = 2, cost: int = 6600) -> dict:
     return {
         "vehicles": {
@@ -217,6 +286,7 @@ def _load_toy_tsp_adapter():
     with open(toy_dir / "problem.yaml", encoding="utf-8") as fh:
         data = yaml.safe_load(fh)
     data["root_dir"] = str(toy_dir)
+    data["canary_case_path"] = "data/tsp_10.json"
     spec_v1 = ProblemSpecV1(**data)
     return spec_v1, load_problem_adapter(spec_v1)
 

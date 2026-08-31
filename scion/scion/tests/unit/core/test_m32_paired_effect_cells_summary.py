@@ -780,6 +780,9 @@ def test_cells_field_is_not_added_to_other_existing_authority_surfaces(
         protocol_result=step.protocol_result,
         decision=Decision.QUEUE_VALIDATE,
         champion=_champion(),
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=("operators/local_search.py",),
     )
     history_text = (tmp_path / "research_history.jsonl").read_text(encoding="utf-8")
     status_text = (tmp_path / "status.json").read_text(encoding="utf-8")

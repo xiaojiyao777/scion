@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 
 import pytest
+
 from scion.config.problem import (
     ProblemSpec,
     ProtocolConfig,
@@ -20,21 +20,25 @@ from scion.core.resource_envelope import ResourceEnvelope
 from scion.problem.spec import ObjectiveMetricSpec
 from scion.proposal.mock_client import MockLLMClient
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 
 def _v3_runtime(spec, split_manifest, seed_ledger, tmp_path):
+    adapter = protocol_test_adapter(
+        (
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        ),
+        problem_spec=spec,
+    )
     protocol = ExperimentProtocol(
         ProtocolConfig(),
         SplitManager(split_manifest),
         SeedLedger(seed_ledger),
         runner=object(),
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=(
-            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
-        ),
-        problem_spec=spec,
+        adapter=adapter,
     )
-    return protocol, SimpleNamespace(spec=spec)
+    return protocol, adapter
 
 
 def _real_protocol_manager_kwargs(
@@ -70,20 +74,22 @@ def _real_protocol_manager_kwargs(
         canary=[29],
     )
     metrics_dir = campaign_dir / "metrics"
+    adapter = protocol_test_adapter(
+        (
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        ),
+        problem_spec=spec,
+    )
     experiment_protocol = ExperimentProtocol(
         protocol_config,
         SplitManager(split_manifest),
         SeedLedger(seed_ledger),
         runner=object(),
         metrics_dir=str(metrics_dir),
-        metric_specs=(
-            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
-        ),
-        problem_spec=spec,
+        adapter=adapter,
     )
     llm_client = MockLLMClient()
     kwargs = {
-        "problem_spec": spec,
         "protocol_config": protocol_config,
         "split_manifest": split_manifest,
         "seed_ledger": seed_ledger,
@@ -95,7 +101,7 @@ def _real_protocol_manager_kwargs(
         ),
         "campaign_dir": str(campaign_dir),
         "experiment_protocol": experiment_protocol,
-        "adapter": SimpleNamespace(spec=spec),
+        "adapter": adapter,
         "research_input": research_input,
         "resource_envelope": resource_envelope,
     }
@@ -132,7 +138,6 @@ def test_campaign_composition_installs_key_services(tmp_path):
         spec, split_manifest, seed_ledger, tmp_path
     )
     manager = CampaignManager(
-        problem_spec=spec,
         protocol_config=protocol,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
@@ -269,7 +274,6 @@ def test_campaign_composition_passes_only_live_campaign_context_to_proposal_pipe
     )
 
     manager = CampaignManager(
-        problem_spec=spec,
         protocol_config=ProtocolConfig(),
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,

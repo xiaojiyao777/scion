@@ -1,10 +1,16 @@
 """Protocol-independent typed outcomes for research execution attempts."""
+
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
-from typing import Any, Dict, Mapping, Optional
+from typing import Any
+
+from scion.core.selected_hypothesis_basis import (
+    canonical_selected_hypothesis_research_basis_json,
+)
 
 
 class ExecutionOutcome(Enum):
@@ -33,7 +39,7 @@ class ExecutionOutcomeRecord:
     outcome: ExecutionOutcome
     reason_code: str
     detail: str = ""
-    provenance: Dict[str, Any] = field(default_factory=dict)
+    provenance: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.outcome, ExecutionOutcome):
@@ -54,7 +60,7 @@ class ExecutionOutcomeRecord:
         object.__setattr__(self, "reason_code", reason_code)
         object.__setattr__(self, "provenance", provenance)
 
-    def to_primitive(self) -> Dict[str, Any]:
+    def to_primitive(self) -> dict[str, Any]:
         return {
             "outcome": self.outcome.value,
             "reason_code": self.reason_code,
@@ -66,7 +72,7 @@ class ExecutionOutcomeRecord:
         }
 
     @classmethod
-    def from_primitive(cls, payload: Mapping[str, Any]) -> "ExecutionOutcomeRecord":
+    def from_primitive(cls, payload: Mapping[str, Any]) -> ExecutionOutcomeRecord:
         if not isinstance(payload, Mapping):
             raise TypeError("execution outcome payload must be a mapping")
         provenance = payload.get("provenance", {})
@@ -88,12 +94,10 @@ def _execution_outcome_primitive(value: Any, *, path: str) -> Any:
             raise ValueError(f"non-finite execution outcome value at {path}")
         return value
     if isinstance(value, Mapping):
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
         for key, child in value.items():
             if not isinstance(key, str):
-                raise TypeError(
-                    f"non-string execution outcome key at {path}: {key!r}"
-                )
+                raise TypeError(f"non-string execution outcome key at {path}: {key!r}")
             result[key] = _execution_outcome_primitive(
                 child,
                 path=f"{path}.{key}",
@@ -114,6 +118,70 @@ def execution_outcome_requires_hold(record: ExecutionOutcomeRecord) -> bool:
     """Return whether automatic scheduling must stop for this branch."""
 
     return record.outcome in _EXECUTION_HOLD_OUTCOMES
+
+
+def disposition_failure_record(
+    *,
+    reason_code: str,
+    error: Exception,
+    operation: str,
+    interrupted_outcome: ExecutionOutcomeRecord | None = None,
+    completed_protocol: Any | None = None,
+    unapplied_decision: Any | None = None,
+    decision_reason_codes: tuple[str, ...] | None = None,
+) -> ExecutionOutcomeRecord:
+    """Describe one failed cleanup/bind without erasing the preceding fact.
+
+    Disposition happens after an earlier typed evaluation fact or after Protocol
+    has completed, but before the host can safely close the attempt.  The
+    terminal outcome is therefore infrastructure-blocked.  The preceding fact
+    remains ordinary provenance; no Decision is claimed as applied.
+    """
+
+    if interrupted_outcome is not None and completed_protocol is not None:
+        raise ValueError(
+            "disposition failure accepts interrupted_outcome or "
+            "completed_protocol, not both"
+        )
+    provenance: dict[str, Any] = {
+        "stage": "candidate_disposition",
+        "operation": operation,
+        "exception_type": type(error).__name__,
+    }
+    if interrupted_outcome is not None:
+        provenance["interrupted_outcome"] = interrupted_outcome.to_primitive()
+    if completed_protocol is not None:
+        protocol_stage = getattr(completed_protocol, "stage", "")
+        protocol_stage_value = str(
+            getattr(protocol_stage, "value", protocol_stage) or ""
+        )
+        stats = getattr(completed_protocol, "stats", None)
+        provenance["protocol_stage"] = protocol_stage_value
+        provenance["completed_protocol"] = {
+            "stage": protocol_stage_value,
+            "gate_outcome": str(
+                getattr(completed_protocol, "gate_outcome", "") or ""
+            ),
+            "reason_codes": list(
+                getattr(completed_protocol, "reason_codes", ()) or ()
+            ),
+            "raw_metrics_ref": str(
+                getattr(completed_protocol, "raw_metrics_ref", "") or ""
+            ),
+            "stats": asdict(stats) if is_dataclass(stats) else None,
+        }
+    if unapplied_decision is not None:
+        provenance["unapplied_decision"] = str(
+            getattr(unapplied_decision, "value", unapplied_decision) or ""
+        )
+    if decision_reason_codes:
+        provenance["decision_reason_codes"] = list(decision_reason_codes)
+    return ExecutionOutcomeRecord(
+        outcome=ExecutionOutcome.BLOCKED_INFRA,
+        reason_code=reason_code,
+        detail=str(error),
+        provenance=provenance,
+    )
 
 
 def block_branch_after_execution(
@@ -143,14 +211,31 @@ def record_execution_outcome_event(
     branch_id: str,
     record: ExecutionOutcomeRecord,
     event_kind: str,
-) -> Optional[str]:
+    extra_fields: Mapping[str, Any] | None = None,
+    selected_hypothesis_research_basis: Mapping[str, Any] | None = None,
+) -> str | None:
     writer = getattr(registry, "record_execution_outcome", None)
     if not callable(writer):
         return None
+    values = {
+        "campaign_id": campaign_id,
+        "branch_id": branch_id,
+        "record": record,
+        "event_kind": event_kind,
+        "stage": str(record.provenance.get("stage") or ""),
+    }
+    extras = dict(extra_fields or {})
+    basis_field = "selected_hypothesis_research_basis_json"
+    if basis_field in extras:
+        raise ValueError(
+            f"{basis_field} must be supplied through the dedicated argument"
+        )
+    if selected_hypothesis_research_basis is not None:
+        extras[basis_field] = canonical_selected_hypothesis_research_basis_json(
+            selected_hypothesis_research_basis
+        )
+    if extras:
+        values["extra_fields"] = extras
     return writer(
-        campaign_id=campaign_id,
-        branch_id=branch_id,
-        record=record,
-        event_kind=event_kind,
-        stage=str(record.provenance.get("stage") or ""),
+        **values,
     )

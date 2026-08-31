@@ -9,7 +9,11 @@ import pytest
 from scion.cli.commands.init_run import _load_research_histories
 from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.evidence_recording import EvidenceRecorder
-from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+    disposition_failure_record,
+)
 from scion.core.models import (
     Branch,
     BranchState,
@@ -35,7 +39,6 @@ from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_snapshot import freeze_proposal_context
 from scion.proposal.hypothesis_research_corpus import (
     build_hypothesis_research_corpus,
-    has_usable_history_headline,
 )
 
 
@@ -71,6 +74,9 @@ def _verification_rejection(text: str = "Try a bounded mechanism.") -> StepRecor
         decision=None,
         failure_stage="verification",
         failure_detail="PRIVATE failure detail",
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=("operators/local_search.py",),
         execution_outcome=ExecutionOutcomeRecord(
             outcome=ExecutionOutcome.RESEARCH_REJECTED,
             reason_code="VERIFICATION_LIGHT_REJECTED",
@@ -105,6 +111,9 @@ def _hypothesis_failure() -> StepRecord:
         decision=None,
         failure_stage="proposal_hypothesis",
         failure_detail="HYPOTHESIS_RESEARCH_ABSTAINED",
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
         execution_outcome=ExecutionOutcomeRecord(
             outcome=ExecutionOutcome.RESEARCH_REJECTED,
             reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
@@ -151,6 +160,9 @@ def _evaluated(stage: ExperimentStage = ExperimentStage.SCREENING) -> StepRecord
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage="screening" if stage is ExperimentStage.SCREENING else None,
         failure_detail="PRIVATE protocol prose",
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=("operators/local_search.py",),
         decision_reason_codes=("SCREENING_FAIL",),
         execution_outcome=ExecutionOutcomeRecord(
             outcome=ExecutionOutcome.EVALUATED,
@@ -240,6 +252,7 @@ def test_hypothesis_free_attempt_round_trips_as_one_redacted_history_row(
         "schema_version": RESEARCH_HISTORY_SCHEMA,
         "problem_id": "generic_demo",
         "hypothesis": None,
+        "selected_hypothesis_research_basis": None,
         "patch": None,
         "outcome": {
             "outcome": "research_rejected",
@@ -286,9 +299,6 @@ def test_hypothesis_free_history_has_no_nearest_ranking_headline(
     assert context["prior_research_history"][0]["hypothesis"] is None
     assert len(histories) == 1
     assert "hypothesis" not in histories[0]["index"]
-    assert not has_usable_history_headline(
-        [history["index"] for history in histories]
-    )
 
 
 @pytest.mark.parametrize(
@@ -296,11 +306,7 @@ def test_hypothesis_free_history_has_no_nearest_ranking_headline(
     (
         (
             "patch",
-            {
-                "changes": [
-                    {"file_path": "x.py", "action": "modify", "source": "x"}
-                ]
-            },
+            {"changes": [{"file_path": "x.py", "action": "modify", "source": "x"}]},
         ),
         ("protocol", _record(_evaluated())["protocol"]),
         ("decision", _record(_evaluated())["decision"]),
@@ -355,15 +361,11 @@ def test_external_hypothesis_free_history_rejects_nonterminal_shapes(
 
 def test_all_tracked_v04_histories_satisfy_cross_field_contracts() -> None:
     inputs = (
-        Path(__file__).resolve().parents[4]
-        / "docs"
-        / "experiments"
-        / "v0.4"
-        / "inputs"
+        Path(__file__).resolve().parents[4] / "docs" / "experiments" / "v0.4" / "inputs"
     )
     paths = sorted(inputs.glob("*research-history.jsonl"))
 
-    assert len(paths) == 15
+    assert len(paths) == 16
     structural_shapes: set[tuple[bool, str, bool, bool]] = set()
     for path in paths:
         records = load_research_histories([path], expected_problem_id="cvrp")
@@ -565,7 +567,9 @@ def test_writer_failure_preserves_atomic_prefix_and_memory(
 
 
 @pytest.mark.parametrize("stage", (ExperimentStage.VALIDATION, ExperimentStage.FROZEN))
-def test_later_stage_step_is_wholly_excluded(tmp_path: Path, stage: ExperimentStage) -> None:
+def test_later_stage_step_is_wholly_excluded(
+    tmp_path: Path, stage: ExperimentStage
+) -> None:
     writer = ResearchHistoryWriter(tmp_path, problem_id="generic_demo")
 
     writer.append_step(_evaluated(stage))
@@ -578,6 +582,32 @@ def test_any_heldout_stage_marker_excludes_the_whole_step(tmp_path: Path) -> Non
     step.execution_outcome = replace(
         step.execution_outcome,
         provenance={"stage": "validation"},
+    )
+    writer = ResearchHistoryWriter(tmp_path, problem_id="generic_demo")
+
+    writer.append_step(step)
+
+    assert not writer.path.exists()
+
+
+@pytest.mark.parametrize("stage", (ExperimentStage.VALIDATION, ExperimentStage.FROZEN))
+def test_disposition_failure_after_heldout_protocol_is_wholly_excluded(
+    tmp_path: Path,
+    stage: ExperimentStage,
+) -> None:
+    step = _evaluated(stage)
+    completed_protocol = step.protocol_result
+    assert completed_protocol is not None
+    step.protocol_result = None
+    step.decision = None
+    step.failure_stage = "candidate_disposition"
+    step.failure_detail = "cleanup unavailable"
+    step.execution_outcome = disposition_failure_record(
+        reason_code="BRANCH_WORKSPACE_DISCARD_FAILED",
+        error=OSError("cleanup unavailable"),
+        operation="discard_branch_workspace",
+        completed_protocol=completed_protocol,
+        unapplied_decision=Decision.ABANDON,
     )
     writer = ResearchHistoryWriter(tmp_path, problem_id="generic_demo")
 
@@ -623,6 +653,128 @@ def test_screening_reuses_canonical_h_projection_without_raw_evidence() -> None:
     assert "decision_outcome" not in record["protocol"]["evidence"]
 
 
+def test_selected_basis_is_strictly_normalized_and_old_rows_remain_loadable(
+    tmp_path: Path,
+) -> None:
+    basis = {
+        "read_refs": ("source-0001", "history-0002"),
+        "nearest_prior_refs": ("history-0002",),
+        "material_delta": "  Change the selected mechanism.  ",
+        "alternatives_considered": ("  Keep the current mechanism.  ",),
+        "observable_prediction": "  Screening should improve.  ",
+        "falsification_condition": "  Reject if screening does not improve.  ",
+    }
+    step = _verification_rejection()
+    step.selected_hypothesis_research_basis = basis
+
+    projected = project_research_history_step(step, problem_id="generic_demo")
+    assert projected is not None
+    assert projected["selected_hypothesis_research_basis"] == {
+        "read_refs": ["source-0001", "history-0002"],
+        "nearest_prior_refs": ["history-0002"],
+        "material_delta": "Change the selected mechanism.",
+        "alternatives_considered": ["Keep the current mechanism."],
+        "observable_prediction": "Screening should improve.",
+        "falsification_condition": "Reject if screening does not improve.",
+    }
+
+    legacy = dict(projected)
+    legacy.pop("selected_hypothesis_research_basis")
+    path = tmp_path / "legacy.jsonl"
+    path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
+    loaded = load_research_histories([path], expected_problem_id="generic_demo")
+    assert loaded[0]["selected_hypothesis_research_basis"] is None
+
+
+def test_selected_basis_rejects_noncanonical_or_nonprimitive_shapes() -> None:
+    record = _record(_verification_rejection())
+    record["selected_hypothesis_research_basis"] = {
+        "read_refs": ["source-0001"],
+        "nearest_prior_refs": [],
+        "material_delta": "Change the selected mechanism.",
+        "alternatives_considered": ["Keep the current mechanism."],
+        "observable_prediction": "Screening should improve.",
+        "falsification_condition": "Reject if screening does not improve.",
+        "unexpected": "must fail closed",
+    }
+
+    with pytest.raises(ValueError, match="six required fields"):
+        normalize_research_history_record(record, expected_problem_id="generic_demo")
+
+
+def test_selected_basis_preserves_optional_ordered_history_review() -> None:
+    record = _record(_verification_rejection())
+    record["selected_hypothesis_research_basis"] = {
+        "read_refs": ["source-0001", "history-0002", "history-0003"],
+        "nearest_prior_refs": ["history-0002", "history-0003"],
+        "material_delta": "Change the selected mechanism.",
+        "alternatives_considered": ["Keep the current mechanism."],
+        "observable_prediction": "Screening should improve.",
+        "falsification_condition": "Reject if screening does not improve.",
+        "history_review": [
+            {"ref": "history-0003", "disposition": "used"},
+            {
+                "ref": "history-0004",
+                "disposition": "rejected",
+                "reason": "Its failure mechanism does not apply.",
+            },
+        ],
+    }
+
+    normalized = normalize_research_history_record(
+        record, expected_problem_id="generic_demo"
+    )
+
+    assert (
+        normalized["selected_hypothesis_research_basis"]["history_review"]
+        == record["selected_hypothesis_research_basis"]["history_review"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("review", "nearest", "message"),
+    [
+        (
+            [{"ref": "history-0003", "disposition": "used"}],
+            ["history-0002"],
+            "used history_review refs",
+        ),
+        (
+            [
+                {
+                    "ref": "history-0003",
+                    "disposition": "rejected",
+                    "reason": "Different mechanism.",
+                }
+            ],
+            ["history-0002", "history-0003"],
+            "rejected history_review refs",
+        ),
+    ],
+)
+def test_selected_basis_history_review_matches_citations(
+    review: list[dict[str, str]],
+    nearest: list[str],
+    message: str,
+) -> None:
+    record = _record(_verification_rejection())
+    record["selected_hypothesis_research_basis"] = {
+        "read_refs": ["source-0001", "history-0002", "history-0003"],
+        "nearest_prior_refs": nearest,
+        "material_delta": "Change the selected mechanism.",
+        "alternatives_considered": ["Keep the current mechanism."],
+        "observable_prediction": "Screening should improve.",
+        "falsification_condition": "Reject if screening does not improve.",
+        "history_review": review,
+    }
+
+    with pytest.raises(ValueError, match=message):
+        normalize_research_history_record(
+            record,
+            expected_problem_id="generic_demo",
+        )
+
+
 def test_real_cvrp_mechanism_envelope_round_trips_safe_aggregates(
     tmp_path: Path,
 ) -> None:
@@ -630,10 +782,12 @@ def test_real_cvrp_mechanism_envelope_round_trips_safe_aggregates(
         CvrpProposalMechanismEvidenceProvider,
     )
 
-    evidence = CvrpProposalMechanismEvidenceProvider().summarize_proposal_mechanism_evidence(
-        stage="screening",
-        selected_surface="solver_design",
-        runtime_pairs=(),
+    evidence = (
+        CvrpProposalMechanismEvidenceProvider().summarize_proposal_mechanism_evidence(
+            stage="screening",
+            selected_surface="solver_design",
+            runtime_pairs=(),
+        )
     )
     step = _evaluated()
     step.protocol_result = replace(
@@ -651,7 +805,9 @@ def test_real_cvrp_mechanism_envelope_round_trips_safe_aggregates(
 
     loaded = load_research_histories([path], expected_problem_id="cvrp")
 
-    assert loaded[0]["protocol"]["evidence"]["mechanism_evidence"]["evidence"] == evidence
+    assert (
+        loaded[0]["protocol"]["evidence"]["mechanism_evidence"]["evidence"] == evidence
+    )
 
 
 def test_writer_round_trips_safe_problem_owned_family_attribution(
@@ -667,9 +823,7 @@ def test_writer_round_trips_safe_problem_owned_family_attribution(
             {
                 "file_path": "policies/baseline_modules/local_search.py",
                 "action": "modify",
-                "before_source": (
-                    "def _default_vns_operators():\n    return ()\n"
-                ),
+                "before_source": ("def _default_vns_operators():\n    return ()\n"),
                 "after_source": (
                     "def _default_vns_operators():\n    return ('swap',)\n"
                 ),
@@ -726,17 +880,16 @@ def test_writer_round_trips_safe_problem_owned_family_attribution(
         expected_problem_id="cvrp",
     )
 
-    attribution = loaded[0]["protocol"]["evidence"]["mechanism_evidence"][
-        "evidence"
-    ]["mechanism_attribution"]
+    attribution = loaded[0]["protocol"]["evidence"]["mechanism_evidence"]["evidence"][
+        "mechanism_attribution"
+    ]
     assert attribution["attribution_status"] == "family_observable_changed"
     assert attribution["attribution_resolution"] == "family_association"
     assert attribution["exact_mechanism_activation"] is False
     assert attribution["changed_source_roles"] == ["local_search"]
     assert attribution["changed_symbol_names"] == ["_default_vns_operators"]
     assert {
-        observation["signal"]
-        for observation in attribution["activation_observations"]
+        observation["signal"] for observation in attribution["activation_observations"]
     } >= {
         "vns_move_attempts",
         "vns_accepted_moves",
@@ -827,7 +980,10 @@ def test_programmatic_runtime_rejects_malformed_history(tmp_path: Path) -> None:
     record["outcome"]["stage"] = "validation"
 
     with pytest.raises(ValueError, match="held-out"):
-        ProblemRuntime(problem_spec=_spec(tmp_path), research_history=(record,))
+        ProblemRuntime(
+            adapter=type("Adapter", (), {"spec": _spec(tmp_path)})(),
+            research_history=(record,),
+        )
 
 
 def test_loader_enforces_bounded_read(

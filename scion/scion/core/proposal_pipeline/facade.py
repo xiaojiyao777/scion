@@ -33,6 +33,9 @@ from scion.proposal.engine import (
     ProposalValidationError,
     build_prompt_turn_snapshot,
 )
+from scion.proposal.hypothesis_research_corpus import (
+    latest_live_failure_frontier_refs,
+)
 from scion.proposal.hypothesis_research_session import (
     HypothesisResearchAbstain,
     HypothesisResearchContextError,
@@ -113,6 +116,7 @@ class ProposalPipeline:
         self,
         branch: Branch,
     ) -> ProposalAttempt[HypothesisProposal]:
+        selected_research_basis: dict[str, Any] | None = None
         try:
             champion = self._champion_snapshot()
         except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
@@ -120,10 +124,18 @@ class ProposalPipeline:
                 self._record_unexpected_call_failure("hypothesis", exc)
             )
         try:
-            _context_snapshot, prompt_snapshot = self._hypothesis_snapshots(
+            context_snapshot, prompt_snapshot = self._hypothesis_snapshots(
                 branch,
                 champion,
             )
+            if self.code_research_limits is None and latest_live_failure_frontier_refs(
+                context_snapshot.provider_context(include_renderer_inputs=True)
+            ):
+                raise ValueError(
+                    "latest live-campaign failure frontier requires bounded "
+                    "hypothesis research; configure code_research_limits to enable "
+                    "HypothesisResearchSession"
+                )
             public_sources: tuple[Mapping[str, Any], ...] = ()
             source_prefixes: tuple[str, ...] = ()
             if self.code_research_limits is not None:
@@ -154,7 +166,7 @@ class ProposalPipeline:
             if self.code_research_limits is None:
                 hypothesis = self.creative.generate_direct_hypothesis(prompt_snapshot)
             else:
-                research_result = HypothesisResearchSession(
+                research_session = HypothesisResearchSession(
                     self.creative,
                     self.code_research_limits,
                     record_candidate_completed=(
@@ -163,7 +175,8 @@ class ProposalPipeline:
                     record_candidate_selected=(
                         self.record_hypothesis_candidate_selected
                     ),
-                ).run(
+                )
+                research_result = research_session.run(
                     prompt_snapshot,
                     public_sources=public_sources,
                     qualified_prefixes=source_prefixes,
@@ -180,6 +193,12 @@ class ProposalPipeline:
                 if not isinstance(research_result, HypothesisResearchFinalized):
                     raise TypeError("hypothesis research returned an invalid result")
                 hypothesis = research_result.hypothesis
+                selected_research_basis = research_result.research_basis.to_primitive()
+                history_review = research_session.selected_history_frontier_review
+                if history_review:
+                    selected_research_basis["history_review"] = [
+                        item.to_primitive() for item in history_review
+                    ]
         except HypothesisResearchContextError as exc:
             return self._hypothesis_failure(
                 self._record_local_failure(
@@ -206,7 +225,10 @@ class ProposalPipeline:
             return self._hypothesis_failure(
                 self._record_unexpected_call_failure("hypothesis", exc)
             )
-        return ProposalAttempt.success(hypothesis)
+        return ProposalAttempt.success(
+            hypothesis,
+            selected_hypothesis_research_basis=selected_research_basis,
+        )
 
     def generate_code(
         self,

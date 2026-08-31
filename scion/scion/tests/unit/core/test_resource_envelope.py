@@ -325,7 +325,6 @@ def test_campaign_composition_writes_the_declared_envelope_once(tmp_path) -> Non
     campaign_dir = tmp_path / "campaign"
 
     CampaignManager(
-        problem_spec=spec,
         protocol_config=ProtocolConfig(),
         split_manifest=SplitManifest(
             screening=["s"],

@@ -288,6 +288,52 @@ def test_campaign_summary_projects_only_bounded_protocol_infeasibility_count(
         assert payload["candidate_attributable_infeasible_pairs"] == expected
 
 
+@pytest.mark.parametrize(
+    ("field_name", "count", "attempted", "total", "expected"),
+    (
+        ("candidate_only_timeout_pairs", 0, 0, 0, 0),
+        ("candidate_only_timeout_pairs", 2, 2, 3, 2),
+        ("candidate_only_timeout_pairs", 3, 2, 3, None),
+        ("candidate_only_timeout_pairs", True, 2, 3, None),
+        ("candidate_only_invalid_output_pairs", 1, 2, 3, 1),
+        ("candidate_only_invalid_output_pairs", -1, 2, 3, None),
+        ("candidate_only_invalid_output_pairs", None, 2, 3, None),
+    ),
+)
+def test_campaign_summary_projects_only_bounded_candidate_only_pair_counts(
+    tmp_path: Path,
+    field_name,
+    count,
+    attempted,
+    total,
+    expected,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    assert step.protocol_result is not None
+    step.protocol_result = replace(
+        step.protocol_result,
+        stats=replace(
+            step.protocol_result.stats,
+            attempted_pairs=attempted,
+            total_pairs=total,
+        ),
+        **{field_name: count},
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    payload = summary["steps"][0]["protocol_result"]
+    if expected is None:
+        assert field_name not in payload
+    else:
+        assert payload[field_name] == expected
+
+
 def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(
     tmp_path: Path,
 ) -> None:

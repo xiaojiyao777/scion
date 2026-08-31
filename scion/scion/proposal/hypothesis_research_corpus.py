@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import re
-import unicodedata
 from collections.abc import Iterator, Mapping, Sequence
 from copy import deepcopy
-from fractions import Fraction
 from typing import Any
 
 from scion.core.paths import normalize_relative_patch_path
@@ -19,6 +16,8 @@ HISTORY_KEYS = (
     "pre_protocol_observations",
     "experiment_history",
 )
+_EXTERNAL_HISTORY_KEYS = HISTORY_KEYS[:2]
+_CAMPAIGN_HISTORY_KEYS = HISTORY_KEYS[2:]
 _HEADLINE_FIELDS = (
     "text",
     "hypothesis_text",
@@ -42,23 +41,6 @@ _FACT_FIELDS = (
     "diagnostic_reason_codes",
     "bypass_reason_codes",
 )
-_NEAREST_HISTORY_TEXT_FIELDS = (
-    "target_weakness",
-    "expected_effect",
-)
-_NEAREST_HISTORY_STRUCTURED_FIELDS = (
-    "target_file",
-    "change_locus",
-    "action",
-    "predicted_direction",
-)
-_NEAREST_HISTORY_ALLOWED_FIELDS = (
-    "text",
-    "hypothesis_text",
-    *_NEAREST_HISTORY_STRUCTURED_FIELDS,
-    *_NEAREST_HISTORY_TEXT_FIELDS,
-)
-_NEAREST_HISTORY_TOKEN = re.compile(r"[\w]+", re.UNICODE)
 
 
 def build_hypothesis_research_corpus(
@@ -104,110 +86,65 @@ def iter_string_leaves(value: Any, path: str = "$") -> Iterator[tuple[str, str]]
             yield from iter_string_leaves(child, f"{path}[{index}]")
 
 
-def nearest_history_headline_ref(
-    hypothesis: Mapping[str, Any],
-    history_indexes: Sequence[Mapping[str, Any]],
-) -> str | None:
-    """Return the lexical top-1 ordinary history ref from headline fields only.
+def latest_live_failure_frontier_refs(
+    context: Mapping[str, Any],
+) -> tuple[str, ...]:
+    """Return explicit failures at each relation's latest live round.
 
-    NFKC-casefolded token Jaccard is ranked before ordered structured exact
-    matches and unique-token overlap count. Equal headlines resolve to the later
-    append position. Histories without any usable headline are ignored; ``None``
-    preserves the existing any-history grounding path when the complete inventory
-    has no usable headline fields at all.
+    Refs come from the complete ordinary history inventory used by H research.
+    External history never creates a live responsibility, and this chronological
+    projection neither ranks nor selects scientific mechanisms.  ``current`` and
+    ``sibling`` are independent ordinary relations: a later pass closes older
+    failures only within its own relation.
     """
 
-    candidate_tokens = _headline_tokens(hypothesis)
-    ranked: list[tuple[tuple[Fraction, bool, bool, bool, bool, int, int], str]] = []
-    for append_ordinal, index in enumerate(history_indexes):
-        resolved = _history_index_headline(index)
-        if resolved is None:
-            continue
-        ref, headline = resolved
-        if not _has_usable_headline(headline):
-            continue
-        prior_tokens = _headline_tokens(headline)
-        overlap = len(candidate_tokens & prior_tokens)
-        union = len(candidate_tokens | prior_tokens)
-        score = (
-            Fraction(overlap, union or 1),
-            *_structured_exact_score(hypothesis, headline),
-            overlap,
-            append_ordinal,
+    histories = _histories(context)
+    live = [
+        entry
+        for entry in histories
+        if entry.get("kind") in _CAMPAIGN_HISTORY_KEYS
+        and type(entry.get("index", {}).get("round_num")) is int
+        and entry["index"].get("relation") in {"current", "sibling"}
+    ]
+    if not live:
+        return ()
+    latest_round_by_relation = {
+        relation: max(
+            int(entry["index"]["round_num"])
+            for entry in live
+            if entry["index"]["relation"] == relation
         )
-        ranked.append((score, ref))
-    return max(ranked)[1] if ranked else None
-
-
-def has_usable_history_headline(
-    history_indexes: Sequence[Mapping[str, Any]],
-) -> bool:
-    """Return whether any index has usable headline fields for the audit."""
-
-    for index in history_indexes:
-        resolved = _history_index_headline(index)
-        if resolved is not None and _has_usable_headline(resolved[1]):
-            return True
-    return False
-
-
-def _headline_tokens(headline: Mapping[str, Any]) -> set[str]:
-    return {
-        token
-        for field in ("text", "hypothesis_text", *_NEAREST_HISTORY_TEXT_FIELDS)
-        for value in (_normalized_headline_text(headline.get(field)),)
-        if value is not None
-        for token in _NEAREST_HISTORY_TOKEN.findall(value)
+        for relation in ("current", "sibling")
+        if any(entry["index"]["relation"] == relation for entry in live)
     }
-
-
-def _normalized_headline_text(value: Any) -> str | None:
-    if not isinstance(value, str):
-        return None
-    normalized = unicodedata.normalize("NFKC", value).casefold()
-    return normalized if normalized.strip() else None
-
-
-def _nonempty_exact(left: Any, right: Any) -> bool:
-    return isinstance(left, str) and bool(left.strip()) and left == right
-
-
-def _has_usable_headline(value: Mapping[str, Any]) -> bool:
-    return any(
-        isinstance(item, str) and bool(item.strip())
-        for item in (value.get(field) for field in _NEAREST_HISTORY_ALLOWED_FIELDS)
+    return tuple(
+        str(entry["ref"])
+        for entry in live
+        if entry["index"]["round_num"]
+        == latest_round_by_relation[entry["index"]["relation"]]
+        and _is_explicit_live_failure(entry)
     )
 
 
-def _structured_exact_score(
-    candidate: Mapping[str, Any],
-    prior: Mapping[str, Any],
-) -> tuple[bool, bool, bool, bool]:
-    return (
-        _nonempty_exact(candidate.get("target_file"), prior.get("target_file")),
-        _nonempty_exact(candidate.get("change_locus"), prior.get("change_locus")),
-        _nonempty_exact(candidate.get("action"), prior.get("action")),
-        _nonempty_exact(
-            candidate.get("predicted_direction"), prior.get("predicted_direction")
-        ),
-    )
-
-
-def _history_index_headline(
-    index: Any,
-) -> tuple[str, Mapping[str, Any]] | None:
-    if not isinstance(index, Mapping):
-        return None
-    ref = index.get("ref")
-    headline = index.get("hypothesis")
+def _is_explicit_live_failure(entry: Mapping[str, Any]) -> bool:
+    if entry.get("kind") == "pre_protocol_observations":
+        return True
+    record = entry.get("record")
+    if not isinstance(record, Mapping):
+        return False
+    evidence = record.get("experiment_evidence")
+    if not isinstance(evidence, Mapping):
+        return False
+    protocol_outcome = evidence.get("protocol_outcome")
     if (
-        not isinstance(ref, str)
-        or not ref
-        or ref != ref.strip()
-        or not isinstance(headline, Mapping)
+        isinstance(protocol_outcome, Mapping)
+        and protocol_outcome.get("gate_outcome") == "fail"
     ):
-        return None
-    return ref, headline
+        return True
+    decision_outcome = evidence.get("decision_outcome")
+    return isinstance(decision_outcome, Mapping) and decision_outcome.get(
+        "decision"
+    ) in {"continue_explore", "abandon"}
 
 
 def _sources(
@@ -337,8 +274,88 @@ def _source_path(value: Any) -> str:
 
 
 def _histories(context: Mapping[str, Any]) -> list[dict[str, Any]]:
+    # Explicit cross-campaign evidence retains caller/file/line order.  Only the
+    # two projections of this live campaign are merged back into StepRecord
+    # round order; this is chronology, not a host rank or selection policy.
+    external = _history_values(context, _EXTERNAL_HISTORY_KEYS)
+    campaign = _history_values(context, _CAMPAIGN_HISTORY_KEYS)
+    if campaign:
+        missing_round = [
+            f"{kind}[{ordinal}]"
+            for round_num, kind, ordinal, _record in campaign
+            if round_num is None
+        ]
+        if missing_round:
+            raise ValueError(
+                "live campaign history requires complete positive round metadata: "
+                + ", ".join(missing_round)
+            )
+        invalid_relation = [
+            f"{kind}[{ordinal}]"
+            for _round_num, kind, ordinal, record in campaign
+            if record.get("relation") not in {"current", "sibling"}
+        ]
+        if invalid_relation:
+            raise ValueError(
+                "live campaign history requires a current/sibling relation: "
+                + ", ".join(invalid_relation)
+            )
+        campaign.sort(key=lambda item: int(item[0]))
+
     entries: list[dict[str, Any]] = []
-    for kind in HISTORY_KEYS:
+    for round_num, kind, ordinal, record in (*external, *campaign):
+        ref = f"history-{len(entries) + 1:04d}"
+        index: dict[str, Any] = {
+            "ref": ref,
+            "kind": kind,
+            "ordinal": ordinal,
+            "sections": sorted(record),
+        }
+        if round_num is not None:
+            index["round_num"] = round_num
+        relation = record.get("relation")
+        if relation in {"current", "sibling"}:
+            index["relation"] = relation
+        headline = next(
+            (
+                record[key]
+                for key in ("hypothesis", "proposal_intent")
+                if isinstance(record.get(key), Mapping)
+            ),
+            None,
+        )
+        if headline:
+            index["hypothesis"] = {
+                field: deepcopy(headline[field])
+                for field in _HEADLINE_FIELDS
+                if field in headline
+            }
+        facts = _facts(record)
+        if facts:
+            index["outcomes"] = facts
+        patch = record.get("patch")
+        changes = patch.get("changes") if isinstance(patch, Mapping) else None
+        if isinstance(changes, list):
+            index["patch_change_count"] = len(changes)
+        entries.append(
+            {
+                "ref": ref,
+                "kind": kind,
+                "ordinal": ordinal,
+                "record": record,
+                "body": bounded_json(record),
+                "index": index,
+            }
+        )
+    return entries
+
+
+def _history_values(
+    context: Mapping[str, Any],
+    kinds: Sequence[str],
+) -> list[tuple[int | None, str, int, dict[str, Any]]]:
+    values: list[tuple[int | None, str, int, dict[str, Any]]] = []
+    for kind in kinds:
         records = context.get(kind)
         if records is None:
             continue
@@ -348,45 +365,16 @@ def _histories(context: Mapping[str, Any]) -> list[dict[str, Any]]:
             raise TypeError(f"hypothesis {kind} must be an array of records")
         for ordinal, raw in enumerate(records, 1):
             record = deepcopy(dict(raw))
-            ref = f"history-{len(entries) + 1:04d}"
-            index: dict[str, Any] = {
-                "ref": ref,
-                "kind": kind,
-                "ordinal": ordinal,
-                "sections": sorted(record),
-            }
-            headline = next(
-                (
-                    record[key]
-                    for key in ("hypothesis", "proposal_intent")
-                    if isinstance(record.get(key), Mapping)
-                ),
-                None,
-            )
-            if headline:
-                index["hypothesis"] = {
-                    field: deepcopy(headline[field])
-                    for field in _HEADLINE_FIELDS
-                    if field in headline
-                }
-            facts = _facts(record)
-            if facts:
-                index["outcomes"] = facts
-            patch = record.get("patch")
-            changes = patch.get("changes") if isinstance(patch, Mapping) else None
-            if isinstance(changes, list):
-                index["patch_change_count"] = len(changes)
-            entries.append(
-                {
-                    "ref": ref,
-                    "kind": kind,
-                    "ordinal": ordinal,
-                    "record": record,
-                    "body": bounded_json(record),
-                    "index": index,
-                }
-            )
-    return entries
+            values.append((_campaign_round(kind, record), kind, ordinal, record))
+    return values
+
+
+def _campaign_round(kind: str, record: Mapping[str, Any]) -> int | None:
+    if kind not in _CAMPAIGN_HISTORY_KEYS:
+        return None
+    field = "round_num" if kind == "pre_protocol_observations" else "latest_round"
+    value = record.get(field)
+    return value if type(value) is int and value > 0 else None
 
 
 def _facts(value: Any, path: str = "$") -> list[dict[str, Any]]:
@@ -418,7 +406,6 @@ def _facts(value: Any, path: str = "$") -> list[dict[str, Any]]:
 
 __all__ = [
     "build_hypothesis_research_corpus",
-    "has_usable_history_headline",
     "iter_string_leaves",
-    "nearest_history_headline_ref",
+    "latest_live_failure_frontier_refs",
 ]

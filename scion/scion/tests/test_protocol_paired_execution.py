@@ -9,6 +9,7 @@ import pytest
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.config.protocol_config import ScreeningConfig
 from scion.core.models import ExperimentStage, RunResult, SolverOutput
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.protocol.experiment import (
     ExperimentProtocol,
     PairedExecutionSpec,
@@ -16,10 +17,17 @@ from scion.protocol.experiment import (
     SplitManager,
     stages,
 )
-from scion.problem.spec import ObjectiveMetricSpec
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 
-def _result(score=1, *, success=True, feasible=True, runtime=None):
+def _result(
+    score=1,
+    *,
+    success=True,
+    feasible=True,
+    runtime=None,
+    error_category="crash",
+):
     return RunResult(
         success=success,
         exit_code=0 if success else 7,
@@ -34,7 +42,7 @@ def _result(score=1, *, success=True, feasible=True, runtime=None):
             if success
             else None
         ),
-        error_category=None if success else "crash",
+        error_category=None if success else error_category,
     )
 
 
@@ -89,10 +97,14 @@ def _protocol(tmp_path, *, cases=("case.json",), seeds=(7,), problem_spec=None):
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=(
-            ObjectiveMetricSpec(name="score", direction="minimize", priority=1),
+        adapter=protocol_test_adapter(
+            (
+                ObjectiveMetricSpec(
+                    name="score", direction="minimize", priority=1
+                ),
+            ),
+            problem_spec=problem_spec,
         ),
-        problem_spec=problem_spec,
     )
     return protocol, runner, candidate, champion
 
@@ -220,6 +232,75 @@ def test_paired_bilateral_infeasibility_is_not_candidate_attributable(tmp_path):
 
 
 @pytest.mark.parametrize(
+    ("champion_category", "expected_timeout"),
+    ((None, 1), ("timeout", 0), ("crash", 0)),
+)
+def test_candidate_only_timeout_pair_excludes_shared_and_bilateral_failures(
+    tmp_path,
+    champion_category,
+    expected_timeout,
+):
+    protocol, runner, candidate, champion = _protocol(tmp_path)
+    runner.results[str(candidate)] = _result(
+        1,
+        success=False,
+        error_category="timeout",
+    )
+    if champion_category is not None:
+        runner.results[str(champion)] = _result(
+            2,
+            success=False,
+            error_category=champion_category,
+        )
+
+    result = _run(protocol, candidate, champion, _spec(candidate=1))
+
+    assert result.candidate_only_timeout_pairs == expected_timeout
+    assert result.candidate_only_invalid_output_pairs == 0
+    assert result.stats.bilateral_failed_pairs == int(champion_category == "crash")
+    assert result.stats.shared_failed_pairs == int(champion_category == "timeout")
+
+
+def test_multiple_invalid_output_events_count_once_for_one_candidate_only_pair(
+    tmp_path,
+    monkeypatch,
+):
+    protocol, _runner, candidate, champion = _protocol(tmp_path)
+
+    def audit(result, **_kwargs):
+        if result.output.objective == {"score": 1}:
+            return {
+                "error_category": "operator_runtime_error",
+                "operator_invalid_outputs": 3,
+                "runtime_error_counts": {"operator_invalid_outputs": 3},
+                "detail": "three invalid outputs in one candidate execution",
+            }
+        return None
+
+    monkeypatch.setattr(stages, "runtime_audit_failure_from_result", audit)
+
+    result = _run(protocol, candidate, champion, _spec(candidate=1))
+
+    assert result.stats.attempted_pairs == 1
+    assert result.candidate_only_timeout_pairs == 0
+    assert result.candidate_only_invalid_output_pairs == 1
+
+
+def test_raw_candidate_only_invalid_output_process_category_counts_once(tmp_path):
+    protocol, runner, candidate, champion = _protocol(tmp_path)
+    runner.results[str(candidate)] = _result(
+        1,
+        success=False,
+        error_category="invalid_output",
+    )
+
+    result = _run(protocol, candidate, champion, _spec(candidate=1))
+
+    assert result.candidate_only_timeout_pairs == 0
+    assert result.candidate_only_invalid_output_pairs == 1
+
+
+@pytest.mark.parametrize(
     ("mode", "candidate_failures", "champion_failures", "shared", "bilateral"),
     (
         ("candidate", 1, 0, 0, 0),
@@ -291,7 +372,7 @@ def test_base_exception_keeps_original_without_partial_metrics(tmp_path):
 
 
 @pytest.mark.parametrize("runtime", [{}, {"surface_loaded": False}])
-def test_paired_telemetry_diagnostics_do_not_reenter_legacy_champion_audit(
+def test_paired_telemetry_diagnostics_use_the_adapter_owned_problem_spec(
     tmp_path, monkeypatch, runtime
 ):
     problem_spec = SimpleNamespace(
@@ -320,9 +401,14 @@ def test_paired_telemetry_diagnostics_do_not_reenter_legacy_champion_audit(
     assert result.stats.valid_pairs == 1
     assert result.stats.failed_pairs == 0
     assert len(calls) == 2
-    assert all(call == {
-        "problem_spec": problem_spec, "selected_surface": "surface"
-    } for call in calls)
+    assert all(
+        call
+        == {
+            "problem_spec": protocol.problem_spec,
+            "selected_surface": "surface",
+        }
+        for call in calls
+    )
 
 
 def test_default_path_executes_both_sides_fresh_and_reports_progress(tmp_path):

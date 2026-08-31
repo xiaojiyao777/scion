@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
+
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import (
     Branch,
@@ -44,6 +45,21 @@ from scion.protocol.experiment.proposal_evidence import (
 )
 
 _PROBLEM_ROOT = Path(__file__).resolve().parents[2] / "problems"
+
+
+def _step_record(**values: object) -> StepRecord:
+    patch = values.get("patch")
+    changed_files = (
+        tuple(change.file_path for change in patch.iter_file_changes())
+        if isinstance(patch, PatchProposal)
+        else ()
+    )
+    values.update(
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=changed_files,
+    )
+    return StepRecord(**values)  # type: ignore[arg-type]
 
 
 def _runtime(problem_id: str):
@@ -225,7 +241,7 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
             else "operators/change_vehicle_type.py"
         ),
     )
-    screening = StepRecord(
+    screening = _step_record(
         round_num=1,
         branch_id=branch.branch_id,
         hypothesis=hypothesis,
@@ -286,7 +302,7 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
         failure_stage=None,
         failure_detail=None,
     )
-    pre_protocol = StepRecord(
+    pre_protocol = _step_record(
         round_num=2,
         branch_id=branch.branch_id,
         hypothesis=HypothesisProposal(
@@ -449,7 +465,7 @@ def test_pre_protocol_rejections_become_ordered_safe_h_observations() -> None:
         checks_key = (
             "contract_checks" if phase.endswith("contract") else "verification_checks"
         )
-        return StepRecord(
+        return _step_record(
             round_num=round_num,
             branch_id=f"FORBIDDEN_OWNER_ID_{round_num}",
             hypothesis=hypothesis,
@@ -543,7 +559,7 @@ def test_pre_protocol_rejections_become_ordered_safe_h_observations() -> None:
         action="modify",
         target_file="operators/safe_screening_target.py",
     )
-    screening = StepRecord(
+    screening = _step_record(
         round_num=3,
         branch_id=branch.branch_id,
         hypothesis=screening_hypothesis,
@@ -579,7 +595,7 @@ def test_pre_protocol_rejections_become_ordered_safe_h_observations() -> None:
             check_code="V1_syntax",
             rejected_patch=None,
         ),
-        StepRecord(
+        _step_record(
             round_num=8,
             branch_id=branch.branch_id,
             hypothesis=hypothesis,
@@ -648,10 +664,18 @@ def test_pre_protocol_rejections_become_ordered_safe_h_observations() -> None:
         "verification",
     ]
     assert len(context["pre_protocol_observations"]) == 5
-    assert (
-        context["pre_protocol_observations"][2]
-        == context["pre_protocol_observations"][3]
-    )
+    assert [
+        item["round_num"] for item in context["pre_protocol_observations"][2:4]
+    ] == [4, 5]
+    assert {
+        key: value
+        for key, value in context["pre_protocol_observations"][2].items()
+        if key != "round_num"
+    } == {
+        key: value
+        for key, value in context["pre_protocol_observations"][3].items()
+        if key != "round_num"
+    }
     assert context["pre_protocol_observations"][4]["outcome"]["reason_code"] == (
         "RESEARCH_REJECTED"
     )
@@ -716,7 +740,7 @@ def test_live_screening_step_is_the_single_in_process_scientific_record() -> Non
         action="modify",
         target_file="policies/baseline_modules/local_search.py",
     )
-    screening = StepRecord(
+    screening = _step_record(
         round_num=1,
         branch_id=branch.branch_id,
         hypothesis=hypothesis,
@@ -761,7 +785,7 @@ def test_live_screening_step_is_the_single_in_process_scientific_record() -> Non
 
 def test_raw_runtime_facts_reach_canonical_h_history_without_advice() -> None:
     _spec, legacy, adapter, champion, branch = _runtime("cvrp")
-    screening = StepRecord(
+    screening = _step_record(
         round_num=1,
         branch_id=branch.branch_id,
         hypothesis=HypothesisProposal(
@@ -828,7 +852,7 @@ def test_step_history_is_the_scientific_context_owner() -> None:
         action="modify",
         target_file="policies/baseline_modules/local_search.py",
     )
-    screening = StepRecord(
+    screening = _step_record(
         round_num=1,
         branch_id=branch.branch_id,
         hypothesis=hypothesis,
@@ -911,7 +935,7 @@ def test_screening_record_uses_host_owned_candidate_parent_scope(
             ),
         ),
     )
-    step = StepRecord(
+    step = _step_record(
         round_num=2,
         branch_id="branch-1",
         hypothesis=hypothesis,
@@ -991,7 +1015,7 @@ def test_screening_record_rejects_pair_stats_row_conflict(
         ci_high=2.0,
         **pair_stats,
     )
-    step = StepRecord(
+    step = _step_record(
         round_num=1,
         branch_id="branch-1",
         hypothesis=HypothesisProposal(
@@ -1076,7 +1100,7 @@ def test_marked_problem_mechanism_evidence_reaches_next_h_without_raw_trace() ->
         action="modify",
         target_file="policies/baseline_modules/destroy_repair.py",
     )
-    screening = StepRecord(
+    screening = _step_record(
         round_num=1,
         branch_id=branch.branch_id,
         hypothesis=hypothesis,
@@ -1239,7 +1263,7 @@ def test_step_history_keeps_multiple_screenings_of_one_hypothesis() -> None:
     )
 
     def screening(round_num: int, raw_ref: str, median_delta: float) -> StepRecord:
-        return StepRecord(
+        return _step_record(
             round_num=round_num,
             branch_id=branch.branch_id,
             hypothesis=hypothesis,
@@ -1384,7 +1408,7 @@ def test_provider_history_does_not_use_attempt_identity_as_a_gate() -> None:
 
 def test_live_screening_relation_does_not_require_owner_registration() -> None:
     _spec, legacy, adapter, champion, current = _runtime("cvrp")
-    unknown_step = StepRecord(
+    unknown_step = _step_record(
         round_num=1,
         branch_id="unknown-sibling",
         hypothesis=HypothesisProposal(
@@ -1465,7 +1489,7 @@ def test_direct_v3_code_context_contains_source_not_research_history(
         champion,
         legacy,
         step_history=[
-            StepRecord(
+            _step_record(
                 round_num=1,
                 branch_id=branch.branch_id,
                 hypothesis=hypothesis,

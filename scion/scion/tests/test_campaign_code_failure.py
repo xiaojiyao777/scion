@@ -75,10 +75,10 @@ class TestCodeFailureDirect:
         tmp_path,
     ):
         """A rejected C is never retried; a new scheduler tick starts at H."""
-        llm = self._make_invalid_patch_then_succeed_llm()
-        cm = _campaign(
+        direct_llm = self._make_invalid_patch_then_succeed_llm()
+        cm, llm = _bounded_campaign(
             tmp_path,
-            llm_client=llm,
+            llm_client=direct_llm,
             experiment_protocol=MockExperimentProtocol(
                 results=[_make_protocol_result(ExperimentStage.SCREENING)]
             ),
@@ -114,7 +114,21 @@ class TestCodeFailureDirect:
 
         assert r2.branch_id == bid
         assert r2.execution_outcome.outcome is ExecutionOutcome.EVALUATED
-        assert llm.request_kinds == ["hypothesis", "code", "hypothesis", "code"]
+        assert llm.request_kinds == [
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_finalize",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_finalize",
+        ]
         attempt_events = [
             event
             for event in cm._registry.query_by_branch(bid)
@@ -125,7 +139,13 @@ class TestCodeFailureDirect:
             "research_rejection",
             "experiment",
         ]
-        assert attempt_events[0]["execution_outcome"] is None
+        assert attempt_events[0]["execution_outcome"] == "evaluated"
+        assert attempt_events[0]["execution_outcome_reason_code"] == (
+            "EVALUATION_COMPLETED"
+        )
+        assert json.loads(
+            attempt_events[0]["execution_outcome_provenance_json"]
+        ) == {"stage": "screening"}
         with sqlite3.connect(tmp_path / "campaign" / "scion.db") as conn:
             proposal_call_count = conn.execute(
                 "SELECT COUNT(*) FROM experiment_events "
@@ -163,10 +183,10 @@ class TestCodeFailureDirect:
             captured_contexts.append(ctx)
             return ctx
 
-        llm = self._make_invalid_patch_then_succeed_llm()
-        cm = _campaign(
+        direct_llm = self._make_invalid_patch_then_succeed_llm()
+        cm, llm = _bounded_campaign(
             tmp_path,
-            llm_client=llm,
+            llm_client=direct_llm,
             experiment_protocol=MockExperimentProtocol(
                 results=[_make_protocol_result(ExperimentStage.SCREENING)]
             ),
@@ -181,7 +201,21 @@ class TestCodeFailureDirect:
         assert all("prior_code_failure" not in context for context in captured_contexts)
 
         cm.run_one_step()
-        assert llm.request_kinds == ["hypothesis", "code", "hypothesis", "code"]
+        assert llm.request_kinds == [
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_finalize",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_finalize",
+        ]
         assert captured_contexts
         assert all("prior_code_failure" not in context for context in captured_contexts)
 
@@ -382,6 +416,7 @@ class TestMissingOrdinaryHypothesis:
         assert bid is not None
 
         branch = cm._branch_ctrl.get_branch(bid)
+        recorded_step_count = len(cm._step_history)
         branch.hypothesis = None
 
         # Run next step — the campaign will schedule READY_VALIDATE → VALIDATING
@@ -391,10 +426,12 @@ class TestMissingOrdinaryHypothesis:
 
         branch = cm._branch_ctrl.get_branch(bid)
         assert branch.state is BranchState.BLOCKED_INFRA
+        assert result.action == "validate"
         assert result.decision is None
         assert result.execution_outcome.outcome is ExecutionOutcome.NOT_EVALUATED
         assert result.execution_outcome.reason_code == "EVAL_HYPOTHESIS_MISSING"
         assert "EVAL_HYPOTHESIS_MISSING" in branch.failure_codes
+        assert len(cm._step_history) == recorded_step_count
         assert protocol.canary_call_count == 1
         assert protocol.experiment_call_count == 1
 

@@ -71,8 +71,30 @@ class TestAuditColumns:
             "protocol_version",
             "prompt_tokens",
             "completion_tokens",
+            "base_champion_version",
+            "base_source_ref",
+            "changed_files_json",
         ):
             assert col in cols, f"Missing column: {col}"
+
+    def test_existing_event_table_gains_plain_source_fact_columns(self, tmp_path):
+        db_path = tmp_path / "scion.db"
+        with sqlite3.connect(str(db_path)) as conn:
+            conn.execute(
+                "CREATE TABLE experiment_events (event_id TEXT PRIMARY KEY)"
+            )
+
+        LineageRegistry(str(db_path))
+
+        with sqlite3.connect(str(db_path)) as conn:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(experiment_events)")
+            }
+        assert {
+            "base_champion_version",
+            "base_source_ref",
+            "changed_files_json",
+        }.issubset(columns)
 
     def test_audit_columns_are_writable(self, tmp_path):
         reg = _reg(tmp_path)

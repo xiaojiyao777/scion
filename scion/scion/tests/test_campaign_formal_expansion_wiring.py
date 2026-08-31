@@ -22,6 +22,7 @@ from scion.protocol.experiment.selection import select_cases
 from scion.protocol.gates import screening_gate, validation_gate
 
 from .campaign_test_support import _VALID_HYPOTHESIS, _VALID_PATCH, _campaign
+from .protocol_adapter_test_support import protocol_test_adapter
 
 _FORMAL_DIR = Path(__file__).resolve().parents[1] / "problems" / "cvrp" / "formal"
 
@@ -57,12 +58,14 @@ class _FormalPopulationTracingProtocol(ExperimentProtocol):
             seed_ledger=SeedLedger(seeds),
             runner=object(),
             metrics_dir=str(metrics_dir),
-            metric_specs=(
-                ObjectiveMetricSpec(
-                    name="total_distance",
-                    direction="minimize",
-                    priority=1,
-                ),
+            adapter=protocol_test_adapter(
+                (
+                    ObjectiveMetricSpec(
+                        name="total_distance",
+                        direction="minimize",
+                        priority=1,
+                    ),
+                )
             ),
         )
         self.calls: list[dict[str, Any]] = []

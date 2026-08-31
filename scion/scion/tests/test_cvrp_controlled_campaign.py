@@ -16,7 +16,6 @@ from scion.problems.cvrp.evidence import (
     load_cvrp_case_manifest,
     write_cvrp_manifest_final_evidence_package,
 )
-from scion.problem.bridge import bridge_problem_spec_v1
 from scion.problem.loader import load_problem_adapter
 from scion.problem.spec import ProblemSpecV1
 from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
@@ -65,7 +64,7 @@ def _load_controlled_runtime(
     tmp_path: Path,
 ) -> tuple[ExperimentProtocol, ProblemSpecV1, ProtocolConfig, SplitManifest, SeedLedgerConfig]:
     spec_v1 = _problem_v1()
-    bridge = bridge_problem_spec_v1(spec_v1)
+    adapter = load_problem_adapter(spec_v1)
     protocol_config = ProtocolConfig.from_yaml(CONTROLLED_DIR / "protocol.yaml")
     split_manifest = SplitManifest.from_yaml(CONTROLLED_DIR / "split_manifest.yaml")
     split_manifest = split_manifest.model_copy(
@@ -80,9 +79,7 @@ def _load_controlled_runtime(
         runner=runner,
         time_limit_sec=1,
         metrics_dir=str(tmp_path / "metrics"),
-        metric_specs=bridge.metric_specs,
-        objective_policy=bridge.objective_policy,
-        problem_spec=bridge.problem_spec,
+        adapter=adapter,
     )
     return protocol, spec_v1, protocol_config, split_manifest, seed_ledger
 
@@ -120,24 +117,19 @@ def _make_campaign(tmp_path: Path) -> CampaignManager:
     proto, spec_v1, protocol_config, split_manifest, seed_ledger = _load_controlled_runtime(
         tmp_path
     )
-    bridge = bridge_problem_spec_v1(spec_v1)
-    adapter = load_problem_adapter(spec_v1)
+    adapter = proto._problem_adapter
     champion = ChampionState(
         version=1,
         operator_pool={},
         code_snapshot_path=str(CVRP_DIR),
     )
     gate = VerificationGate(
-        problem_spec=bridge.problem_spec,
         runner=proto.runner,
         metrics_dir=str(tmp_path / "metrics"),
         adapter=adapter,
         strict_runtime_checks=True,
-        require_adapter_for_runtime=True,
-        operator_execute_signature=bridge.operator_execute_signature,
     )
     return CampaignManager(
-        problem_spec=bridge.problem_spec,
         protocol_config=protocol_config,
         split_manifest=split_manifest,
         seed_ledger=seed_ledger,
@@ -147,7 +139,6 @@ def _make_campaign(tmp_path: Path) -> CampaignManager:
         verification_gate=gate,
         experiment_protocol=proto,
         adapter=adapter,
-        operator_execute_signature=bridge.operator_execute_signature,
     )
 
 
@@ -203,11 +194,13 @@ def test_controlled_campaign_one_step_then_manual_final_evidence_refs(
 ) -> None:
     campaign = _make_campaign(tmp_path)
 
-    result = campaign.run_one_step()
-
-    if result.action == "create_branch" and campaign._n_experiments == 0:
+    result = None
+    for _ in range(4):
         result = campaign.run_one_step()
+        if campaign._n_experiments >= 1:
+            break
 
+    assert result is not None
     assert result.action in {"create_branch", "validate", "promote", "abandon", "noop"}
     assert campaign._n_experiments >= 1
     step = next(
@@ -264,9 +257,10 @@ def test_controlled_campaign_records_vrp_screening_without_forcing_promotion(
 ) -> None:
     campaign = _make_campaign(tmp_path)
 
-    first = campaign.run_one_step()
-    if first.action == "create_branch" and campaign._n_experiments == 0:
+    for _ in range(4):
         campaign.run_one_step()
+        if campaign._n_experiments >= 1:
+            break
 
     stages = [
         step.protocol_result.stage

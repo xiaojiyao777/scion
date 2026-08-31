@@ -29,7 +29,7 @@ class TestGradedRetry:
     """Legacy name: all priorities now fail immediately on typed 429."""
 
     def _client(self) -> LLMClient:
-        return LLMClient()
+        return LLMClient(model="claude-test")
 
     # -- call_with_tool tests --
 
@@ -93,7 +93,7 @@ class TestProviderManagedOutput:
         return resp
 
     def test_length_stop_with_typed_payload_is_returned_without_retry(self):
-        client = LLMClient()
+        client = LLMClient(model="claude-test")
         tool = {"name": "write", "input_schema": {"required": []}}
         good = self._make_good_response("write", {"code": "x=1"})
         good.stop_reason = "max_tokens"
@@ -108,7 +108,7 @@ class TestProviderManagedOutput:
         assert mock_client.messages.create.call_count == 1
 
     def test_length_stop_without_typed_payload_is_format_failure(self):
-        client = LLMClient()
+        client = LLMClient(model="claude-test")
         tool = {"name": "write", "input_schema": {"required": []}}
         response = self._make_truncated_response("max_tokens")
 
@@ -216,24 +216,33 @@ class TestCampaignTypedProviderTermination:
             operator_pool={},
             code_snapshot_path=tmpdir,
         )
+        metric_specs = (
+            ObjectiveMetricSpec(
+                name="cost", direction="minimize", priority=1
+            ),
+        )
+        protocol_runtime = SimpleNamespace(
+            runner=object(),
+            config=protocol,
+            _metric_specs=metric_specs,
+            _problem_spec=spec,
+        )
+
+        def bind_problem_adapter(adapter):
+            protocol_runtime._problem_spec = adapter.spec
+            declared = getattr(adapter.spec, "objectives", None)
+            if declared:
+                protocol_runtime._metric_specs = tuple(declared)
+
+        protocol_runtime.set_problem_adapter = bind_problem_adapter
         campaign = CampaignManager(
-            problem_spec=spec,
             protocol_config=protocol,
             split_manifest=split,
             seed_ledger=seed_ledger,
             llm_client=llm_client,
             champion=champion,
             campaign_dir=tmpdir,
-            experiment_protocol=SimpleNamespace(
-                runner=object(),
-                config=protocol,
-                _metric_specs=(
-                    ObjectiveMetricSpec(
-                        name="cost", direction="minimize", priority=1
-                    ),
-                ),
-                _problem_spec=spec,
-            ),
+            experiment_protocol=protocol_runtime,
             adapter=SimpleNamespace(spec=spec),
         )
         return campaign
@@ -261,4 +270,7 @@ class TestCampaignTypedProviderTermination:
         summary_path = Path(campaign._campaign_dir) / "campaign_summary.json"
         if summary_path.exists():
             summary = _json.loads(summary_path.read_text())
-            assert summary.get("stopped_reason") == "execution_blocked_infra"
+            assert (
+                summary.get("run_result", {}).get("stop_reason")
+                == "execution_blocked_infra"
+            )

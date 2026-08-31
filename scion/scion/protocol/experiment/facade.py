@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any, Callable, List, Optional, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any
 
 from scion.config.problem import ProtocolConfig
 from scion.core.models import CanaryResult, ExperimentStage, ProtocolResult
@@ -19,8 +19,6 @@ from .selection import (
 )
 
 if TYPE_CHECKING:
-    from scion.problem.spec import ObjectiveMetricSpec, ObjectivePolicySpec
-
     from .types import PairedExecutionSpec
 
 logger = logging.getLogger(__name__)
@@ -36,33 +34,42 @@ class ExperimentProtocol:
         time_limit_sec: int = 300,
         metrics_dir: str = "/tmp/scion_metrics",
         *,
-        metric_specs: Optional[Sequence[ObjectiveMetricSpec]] = None,
-        objective_policy: "ObjectivePolicySpec | None" = None,
-        problem_spec: Any | None = None,
+        adapter: Any,
     ) -> None:
-        self.config = protocol_config
+        problem_spec, metric_specs, objective_policy = _adapter_problem_semantics(
+            adapter
+        )
+        self.config = protocol_config.with_problem_measurement(problem_spec)
         self.split_manager = split_manager
         self.seed_ledger = seed_ledger
         self.runner = runner
         self.time_limit_sec = time_limit_sec
         self.metrics_dir = metrics_dir
-        self._metric_specs = _hydrate_metric_specs(metric_specs, problem_spec)
-        self._objective_policy = objective_policy or _hydrate_objective_policy(
-            problem_spec
-        )
+        self._metric_specs = metric_specs
+        self._objective_policy = objective_policy
         self._problem_spec = problem_spec
-        self._problem_adapter: Any | None = None
-        self._strict_case_paths = True
-        self._progress_callback: Optional[Callable[..., None]] = None
-        if not _has_metric_specs(self._metric_specs):
-            raise ValueError("metric_specs are required for ExperimentProtocol")
-
-    def set_problem_adapter(self, adapter: Any | None) -> None:
-        """Attach the campaign adapter for optional problem-owned projections."""
-
         self._problem_adapter = adapter
+        self._strict_case_paths = True
+        self._progress_callback: Callable[..., None] | None = None
 
-    def set_progress_callback(self, callback: Optional[Callable[..., None]]) -> None:
+    def set_problem_adapter(self, adapter: Any) -> None:
+        """Bind Protocol to the campaign's adapter-owned problem definition."""
+
+        problem_spec, metric_specs, objective_policy = _adapter_problem_semantics(
+            adapter
+        )
+        config = self.config.with_problem_measurement(problem_spec)
+
+        # Replace the complete problem-owned semantic bundle before validating
+        # it.  A failed bind therefore cannot leave metrics or policy from the
+        # previous problem paired with the new adapter.
+        self._problem_adapter = adapter
+        self._problem_spec = problem_spec
+        self._metric_specs = metric_specs
+        self._objective_policy = objective_policy
+        self.config = config
+
+    def set_progress_callback(self, callback: Callable[..., None] | None) -> None:
         """Register a lightweight progress hook for long validation/frozen runs."""
         self._progress_callback = callback
         runner_hook = getattr(self.runner, "set_progress_callback", None)
@@ -161,7 +168,7 @@ class ExperimentProtocol:
         stage: ExperimentStage,
         hypothesis_action: str,
         expand_round: int,
-    ) -> List[str]:
+    ) -> list[str]:
         return select_cases(
             config=self.config,
             split_manager=self.split_manager,
@@ -175,7 +182,7 @@ class ExperimentProtocol:
         stage: ExperimentStage,
         *,
         expanded: bool = False,
-    ) -> List[int]:
+    ) -> list[int]:
         return select_seeds(
             config=self.config,
             seed_ledger=self.seed_ledger,
@@ -264,7 +271,7 @@ class ExperimentProtocol:
         expand_round: int = 1,
         selected_surface: str | None = None,
         *,
-        paired_execution: "PairedExecutionSpec | None" = None,
+        paired_execution: PairedExecutionSpec | None = None,
         proposal_subject: Mapping[str, Any] | None = None,
     ) -> ProtocolResult:
         from .stages import run_experiment
@@ -290,25 +297,18 @@ def _has_metric_specs(metric_specs: Sequence[Any] | None) -> bool:
     return metric_specs is not None and len(metric_specs) > 0
 
 
-def _hydrate_metric_specs(
-    metric_specs: Sequence[Any] | None,
-    problem_spec: Any | None,
-) -> Sequence[Any] | None:
-    if _has_metric_specs(metric_specs):
-        return metric_specs
-    declared = getattr(problem_spec, "objectives", None)
-    if _has_metric_specs(declared):
-        return tuple(declared)
-    spec_v1 = getattr(problem_spec, "spec_v1", None)
-    declared = getattr(spec_v1, "objectives", None)
-    if _has_metric_specs(declared):
-        return tuple(declared)
-    return metric_specs
+def _adapter_problem_semantics(adapter: Any) -> tuple[Any, tuple[Any, ...], Any]:
+    """Return the complete problem-owned Protocol bundle from one adapter."""
 
-
-def _hydrate_objective_policy(problem_spec: Any | None) -> Any | None:
-    policy = getattr(problem_spec, "objective_policy", None)
-    if policy is not None:
-        return policy
-    spec_v1 = getattr(problem_spec, "spec_v1", None)
-    return getattr(spec_v1, "objective_policy", None)
+    if adapter is None:
+        raise TypeError("problem adapter is required")
+    problem_spec = getattr(adapter, "spec", None)
+    if problem_spec is None:
+        raise TypeError("problem adapter must expose its problem spec")
+    metric_specs = getattr(problem_spec, "objectives", None)
+    if not _has_metric_specs(metric_specs):
+        raise ValueError("metric_specs are required for ExperimentProtocol")
+    objective_policy = getattr(problem_spec, "objective_policy", None)
+    if objective_policy is None:
+        raise ValueError("objective_policy is required for ExperimentProtocol")
+    return problem_spec, tuple(metric_specs), objective_policy

@@ -34,7 +34,10 @@ class TestVerificationGateIntegration:
     def test_with_spec_no_canary_skips_runtime(self):
         spec = _make_spec(canary="")
         runner = _mock_runner()
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
         patch = _make_patch(_VALID_CODE)
         result = gate.run("/tmp", "", patch)
         assert result.passed is True
@@ -45,20 +48,16 @@ class TestVerificationGateIntegration:
         assert "V8_nondeterminism" in check_names
         assert "V9_perf_guard" not in check_names
 
-    def test_strict_runtime_checks_fail_without_runner_or_spec(self):
-        gate = VerificationGate(strict_runtime_checks=True)
-        patch = _make_patch(_VALID_CODE)
-        result = gate.run("/tmp", "/tmp", patch)
-        assert result.passed is False
-        assert result.failure_severity == "heavy"
-        assert result.first_failure == "V_runtime_config"
+    def test_strict_runtime_checks_require_adapter_at_construction(self):
+        with pytest.raises(TypeError, match="problem adapter"):
+            VerificationGate(strict_runtime_checks=True)
 
     def test_strict_runtime_checks_fail_without_canary(self, tmp_path):
         spec = _make_spec(canary="")
         runner = _mock_runner()
         gate = VerificationGate(
-            problem_spec=spec,
             runner=runner,
+            adapter=_verification_test_adapter(spec),
             strict_runtime_checks=True,
         )
         patch = _make_patch(_VALID_CODE)
@@ -92,25 +91,9 @@ class TestVerificationGateIntegration:
 
         assert result is None
 
-    def test_strict_runtime_checks_can_require_adapter(self, tmp_path):
-        canary = tmp_path / "small.json"
-        canary.write_text("{}")
-        spec = _make_spec(canary=str(canary))
-        runner = _mock_runner()
-        gate = VerificationGate(
-            problem_spec=spec,
-            runner=runner,
-            strict_runtime_checks=True,
-            require_adapter_for_runtime=True,
-        )
-        patch = _make_patch(_VALID_CODE)
-
-        result = gate.run(str(tmp_path), str(tmp_path), patch)
-
-        assert result.passed is False
-        assert result.first_failure == "V_runtime_config"
-        assert "problem adapter is required" in result.checks[-1].detail
-        assert "legacy runtime fallback disabled" in result.checks[-1].detail
+    def test_runner_requires_adapter_at_construction(self):
+        with pytest.raises(TypeError, match="problem adapter"):
+            VerificationGate(runner=_mock_runner())
 
     def test_verification_does_not_run_comparative_champion_guard(
         self,
@@ -181,8 +164,8 @@ class TestVerificationGateIntegration:
         runner = MagicMock()
         runner.run_solver.side_effect = run_solver
         gate = VerificationGate(
-            problem_spec=spec,
             runner=runner,
+            adapter=_verification_test_adapter(spec),
             strict_runtime_checks=True,
             runtime_time_limit_sec=17,
         )
@@ -299,21 +282,13 @@ class TestVerificationGateIntegration:
         assert result.metadata["candidate_timeout"] is True
         assert result.metadata["candidate_error_category"] == "timeout"
 
-    def test_adapter_backed_problem_v1_without_adapter_fails_v5(self, tmp_path):
-        canary = tmp_path / "small.json"
-        canary.write_text("{}")
-        spec = _make_adapter_required_spec(str(canary))
-        runner = _mock_runner(output_dict=_solver_output_dict())
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+    def test_public_gate_has_no_problem_spec_compatibility_input(self, tmp_path):
+        spec = _make_adapter_required_spec(str(tmp_path / "small.json"))
 
-        result = gate.run(str(tmp_path), str(tmp_path), _make_patch(_VALID_CODE))
+        with pytest.raises(TypeError, match="problem_spec"):
+            VerificationGate(problem_spec=spec)
 
-        assert result.passed is False
-        assert result.first_failure == "V_runtime_config"
-        assert "problem adapter is required" in result.checks[-1].detail
-        assert "legacy runtime fallback disabled" in result.checks[-1].detail
-
-    def test_selected_surface_runtime_fields_do_not_enable_legacy_v5_fallback(
+    def test_selected_surface_runtime_fields_remain_diagnostics_in_adapter_mode(
         self,
         tmp_path,
     ):
@@ -343,7 +318,10 @@ class TestVerificationGateIntegration:
             "policy_errors": 0,
         }
         runner = _mock_runner(output_dict=output)
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
 
         result = gate.run(
             str(tmp_path),
@@ -352,23 +330,16 @@ class TestVerificationGateIntegration:
             selected_surface="search_policy",
         )
 
-        assert result.passed is False
-        assert result.first_failure == "V_runtime_config"
-        assert "problem adapter is required" in result.checks[-1].detail
-        assert "legacy runtime fallback disabled" in result.checks[-1].detail
+        assert result.passed is True
+        assert result.first_failure is None
 
     def test_strict_adapter_backed_runtime_passes_toy_tsp(self, tmp_path):
-        spec_v1, adapter = _load_toy_tsp_adapter()
-        canary = os.path.join(spec_v1.root_dir, "data", "tsp_10.json")
-        spec = _make_spec(canary=canary).model_copy(update={"root_dir": spec_v1.root_dir})
+        _, adapter = _load_toy_tsp_adapter()
         runner = _mock_runner(output_dict={"tour": list(range(10))}, elapsed_ms=100)
         gate = VerificationGate(
-            problem_spec=spec,
             runner=runner,
             adapter=adapter,
             strict_runtime_checks=True,
-            require_adapter_for_runtime=True,
-            operator_execute_signature=spec_v1.operator_interface.execute_signature,
         )
 
         result = gate.run(str(tmp_path), str(tmp_path), _make_toy_tsp_patch())
@@ -379,16 +350,17 @@ class TestVerificationGateIntegration:
         assert "V7_objective" in check_names
 
     def test_gate_uses_problem_defined_interface_signature(self, tmp_path):
-        gate = VerificationGate(
-            operator_execute_signature="execute(self, solution, instance, rng) -> TspSolution"
-        )
+        _, adapter = _load_toy_tsp_adapter()
+        gate = VerificationGate(adapter=adapter)
         patch = _make_patch(_VALID_CODE)
         result = gate.run(str(tmp_path), "", patch)
         assert result.passed is False
         assert result.first_failure == "V2_interface"
 
     def test_gate_forwards_hypothesis_surface_to_v2_interface(self, tmp_path):
-        gate = VerificationGate(problem_spec=_make_policy_interface_spec())
+        gate = VerificationGate(
+            adapter=_verification_test_adapter(_make_policy_interface_spec())
+        )
         patch = _make_patch(_VALID_CODE)
 
         result = gate.run(
@@ -431,7 +403,10 @@ class TestVerificationGateIntegration:
                 "runtime": {"policy_loaded": True},
             }
         )
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
 
         result = gate.run(
             str(tmp_path),
@@ -440,9 +415,8 @@ class TestVerificationGateIntegration:
             selected_surface="search_policy",
         )
 
-        assert result.passed is False
-        assert result.first_failure == "V6_feasibility"
-        assert "runtime evidence contract" not in result.checks[-1].detail
+        assert result.passed is True
+        assert result.first_failure is None
 
     def test_unknown_selected_surface_fails_at_v2_interface(self, tmp_path):
         canary = tmp_path / "small.json"
@@ -464,7 +438,10 @@ class TestVerificationGateIntegration:
                 "runtime": {"policy_loaded": True},
             }
         )
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
 
         result = gate.run(
             str(tmp_path),
@@ -503,7 +480,10 @@ class TestVerificationGateIntegration:
                 "runtime": {"policy_loaded": True},
             }
         )
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
 
         result = gate.run(
             str(tmp_path),
@@ -512,9 +492,8 @@ class TestVerificationGateIntegration:
             hypothesis=_make_hypothesis("search_policy"),
         )
 
-        assert result.passed is False
-        assert result.first_failure == "V6_feasibility"
-        assert "runtime evidence contract" not in result.checks[-1].detail
+        assert result.passed is True
+        assert result.first_failure is None
 
     def test_run_verification_gate_helper_forwards_hypothesis_surface(
         self,
@@ -545,7 +524,10 @@ class TestVerificationGateIntegration:
                 },
             }
         )
-        gate = VerificationGate(problem_spec=spec, runner=runner)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
 
         result = run_verification_gate(
             gate,
@@ -555,6 +537,5 @@ class TestVerificationGateIntegration:
             hypothesis=_make_hypothesis("dispatch_policy"),
         )
 
-        assert result.passed is False
-        assert result.first_failure == "V6_feasibility"
-        assert "runtime evidence contract" not in result.checks[-1].detail
+        assert result.passed is True
+        assert result.first_failure is None

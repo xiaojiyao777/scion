@@ -4,9 +4,11 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+
 from scion.core.campaign_loop import CampaignRunResult
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
 from scion.core.evidence_recording import EvidenceRecorder
+from scion.core.evidence_recording.status import project_last_result
 from scion.core.execution_outcome import (
     ExecutionOutcome,
     ExecutionOutcomeRecord,
@@ -20,7 +22,6 @@ from scion.core.models import (
     StepRecord,
 )
 from scion.core.step_result import StepResult
-from scion.core.evidence_recording.status import project_last_result
 from scion.lineage.registry import LineageRegistry
 
 
@@ -96,6 +97,9 @@ def _step(
         decision=decision,
         failure_stage=None,
         failure_detail=None,
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
         execution_outcome=(
             execution_outcome
             or ExecutionOutcomeRecord(
@@ -120,6 +124,9 @@ def _hypothesis_free_step(**overrides: object) -> StepRecord:
         "decision": None,
         "failure_stage": "proposal_hypothesis",
         "failure_detail": "HYPOTHESIS_RESEARCH_ABSTAINED",
+        "base_champion_version": 1,
+        "base_source_ref": "champion:v1",
+        "changed_files": (),
         "execution_outcome": ExecutionOutcomeRecord(
             outcome=ExecutionOutcome.RESEARCH_REJECTED,
             reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
@@ -128,6 +135,22 @@ def _hypothesis_free_step(**overrides: object) -> StepRecord:
     }
     values.update(overrides)
     return StepRecord(**values)  # type: ignore[arg-type]
+
+
+def test_scientific_step_requires_explicit_source_facts() -> None:
+    with pytest.raises(TypeError, match="base_champion_version"):
+        StepRecord(  # type: ignore[call-arg]
+            round_num=1,
+            branch_id="branch-missing-source",
+            hypothesis=_hypothesis(),
+            patch=None,
+            contract_passed=False,
+            verification_passed=False,
+            protocol_result=None,
+            decision=None,
+            failure_stage="hypothesis_contract",
+            failure_detail="missing source facts",
+        )
 
 
 @pytest.mark.parametrize("outcome", list(ExecutionOutcome))
@@ -274,6 +297,9 @@ def test_step_values_reject_a_bare_outcome_enum() -> None:
             decision=None,
             failure_stage=None,
             failure_detail=None,
+            base_champion_version=1,
+            base_source_ref="champion:v1",
+            changed_files=(),
             execution_outcome=ExecutionOutcome.NOT_EVALUATED,  # type: ignore[arg-type]
         )
 
@@ -318,6 +344,9 @@ def test_historical_row_without_outcome_remains_readable_and_unknown(
         decision=Decision.CONTINUE_EXPLORE,
         failure_stage=None,
         failure_detail=None,
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
     )
     assert historical_step.execution_outcome is None
 
@@ -492,6 +521,9 @@ def test_public_proposal_failure_status_and_summary_drop_provider_detail(
             if stage == "proposal_hypothesis"
             else sentinel
         ),
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
         execution_outcome=durable_outcome,
     )
     recorder = EvidenceRecorder(campaign_id="campaign-1", campaign_dir=tmp_path)
@@ -544,6 +576,9 @@ def test_summary_sanitizes_proposal_failure_from_either_stage_fact(
         decision=None,
         failure_stage=failure_stage,
         failure_detail=sentinel,
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
         execution_outcome=outcome,
     )
     recorder = EvidenceRecorder(campaign_id="campaign-1", campaign_dir=tmp_path)

@@ -7,6 +7,35 @@ from typing import Any
 from scion.core.path_match import normalize_relative_glob_pattern
 
 
+def research_loci(problem_spec: Any | None) -> tuple[str, ...]:
+    """Return the problem-declared hypothesis loci in stable declaration order."""
+
+    surfaces = _field(problem_spec, "research_surfaces", []) or []
+    names = tuple(
+        str(_field(surface, "name", "") or "").strip()
+        for surface in surfaces
+    )
+    names = tuple(name for name in names if name)
+    if names:
+        return names
+
+    operator_interface = _field(problem_spec, "operator_interface")
+    categories = _field(operator_interface, "categories", []) or []
+    names = tuple(
+        str(_field(category, "name", category) or "").strip()
+        for category in categories
+    )
+    names = tuple(name for name in names if name)
+    if names:
+        return names
+
+    return tuple(
+        str(category).strip()
+        for category in (_field(problem_spec, "operator_categories", []) or [])
+        if str(category).strip()
+    )
+
+
 def editable_patterns(problem_spec: Any | None) -> tuple[str, ...]:
     """Return normalized editable file patterns for a problem spec.
 

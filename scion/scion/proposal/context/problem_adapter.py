@@ -6,6 +6,7 @@ import os
 from typing import Any, Optional
 
 from scion.config.problem import ProblemSpec
+from scion.core.research_surface_index import research_loci
 from scion.proposal.context.surfaces import (
     _build_research_surface_interface_spec,
     _find_research_surface,
@@ -32,11 +33,16 @@ def _build_problem_summary(spec: ProblemSpec, *, adapter=None) -> str:
     """
     if adapter is not None and hasattr(adapter, 'render_problem_summary'):
         return adapter.render_problem_summary()
-    lines = [f"Name: {spec.name}"]
+    name = getattr(spec, "display_name", None) or getattr(
+        spec,
+        "name",
+        getattr(spec, "id", ""),
+    )
+    lines = [f"Name: {name}"]
     if spec.description:
         lines.append(f"Description: {spec.description}")
     lines += [
-        f"Research loci: {', '.join(spec.operator_categories)}",
+        f"Research loci: {', '.join(research_loci(spec))}",
         f"Editable files: {', '.join(spec.search_space.editable)}",
         f"Frozen files (do not modify): {', '.join(spec.search_space.frozen)}",
     ]

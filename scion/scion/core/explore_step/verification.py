@@ -42,6 +42,10 @@ class VerificationMixin:
         hypothesis: HypothesisProposal,
         vresult: VerificationResult,
         candidate: CandidateWorkspace,
+        selected_hypothesis_research_basis: dict[str, Any] | None,
+        base_champion_version: int,
+        base_source_ref: str,
+        changed_files: tuple[str, ...],
     ) -> StepResult:
         bid = branch.branch_id
         severity = vresult.failure_severity or "light"
@@ -81,12 +85,26 @@ class VerificationMixin:
                 },
             },
         )
-        self.finalize_research_rejection(
+        finalized_outcome = self.finalize_research_rejection(
             branch=branch,
             rejection_phase="verification",
             outcome=outcome,
             patch=patch,
             candidate=candidate,
+            selected_hypothesis_research_basis=(
+                selected_hypothesis_research_basis
+            ),
+        )
+        if isinstance(finalized_outcome, ExecutionOutcomeRecord):
+            outcome = finalized_outcome
+        cleanup_failed = outcome.outcome is ExecutionOutcome.BLOCKED_INFRA
+        failure_stage = (
+            "candidate_disposition" if cleanup_failed else "verification"
+        )
+        failure_detail = (
+            outcome.detail
+            if cleanup_failed
+            else vresult.first_failure
         )
         self.record_step(
             self._verification_failure_step(
@@ -94,17 +112,28 @@ class VerificationMixin:
                 bid=bid,
                 hypothesis=hypothesis,
                 patch=patch,
-                vresult=vresult,
                 outcome=outcome,
+                failure_stage=failure_stage,
+                failure_detail=failure_detail,
+                selected_hypothesis_research_basis=(
+                    selected_hypothesis_research_basis
+                ),
+                base_champion_version=base_champion_version,
+                base_source_ref=base_source_ref,
+                changed_files=changed_files,
             )
         )
         return StepResult(
             action="explore",
             branch_id=bid,
-            reason=f"verification rejected ({severity})",
-            failure_stage="verification",
-            failure_detail=vresult.first_failure,
-            failure_category=ExecutionOutcome.RESEARCH_REJECTED.value,
+            reason=(
+                f"candidate_disposition_failed: {outcome.detail}"
+                if cleanup_failed
+                else f"verification rejected ({severity})"
+            ),
+            failure_stage=failure_stage,
+            failure_detail=failure_detail,
+            failure_category=outcome.outcome.value,
             execution_outcome=outcome,
         )
 
@@ -115,8 +144,13 @@ class VerificationMixin:
         bid: str,
         hypothesis: HypothesisProposal,
         patch: PatchProposal,
-        vresult: VerificationResult,
         outcome: ExecutionOutcomeRecord,
+        failure_stage: str,
+        failure_detail: str | None,
+        selected_hypothesis_research_basis: dict[str, Any] | None,
+        base_champion_version: int,
+        base_source_ref: str,
+        changed_files: tuple[str, ...],
     ) -> StepRecord:
         return StepRecord(
             round_num=rnum,
@@ -127,7 +161,13 @@ class VerificationMixin:
             verification_passed=False,
             protocol_result=None,
             decision=None,
-            failure_stage="verification",
-            failure_detail=vresult.first_failure,
+            failure_stage=failure_stage,
+            failure_detail=failure_detail,
             execution_outcome=outcome,
+            selected_hypothesis_research_basis=(
+                selected_hypothesis_research_basis
+            ),
+            base_champion_version=base_champion_version,
+            base_source_ref=base_source_ref,
+            changed_files=changed_files,
         )

@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
 from scion.core.models import ExperimentStage, HypothesisProposal, StepRecord
 from scion.core.research_history import (
@@ -267,6 +268,9 @@ def _visible_step(round_num: int) -> StepRecord:
         decision=None,
         failure_stage="hypothesis_contract",
         failure_detail="host-only detail",
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
         execution_outcome=ExecutionOutcomeRecord(
             outcome=ExecutionOutcome.RESEARCH_REJECTED,
             reason_code="HYPOTHESIS_CONTRACT_REJECTED",

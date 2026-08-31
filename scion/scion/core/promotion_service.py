@@ -26,11 +26,36 @@ class PromotionResult:
     champion: ChampionState
     current_weights: Mapping[str, float] = field(default_factory=dict)
     stale_branch_ids: tuple[str, ...] = ()
+    bookkeeping_failures: tuple["PromotionBookkeepingFailure", ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(
             self, "current_weights", MappingProxyType(dict(self.current_weights))
         )
+
+
+@dataclass(frozen=True)
+class PromotionBookkeepingFailure:
+    """Non-reversing failure observed after champion commit."""
+
+    operation: str
+    exception_type: str
+    detail: str
+
+
+class PromotionCommittedError(RuntimeError):
+    """Promotion committed, but required post-commit recovery did not close."""
+
+    def __init__(
+        self,
+        *,
+        champion_version: int,
+        operation: str,
+        detail: str,
+    ) -> None:
+        super().__init__(detail)
+        self.champion_version = champion_version
+        self.operation = operation
 
 
 ChampionHook = Callable[[ChampionState], None]
@@ -123,15 +148,39 @@ class PromotionService:
 
         if self._set_champion is not None:
             self._set_champion(promoted_champion)
+
+        # Returning from set_champion is the commit point.  Later bookkeeping
+        # failures are diagnostics on a real promotion and must never be
+        # reclassified as an uncommitted PROMOTION_FAILED attempt.
+        bookkeeping_failures: list[PromotionBookkeepingFailure] = []
         if self._promote_branch is not None:
-            self._promote_branch(branch_id, promoted_champion)
-        stale_branch_ids = (
-            tuple(self._mark_stale(promoted_champion.version))
-            if self._mark_stale is not None
-            else ()
-        )
+            try:
+                self._promote_branch(branch_id, promoted_champion)
+            except Exception as exc:
+                bookkeeping_failures.append(
+                    PromotionBookkeepingFailure(
+                        operation="promote_branch",
+                        exception_type=type(exc).__name__,
+                        detail=str(exc),
+                    )
+                )
+        stale_branch_ids: tuple[str, ...] = ()
+        if self._mark_stale is not None:
+            try:
+                stale_branch_ids = tuple(
+                    self._mark_stale(promoted_champion.version)
+                )
+            except Exception as exc:
+                bookkeeping_failures.append(
+                    PromotionBookkeepingFailure(
+                        operation="mark_stale",
+                        exception_type=type(exc).__name__,
+                        detail=str(exc),
+                    )
+                )
         return PromotionResult(
             champion=promoted_champion,
             current_weights=current_weights,
             stale_branch_ids=stale_branch_ids,
+            bookkeeping_failures=tuple(bookkeeping_failures),
         )

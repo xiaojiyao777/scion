@@ -1,1217 +1,495 @@
-# Scion v0.4 Solver-Improvement Research Task
+# Scion v0.4 Continuous Solver Research
 
 *Working branch: `v0.4-dev`*
 
-*Last updated: 2026-08-25*
+*Current as of: 2026-08-31*
 
-## Authority and objective
+## Goal and authority
 
 [`design/scion-architecture-v3.md`](design/scion-architecture-v3.md) is the
-sole Scion architecture authority. The direct-runtime addendum may narrow an
-implementation example, but it cannot introduce another authority, identity or
-proof lifecycle. Historical plans, experiment reports and Git history preserve
-context; they do not create current work.
+sole architecture authority. The
+[`direct-runtime addendum`](design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)
+narrows implementation details but does not add a second authority lifecycle.
+Historical plans and experiment reports are evidence, not current work queues.
 
-The active objective is retained solver improvement:
+The project goal is retained solver improvement produced by Scion itself:
 
-- Warehouse is complete: one uninterrupted synthetic campaign reached
-  `v1 -> v2 -> v3`, the two promotion steps and cumulative gain survived the
-  declared held-out replay, and production-style Warehouse promoted and retained
-  `v1 -> v2`.
-- CVRP is incomplete: no exact candidate has yet completed screening,
-  validation and frozen holdout, received deterministic `PROMOTE`, and then
-  independently retained an improvement over B0 without feasibility or fleet
-  regression. Scion has produced testable CVRP hypotheses, patches and several
-  complete initial or expanded development screens, but it has not yet
-  demonstrated effective CVRP research under that acceptance standard: no
-  autonomous candidate has completed and survived the held-out funnel, recent
-  qualification attempts have not produced a new candidate eligible to
-  enter it, and too much proposal budget is still spent on repeated, rejected
-  or unfinalized directions per formal candidate.
+- Warehouse is accepted. The synthetic campaign promoted and independently
+  retained `v1 -> v2 -> v3`; the production-style campaign promoted and
+  independently retained `v1 -> v2`.
+- CVRP is not accepted. No autonomous CVRP candidate has completed
+  `screening -> validation -> frozen -> PROMOTE` and then beaten the original
+  B0 in an independent, no-LLM retained evaluation without feasibility or fleet
+  regression.
 
-A valid negative experiment is scientific evidence, not task completion.
+A valid negative run improves the research record but does not complete CVRP.
 
 ## Scion boundary
 
-The active research path is:
+The problem enters through one adapter. Scion owns the research engine; it must
+not contain CVRP or Warehouse mechanism selection logic.
 
 ```text
-complete safe problem facts + complete current branch source
-+ explicit safe prior evidence
-  -> optional finite Hypothesis research actions, or the direct one-shot path
-  -> at most one tainted structured H
+problem adapter + complete safe current source + optional ordered H-only history
+  -> agent-controlled bounded source/history research
+  -> one tainted structured H
   -> structural Hypothesis Contract
-  -> optional finite Code research actions bound to that exact approved H,
-     or the direct one-shot path
-  -> at most one tainted structured C
+  -> agent-controlled bounded code research bound to that exact H
+  -> one tainted structured C
   -> structural Patch Contract
-  -> isolated Workspace
+  -> isolated candidate workspace
   -> executable Verification
   -> problem-owned paired Protocol
   -> Safe Features
   -> deterministic Decision
-  -> exact stage reuse, branch iteration, or promotion
+  -> exact candidate stage reuse, deeper branch research, or promotion
 ```
 
-A bounded Creative session may use several deliberate provider turns, all
-charged to the declared shared provider/resource envelope. These turns are
-internal Creative-Layer research actions, not provider retries. One branch
-attempt exports at most one H and, only after Hypothesis Contract approval, at
-most one C. A provider turn without a terminal response stops the session; an
-exported, rejected, finalized, abandoned or abstained H/C is never repaired,
-replayed, resumed or regenerated.
-
-Creative drafts and `research_basis` remain tainted. Public-development
-results, explicit research history and problem-owned mechanism-family
-association are proposal context only. They cannot replace Contract or
-Verification, alter a Protocol gate, enter Safe Features or Decision, or
-select the next mechanism. The host may expose complete ordinary
-source/history indexes and problem-owned association observations; it may not
-rank, select or require a mechanism, surface, action, target file or patch.
-
-The following are required:
-
-- LLM output remains tainted and cannot author Protocol, Decision, scheduling or
-  promotion.
-- Contract owns schema, the same-attempt exact approved-H binding,
-  editable/frozen paths, public
-  interface, import/API and dangerous-capability boundaries. It does not grade
-  novelty, style, mechanism taste, activation or expected quality.
-- Verification owns executable correctness, feasibility, objective semantics,
-  deterministic behavior and state isolation.
-- Protocol owns fixed case/seed comparisons and statistical gates. Decision
-  consumes typed Safe Features only.
-- Branch, H, C, experiment and case identifiers are ordinary references. One
-  transition function/transaction updates each mutable state boundary.
-- Scientific lineage is a minimal append-only record linking H/C, base source,
-  patch, Verification, declared stage inputs, raw metrics, Protocol and Decision.
-- Exact source equality, fixed case/seed selection and exact stage reuse remain
-  where scientific equivalence needs them. Direct byte equality is preferred;
-  one content digest may compact the same comparison but confers no authority.
-- Runtime isolation remains the V3 minimum: subprocess/workspace isolation,
-  read-only scientific inputs, resource limits, clean environment, temporary
-  directory isolation and cache cleanup.
-
-The following are outside Scion and are deletion targets, not deferred work:
-
-- object identities, owner tokens/registries, capabilities, durable leases,
-  issuer/claim/spend protocols, registration and nonce ledgers;
-- nested intent/commit/completion/closure graphs, activation/reopen/recovery
-  proof, source acceptance and repeated absence proof;
-- prompt/context/source identity, self-hashing manifests, receipt chains,
-  formal-candidate identity, promotion dossiers and readiness closure;
-- duplicate hashes, tree hashes, fixed-hash review gates or digests used to
-  authorize, sign, lease, register, accept or attest an object;
-- preauthorization/refreeze/sentinel/launch-ready state machines inside Scion;
-- distribution, deployment, installation, packaging, reproducible-build work,
-  root/systemd/D-Bus/cgroup/native-spawn infrastructure and H11 watch authority;
-- provider retry, response repair, partial resume, top-k/truncation, forced
-  mechanisms/surfaces/actions/targets, novelty gates and host-authored
-  algorithm-quality gates.
-
-Scientific `Frozen Holdout`, split manifests, seed ledgers, ordinary source
-references, problem-owned operator registries, output-directory collision
-protection and subprocess cleanup are not authority lifecycles and remain.
-Explicit operator permission is an external action boundary; it must not be
-reimplemented as a self-proving Scion object graph.
-
-## Accepted evidence checkpoint
-
-- Warehouse acceptance and its exact replay results are recorded in the
-  [synthetic R8 postrun](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-synthetic-36stage-r8-postrun-20260808.md),
-  [synthetic held-out replay](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-postrun-20260809.md),
-  [production campaign](docs/experiments/v0.4/v0.4-warehouse-v3-production-transfer-prod12-24stage-r1-postrun-20260809.md)
-  and [production held-out replay](docs/experiments/v0.4/v0.4-warehouse-prod12-independent-heldout-v1-postrun-20260809.md).
-- CVRP R3 retained a complete positive quality screen but was interrupted during
-  validation; it is valid partial science, not a promotion and not a resumable
-  candidate. Later diagnostics and short runs remain in their experiment
-  reports and the
-  [longitudinal mechanism audit](docs/experiments/v0.4/v0.4-cvrp-longitudinal-mechanism-reopen-audit-20260815.md).
-- R67 is terminal `PREP_INVALID / AUTHORIZED_PREFLIGHT_LIVE_CONTROL_ROOT_COLLISION / KNOWN_ZERO_BEFORE_SCIENTIFIC_DELEGATION`: solver, provider, Protocol and Decision observations are zero, the one-shot was consumed, and it supplies no candidate-quality evidence; see its
-  [historical preregistration and terminal record](docs/experiments/v0.4/v0.4-cvrp-r67-provider-free-r3-cumulative-exact-source-full-funnel-confirmation-preregistration-20260815.md).
-
-Detailed chronology belongs in experiment reports and Git history, not in this
-prospective task.
-
-## Ordered modules
-
-Later modules begin only after the preceding module's acceptance evidence is
-recorded. Each code module first resolves exact imports, callers, tests and
-retained scientific evidence; obsolete code may then be deleted without a
-compatibility layer.
-
-### M0 - Normalize the active documentation boundary
-
-- [x] Replace cumulative TASK/current-state experiment logs with prospective
-  modules and a compact current-state resume point.
-- [x] Reduce the latest one-shot preflight in active docs to its single terminal
-  scientific fact while
-  preserving the full historical experiment record unchanged.
-- [x] Mark D2/D2b, fresh-activation, W3/H11, old runtime-identity and related
-  fixed-hash plans superseded by V3 and this task.
-- [x] Remove stale identity/ledger terminology from onboarding, reading profiles
-  and the current runbook.
-
-Acceptance: no default-read document presents self-proof lifecycle work as an
-active, frozen or pending Scion requirement.
-
-### M1 - Resolve reachable self-proof code
-
-- [x] Classify every relevant source, schema, fixture and test as
-  `KEEP_SCIENCE`, `DELETE_DEAD`, `REPLACE_REACHABLE` or `ARCHIVE_EVIDENCE`.
-- [x] Trace production imports, composition, CLI entry points, callers and tests
-  before each deletion. The classification is a temporary review aid, not a new
-  manifest, registry or receipt system.
-- [x] Preserve experiment outputs and scientific reports; do not preserve dead
-  implementation merely because an old plan called it accepted.
-
-Acceptance: every deletion target has a bounded module, known dependants and a
-V3 replacement or proof that it is unreachable.
-
-### M2 - Remove platform and activation infrastructure
-
-- [x] Delete dormant root/systemd/cgroup/native-build/install/source-acceptance,
-  D2 activation and W3/H11 authority code, schemas, fixtures, tests and exports.
-- [x] Keep only ordinary local subprocess isolation, timeout/resource handling,
-  environment cleanup and safe output-directory creation.
-- [x] Add no compatibility shim, alternate backend or deployment investment.
-
-Acceptance: production imports and CLI expose no platform/activation authority
-path, while LocalSubprocessRunner behavior remains covered.
-
-### M3 - Simplify mutable state and lineage
-
-- [x] Delete authority tokens, capability graphs, lease/revision authorities,
-  owner registries, issuer/claim/spend APIs and reopen/closure state.
-- [x] Keep ordinary IDs, one in-process `CandidateWorkspace` value, one direct
-  transition per mutable boundary and one minimal append-only scientific event
-  path; no candidate-evaluation marker or durable candidate owner remains.
-- [x] Keep summaries and status files as projections that cannot drive or reopen
-  runtime state.
-
-Acceptance: completed screening retains the verified provisional branch head;
-Contract/Verification rejection returns to the clean source; Protocol and
-Decision semantics are unchanged.
-
-### M4 - Simplify proposal, source and candidate evidence
-
-- [x] Remove prompt/context/source identity, owner maps used as authority,
-  prompt manifests/hash receipts, duplicate digest reconciliation,
-  formal-candidate recorder, promotion dossier and readiness closure.
-- [x] Keep one validated ordinary source/history corpus and one immutable
-  provider-visible projection per deliberate turn, plus the same-attempt exact
-  approved-H binding, strict patch application and isolated candidate
-  materialization.
-- [x] Keep at most one optional terminal trace per deliberate provider turn as
-  best-effort diagnostics; no public trace receipt or provider-call identity
-  carrier remains, and trace failure cannot change a valid provider result.
-- [x] Complete the minimal failure-only nondeterminism record: successful
-  same-seed checks write no sidecar; a mismatch writes one bounded diagnostic;
-  diagnostic write failure cannot change Verification.
-
-Acceptance: the direct multi-file H/C path remains complete and source-bound,
-with no second identity or receipt graph around it.
-
-### M5 - Simplify experiment execution
-
-- [x] Use the normal direct CLI, or a small fixed-candidate scientific driver
-  when no H/C is part of the estimand.
-- [x] Record ordinary source revision/worktree state, scientific config,
-  cases/seeds/order/budgets, claim boundary, run status and terminal result.
-- [x] Limit preflight to real prerequisites: config/schema, dependencies,
-  permissions, input readability and non-overwriting output creation.
-- [x] Delete reusable authorization manifests, refreeze steps, sentinels,
-  whole-tree/code-receipt closures, live-root absence tests and control-root
-  ownership proof.
-
-Acceptance: an experiment can start once from a new output directory and write
-a typed terminal without registering or certifying itself. `--check` is
-read-only and cannot conflict with the launcher's own acquired state.
-
-### M6 - Verify V3 behavior after subtraction
-
-- [x] Run focused Contract, proposal, workspace, Verification, Protocol,
-  Decision, branch-state, lineage and subprocess-isolation tests.
-- [x] Delete tests whose sole assertion is obsolete identity/hash/receipt/
-  closure topology; retain behavioral and scientific-boundary tests.
-- [x] Run the full relevant suite, focused formatter/linter, compile/import
-  checks and `git diff --check`.
-- [x] Perform one offline reachability search for forbidden lifecycle modules;
-  this is review evidence, not a runtime gate.
-
-Acceptance: all V3 behavior remains green and no active import or default-read
-document points back to the removed lifecycle.
-
-### M7 - Resume the CVRP scientific task
-
-- [x] Decide the next scientific rung only after M0-M6 close. M7-FC1 is a new
-  fixed-candidate comparison; the terminal R67 preflight attempt is not fixed,
-  retried, resumed or renamed.
-- [x] Prepare a new ordinary experiment record that freezes only scientific
-  inputs: exact source, comparator, cases, seeds, order, budgets, Protocol and
-  claim boundary. The carrier is commit
-  `cd1fcd7ad2a953c505c59ea339c2ff7d27af7fb3`; its read-only check and 19
-  provider-/solver-free tests pass.
-- [x] Run the existing V3 path without a self-proof launch bundle. The
-  explicitly authorized M7-FC1 one-shot completed initial and expanded
-  screening, then stopped fail-closed in validation with
-  `CANDIDATE_SUBJECT_VETO` on candidate `X-n200-k36`, seed 2069. The one-shot is
-  consumed: there is no repair, retry, resume or automatic next rung. This
-  negative result is prior evidence for a later autonomous Scion research
-  campaign, not a host-authored gate or VRP repair.
-
-CVRP acceptance remains:
-
-- one exact candidate completes all declared pairs without feasibility, fleet,
-  candidate-runtime or champion-runtime failure;
-- the declared Protocol passes screening, validation and frozen without
-  outcome-adaptive threshold, case, seed or budget changes;
-- deterministic Decision promotes to champion v2 or later;
-- an independent final comparison against original B0 confirms retained
-  distance improvement and states its exact population scope.
-
-### M8 - Add problem-neutral research-evidence continuity
-
-- [x] Add one optional ordered ordinary prior-research input to the normal
-  `scion run` path. Record it once; do not create an identity, registry,
-  receipt, hash chain, reopen or authorization lifecycle around it.
-- [x] Let an optional problem-adapter provider project domain-shaped evidence
-  into a bounded safe H context. Generic Scion code must contain no CVRP,
-  Warehouse, route, fleet, case-specific or repair-specific fields or branches.
-- [x] Keep Agent ownership complete: the host does not force action, surface,
-  target file, mechanism, patch or fix. C sees the same Contract-approved H
-  value and editable source, not the raw prior observation.
-- [x] Derive any within-campaign research observations from the existing typed
-  step/outcome path. Do not restore a special rejection-feedback ledger or
-  duplicated branch evidence state.
-- [x] Prove with provider-/solver-free tests that evidence is exposed once to H,
-  private/current holdout facts do not leak, rejected candidates leave the
-  verified source clean, and differently shaped or absent problem evidence uses
-  the same core path.
-
-Acceptance: Scion can transport problem-owned prior research evidence into the
-normal V3 research loop without learning domain semantics or constraining the
-Agent's proposal.
-
-The exact design and claim boundary are in the
-[autonomous prior-evidence research design](docs/experiments/v0.4/v04-scion-autonomous-prior-evidence-research-design-20260817.md).
-
-### M9 - Run an autonomous CVRP research-effectiveness campaign
-
-- [x] Add problem-neutral invocation limits to normal `scion run`: one shared
-  H/C provider-call cap and one outer hardwall. Cap exhaustion and hardwall
-  expiry are typed terminal outcomes; configured limits are written once as an
-  ordinary run input, without a registry, receipt, hash or reopen lifecycle.
-- [x] Prepare a fresh normal `scion run` input that supplies the safe M7-FC1
-  terminal facts through the CVRP adapter, while specifying no patch, target
-  file, action, surface, repair or algorithm mechanism.
-- [x] Freeze one new development population whose screening, reserved
-  validation and reserved frozen cases/seeds are disjoint from every M7 fact
-  exposed to H, the R67 plan and current package inputs.
-- [x] Invoke the reviewed M9 carrier once under explicit authorization. The
-  normal CLI stopped before `mgr.run` because `ExperimentProtocol` created
-  `metrics/` before the fresh-output check, so the one-shot produced no H/C or
-  scientific observation and is consumed.
-- [x] Correct the problem-neutral CLI initialization order so Protocol
-  construction cannot create `metrics/` before the fresh-output check. The
-  strict check is unchanged; absent, existing-empty and existing-nonempty
-  roots, direct Protocol metrics creation and provider-zero rejection are
-  covered offline.
-- [x] Commit and independently verify the clean fix carrier, then execute the
-  single rerun explicitly authorized by the user on the fresh `rerun1` root
-  under the unchanged M9 scientific/resource/stop/claim envelope. Any fix or
-  preflight failure stops; no third attempt is authorized.
-- **SUPERSEDED BY LATER POPULATION-SPECIFIC PREREGISTRATION:** the M9
-  future-population placeholder is no longer a live task or authority.
-  M17-M25 and M30 used their own reviewed fresh/frozen or outcome-blind rules;
-  M26-M28 deliberately reused outcome-exposed development banks under
-  separately frozen seen-bank claim boundaries. Every later formal population
-  remains governed by its own reviewed rule, resource envelope and explicit
-  authorization; no M9 population authority remains live.
-- [x] Run real H and C, current Contract and Verification, problem Protocol,
-  Safe Features and deterministic Decision. Provider retry, repair and hidden
-  host steering remain zero.
-- [x] Assess separately whether the framework behaved correctly, whether the
-  Agent used the evidence to conduct grounded research, and whether the solver
-  actually improved.
-
-Acceptance: at least one fresh autonomous attempt reaches a typed outcome with
-the complete V3 decision chain and enough ordinary lineage to reconstruct what
-H saw, proposed and changed. Promotion is not assumed; a valid rejection or
-non-promotion remains evidence about Scion's research effectiveness.
-
-Live provider/solver execution requires a separate explicit one-shot
-authorization after the exact input, populations, budgets, stop conditions and
-claim boundary are prepared.
-
-### M10 - Test continuous cross-campaign CVRP research
-
-- [x] Correct pair-local Protocol failure attribution so a shared or bilateral
-  runtime incident is not flattened into a candidate-only failure.
-- [x] Expose safe current-campaign Contract and Verification rejections to the
-  next H without paths, raw detail, identities or host repair instructions.
-- [x] Add a finite C research session with source read/search, typed revision,
-  sandboxed public development tests, retest and independent finalize/abandon.
-- [x] Add explicit H-only cross-campaign `research_history.jsonl` carrying
-  ordinary H, patch, rejection, screening Protocol and Decision values; do not
-  discover or read old summary/database state at runtime.
-- [x] Select C context from the current target, transitive local dependencies,
-  callers and public tests; keep peers inventoried and problem runtime/support
-  host-only, with no CVRP/Warehouse branches in generic core.
-- [x] Prepare one bounded longitudinal CVRP development continuation from the
-  two M9 history records. Reuse the outcome-known M9 screen only to measure
-  repair continuity; reserve all unseen/generalization claims for a later rung.
-- [x] Commit and independently verify the clean M10 carrier, then require one
-  explicit authorization naming the exact carrier and complete one-shot
-  envelope before any provider or solver execution.
-- [x] Run the one-shot M10 carrier. It consumed all 18 provider calls across
-  five H/C attempts, produced four code-research rejections and one typed
-  resource stop, and reached zero formal candidates or solver calls. Classify
-  this as negative framework-continuity evidence, not algorithm evidence.
-- [x] Classify framework
-  continuity, research effectiveness and algorithm evidence separately.
-
-Acceptance: a current candidate uses explicit prior history and the bounded
-code-research loop, reruns formal Contract and Verification, and reaches a
-typed Protocol/Decision outcome. Failure remains a valid negative result;
-development repair never becomes an unseen-population improvement claim.
-
-The exact design, resource arithmetic and stopping boundary are in the
-[M10 preregistration](docs/experiments/v0.4/v04-cvrp-m10-continuous-research-m9-history-development-preregistration-20260820.md).
-
-### M11 - Make bounded C failures actionable and continue once
-
-- [x] Convert invalid patch drafts into bounded correction observations rather
-  than aborting the C session; retain strict source and patch bounds.
-- [x] Return only host-enumerated development failure reasons and already-public
-  test paths; continue to exclude child stdout, stderr and traceback.
-- [x] Count actual provider-wire transcript bytes without adding trace-only
-  structured metadata a second time.
-- [x] Mechanically project the five M10 attempts, including the two D4 failures
-  and their draft source, into ordinary H-only research history.
-- [x] Execute one fresh two-stage development continuation under provider cap
-  30, solver cap 64 and a 13,500-second outer hardwall. It terminated at the
-  provider cap after three C rejections and reached zero formal candidates.
-- [x] Diagnose the repeated D4 result: the public development scratch omitted
-  two frozen package markers, so `policies` became a namespace package and the
-  test failed before candidate execution. Both retained M11 drafts pass D1-D4
-  after the problem-owned closure correction.
-
-Acceptance: at least one bounded C candidate reaches current Patch Contract,
-Verification, screening Protocol, Safe Features and Decision. Development
-failure remains a valid negative result and cannot become a generalization
-claim.
-
-The exact design is in the
-[M11 preregistration](docs/experiments/v0.4/v04-cvrp-m11-actionable-code-research-continuation-preregistration-20260820.md).
-
-### M12 - Continue once with the corrected public closure
-
-- [x] Declare the frozen CVRP package markers as read-only development
-  workspace support; do not change generic core or CVRP algorithm source.
-- [x] Copy the three-record M11 terminal history as an ordinary H-only input.
-- [x] Execute one fresh continuation with the same population, provider cap 30,
-  solver cap 64 and 13,500-second hardwall. The third autonomous candidate
-  completed Verification, canary and all 12 screening pairs, but terminal
-  history persistence rejected the canonical `seed_pattern` aggregate and the
-  run stopped as an unhandled framework exception before the StepRecord and
-  typed execution outcome were durably recorded. The ordinary experiment event
-  does retain `continue_explore` and its two reason codes. M12 is terminal and
-  is not retried.
-
-Acceptance remains one current candidate reaching formal Patch Contract,
-Verification, screening Protocol, Safe Features and Decision. Replaying a
-draft through development checks alone is not positive evidence.
-
-The exact design is in the
-[M12 preregistration](docs/experiments/v0.4/v04-cvrp-m12-corrected-development-closure-continuation-preregistration-20260820.md).
-
-### M13 - Close on solver evidence
-
-- [x] Correct the generic history boundary so canonical screening
-  `seed_pattern`/`seed_consistency` aggregates persist without permitting raw
-  seed values in open problem evidence.
-- [x] Remove the redundant mandatory `ready` turn: a latest unchanged draft
-  whose bounded public development checks passed is eligible for the separate
-  finalize/abandon decision; any later revision clears that eligibility.
-- [x] Prepare and execute one fresh bounded continuation that imports the M12
-  attempts and complete screening result as ordinary H-only history. Do not
-  reuse the M12 output root or reinterpret its framework exception as a valid
-  completed run. M13 completed validly with two evaluated screening candidates,
-  two durable history records and no candidate-only runtime failures. Both
-  gates failed case quality; the second mechanism was mixed rather than
-  uniformly negative.
-- [x] Continue in one independently frozen M14 campaign using the two native
-  M13 history records. M14 completed validly with two typed C rejections and
-  two evaluated candidates. The second candidate exposed a missing public
-  customer-conservation invariant and was correctly abandoned after two
-  candidate-only X195 runtime failures; no M13/M14 root was reused and the
-  host selected no mechanism or patch.
-- [x] Continue in one independently frozen M15 campaign using the four native
-  M14 history records and the new problem-owned customer-conservation test.
-  Two candidates passed every development/formal gate; the first reached
-  `SCREENING_EXPAND_INITIAL_QUALITY` with two wins and no losses, while the
-  second refinement was mixed. Shared X256 baseline failures kept Decision in
-  exploration, so no expansion or later stage ran.
-- [x] Continue in one independently frozen M16 campaign using the two native
-  M15 records. Both autonomous candidates passed current development and
-  formal gates. The second exact directed `_or_opt` delta produced two case
-  wins, zero losses and three ties with CI `[0, 244]` and
-  `SCREENING_EXPAND_INITIAL_QUALITY`; two shared X256 failures kept Decision in
-  exploration, so no later stage ran.
-- [x] Confirm the strongest autonomous positive candidate on one freshly
-  selected outcome-blind population before any further adaptive H/C campaign.
-  Treat this as fixed-candidate confirmation: no new provider call, patch or
-  repair, and no promotion claim unless the newly declared Protocol completes.
-  M17 stopped after its canary and before any formal pair because its equal
-  initial/expanded case counts violated the Protocol shape. Preserve that root
-  and use a new label for the mechanical shape correction; candidate,
-  population, resources and claim boundary must remain unchanged. M18 is
-  prepared with exactly that correction and an added solver-free preflight
-  assertion for the strict expanded shape. M18 completed all 24 new-population
-  pairs. The candidate had zero candidate-only failures and one case win, but
-  four shared construction failures left only 20 valid pairs; the quality gate
-  failed and measured runtime was effectively unchanged. The fixed candidate
-  is therefore not confirmed, and no validation, frozen or promotion claim is
-  available.
-- [x] Feed the ordinary M18 confirmation observation into a new autonomous
-  campaign through the CVRP problem adapter, without adding CVRP semantics to
-  generic Scion. Use a fresh development population and let H choose whether
-  to address construction completeness, refine local search or pivot; do not
-  host-select a target, patch or repair mechanism. M19 is prepared with both
-  the M18 problem-owned observation and M16's two native history records, a
-  metadata-selected fresh development split, two evaluated-stage maximum and
-  the unchanged bounded code-research chain. M19 completed validly: both
-  candidates passed all gates and produced three wins, zero losses and two
-  ties on the fresh screen, with only shared X429 construction failures. But
-  the two byte-distinct patches were semantically equivalent `_or_opt`
-  implementations, so the run also exposes inadequate research-frontier
-  novelty after a current-campaign result.
-- [x] Add one problem-neutral H frontier instruction: current-campaign
-  experiment evidence is an already evaluated mechanism, so a repeated target
-  must identify a materially new algorithmic delta or H should pivot. Do not
-  ban same-file refinement, score novelty with a second model, or encode a CVRP
-  target. Validate the change on a new fresh development population.
-  The generic instruction and prompt-boundary tests are implemented in
-  `06aefa81`. M20's first H made a real `_or_opt` -> `_swap` mechanism advance;
-  its candidate passed all gates and produced three wins, zero losses and three
-  ties on a 12/12-valid fresh screen. Expanded confirmation did not run because
-  the config declared equal initial/expanded case counts. Preserve the terminal
-  root and reject this shape before provider/solver work in every future
-  multi-round normal run.
-- [x] Continue from M20's native ordinary history on a new fresh population
-  whose initial screen is a strict subset of its expanded screen. Allow two
-  evaluated stages: either initial -> expanded for the same branch, or a second
-  autonomous H after a terminal initial result. Host selects no mechanism,
-  target or patch; no validation/frozen/promotion claim follows from this
-  development continuation.
-  M21 ran from the generic preflight fix and exact M20 history. One candidate
-  completed a 6/6-valid all-tie initial screen; the next H pivoted to
-  deadline-based annealing but its C session stopped on an upstream 504 after
-  a valid draft revision. No expansion or later stage ran.
-- [x] Continue from M21's three native records under a new label and fresh
-  population. Preserve the strict nested expansion shape and the no-retry
-  provider boundary. Treat invalid C draft feedback as tool-usability evidence,
-  not algorithm evidence; host still selects no mechanism, target or patch.
-  M22 completed validly with one typed C rejection and two 6/6-valid formal
-  initial screens. The construction-portfolio candidate tied every case; the
-  2-for-2 exchange candidate tied two cases and lost one by 10 distance units.
-  Both gates failed case quality, so expanded and later stages remained zero.
-  M21's provider request was neither resumed nor retried.
-
-### M23 - Freeze bounded research and resume solver evidence
-
-- [x] Freeze optional bounded H and C research sessions: finite internal
-  actions, at most one exported tainted H and one exported tainted C per
-  attempt, with every provider turn charged to the shared resource envelope.
-- [x] Keep explicit ordered `research_history.jsonl` as H-only ordinary
-  evidence. Exclude validation, frozen/holdout, private/raw state and automatic
-  campaign discovery or reopen.
-- [x] Expose complete ordinary source/history indexes to H with bounded
-  read/search, dependency/caller and declared public-test organization, and a
-  required tainted `research_basis`. Do not add a host mechanism ranker.
-- [x] Keep CVRP mechanism-family observations problem-owned,
-  association-only and available only from complete paired observations. They
-  are not exact activation, causal proof, a Protocol gate or Decision input.
-- [x] Consolidate provider-free fixed-candidate evaluation into one funnel with
-  private read-only source snapshots and the existing
-  Protocol -> Safe Features -> Decision chain. Distinguish candidate-negative
-  evidence from comparator-incomplete evidence at canary, every formal stage
-  and retained comparison.
-- [x] Complete focused provider-/solver-free regression and independent review.
-  Do no distribution, packaging, build, deployment, root/systemd or Trust/Hash
-  lifecycle work.
-- [x] **COMPLETED / NOT_CONFIRMED:** run one ordinary provider-free full-funnel
-  confirmation of the preserved M20 candidate on the frozen outcome-unseen
-  population in the
-  [M23 preregistration](docs/experiments/v0.4/v04-cvrp-m23-m20-swap-provider-free-full-funnel-preregistration-20260821.md).
-  Canary passed and expanded screening completed 24/24 valid pairs with zero
-  failures, two wins, four ties and no losses. Median delta `0.0` and CI
-  `[0.0, 66.75]` left the aggregate gate `unclear`; Decision returned
-  `continue_explore`, so validation, frozen, promotion and retained remained
-  zero. No provider call, replacement candidate, repair, retry or resume path
-  was created.
-- [x] **TERMINAL / RESOURCE_EXHAUSTED:** run one serial bounded autonomous
-  campaign in which H performs the direction research and the host supplies
-  only ordinary source/history access, resource limits and the V3 gates. M24
-  stopped at 34/34 provider calls after nine H drafts all failed the same
-  unread-nearest-history basis check; no valid H, C, Contract, Verification,
-  solver or formal Protocol stage was reached. This is a bounded H-feedback
-  failure and supplies zero algorithm evidence. The exact population, resource
-  boundary and terminal record are preserved in the
-  [M24 preregistration](docs/experiments/v0.4/v04-cvrp-m24-autonomous-direction-research-development-preregistration-20260821.md).
-- [x] Make invalid H-finalization evidence binding a bounded, enumerated
-  in-session observation, constrain finalize-basis ref enums to refs actually
-  read, and validate the repair without a provider or solver before designing
-  another autonomous experiment. Finalize now requires current-source and
-  history reads when those corpora are available, a cited nearest prior and an
-  explicit falsification condition. Recognized invalid finalize feedback is
-  fixed-enum and same-campaign rejection memory is bounded; local/global
-  resource caps remain hard stops. Provider-/solver-free real-context replay
-  and independent review passed.
-- [x] **TERMINAL / COMPLETED VALID / SCREENING ABANDON:** execute the M25
-  evidence-grounded autonomous continuous-research one-shot on the
-  carried-forward unopened M24 population. H read current source and ordinary
-  history and finalized in three provider calls; C publicly tested and
-  finalized the aligned directed intra-route 2-opt delta patch in four. The
-  unchanged gates passed Contract, Verification and canary. Initial screening
-  completed 6/6 valid pairs and expanded. Exact-branch expanded screening
-  attempted 12/12 pairs, completed 11 valid pairs and recorded one
-  candidate-only timeout; Protocol failed case quality and Decision abandoned
-  for `CANDIDATE_RUNTIME_FAILURE`. Total use was seven provider calls, 42
-  serial solver subprocesses and about 1,458 seconds. Validation, frozen,
-  promotion and retained remained zero. The framework result is positive, the
-  research direction was grounded and testable, and the exact algorithm result
-  is negative/mixed development evidence. See the
-  [M25 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m25-evidence-grounded-autonomous-continuous-research-preregistration-20260821.md).
-- [x] **TERMINAL / COMPLETED VALID / TWO NEGATIVE INITIAL SCREENS:** execute
-  M26 once on M25's outcome-exposed development bank. Fifteen provider calls
-  comprised seven H turns, six C turns and two independent C final decisions.
-  Both candidates passed Contract, Verification and canary and completed 6/6
-  valid formal pairs, but each lost one of three cases: case win/loss/tie
-  `0/1/2`, with pair counts
-  `1/1/4` and `0/2/4`, median delta `0.0`, and CIs `[-61.5, 0.0]` and
-  `[-90.5, 0.0]`. Both Protocol results were
-  `fail / SCREENING_FAIL_CASE_QUALITY`; both Decisions continued exploration.
-  The two ordered C-authored probes were fully observed: 3,272 characters
-  projected `failed`, then 326 projected `passed`, while ordinary host checks
-  passed 5/5 both times and each session went directly to ready without a
-  post-probe revision. This establishes adoption and bounded framework
-  execution, not a causal probe effect. H1 reimplemented historical work; H2
-  read same-campaign `history-0041` and pivoted, but reproduced unread failed
-  `history-0034` byte for byte. Exactly 32 serial solver subprocesses ran; no
-  expansion, validation, frozen, promotion or retained stage ran. The root is
-  preserved and consumed without retry, resume or automatic M27. See the
-  [M26 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m26-embedded-falsifier-autonomous-continuation-preregistration-20260821.md).
-- [x] Add a problem-neutral nearest-history audit to bounded H finalization.
-  For each otherwise valid candidate, a pure headline-only ranker scans the
-  complete current index and routes the lexical top-1 among usable headline-
-  bearing ordinary refs. H must read it and cite
-  it in both basis arrays; a candidate change recomputes the ref. The fixed
-  feedback contains only the required ref, not candidate/match text or a score.
-  Preemptive exact-ref reads remain valid. The ranker does not judge novelty,
-  choose a mechanism/target/patch or reach C, Contract, Protocol or Decision.
-  Direct-H behavior without research limits is unchanged.
-- [x] **TERMINAL / COMPLETED VALID / EXPANDED SCREENING ABANDON:** execute M27
-  once on the M25/M26 outcome-exposed development bank. One accepted H used
-  four turns over the 43-entry index: source read, audit trigger for
-  `history-0030`, required history read, then acceptance with that ref cited in
-  both basis arrays. Coverage was accepted 1/1 and incomplete zero; the read
-  was not preemptive. The candidate changed after the trigger but retained the
-  same top-1. Its self-described pivot/refinement label was `not_observable`,
-  and exact structured-H and complete ordered-patch replay counts were both
-  zero. C used `revise -> test_patch -> ready -> finalize_patch`; its
-  1,199-character falsifier projected `passed`, all 5/5 host checks passed and
-  no post-probe revision occurred. Eight provider calls and 42 serial solver subprocesses
-  completed initial 6/6 screening and an expanded screen with 10/12 valid pairs
-  plus two candidate-only timeouts. Initial evidence expanded; expanded
-  Protocol failed case quality and Decision abandoned for runtime failure.
-  Validation and frozen remained zero. The preserved root is consumed without
-  retry, resume or automatic M28. Audit/probe observations are non-causal, and
-  the result is negative/mixed evidence only on the seen bank. See the
-  [M27 preregistration and terminal result](docs/experiments/v0.4/v04-cvrp-m27-nearest-history-audit-autonomous-continuation-preregistration-20260821.md).
-- [x] **TERMINAL / STOPPED RESOURCE_EXHAUSTED / VALID_INCOMPLETE / NOT
-  QUALIFIED:** execute M28 exactly once under its frozen seen-bank
-  [preregistration](docs/experiments/v0.4/v04-cvrp-m28-seen-bank-qualification-autonomous-continuation-preregistration-20260824.md).
-  The invocation exited 21 at 34/34 provider calls: 25 H turns, eight C
-  research turns and one C final decision. Four attempts yielded one evaluated
-  screening, two research rejections and a final
-  `PROVIDER_CALL_CAP_EXHAUSTED` at `proposal_code`; only one of two requested
-  formal rounds completed. The sole evaluated candidate passed Contract,
-  Verification and canary and completed initial screening `6/6` valid with
-  zero failures, but case win/loss/tie `1/1/1`, median delta `0.0` and CI
-  `[-2.5, 206.0]` failed case quality; Decision continued exploration. A later
-  C ended `PATCH_PROPOSAL_INVALID`, and the last accepted H reached the shared
-  cap before C dispatch. The terminal counters contain two research
-  rejections, while the three ordinary steps/history rows durably contain only
-  one rejected row; the missing H-abstention reason is a live safe-public
-  observation, not terminal-only reconstruction. Exactly 16 solver
-  subprocesses ran serially: two Verification, two canary and twelve formal;
-  observed concurrency was one. Expanded screening, validation, frozen,
-  promotion and retained comparison were zero, and no branch was
-  `READY_VALIDATE`. The frozen carrier audit's assertion that total branch
-  records must equal active branches and both equal one is a P1 structural
-  false-negative defect, but it did not affect this nonqualification: the
-  scientific predicate had already failed and no eligible carrier existed.
-  The conditional M29 selector expired unmaterialized; there is no M29 prep,
-  launch, retry or resume authority.
-- [x] Repair the M28 postrun-carrier false-negative and provider-safe null-H
-  durability boundaries, then add a bounded qualification-only campaign mode.
-  The reviewed runtime now counts EXPLORE H/C proposal attempts, distinct
-  Verification-passing chains and initial/expanded screening stages
-  independently; legal cap exhaustion is a completed valid negative, while
-  infra/resource/hardwall terminals remain incomplete. Nonqualifying verified
-  chains are durably recorded before their mutable workspace/H/patch/hash is
-  cleared and the lineage is parked; a positive branch stops before validation
-  as `ready_for_postrun_qualification_audit`, not as already qualified.
-- [x] Freeze M30 as the next CVRP
-  qualification attempt on a metadata-selected fresh-at-start development
-  bank. Its first H receives eight ordinary observations plus 42 native history
-  rows; six H/C proposal attempts, two verified chains, four screening stages,
-  60 provider calls and a 28,000-second hardwall are independent explicit
-  limits. The runtime/source base is exact
-  `5d282ea8e9133e0146c47588f2310c9bd2493e50`. A tracked strict expectation JSON
-  supplies M30 facts to the sole public, problem-neutral postrun auditor; only
-  its exact `QUALIFIED_FOR_NEW_FIXED_CANDIDATE_FUNNEL` token after terminal
-  boundary, scientific join and B0/full-byte carrier checks can unlock a
-  successor. The exact selector, controls, resource arithmetic, three-layer
-  claim boundary and mechanical prelaunch/postrun commands are preserved in the
-  [M30 preregistration](docs/experiments/v0.4/v04-cvrp-m30-fresh-development-qualification-only-autonomous-continuation-preregistration-20260824.md).
-  M31 exists only as a conditional outcome-blind rule and count-only
-  feasibility proof; no M31 case/seed identity is materialized.
-- [x] **TERMINAL / STOPPED RESOURCE_EXHAUSTED / VALID_INCOMPLETE / NOT
-  QUALIFIED:** execute M30 exactly once from its frozen carrier. It used three
-  proposal attempts, one Verification-passing chain and one formal initial
-  screen. The sole candidate passed Contract, Verification and canary and
-  completed `6/6` valid initial pairs with zero failed-pair classes, but case
-  win/loss/tie `0/2/1`, pair win/loss/tie `1/3/2`, median delta `-5.5` and CI
-  `[-6.5, 0.0]` failed case quality; Decision continued exploration and
-  qualification-only parking
-  removed its executable branch authority. The second H abstained, and the
-  third stopped at its eight-turn H-session cap as
-  `HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED`. The invocation exited `21` after
-  25/60 provider calls and 16 serial solver subprocesses; expanded screening,
-  validation, frozen, promotion and retained comparison were all zero. The
-  frozen postrun auditor returned `QUALIFICATION_CARRIER_UNAVAILABLE`, so the
-  conditional M31 rule expired without identity, preparation, launch, retry or
-  resume authority. A post-terminal monitoring mistake opened SQLite in
-  readonly mode; the only observed metadata change was to `scion.db-shm` after
-  the frozen audit. Cached metadata showed no post-terminal mtime change to the
-  main database or WAL, and the scientific JSON/JSONL/metrics were untouched.
-  No database hash was taken, and nothing was repaired or rerun.
-
-Acceptance: an enabled attempt may spend finite Creative turns but exports at
-most one H and one C. Contract, Verification, Protocol, Safe Features and
-Decision retain their existing authority. History and family association may
-inform a later H without host mechanism selection or Decision influence.
-At canary or a main-chain formal stage, comparator-incomplete evidence never
-advances and never reaches Decision. After a complete frozen-stage promotion,
-retained comparator incompleteness terminates
-`completed_incomplete / INCOMPLETE_COMPARATOR_EVIDENCE` at
-`stop_stage=retained`; it is not sent to Decision and is never reported as
-`PROMOTED_NOT_RETAINED`.
-
-### M32 - Improve CVRP proposal research effectiveness before another qualification
-
-The next CVRP task is not another qualification run and not a broad multi-agent
-rewrite. M10-M30 show that the deterministic Contract, Verification, Protocol,
-Decision and evidence boundaries can execute and fail closed, while autonomous
-proposal research still yields too few distinct, implementable formal
-candidates per provider call. M32 therefore improves the tainted Creative
-research boundary first and leaves every downstream scientific authority
-unchanged.
-
-The provider-/solver-free metric contract, M30 calibration row, future
-five-block matched-study gate, freshness rule and claim boundary are frozen in
-the [M32 design](docs/experiments/v0.4/v04-cvrp-m32-hypothesis-candidate-bank-research-effectiveness-design-20260825.md).
-The default-off K=2 implementation, count-only attempt telemetry, pure
-single-arm offline scorer, pure exact-five-block comparator, default-off
-initial-screening producer boundary, ordinal-only paired-effect projection,
-strict ten-root artifact audit, safe private root loader and private pre-run
-configuration-subset snapshot, manifest-path-only configuration-subset join
-and separate requested-provider-policy producer plus its validation-only v2
-manifest join, plus a separate producer-only ProblemSpec declaration and its
-validation-only v3 manifest join, now exist, but no population selection,
-matched-study result or live authority exists. Carrier
-`25b78037` implements the private
-ordinal K=2 H bank under the existing shared session budget and exports only
-the provider-selected H. Carrier `b0d81ddb` adds body-free attempt lifecycle,
-provider-delta and H/C boundary counts. Carrier `bda346e9` adds a pure
-provider-/solver-free single-arm scorer that closes current-history, replay,
-formal-quality and paired-effect accounting without emitting H, patch, path,
-identity or hash material. Carrier `3e97243d` adds the pure exact-five-block
-comparator and its cross-block replay/`U_F` reducer. Carrier `042da9e8` adds the
-default-off `initial_screening_only_v1` producer boundary; `a8e483bb` adds the
-ordinal-only paired-effect cells; `8b7b5988` hardens initial-only asynchronous
-terminal cleanup; `acff2f0a` adds the private strict decoded-artifact study
-audit; `4256c190` adds the private bounded safe-path loader for the ten study
-roots; and `f2fd0053` adds the package-private, default-off
-`CONFIG_SUBSET_ONLY` `initial_screening_study_controls.json` producer. It
-writes before other campaign-root side effects from detached normalized
-controls, installs those same detached objects at the finite reviewed direct
-seams and revalidates their publication, joins and pristine run state before
-preflight. Its 203 focused tests passed and independent science/privacy and
-red-team review reported P0/P1/P2 = `0/0/0`. Carrier `94455954` adds the
-package-private, default-off, manifest-path-only `CONFIG_SUBSET_JOINED`
-validator. It normalizes the manifest's exact five typed history declarations
-and reads/canonically normalizes every available basis file before opening any
-outcome root, then safely joins ten bounded six-leaf root surfaces to their
-manifest-declared controls, root snapshots and independent
-code-research/resource files. One fresh absolute bundle pass revalidates the
-manifest, history files and ten roots, followed by a second fresh absolute
-manifest-only rewalk. It then passes all ten roots through the S2a structural
-decoder and discards every decoded value. Its 97 focused, 523 adjacent and 438
-postrun tests passed. It does not pass the history bases to S2a, invoke the D2
-scorer, D3 comparator or either endpoint, or create a matched result. Carrier
-`7ad892eb` adds a distinct package-private, default-off, producer-only
-`REQUESTED_PROVIDER_POLICY_ONLY` sidecar. It writes
-`initial_screening_provider_policy.json` as the independent second private
-leaf, binds the exact existing `LLMClient` to one immutable requested-policy
-capsule, freezes the five reviewed request kinds, and revalidates both private
-leaves, the same-client consumer joins and pristine state at the run gate. Its
-313 focused tests and 1,036 adjacent tests passed; the sole adjacent failure
-was the pre-existing hard-coded 15-versus-16 research-history count debt, and
-independent review reported P0/P1/P2 = `0/0/0`. It is not a manifest join and
-does not claim the actual remote backend, account or credential identity,
-served model, network/TLS environment, SDK retry or timeout enforcement, or
-client lifetime freshness. Carrier `8560a892` adds the separate package-private,
-manifest-path-only v2 validator. One top-level common declared provider policy
-must equal the raw canonical bytes and independently normalized value of the
-seventh private leaf in every one of the ten roots. It first normalizes all five
-typed history declarations and reads and canonically normalizes every available
-basis file, distinguishing known-empty available from typed unavailable
-history. After all ten seven-leaf roots, the full bundle rewalk and the second
-manifest-only rewalk have passed, it structurally decodes all ten S2a roots and
-discards the values. Its sole success is the exact ordered-25
-`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED` mapping. The 85 focused,
-405 combined v1/v2 manifest/root and 523 full postrun tests passed; a 1,216-case
-producer/decoder differential had zero mismatches, and independent review
-reported P0/P1/P2 = `0/0/0`. It calls neither D2 nor D3 and creates no matched
-result, population, live authority or GO token. Carrier `1b967d93` adds a
-distinct package-private, default-off, producer-only
-`PROBLEM_SPEC_DECLARATION_ONLY` boundary. With both the controls and provider
-opt-ins, it publishes `initial_screening_problem_spec.json` as the third
-private control leaf after the controls and provider leaves. It canonically
-projects 30 of the exact current 31 `ProblemSpecV1` fields, excluding
-`root_dir`, and installs a fresh mechanical legacy bridge and a fresh instance
-of the already-loaded exact adapter class. The pre-first-leaf gate validates
-the provisional five-object graph of controls runtime inputs,
-`ProblemRuntime`, `ContractGate`, Protocol and `VerificationGate`.
-Post-construction registration first validates the full installed reviewed
-seams, including the materializer, evaluator, proposal and evidence consumers;
-run start revalidates all three publications and those full joins before
-preflight. The 42 focused and 321 combined tests passed, and independent
-science/privacy and read-only consistency review reported P0/P1/P2 =
-`0/0/0`. Its exact ordered 11 limitations retain adapter behavior, research
-input, runtime-history consumption, verification, source/B0, manifest,
-post-gate root freshness and matched/live/GO boundaries. It does not upgrade
-either manifest v1 or v2. The complete declaration is bounded to JSON depth 23
-at prerequisite base `cb749795`, so embedding it one level below the v3
-manifest root remains within the existing depth-24 manifest envelope. Carrier
-`76702588` adds the wholly separate package-private, manifest-path-only,
-validation-only v3. One top-level common declared ProblemSpec must equal the
-raw canonical bytes and independently normalized value of the eighth private
-leaf in all ten roots, while the existing controls and requested-provider
-joins remain exact. The ten bounded eight-leaf roots share one held descriptor
-per root and participate in global non-alias checks and the integrated fresh
-manifest/history/ten-root rewalk. A held-parent fingerprint check and second
-fresh manifest-only rewalk follow. Only afterward are all ten S2a roots
-structurally decoded and discarded. Its sole success is the fixed
-`CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_AND_PROBLEM_SPEC_DECLARATION_JOINED`
-mapping with the exact ordered 24 limitations. Its 76 focused, 258 combined
-v1/v2/v3 and 599 full postrun tests passed; a 2,206-variant independent
-producer/decoder differential found zero decoder rejections among 1,602 unique
-publishable declaration byte strings, and both independent reviews reported
-P0/P1/P2 = `0/0/0`. V1 and v2 tracked bytes, statuses and limitations remain
-unchanged. V3 calls neither D2 nor D3 and creates no matched result,
-population, live authority or GO token. Together these carriers provide
-joined-configuration, implementation, mutation-audit and provider-/solver-free
-writer-roundtrip results, not evidence that K=2 improves CVRP research.
-The status remains `NO_POPULATION_SELECTION`, `NO_MATCHED_RESULT`,
-`NO_LIVE_AUTHORITY` and `NO_GO`; none of these private carriers is a public
-command or launch path.
-
-- [x] Close the M30 terminal documentation and monitoring-incident record on a
-  clean docs-only commit before changing research behavior. Preserve the M30
-  root as consumed; do not retry, resume or reinterpret its incomplete result.
-- [x] Correct proposal telemetry so bounded H/C research is not reported as
-  `direct_v3`, and durably project safe attempt-level provider-turn,
-  H-candidate and selected-candidate counts without exposing draft bodies.
-- [x] Freeze baseline research-throughput and candidate-quality measures before
-  implementation:
-  finalized H per provider call, history- and within-arm-exact-distinct H per
-  attempt, C-ready rate, exact-distinct formal candidate per attempt/provider
-  call, separate loaded-history/within-block/cross-block exact H/patch replay
-  guards, initial gate/expand rate, the median-of-candidate-medians
-  paired-effect guard and candidate-only runtime-failure rate. The exact
-  throughput and quality endpoints and their repeated-block acceptance rule
-  must be fixed before outcomes. These are development diagnostics, never
-  promotion features or Decision inputs.
-- [x] Add bounded session-local H candidate slots and safe counters without a
-  new durable ledger, identity, hash, receipt or authority. All slots share the
-  existing turn/read/search/transcript and campaign provider budgets; creating
-  a second slot may not reset or multiply any allowance. Public artifacts may
-  expose only bounded counts and the single exported H.
-- [x] Complete the strict optional configuration contract
-  `max_hypothesis_candidates`. Missing or explicit `1` preserves the bounded
-  K=1 path; within qualification-only composition with its bounded
-  proposal-attempt limit and explicit shared provider-call and outer hardwall
-  caps, explicit `2` enables K=2 and remains the hard maximum; every other value
-  fails closed.
-- [x] Implement the `K=2` H draft bank inside one
-  `HypothesisResearchSession`. The provider may stage two complete structured H
-  values in session-local ordinal slots and either choose one existing slot or
-  abstain. Only a chosen slot can export H. The host may validate structure and
-  exact slot equality but may not rank
-  mechanisms, targets or expected quality. Only the chosen H is exported to
-  formal Hypothesis Contract. Every unselected staged H, including both slots
-  after an abstention, disappears with the tainted session and never enters
-  StepRecord, lineage, research history, workspace or candidate authority.
-- [x] Add provider-/solver-free red-team coverage for shared-budget accounting,
-  slot immutability, deterministic ordering, unchosen-draft non-persistence,
-  transport/resource interruption and zero validation/frozen leakage. Defaults
-  must preserve the current direct and bounded paths byte-for-byte where their
-  public schema is unchanged.
-- [x] Implement a pure single-arm postrun scorer that joins terminal status,
-  summary, normalized current history, explicit loaded-history availability,
-  count-only attempt telemetry and ordinal-only initial cells. It must keep
-  physical counts separate from replay-adjusted `D_H/F/G/T/Q/E`, preserve the
-  M30 incomplete/history-unavailable calibration boundary, and emit no
-  hypothesis, patch, path, identity, hash, case or seed material.
-- [x] Implement and independently red-team the pure offline exact-five-block
-  matched comparator. It must call the same single-arm oracle for all ten arms,
-  compute the five frozen joint signs plus cross-block H/pair replay and `U_F`
-  inside one private in-memory boundary, and return only aggregate counts,
-  ratios, signs and fixed availability codes. It creates no GO token, command,
-  population or launch authority. Carrier `3e97243d` provides this
-  provider-/solver-free comparator with synthetic-only evidence.
-- [x] Implement and independently red-team a default-off initial-development
-  diagnostic boundary before selecting any study population. After each initial
-  Protocol and unchanged Decision are durably recorded, the boundary must park
-  and clear that candidate and continue from fresh B0 without dispatching
-  expanded screening, validation or frozen stages. A favorable initial result
-  may not consume later proposal-attempt opportunity, and every incomplete or
-  resource terminal remains inconclusive rather than being imputed as a
-  scientific negative. Carrier `042da9e8` implements this boundary, and carrier
-  `8b7b5988` closes the initial-only signal, workspace and terminal-accounting
-  races without granting a command or live launch path.
-- [x] Implement and independently red-team the safe initial-cell producer and
-  strict study-root audit before any population selection. The producer may
-  project only ordinal paired candidate/B0 values from complete screening
-  Protocol evidence, with no case, seed, path, H, patch or raw body; the audit
-  must prove every declared attempt remained reachable before a completed arm
-  can contribute and must keep any exact typed terminal prefix inconclusive,
-  then call the existing single-arm and exact-five-block oracles without adding
-  downstream authority. The generic producer projects any canonical complete
-  screening row in that row's case-major/seed-minor order; only the strict
-  initial-only audit interprets an unexpanded, attempt-joined row as initial,
-  and pre-outcome order/control authority remains an S2c gate.
-  Carrier `a8e483bb` supplies the summary-only ordinal cells, `acff2f0a` audits
-  all ten decoded roots before comparison, and `4256c190` loads only literal
-  `status.json`, `campaign_summary.json` and optional canonical
-  `research_history.jsonl` from ten distinct canonical roots through bounded,
-  no-follow regular-file reads. The loader proves detached bytes plus sequential
-  path revalidation, not a simultaneous ten-root snapshot, live freshness,
-  pre-outcome controls or population authority.
-- [x] Add the default-off, package-private pre-run
-  `initial_screening_study_controls.json` configuration-subset snapshot without
-  public, CLI or live authority. Carrier `f2fd0053` records only the normalized
-  qualification, code-research, resource, scheduler and Protocol subset,
-  installs those same detached controls for runtime consumption at the known
-  reviewed direct seams, and revalidates the exact publication, installed joins
-  and pristine state before preflight. It remains `CONFIG_SUBSET_ONLY`: it does
-  not cover requested provider/model policy, ProblemSpec, research input or
-  actual loaded-history consumption, verification, runner or hardwall
-  enforcement, full source or B0 content, a study manifest, population
-  freshness or actual launch order.
-- [x] Add the first private manifest/control join without opening the rest of
-  S2c. Carrier `94455954` accepts only an explicit absolute manifest path and
-  returns only the fixed `CONFIG_SUBSET_JOINED` mapping, including the exact
-  ordered 20 limitations. The manifest is the sole source of its five ordered
-  block expectations and five explicit loaded-history availability/bases; its
-  history and root locators are relative POSIX tokens beneath the held manifest
-  parent, with no caller history/root-path injection. All five typed
-  declarations are normalized and every available basis file is read and
-  canonically normalized before any of the ten roots; each K=1/K=2 pair shares
-  one typed basis, while known-empty available and typed unavailable histories
-  remain distinct. Each ordered arm's declared controls exactly join its root
-  snapshot, whose overlapping code-research and resource subsets exactly join
-  independent `code_research_limits.json` and `resource_envelope.json` files;
-  common controls are exact-equal across all arms and only the eight declared
-  population paths plus K vary across blocks. After all joins, one fresh
-  absolute bundle pass revalidates the manifest, history files and all ten
-  roots, followed by a second fresh absolute manifest-only rewalk. The
-  validator structurally decodes all ten S2a roots and discards those values;
-  it does not pass the history bases to S2a or prove their runtime consumption.
-  It also does not verify ordinary-Git or pre-outcome timing or launch
-  execution; call D2, D3 or their endpoints; expose a public/CLI/write path; or
-  create a matched result, population, live authority or GO token.
-- [x] Add a separate package-private, default-off requested-provider-policy
-  producer without upgrading the existing configuration-subset schemas or
-  join. Carrier `7ad892eb` requires the explicit S2c1 opt-in, publishes the
-  independent second private leaf with scope `REQUESTED_PROVIDER_POLICY_ONLY`,
-  binds the same exact `LLMClient` used by the reviewed consumers to one
-  immutable capsule for the five fixed request kinds, and gates run on both
-  leaf publications, direct identity joins and pristine state before preflight.
-  Its 313 focused and 1,036 adjacent tests passed; the only adjacent failure was
-  the known HEAD research-history-count debt, and independent review reported
-  P0/P1/P2 = `0/0/0`. This producer makes no actual-backend, account,
-  credential, served-model, network/TLS, code-constant, timeout/retry
-  enforcement or lifetime-freshness claim. The S2c1 controls v1 leaf and S2c2
-  manifest/join v1 remain byte- and meaning-compatible and retain
-  `PROVIDER_REQUEST_POLICY_UNVERIFIED`.
-  `MATCHED_RESULT_UNAUTHORIZED`, `LIVE_EXECUTION_UNAUTHORIZED` and
-  `STUDY_GO_UNAUTHORIZED` also remain in force.
-- [x] Add the separate package-private, manifest-path-only validation v2 without
-  changing either v1. Carrier `8560a892` requires one top-level common declared
-  provider policy and joins its raw canonical bytes and independently
-  normalized value to `initial_screening_provider_policy.json` in all ten
-  roots, with no K or population mask. It normalizes all five typed history
-  declarations and reads and canonically normalizes every available basis file
-  before the ten seven-leaf roots, distinguishing known-empty available from
-  typed unavailable history. It includes every seventh leaf in the existing
-  bounds, non-alias checks and fresh full-bundle plus manifest-only rewalks,
-  then runs and discards exactly ten S2a structural decodes. It returns only
-  `CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_JOINED` with the exact ordered
-  25 limitations. Only this v2 removes `PROVIDER_REQUEST_POLICY_UNVERIFIED`;
-  both v1s retain their old status and limitation, while
-  `STUDY_MANIFEST_UNVERIFIED`, provider identity/environment/code-constant and
-  timeout/retry/lifetime limitations, both enforcement limitations and the
-  matched/live/GO prohibitions remain. Its 85 focused, 405 combined and 523
-  postrun tests passed, the 1,216-case differential had zero mismatches, and
-  science/privacy and red-team review reported P0/P1/P2 = `0/0/0`. It does not
-  call D2, D3 or an endpoint or create a matched result, population, live
-  authority or GO token.
-- [x] Add a separate package-private, default-off producer-only ProblemSpec
-  declaration without changing either manifest version. Carrier `1b967d93`
-  requires the S2c1 and S2c3 opt-ins, writes
-  `initial_screening_problem_spec.json` as the third ordered private control
-  leaf, and projects exactly 30 of the current 31 `ProblemSpecV1` model fields,
-  excluding `root_dir`. It reconstructs a fresh V1 object, a fresh mechanical
-  legacy bridge and a fresh instance of the already-loaded exact adapter class.
-  Before the first leaf, it validates the provisional graph of controls runtime
-  inputs, `ProblemRuntime`, `ContractGate`, Protocol and `VerificationGate`.
-  Post-construction registration first validates the full installed reviewed
-  seams, including the materializer, evaluator, proposal and evidence
-  consumers; run start revalidates all three publications and those full joins
-  before preflight. Its exact ordered 11 limitations retain
-  `PROBLEM_ADAPTER_UNVERIFIED`, `RESEARCH_INPUT_UNVERIFIED`,
-  `RUNTIME_RESEARCH_HISTORY_CONSUMPTION_UNVERIFIED`,
-  `VERIFICATION_CONFIG_AND_RUNTIME_UNVERIFIED`, `SOURCE_CARRIER_UNVERIFIED`,
-  `B0_CONTENT_UNVERIFIED`, `STUDY_MANIFEST_UNVERIFIED`,
-  `ROOT_LIFETIME_FRESHNESS_UNVERIFIED`, `MATCHED_RESULT_UNAUTHORIZED`,
-  `LIVE_EXECUTION_UNAUTHORIZED` and `STUDY_GO_UNAUTHORIZED`. Its 42 focused
-  and 321 combined tests passed, and independent science/privacy and read-only
-  consistency review reported P0/P1/P2 = `0/0/0`. The claim is only the
-  root-dir-excluded normalized declaration installed at reviewed local seams;
-  it does not prove adapter behavior or any retained limitation. Manifest v1
-  and v2 remain byte- and meaning-compatible.
-- [x] Add a separate package-private, manifest-path-only validation v3 without
-  changing v1 or v2. After the depth-23 declaration/depth-24 manifest envelope
-  prerequisite at base `cb749795`, carrier `76702588` requires one top-level
-  common declared ProblemSpec and joins its raw canonical bytes and independent
-  frozen normalization to `initial_screening_problem_spec.json` as the eighth
-  private leaf in all ten roots. The same held root descriptor reads all eight
-  leaves; the new leaf participates in the existing caps, global non-alias
-  checks and integrated fresh manifest/history/ten-root rewalk. A held-parent
-  fingerprint check and second fresh manifest-only rewalk follow. Controls
-  retain their type-aware objective/measurement overlap joins. All ten S2a
-  structural decodes run only after the joins and both fresh passes, and all
-  decoded values are discarded. The only success is the fixed
-  `CONFIG_SUBSET_AND_REQUESTED_PROVIDER_POLICY_AND_PROBLEM_SPEC_DECLARATION_JOINED`
-  mapping with the exact ordered 24 limitations. The 76 focused, 258 combined
-  v1/v2/v3 and 599 full postrun tests passed; the 2,206-variant differential
-  produced 1,602 unique publishable declaration byte strings with zero decoder
-  rejections, and two independent reviews reported P0/P1/P2 = `0/0/0`. Only
-  this v3 removes `PROBLEM_SPEC_UNVERIFIED`; it retains adapter, research-input,
-  runtime-history-consumption, verification, source/B0, manifest/pre-outcome,
-  enforcement, root-freshness and matched/live/GO limitations. It invokes no
-  D2, D3 or endpoint and creates no matched result, population, live authority
-  or GO token. V1 and v2 bytes, APIs, statuses and limitations are unchanged.
-- [ ] Complete the remaining S2c control authority before selecting a
-  population. The separate v3 now joins the requested provider/model policy
-  and normalized root-dir-excluded ProblemSpec declarations to all ten roots.
-  S2c must still add actual research-input/history consumption,
-  normalized requested/resolved solver and verification configuration,
-  declared hardwall cap and launcher configuration, and source/B0 content and
-  order; source revision remains an external ordinary fact. Runner/backend
-  runtime enforcement and external hardwall enforcement remain unverified under
-  `PROTOCOL_RUNNER_BACKEND_AND_RUNTIME_ENFORCEMENT_UNVERIFIED` and
-  `EXTERNAL_HARDWALL_ENFORCEMENT_UNVERIFIED`. Finish these generic joins first,
-  then add a gated comparator schema exercised only on synthetic inputs. These
-  joins do not lift either enforcement limitation. Only after those generic
-  gates and synthetic comparator tests exist may an outcome-blind metadata-only
-  population be selected; the study-specific cases, seeds, time/resource
-  arithmetic, actual ordinary manifest and launch order must then be
-  mechanically frozen and independently reviewed before any live authority.
-  The existing controls/manifest v1 and manifest v2 remain unchanged.
-  Comparator code may therefore precede population selection, but its
-  implementation does not freeze the missing values or the actual study
-  manifest. This remains package-private with no CLI, live command, self-hash,
-  receipt, nonce, GO token or claim that Scion proves preregistration timing.
-- [ ] Preregister repeated matched `K=1` versus `K=2` development comparisons
-  under the same total provider, attempt, solver and hardwall envelopes. Use
-  outcome-blind ordinary development populations and hold the current
-  cross-attempt feedback behavior constant. K=2 advances only after repeated
-  matched blocks improve distinct formal-candidate yield per unit budget and
-  meet the predeclared candidate-quality rule without increasing replay or
-  candidate-only failure. One favorable candidate or throughput uplift alone
-  is not an advance and cannot produce a validation, generalization or CVRP
-  acceptance claim.
-
-Acceptance: the minimal successful M32 result is a provider-/solver-free
-audited, default-off K=2 H session plus repeated preregistered matched-control
-development evidence under the same total resource envelope as K=1 that
-improves both distinct formal-candidate yield per provider call and the frozen
-development-quality endpoint without hidden host selection, draft persistence
-or held-out leakage. Throughput-only uplift is research-throughput evidence,
-not effective-research evidence. A completed valid comparison without
-repeatable joint uplift is a valid negative and blocks the next architectural
-rung; an incomplete comparison is inconclusive and also cannot advance. A
-repeated joint uplift is bounded development research-effectiveness evidence
-only.
-CVRP acceptance still requires a later exact autonomous candidate to complete
-screening, validation and frozen holdout, receive deterministic `PROMOTE`, and
-survive an independent retained-B0 comparison without feasibility or fleet
-regression.
-
-### Conditional CVRP research path after M32
-
-These are later conditional modules, not M32 completion tasks and not current
-launch authority:
-
-- **M33 - Cross-attempt typed reflection:** only after M32 passes, replace the
-  provider-authored C abandonment prose available to later H with a small
-  closed set of hypothesis-level obstruction codes. The current attempt still
-  terminates; the next H is a new attempt. Compare default-off reflection
-  against the K=2 baseline in repeated matched blocks with the same resources,
-  measuring obstruction recurrence, C-ready/formal yield and the same frozen
-  quality endpoints. No same-attempt retry or repair is permitted.
-- **M34 - One bounded same-attempt `H -> C -> H` edge:** consider only if M33
-  improves both efficiency and quality and remaining failures are specifically
-  attributable to H/C implementability mismatch rather than weak algorithms.
-  First amend the architecture authority to distinguish provisional drafts
-  from exported H/C, permit at most one typed revision request, discard the old
-  C draft, rerun H binding from a clean snapshot and charge all H/C work to one
-  cumulative budget. It may not be introduced as an internal retry loop.
-- **M35 - Multi-agent role ablation:** consider researcher/critic/implementer
-  roles only if M32, M33 and a controlled M34 experiment each demonstrate their
-  preregistered joint benefit, yet their proposed candidates remain materially
-  correlated. A failed or no-uplift earlier rung blocks M35. Every output
-  remains tainted, no agent sees
-  validation/frozen/held-out evidence, any Creative selector may choose only a
-  session-local ordinal without rewriting its candidate, and Contract,
-  Verification, Protocol, Safe Features and Decision remain deterministic host
-  authorities.
-- **M36 - New CVRP qualification:** prepare only after a prior rung demonstrates
-  repeatable joint research-effectiveness uplift without budget multiplication
-  or evidence leakage. It requires a new label, fresh outcome-blind selector,
-  independent reviews and separate explicit one-shot authorization; M31 and
-  all expired M29/M30 conditional authority remain unusable.
-
-- [ ] Publish the final full regression record.
-- [ ] Write one cross-problem report separating framework behavior,
-  mechanism-level evidence, formal promotion and independent replay.
-- [ ] Mark v0.4 complete only when both Warehouse and CVRP acceptance are
-  satisfied.
+Required properties:
+
+- H and C are tainted. They never author Protocol, Safe Features, Decision,
+  scheduling or promotion.
+- Contract checks structure, allowed files and interfaces. Verification checks
+  executable correctness, determinism, feasibility and objective semantics.
+- Protocol owns fixed cases, seeds, comparisons and statistical gates. Only
+  typed Safe Features enter Decision.
+- The scheduler has at most three active branches and is evidence-blind.
+- A branch keeps its verified head across research rounds. An exact candidate,
+  not a reconstructed carrier, progresses through later stages.
+- Current-campaign screening history and explicitly loaded cross-campaign
+  history are H-only ordinary evidence. The complete inventory is available to
+  the agent; the host does not rank a nearest record or require a mechanism,
+  file, action, history read or citation.
+- If the agent cites history, it must have read that reference in the same
+  bounded session. History never enters Safe Features or Decision.
+- Scientific lineage is one minimal append-only factual path. Exact content
+  equality is kept only where same-candidate reuse requires it; one digest may
+  compact that comparison but grants no authority.
+- Provider SDK retries remain disabled. An ordinary ResourceEnvelope may allow
+  at most one immediate `ProviderCaller` redispatch of the same frozen request
+  for a typed timeout, transport fault or provider fault. Every physical
+  dispatch consumes the shared cap and writes a terminal trace; the redispatch
+  is not a new H/C turn and never enters history, Protocol or Decision. Multiple
+  deliberate bounded research turns remain agent actions, not transport retry
+  or response repair.
+
+Deletion boundary:
+
+- No object identity/capability system, owner registry, lease, issue/claim/spend,
+  signature, registration, nonce, receipt, manifest closure, freshness proof,
+  repeated absence proof, candidate reconstruction or promotion dossier.
+- No host top-N mechanism routing, forced nearest-history grounding, novelty
+  gate, response repair, retry, partial resume or hidden held-out feedback.
+- No distribution, deployment, installation, packaging, reproducible-build,
+  root service, systemd, D-Bus, cgroup or native-spawn investment.
+
+`Frozen Holdout`, fixed split/seed inputs, ordinary problem-owned operator
+catalogues, fresh output directories, local subprocess limits and temporary
+workspace cleanup are scientific or operational mechanisms, not authority
+objects.
+
+## Evidence checkpoint
+
+Warehouse acceptance is recorded in:
+
+- [synthetic continuous campaign](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-synthetic-36stage-r8-postrun-20260808.md)
+- [synthetic independent replay](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-postrun-20260809.md)
+- [production-style campaign](docs/experiments/v0.4/v0.4-warehouse-v3-production-transfer-prod12-24stage-r1-postrun-20260809.md)
+- [production-style independent replay](docs/experiments/v0.4/v0.4-warehouse-prod12-independent-heldout-v1-postrun-20260809.md)
+
+CVRP evidence is mixed:
+
+- M7 reached a complete positive initial and expanded development screen, then
+  failed during validation candidate construction. It is not a promotion.
+- M23 completed 24/24 pairs with median delta `0` and was correctly rejected.
+- M25 and M27 exposed candidate-only runtime timeouts.
+- M30 made 25 provider calls, exported one formal candidate, completed 6/6
+  initial pairs and failed quality with median delta `-5.5`.
+- Earlier runs produced useful hypotheses and patches, including positive
+  development screens, but no exact candidate survived the full held-out
+  funnel. The detailed chronology remains under
+  [`docs/experiments/v0.4/`](docs/experiments/v0.4/).
+
+The current bottleneck is proposal yield plus CVRP algorithm robustness, not a
+missing authority protocol and not evidence that Protocol should be weakened.
+
+## Current implementation checkpoint
+
+Completed in the current worktree:
+
+- [x] Deleted the post-M32 S2c private controls/provider/problem/context capsule,
+  study-root, study-manifest and safe-loader graph and its self-proof tests.
+- [x] Deleted qualification-only/initial-only parking, retirement, carrier
+  reconstruction, qualification CLI and audit paths.
+- [x] Restored K=1 and K=2 to the ordinary three-branch campaign and complete
+  `screening -> validation -> frozen -> PROMOTE` trajectory. K=2 still requires
+  explicit provider-call and outer-hardwall caps.
+- [x] Removed forced lexical nearest-history routing and mandatory history reads.
+  The agent may search/read any visible history or ignore it; cited refs remain
+  session-read checked.
+- [x] Preserved complete within-campaign screening history with current/sibling
+  relation and complete explicitly ordered cross-campaign history.
+- [x] Replaced workspace leases/claims with ordinary fresh temporary candidates
+  and local `try/finally` cleanup. Isolation, freeze and the one necessary
+  candidate-content equality check remain.
+- [x] Added provider/solver-free full-trajectory observations from ordinary
+  status, summary, research history and traces. Stage progression is not counted
+  as hypothesis replay; the report emits endpoint values, never a composite GO.
+- [x] Made local development defaults `http://127.0.0.1:8080` and
+  `gpt-5.6-sol`; explicit `SCION_*` values still override them.
+- [x] Completed the five-block CVRP history-availability matched study in the
+  fresh root
+  `/home/clawd/research/scion-experiments/cvrp-history-matched-20260828-r5`.
+  All ten arms completed their requested rounds and emitted ordinary status,
+  summary, history and trace artifacts. The earlier `r2`, `r3` and `r4` roots
+  remain excluded invalid-launch evidence.
+
+The removed S2c authority chain and qualification-only K1/K2 study are
+**cancelled**, not deferred. Git history preserves their historical record.
+
+## Ordered active work
+
+### R1 — Finish the problem-neutral runtime cut
+
+- [x] Make the adapter the single Campaign/CLI problem entry point. Remove the
+  caller-supplied duplicate legacy/V1 spec comparison and keep, at most, one
+  clearly local compatibility projection while remaining code is migrated.
+- [x] Verify real CVRP and Warehouse adapters, normal K1/K2 campaign composition,
+  Contract, Verification, Protocol, Decision, history and workspace behavior.
+- [x] Delete the obsolete qualification-only K1/K2 effectiveness scorer and its
+  tests; retain the ordinary trajectory evaluator.
+- [x] Run the full provider/solver-free suite, focused lint/import checks and
+  `git diff --check` from the repository package root.
+
+Acceptance: both problem packages construct only through their adapter; no
+reachable runtime symbol reintroduces qualification parking, S2c manifests,
+history routing or workspace leases.
+
+### R2 — Measure whether history helps the agent
+
+This is a causal development study, not a gate on whether Scion is allowed to
+research.
+
+- [x] Freeze five matched CVRP blocks. Within a block both arms use the same B0,
+  `gpt-5.6-sol`, reasoning effort, research input, code/resource budgets,
+  screening cases, seeds and time limits. Across blocks, use fresh disjoint
+  development populations where the available corpus supports them.
+- [x] Use K=1 in both arms so candidate-bank size is not a confound.
+- [x] `history OFF` receives no prior research file. `history ON` receives the
+  same complete ordered canonical H-only corpus. History remains optional to
+  the agent; no read or citation is forced.
+- [x] Counterbalance arm order (`ON/OFF` in three blocks, `OFF/ON` in two).
+- [x] Each arm has exactly two formal screening-stage opportunities in a fresh
+  campaign root. If the first result requests expansion, the second opportunity
+  evaluates that exact candidate on the expanded screen; otherwise it may be a
+  new formal hypothesis. Because the fixed protocol requires expanded screening
+  before a pass, validation and frozen evidence remain unreachable in this
+  proposal-effect study.
+- [x] Record charged provider calls, formal proposal episodes, distinct H,
+  distinct H+patch, explicit distinct-formal-H/charged-call throughput,
+  Contract/Verification outcomes, fixed-slot screening gate/statistical
+  indicators, median/CI and case/pair W/L/T, gate/statistical counts, pair
+  attribution and completeness, protected-regression reasons,
+  candidate-attributable failure
+  classes and terminal execution completeness. Record all-deliberation history
+  search/read actions separately from history refs/citations in the ordinary
+  summary basis for the selected formal H; never attribute an unselected slot's
+  basis to the executed H. Keep normal solver `time_limit` stops separate from
+  failed-process `timeout`.
+
+Blocks 01/03/05 ran ON->OFF and 02/04 ran OFF->ON. The prior existing-case
+freeze is invalid:
+the old full-result table covers 10,330 of 10,344 local CVRPLIB cases and all 14
+remaining cases occur in the reference-validation failure table, so literal
+fresh existing cases equal zero. The replacement is 30 fixed, cross-block
+disjoint ordinary CVRP JSON inputs under
+`scion_generated/cvrp_history_matched_v1`, produced by a deterministic
+outcome-blind generator that reads no historical source or result. Uniform,
+clustered and radial structures are predeclared; each block's positions 0/2/5
+cover small/medium/large dimensions. Capacity is 80, every full ten-customer
+constructive group has the fixed demand multiset `5 x (12, 4)`, an odd tail
+uses demand 8, and `allowed_routes=ceil(customers/10)`. Thus both a direct
+route witness and best-fit-decreasing packing meet the route cap, while the
+total-demand capacity lower bound equals that cap. All BKS fields are null and
+there are no solution sidecars. Exact byte regeneration, adapter loading and
+the source counts are executable tests, not an identity or GO authority. All
+30 screening cases resolve to the same 30-second solver limit;
+dimension-based overrides are absent.
+
+Primary observations:
+
+- throughput: distinct formal H per charged provider call;
+- development quality: initial expand/pass outcomes per formal proposal episode;
+- safety guard: candidate-only timeout, invalid output and infeasibility rates
+  must not worsen materially;
+- utilization: all-deliberation search/read is a manipulation check; selected-H
+  basis history refs/citations show that the exported H explicitly used those
+  records, but neither measure proves benefit.
+
+Compare endpoints block by block and in aggregate. Do not emit an aggregate
+score or GO token. A non-positive result means the next long campaign runs
+without loaded external history; it does not justify host routing or a more
+complex history authority layer.
+
+R2 result:
+
+- The fresh `r5` root completed `10/10` arms and `20/20` requested evaluated
+  screening steps. Contract and Verification passed every formal proposal;
+  every arm was terminal `completed` and valid, with no unknown outcome,
+  provider-cap exhaustion or infrastructure stop.
+- ON produced formal-H counts `[1, 2, 2, 2, 2]` from charged-call counts
+  `[7, 13, 13, 13, 16]`; OFF produced `[2, 2, 2, 2, 2]` from
+  `[14, 16, 15, 15, 15]`. Mean distinct-formal-H/charged-call was about
+  `0.1459` ON versus `0.1336` OFF, but this descriptive difference is not
+  evidence that the external corpus helped.
+- No selected ON hypothesis read or cited any of the additional 45 external
+  records. The only selected-H history citations in ON were the immediately
+  preceding current-campaign sibling in blocks 04 and 05. OFF likewise used
+  only the common ordinary observations or its current-campaign sibling.
+  Therefore external-history availability did not achieve attributable use and
+  has no demonstrated benefit in this study. R3 will not load the external
+  corpus. The 45 headline rows were nevertheless visible in ON prompts, so this
+  result is an availability/index-exposure ITT rather than evidence that the
+  external content had no effect whatsoever.
+- ON used 62 charged calls and about 1.464 million prompt tokens; OFF used 75
+  calls and about 1.321 million prompt tokens. Fewer calls therefore did not
+  mean lower context or inference cost.
+- Continuous local history was observably read and cited, and selected bases
+  attributed later direction changes to the preceding sibling result, for
+  example from joint operator-pair credit to initial/embedded-VNS budget
+  allocation. Because both matched arms had local history, R2 does not estimate
+  its causal effect or demonstrate benefit; it establishes attributable uptake
+  and leaves that history path enabled.
+- There were no invalid-output, infeasibility or protected-objective
+  regressions. One block-04 ON second candidate had one candidate-only timeout
+  among twelve attempted pairs and was correctly abandoned. No development
+  candidate passed screening or promoted. Endpoint shifts remain descriptive;
+  no aggregate score or GO was emitted.
+
+### R3 — Run normal long CVRP research
+
+- [x] Choose K=1 or K=2 from proposal-yield evidence without changing Contract,
+  Verification, Protocol or Decision. K2 is an ordinary optional Creative
+  strategy, not a separate campaign mode.
+- [x] Start one fresh normal campaign through the local Codex proxy using
+  `gpt-5.6-sol`, explicit provider-call cap, explicit outer hardwall, the fixed
+  CVRP adapter/config and the history policy selected by R2.
+- [x] Allow the scheduler to maintain up to three branches and continue for
+  multiple proposal/evaluation rounds. Do not stop merely because the first
+  hypothesis is negative.
+- [x] Require automatic exact-candidate progression through screening,
+  validation and frozen. Never reconstruct a candidate from summaries or
+  history. The live run exercised exact initial-to-expanded screening reuse;
+  no candidate earned validation.
+- [x] If no candidate promotes, analyze proposal yield, distinct branches,
+  Contract/Verification failures, stage reach, CVRP quality and runtime evidence
+  separately, then freeze the next scientific change before another run.
+
+Acceptance: a normal Scion campaign deterministically promotes an autonomous
+CVRP candidate after the full declared funnel, with no hidden held-out input in
+H, C, Safe Features or scheduling.
+
+R3 freezes K=1. In r5, K1 produced a formal H at every opportunity not consumed
+by exact-candidate screening expansion; the observed bottleneck was candidate
+quality rather than formal-proposal yield. K2 would spend more provider budget
+without matched evidence of a quality benefit. The normal run keeps the common
+ordinary observations and within-campaign local history, loads no external
+history file, caps provider dispatch at the mechanical K1 maximum of
+`16 x 17 = 272`, and uses an explicit 60-hour outer hardwall.
+
+R3 result:
+
+- The one frozen launch at
+  `/home/clawd/research/scion-experiments/v04-cvrp-r3-normal-k1-sol-20260828-r1`
+  completed normally and is classified `VALID_16_STAGE_NO_PROMOTION`.
+  It scheduled 21 research calls, completed 16/16 formal screening stages,
+  recorded five typed research rejections, used 114/272 provider dispatches and
+  finished with three ordinary branches and champion v1 unchanged.
+- The campaign produced 16 distinct formal H episodes and 12 observed distinct
+  H+patch pairs. Five exact candidates reached expanded screening. No candidate
+  reached validation or frozen, so R3 does not meet its acceptance condition.
+- The strongest candidate made incremental local-search deltas and passed
+  expanded screening quality: case W/L/T `7/2/3`, pair W/L/T `56/19/21`, median
+  `+3.75`, CI `[0,31.75]`. It also produced five repeatable candidate-only hard
+  timeouts on `X-n716-k35`. Decision correctly overrode the Protocol quality
+  pass with `CANDIDATE_RUNTIME_FAILURE` and abandoned it.
+- Local history was attributably read and cited in eight selected H bases, and
+  those bases explicitly tied several later direction changes to preceding
+  branch evidence. This establishes uptake and dependence, not improvement
+  benefit. After the runtime failure, however, rounds 17-21 made no successful
+  history read despite the index exposing that failure and subsequent
+  code/schema/Contract failures. Optional history therefore works as a
+  capability but lacked a bounded responsibility to dispose of the immediate
+  failure frontier.
+- The final candidate completed 32/32 pairs with no runtime or protected
+  failure, but all eight cases tied, median and CI were `[0,0]`, and its proposed
+  reheating mechanism triggered zero times. Its self-authored falsifier had
+  returned `failed`, yet the C session allowed `ready` because D1-D4 passed.
+- Ordinary summary retained selected-H basis, while SQLite and research-history
+  projections dropped it. Ordinary evaluated SQLite rows also left typed
+  execution-outcome columns null. These are future lineage-write defects; the
+  append-only R3 root will not be rewritten.
+
+Full evidence is in
+[`v04-cvrp-r3-normal-k1-sol-postrun-20260829.md`](docs/experiments/v0.4/v04-cvrp-r3-normal-k1-sol-postrun-20260829.md).
+
+Before another normal campaign:
+
+- [x] Make a failed self-authored falsifier a session-local veto on that exact
+  patch value; an omitted or weaker later probe cannot reopen it.
+- [x] Require an agent-authored disposition of explicit failures at the latest
+  ordinary live round of `current` and `sibling` independently. A later pass
+  closes an older failure only in the same relation; external and older history
+  remain optional, with no host mechanism/ref selection.
+- [x] Persist attempt-local selected-H basis and typed outcomes through ordinary
+  StepRecord, SQLite, summary and research-history writes, including post-H
+  rejection/infra and candidate-disposition failures. Keep validation/frozen
+  evidence out of H-only history and leave old R3 rows unchanged.
+- [x] Require an agent-authored exact-path activation falsifier and a separate
+  public 719-customer large-shape deadline falsification for CVRP performance
+  changes. These remain development diagnostics, never Safe Features, Decision
+  inputs or core mechanism selectors.
+- [x] Run the full provider-free, non-campaign regression and freeze a fresh R3b
+  scientific question before spending new provider/solver budget. The frozen
+  tree passed `2259` tests with one declared skip on 2026-08-29.
+
+R3b result and R3c continuity:
+
+- [x] Launch R3b once from B0 with the 21 complete R3 records available and the
+  R2 heterogeneous corpus OFF. Its one complete initial screen was promising:
+  32/32 valid, case W/L/T `6/0/2`, median `+6.5`, CI `[0,18]`, and Decision
+  `expand_screening`. The agent did not search, read or cite external R3 history
+  in this first H, so the result is not history uptake or benefit evidence.
+- [x] Classify the vanished interactive process precisely. R3b stopped during
+  the same candidate's expanded screen at 33 completed/valid pairs of 96,
+  without an expanded metric, event or Decision. Preserve the root as
+  `INTERRUPTED_UNFINALIZED_EXTERNAL_PROCESS_LOSS`; do not resume, retry, append
+  a terminal artifact or infer a scientific result from partial counters.
+- [x] Route SIGHUP through the existing typed CLI interruption path. This adds
+  no service, owner, lease, signature, registry, receipt or hash closure.
+- [x] Re-run the frozen launch gate after the SIGHUP change. The full
+  provider-free, non-campaign regression passed `2260` tests with one declared
+  skip in 439.42 seconds; the exact signal/resource/history/formal-readiness
+  slice passed `107`, both histories load as 22 ordered `cvrp` records, and the
+  R3c root remains absent.
+- [x] Launch the freshly preregistered R3c campaign from B0 with the 21 complete
+  R3 records followed by the one complete R3b record. Its first candidate
+  completed a safe but tied 32/32 initial screen and returned
+  `SCREENING_FAIL_CASE_QUALITY`; the next H turn then ended in a typed
+  `LLMTimeoutError`, so the root stopped `valid_incomplete` with
+  `PROVIDER_CALL_BLOCKED_INFRA` and no validation, frozen result or promotion.
+- [x] Preserve R3c as terminal infrastructure evidence and do not resume it.
+  Add only the minimal explicit transient boundary: zero SDK retry; at most one
+  typed `ProviderCaller` redispatch; no 429/auth/format retry; each physical
+  dispatch charged/traced; no identity, lease, request hash, receipt or retry
+  state in H/history/Protocol/Decision.
+- [x] Freeze R3d as a fresh-B0 experiment loading exactly 24 complete H-only
+  records in R3 -> R3b -> R3c order. The post-repair full provider-free suite
+  passed `2293` tests with one declared skip and zero failures; the fresh R3d
+  root remained absent through prelaunch preparation.
+- [x] Launch R3d once from fresh B0 with the 24 complete R3 -> R3b -> R3c
+  records available. Its first candidate read and cited the R3b route-distinct
+  result, changed only `destroy_repair.py`, passed Contract, Verification and
+  canary, and completed a failure-free `32/32` initial screen with case W/L/T
+  `4/0/4`, median `+2.25`, CI `[0,18]` and Decision `expand_screening`.
+- [x] Classify R3d's vanished foreground process precisely. Expanded screening
+  stopped after `35` attempted and `34` completed/valid pairs of `96`, without
+  an expanded metric, event or Decision. Preserve the root as
+  `INTERRUPTED_UNFINALIZED_EXTERNAL_PROCESS_LOSS`; do not resume, rewrite or
+  infer an expanded result. Only its one complete initial-screen history row is
+  eligible for future H context. See the
+  [R3d interruption report](docs/experiments/v0.4/v04-cvrp-r3d-adaptive-history-k1-sol-interruption-20260830.md).
+- [x] Separate and repair the two run-lifetime defects. The R3d tool PTY was
+  never attached to the app terminal and later disappeared; independently, a
+  caught signal could restore default handlers before typed finalization was
+  durable. Keep handlers installed through `finalize_requested_stop`, suppress
+  repeated handler re-entry, and require attach-before-start with a visible
+  marker. Use `exec env` so the attached shell is replaced by Python. Add no
+  service, background runner, distribution, deployment, build, process
+  registry, identity, lease, receipt or hash closure.
+- [x] Preregister R3e as a fresh-B0 campaign loading exactly 25 complete H-only
+  records in R3 -> R3b -> R3c -> R3d order. Explicitly exclude R3d's status,
+  SQLite, candidate workspace and partial expansion. The current repair gate
+  has `1197` passing unit tests and `45` passing focused signal/finalization
+  tests. See the
+  [R3e preregistration](docs/experiments/v0.4/v04-cvrp-r3e-adaptive-history-k1-sol-preregistration-20260830.md).
+- [x] Complete the fresh full provider-free, non-campaign regression: `2295
+  passed, 1 skipped, 0 failed` from `2296` collected in 443.05 seconds (444.10
+  seconds outer elapsed). The frozen launch block passes shell syntax, path,
+  whitespace and diff checks; the R3e root remains absent.
+- [x] Exhaust the attach-before-start path without launching. Two empty-shell
+  requests across turns remained `queued` and unattached; no proxy, provider,
+  solver or campaign action followed, the earlier empty shell is closed, and
+  the R3e root remains absent. Freeze the sole fallback from the successful R3
+  precedent: one result-blind ordinary non-TTY unified-exec foreground call.
+  R3 completed exit `0` after `77359.3004` seconds, while the R3b/R3d PTYs
+  disappeared after `4957.185`/`5039.302` seconds. Add no background, service,
+  deployment, build, identity, lease, receipt or hash lifecycle.
+- [x] Run the exact R3e block once through the frozen non-TTY unified-exec
+  carrier. R3e completed one safe `32/32` initial screen with case W/L/T
+  `3/1/4`, pair W/L/T `12/7/13`, median distance delta `0`, CI `[0,7]`, and
+  Decision `expand_screening`. H read current source only and did not read or
+  cite external history. This is uncertain adaptive-development evidence, not
+  an expanded pass or promotion.
+- [x] Classify R3e's second external process loss. The non-TTY carrier returned
+  `failed/-1` after `7704.372878714` seconds; its last heartbeat reports `59`
+  attempted and `58` completed/valid expanded pairs of `96`, with zero observed
+  failures but no expanded metric, event or Decision. Preserve the root as
+  `INTERRUPTED_UNFINALIZED_EXTERNAL_PROCESS_LOSS`; do not resume, rewrite or
+  infer a result. See the
+  [R3e interruption report](docs/experiments/v0.4/v04-cvrp-r3e-adaptive-history-k1-sol-interruption-20260831.md).
+- [x] Freeze R3f as a fresh-B0 campaign loading exactly 26 complete H-only
+  records in R3 -> R3b -> R3c -> R3d -> R3e order. Include only R3e's one
+  completed initial-screen row and exclude its status, SQLite, candidate,
+  workspace and `58/96` partial expansion. Keep all science inputs, thresholds,
+  K1, three branches, 20 evaluated stages, 340 physical-dispatch cap, one typed
+  transient redispatch and 96-hour hardwall unchanged. See the
+  [R3f preregistration](docs/experiments/v0.4/v04-cvrp-r3f-adaptive-history-k1-sol-preregistration-20260831.md).
+- [x] Replace the tool session as run owner with one verified local tmux
+  carrier. Use exactly one lazy pane, set window-local `remain-on-exit`, and
+  replace it once with the frozen foreground `exec env` command. The carrier
+  probe survived its creating exec call and preserved exit status/signal. It is
+  operational only: no service, distribution, deployment, build, PID registry,
+  object identity, lease, receipt or hash authority is added, and only ordinary
+  campaign artifacts establish the scientific result.
+- [x] Complete the fresh exact-tree provider-free regression and record it in
+  the R3f preregistration: `2296` collected, `2295 passed, 1 skipped, 0 failed`
+  in 437.80 seconds (438.83 seconds outer), with focused Ruff `E9,F,I` and
+  `git diff --check` green.
+- [ ] Create the frozen tmux carrier once and respawn the exact R3f command
+  without waiting for another authorization round. If the proxy/model gate or
+  any precondition fails, do not respawn again under the same preregistration.
+- [ ] Let an independently generated exact R3f candidate drain the ordinary
+  screening -> validation -> frozen funnel without reconstruction. Treat
+  screening as adaptive development and validation/frozen as prospective
+  evidence.
+
+### R4 — Independent retained-B0 confirmation
+
+- [ ] After a promotion, run the reserved final population with no LLM calls,
+  comparing the exact promoted snapshot directly to original CVRP B0.
+- [ ] Require complete paired execution, feasibility, no fleet regression and a
+  positive retained objective result under the frozen rule.
+- [ ] Keep this final evidence unavailable to later proposal context.
+
+Acceptance: the promoted CVRP algorithm truly retains an improvement over B0.
+
+### R5 — Close v0.4 across problems
+
+- [ ] Publish one compact cross-problem report separating framework correctness,
+  research efficiency, algorithm quality and retained solver improvement.
+- [ ] Mark v0.4 complete only when Warehouse and CVRP both satisfy retained
+  improvement; otherwise leave CVRP open with the exact next falsifiable rung.
 
 ## Working discipline
 
-- Main Python: `/home/clawd/miniconda3/envs/claw/bin/python`.
-- Model experiments, when separately authorized, use `gpt-5.6-terra` through
-  the local Codex proxy with provider SDK retry zero.
-- Do not change framework source while an experiment is running.
-- Long scientific runs are serial and observationally monitored; polling never
-  launches, retries or mutates a campaign.
-- Preserve terminal experiment roots, scientific reports and unrelated user
-  worktree changes.
-- Subtraction modules are reviewed independently and land without distribution,
-  deployment or build work.
-
-## Status
-
-M7-FC1 is terminal. The
-`v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816` one-shot
-completed initial and expanded screening, then stopped in validation with
-`CANDIDATE_SUBJECT_VETO` on candidate `X-n200-k36`, seed 2069. At termination it
-had used 311 solver subprocesses and 15,225 nominal subject-seconds; no frozen,
-promotion or retained-B0 stage ran. The complete design and terminal record are
-preserved in its
-[preregistration](docs/experiments/v0.4/v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-preregistration-20260816.md).
-CVRP acceptance remains unmet. M8 is complete: normal `scion run` now accepts
-one bounded ordinary `--research-input`; the problem adapter projects ordered
-observations into H only, while C continues from the Contract-approved H and
-editable source. Generic Scion contains no CVRP/Warehouse evidence schema, and
-the input creates no registry, hash, receipt or reopen lifecycle. Normal runs
-also accept explicit `--provider-call-cap` and `--outer-hardwall-sec`; the
-problem-neutral implementation is commit `9ae49b21`. M9's ordinary
-six-case/two-seed development screen, reserved later development splits,
-provider/process envelope, one-stage stopping rule and three-layer claim
-boundary are now frozen in its
-[preregistration](docs/experiments/v0.4/v04-cvrp-m9-autonomous-m7-prior-development-screen-preregistration-20260817.md).
-The authorized M9 invocation is terminal
-`PRE_MGR_RUN_FRESH_OUTPUT_SELF_COLLISION / ONE_SHOT_CONSUMED`: CLI Protocol
-construction created an empty `metrics/` directory before `CampaignManager`
-checked output freshness, so the complete V3 chain never started. Provider
-generation, solver, H/C, Contract, Verification, Protocol, Safe Features and
-Decision observations are all zero. The future formal population remains
-unselected and unavailable to the Agent. The generic initialization fix is now
-implemented and validated offline without weakening the fresh-output boundary.
-The user has explicitly authorized exactly one rerun after a clean fix carrier
-passes independent checks. It must use a new `rerun1` root and the unchanged
-M9 envelope; the original root remains preserved and no third attempt, later
-development stage or formal rung is authorized.
-
-That rerun is now terminal `completed / valid / requested_rounds_completed`.
-Two autonomous candidates used four provider calls. The first passed Contract
-but was rejected by Verification unit tests. The second passed Contract,
-Verification and canary, then completed all 12 development-screen pairs.
-Protocol returned `fail / SCREENING_FAIL_CASE_QUALITY`; Safe Features exposed
-candidate runtime failures and Decision returned
-`abandon / CANDIDATE_RUNTIME_FAILURE`. Champion remains v1; validation,
-frozen, promotion and a third candidate are all zero. This demonstrates the
-bounded autonomous V3 research chain, but the research result is negative/mixed
-and supplies no algorithm-improvement or generalization claim.
-
-M10-M27 then established continuous cross-campaign ordinary history, bounded H
-and C research, an optional sandboxed C falsifier and several valid
-negative/mixed CVRP screens. M25 reached an expanded screen but its exact
-candidate had one candidate-only timeout and was abandoned. M26 completed two
-valid initial screens; both failed case quality. Its first direction
-reimplemented historical work, while its second used same-campaign evidence but
-exactly replayed an unread failed prior patch. Validation, frozen, promotion and
-retained evidence remain zero; the roots are preserved and consumed.
-
-The generic nearest-history audit now scans every current ordinary index entry,
-ranks only usable hypothesis headlines and requires the candidate-specific
-top-1 ref to be read and cited before H acceptance. M27 exercised that path in
-four H turns over a 43-entry inventory, then used the same accepted H and patch
-for initial and expanded screening. Initial screening expanded, but two
-candidate-only expanded-stage timeouts left 10/12 valid pairs; Protocol failed
-case quality and Decision abandoned for runtime failure. The run is terminal
-`completed / valid / requested_rounds_completed`, with validation and frozen
-zero. Its audit and probe observations establish bounded framework behavior,
-not causal research improvement; its paired result is negative/mixed seen-bank
-development evidence.
-
-M28 is now terminal `stopped / execution_resource_exhausted / valid_incomplete`
-after its sole authorized invocation. It spent 34/34 provider calls and
-completed only one of two formal rounds. The sole screened candidate completed
-`6/6` valid initial pairs but failed case quality and returned to exploration;
-later attempts ended one C rejection and then provider-cap exhaustion. No
-expanded, validation, frozen, promotion or retained stage ran, and no branch
-reached `READY_VALIDATE`. The candidate-independent M29 selector therefore
-expired without materialization and supplies no launch authority. CVRP
-acceptance remains unmet; the M28 root is preserved and consumed.
-
-M30 is also terminal `stopped / execution_resource_exhausted /
-valid_incomplete` after its sole authorized qualification-only invocation. It
-used 25/60 provider calls across three proposal attempts but produced only one
-verified formal candidate. That candidate completed a clean `6/6` initial
-screen and failed case quality; no expanded or held-out stage ran. One later H
-abstained and the final H exhausted its eight-turn session budget. The public
-postrun audit returned `QUALIFICATION_CARRIER_UNAVAILABLE`, and M31 expired
-without materialization. The result strengthens the framework accounting and
-fail-closed evidence, but it does not establish effective CVRP research: Scion
-has not yet produced an autonomous CVRP candidate that qualifies for, let
-alone passes and survives, the validation/frozen/retained acceptance chain.
+- Main session owns architecture, experiment estimands and task ordering;
+  bounded subagents implement modules and independently inspect evidence.
+- Read V3 before changing runtime boundaries.
+- Prefer subtraction. Historical compatibility is not a reason to keep dead
+  authority code; historical evidence remains in Git and experiment reports.
+- Use fresh output directories. Never overwrite a prior experiment root.
+- Do not spend provider/solver budget until code, tests and scientific inputs
+  for that run are frozen.
+- Never infer a promotion from a positive screen, an interrupted run or a
+  postrun reconstruction.

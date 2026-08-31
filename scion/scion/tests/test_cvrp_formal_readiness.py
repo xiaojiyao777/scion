@@ -56,6 +56,27 @@ def _load_reference_bad_instances() -> set[str]:
         return {row["instance"] for row in csv.DictReader(handle)}
 
 
+def test_public_development_seeds_are_disjoint_from_declared_science_ledgers() -> None:
+    from scion.problems.cvrp.tests.test_solver import PUBLIC_DEVELOPMENT_SEEDS
+
+    ledgers = (
+        SeedLedgerConfig.from_yaml(CVRP_DIR / "seed_ledger.yaml"),
+        SeedLedgerConfig.from_yaml(CVRP_DIR / "controlled" / "seed_ledger.yaml"),
+        SeedLedgerConfig.from_yaml(FORMAL_DIR / "seed_ledger.yaml"),
+    )
+    declared = {
+        seed
+        for ledger in ledgers
+        for stage in ("screening", "validation", "frozen", "canary")
+        for seed in ledger.get_seeds(stage)
+    }
+    declared.update(
+        _load_json(FORMAL_DIR / "budgets.json")["final_evidence"]["seeds"]
+    )
+
+    assert set(PUBLIC_DEVELOPMENT_SEEDS).isdisjoint(declared)
+
+
 def test_formal_protocol_split_seed_and_budget_assets_load() -> None:
     legacy_problem = ProblemSpec.from_yaml(CVRP_DIR / "problem.yaml")
     protocol = ProtocolConfig.from_yaml(FORMAL_DIR / "protocol.yaml")
@@ -76,9 +97,9 @@ def test_formal_protocol_split_seed_and_budget_assets_load() -> None:
     assert budgets["data_root_env"] == "SCION_PROBLEM_DATA_ROOT"
     assert budgets["data_root_expected_repo_relative"] == "vrp"
     assert matrix["schema"] == "scion.cvrp_formal_matrix.v1"
-    assert matrix["models"] == ["gpt-5.6-terra"]
+    assert matrix["models"] == ["gpt-5.6-sol"]
     assert "campaign_seeds" not in matrix
-    assert matrix["rounds_per_campaign"] == 16
+    assert matrix["rounds_per_campaign"] == 20
     assert matrix["total_campaigns"] == 1
     assert budgets["models"] == matrix["models"]
     assert budgets["campaign_rounds"] == matrix["rounds_per_campaign"]

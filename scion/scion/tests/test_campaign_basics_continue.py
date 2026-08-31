@@ -8,7 +8,7 @@ from scion.core.resource_envelope import ResourceEnvelope
 from scion.core.scheduler import Scheduler
 from scion.proposal.llm_client import LLMProviderError
 
-from .campaign_test_support import *  # noqa: F401,F403
+from .campaign_test_support import *
 
 
 class TestCampaignBasics:
@@ -179,7 +179,7 @@ class TestCampaignBasics:
         cm = _campaign(
             tmp_path,
             llm_client=FailingBoundedLLM(),
-            code_research_limits=CodeResearchLimits(max_turns=1),
+            code_research_limits=CodeResearchLimits(max_turns=2),
             resource_envelope=ResourceEnvelope(provider_call_cap=2),
         )
 
@@ -317,8 +317,8 @@ class TestContinueExplore:
             in (workspace / "operators" / "local_search.py").read_text()
         )
 
-    def test_continue_explore_clears_hypothesis(self, tmp_path):
-        """After CONTINUE_EXPLORE, the branch hypothesis is cleared."""
+    def test_continue_explore_retains_accepted_head_metadata(self, tmp_path):
+        """CONTINUE keeps the accepted H/C facts needed by stale reconcile."""
         cm = _campaign(
             tmp_path,
             experiment_protocol=MockExperimentProtocol(
@@ -331,7 +331,10 @@ class TestContinueExplore:
         )
         result = cm.run_one_step()
         bid = result.branch_id
-        assert cm._branch_ctrl.get_branch(bid).hypothesis is None
+        branch = cm._branch_ctrl.get_branch(bid)
+        assert branch.hypothesis is not None
+        assert len(branch.accepted_changes) == 1
+        assert branch.accepted_changes[0].hypothesis == branch.hypothesis
 
     def test_continue_explore_branch_stays_in_explore(self, tmp_path):
         """Branch should remain in EXPLORE state after CONTINUE_EXPLORE."""
@@ -401,10 +404,11 @@ class TestContinueExplore:
                     system_blocks,
                 )
 
-        llm = SequencedLLM()
-        cm = _campaign(
+        direct_llm = SequencedLLM()
+        cm, llm = _bounded_campaign(
             tmp_path,
-            llm_client=llm,
+            llm_client=direct_llm,
+            failure_frontier_disposition="used",
             experiment_protocol=MockExperimentProtocol(
                 [
                     _make_protocol_result(
@@ -428,37 +432,69 @@ class TestContinueExplore:
         assert r2.decision == Decision.QUEUE_VALIDATE
         assert r1.branch_id == r2.branch_id
         assert len(cm._branch_ctrl._branches) == 1
-        assert llm.hyp_calls == 2
-        assert llm.patch_calls == 2
+        assert direct_llm.hyp_calls == 2
+        assert direct_llm.patch_calls == 2
+        assert llm.request_kinds == [
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_finalize",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_finalize",
+        ]
 
         hypothesis_calls = [
-            call for call in llm.provider_calls if call["request_kind"] == "hypothesis"
+            call
+            for call in direct_llm.provider_calls
+            if call["request_kind"] == "hypothesis"
         ]
-        second_h_evidence = json.loads(
-            hypothesis_calls[1]["system_blocks"][2]["text"].split("\n", 1)[1]
+        second_h_research = _bounded_research_state(
+            hypothesis_calls[1]["system_blocks"],
+            heading="## Bounded Hypothesis Research State\n",
         )
         second_h_static = json.loads(
             hypothesis_calls[1]["system_blocks"][1]["text"].split("\n", 1)[1]
         )
-        assert len(second_h_evidence["experiment_history"]) == 1
-        prior = second_h_evidence["experiment_history"][0]
+        assert len(second_h_research["visible_history"]) == 1
+        visible_prior = second_h_research["visible_history"][0]
+        prior = visible_prior["record"]
         assert prior["experiment_evidence"]["stage"] == "screening"
         prior_aggregate = prior["experiment_evidence"]["objective_outcome"]["aggregate"]
         assert prior_aggregate["win_rate"] == 0.1
         assert prior_aggregate["median_delta"] == -12.0
-        assert "candidate = solution" in second_h_evidence.get(
-            "branch_current_code", ""
+        branch_source = next(
+            item
+            for item in second_h_research["visible_sources"]
+            if item["path"] == "operators/local_search.py"
         )
+        assert "candidate = solution" in branch_source["content"]
+        source_index = next(
+            item
+            for item in second_h_research["source_index"]
+            if item["path"] == "operators/local_search.py"
+        )
+        assert source_index["owner"] == "branch"
+        selected_basis = cm._step_history[-1].selected_hypothesis_research_basis
+        assert selected_basis is not None
+        assert selected_basis["nearest_prior_refs"] == [visible_prior["ref"]]
+        assert selected_basis["history_review"] == [
+            {"ref": visible_prior["ref"], "disposition": "used"}
+        ]
         assert (
             "### operators/local_search.py"
             not in (second_h_static["champion_operators_code"])
         )
-        assert "### operators/local_search.py" in second_h_evidence.get(
-            "branch_current_code", ""
-        )
 
         code_calls = [
-            call for call in llm.provider_calls if call["request_kind"] == "code"
+            call for call in direct_llm.provider_calls if call["request_kind"] == "code"
         ]
         second_c_context = json.loads(
             code_calls[1]["system_blocks"][1]["text"].split("\n", 1)[1]
@@ -523,9 +559,10 @@ class TestContinueExplore:
                     prompt, tool.get("input_schema", {}), model, system_blocks
                 )
 
-        cm = _campaign(
+        direct_llm = SequencedLLM()
+        cm, llm = _bounded_campaign(
             tmp_path,
-            llm_client=SequencedLLM(),
+            llm_client=direct_llm,
             experiment_protocol=MockExperimentProtocol(
                 [
                     _make_protocol_result(
@@ -556,3 +593,20 @@ class TestContinueExplore:
         branch_after = cm._branch_ctrl.get_branch(r2.branch_id)
         assert branch_after.screening_expand_count == 0
         assert branch_after.validation_expand_count == 0
+        assert direct_llm.hyp_calls == 2
+        assert direct_llm.patch_calls == 2
+        assert llm.request_kinds == [
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_finalize",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "hypothesis_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_turn",
+            "code_research_finalize",
+        ]

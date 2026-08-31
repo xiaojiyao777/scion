@@ -8,9 +8,10 @@ from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
-# Default config — aihubmix Anthropic endpoint
-_DEFAULT_BASE_URL = "https://aihubmix.com"
-_DEFAULT_MODEL = "claude-opus-4-6"
+# Local development default. Explicit constructor arguments or SCION_* env
+# values still override both fields for controlled experiments.
+_DEFAULT_BASE_URL = "http://127.0.0.1:8080"
+_DEFAULT_MODEL = "gpt-5.6-sol"
 _DEFAULT_TIMEOUT_SEC = 60.0
 _DEFAULT_CODE_TIMEOUT_SEC = 180.0
 _ANTHROPIC_REQUIRED_MAX_TOKENS = 16384
@@ -29,7 +30,7 @@ _TOOL_REQUEST_KIND_BY_NAME = {
 
 
 def _is_openai_model(model: str) -> bool:
-    """Non-Anthropic models use the OpenAI-compatible API via aihubmix."""
+    """Non-Anthropic models use the configured OpenAI-compatible API."""
     return not any(model.startswith(p) for p in _ANTHROPIC_MODEL_PREFIXES)
 
 

@@ -28,11 +28,7 @@ from scion.contract.surface_access import SurfaceAccess
 from scion.core.decision import DecisionEngine
 from scion.core.features import SafeFeatureExtractor
 from scion.core.models import BranchState, CanaryResult, Decision, ExperimentStage
-from scion.problem.bridge import (
-    bridge_problem_spec_v1,
-    load_problem_spec_v1_from_yaml,
-)
-from scion.problem.loader import load_problem_adapter
+from scion.problem.loader import load_problem_adapter, load_problem_spec_v1_from_yaml
 from scion.protocol.experiment import (
     ExperimentProtocol,
     PairedExecutionSpec,
@@ -117,7 +113,6 @@ class Prepared:
     seed_config: SeedLedgerConfig
     retained_split_manifest: SplitManifest
     retained_seed_config: SeedLedgerConfig
-    bridge: Any
     adapter: Any
     envelope: ResourceEnvelope
 
@@ -516,13 +511,12 @@ def prepare(
         retained_split_manifest,
         retained_seed_config,
     )
-    bridge = bridge_problem_spec_v1(load_problem_spec_v1_from_yaml(problem_spec_path))
+    adapter = load_problem_adapter(load_problem_spec_v1_from_yaml(problem_spec_path))
     validate_candidate_scope(
-        bridge.spec_v1,
+        adapter.spec,
         selected_surface=selected_surface,
         changed_files=actual_changed,
     )
-    adapter = load_problem_adapter(bridge.spec_v1)
     envelope = build_resource_envelope(
         protocol_config,
         split_manifest,
@@ -553,7 +547,6 @@ def prepare(
         seed_config=seed_config,
         retained_split_manifest=retained_split_manifest,
         retained_seed_config=retained_seed_config,
-        bridge=bridge,
         adapter=adapter,
         envelope=envelope,
     )
@@ -711,7 +704,7 @@ def _make_protocol(
     manifest = prepared.retained_split_manifest if retained else prepared.split_manifest
     ledger = prepared.retained_seed_config if retained else prepared.seed_config
     config = prepared.protocol_config.with_problem_measurement(
-        prepared.bridge.problem_spec,
+        prepared.adapter.spec,
         governance_mode="on",
     )
     protocol = ExperimentProtocol(
@@ -721,11 +714,8 @@ def _make_protocol(
         runner,
         time_limit_sec=prepared.envelope.fallback_time_limit_sec,
         metrics_dir=str(output / ("retained_metrics" if retained else "metrics")),
-        metric_specs=prepared.bridge.metric_specs,
-        objective_policy=prepared.bridge.objective_policy,
-        problem_spec=prepared.bridge.problem_spec,
+        adapter=prepared.adapter,
     )
-    protocol.set_problem_adapter(prepared.adapter)
     return protocol
 
 

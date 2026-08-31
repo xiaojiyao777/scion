@@ -5,8 +5,18 @@ Core depends ONLY on these types — never on concrete problem modules.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal, Mapping, Protocol, Sequence, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Literal,
+    Protocol,
+    runtime_checkable,
+)
+
+if TYPE_CHECKING:
+    from scion.problem.spec import ProblemSpecV1
 
 
 @dataclass(frozen=True)
@@ -34,6 +44,11 @@ class SolverArtifact:
 @runtime_checkable
 class ProblemAdapter(Protocol):
     """Problem-specific runtime hooks for Scion core."""
+
+    @property
+    def spec(self) -> ProblemSpecV1:
+        """Return the problem definition owned by this adapter."""
+        ...
 
     # --- Prompt / context ---
 

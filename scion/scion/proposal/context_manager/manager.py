@@ -12,7 +12,6 @@ from collections.abc import Mapping, Sequence
 from dataclasses import fields, is_dataclass
 from enum import Enum
 from pathlib import Path
-from types import FunctionType, ModuleType
 from typing import Any
 
 from scion.config.problem import ProblemSpec
@@ -29,6 +28,7 @@ from scion.core.paths import normalize_relative_patch_path
 from scion.core.research_history import provider_research_history
 from scion.core.research_input import normalize_research_input
 from scion.measurement.consumer_view import measurement_consumer_view
+from scion.problem.loader import adapter_package_prefixes
 from scion.problem.providers import (
     active_subject_code_constraints_payload,
     project_prior_research_observation,
@@ -95,82 +95,6 @@ _MEASUREMENT_PRIVATE_FIELDS = frozenset(
         "phase_telemetry",
     }
 )
-_RESEARCH_CONTEXT_EDGE_AUTHORITY_HOLDER: None = None
-
-
-def _make_hypothesis_context_edge_authority() -> tuple[Any, Any, Any]:
-    authority: Any = None
-    type_fn, tuple_type, len_fn = type, tuple, len
-    function_type, module_type, vars_fn = FunctionType, ModuleType, vars
-
-    def install(reader: Any, entries: Any) -> None:
-        nonlocal authority
-        if (
-            authority is not None
-            or type_fn(reader) is not function_type
-            or type_fn(entries) is not tuple_type
-            or len_fn(entries) != 2
-            or reader() is not entries
-        ):
-            raise TypeError
-        authority = entries
-
-    def read() -> Any:
-        return authority
-
-    def bind(original: Any) -> Any:
-        def bound(
-            self,
-            branch: Branch,
-            champion: ChampionState,
-            problem_spec: ProblemSpec,
-            step_history: list[StepRecord] | None = None,
-            branch_workspace: str | None = None,
-        ) -> dict[str, Any]:
-            self_storage = vars_fn(self)
-            active = "_initial_screening_research_context_capsule" in self_storage
-            edge_authority = read() if active else None
-            if active and edge_authority is None:
-                from scion.core import (
-                    initial_screening_research_context_edges as edges_module,
-                )
-
-                if type_fn(edges_module) is not module_type:
-                    raise TypeError
-                edge_authority = read()
-            if active:
-                if edge_authority is None:
-                    raise TypeError
-                materializer = edge_authority[1][1]()
-            else:
-                materializer = None
-            return original(
-                self,
-                branch,
-                champion,
-                problem_spec,
-                step_history,
-                branch_workspace,
-                _research_context_edge_authority=(self_storage, materializer)
-                if active
-                else None,
-            )
-
-        bound.__name__ = original.__name__
-        bound.__qualname__ = original.__qualname__
-        bound.__module__ = original.__module__
-        bound.__doc__ = original.__doc__
-        return bound
-
-    return install, read, bind
-
-
-(
-    _install_research_context_edge_authority,
-    _read_research_context_edge_authority,
-    _bind_hypothesis_context_edge_authority,
-) = _make_hypothesis_context_edge_authority()
-del _make_hypothesis_context_edge_authority
 
 
 def _filter_hypothesis_prompt_steps(
@@ -234,7 +158,6 @@ class ContextManager:
         )
         return tuple(bounded_projection["observations"])
 
-    @_bind_hypothesis_context_edge_authority
     def build_hypothesis_context(
         self,
         branch: Branch,
@@ -242,8 +165,6 @@ class ContextManager:
         problem_spec: ProblemSpec,
         step_history: list[StepRecord] | None = None,
         branch_workspace: str | None = None,
-        *,
-        _research_context_edge_authority: Any = None,
     ) -> dict[str, Any]:
         """Return the V3 round-one research context.
 
@@ -306,10 +227,13 @@ class ContextManager:
                 _filter_hypothesis_prompt_steps(history_steps),
             )
         )
-        pre_protocol_observations = proposal_pre_protocol_observations(history_steps)
+        pre_protocol_observations = proposal_pre_protocol_observations(
+            history_steps,
+            current_branch_id=branch.branch_id,
+        )
         provider = (
             resolve_solver_design_prompt_provider(
-                problem_spec=problem_spec,
+                problem_spec=(problem_spec if self._adapter is None else None),
                 adapter=self._adapter,
             )
             if solver_design_surfaces
@@ -349,27 +273,17 @@ class ContextManager:
         )
         if measurement:
             context["problem_measurement_diagnostics"] = measurement
-        edge_state = _research_context_edge_authority
-        context_manager_storage = vars(self) if edge_state is None else edge_state[0]
-        capsule_name = "_initial_screening_research_context_capsule"
-        if capsule_name not in context_manager_storage:
-            if self._research_input is not None:
-                context["research_question"] = {
-                    "current_question": self._research_input["current_question"],
-                }
-            if self._prior_research_observations:
-                context["prior_research_observations"] = list(
-                    self._prior_research_observations
-                )
-            if self._research_history:
-                context["prior_research_history"] = provider_research_history(
-                    self._research_history,
-                )
-        else:
-            materialize_research_context = edge_state[1]
-
-            context.update(
-                materialize_research_context(context_manager_storage[capsule_name])
+        if self._research_input is not None:
+            context["research_question"] = {
+                "current_question": self._research_input["current_question"],
+            }
+        if self._prior_research_observations:
+            context["prior_research_observations"] = list(
+                self._prior_research_observations
+            )
+        if self._research_history:
+            context["prior_research_history"] = provider_research_history(
+                self._research_history,
             )
         guidance = materialize_solver_design_prompt_guidance(
             provider,
@@ -414,7 +328,7 @@ class ContextManager:
             raise ValueError("current source root must be a non-symlink directory")
         provider = (
             resolve_solver_design_prompt_provider(
-                problem_spec=problem_spec,
+                problem_spec=(problem_spec if self._adapter is None else None),
                 adapter=self._adapter,
             )
             if _is_solver_design_context_surface(
@@ -423,12 +337,7 @@ class ContextManager:
             )
             else None
         )
-        problem_id = str(
-            getattr(adapter_spec, "id", None) or getattr(problem_spec, "name", "") or ""
-        ).strip()
-        qualified_module_prefixes = (
-            (f"scion.problems.{problem_id}.",) if problem_id else ()
-        )
+        qualified_module_prefixes = adapter_package_prefixes(adapter_spec)
         editable_source_context = _build_editable_source_context(
             champion=champion,
             selected_surface=surface,
@@ -466,7 +375,7 @@ class ContextManager:
         }
         code_constraints = active_subject_code_constraints_payload(
             context=context,
-            problem_spec=problem_spec,
+            problem_spec=(problem_spec if self._adapter is None else None),
             adapter=self._adapter,
             surface=hypothesis.change_locus,
         )
@@ -689,9 +598,11 @@ def _hypothesis_surface_projections(
     ]
     if projections:
         return projections
+    from scion.core.research_surface_index import research_loci
+
     return [
         {"name": category, "kind": "operator"}
-        for category in problem_spec.operator_categories
+        for category in research_loci(problem_spec)
     ]
 
 

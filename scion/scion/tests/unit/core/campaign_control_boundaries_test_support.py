@@ -157,6 +157,12 @@ class _MockProtocol:
         )
         self._problem_spec = None
 
+    def set_problem_adapter(self, adapter: Any) -> None:
+        self._problem_spec = adapter.spec
+        objectives = getattr(adapter.spec, "objectives", None)
+        if objectives:
+            self._metric_specs = tuple(objectives)
+
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         self.canary_calls.append((candidate_ws, champion_ws))
         return CanaryResult(passed=self._canary_pass)
@@ -196,7 +202,6 @@ def _campaign(
     protocol._problem_spec = spec
 
     return CampaignManager(
-        problem_spec=spec,
         protocol_config=protocol_config or ProtocolConfig(
             screening_n=6,
             screening_win_rate_threshold=0.66,

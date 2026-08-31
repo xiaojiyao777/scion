@@ -2,16 +2,17 @@
 from __future__ import annotations
 
 import time
-from typing import Callable
+from collections.abc import Callable
 
 from scion.config.problem import ProblemSpec
+from scion.contract.result_payload import check_result as _cr
+from scion.contract.schema import PREDICTED_DIRECTIONS as _PREDICTED_DIRECTIONS
+from scion.contract.surface_access import SurfaceAccess
 from scion.core.models import (
     CheckResult,
     HypothesisProposal,
 )
-from scion.contract.result_payload import check_result as _cr
-from scion.contract.schema import PREDICTED_DIRECTIONS as _PREDICTED_DIRECTIONS
-from scion.contract.surface_access import SurfaceAccess
+from scion.core.research_surface_index import research_loci
 
 
 def check_hypothesis_schema(
@@ -44,7 +45,7 @@ def check_change_locus(
     surface_access: SurfaceAccess,
 ) -> CheckResult:
     t0 = time.monotonic_ns()
-    categories = problem_spec.operator_categories
+    categories = research_loci(problem_spec)
     passed = h.change_locus in categories
     if passed:
         surface = surface_access.surface_by_name(h.change_locus)
