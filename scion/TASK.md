@@ -66,12 +66,14 @@ Required properties:
   equality is kept only where same-candidate reuse requires it; one digest may
   compact that comparison but grants no authority.
 - Provider SDK retries remain disabled. An ordinary ResourceEnvelope may allow
-  at most one immediate `ProviderCaller` redispatch of the same frozen request
-  for a typed timeout, transport fault or provider fault. Every physical
-  dispatch consumes the shared cap and writes a terminal trace; the redispatch
-  is not a new H/C turn and never enters history, Protocol or Decision. Multiple
-  deliberate bounded research turns remain agent actions, not transport retry
-  or response repair.
+  at most two `ProviderCaller` redispatches of the same frozen request for a
+  typed timeout, transport fault or provider fault, with fixed bounded backoff
+  of 5 seconds and then 20 seconds. Every physical dispatch consumes the shared
+  cap and writes a terminal trace; a redispatch is not a new H/C turn and never
+  enters history, Protocol or Decision. Multiple deliberate bounded research
+  turns remain agent actions, not transport retry or response repair. This is a
+  prospective ordinary boundary; old run artifacts retain their actual retry
+  counts and attempt sequences.
 
 Deletion boundary:
 
@@ -503,16 +505,51 @@ R3b result and R3c continuity:
   regression data symlink is removed and no pytest or solver process remains.
   Record the exact result in the R3g preregistration; all static gates are
   green.
-- [ ] After the full gate is green, use the user's existing autonomous-launch
-  authorization to create the frozen R3g tmux carrier once and respawn its
-  exact foreground `exec env` command once. If an in-pane precondition or
-  proxy/model check fails, inspect the dead pane but do not respawn again under
-  this preregistration.
-- [ ] Let an independently generated exact R3g candidate drain the ordinary
-  screening -> validation -> frozen funnel without reconstruction. Treat
-  screening as adaptive development, validation as stage-held-out rather than
-  globally never-observed, and frozen/retained evidence under their declared
-  prospective boundaries.
+- [x] Launch the frozen R3g wrapper once through its named tmux carrier. The
+  first independently generated candidate read and cited R3f `history-0056`,
+  changed only `local_search.py`, passed Contract, Verification and canary, and
+  completed a failure-free `32/32` screen. Case W/L/T was `1/2/5`, pair W/L/T
+  `4/6/22`, median distance delta `0`, CI `[-2,0]`; Protocol returned
+  `SCREENING_FAIL_CASE_QUALITY` and Decision continued research.
+- [x] Classify R3g's next H turn and terminal exactly. It read current source
+  `source-0005`, then the same frozen request received two charged/traced 502
+  `LLMProviderError` results at attempt indexes 0 and 1. No H or selected basis
+  was exported. R3g stopped `valid_incomplete / execution_blocked_infra` after
+  `1/20` evaluated stages and `10/340` provider dispatches, with champion v1
+  unchanged. Its two closed strict history rows are one evaluated screen and
+  one null-H `blocked_infra` row. Preserve the root as terminal and do not
+  resume or reconstruct it. See the
+  [R3g postrun](docs/experiments/v0.4/v04-cvrp-r3g-adaptive-history-k1-sol-postrun-20260902.md).
+- [x] Keep the invocation-terminal gate and add only the prospective bounded
+  provider repair for a fresh successor: SDK retries zero; at most two Scion
+  redispatches of the same frozen request; fixed 5-second then 20-second
+  backoff; every physical dispatch charged and traced; exhausted attempts still
+  use the existing typed terminal path. Freeze provider ceilings at 180 seconds
+  for default/H turns, 300 seconds for C turns and 240 seconds for C finalize.
+  Add no scheduler-forward infra retry, identity, owner, lease, registration,
+  receipt, request hash, history field or repeated closure, and do not rewrite
+  R3d-R3g facts.
+- [x] Freeze R3h as a fresh-B0 campaign loading exactly
+  `[21,1,2,1,1,22,2] = 50` strict H-only rows in R3 -> R3b -> R3c -> R3d -> R3e
+  -> R3f -> R3g order. Keep K1, three active branches, 20 evaluated stages,
+  provider cap 340, 96-hour hardwall and all formal solver budgets/gates
+  unchanged. Freeze fresh root
+  `v04-cvrp-r3h-normal-k1-sol-20260902-r1`, tmux session
+  `scion-r3h-normal-k1-sol-20260902-r1`, and the R3g-style one-respawn carrier.
+  The [R3h preregistration](docs/experiments/v0.4/v04-cvrp-r3h-adaptive-history-k1-sol-preregistration-20260902.md)
+  is ready for its one-shot background launch from clean detached worktree
+  `/home/clawd/research/or-autoresearch-agent-r3h-dev` at code commit
+  `44fff1356e253927e820fff88ad13ca701e87dbc`.
+- [x] Complete and record the exact-tree full provider-free, non-campaign
+  regression: `2301 passed, 1 skipped, 0 failed` in 475.77 seconds (478.81
+  seconds outer wall). Focused provider/backoff/CLI/history tests, Ruff
+  `E9,F,I`, diff check, production-loader 50-row check, formal readiness and
+  frozen-wrapper syntax/path checks are green.
+- [ ] Only after every R3h launch gate is green, use the user's existing
+  autonomous-launch authorization to create the frozen tmux carrier once and
+  respawn its exact foreground `exec env` command once. If an in-pane
+  precondition or proxy/model check fails, inspect the dead pane but do not
+  respawn again under this preregistration.
 
 ### R4 — Independent retained-B0 confirmation
 

@@ -292,34 +292,54 @@ and initial-VNS budget directions receive no more host-directed investment.
 Exact inter-route evaluation remains only promising cumulative association
 evidence, not a fixed replay.
 
-[`R3g`](../experiments/v0.4/v04-cvrp-r3g-adaptive-history-k1-sol-preregistration-20260901.md)
-is preregistered from the isolated repaired tree. Its exact repository-local
-paths all point to
-`/home/clawd/research/or-autoresearch-agent-r3g-dev/scion`; its fresh root is
-`v04-cvrp-r3g-normal-k1-sol-20260901-r1` and its sole tmux session is
-`scion-r3g-normal-k1-sol-20260901-r1`. Both are currently absent. History and
-formal-readiness gates are green at 48 rows, 37 cases and 73 files, and the
-frozen wrapper is shell-syntax valid. The final full provider-free combined-
-tree regression collected `2299` tests and completed `2298 passed, 1 skipped,
-0 failed` in 432.87 seconds. Ruff `E9,F,I` over all 18 changed Python files and
-`git diff --check` pass; the temporary regression data symlink is removed and
-no pytest or solver remains. All static gates are green and R3g is `READY`.
+[`R3g`](../experiments/v0.4/v04-cvrp-r3g-adaptive-history-k1-sol-postrun-20260902.md)
+launched from that isolated tree and stopped cleanly as
+`valid_incomplete / execution_blocked_infra` after one evaluated screening and
+one proposal-infrastructure step. Its three-route cyclic-exchange candidate
+completed 32/32 valid pairs with no runtime or protected-objective failure,
+case W/L/T `1/2/5`, pair W/L/T `4/6/22`, median `0`, CI `[-2,0]`, and
+`SCREENING_FAIL_CASE_QUALITY`. The next H read current source but exported no
+hypothesis: one frozen request received two charged/traced 502 overload
+responses only milliseconds apart. R3g stopped at 10/340 provider dispatches;
+champion v1 and all held-out stages remained unchanged. Its two strict history
+rows preserve exactly those facts.
+
+The prospective provider repair is ordinary and bounded: SDK retries remain
+zero; a frozen request may receive at most two Scion redispatches after typed
+timeout/transport/provider faults, with fixed waits of 5 and 20 seconds. Each
+physical dispatch still consumes the shared cap and writes one terminal trace;
+three failures retain the invocation-terminal outcome. Provider ceilings for
+the successor are 180 seconds for H/default, 300 for C turns and 240 for C
+finalize. Formal solver budgets, Protocol gates and Decision mapping are
+unchanged. The repair is code commit
+`44fff1356e253927e820fff88ad13ca701e87dbc` and introduces no identity, owner,
+lease, registration, receipt, request hash or repeated closure.
+
+[`R3h`](../experiments/v0.4/v04-cvrp-r3h-adaptive-history-k1-sol-preregistration-20260902.md)
+is frozen from a clean detached worktree at
+`/home/clawd/research/or-autoresearch-agent-r3h-dev/scion`. Its history loader
+returns `[21,1,2,1,1,22,2] = 50` ordered strict `cvrp` rows; formal readiness is
+37 cases / 73 files with no missing or unsafe input. The final full suite
+completed `2301 passed, 1 skipped, 0 failed` in 475.77 seconds (478.81 seconds
+outer wall), focused provider/resource/LLM/signal checks and Ruff are green,
+and `git diff --check` passes. The fresh R3h root and exact tmux session are
+absent. R3h is ready for its one-shot background launch.
 
 ## Next scientific rung
 
 1. Use the user's existing autonomous-launch
-   authorization to run the exact frozen R3g wrapper once. It creates one
+   authorization to run the exact frozen R3h wrapper once. It creates one
    named local tmux session with a lazy pane, sets `remain-on-exit`, and
    replaces that pane once with the foreground `exec env` command. Do not
    respawn a second time if an in-pane gate fails.
-2. Start from the repaired B0 in the absent fresh R3g root. This is not a
-   resume/retry of R3f, and only durable ordinary artifacts establish result
+2. Start from the repaired B0 in the absent fresh R3h root. This is not a
+   resume/retry of R3g, and only durable ordinary artifacts establish result
    validity.
-3. Run one 20-stage normal CVRP campaign with the exact 48 eligible R3 through
-   R3f H-only records available for voluntary uptake. Keep R3f validation and
-   all candidate/process state excluded.
+3. Run one 20-stage normal CVRP campaign with the exact 50 eligible R3 through
+   R3g H-only records available for voluntary uptake. Keep validation and all
+   prior candidate/process state excluded.
 4. Treat screening as adaptive development. Validation remains stage-held-out
-   from H/C and prospective for each independent exact R3g candidate, but is
+   from H/C and prospective for each independent exact R3h candidate, but is
    not called globally never-observed because R3f already reached it. Let a
    successful exact candidate drain validation -> frozen -> deterministic
    promotion without reconstruction.
