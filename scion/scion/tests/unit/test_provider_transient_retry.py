@@ -9,6 +9,7 @@ import pytest
 from typer.main import get_command
 from typer.testing import CliRunner
 
+import scion.proposal.engine.provider_call as provider_call_module
 from scion.cli.app import app
 from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.resource_envelope import (
@@ -91,13 +92,14 @@ def _call(
     client: _SequenceClient,
     *,
     budget: ProviderCallBudget | None = None,
+    retries: int = 1,
 ) -> dict[str, object]:
     caller = ProviderCaller(
         client,
         "test-model",
         trace_dir=str(tmp_path / "traces"),
         provider_call_budget=budget,
-        provider_transient_retries=1,
+        provider_transient_retries=retries,
     )
     return caller.call(
         request_kind="hypothesis",
@@ -112,6 +114,17 @@ def _traces(tmp_path: Path) -> list[dict[str, object]]:
         for path in (tmp_path / "traces").glob("*.json")
     ]
     return sorted(payloads, key=lambda payload: payload["attempt_index"])
+
+
+@pytest.fixture(autouse=True)
+def _skip_real_redispatch_backoff(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    delays: list[float] = []
+    monkeypatch.setattr(
+        provider_call_module,
+        "_sleep",
+        lambda seconds: delays.append(float(seconds)),
+    )
+    return delays
 
 
 @pytest.mark.parametrize(
@@ -223,6 +236,28 @@ def test_second_dispatch_is_blocked_when_its_independent_budget_consume_fails(
     assert traces[0]["attempt_index"] == 0
 
 
+def test_third_dispatch_is_blocked_without_trace_when_cap_is_two(
+    tmp_path: Path,
+) -> None:
+    client = _SequenceClient(
+        [
+            LLMProviderError("overloaded once"),
+            LLMTransportError("gateway still unavailable"),
+            {"would": "exceed the cap"},
+        ]
+    )
+    budget = ProviderCallBudget(2)
+
+    with pytest.raises(ProviderCallCapExhausted):
+        _call(tmp_path, client, budget=budget, retries=2)
+
+    assert budget.used == 2
+    assert len(client.calls) == 2
+    traces = _traces(tmp_path)
+    assert [trace["attempt_index"] for trace in traces] == [0, 1]
+    assert [trace["ok"] for trace in traces] == [False, False]
+
+
 def test_second_transient_failure_is_terminal_after_one_retry(tmp_path: Path) -> None:
     first = LLMTransportError("connection reset")
     second = LLMTimeoutError("timed out again")
@@ -237,8 +272,60 @@ def test_second_transient_failure_is_terminal_after_one_retry(tmp_path: Path) ->
     assert [trace["attempt_index"] for trace in traces] == [0, 1]
 
 
-@pytest.mark.parametrize("value", [True, -1, 2, 1.5, "1", None])
-def test_retry_configuration_accepts_only_integer_zero_or_one(value) -> None:
+def test_two_bounded_redispatches_use_deterministic_short_backoff(
+    tmp_path: Path,
+    _skip_real_redispatch_backoff: list[float],
+) -> None:
+    client = _SequenceClient(
+        [
+            LLMProviderError("overloaded once"),
+            LLMTransportError("gateway still unavailable"),
+            {"ok": True},
+        ]
+    )
+    budget = ProviderCallBudget(3)
+
+    assert _call(tmp_path, client, budget=budget, retries=2) == {"ok": True}
+
+    assert len(client.calls) == 3
+    assert client.calls[0] == client.calls[1] == client.calls[2]
+    assert budget.used == 3
+    assert _skip_real_redispatch_backoff == [5.0, 20.0]
+    traces = _traces(tmp_path)
+    assert [trace["ok"] for trace in traces] == [False, False, True]
+    assert [trace["attempt_index"] for trace in traces] == [0, 1, 2]
+
+
+def test_signal_during_backoff_prevents_budget_charge_dispatch_and_trace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _SequenceClient(
+        [LLMProviderError("overloaded"), {"would": "run after signal"}]
+    )
+    budget = ProviderCallBudget(2)
+    delays: list[float] = []
+
+    def interrupt(seconds: float) -> None:
+        delays.append(seconds)
+        raise KeyboardInterrupt("operator signal")
+
+    monkeypatch.setattr(provider_call_module, "_sleep", interrupt)
+
+    with pytest.raises(KeyboardInterrupt, match="operator signal"):
+        _call(tmp_path, client, budget=budget, retries=2)
+
+    assert delays == [5.0]
+    assert len(client.calls) == 1
+    assert budget.used == 1
+    traces = _traces(tmp_path)
+    assert len(traces) == 1
+    assert traces[0]["attempt_index"] == 0
+    assert traces[0]["ok"] is False
+
+
+@pytest.mark.parametrize("value", [True, -1, 3, 1.5, "1", None])
+def test_retry_configuration_accepts_only_integer_zero_to_two(value) -> None:
     with pytest.raises((TypeError, ValueError)):
         ProviderCaller(
             _SequenceClient([]),
@@ -255,6 +342,9 @@ def test_retry_configuration_is_explicit_and_defaults_off() -> None:
     assert ResourceEnvelope(provider_transient_retries=1).to_primitive() == {
         "provider_transient_retries": 1
     }
+    assert ResourceEnvelope(provider_transient_retries=2).to_primitive() == {
+        "provider_transient_retries": 2
+    }
 
     run_command = get_command(app).commands["run"]
     option = next(
@@ -264,6 +354,8 @@ def test_retry_configuration_is_explicit_and_defaults_off() -> None:
     )
     assert option.opts == ["--provider-transient-retries"]
     assert option.default == 0
+    assert option.type.min == 0
+    assert option.type.max == 2
     runner = CliRunner()
     invalid = runner.invoke(
         app,
@@ -272,7 +364,7 @@ def test_retry_configuration_is_explicit_and_defaults_off() -> None:
             "--problem",
             "not-used.yaml",
             "--provider-transient-retries",
-            "2",
+            "3",
         ],
     )
     assert invalid.exit_code == 2
@@ -286,7 +378,7 @@ def test_retry_configuration_is_written_in_the_ordinary_resource_artifact(
         ResourceEnvelope(
             provider_call_cap=2,
             outer_hardwall_sec=60,
-            provider_transient_retries=1,
+            provider_transient_retries=2,
         ),
     )
 
@@ -294,7 +386,7 @@ def test_retry_configuration_is_written_in_the_ordinary_resource_artifact(
     assert json.loads(path.read_text(encoding="utf-8")) == {
         "outer_hardwall_sec": 60,
         "provider_call_cap": 2,
-        "provider_transient_retries": 1,
+        "provider_transient_retries": 2,
     }
 
 

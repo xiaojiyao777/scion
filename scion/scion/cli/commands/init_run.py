@@ -359,10 +359,11 @@ def register_run_command(app: typer.Typer) -> None:
             0,
             "--provider-transient-retries",
             min=0,
-            max=1,
+            max=2,
             help=(
-                "Immediate Scion retries per frozen request for typed transient "
-                "provider failures (0 or 1; SDK retries remain disabled)"
+                "Bounded Scion redispatches per frozen request for typed transient "
+                "provider failures (0 to 2, with short deterministic backoff; "
+                "SDK retries remain disabled)"
             ),
         ),
         outer_hardwall_sec: int | None = typer.Option(

@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
+from time import sleep as _sleep
 from typing import Any, Dict
 
 from scion.core.resource_envelope import ProviderCallBudget
@@ -18,6 +19,9 @@ from scion.proposal.llm.errors import (
 )
 
 from .trace import _client_request_policy, _TraceWriter
+
+_MAX_PROVIDER_TRANSIENT_RETRIES = 2
+_PROVIDER_REDISPATCH_BACKOFF_SEC = (5.0, 20.0)
 
 
 class ProviderResponseSizeExceeded(LLMFormatError):
@@ -147,6 +151,7 @@ class ProviderCaller:
                     attempt_index=attempt_index,
                 )
                 if retry_planned:
+                    _sleep(_PROVIDER_REDISPATCH_BACKOFF_SEC[attempt_index])
                     continue
                 raise
 
@@ -290,8 +295,11 @@ def _client_response_diagnostics(client: Any) -> dict[str, Any] | None:
 def _validate_provider_transient_retries(value: Any) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError("provider_transient_retries must be an integer")
-    if value not in {0, 1}:
-        raise ValueError("provider_transient_retries must be zero or one")
+    if not 0 <= value <= _MAX_PROVIDER_TRANSIENT_RETRIES:
+        raise ValueError(
+            "provider_transient_retries must be between zero and "
+            f"{_MAX_PROVIDER_TRANSIENT_RETRIES}"
+        )
 
 
 def _is_retryable_provider_error(exc: Exception) -> bool:

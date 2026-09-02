@@ -17,6 +17,7 @@ _KNOWN_PROVIDER_REQUEST_KINDS = (
     "code_research_finalize",
 )
 _PROVIDER_REQUEST_KINDS = (*_KNOWN_PROVIDER_REQUEST_KINDS, "other")
+_MAX_PROVIDER_TRANSIENT_RETRIES = 2
 
 
 class ProviderCallCapExhausted(RuntimeError):
@@ -187,8 +188,11 @@ def _validate_optional_positive_int(value: Any, *, field: str) -> None:
 def _validate_provider_transient_retries(value: Any) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError("provider_transient_retries must be an integer")
-    if value not in {0, 1}:
-        raise ValueError("provider_transient_retries must be zero or one")
+    if not 0 <= value <= _MAX_PROVIDER_TRANSIENT_RETRIES:
+        raise ValueError(
+            "provider_transient_retries must be between zero and "
+            f"{_MAX_PROVIDER_TRANSIENT_RETRIES}"
+        )
 
 
 __all__ = [
