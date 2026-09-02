@@ -7,13 +7,22 @@ Predecessor evidence:
 
 ## Status
 
-**READY FOR ONE-SHOT BACKGROUND LAUNCH**
+**LAUNCHED / RUNNING**
 
 This document freezes prospective R3h inputs and the one-shot carrier command.
 The provider-free launch gates are complete. The sole remaining launch-time
 precondition is the local proxy/model check embedded before campaign-root
 creation in the frozen block; failure leaves no campaign and authorizes no
 second launch under this preregistration.
+
+Post-freeze operational record: the block ran once at
+`2026-09-02T14:49:58Z`. The local proxy/model precondition passed, the fresh
+root was created, and tmux session
+`scion-r3h-normal-k1-sol-20260902-r1` owns the foreground Python process. The
+first H/C closed with 11/340 physical dispatches, all successful at
+`attempt_index=0`; Contract, Verification and canary passed. Initial screening
+then reached 2/32 completed valid pairs with zero failures. This record does
+not alter any prospective input or gate above.
 
 ## Question
 

@@ -545,11 +545,14 @@ R3b result and R3c continuity:
   seconds outer wall). Focused provider/backoff/CLI/history tests, Ruff
   `E9,F,I`, diff check, production-loader 50-row check, formal readiness and
   frozen-wrapper syntax/path checks are green.
-- [ ] Only after every R3h launch gate is green, use the user's existing
+- [x] After every R3h launch gate became green, use the user's existing
   autonomous-launch authorization to create the frozen tmux carrier once and
   respawn its exact foreground `exec env` command once. If an in-pane
   precondition or proxy/model check fails, inspect the dead pane but do not
-  respawn again under this preregistration.
+  respawn again under this preregistration. The one launch succeeded: first
+  H/C closed with 11/340 all-successful attempt-0 provider traces, Contract,
+  Verification and canary passed, and screening reached 2/32 valid pairs with
+  zero failures under a healthy tmux/Python process.
 
 ### R4 — Independent retained-B0 confirmation
 

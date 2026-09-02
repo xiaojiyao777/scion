@@ -322,8 +322,13 @@ returns `[21,1,2,1,1,22,2] = 50` ordered strict `cvrp` rows; formal readiness is
 37 cases / 73 files with no missing or unsafe input. The final full suite
 completed `2301 passed, 1 skipped, 0 failed` in 475.77 seconds (478.81 seconds
 outer wall), focused provider/resource/LLM/signal checks and Ruff are green,
-and `git diff --check` passes. The fresh R3h root and exact tmux session are
-absent. R3h is ready for its one-shot background launch.
+and `git diff --check` passes. R3h launched once at
+`2026-09-02T14:49:58Z`; its named tmux pane and foreground Python process are
+healthy. The first H/C used 11/340 physical provider dispatches, all successful
+at attempt index zero, and passed Contract, Verification and canary. Initial
+screening has reached 2/32 completed valid pairs with zero failures. R3h is
+running in the background; only durable campaign artifacts determine its
+eventual scientific result.
 
 ## Next scientific rung
 
