@@ -6,7 +6,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-from scion.core.models import PatchProposal, patch_file_changes
+from scion.core.models import (
+    AcceptedFileBeforeSource,
+    PatchProposal,
+    patch_file_changes,
+)
 from scion.core.paths import normalize_relative_patch_path
 from scion.problem.providers import resolve_proposal_mechanism_evidence_provider
 
@@ -25,6 +29,7 @@ def build_problem_proposal_subject(
     *,
     patch: PatchProposal | None,
     base_workspace: str | None,
+    before_sources: Sequence[AcceptedFileBeforeSource] | None = None,
 ) -> dict[str, Any]:
     """Build a domain-opaque before/after source packet for a problem provider.
 
@@ -33,9 +38,20 @@ def build_problem_proposal_subject(
     object identity, hashes, receipts, or registration metadata.
     """
 
-    if patch is None or not base_workspace:
+    if patch is None:
         return {}
-    root = Path(base_workspace).expanduser().resolve()
+    ordinary_before_sources: dict[str, str | None] | None = None
+    if before_sources is not None:
+        ordinary_before_sources = _ordinary_before_source_map(before_sources)
+        if ordinary_before_sources is None:
+            return {}
+    elif not base_workspace:
+        return {}
+    root = (
+        Path(base_workspace).expanduser().resolve()
+        if ordinary_before_sources is None and base_workspace
+        else None
+    )
     changes: list[dict[str, Any]] = []
     source_bytes = 0
     for change in patch_file_changes(patch):
@@ -45,10 +61,16 @@ def build_problem_proposal_subject(
             return {}
         if file_path != change.file_path:
             return {}
-        try:
-            before_source = _bounded_subject_source(root, file_path)
-        except _SubjectSourceLimitExceeded:
-            return {}
+        if ordinary_before_sources is None:
+            assert root is not None
+            try:
+                before_source = _bounded_subject_source(root, file_path)
+            except _SubjectSourceLimitExceeded:
+                return {}
+        else:
+            if file_path not in ordinary_before_sources:
+                return {}
+            before_source = ordinary_before_sources.pop(file_path)
         after_source = None if change.action == "delete" else change.code_content
         try:
             source_bytes += sum(
@@ -68,10 +90,34 @@ def build_problem_proposal_subject(
                 "after_source": after_source,
             }
         )
+    if ordinary_before_sources:
+        return {}
     return {
         "schema_version": _SUBJECT_SCHEMA,
         "changes": changes,
     }
+
+
+def _ordinary_before_source_map(
+    before_sources: Sequence[AcceptedFileBeforeSource],
+) -> dict[str, str | None] | None:
+    sources: dict[str, str | None] = {}
+    for before_source in before_sources:
+        if not isinstance(before_source, AcceptedFileBeforeSource):
+            return None
+        try:
+            file_path = normalize_relative_patch_path(before_source.file_path)
+        except ValueError:
+            return None
+        if file_path != before_source.file_path or file_path in sources:
+            return None
+        if before_source.source is not None and not isinstance(
+            before_source.source,
+            str,
+        ):
+            return None
+        sources[file_path] = before_source.source
+    return sources
 
 
 def problem_proposal_mechanism_evidence(

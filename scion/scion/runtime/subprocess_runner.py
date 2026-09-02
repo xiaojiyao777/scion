@@ -229,6 +229,8 @@ class LocalSubprocessRunner:
             self._emit_progress(
                 child_pid=proc.pid,
                 child_phase="solver_subprocess",
+                child_exit_code=None,
+                child_elapsed_ms=None,
                 case=instance_path,
                 seed=seed,
                 selected_surface=surface or None,

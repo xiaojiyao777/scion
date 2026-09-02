@@ -19,6 +19,7 @@ from scion.core.execution_outcome import (
 )
 from scion.core.features import SafeFeatureExtractor
 from scion.core.models import (
+    AcceptedFileBeforeSource,
     Branch,
     BranchState,
     CanaryResult,
@@ -111,6 +112,8 @@ class EvaluationOrchestrator:
         branch_state: BranchState | None = None,
         screening_expand_count: int | None = None,
         validation_expand_count: int | None = None,
+        proposal_patch: PatchProposal | None = None,
+        proposal_before_sources: tuple[AcceptedFileBeforeSource, ...] | None = None,
     ) -> EvaluationExecutionResult:
         bid = branch.branch_id
         effective_state = branch_state or branch.state
@@ -141,16 +144,30 @@ class EvaluationOrchestrator:
             effective_screening_expand_count = expand_round
         elif expand and effective_state == BranchState.VALIDATING_EXPAND:
             effective_validation_expand_count = expand_round
+        if (
+            effective_state is BranchState.EXPLORE_EXPAND
+            and branch.accepted_changes
+        ):
+            accepted_head = branch.accepted_changes[-1]
+            if proposal_patch is None:
+                proposal_patch = accepted_head.patch
+            if proposal_before_sources is None:
+                proposal_before_sources = accepted_head.before_sources
         request = EvaluationRequest(
             branch_state=effective_state,
             candidate_workspace=workspace,
             champion_workspace=champion_workspace,
             hypothesis_action=hypothesis.action,
             proposal_base_workspace=self.branch_workspaces.get(bid),
+            proposal_before_sources=proposal_before_sources,
             expand=expand,
             expand_round=expand_round,
             selected_surface=hypothesis.change_locus,
-            patch=self.branch_patches.get(bid),
+            patch=(
+                proposal_patch
+                if proposal_patch is not None
+                else self.branch_patches.get(bid)
+            ),
             screening_expand_count=effective_screening_expand_count,
             validation_expand_count=effective_validation_expand_count,
             failure_codes=tuple(branch.failure_codes),

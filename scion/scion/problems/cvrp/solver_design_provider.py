@@ -26,11 +26,12 @@ class CvrpSolverDesignProvider:
             "policies/baseline_modules/destroy_repair.py": (
                 "This module owns destroy and repair operators. Scheduler wiring "
                 "may import exact symbols defined by the same patch and register "
-                "them in the existing destroy or repair collection. Pass the "
-                "existing monotonic deadline context and reserve into any "
-                "potentially long-running repair; poll remaining_time inside "
+                "them in the existing destroy or repair collection. Every registered "
+                "operator keeps required keyword-only `context` and `reserve` inputs. "
+                "Pass the existing monotonic deadline context and reserve into any "
+                "potentially long-running destroy or repair; poll remaining_time inside "
                 "nested customer, route, position, and recursive searches, and "
-                "exit before committing a partial repair when time expires."
+                "let the scheduler discard the partial candidate when time expires."
             ),
             "policies/baseline_modules/local_search.py": (
                 "The `_default_vns_operators()` registry is shared by initial and "
@@ -47,7 +48,11 @@ class CvrpSolverDesignProvider:
             "policies/baseline_modules/scheduler.py": (
                 "Scheduler owns `_ALNSVNSSolver` orchestration. Put a new "
                 "construction, destroy/repair, local-search, or acceptance "
-                "mechanism in its owner module and use scheduler only to execute it."
+                "mechanism in its owner module and use scheduler only to execute it. "
+                "Do not start optional second-candidate or tournament work near "
+                "the exit reserve unless every potentially long called path receives "
+                "the monotonic context and reserve and polls them internally; a "
+                "deadline check only at the ALNS loop boundary is insufficient."
             ),
             "policies/baseline_modules/state.py": (
                 "`_Solution` and `_Route` are the internal slotted state model. "

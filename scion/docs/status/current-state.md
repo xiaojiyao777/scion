@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-08-31*
+*Current as of: 2026-09-02*
 
 Read [`../../TASK.md`](../../TASK.md) first. The sole architecture authority is
 [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md)
@@ -14,15 +14,18 @@ Warehouse has demonstrated real retained improvement:
 - synthetic Scion promoted and independently retained `v1 -> v2 -> v3`;
 - production-style Scion promoted and independently retained `v1 -> v2`.
 
-CVRP remains open. The normal R3 campaign completed 16/16 formal stages and
-made sustained algorithm changes across three research branches, but no exact
-candidate reached validation or frozen testing. Champion B0/v1 therefore
-remains unchanged, and R4 retained-B0 evaluation is correctly blocked.
+CVRP remains open. R3f completed its full 20-stage horizon through a stable
+local tmux carrier with 19 screening stages, one prospective validation and no
+frozen stage. One cumulative candidate passed initial and expanded screening,
+but its validation obtained 94/96 valid pairs and two candidate-only timeouts;
+Decision correctly abandoned it for incomplete runtime evidence. Champion
+B0/v1 remains unchanged, and R4 retained-B0 evaluation is correctly blocked.
 
-R3's closest candidate passed expanded-screen quality with case W/L/T `7/2/3`
-and median distance delta `+3.75`, but produced five repeatable candidate-only
-hard timeouts on the largest case. Decision correctly abandoned it rather than
-turning a quality result with incomplete runtime safety into a promotion.
+The final R3f cumulative candidate completed a safe `32/32` exact-relocate
+initial screen and requested expansion, but this was evaluated stage 20. It has
+no expanded result and is a formal-horizon censor, not a pass, failure,
+interruption or promotion. R3f is therefore valid negative research evidence
+classified `VALID_20_STAGE_HORIZON_CENSORED`.
 
 ## Runtime boundary
 
@@ -234,38 +237,93 @@ and the dead pane retained process exit status or signal. This is operational
 evidence only. The pane, console and tmux state never enter H, Protocol, Safe
 Features or Decision and cannot authorize promotion or relaunch.
 
-[`R3f`](../experiments/v0.4/v04-cvrp-r3f-adaptive-history-k1-sol-preregistration-20260831.md)
-is frozen as a fresh B0 campaign with exactly 26 complete history rows in
-R3 -> R3b -> R3c -> R3d -> R3e order. Only R3e's completed initial-screen row
-is eligible; its status, SQLite state, candidate, workspace and `58/96` partial
-expansion remain excluded. All scientific inputs, thresholds and resources are
-unchanged. The production loader observes `[21,1,2,1,1]` strict `cvrp` records,
-formal readiness remains 37 cases and 73 files with no missing or unsafe input,
-and the fresh root is absent. The fresh exact-tree provider-free,
-non-campaign regression collected `2296` tests and completed `2295 passed, 1
-skipped, 0 failed` in 437.80 seconds (438.83 seconds outer elapsed); focused
-Ruff `E9,F,I` and `git diff --check` pass.
+R3f then launched once through the preregistered tmux carrier and finished
+normally: terminal `completed / requested_rounds_completed / valid`, 20/20
+evaluated stages, 23 scheduled calls, three research rejections, 145/340
+provider dispatches, three active branches and champion v1 unchanged. The
+retained dead pane has exit status zero and agrees operationally with the
+ordinary terminal artifacts; it is not scientific authority.
+
+The one candidate to reach stage-held-out validation was cumulative across
+`destroy_repair.py` and `scheduler.py`. It completed initial screening at
+32/32 valid, case W/L/T `5/1/2`, median `+5.25`, CI `[0,14.5]`, then expanded
+screening at 96/96 valid, case W/L/T `6/1/5`, median `+3`, CI `[0,9.5]`.
+Validation attempted all 96 pairs but produced two candidate-only timeouts on
+`X-n401-k29`, seeds 53 and 71. The champion had no failures. Protocol returned
+`INCOMPLETE_EVIDENCE` and `CANDIDATE_RUNTIME_FAILURE`; Decision abandoned the
+candidate. The observed case win rate was also only `0.50` against a `0.66`
+threshold, and optimistic recovery of the two missing pairs cannot create a
+seventh case win. This is negative candidate algorithm/runtime evidence, not
+root infrastructure, a validation pass or promotion. The validation row is
+excluded from H-only history.
+
+R3f's final exact-relocate initial screen completed 32/32 valid pairs, case
+W/L/T `2/1/5`, median `0`, CI `[0,25]`, and requested expansion at the formal
+horizon. No expanded-stage metric or Decision artifact exists. V3
+cumulative-depth semantics remain in force: this is association evidence for
+a cumulative `scheduler.py` + `local_search.py` candidate, not an isolated
+current-step effect and not an executable candidate to reconstruct in R3g.
+Full evidence is in the
+[`R3f postrun`](../experiments/v0.4/v04-cvrp-r3f-adaptive-history-k1-sol-postrun-20260901.md).
+
+The R3f terminal history is frozen at 22 strict `cvrp` rows: 19 evaluated
+screening rows and three research rejections, with no validation/frozen row.
+The prospective R3g loader reads
+`[21,1,2,1,1,22] = 48` ordered rows across R3 -> R3b -> R3c -> R3d -> R3e ->
+R3f. No R3f candidate source, workspace, status, metric, SQLite state or tmux
+state is an R3g input.
+
+Three bounded prospective corrections address the R3f evidence without
+rewriting it:
+
+- nested destroy/repair loops poll the existing monotonic deadline and exit
+  reserve; a typed internal expiry causes the partially mutated local candidate
+  to be discarded before the scheduler exits its ALNS loop;
+- ordinary before-source text captured at candidate materialization follows
+  the current-step patch into exact-stage proposal evidence, so workspace
+  cleanup cannot erase bounded before/after attribution;
+- every Protocol stage and subprocess launch clears stale completion, phase,
+  child-exit and child-elapsed progress fields before new work begins.
+
+These changes add no mechanism selector, held-out exposure, identity, lease,
+issuance, registration, signature, receipt, hash or repeated closure. The
+adaptive embedded-VNS direction is a strong negative; pre-polish tournament
+and initial-VNS budget directions receive no more host-directed investment.
+Exact inter-route evaluation remains only promising cumulative association
+evidence, not a fixed replay.
+
+[`R3g`](../experiments/v0.4/v04-cvrp-r3g-adaptive-history-k1-sol-preregistration-20260901.md)
+is preregistered from the isolated repaired tree. Its exact repository-local
+paths all point to
+`/home/clawd/research/or-autoresearch-agent-r3g-dev/scion`; its fresh root is
+`v04-cvrp-r3g-normal-k1-sol-20260901-r1` and its sole tmux session is
+`scion-r3g-normal-k1-sol-20260901-r1`. Both are currently absent. History and
+formal-readiness gates are green at 48 rows, 37 cases and 73 files, and the
+frozen wrapper is shell-syntax valid. The final full provider-free combined-
+tree regression collected `2299` tests and completed `2298 passed, 1 skipped,
+0 failed` in 432.87 seconds. Ruff `E9,F,I` over all 18 changed Python files and
+`git diff --check` pass; the temporary regression data symlink is removed and
+no pytest or solver remains. All static gates are green and R3g is `READY`.
 
 ## Next scientific rung
 
-1. Run the exact frozen R3f wrapper once. It creates the one named local tmux
-   session with a lazy pane, sets `remain-on-exit`, and replaces that pane once
-   with the preregistered foreground `exec env` command. Do not respawn a
-   second time under this preregistration if a gate fails.
-2. Start from B0 in the absent fresh R3f root. This is not a resume/retry of
-   R3e, and the result is established only by durable campaign artifacts.
-3. Run one 20-stage normal CVRP campaign with 21 complete R3 records, one R3b
-   record, two R3c records, one R3d record and the one complete R3e
-   initial-screen record available for voluntary uptake. Keep the R2 45-record
-   corpus OFF and require used/rejected disposition only for each relation's
-   latest live failure.
-4. Keep the common research input and ordinary local history/frontier review
-   ON. Screening is adaptive development evidence; validation and frozen remain
-   prospective for an independently generated exact R3f candidate. The R3e
-   beam patch and `58/96` partial expansion receive no replay or host priority.
-5. Let any successful exact candidate drain screening -> validation -> frozen
-   -> deterministic promotion without reconstruction.
-6. Only after promotion, compare that exact snapshot with original B0 on a
+1. Use the user's existing autonomous-launch
+   authorization to run the exact frozen R3g wrapper once. It creates one
+   named local tmux session with a lazy pane, sets `remain-on-exit`, and
+   replaces that pane once with the foreground `exec env` command. Do not
+   respawn a second time if an in-pane gate fails.
+2. Start from the repaired B0 in the absent fresh R3g root. This is not a
+   resume/retry of R3f, and only durable ordinary artifacts establish result
+   validity.
+3. Run one 20-stage normal CVRP campaign with the exact 48 eligible R3 through
+   R3f H-only records available for voluntary uptake. Keep R3f validation and
+   all candidate/process state excluded.
+4. Treat screening as adaptive development. Validation remains stage-held-out
+   from H/C and prospective for each independent exact R3g candidate, but is
+   not called globally never-observed because R3f already reached it. Let a
+   successful exact candidate drain validation -> frozen -> deterministic
+   promotion without reconstruction.
+5. Only after promotion, compare that exact snapshot with original B0 on a
    newly frozen independent retained population with no LLM calls.
 
 The tmux session is a single local process carrier, not a service, deployment,

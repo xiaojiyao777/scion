@@ -11,6 +11,7 @@ from scion.core.canary_failure import (
 )
 from scion.core.features import SafeFeatureExtractor
 from scion.core.models import (
+    AcceptedFileBeforeSource,
     BranchState,
     CanaryResult,
     DecisionFeatures,
@@ -30,9 +31,10 @@ class EvaluationRequest:
     candidate_workspace: str
     champion_workspace: str
     hypothesis_action: str
-    # Source against which the current patch was authored.  This can be a
-    # branch's accepted workspace rather than the global champion.
+    # Legacy filesystem fallback for callers without captured plain source.
     proposal_base_workspace: str | None = None
+    # Source observed before the current patch, captured at materialization.
+    proposal_before_sources: tuple[AcceptedFileBeforeSource, ...] | None = None
     expand: bool = False
     expand_round: int = 0
     selected_surface: str | None = None
@@ -127,6 +129,7 @@ class EvaluationPipeline:
                     proposal_subject=build_problem_proposal_subject(
                         patch=request.patch,
                         base_workspace=request.proposal_base_workspace,
+                        before_sources=request.proposal_before_sources,
                     ),
                 )
                 protocol_result = _sanitize_protocol_exposure(protocol_result)

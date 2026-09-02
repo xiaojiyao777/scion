@@ -152,8 +152,9 @@ class _MockExperimentProtocol:
         hypothesis_action: str,
         expand: bool = False,
         expand_round: int = 1,
+        proposal_subject: dict[str, Any] | None = None,
     ) -> ProtocolResult:
-        del expand_round
+        del expand_round, proposal_subject
         self.experiment_call_count += 1
         if self._results:
             return self._results.pop(0)

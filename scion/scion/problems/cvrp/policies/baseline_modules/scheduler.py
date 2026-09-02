@@ -1,9 +1,10 @@
 """Top-level ALNS+VNS search scheduler for the solver-design subject."""
+
 from __future__ import annotations
 
 from .acceptance import _AdaptiveWeights, _SimulatedAnnealing
 from .config import (
-    ENABLE_EMBEDDED_VNS,
+    _EPS,
     EMBEDDED_VNS_CADENCE,
     EMBEDDED_VNS_CAP_REPAIR_IMPROVEMENT_RESCUE,
     EMBEDDED_VNS_CAP_RESCUE_CADENCE,
@@ -12,6 +13,7 @@ from .config import (
     EMBEDDED_VNS_MAX_RUNTIME_SHARE,
     EMBEDDED_VNS_MIN_RUNTIME_SHARE,
     EMBEDDED_VNS_RUN_ON_REPAIR_IMPROVEMENT,
+    ENABLE_EMBEDDED_VNS,
     ENABLE_INITIAL_VNS,
     ENABLE_SIZE70_TWO_OPT_FALLBACK,
     EXIT_RESERVE_FRACTION,
@@ -19,7 +21,6 @@ from .config import (
     SIGMA_BEST,
     SIGMA_BETTER,
     SIZE70_TWO_OPT_MIN_CUSTOMERS,
-    _EPS,
 )
 from .construction import (
     _capacity_balanced_construction,
@@ -29,6 +30,7 @@ from .construction import (
 )
 from .destroy_repair import (
     _greedy_insertion,
+    _OperatorDeadlineExpired,
     _random_removal,
     _regret2_insertion,
     _regret3_insertion,
@@ -92,8 +94,12 @@ class _ALNSVNSSolver:
             ("regret2", _regret2_insertion),
             ("regret3", _regret3_insertion),
         ]
-        destroy_weights = _AdaptiveWeights([name for name, _ in destroy_ops], self.reaction_factor)
-        repair_weights = _AdaptiveWeights([name for name, _ in repair_ops], self.reaction_factor)
+        destroy_weights = _AdaptiveWeights(
+            [name for name, _ in destroy_ops], self.reaction_factor
+        )
+        repair_weights = _AdaptiveWeights(
+            [name for name, _ in repair_ops], self.reaction_factor
+        )
         estimated_iterations = max(100, int(self.time_limit * 50))
         annealing = _SimulatedAnnealing(current.total_cost, estimated_iterations)
 
@@ -140,7 +146,13 @@ class _ALNSVNSSolver:
             core_phase_ms = self.context.elapsed_ms()
 
             try:
-                removed = destroy_op(candidate, q, rng)
+                removed = destroy_op(
+                    candidate,
+                    q,
+                    rng,
+                    context=self.context,
+                    reserve=reserve,
+                )
                 if not removed:
                     alns_core_ms += self.context.elapsed_ms() - core_phase_ms
                     self.context.record_phase("alns_core", alns_core_ms)
@@ -161,7 +173,13 @@ class _ALNSVNSSolver:
                         acceptance_reason="destroy_empty",
                     )
                     continue
-                repair_op(candidate, removed, rng)
+                repair_op(
+                    candidate,
+                    removed,
+                    rng,
+                    context=self.context,
+                    reserve=reserve,
+                )
                 candidate.remove_empty_routes()
                 candidate_after_repair_distance = float(candidate.total_cost)
                 alns_core_ms += self.context.elapsed_ms() - core_phase_ms
@@ -182,7 +200,9 @@ class _ALNSVNSSolver:
                         self.context.record_iteration(diagnostic_phase, 1)
                     phase_ms = self.context.elapsed_ms()
                     before_vns_distance = float(candidate.total_cost)
-                    self.context.record_objective_probe("vns_embedded_before", candidate)
+                    self.context.record_objective_probe(
+                        "vns_embedded_before", candidate
+                    )
                     improved = _vns(
                         candidate,
                         _default_vns_operators(),
@@ -221,6 +241,23 @@ class _ALNSVNSSolver:
                     candidate_after_polish_distance = float(candidate.total_cost)
                 else:
                     candidate_after_polish_distance = candidate_after_repair_distance
+            except _OperatorDeadlineExpired:
+                alns_core_ms += self.context.elapsed_ms() - core_phase_ms
+                self.context.record_phase("alns_core", alns_core_ms)
+                self.context.record_move("alns", attempted=1, accepted=0)
+                self._record_alns_iteration_trace(
+                    iteration=iteration,
+                    elapsed_ms_before=iteration_elapsed_before,
+                    remaining_ms_before=iteration_remaining_before,
+                    q=q,
+                    destroy_operator=destroy_name,
+                    repair_operator=repair_name,
+                    candidate_after_repair_distance=candidate_after_repair_distance,
+                    candidate_after_polish_distance=candidate_after_polish_distance,
+                    accepted=False,
+                    acceptance_reason="deadline_exhausted",
+                )
+                break
             except ValueError:
                 alns_core_ms += self.context.elapsed_ms() - core_phase_ms
                 self.context.record_phase("alns_core", alns_core_ms)
@@ -364,7 +401,9 @@ class _ALNSVNSSolver:
         if not solution.is_feasible():
             solution = _nearest_neighbor(instance)
         if not solution.is_feasible():
-            raise ValueError(f"unable to construct feasible solution for {instance.name}")
+            raise ValueError(
+                f"unable to construct feasible solution for {instance.name}"
+            )
         if self.max_routes is not None and len(solution.routes) > self.max_routes:
             raise ValueError(
                 f"initial solution uses {len(solution.routes)} routes; "

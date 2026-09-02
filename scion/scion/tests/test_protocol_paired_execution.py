@@ -433,3 +433,37 @@ def test_default_path_executes_both_sides_fresh_and_reports_progress(tmp_path):
     final = next(event for event in events if event.get("complete") is True)
     assert "case" not in final and "seed" not in final
     assert final["raw_metrics_ref"] == first.raw_metrics_ref
+
+
+def test_formal_progress_resets_canary_lifecycle_before_pair_execution(tmp_path):
+    protocol, _runner, candidate, champion = _protocol(tmp_path)
+    current = {
+        "stage": "canary",
+        "phase": "canary",
+        "complete": True,
+        "child_pid": None,
+        "child_phase": "solver_subprocess_complete",
+        "child_exit_code": 0,
+        "child_elapsed_ms": 23,
+    }
+    snapshots = []
+
+    def merge_progress(**payload):
+        current.update(payload)
+        snapshots.append(dict(current))
+
+    protocol.set_progress_callback(merge_progress)
+    _run(protocol, candidate, champion)
+
+    formal_start = snapshots[0]
+    assert formal_start["stage"] == "screening"
+    assert formal_start["phase"] == "screening_protocol"
+    assert formal_start["complete"] is False
+    assert formal_start["child_pid"] is None
+    assert formal_start["child_phase"] is None
+    assert formal_start["child_exit_code"] is None
+    assert formal_start["child_elapsed_ms"] is None
+
+    nonterminal = [item for item in snapshots if item["complete"] is False]
+    assert nonterminal
+    assert all(item["phase"] == "screening_protocol" for item in nonterminal)

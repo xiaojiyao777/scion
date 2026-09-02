@@ -653,12 +653,26 @@ def test_baseline_scheduler_best_update_records_public_routes_not_internal_solut
         use_integer_cost=True,
     )
 
-    def improve_to_ordered_route(candidate: _Solution, q: int, rng: object) -> list[int]:
+    def improve_to_ordered_route(
+        candidate: _Solution,
+        q: int,
+        rng: object,
+        *,
+        context: object,
+        reserve: float,
+    ) -> list[int]:
         candidate.routes = [_Route(candidate.instance, [1, 2, 3])]
         candidate.rebuild_index()
         return [3]
 
-    def repair_noop(candidate: _Solution, removed: list[int], rng: object) -> None:
+    def repair_noop(
+        candidate: _Solution,
+        removed: list[int],
+        rng: object,
+        *,
+        context: object,
+        reserve: float,
+    ) -> None:
         return None
 
     for name in (

@@ -3,10 +3,8 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import signal
 import subprocess
-import sys
 import tempfile
 import textwrap
 import threading
@@ -16,14 +14,13 @@ from unittest.mock import patch
 
 import pytest
 
+from scion.core.models import RunResult, SolverOutput
 from scion.runtime.runner import ResourceLimits, Runner
 from scion.runtime.subprocess_runner import (
-    LocalSubprocessRunner,
     _SOLVER_WALL_CLOCK_GRACE_SEC,
+    LocalSubprocessRunner,
     _build_clean_env,
 )
-from scion.core.models import RunResult, SolverOutput
-
 
 # ---------------------------------------------------------------------------
 # Fixture: minimal fake solver scripts
@@ -151,6 +148,54 @@ class TestRunnerSuccess:
         )
         result = run(workdir)
         assert result.elapsed_ms >= 0
+
+    def test_new_child_progress_clears_previous_completion(self, workdir: Path):
+        _write_solver(
+            workdir,
+            """\
+            import argparse, json, pathlib
+            p = argparse.ArgumentParser()
+            p.add_argument("instance", nargs="?", default="")
+            for name in ["--seed", "--time-limit", "--registry", "--output"]:
+                p.add_argument(name, default="")
+            args = p.parse_args()
+            pathlib.Path(args.output).write_text(json.dumps({
+                "solution": {}, "objective": {}, "feasible": True,
+            }))
+            """,
+        )
+        current = {
+            "child_pid": None,
+            "child_phase": "solver_subprocess_complete",
+            "child_exit_code": 7,
+            "child_elapsed_ms": 123,
+        }
+        snapshots = []
+
+        def merge_progress(**payload):
+            current.update(payload)
+            snapshots.append(dict(current))
+
+        runner = LocalSubprocessRunner()
+        runner.set_progress_callback(merge_progress)
+        result = runner.run_solver(
+            workdir=str(workdir),
+            instance_path=str(workdir / "instance.json"),
+            seed=42,
+            time_limit_sec=5,
+            registry_path=str(workdir / "registry.json"),
+        )
+
+        assert result.success is True
+        child_start, child_complete = snapshots
+        assert child_start["child_pid"] is not None
+        assert child_start["child_phase"] == "solver_subprocess"
+        assert child_start["child_exit_code"] is None
+        assert child_start["child_elapsed_ms"] is None
+        assert child_complete["child_pid"] is None
+        assert child_complete["child_phase"] == "solver_subprocess_complete"
+        assert child_complete["child_exit_code"] == 0
+        assert child_complete["child_elapsed_ms"] >= 0
 
     def test_solver_output_reconstruction_is_stable_and_typed(self):
         output = SolverOutput(

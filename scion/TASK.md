@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-08-31*
+*Current as of: 2026-09-02*
 
 ## Goal and authority
 
@@ -456,13 +456,63 @@ R3b result and R3c continuity:
   the R3f preregistration: `2296` collected, `2295 passed, 1 skipped, 0 failed`
   in 437.80 seconds (438.83 seconds outer), with focused Ruff `E9,F,I` and
   `git diff --check` green.
-- [ ] Create the frozen tmux carrier once and respawn the exact R3f command
-  without waiting for another authorization round. If the proxy/model gate or
-  any precondition fails, do not respawn again under the same preregistration.
-- [ ] Let an independently generated exact R3f candidate drain the ordinary
+- [x] Run the frozen R3f campaign once through the exact tmux carrier. It
+  completed exit `0` with terminal `completed / requested_rounds_completed /
+  valid`, all `20/20` evaluated stages, 19 screening stages, one validation,
+  zero frozen stages, 145/340 provider dispatches and champion v1 unchanged.
+  Classify the run `VALID_20_STAGE_HORIZON_CENSORED`, not an interruption or
+  promotion. See the
+  [R3f postrun](docs/experiments/v0.4/v04-cvrp-r3f-adaptive-history-k1-sol-postrun-20260901.md).
+- [x] Preserve R3f's stage-held-out validation result exactly. The cumulative
+  pre-polish candidate passed initial and expanded screening, then validation
+  attempted 96 pairs with 94 valid and two candidate-only `X-n401-k29`
+  timeouts. Protocol returned `INCOMPLETE_EVIDENCE` and
+  `CANDIDATE_RUNTIME_FAILURE`; Decision abandoned it. This is negative
+  algorithm/runtime evidence, not root infrastructure or a validation pass,
+  and the validation row remains excluded from H-only history.
+- [x] Classify the final exact-relocate initial screen as a formal-horizon
+  censor. It completed 32/32 valid pairs, case W/L/T `2/1/5`, median `0`, CI
+  `[0,25]` and requested expansion at evaluated stage 20. No expanded-stage
+  metric or Decision artifact exists. Do not resume or reconstruct this
+  cumulative candidate.
+- [x] Keep the scientific disposition bounded. Adaptive embedded-VNS scheduling
+  is a strong negative; do not host-direct more pre-polish tournament or
+  initial-VNS budget work. Exact inter-route evaluation remains only
+  cumulative-candidate, association evidence. Retain V3 cumulative-depth
+  semantics without rollback and report every result against its exact
+  cumulative candidate.
+- [x] Add the prospective R3g corrections without changing scientific
+  authority: internal nested destroy/repair deadline polling and partial-local-
+  candidate discard; captured ordinary before-source evidence for exact-stage
+  proposal attribution after workspace cleanup; and explicit stage/child
+  progress reset. Add no held-out exposure, host mechanism selection, object
+  identity, lease, issuance, registration, signature, receipt, hash or repeated
+  closure.
+- [x] Freeze R3g as a fresh repaired-B0 campaign loading exactly
+  `[21,1,2,1,1,22] = 48` strict H-only rows in R3 -> R3b -> R3c -> R3d -> R3e
+  -> R3f order. R3f contributes 19 screening and three research-rejected rows,
+  never its validation result or an executable candidate. Freeze the fresh
+  root `v04-cvrp-r3g-normal-k1-sol-20260901-r1`, tmux session
+  `scion-r3g-normal-k1-sol-20260901-r1`, and every repository-local launch path
+  to the isolated repaired tree. See the
+  [R3g preregistration](docs/experiments/v0.4/v04-cvrp-r3g-adaptive-history-k1-sol-preregistration-20260901.md).
+- [x] Complete the full provider-free, non-campaign regression on the final
+  combined tree: `2299` collected, `2298 passed, 1 skipped, 0 failed` in 432.87
+  seconds. Ruff `E9,F,I` over all 18 changed Python files, with only the exact
+  existing `F403/F405` ignores, and `git diff --check` pass. The temporary
+  regression data symlink is removed and no pytest or solver process remains.
+  Record the exact result in the R3g preregistration; all static gates are
+  green.
+- [ ] After the full gate is green, use the user's existing autonomous-launch
+  authorization to create the frozen R3g tmux carrier once and respawn its
+  exact foreground `exec env` command once. If an in-pane precondition or
+  proxy/model check fails, inspect the dead pane but do not respawn again under
+  this preregistration.
+- [ ] Let an independently generated exact R3g candidate drain the ordinary
   screening -> validation -> frozen funnel without reconstruction. Treat
-  screening as adaptive development and validation/frozen as prospective
-  evidence.
+  screening as adaptive development, validation as stage-held-out rather than
+  globally never-observed, and frozen/retained evidence under their declared
+  prospective boundaries.
 
 ### R4 — Independent retained-B0 confirmation
 

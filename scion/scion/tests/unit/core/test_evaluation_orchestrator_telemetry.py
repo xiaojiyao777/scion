@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from scion.config.problem import ProtocolConfig
 from scion.core.decision_coordinator import DecisionCoordinator
 from scion.core.evaluation_orchestrator import (
@@ -16,6 +17,8 @@ from scion.core.evaluation_orchestrator import (
 from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.features import SafeFeatureExtractor
 from scion.core.models import (
+    AcceptedBranchChange,
+    AcceptedFileBeforeSource,
     Branch,
     BranchState,
     CanaryResult,
@@ -116,16 +119,17 @@ class _Protocol:
 
 
 @pytest.mark.parametrize(
-    ("branch_state", "branch_value"),
+    ("branch_state", "branch_value", "expected_before_value"),
     (
-        (BranchState.EXPLORE, "branch-current"),
-        (BranchState.EXPLORE_EXPAND, "candidate"),
+        (BranchState.EXPLORE, "branch-current", "branch-current"),
+        (BranchState.EXPLORE_EXPAND, "candidate", "branch-current"),
     ),
 )
-def test_proposal_subject_uses_branch_current_base_not_global_champion(
+def test_proposal_subject_uses_authored_before_source_not_global_champion(
     tmp_path: Path,
     branch_state: BranchState,
     branch_value: str,
+    expected_before_value: str,
 ) -> None:
     branch = Branch(
         branch_id=str(uuid.uuid4()),
@@ -147,6 +151,19 @@ def test_proposal_subject_uses_branch_current_base_not_global_champion(
         action="modify",
         code_content="def solve():\n    return 'candidate'\n",
     )
+    if branch_state is BranchState.EXPLORE_EXPAND:
+        branch.accepted_changes.append(
+            AcceptedBranchChange(
+                hypothesis=_hypothesis(),
+                patch=patch,
+                before_sources=(
+                    AcceptedFileBeforeSource(
+                        file_path=str(relative),
+                        source="def solve():\n    return 'branch-current'\n",
+                    ),
+                ),
+            )
+        )
     captured: dict = {}
 
     class RecordingProtocol(_Protocol):
@@ -184,7 +201,9 @@ def test_proposal_subject_uses_branch_current_base_not_global_champion(
             {
                 "file_path": str(relative),
                 "action": "modify",
-                "before_source": f"def solve():\n    return '{branch_value}'\n",
+                "before_source": (
+                    f"def solve():\n    return '{expected_before_value}'\n"
+                ),
                 "after_source": "def solve():\n    return 'candidate'\n",
             }
         ],
@@ -192,10 +211,9 @@ def test_proposal_subject_uses_branch_current_base_not_global_champion(
     assert "global-champion" not in str(subject)
     assert "hypothesis_text" not in str(subject)
     assert "hash" not in str(subject).lower()
-    if branch_state is BranchState.EXPLORE_EXPAND:
-        assert subject["changes"][0]["before_source"] == subject["changes"][0][
-            "after_source"
-        ]
+    assert subject["changes"][0]["before_source"] != subject["changes"][0][
+        "after_source"
+    ]
 
 
 class _RecordingExpandProtocol:

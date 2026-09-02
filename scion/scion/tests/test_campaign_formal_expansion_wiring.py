@@ -146,6 +146,7 @@ class _FormalPopulationTracingProtocol(ExperimentProtocol):
                 "seeds": tuple(seeds),
                 "gate_outcome": gate.outcome,
                 "reason_codes": gate.reason_codes,
+                "proposal_subject": _kwargs.get("proposal_subject"),
             }
         )
         return ProtocolResult(
@@ -233,6 +234,35 @@ def test_formal_screening_expansion_reuses_exact_candidate_then_enters_validatio
         protocol.calls[1]["candidate_source"] == protocol.calls[0]["candidate_source"]
     )
     assert protocol.calls[1]["candidate_ws"] == protocol.calls[0]["candidate_ws"]
+    initial_subject = protocol.calls[0]["proposal_subject"]
+    expanded_subject = protocol.calls[1]["proposal_subject"]
+    assert initial_subject == expanded_subject
+    assert set(initial_subject) == {"schema_version", "changes"}
+    assert initial_subject["schema_version"] == "scion.problem_proposal_subject.v1"
+    assert len(initial_subject["changes"]) == 1
+    subject_change = initial_subject["changes"][0]
+    assert set(subject_change) == {
+        "file_path",
+        "action",
+        "before_source",
+        "after_source",
+    }
+    assert subject_change["file_path"] == _VALID_PATCH["file_path"]
+    assert subject_change["action"] == "modify"
+    assert subject_change["before_source"] != subject_change["after_source"]
+    assert subject_change["before_source"] == branch.accepted_changes[-1].before_sources[
+        0
+    ].source
+    assert subject_change["before_source"] == (
+        Path(campaign._champion.code_snapshot_path) / _VALID_PATCH["file_path"]
+    ).read_text(encoding="utf-8")
+    assert subject_change["after_source"].encode("utf-8") == protocol.calls[0][
+        "candidate_source"
+    ]
+    subject_keys = set(initial_subject) | set(subject_change)
+    assert subject_keys.isdisjoint(
+        {"digest", "hash", "identity", "lease", "receipt", "registry", "signature"}
+    )
     durable_candidate = Path(campaign._branch_workspaces[branch_id]).resolve()
     candidate_root = Path(campaign._campaign_dir) / "candidate_workspaces"
     candidate_children = sorted(path.resolve() for path in candidate_root.iterdir())

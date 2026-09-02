@@ -347,6 +347,8 @@ def run_experiment(
             raise
 
     def _progress(case=None, seed=None, **payload) -> None:
+        payload.setdefault("phase", f"{stage.value}_protocol")
+        payload.setdefault("complete", False)
         protocol._emit_progress(
             stage=stage.value, case=case, seed=seed,
             attempted_pairs=attempted_pairs, completed_pairs=valid_pairs,
@@ -420,7 +422,14 @@ def run_experiment(
                     category=category,
                 )
 
-    _progress(None, None)
+    _progress(
+        None,
+        None,
+        child_pid=None,
+        child_phase=None,
+        child_exit_code=None,
+        child_elapsed_ms=None,
+    )
 
     for case in cases:
         case_features = _extract_case_features(

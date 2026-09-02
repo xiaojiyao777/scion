@@ -751,6 +751,8 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             branch,
             workspace,
             hypothesis,
+            proposal_patch=patch,
+            proposal_before_sources=candidate.before_sources,
         )
         return self._commit_evaluation_result(
             branch=branch,

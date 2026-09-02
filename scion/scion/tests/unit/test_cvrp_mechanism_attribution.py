@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scion.core.models import PatchFileChange, PatchProposal
+from scion.core.models import (
+    AcceptedFileBeforeSource,
+    PatchFileChange,
+    PatchProposal,
+)
 from scion.problems.cvrp.mechanism_attribution import (
     summarize_cvrp_mechanism_attribution,
 )
@@ -376,6 +380,41 @@ def test_proposal_subject_has_aggregate_utf8_source_hard_cap(
             base_workspace=str(tmp_path),
         )
         == {}
+    )
+
+
+def test_proposal_subject_prefers_plain_before_sources_without_metadata() -> None:
+    patch = PatchProposal(
+        file_path="solver.py",
+        action="modify",
+        code_content="def solve():\n    return 'after'\n",
+    )
+
+    subject = proposal_evidence.build_problem_proposal_subject(
+        patch=patch,
+        base_workspace=None,
+        before_sources=(
+            AcceptedFileBeforeSource(
+                file_path="solver.py",
+                source="def solve():\n    return 'before'\n",
+            ),
+        ),
+    )
+
+    assert subject == {
+        "schema_version": "scion.problem_proposal_subject.v1",
+        "changes": [
+            {
+                "file_path": "solver.py",
+                "action": "modify",
+                "before_source": "def solve():\n    return 'before'\n",
+                "after_source": "def solve():\n    return 'after'\n",
+            }
+        ],
+    }
+    subject_keys = set(subject) | set(subject["changes"][0])
+    assert subject_keys.isdisjoint(
+        {"digest", "hash", "identity", "lease", "receipt", "registry", "signature"}
     )
 
 

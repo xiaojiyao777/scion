@@ -1,42 +1,66 @@
 """ALNS destroy and repair operators for the CVRP solver-design subject."""
+
 from __future__ import annotations
 
 import math
 
-from .state import _Route, _demand, _distance_scale
+from .state import _demand, _distance_scale, _Route
 
 
-def _random_removal(solution, q, rng):
+class _OperatorDeadlineExpired(TimeoutError):
+    """Stop one in-memory ALNS operator at the scheduler exit reserve."""
+
+
+def _random_removal(solution, q, rng, *, context, reserve):
+    _raise_if_deadline_expired(context, reserve)
     customers = _customers_in_solution(solution)
     if not customers:
         return []
     q = min(max(1, q), len(customers))
     removed = rng.sample(customers, q)
     for customer in removed:
+        _raise_if_deadline_expired(context, reserve)
         _remove_customer(solution, customer)
     return removed
 
 
-def _worst_removal(solution, q, rng, p=3.0):
+def _worst_removal(solution, q, rng, p=3.0, *, context, reserve):
+    _raise_if_deadline_expired(context, reserve)
     removed = []
     q = max(0, min(q, len(_customers_in_solution(solution))))
     while len(removed) < q:
+        _raise_if_deadline_expired(context, reserve)
         candidates = []
         for route in solution.routes:
+            _raise_if_deadline_expired(context, reserve)
             for pos, customer in enumerate(route.customers):
                 saving = -route.cost_of_remove(pos)
                 candidates.append((saving, customer))
         if not candidates:
             break
         candidates.sort(reverse=True)
-        idx = min(len(candidates) - 1, int(math.floor((rng.random() ** p) * len(candidates))))
+        idx = min(
+            len(candidates) - 1, int(math.floor((rng.random() ** p) * len(candidates)))
+        )
         customer = candidates[idx][1]
         if _remove_customer(solution, customer):
             removed.append(customer)
     return removed
 
 
-def _shaw_removal(solution, q, rng, p=6.0, phi_dist=9.0, phi_demand=3.0, phi_route=2.0):
+def _shaw_removal(
+    solution,
+    q,
+    rng,
+    p=6.0,
+    phi_dist=9.0,
+    phi_demand=3.0,
+    phi_route=2.0,
+    *,
+    context,
+    reserve,
+):
+    _raise_if_deadline_expired(context, reserve)
     customers = _customers_in_solution(solution)
     if not customers:
         return []
@@ -52,18 +76,27 @@ def _shaw_removal(solution, q, rng, p=6.0, phi_dist=9.0, phi_demand=3.0, phi_rou
     removed = [seed]
     _remove_customer(solution, seed)
     while len(removed) < q:
+        _raise_if_deadline_expired(context, reserve)
         candidates = _customers_in_solution(solution)
         if not candidates:
             break
         related = []
         for customer in candidates:
+            _raise_if_deadline_expired(context, reserve)
             best = float("inf")
             for ref in removed:
                 same_route = original_route.get(customer) == original_route.get(ref)
                 score = (
-                    phi_dist * (solution.instance.distance(customer, ref) / max_distance)
+                    phi_dist
+                    * (solution.instance.distance(customer, ref) / max_distance)
                     + phi_demand
-                    * (abs(_demand(solution.instance, customer) - _demand(solution.instance, ref)) / max_demand)
+                    * (
+                        abs(
+                            _demand(solution.instance, customer)
+                            - _demand(solution.instance, ref)
+                        )
+                        / max_demand
+                    )
                     + (0.0 if same_route else phi_route)
                 )
                 best = min(best, score)
@@ -76,14 +109,18 @@ def _shaw_removal(solution, q, rng, p=6.0, phi_dist=9.0, phi_demand=3.0, phi_rou
     return removed
 
 
-def _route_removal(solution, q, rng):
-    route_indexes = [idx for idx, route in enumerate(solution.routes) if route.customers]
+def _route_removal(solution, q, rng, *, context, reserve):
+    _raise_if_deadline_expired(context, reserve)
+    route_indexes = [
+        idx for idx, route in enumerate(solution.routes) if route.customers
+    ]
     if not route_indexes:
         return []
     q = min(max(1, q), len(_customers_in_solution(solution)))
     rng.shuffle(route_indexes)
     removed = []
     for route_idx in route_indexes:
+        _raise_if_deadline_expired(context, reserve)
         if route_idx >= len(solution.routes):
             continue
         route = solution.routes[route_idx]
@@ -98,14 +135,21 @@ def _route_removal(solution, q, rng):
     return removed
 
 
-def _greedy_insertion(solution, removed, rng):
+def _greedy_insertion(solution, removed, rng, *, context, reserve):
     pending = list(removed)
     rng.shuffle(pending)
     while pending:
+        _raise_if_deadline_expired(context, reserve)
         best_idx = -1
         best_move = None
         for idx, customer in enumerate(pending):
-            insertions = _best_insertions(solution, customer)
+            _raise_if_deadline_expired(context, reserve)
+            insertions = _best_insertions(
+                solution,
+                customer,
+                context=context,
+                reserve=reserve,
+            )
             if not insertions:
                 continue
             if best_move is None or insertions[0][0] < best_move[0]:
@@ -120,25 +164,54 @@ def _greedy_insertion(solution, removed, rng):
         _insert_existing(solution, customer, route_idx, pos)
 
 
-def _regret2_insertion(solution, removed, rng):
-    _regret_insertion(solution, removed, rng, 2)
+def _regret2_insertion(solution, removed, rng, *, context, reserve):
+    _regret_insertion(
+        solution,
+        removed,
+        rng,
+        2,
+        context=context,
+        reserve=reserve,
+    )
 
 
-def _regret3_insertion(solution, removed, rng):
-    _regret_insertion(solution, removed, rng, 3)
+def _regret3_insertion(solution, removed, rng, *, context, reserve):
+    _regret_insertion(
+        solution,
+        removed,
+        rng,
+        3,
+        context=context,
+        reserve=reserve,
+    )
 
 
-def _regret_insertion(solution, removed, rng, k):
+def _regret_insertion(
+    solution,
+    removed,
+    rng,
+    k,
+    *,
+    context,
+    reserve,
+):
     pending = list(removed)
     rng.shuffle(pending)
     k = max(2, int(k))
     while pending:
+        _raise_if_deadline_expired(context, reserve)
         best_idx = -1
         best_score = float("-inf")
         best_delta = float("inf")
         best_move = None
         for idx, customer in enumerate(pending):
-            insertions = _best_insertions(solution, customer)
+            _raise_if_deadline_expired(context, reserve)
+            insertions = _best_insertions(
+                solution,
+                customer,
+                context=context,
+                reserve=reserve,
+            )
             if not insertions:
                 score = float("inf")
                 delta = _new_route_cost(solution, customer)
@@ -146,7 +219,10 @@ def _regret_insertion(solution, removed, rng, k):
             else:
                 delta = insertions[0][0]
                 considered = insertions[:k]
-                score = sum(move_delta - delta for move_delta, _route_idx, _pos in considered[1:])
+                score = sum(
+                    move_delta - delta
+                    for move_delta, _route_idx, _pos in considered[1:]
+                )
                 if len(considered) < k:
                     score += (k - len(considered)) * max(
                         0.0,
@@ -166,15 +242,21 @@ def _regret_insertion(solution, removed, rng, k):
             _insert_existing(solution, customer, route_idx, pos)
 
 
-def _best_insertions(solution, customer):
+def _best_insertions(solution, customer, *, context, reserve):
     insertions = []
     for route_idx, route in enumerate(solution.routes):
+        _raise_if_deadline_expired(context, reserve)
         if not route.can_insert(customer):
             continue
         for pos in range(len(route.customers) + 1):
             insertions.append((route.cost_of_insert(customer, pos), route_idx, pos))
     insertions.sort(key=lambda item: item[0])
     return insertions
+
+
+def _raise_if_deadline_expired(context, reserve):
+    if context is not None and context.remaining_time() <= reserve:
+        raise _OperatorDeadlineExpired("destroy/repair deadline exhausted")
 
 
 def _insert_existing(solution, customer, route_idx, pos):
@@ -192,7 +274,9 @@ def _insert_new_route(solution, customer):
 
 def _new_route_cost(solution, customer):
     depot = solution.instance.depot
-    return solution.instance.distance(depot, customer) + solution.instance.distance(customer, depot)
+    return solution.instance.distance(depot, customer) + solution.instance.distance(
+        customer, depot
+    )
 
 
 def _customers_in_solution(solution):

@@ -6,6 +6,7 @@ import importlib
 import random
 
 import pytest
+
 from scion.problems.cvrp.models import CvrpInstance, CvrpNode
 
 
@@ -47,6 +48,48 @@ class _RecordingContext:
 
     def record_solution_progress(self, **record) -> None:
         self.solution_progress = record
+
+
+class _ExpiringContext(_RecordingContext):
+    def __init__(self, *, live_checks: int) -> None:
+        super().__init__()
+        self.live_checks = live_checks
+
+    def remaining_time(self) -> float:
+        self.live_checks -= 1
+        return 1.0 if self.live_checks >= 0 else 0.0
+
+
+@pytest.mark.parametrize(
+    ("operator_name", "is_destroy"),
+    [
+        ("_random_removal", True),
+        ("_worst_removal", True),
+        ("_shaw_removal", True),
+        ("_route_removal", True),
+        ("_greedy_insertion", False),
+        ("_regret2_insertion", False),
+        ("_regret3_insertion", False),
+    ],
+)
+def test_destroy_and_repair_require_deadline_context(
+    operator_name: str,
+    is_destroy: bool,
+) -> None:
+    destroy_repair = _candidate_module("baseline_modules.destroy_repair")
+    state = _candidate_module("baseline_modules.state")
+    instance = _instance()
+    solution = state._Solution(
+        instance,
+        [
+            state._Route(instance, [1, 2]),
+            state._Route(instance, [3, 4]),
+        ],
+    )
+    operator = getattr(destroy_repair, operator_name)
+
+    with pytest.raises(TypeError, match="context"):
+        operator(solution, 2 if is_destroy else [2], random.Random(1703))
 
 
 def _instance() -> CvrpInstance:
@@ -104,17 +147,169 @@ def test_two_opt_star_preserves_each_customer_exactly_once() -> None:
 
 
 @pytest.mark.parametrize(
-    ("scenario", "expected_reason"),
+    "repair_name", ["_greedy_insertion", "_regret2_insertion", "_regret3_insertion"]
+)
+def test_repair_deadline_polling_preserves_live_path(repair_name: str) -> None:
+    destroy_repair = _candidate_module("baseline_modules.destroy_repair")
+    state = _candidate_module("baseline_modules.state")
+    instance = _instance()
+    control = state._Solution(
+        instance,
+        [
+            state._Route(instance, [1]),
+            state._Route(instance, [3]),
+        ],
+    )
+    observed = control.copy()
+    repair = getattr(destroy_repair, repair_name)
+
+    repair(
+        control,
+        [2, 4],
+        random.Random(1703),
+        context=None,
+        reserve=0.0,
+    )
+    repair(
+        observed,
+        [2, 4],
+        random.Random(1703),
+        context=_RecordingContext(),
+        reserve=0.1,
+    )
+
+    assert observed.routes_as_tuples() == control.routes_as_tuples()
+    assert observed.total_cost == control.total_cost
+
+
+@pytest.mark.parametrize(
+    "repair_name", ["_greedy_insertion", "_regret2_insertion", "_regret3_insertion"]
+)
+def test_repair_stops_when_the_internal_deadline_expires(repair_name: str) -> None:
+    destroy_repair = _candidate_module("baseline_modules.destroy_repair")
+    state = _candidate_module("baseline_modules.state")
+    instance = _instance()
+    solution = state._Solution(
+        instance,
+        [
+            state._Route(instance, [1]),
+            state._Route(instance, [3]),
+        ],
+    )
+    repair = getattr(destroy_repair, repair_name)
+
+    with pytest.raises(TimeoutError, match="deadline exhausted"):
+        repair(
+            solution,
+            [2, 4],
+            random.Random(1703),
+            context=_ExpiringContext(live_checks=1),
+            reserve=0.1,
+        )
+
+
+@pytest.mark.parametrize(
+    "destroy_name",
+    ["_random_removal", "_worst_removal", "_shaw_removal", "_route_removal"],
+)
+def test_destroy_deadline_polling_preserves_live_path(destroy_name: str) -> None:
+    destroy_repair = _candidate_module("baseline_modules.destroy_repair")
+    state = _candidate_module("baseline_modules.state")
+    instance = _instance()
+    control = state._Solution(
+        instance,
+        [
+            state._Route(instance, [1, 2]),
+            state._Route(instance, [3, 4]),
+        ],
+    )
+    observed = control.copy()
+    destroy = getattr(destroy_repair, destroy_name)
+
+    control_removed = destroy(
+        control,
+        2,
+        random.Random(1703),
+        context=None,
+        reserve=0.0,
+    )
+    observed_removed = destroy(
+        observed,
+        2,
+        random.Random(1703),
+        context=_RecordingContext(),
+        reserve=0.1,
+    )
+
+    assert observed_removed == control_removed
+    assert observed.routes_as_tuples() == control.routes_as_tuples()
+    assert observed.total_cost == control.total_cost
+
+
+@pytest.mark.parametrize(
+    ("destroy_name", "live_checks"),
     [
-        pytest.param("repair_value_error", "repair_error", id="repair-value-error"),
-        pytest.param("candidate_infeasible", "infeasible", id="candidate-infeasible"),
-        pytest.param("route_limit", "route_limit", id="route-limit"),
+        ("_random_removal", 1),
+        ("_worst_removal", 2),
+        ("_shaw_removal", 2),
+        ("_route_removal", 1),
+    ],
+)
+def test_destroy_stops_when_its_internal_deadline_expires(
+    destroy_name: str,
+    live_checks: int,
+) -> None:
+    destroy_repair = _candidate_module("baseline_modules.destroy_repair")
+    state = _candidate_module("baseline_modules.state")
+    instance = _instance()
+    solution = state._Solution(
+        instance,
+        [
+            state._Route(instance, [1, 2]),
+            state._Route(instance, [3, 4]),
+        ],
+    )
+    destroy = getattr(destroy_repair, destroy_name)
+
+    with pytest.raises(TimeoutError, match="deadline exhausted"):
+        destroy(
+            solution,
+            4,
+            random.Random(1703),
+            context=_ExpiringContext(live_checks=live_checks),
+            reserve=0.1,
+        )
+
+
+@pytest.mark.parametrize(
+    ("scenario", "expected_reason", "expects_repair"),
+    [
+        pytest.param(
+            "destroy_deadline",
+            "deadline_exhausted",
+            False,
+            id="destroy-deadline",
+        ),
+        pytest.param(
+            "repair_value_error",
+            "repair_error",
+            True,
+            id="repair-value-error",
+        ),
+        pytest.param(
+            "candidate_infeasible",
+            "infeasible",
+            True,
+            id="candidate-infeasible",
+        ),
+        pytest.param("route_limit", "route_limit", True, id="route-limit"),
     ],
 )
 def test_scheduler_recovery_retains_valid_incumbent(
     monkeypatch: pytest.MonkeyPatch,
     scenario: str,
     expected_reason: str,
+    expects_repair: bool,
 ) -> None:
     scheduler = _candidate_module("baseline_modules.scheduler")
     state = _candidate_module("baseline_modules.state")
@@ -142,10 +337,20 @@ def test_scheduler_recovery_retains_valid_incumbent(
         context=context,
     )
 
-    def destroy(_candidate, _count, _rng):
+    destroy_calls = []
+
+    def destroy(_candidate, _count, _rng, *, context, reserve):
+        destroy_calls.append((context, reserve))
+        if scenario == "destroy_deadline":
+            raise scheduler._OperatorDeadlineExpired(
+                "destroy/repair deadline exhausted"
+            )
         return [1]
 
-    def repair(candidate, _removed, _rng) -> None:
+    repair_calls = []
+
+    def repair(candidate, _removed, _rng, *, context, reserve) -> None:
+        repair_calls.append((context, reserve))
         if scenario == "repair_value_error":
             raise ValueError("repair could not insert the removed customer")
         if scenario == "candidate_infeasible":
@@ -189,3 +394,7 @@ def test_scheduler_recovery_retains_valid_incumbent(
         expected_reason
     ]
     assert context.solution_progress["final_route_count"] == len(incumbent.routes)
+    assert destroy_calls == [(context, pytest.approx(0.05))]
+    assert repair_calls == (
+        [(context, pytest.approx(0.05))] if expects_repair else []
+    )

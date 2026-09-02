@@ -62,10 +62,12 @@ def test_cvrp_target_module_guidance_matches_mechanism_ownership() -> None:
         "policies/baseline_modules/destroy_repair.py"
     )
     assert "destroy and repair operators" in destroy_repair_guidance
+    assert "required keyword-only `context` and `reserve`" in destroy_repair_guidance
     assert "monotonic deadline context" in destroy_repair_guidance
     assert "remaining_time" in destroy_repair_guidance
     assert "recursive searches" in destroy_repair_guidance
-    assert "partial repair" in destroy_repair_guidance
+    assert "potentially long-running destroy or repair" in destroy_repair_guidance
+    assert "discard the partial candidate" in destroy_repair_guidance
     local_search_guidance = provider.solver_design_target_api_guidance(
         "policies/baseline_modules/local_search.py"
     )
@@ -74,9 +76,12 @@ def test_cvrp_target_module_guidance_matches_mechanism_ownership() -> None:
     assert "both phases" in local_search_guidance
     assert "smallest complete scheduler wiring" in local_search_guidance
     assert "target phase only" in local_search_guidance
-    assert "Scheduler owns" in provider.solver_design_target_api_guidance(
+    scheduler_guidance = provider.solver_design_target_api_guidance(
         "policies/baseline_modules/scheduler.py"
     )
+    assert "Scheduler owns" in scheduler_guidance
+    assert "optional second-candidate or tournament work" in scheduler_guidance
+    assert "ALNS loop boundary is insufficient" in scheduler_guidance
 
 
 def test_cvrp_code_guidance_has_one_problem_fact_packet() -> None:
