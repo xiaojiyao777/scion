@@ -572,10 +572,13 @@ R3b result and R3c continuity:
   seconds (469.59 seconds outer wall); changed-file Ruff `E9,F,I` and
   `git diff --check`
   pass. No real provider or campaign ran during tests.
-- [ ] Commit the exact repair/config/docs, create the isolated R3i worktree,
-  and launch the one-shot local tmux carrier for 40 evaluated stages with a
-  generous 2,000-call / 14-day operator envelope. Confirm the first proposal
-  and formal stage from durable artifacts, then leave it running in background.
+- [x] Commit the exact repair/config/docs as `738d741e`, create the isolated
+  R3i worktree, and launch the one-shot local tmux carrier for 40 evaluated
+  stages with a generous 2,000-call / 14-day operator envelope. The first H/C
+  closed with 11/2,000 all-successful attempt-0 provider calls; proposal
+  Verification and formal canary passed; screening produced its first valid
+  pair with zero failures while the tmux/Python process remained healthy. R3i
+  is now running in background from the frozen worktree and fresh root.
 
 ### R4 — Independent retained-B0 confirmation
 

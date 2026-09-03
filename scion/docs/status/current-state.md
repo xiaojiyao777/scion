@@ -330,17 +330,23 @@ lifecycle was added. The final repair suite is `2351 passed, 1 skipped, 0
 failed` in 467.79 seconds; focused tests are `438 passed`, Ruff and diff checks
 pass.
 
+R3i is now live from commit `738d741e` in the isolated
+`or-autoresearch-agent-r3i-dev` worktree and fresh
+`v04-cvrp-r3i-normal-k1-sol-20260903-r1` root. Its first H/C closed with 11
+successful first-attempt provider calls out of the 2,000-call envelope; the
+unbounded transcript setting and widened 12-turn/8-read limits were loaded.
+Proposal Verification and the formal canary passed, and initial screening
+recorded its first valid pair with zero candidate, champion, shared, or
+bilateral failures. The 40-stage campaign remains healthy in its local tmux
+carrier and continues in background.
+
 ## Next scientific rung
 
-1. Use the user's existing autonomous-launch
-   authorization to run the exact frozen R3i wrapper once. It creates one
-   named local tmux session with a lazy pane, sets `remain-on-exit`, and
-   replaces that pane once with the foreground `exec env` command. Do not
-   respawn a second time if an in-pane gate fails.
-2. Start from B0 in the absent fresh R3i root. This is not a resume/retry of
-   R3h, and only durable ordinary artifacts establish result
-   validity.
-3. Run one 40-stage normal CVRP campaign with the exact 65 eligible R3 through
+1. Let the already launched R3i campaign continue in its one named local tmux
+   carrier. Do not respawn it; only durable ordinary artifacts establish
+   result validity.
+2. R3i started from B0 in a fresh root. It is not a resume/retry of R3h.
+3. Complete the 40-stage normal CVRP campaign with the exact 65 eligible R3 through
    R3h H-only records available for voluntary uptake. Keep validation and all
    prior candidate/process state excluded. Use the explicit no-transcript-cap
    limits and a generous 2,000-call / 14-day operator envelope.
