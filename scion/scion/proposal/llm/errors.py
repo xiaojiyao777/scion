@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import time
 
+
 def _is_transient_provider_error(err_str: str) -> bool:
     """Return true for gateway failures that happen before model generation."""
     transient_markers = (
@@ -85,7 +86,7 @@ class LLMFormatError(LLMError):
 
 
 class LLMRateLimitError(LLMError):
-    """HTTP 429; ``retry_after`` is advisory operator metadata only."""
+    """HTTP 429 with an advisory bounded-redispatch delay."""
 
     def __init__(self, message: str, retry_after: float = 60.0) -> None:
         super().__init__(message)

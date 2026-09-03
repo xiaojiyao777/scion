@@ -456,3 +456,24 @@ def test_resource_exhaustion_has_a_nonzero_cli_completion_status() -> None:
         21,
         "incomplete_resource_stop:resource_exhausted",
     )
+
+
+def test_other_incomplete_run_has_a_nonzero_cli_completion_status() -> None:
+    result = CampaignRunResult.empty(1)
+    result = replace(
+        result,
+        stop_reason="execution_not_evaluated",
+        execution_outcome_counts={
+            **result.execution_outcome_counts,
+            ExecutionOutcome.NOT_EVALUATED.value: 1,
+        },
+        last_execution_outcome={
+            "outcome": "not_evaluated",
+            "reason_code": "CURRENT_CALL_NOT_EVALUATED",
+        },
+    )
+
+    assert _completion_from_run_result(result) == (
+        22,
+        "incomplete_stop:execution_not_evaluated",
+    )

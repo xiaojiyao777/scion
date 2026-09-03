@@ -1,0 +1,23 @@
+{
+  "max_action_bytes": 200000,
+  "max_hypothesis_candidates": 1,
+  "max_patch_chars": 500000,
+  "max_patch_files": 8,
+  "max_read_bytes": 1000000,
+  "max_read_calls": 8,
+  "max_read_chars": 500000,
+  "max_read_lines": 50000,
+  "max_search_bytes": 200000,
+  "max_search_calls": 8,
+  "max_search_chars": 100000,
+  "max_search_matches": 500,
+  "max_test_calls": 4,
+  "max_test_copy_bytes": 20000000,
+  "max_test_files": 128,
+  "max_test_result_chars": 100000,
+  "max_test_suite_timeout_sec": 60,
+  "max_test_total_timeout_sec": 240,
+  "max_tool_result_chars": 1000000,
+  "max_transcript_chars": null,
+  "max_turns": 12
+}

@@ -5,10 +5,15 @@ import sqlite3
 from dataclasses import replace
 
 from scion.cli.commands.init_run import _completion_from_run_result
-from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.core.execution_outcome import (
+    PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+)
 from scion.core.models import BranchState
 from scion.core.proposal_pipeline import ProposalAttempt
 from scion.core.scheduler import Scheduler
+from scion.proposal.llm_client import LLMTransportError
 
 from .campaign_test_support import *
 
@@ -257,6 +262,86 @@ class TestCodeFailureDirect:
         result = cm.run_one_step()
         assert result.branch_id is not None
         assert result.execution_outcome.outcome is ExecutionOutcome.EVALUATED
+
+
+@pytest.mark.parametrize(
+    "failed_request_kind",
+    ["hypothesis", "code"],
+)
+def test_transient_provider_failure_does_not_stop_campaign_or_pollute_history(
+    tmp_path,
+    failed_request_kind,
+):
+    class TransientOnceLLM:
+        def __init__(self):
+            self.failed = False
+            self.request_kinds = []
+
+        def call_with_tool(
+            self,
+            prompt,
+            tool,
+            model=None,
+            system_blocks=None,
+            request_kind=None,
+        ):
+            del prompt, model, system_blocks
+            self.request_kinds.append(request_kind)
+            if request_kind == failed_request_kind and not self.failed:
+                self.failed = True
+                raise LLMTransportError("PRIVATE transient transport detail")
+            required = set(tool.get("input_schema", {}).get("required", []))
+            if "hypothesis_text" in required or "change_locus" in required:
+                return dict(_VALID_HYPOTHESIS)
+            return dict(_VALID_PATCH)
+
+    cm = _campaign(
+        tmp_path,
+        llm_client=TransientOnceLLM(),
+        experiment_protocol=MockExperimentProtocol(
+            results=[_make_protocol_result(ExperimentStage.SCREENING)]
+        ),
+    )
+    cm._scheduler = Scheduler(max_active_branches=1)
+    cm._branch_step_runner.scheduler = cm._scheduler
+
+    terminal = cm.run(requested_rounds=1)
+
+    assert terminal.completed
+    assert terminal.stop_reason == "requested_rounds_completed"
+    assert terminal.scheduled_calls == 2
+    assert terminal.evaluated_rounds == 1
+    assert terminal.execution_outcome_counts == {
+        "evaluated": 1,
+        "research_rejected": 1,
+        "not_evaluated": 0,
+        "blocked_infra": 0,
+        "resource_exhausted": 0,
+        "interrupted": 0,
+    }
+    assert len(cm._step_history) == 2
+    first_outcome = cm._step_history[0].execution_outcome
+    assert first_outcome is not None
+    assert first_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+    assert first_outcome.reason_code == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+    branch = next(iter(cm._branch_ctrl._branches.values()))
+    assert branch.state is not BranchState.BLOCKED_INFRA
+    durable = cm._registry.query_execution_outcomes(branch_id=branch.branch_id)
+    assert any(
+        row["reason_code"] == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+        and row["outcome"] == ExecutionOutcome.RESEARCH_REJECTED.value
+        for row in durable
+    )
+    history_rows = [
+        json.loads(line)
+        for line in (tmp_path / "campaign" / "research_history.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(history_rows) == 1
+    assert history_rows[0]["outcome"]["outcome"] == "evaluated"
+    assert PROVIDER_TRANSIENT_RETRIES_EXHAUSTED not in str(history_rows)
+    assert "PRIVATE transient transport detail" not in str(history_rows)
 
 
 def test_provider_auth_failure_blocks_branch_with_one_typed_outcome(tmp_path):
@@ -598,3 +683,55 @@ def test_hypothesis_abstention_is_one_redacted_durable_attempt(tmp_path):
     )
     for marker in sentinel.split():
         assert marker not in public_artifacts
+
+
+def test_campaign_continues_after_research_history_record_limit(
+    tmp_path,
+    monkeypatch,
+    caplog,
+):
+    import scion.core.research_history as history_module
+
+    monkeypatch.setattr(history_module, "MAX_RESEARCH_HISTORY_RECORDS", 1)
+    cm = _campaign(
+        tmp_path,
+        experiment_protocol=MockExperimentProtocol(
+            results=[_make_protocol_result(ExperimentStage.SCREENING)]
+        ),
+    )
+    generate_hypothesis = cm._explore_step_pipeline.generate_hypothesis
+    calls = 0
+
+    def abstain_once(branch):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return ProposalAttempt.failure(
+                ExecutionOutcomeRecord(
+                    outcome=ExecutionOutcome.RESEARCH_REJECTED,
+                    reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
+                    provenance={"stage": "proposal_hypothesis"},
+                )
+            )
+        return generate_hypothesis(branch)
+
+    cm._explore_step_pipeline.generate_hypothesis = abstain_once
+
+    terminal = cm.run(requested_rounds=1)
+
+    assert terminal.completed
+    assert terminal.stop_reason == "requested_rounds_completed"
+    assert terminal.scheduled_calls == 2
+    assert terminal.evaluated_rounds == 1
+    assert len(cm._step_history) == 2
+    summary = json.loads(
+        (tmp_path / "campaign" / "campaign_summary.json").read_text(encoding="utf-8")
+    )
+    assert [step["round"] for step in summary["steps"]] == [1, 2]
+    history_path = tmp_path / "campaign" / "research_history.jsonl"
+    history_lines = history_path.read_text(encoding="utf-8").splitlines()
+    assert len(history_lines) == 1
+    assert json.loads(history_lines[0])["outcome"]["reason_code"] == (
+        "HYPOTHESIS_RESEARCH_ABSTAINED"
+    )
+    assert "record limit 1 reached" in caplog.text

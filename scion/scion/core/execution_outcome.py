@@ -22,6 +22,11 @@ class ExecutionOutcome(Enum):
     INTERRUPTED = "interrupted"
 
 
+PROVIDER_TRANSIENT_RETRIES_EXHAUSTED = (
+    "PROVIDER_TRANSIENT_RETRIES_EXHAUSTED"
+)
+
+
 _EXECUTION_HOLD_OUTCOMES = frozenset(
     {
         ExecutionOutcome.BLOCKED_INFRA,

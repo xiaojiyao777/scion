@@ -234,6 +234,13 @@ class CampaignLoop:
                 )
                 continue
 
+            if _is_cleaned_stale_explore_attempt(result):
+                self.write_status(
+                    last_result=result,
+                    run_result=snapshot(),
+                )
+                continue
+
             if outcome is not ExecutionOutcome.EVALUATED:
                 final_reason = (
                     f"execution_{outcome.value}"
@@ -312,6 +319,15 @@ def _is_non_attempt_reconcile_housekeeping(result: StepResult) -> bool:
         and record is not None
         and record.outcome is ExecutionOutcome.NOT_EVALUATED
         and record.reason_code == "RECONCILE_NO_ACCEPTED_CHANGES"
+    )
+
+
+def _is_cleaned_stale_explore_attempt(result: StepResult) -> bool:
+    record = result.execution_outcome
+    return bool(
+        record is not None
+        and record.outcome is ExecutionOutcome.NOT_EVALUATED
+        and record.reason_code == "BRANCH_STALE_DURING_EXPLORE"
     )
 
 

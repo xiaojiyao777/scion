@@ -25,6 +25,7 @@ from scion.core.resource_envelope import (
     ProviderCallBudget,
     ProviderCallCapExhausted,
 )
+from scion.proposal.bounded_research import BoundedResearchBudget, bounded_json
 from scion.proposal.code_research_session import (
     CodeResearchAbandon,
     CodeResearchSession,
@@ -991,11 +992,85 @@ def test_limits_json_is_strict_and_enables_by_file_presence(tmp_path: Path) -> N
 
     assert limits.max_turns == 2
     assert limits.max_read_calls == 1
-    assert limits.max_search_calls == 3
+    assert limits.max_search_calls == 8
+    assert limits.max_transcript_chars is None
     bad = tmp_path / "bad.json"
     bad.write_text('{"max_turns":2,"workspace":"/tmp"}', encoding="utf-8")
     with pytest.raises(ValueError, match="unsupported"):
         load_code_research_limits(bad)
+
+
+def test_research_limit_defaults_and_extended_call_bounds() -> None:
+    defaults = CodeResearchLimits()
+
+    assert defaults.max_turns == 12
+    assert defaults.max_read_calls == 8
+    assert defaults.max_search_calls == 8
+    assert defaults.max_transcript_chars is None
+    assert defaults.to_primitive()["max_transcript_chars"] is None
+
+    for field in ("max_turns", "max_read_calls", "max_search_calls"):
+        assert getattr(CodeResearchLimits(**{field: 64}), field) == 64
+        with pytest.raises(ValueError, match=field):
+            CodeResearchLimits(**{field: 65})
+
+
+@pytest.mark.parametrize("value", [1, 4_000_001, 100_000_000])
+def test_explicit_transcript_limit_accepts_any_positive_integer(value: int) -> None:
+    assert CodeResearchLimits(max_transcript_chars=value).max_transcript_chars == value
+
+
+@pytest.mark.parametrize(
+    ("value", "error_type"),
+    [
+        (0, ValueError),
+        (-1, ValueError),
+        (True, TypeError),
+        (1.5, TypeError),
+        ("1000", TypeError),
+    ],
+)
+def test_explicit_transcript_limit_rejects_nonpositive_or_noninteger_values(
+    value: object,
+    error_type: type[Exception],
+) -> None:
+    with pytest.raises(error_type, match="max_transcript_chars"):
+        CodeResearchLimits(max_transcript_chars=value)  # type: ignore[arg-type]
+
+
+def test_unbounded_transcript_still_accumulates_exact_accounting() -> None:
+    budget = BoundedResearchBudget(
+        CodeResearchLimits(max_transcript_chars=None),
+        label="code research",
+        provider_cap=1,
+    )
+    snapshot = PromptTurnSnapshot(
+        render_kind="code_research",
+        system_blocks=({"type": "text", "text": "bounded state"},),
+        user_prompt="choose one action",
+        provider_tool={"name": "turn", "input_schema": {"type": "object"}},
+        structured_context_json="{}",
+    )
+    action = {"action": "ready"}
+    result = {"action": "ready", "ok": False, "reason": "draft_required"}
+    prompt_chars = len(
+        bounded_json(
+            {
+                "system_blocks": list(snapshot.system_blocks),
+                "user_prompt": snapshot.user_prompt,
+                "provider_tool": snapshot.provider_tool,
+            }
+        )
+    )
+
+    assert budget.call_provider(snapshot, lambda: action) == action
+    budget.record_action(action)
+    budget.record_result(result)
+
+    assert budget.provider_calls == 1
+    assert budget.transcript_chars == (
+        prompt_chars + len(bounded_json(action)) + len(bounded_json(result))
+    )
 
 
 def test_enabled_limits_reach_the_normal_proposal_pipeline() -> None:

@@ -70,7 +70,7 @@ def text_line_count(text: str) -> int:
 
 
 class BoundedResearchBudget:
-    """Shared finite transcript, read, search, and provider accounting."""
+    """Shared transcript, read, search, and provider accounting."""
 
     def __init__(
         self,
@@ -106,7 +106,7 @@ class BoundedResearchBudget:
                 }
             )
         )
-        if self.transcript_chars + prompt_chars > self.limits.max_transcript_chars:
+        if not self._can_reserve_transcript(prompt_chars):
             raise ProposalValidationError(
                 f"{self.label} transcript exceeds max_transcript_chars before dispatch"
             )
@@ -172,15 +172,12 @@ class BoundedResearchBudget:
                 self.limits.max_tool_result_chars,
                 "tool_result_cap_exhausted",
             ),
-            (
-                self.transcript_chars + chars,
-                self.limits.max_transcript_chars,
-                "tool_result_cap_exhausted",
-            ),
         )
         reason = next(
             (reason for value, maximum, reason in checks if value > maximum), None
         )
+        if reason is None and not self._can_reserve_transcript(chars):
+            reason = "tool_result_cap_exhausted"
         if reason:
             return reason
         self.read_chars += chars
@@ -229,11 +226,15 @@ class BoundedResearchBudget:
         }
 
     def _reserve_transcript(self, chars: int) -> None:
-        if self.transcript_chars + chars > self.limits.max_transcript_chars:
+        if not self._can_reserve_transcript(chars):
             raise ProposalValidationError(
                 f"{self.label} transcript exceeds max_transcript_chars"
             )
         self.transcript_chars += chars
+
+    def _can_reserve_transcript(self, chars: int) -> bool:
+        maximum = self.limits.max_transcript_chars
+        return maximum is None or self.transcript_chars + chars <= maximum
 
 
 class BoundedMatchCollector:
@@ -259,8 +260,7 @@ class BoundedMatchCollector:
             any(value <= 0 for value in self._budget.search_capacity())
             or self._chars
             > self._budget.limits.max_tool_result_chars - self._budget.tool_chars
-            or self._chars
-            > self._budget.limits.max_transcript_chars - self._budget.transcript_chars
+            or not self._budget._can_reserve_transcript(self._chars)
         )
 
     def add(
@@ -281,15 +281,12 @@ class BoundedMatchCollector:
         next_match_bytes = self._match_bytes + matched_bytes
         match_cap, char_cap, byte_cap = self._budget.search_capacity()
         tool_cap = self._budget.limits.max_tool_result_chars - self._budget.tool_chars
-        transcript_cap = (
-            self._budget.limits.max_transcript_chars - self._budget.transcript_chars
-        )
         if (
             len(self._matches) + 1 > match_cap
             or next_match_chars > char_cap
             or next_match_bytes > byte_cap
             or next_chars > tool_cap
-            or next_chars > transcript_cap
+            or not self._budget._can_reserve_transcript(next_chars)
         ):
             self.exhausted = True
             return False

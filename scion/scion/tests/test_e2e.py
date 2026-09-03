@@ -327,7 +327,16 @@ class TestFullMockCampaign:
 
     def test_campaign_run_method_terminates(self, tmp_path):
         """cm.run(requested_rounds=5) terminates without hanging."""
-        cm = _build_campaign(tmp_path)
+        protocol = _MockExperimentProtocol(
+            results=[
+                _make_protocol_result(ExperimentStage.SCREENING),
+                _make_protocol_result(ExperimentStage.VALIDATION),
+                _make_protocol_result(ExperimentStage.FROZEN, gate_outcome="fail"),
+                _make_protocol_result(ExperimentStage.SCREENING),
+                _make_protocol_result(ExperimentStage.VALIDATION),
+            ]
+        )
+        cm = _build_campaign(tmp_path, experiment_protocol=protocol)
         cm.run(requested_rounds=5)
         # No exception = pass
 

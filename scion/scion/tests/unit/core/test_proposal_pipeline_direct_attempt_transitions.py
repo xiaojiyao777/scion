@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from scion.core.code_research_limits import CodeResearchLimits
-from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.core.execution_outcome import (
+    PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+)
 from scion.core.models import BranchState, HypothesisProposal, StepRecord
 from scion.core.resource_envelope import ProviderCallCapExhausted
 from scion.proposal.engine import ProposalValidationError
@@ -13,7 +17,13 @@ from scion.proposal.hypothesis_research_basis import (
     HypothesisResearchBasis,
     HypothesisResearchFinalized,
 )
-from scion.proposal.llm_client import LLMFormatError, LLMTransportError
+from scion.proposal.llm_client import (
+    LLMFormatError,
+    LLMProviderError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+    LLMTransportError,
+)
 
 from .proposal_pipeline_test_support import FakeCreative, _pipeline
 
@@ -61,7 +71,9 @@ class _ManyRejectionsCreative(FakeCreative):
         return self.hypothesis
 
 
-def test_direct_h_rejects_latest_live_failure_frontier_before_provider() -> None:
+def test_direct_h_auto_enables_default_research_for_live_failure_frontier(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     creative = FakeCreative()
     pipeline, branch, runtime, _balance = _pipeline(creative=creative)
     original_builder = runtime.build_hypothesis_context
@@ -87,14 +99,41 @@ def test_direct_h_rejects_latest_live_failure_frontier_before_provider() -> None
         return context
 
     runtime.build_hypothesis_context = build_context
+    runtime.hypothesis_research_public_sources = lambda: ()
+    runtime.hypothesis_research_source_prefixes = lambda: ()
+    observed_limits: list[CodeResearchLimits] = []
+
+    class _Session:
+        provider_calls_used = 1
+        selected_history_frontier_review = ()
+
+        def __init__(self, _creative, limits, **_kwargs) -> None:
+            observed_limits.append(limits)
+
+        def run(self, *_args, **_kwargs):
+            return HypothesisResearchFinalized(
+                hypothesis=creative.hypothesis,
+                research_basis=HypothesisResearchBasis(
+                    read_refs=("history-0001",),
+                    nearest_prior_refs=("history-0001",),
+                    material_delta="Use the latest failed mechanism as evidence.",
+                    alternatives_considered=("Repeat the failed mechanism.",),
+                    observable_prediction="The revised mechanism should improve.",
+                    falsification_condition=("Reject on another quality failure.",),
+                ),
+            )
+
+    monkeypatch.setattr(
+        "scion.core.proposal_pipeline.facade.HypothesisResearchSession",
+        _Session,
+    )
 
     attempt = pipeline.generate_hypothesis(branch)
 
-    assert attempt.proposal is None
-    assert attempt.execution_outcome is not None
-    assert attempt.execution_outcome.outcome is ExecutionOutcome.NOT_EVALUATED
-    assert attempt.execution_outcome.reason_code == "PROPOSAL_CONTEXT_INVALID"
-    assert "requires bounded hypothesis research" in attempt.execution_outcome.detail
+    assert attempt.proposal is creative.hypothesis
+    assert attempt.execution_outcome is None
+    assert len(observed_limits) == 1
+    assert observed_limits[0] == CodeResearchLimits()
     assert creative.hypothesis_calls == 0
 
 
@@ -408,7 +447,7 @@ def test_next_bounded_h_sees_sanitized_abstention() -> None:
         ),
     ],
 )
-def test_h_research_limits_are_terminal_resources_not_observations(
+def test_h_research_limits_without_a_dispatched_session_remain_terminal(
     error: Exception,
     reason_code: str,
 ) -> None:
@@ -423,6 +462,80 @@ def test_h_research_limits_are_terminal_resources_not_observations(
     assert exhausted.execution_outcome.reason_code == reason_code
     assert manual_followup.proposal is creative.hypothesis
     assert "hypothesis_rejection_summary" not in creative.hypothesis_contexts[1]
+
+
+@pytest.mark.parametrize(
+    ("error", "reason_code"),
+    [
+        (
+            ProposalValidationError(
+                "transcript exceeds max_transcript_chars before dispatch"
+            ),
+            "HYPOTHESIS_RESEARCH_TRANSCRIPT_EXHAUSTED",
+        ),
+        (
+            ProposalValidationError("turn cap exhausted without finalize"),
+            "HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED",
+        ),
+        (
+            ProposalValidationError("tool results exceed limit"),
+            "HYPOTHESIS_RESEARCH_RESULT_CAP_EXHAUSTED",
+        ),
+    ],
+)
+def test_h_research_limits_after_dispatch_are_sanitized_rejections(
+    monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    reason_code: str,
+) -> None:
+    creative = FakeCreative()
+    pipeline, branch, runtime, _balance = _pipeline(creative=creative)
+    runtime.hypothesis_research_public_sources = lambda: ()
+    runtime.hypothesis_research_source_prefixes = lambda: ()
+    pipeline.code_research_limits = CodeResearchLimits(max_turns=1)
+    contexts: list[dict[str, object]] = []
+
+    class _Session:
+        provider_calls_used = 1
+        selected_history_frontier_review = ()
+
+        def __init__(self, *_args, **_kwargs) -> None:
+            pass
+
+        def run(self, snapshot, **_kwargs):
+            contexts.append(snapshot.structured_context)
+            if len(contexts) == 1:
+                raise error
+            return HypothesisResearchFinalized(
+                hypothesis=creative.hypothesis,
+                research_basis=HypothesisResearchBasis(
+                    read_refs=(),
+                    nearest_prior_refs=(),
+                    material_delta="Change the selected mechanism.",
+                    alternatives_considered=("Keep the current mechanism.",),
+                    observable_prediction="Screening should improve.",
+                    falsification_condition="Reject if screening does not improve.",
+                ),
+            )
+
+    monkeypatch.setattr(
+        "scion.core.proposal_pipeline.facade.HypothesisResearchSession",
+        _Session,
+    )
+
+    rejected = pipeline.generate_hypothesis(branch)
+    accepted = pipeline.generate_hypothesis(branch)
+
+    assert rejected.proposal is None
+    assert rejected.execution_outcome is not None
+    assert rejected.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+    assert rejected.execution_outcome.reason_code == reason_code
+    assert accepted.proposal is creative.hypothesis
+    assert contexts[1]["hypothesis_rejection_summary"] == {
+        "reason_counts": {reason_code: 1},
+        "last_reason": reason_code,
+    }
+    assert str(error) not in str(contexts[1])
 
 
 def test_bounded_h_transcript_exhaustion_stops_before_provider_dispatch() -> None:
@@ -458,21 +571,12 @@ def test_bounded_h_transcript_exhaustion_stops_before_provider_dispatch() -> Non
     assert pipeline._hypothesis_rejection_counts == {}
 
 
-@pytest.mark.parametrize(
-    "error",
-    [
-        ProviderCallCapExhausted(
-            cap=1,
-            used=1,
-            request_kind="hypothesis_research_turn",
-        ),
-        LLMTransportError("UNTRUSTED_INFRA_DETAIL"),
-    ],
-    ids=("resource", "infra"),
-)
-def test_resource_and_infra_failures_do_not_enter_h_research_observations(
-    error: Exception,
-) -> None:
+def test_global_provider_cap_does_not_enter_h_research_observations() -> None:
+    error = ProviderCallCapExhausted(
+        cap=1,
+        used=1,
+        request_kind="hypothesis_research_turn",
+    )
     creative = _HypothesisSequenceCreative([error, None])
     pipeline, branch, _runtime, _balance = _pipeline(creative=creative)
 
@@ -480,12 +584,53 @@ def test_resource_and_infra_failures_do_not_enter_h_research_observations(
     accepted = pipeline.generate_hypothesis(branch)
 
     assert rejected.execution_outcome is not None
-    assert rejected.execution_outcome.outcome in {
-        ExecutionOutcome.BLOCKED_INFRA,
-        ExecutionOutcome.RESOURCE_EXHAUSTED,
-    }
+    assert rejected.execution_outcome.outcome is ExecutionOutcome.RESOURCE_EXHAUSTED
     assert accepted.proposal is creative.hypothesis
     assert "hypothesis_rejection_summary" not in creative.hypothesis_contexts[1]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        LLMTimeoutError("UNTRUSTED_TIMEOUT_DETAIL"),
+        LLMTransportError("UNTRUSTED_TRANSPORT_DETAIL"),
+        LLMProviderError("UNTRUSTED_PROVIDER_DETAIL"),
+        LLMRateLimitError("UNTRUSTED_RATE_DETAIL", retry_after=30.0),
+    ],
+)
+@pytest.mark.parametrize("phase", ["hypothesis", "code"])
+def test_transient_provider_retry_exhaustion_rejects_only_current_attempt(
+    error: Exception,
+    phase: str,
+) -> None:
+    creative = (
+        _HypothesisSequenceCreative([error])
+        if phase == "hypothesis"
+        else FakeCreative(code_error=error)
+    )
+    pipeline, branch, _runtime, _balance = _pipeline(creative=creative)
+
+    if phase == "hypothesis":
+        rejected = pipeline.generate_hypothesis(branch)
+    else:
+        hypothesis = pipeline.generate_hypothesis(branch).proposal
+        assert hypothesis is not None
+        rejected = pipeline.generate_code(branch, hypothesis)
+
+    assert rejected.proposal is None
+    assert rejected.execution_outcome is not None
+    assert rejected.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+    assert (
+        rejected.execution_outcome.reason_code
+        == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+    )
+    assert rejected.execution_outcome.provenance == {
+        "stage": f"proposal_{phase}",
+        "phase": phase,
+        "exception_type": type(error).__name__,
+    }
+    assert branch.state is not BranchState.BLOCKED_INFRA
+    assert pipeline._hypothesis_rejection_counts == {}
 
 
 def test_not_evaluated_context_failure_does_not_enter_h_observations() -> None:

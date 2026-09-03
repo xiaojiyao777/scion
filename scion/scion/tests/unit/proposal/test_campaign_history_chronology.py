@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from scion.core.execution_outcome import ExecutionOutcome, ExecutionOutcomeRecord
+from scion.core.execution_outcome import (
+    PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+)
 from scion.core.models import (
     Branch,
     BranchState,
@@ -90,6 +94,32 @@ def _screening_step(round_num: int, branch_id: str, label: str) -> StepRecord:
     )
 
 
+def _provider_transient_step(round_num: int, branch_id: str) -> StepRecord:
+    return StepRecord(
+        round_num=round_num,
+        branch_id=branch_id,
+        hypothesis=_hypothesis("provider transport failed after H"),
+        patch=None,
+        contract_passed=True,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="proposal_code",
+        failure_detail="PRIVATE provider outage",
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code=PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+            provenance={
+                "stage": "proposal_code",
+                "exception_type": "LLMTransportError",
+            },
+        ),
+    )
+
+
 def _experiment_history_record(
     round_num: int,
     relation: str,
@@ -162,6 +192,23 @@ def test_campaign_history_tool_index_follows_interleaved_step_rounds() -> None:
         "sibling",
         "sibling",
     ]
+
+
+def test_provider_transient_rejection_is_not_algorithm_failure_feedback() -> None:
+    ordinary = _pre_protocol_step(1, "current-branch", "algorithm rejection")
+    operational = _provider_transient_step(2, "current-branch")
+
+    projected = proposal_pre_protocol_observations(
+        [ordinary, operational],
+        current_branch_id="current-branch",
+    )
+
+    assert len(projected) == 1
+    assert projected[0]["round_num"] == 1
+    assert projected[0]["outcome"]["reason_code"] == (
+        "HYPOTHESIS_CONTRACT_REJECTED"
+    )
+    assert PROVIDER_TRANSIENT_RETRIES_EXHAUSTED not in str(projected)
 
 
 def test_live_campaign_history_without_round_metadata_fails_closed() -> None:

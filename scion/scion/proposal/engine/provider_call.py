@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass
@@ -14,6 +15,7 @@ from scion.core.resource_envelope import ProviderCallBudget
 from scion.proposal.llm.errors import (
     LLMFormatError,
     LLMProviderError,
+    LLMRateLimitError,
     LLMTimeoutError,
     LLMTransportError,
 )
@@ -151,7 +153,7 @@ class ProviderCaller:
                     attempt_index=attempt_index,
                 )
                 if retry_planned:
-                    _sleep(_PROVIDER_REDISPATCH_BACKOFF_SEC[attempt_index])
+                    _sleep(_provider_redispatch_backoff_sec(exc, attempt_index))
                     continue
                 raise
 
@@ -303,7 +305,34 @@ def _validate_provider_transient_retries(value: Any) -> None:
 
 
 def _is_retryable_provider_error(exc: Exception) -> bool:
-    return isinstance(exc, (LLMTimeoutError, LLMTransportError, LLMProviderError))
+    return isinstance(
+        exc,
+        (
+            LLMTimeoutError,
+            LLMTransportError,
+            LLMProviderError,
+            LLMRateLimitError,
+        ),
+    )
+
+
+def _provider_redispatch_backoff_sec(exc: Exception, attempt_index: int) -> float:
+    base = _PROVIDER_REDISPATCH_BACKOFF_SEC[attempt_index]
+    if not isinstance(exc, LLMRateLimitError):
+        return base
+    retry_after = getattr(exc, "retry_after", None)
+    if (
+        isinstance(retry_after, bool)
+        or not isinstance(retry_after, (int, float))
+    ):
+        return base
+    try:
+        retry_after_sec = float(retry_after)
+    except (OverflowError, TypeError, ValueError):
+        return base
+    if not math.isfinite(retry_after_sec) or retry_after_sec < 0:
+        return base
+    return max(base, retry_after_sec)
 
 
 def _json_size_exceeds(value: Any, maximum: int) -> bool:

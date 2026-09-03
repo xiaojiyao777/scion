@@ -28,8 +28,9 @@ class PolicyMixin:
         """Return the effective transport/output policy for one LLM request.
 
         Code-generation requests are long non-streaming tool calls.  By default
-        they get a longer client timeout.  Every request is a single transport
-        call; timeout is a process-safety boundary, never a retry trigger.
+        they get a longer client timeout.  Each LLMClient request is one
+        transport call; any bounded transient redispatch is owned by the
+        outer ProviderCaller and remains separately charged and traced.
 
         OpenAI-compatible proposal calls leave output length to the provider.
         Anthropic's SDK requires ``max_tokens``; that provider-native transport

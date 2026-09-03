@@ -10,6 +10,7 @@ from scion.cli.commands.init_run import _load_research_histories
 from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.evidence_recording import EvidenceRecorder
 from scion.core.execution_outcome import (
+    PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
     ExecutionOutcome,
     ExecutionOutcomeRecord,
     disposition_failure_record,
@@ -118,6 +119,33 @@ def _hypothesis_failure() -> StepRecord:
             outcome=ExecutionOutcome.RESEARCH_REJECTED,
             reason_code="HYPOTHESIS_RESEARCH_ABSTAINED",
             provenance={"stage": "proposal_hypothesis"},
+        ),
+    )
+
+
+def _provider_transient_failure() -> StepRecord:
+    return StepRecord(
+        round_num=2,
+        branch_id="private-branch",
+        hypothesis=_hypothesis("Provider-independent algorithm hypothesis."),
+        patch=None,
+        contract_passed=True,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="proposal_code",
+        failure_detail="PRIVATE provider outage detail",
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code=PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+            detail="PRIVATE provider outage detail",
+            provenance={
+                "stage": "proposal_code",
+                "exception_type": "LLMTransportError",
+            },
         ),
     )
 
@@ -232,6 +260,35 @@ def test_writer_persists_only_ordinary_failure_before_memory_append(
         "metadata",
     ):
         assert forbidden not in raw
+
+
+def test_provider_transient_step_remains_auditable_but_not_scientific_history(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(
+        campaign_id="campaign",
+        campaign_dir=tmp_path,
+        problem_id="generic_demo",
+    )
+    history: list[StepRecord] = []
+    ordinary = _verification_rejection()
+    transient = _provider_transient_failure()
+
+    recorder.record_step(ordinary, history)
+    before = (tmp_path / "research_history.jsonl").read_bytes()
+    recorder.record_step(transient, history)
+
+    assert history == [ordinary, transient]
+    assert history[-1].execution_outcome is not None
+    assert history[-1].execution_outcome.reason_code == (
+        PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+    )
+    assert project_research_history_step(
+        transient,
+        problem_id="generic_demo",
+    ) is None
+    assert (tmp_path / "research_history.jsonl").read_bytes() == before
+    assert PROVIDER_TRANSIENT_RETRIES_EXHAUSTED.encode() not in before
 
 
 def test_hypothesis_free_attempt_round_trips_as_one_redacted_history_row(
@@ -564,6 +621,99 @@ def test_writer_failure_preserves_atomic_prefix_and_memory(
 
     assert (tmp_path / "research_history.jsonl").read_bytes() == before
     assert [step.hypothesis.hypothesis_text for step in history] == ["first"]
+
+
+def test_writer_record_limit_is_nonfatal_and_stops_future_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import scion.core.research_history as module
+
+    monkeypatch.setattr(module, "MAX_RESEARCH_HISTORY_RECORDS", 1)
+    writer = ResearchHistoryWriter(tmp_path, problem_id="generic_demo")
+    writer.append_step(_verification_rejection("first"))
+    before = writer.path.read_bytes()
+
+    writer.append_step(_verification_rejection("second"))
+    monkeypatch.setattr(
+        module,
+        "project_research_history_step",
+        lambda _step, *, problem_id: (_ for _ in ()).throw(
+            AssertionError(f"unexpected projection for {problem_id}")
+        ),
+    )
+    writer.append_step(_verification_rejection("third"))
+
+    assert writer.path.read_bytes() == before
+    assert "record limit 1 reached" in caplog.text
+
+
+def test_writer_skips_oversized_line_and_keeps_projecting(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import scion.core.research_history as module
+
+    small = _verification_rejection("small")
+    small_line = (
+        json.dumps(
+            _record(small),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            allow_nan=False,
+        )
+        + "\n"
+    ).encode("utf-8")
+    monkeypatch.setattr(module, "MAX_RESEARCH_HISTORY_LINE_BYTES", len(small_line))
+    writer = ResearchHistoryWriter(tmp_path, problem_id="generic_demo")
+
+    writer.append_step(_verification_rejection("x" * (len(small_line) + 1)))
+    writer.append_step(small)
+
+    assert writer.path.read_bytes() == small_line
+    assert "Skipping research history record" in caplog.text
+    assert f"{len(small_line)}-byte line limit" in caplog.text
+
+
+def test_recorder_keeps_steps_after_history_file_limit_and_preserves_prefix(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    import scion.core.research_history as module
+
+    recorder = EvidenceRecorder(
+        campaign_id="campaign",
+        campaign_dir=tmp_path,
+        problem_id="generic_demo",
+    )
+    history: list[StepRecord] = []
+    first = _verification_rejection("first")
+    second = _verification_rejection("second")
+    third = _verification_rejection("third")
+    recorder.record_step(first, history)
+    path = tmp_path / "research_history.jsonl"
+    before = path.read_bytes()
+    monkeypatch.setattr(module, "MAX_RESEARCH_HISTORY_FILE_BYTES", len(before))
+
+    recorder.record_step(second, history)
+    monkeypatch.setattr(
+        module,
+        "project_research_history_step",
+        lambda _step, *, problem_id: (_ for _ in ()).throw(
+            AssertionError(f"unexpected projection for {problem_id}")
+        ),
+    )
+    recorder.record_step(third, history)
+
+    assert history == [first, second, third]
+    assert path.read_bytes() == before
+    assert load_research_histories(
+        [path], expected_problem_id="generic_demo"
+    ) == (_record(first),)
+    assert "file limit" in caplog.text
 
 
 @pytest.mark.parametrize("stage", (ExperimentStage.VALIDATION, ExperimentStage.FROZEN))

@@ -9,16 +9,22 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from scion.proposal.llm_client import (
+    LLMAuthError,
     LLMClient,
     LLMFormatError,
     LLMRateLimitError,
 )
-from scion.runtime.subprocess_runner import (
-    LocalSubprocessRunner,
-    MAX_INLINE_OUTPUT_BYTES,
-    _OFFLOAD_PREFIX,
-)
 from scion.runtime.runner import resolve_offloaded
+from scion.runtime.subprocess_runner import (
+    _OFFLOAD_PREFIX,
+    MAX_INLINE_OUTPUT_BYTES,
+    LocalSubprocessRunner,
+)
+
+
+class _AuthFailureLLM:
+    def call_with_tool(self, *_args, **_kwargs):
+        raise LLMAuthError("invalid provider credentials")
 
 
 # ---------------------------------------------------------------------------
@@ -185,13 +191,18 @@ class TestCampaignTypedProviderTermination:
 
     def _make_campaign(self, llm_client):
         """Create a minimal CampaignManager with mock dependencies."""
+        from types import SimpleNamespace
+
+        from scion.config.problem import (
+            ProblemSpec,
+            ProtocolConfig,
+            SearchSpace,
+            SeedLedgerConfig,
+            SplitManifest,
+        )
         from scion.core.campaign import CampaignManager
         from scion.core.models import ChampionState
-        from scion.config.problem import (
-            ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
-        )
         from scion.problem.spec import ObjectiveMetricSpec
-        from types import SimpleNamespace
 
         tmpdir = tempfile.mkdtemp()
         spec = ProblemSpec(
@@ -247,11 +258,9 @@ class TestCampaignTypedProviderTermination:
         )
         return campaign
 
-    def test_campaign_stops_on_first_typed_infra_outcome(self):
-        """Provider infra failure stops the invocation without hidden retries."""
-        from scion.proposal.mock_client import MockLLMClient
-
-        failing_client = MockLLMClient(mode="timeout")
+    def test_campaign_stops_on_first_typed_auth_outcome(self):
+        """Provider auth failure remains a terminal invocation boundary."""
+        failing_client = _AuthFailureLLM()
         campaign = self._make_campaign(failing_client)
 
         campaign.run(requested_rounds=20)
@@ -260,10 +269,9 @@ class TestCampaignTypedProviderTermination:
 
     def test_campaign_summary_has_typed_infra_stop_reason(self):
         """Campaign summary names the typed outcome that stopped execution."""
-        from scion.proposal.mock_client import MockLLMClient
         import json as _json
 
-        failing_client = MockLLMClient(mode="timeout")
+        failing_client = _AuthFailureLLM()
         campaign = self._make_campaign(failing_client)
         campaign.run(requested_rounds=20)
 

@@ -106,21 +106,7 @@ def _normalize_campaign_boundaries(
         if code_research_limits is None
         else normalize_code_research_limits(code_research_limits)
     )
-    k2_candidates = (
-        normalized_code is not None and normalized_code.max_hypothesis_candidates == 2
-    )
     normalized_resource = normalize_resource_envelope(resource_envelope)
-    if k2_candidates:
-        if normalized_resource.provider_call_cap is None:
-            raise ValueError(
-                "max_hypothesis_candidates=2 requires resource envelope "
-                "provider_call_cap"
-            )
-        if normalized_resource.outer_hardwall_sec is None:
-            raise ValueError(
-                "max_hypothesis_candidates=2 requires resource envelope "
-                "outer_hardwall_sec"
-            )
     return normalized_code, normalized_resource
 
 

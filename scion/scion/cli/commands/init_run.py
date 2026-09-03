@@ -225,7 +225,10 @@ def _campaign_signal_handlers(
         )
 
     handled_signals = [signal.SIGTERM, signal.SIGINT]
-    if hasattr(signal, "SIGHUP"):
+    if (
+        hasattr(signal, "SIGHUP")
+        and signal.getsignal(signal.SIGHUP) != signal.SIG_IGN
+    ):
         handled_signals.append(signal.SIGHUP)
     for signum in handled_signals:
         previous[signum] = signal.getsignal(signum)
@@ -258,6 +261,7 @@ def _run_campaign_with_signal_finalization(
 
 _INCOMPLETE_INFRA_STOP_EXIT_STATUS = 20
 _RESOURCE_EXHAUSTED_EXIT_STATUS = 21
+_INCOMPLETE_OTHER_STOP_EXIT_STATUS = 22
 
 
 def _completion_from_run_result(result: Any) -> tuple[int, str]:
@@ -285,7 +289,10 @@ def _completion_from_run_result(result: Any) -> tuple[int, str]:
             _INCOMPLETE_INFRA_STOP_EXIT_STATUS,
             f"incomplete_infra_stop:{stopped_reason}",
         )
-    return 0, "command_returned"
+    return (
+        _INCOMPLETE_OTHER_STOP_EXIT_STATUS,
+        f"incomplete_stop:{stopped_reason or 'unknown'}",
+    )
 
 
 def _campaign_start_message(
@@ -362,8 +369,8 @@ def register_run_command(app: typer.Typer) -> None:
             max=2,
             help=(
                 "Bounded Scion redispatches per frozen request for typed transient "
-                "provider failures (0 to 2, with short deterministic backoff; "
-                "SDK retries remain disabled)"
+                "provider failures and HTTP 429 (0 to 2; valid Retry-After is "
+                "honored; SDK retries remain disabled)"
             ),
         ),
         outer_hardwall_sec: int | None = typer.Option(

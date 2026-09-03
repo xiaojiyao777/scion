@@ -15,11 +15,11 @@ MAX_CODE_RESEARCH_PROBE_TIMEOUT_SEC = 10
 
 @dataclass(frozen=True)
 class CodeResearchLimits:
-    """Finite host-enforced limits for one code proposal research session."""
+    """Host-enforced limits for one hypothesis/code research session."""
 
-    max_turns: int = 6
-    max_read_calls: int = 3
-    max_search_calls: int = 3
+    max_turns: int = 12
+    max_read_calls: int = 8
+    max_search_calls: int = 8
     max_read_chars: int = 120_000
     max_read_bytes: int = 240_000
     max_search_matches: int = 80
@@ -36,7 +36,7 @@ class CodeResearchLimits:
     max_test_copy_bytes: int = 5_000_000
     max_test_result_chars: int = 20_000
     max_tool_result_chars: int = 200_000
-    max_transcript_chars: int = 800_000
+    max_transcript_chars: int | None = None
     max_hypothesis_candidates: int = 1
 
     def __post_init__(self) -> None:
@@ -46,18 +46,18 @@ class CodeResearchLimits:
             minimum=1,
             maximum=2,
         )
-        _bounded_int(self.max_turns, field="max_turns", minimum=1, maximum=12)
+        _bounded_int(self.max_turns, field="max_turns", minimum=1, maximum=64)
         _bounded_int(
             self.max_read_calls,
             field="max_read_calls",
             minimum=0,
-            maximum=12,
+            maximum=64,
         )
         _bounded_int(
             self.max_search_calls,
             field="max_search_calls",
             minimum=0,
-            maximum=12,
+            maximum=64,
         )
         _bounded_int(
             self.max_read_chars,
@@ -159,14 +159,13 @@ class CodeResearchLimits:
             minimum=1_000,
             maximum=1_000_000,
         )
-        _bounded_int(
-            self.max_transcript_chars,
-            field="max_transcript_chars",
-            minimum=2_000,
-            maximum=4_000_000,
-        )
+        if self.max_transcript_chars is not None:
+            _positive_int(
+                self.max_transcript_chars,
+                field="max_transcript_chars",
+            )
 
-    def to_primitive(self) -> dict[str, int]:
+    def to_primitive(self) -> dict[str, int | None]:
         return {
             "max_hypothesis_candidates": self.max_hypothesis_candidates,
             "max_turns": self.max_turns,
@@ -279,6 +278,13 @@ def _bounded_int(
         raise TypeError(f"{field} must be an integer")
     if not minimum <= value <= maximum:
         raise ValueError(f"{field} must be between {minimum} and {maximum}")
+
+
+def _positive_int(value: Any, *, field: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise TypeError(f"{field} must be an integer or null")
+    if value <= 0:
+        raise ValueError(f"{field} must be greater than zero")
 
 
 __all__ = [

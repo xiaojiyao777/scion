@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import re
@@ -12,7 +13,10 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.execution_outcome import (
+    PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+    ExecutionOutcome,
+)
 from scion.core.models import ExperimentStage, StepRecord, patch_file_changes
 from scion.core.paths import normalize_relative_patch_path
 from scion.core.research_input import is_sensitive_research_key
@@ -27,6 +31,12 @@ MAX_RESEARCH_HISTORY_LINE_BYTES = 1 * 1024 * 1024
 MAX_RESEARCH_HISTORY_FILE_BYTES = 32 * 1024 * 1024
 MAX_RESEARCH_HISTORY_TOTAL_BYTES = 64 * 1024 * 1024
 MAX_RESEARCH_HISTORY_DEPTH = 24
+
+logger = logging.getLogger(__name__)
+
+
+class _ResearchHistoryLineTooLarge(ValueError):
+    """A policy-size rejection that the campaign-local writer may skip."""
 
 _TOP = frozenset(
     {
@@ -120,27 +130,59 @@ class ResearchHistoryWriter:
         if self.path.exists():
             raise FileExistsError(f"research history already exists: {self.path}")
         self._lines: list[bytes] = []
+        self._output_stopped = False
 
     def append_step(self, step: StepRecord) -> None:
-        record = project_research_history_step(step, problem_id=self.problem_id)
-        if record is None:
+        if self._output_stopped:
             return
         if len(self._lines) >= MAX_RESEARCH_HISTORY_RECORDS:
-            raise ValueError("too many research history records")
+            self._stop_output(
+                "record limit %d reached",
+                MAX_RESEARCH_HISTORY_RECORDS,
+            )
+            return
+        try:
+            record = project_research_history_step(step, problem_id=self.problem_id)
+        except _ResearchHistoryLineTooLarge:
+            logger.warning(
+                "Skipping research history record because it exceeds the %d-byte "
+                "line limit",
+                MAX_RESEARCH_HISTORY_LINE_BYTES,
+            )
+            return
+        if record is None:
+            return
         line = _render(record)
         if len(line) > MAX_RESEARCH_HISTORY_LINE_BYTES:
-            raise ValueError("research history line is too large")
+            logger.warning(
+                "Skipping research history record because it exceeds the %d-byte "
+                "line limit",
+                MAX_RESEARCH_HISTORY_LINE_BYTES,
+            )
+            return
         prefix = b"".join((*self._lines, line))
         if len(prefix) > MAX_RESEARCH_HISTORY_FILE_BYTES:
-            raise ValueError("research history file is too large")
+            self._stop_output(
+                "file limit %d bytes would be exceeded",
+                MAX_RESEARCH_HISTORY_FILE_BYTES,
+            )
+            return
         _write_bytes_atomically(self.path, prefix)
         self._lines.append(line)
+
+    def _stop_output(self, reason: str, *args: object) -> None:
+        self._output_stopped = True
+        logger.warning(
+            "Research history output stopped after %d records: " + reason,
+            len(self._lines),
+            *args,
+        )
 
 
 def project_research_history_step(
     step: StepRecord, *, problem_id: str
 ) -> dict[str, Any] | None:
-    if _is_held_out(step):
+    if _is_held_out(step) or _is_operational_provider_rejection(step):
         return None
     return normalize_research_history_record(
         {
@@ -156,6 +198,15 @@ def project_research_history_step(
             "decision": _decision(step),
         },
         expected_problem_id=problem_id,
+    )
+
+
+def _is_operational_provider_rejection(step: StepRecord) -> bool:
+    outcome = step.execution_outcome
+    return bool(
+        outcome is not None
+        and outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+        and outcome.reason_code == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
     )
 
 
@@ -254,7 +305,9 @@ def normalize_research_history_record(
     _validate_record_relationships(normalized)
     _validate_safe_value(normalized, path="$", depth=0)
     if len(_render(normalized)) > MAX_RESEARCH_HISTORY_LINE_BYTES:
-        raise ValueError("research history record exceeds line byte limit")
+        raise _ResearchHistoryLineTooLarge(
+            "research history record exceeds line byte limit"
+        )
     return normalized
 
 

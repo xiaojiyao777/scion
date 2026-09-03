@@ -6,7 +6,7 @@ from pathlib import Path
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.resource_envelope import ResourceEnvelope
 from scion.core.scheduler import Scheduler
-from scion.proposal.llm_client import LLMProviderError
+from scion.proposal.llm_client import LLMAuthError
 
 from .campaign_test_support import *
 
@@ -112,12 +112,10 @@ class TestCampaignBasics:
         assert "stage_transition_drain" not in status
         assert "stage_transition_drain_executed" not in status
 
-    def test_infra_only_call_stops_immediately_and_is_marked_invalid(self, tmp_path):
-        class NoAvailableAccountsLLM:
+    def test_auth_failure_stops_immediately_and_is_marked_invalid(self, tmp_path):
+        class InvalidCredentialsLLM:
             def call(self, prompt, response_schema, model=None, system_blocks=None):
-                raise LLMProviderError(
-                    "Transient provider error: HTTP 503 no_available_accounts"
-                )
+                raise LLMAuthError("invalid provider credentials")
 
             def call_with_tool(
                 self, prompt, tool, model=None, system_blocks=None, request_kind=None
@@ -132,7 +130,7 @@ class TestCampaignBasics:
 
         cm = _campaign(
             tmp_path,
-            llm_client=NoAvailableAccountsLLM(),
+            llm_client=InvalidCredentialsLLM(),
             experiment_protocol=MockExperimentProtocol(
                 [_make_protocol_result(ExperimentStage.SCREENING)]
             ),
@@ -158,11 +156,11 @@ class TestCampaignBasics:
         assert run_result["scheduled_calls"] == 1
         assert summary["run_result"] == run_result
 
-    def test_bounded_provider_failure_projects_one_terminal_runtime_snapshot(
+    def test_bounded_auth_failure_projects_one_terminal_runtime_snapshot(
         self,
         tmp_path,
     ):
-        class FailingBoundedLLM:
+        class AuthFailingBoundedLLM:
             model = "fake-bounded-model"
 
             def call_with_tool(
@@ -174,11 +172,11 @@ class TestCampaignBasics:
                 request_kind=None,
             ):
                 del prompt, tool, model, system_blocks, request_kind
-                raise LLMProviderError("bounded provider failure")
+                raise LLMAuthError("bounded provider auth failure")
 
         cm = _campaign(
             tmp_path,
-            llm_client=FailingBoundedLLM(),
+            llm_client=AuthFailingBoundedLLM(),
             code_research_limits=CodeResearchLimits(max_turns=2),
             resource_envelope=ResourceEnvelope(provider_call_cap=2),
         )

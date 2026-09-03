@@ -13,7 +13,7 @@ import pytest
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.models import ContractResult
 from scion.core.resource_envelope import ResourceEnvelope
-from scion.proposal.llm_client import LLMProviderError
+from scion.proposal.llm_client import LLMAuthError
 from scion.tests.campaign_test_support import (
     _VALID_HYPOTHESIS,
     _VALID_PATCH,
@@ -58,7 +58,7 @@ def _runtime_artifacts(cm: Any, tmp_path: Path) -> tuple[dict[str, Any], ...]:
     )
 
 
-class _K1CodeFailureClient:
+class _K1CodeAuthFailureClient:
     model = "m32-d1-k1-code-failure"
 
     def __init__(self) -> None:
@@ -83,15 +83,15 @@ class _K1CodeFailureClient:
         del system_blocks
         if request_kind == "hypothesis_research_turn":
             return deepcopy(self._hypothesis.pop(0))
-        raise LLMProviderError("synthetic code stop")
+        raise LLMAuthError("synthetic code auth stop")
 
 
-def test_k1_completed_selected_exported_and_provider_failure_are_one_closed_row(
+def test_k1_completed_selected_exported_and_auth_failure_are_one_closed_row(
     tmp_path: Path,
 ) -> None:
     cm = _campaign(
         tmp_path,
-        llm_client=_K1CodeFailureClient(),
+        llm_client=_K1CodeAuthFailureClient(),
         code_research_limits=CodeResearchLimits(max_turns=3),
         resource_envelope=ResourceEnvelope(provider_call_cap=8),
     )
@@ -123,7 +123,7 @@ def test_k1_completed_selected_exported_and_provider_failure_are_one_closed_row(
     }
 
 
-class _K2CodeFailureClient:
+class _K2CodeAuthFailureClient:
     model = "m32-d1-k2-code-failure"
 
     def __init__(self, *, loser: str, selected: str) -> None:
@@ -157,7 +157,7 @@ class _K2CodeFailureClient:
         del system_blocks
         if request_kind == "hypothesis_research_turn":
             return deepcopy(self._hypothesis.pop(0))
-        raise LLMProviderError("synthetic K2 code stop")
+        raise LLMAuthError("synthetic K2 code auth stop")
 
 
 def test_k2_counts_only_accepted_slots_and_loser_stays_trace_only(
@@ -167,7 +167,7 @@ def test_k2_counts_only_accepted_slots_and_loser_stays_trace_only(
     selected = "D1_K2_SELECTED_BODY"
     cm = _campaign(
         tmp_path,
-        llm_client=_K2CodeFailureClient(loser=loser, selected=selected),
+        llm_client=_K2CodeAuthFailureClient(loser=loser, selected=selected),
         resource_envelope=ResourceEnvelope(
             provider_call_cap=10,
             outer_hardwall_sec=60,

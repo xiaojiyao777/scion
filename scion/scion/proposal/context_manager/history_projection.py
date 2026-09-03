@@ -7,7 +7,10 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.execution_outcome import (
+    PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+    ExecutionOutcome,
+)
 from scion.core.models import StepRecord
 
 _PRE_PROTOCOL_STAGES = frozenset(
@@ -171,6 +174,7 @@ def proposal_pre_protocol_observations(
         if (
             outcome is None
             or outcome.outcome is not ExecutionOutcome.RESEARCH_REJECTED
+            or outcome.reason_code == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
             or stage not in _PRE_PROTOCOL_STAGES
         ):
             continue

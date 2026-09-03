@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 # values still override both fields for controlled experiments.
 _DEFAULT_BASE_URL = "http://127.0.0.1:8080"
 _DEFAULT_MODEL = "gpt-5.6-sol"
-_DEFAULT_TIMEOUT_SEC = 60.0
-_DEFAULT_CODE_TIMEOUT_SEC = 180.0
+_DEFAULT_TIMEOUT_SEC = 180.0
+_DEFAULT_CODE_TIMEOUT_SEC = 300.0
 _ANTHROPIC_REQUIRED_MAX_TOKENS = 16384
 _ANTHROPIC_MODEL_PREFIXES = ("claude-",)
 _DEEPSEEK_MODEL_PREFIXES = ("deepseek-",)

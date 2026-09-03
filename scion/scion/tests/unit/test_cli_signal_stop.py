@@ -4,6 +4,7 @@ import inspect
 import json
 import os
 import signal
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -27,6 +28,19 @@ class _Manager:
 
     def request_stop(self, reason: str) -> None:
         self.reasons.append(reason)
+
+
+@pytest.fixture(autouse=True)
+def _restore_inherited_sighup_handler() -> Iterator[None]:
+    if not hasattr(signal, "SIGHUP"):
+        yield
+        return
+    inherited = signal.getsignal(signal.SIGHUP)
+    signal.signal(signal.SIGHUP, signal.SIG_DFL)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGHUP, inherited)
 
 
 def test_cli_signal_handler_records_stop_before_exit() -> None:
@@ -55,6 +69,20 @@ def test_cli_sighup_records_typed_stop_before_terminal_exit() -> None:
     assert manager.reasons == ["signal:SIGHUP"]
     assert raised.value.reason == "signal:SIGHUP"
     assert raised.value.exit_status == 128 + int(signal.SIGHUP)
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGHUP"), reason="SIGHUP unavailable")
+def test_cli_preserves_inherited_ignored_sighup() -> None:
+    manager = _Manager()
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+
+    with _campaign_signal_handlers(manager):
+        assert signal.getsignal(signal.SIGHUP) == signal.SIG_IGN
+        assert callable(signal.getsignal(signal.SIGINT))
+        assert callable(signal.getsignal(signal.SIGTERM))
+
+    assert signal.getsignal(signal.SIGHUP) == signal.SIG_IGN
+    assert manager.reasons == []
 
 
 @pytest.mark.skipif(not hasattr(signal, "SIGHUP"), reason="SIGHUP unavailable")

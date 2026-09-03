@@ -11,7 +11,10 @@ from typer.testing import CliRunner
 
 import scion.proposal.engine.provider_call as provider_call_module
 from scion.cli.app import app
-from scion.core.execution_outcome import ExecutionOutcome
+from scion.core.execution_outcome import (
+    PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+    ExecutionOutcome,
+)
 from scion.core.resource_envelope import (
     ProviderCallBudget,
     ProviderCallCapExhausted,
@@ -133,6 +136,7 @@ def _skip_real_redispatch_backoff(monkeypatch: pytest.MonkeyPatch) -> list[float
         LLMTimeoutError("timed out"),
         LLMTransportError("connection reset"),
         LLMProviderError("typed provider failure"),
+        LLMRateLimitError("rate limited", retry_after=7.0),
     ],
 )
 def test_one_explicit_retry_for_each_eligible_typed_failure(
@@ -162,7 +166,6 @@ def test_one_explicit_retry_for_each_eligible_typed_failure(
         LLMFormatError("invalid JSON"),
         LLMAuthError("unauthorized"),
         LLMBalanceError("no credits"),
-        LLMRateLimitError("rate limited", retry_after=60.0),
         LLMError("generic LLM failure"),
         RuntimeError("generic runtime failure"),
     ],
@@ -220,10 +223,18 @@ def test_response_bound_failure_never_retries(tmp_path: Path) -> None:
     assert _traces(tmp_path)[0]["attempt_index"] == 0
 
 
+@pytest.mark.parametrize(
+    "first_error",
+    [
+        LLMTimeoutError("timed out"),
+        LLMRateLimitError("rate limited", retry_after=30.0),
+    ],
+)
 def test_second_dispatch_is_blocked_when_its_independent_budget_consume_fails(
     tmp_path: Path,
+    first_error: Exception,
 ) -> None:
-    client = _SequenceClient([LLMTimeoutError("timed out"), {"ok": True}])
+    client = _SequenceClient([first_error, {"ok": True}])
     budget = ProviderCallBudget(1)
 
     with pytest.raises(ProviderCallCapExhausted):
@@ -296,12 +307,74 @@ def test_two_bounded_redispatches_use_deterministic_short_backoff(
     assert [trace["attempt_index"] for trace in traces] == [0, 1, 2]
 
 
-def test_signal_during_backoff_prevents_budget_charge_dispatch_and_trace(
+def test_rate_limit_backoff_obeys_retry_after_after_writing_failure_trace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     client = _SequenceClient(
-        [LLMProviderError("overloaded"), {"would": "run after signal"}]
+        [LLMRateLimitError("rate limited", retry_after=17.0), {"ok": True}]
+    )
+    budget = ProviderCallBudget(2)
+    observations: list[tuple[float, int, int, list[bool]]] = []
+
+    def observe_backoff(seconds: float) -> None:
+        observations.append(
+            (
+                seconds,
+                budget.used,
+                len(client.calls),
+                [bool(trace["ok"]) for trace in _traces(tmp_path)],
+            )
+        )
+
+    monkeypatch.setattr(provider_call_module, "_sleep", observe_backoff)
+
+    assert _call(tmp_path, client, budget=budget) == {"ok": True}
+
+    assert observations == [(17.0, 1, 1, [False])]
+    assert budget.used == 2
+    assert client.calls[0] == client.calls[1]
+    assert [trace["attempt_index"] for trace in _traces(tmp_path)] == [0, 1]
+
+
+@pytest.mark.parametrize(
+    "retry_after",
+    [
+        -1.0,
+        float("nan"),
+        float("inf"),
+        float("-inf"),
+        10**1_000,
+        "invalid",
+        True,
+    ],
+)
+def test_invalid_retry_after_falls_back_to_bounded_delay(
+    tmp_path: Path,
+    _skip_real_redispatch_backoff: list[float],
+    retry_after: object,
+) -> None:
+    client = _SequenceClient(
+        [
+            LLMRateLimitError("rate limited", retry_after=retry_after),  # type: ignore[arg-type]
+            {"ok": True},
+        ]
+    )
+
+    assert _call(tmp_path, client) == {"ok": True}
+
+    assert _skip_real_redispatch_backoff == [5.0]
+
+
+def test_signal_during_rate_limit_backoff_prevents_dispatch_charge_and_trace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = _SequenceClient(
+        [
+            LLMRateLimitError("rate limited", retry_after=120.0),
+            {"would": "run after signal"},
+        ]
     )
     budget = ProviderCallBudget(2)
     delays: list[float] = []
@@ -315,7 +388,7 @@ def test_signal_during_backoff_prevents_budget_charge_dispatch_and_trace(
     with pytest.raises(KeyboardInterrupt, match="operator signal"):
         _call(tmp_path, client, budget=budget, retries=2)
 
-    assert delays == [5.0]
+    assert delays == [120.0]
     assert len(client.calls) == 1
     assert budget.used == 1
     traces = _traces(tmp_path)
@@ -549,7 +622,7 @@ def test_cross_layer_successful_retry_creates_no_failure_outcome_or_history(
     assert budget.used == 2
 
 
-def test_cross_layer_double_transient_failure_is_one_blocked_outcome(
+def test_cross_layer_double_transient_failure_rejects_only_current_attempt(
     tmp_path: Path,
 ) -> None:
     client = _SequenceClient(
@@ -568,12 +641,53 @@ def test_cross_layer_double_transient_failure_is_one_blocked_outcome(
 
     assert attempt.proposal is None
     assert attempt.execution_outcome is not None
-    assert attempt.execution_outcome.outcome is ExecutionOutcome.BLOCKED_INFRA
-    assert attempt.execution_outcome.reason_code == "PROVIDER_CALL_BLOCKED_INFRA"
+    assert attempt.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+    assert (
+        attempt.execution_outcome.reason_code
+        == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+    )
     assert pipeline.step_history == []
     assert pipeline._hypothesis_rejection_counts == {}
     assert len(client.calls) == 2
     assert budget.used == 2
+
+
+def test_cross_layer_rate_limit_exhausts_two_redispatches_as_one_rejection(
+    tmp_path: Path,
+    _skip_real_redispatch_backoff: list[float],
+) -> None:
+    client = _SequenceClient(
+        [
+            LLMRateLimitError("first rate limit", retry_after=7.0),
+            LLMRateLimitError("second rate limit", retry_after=30.0),
+            LLMRateLimitError("third rate limit", retry_after=1.0),
+            _VALID_HYPOTHESIS_RESPONSE,
+        ]
+    )
+    budget = ProviderCallBudget(3)
+    creative = CreativeLayer(
+        client,
+        trace_dir=str(tmp_path / "traces"),
+        provider_call_budget=budget,
+        provider_transient_retries=2,
+    )
+    pipeline, branch, _runtime, _balance = _pipeline(creative=creative)
+
+    attempt = pipeline.generate_hypothesis(branch)
+
+    assert attempt.proposal is None
+    assert attempt.execution_outcome is not None
+    assert attempt.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+    assert (
+        attempt.execution_outcome.reason_code
+        == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+    )
+    assert pipeline.step_history == []
+    assert pipeline._hypothesis_rejection_counts == {}
+    assert len(client.calls) == 3
+    assert budget.used == 3
+    assert _skip_real_redispatch_backoff == [7.0, 30.0]
+    assert [trace["attempt_index"] for trace in _traces(tmp_path)] == [0, 1, 2]
 
 
 def test_cross_layer_cap_blocks_retry_as_resource_without_second_dispatch(

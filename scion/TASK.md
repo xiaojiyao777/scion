@@ -553,6 +553,29 @@ R3b result and R3c continuity:
   H/C closed with 11/340 all-successful attempt-0 provider traces, Contract,
   Verification and canary passed, and screening reached 2/32 valid pairs with
   zero failures under a healthy tmux/Python process.
+- [x] Classify R3h's stop correctly: `valid_incomplete` after 11 evaluated
+  stages, with 113/340 provider calls all successful. The terminal
+  `HYPOTHESIS_RESEARCH_TRANSCRIPT_EXHAUSTED` was a proposal-local 1.5M
+  character working-context limit, not global disk/provider/solver exhaustion.
+  Preserve the 15-row history and do not resume the root. See the
+  [R3h postrun](docs/experiments/v0.4/v04-cvrp-r3h-adaptive-history-k1-sol-postrun-20260903.md).
+- [x] Remove long-run blockers without weakening scientific promotion: make
+  started H/C local limits and exhausted typed transient/429 calls
+  attempt-local; default transcript total unbounded; widen H/C timeouts and
+  research actions; auto-enable default bounded H when a live failure frontier
+  requires its tools; make output-history policy caps nonfatal; respect ignored
+  SIGHUP; allow optional K2 cap/hardwall; and schedule forward after a cleaned
+  stale explore attempt. Keep Auth/balance/operator-selected global boundaries
+  and all Contract/Verification/Protocol gates.
+- [x] Complete the combined regression on the long-run repair: `438 passed`
+  focused; final full suite `2351 passed, 1 skipped, 0 failed` in 467.79
+  seconds (469.59 seconds outer wall); changed-file Ruff `E9,F,I` and
+  `git diff --check`
+  pass. No real provider or campaign ran during tests.
+- [ ] Commit the exact repair/config/docs, create the isolated R3i worktree,
+  and launch the one-shot local tmux carrier for 40 evaluated stages with a
+  generous 2,000-call / 14-day operator envelope. Confirm the first proposal
+  and formal stage from durable artifacts, then leave it running in background.
 
 ### R4 — Independent retained-B0 confirmation
 

@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 
+from scion.core.campaign_composition import _normalize_campaign_boundaries
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.models import ContractResult, Decision, ExperimentStage
@@ -15,7 +16,7 @@ from scion.core.resource_envelope import ResourceEnvelope
 from scion.core.selected_hypothesis_basis import (
     canonical_selected_hypothesis_research_basis_json,
 )
-from scion.proposal.llm_client import LLMProviderError
+from scion.proposal.llm_client import LLMAuthError
 from scion.tests.campaign_test_support import (
     _VALID_HYPOTHESIS,
     _VALID_PATCH,
@@ -91,41 +92,25 @@ def _selected_basis(
 
 
 @pytest.mark.parametrize(
-    ("envelope", "reason"),
+    "envelope",
     (
-        (
-            ResourceEnvelope(outer_hardwall_sec=60),
-            "provider_call_cap",
-        ),
-        (
-            ResourceEnvelope(provider_call_cap=12),
-            "outer_hardwall_sec",
-        ),
+        None,
+        ResourceEnvelope(),
+        ResourceEnvelope(outer_hardwall_sec=60),
+        ResourceEnvelope(provider_call_cap=12),
+        _complete_envelope(),
     ),
 )
-def test_k2_composition_requires_complete_envelope_before_root(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    envelope: ResourceEnvelope,
-    reason: str,
+def test_k2_composition_keeps_global_resource_boundaries_optional(
+    envelope: ResourceEnvelope | None,
 ) -> None:
-    def development_tripwire(**_kwargs: Any) -> None:
-        raise AssertionError("K2 boundary ran after development closure")
-
-    monkeypatch.setattr(
-        "scion.core.campaign_composition.validate_development_closure_boundary",
-        development_tripwire,
+    limits, normalized_envelope = _normalize_campaign_boundaries(
+        code_research_limits=_limits(),
+        resource_envelope=envelope,
     )
 
-    with pytest.raises(ValueError, match=reason):
-        _campaign(
-            tmp_path,
-            llm_client=_NoCallClient(),
-            resource_envelope=envelope,
-            code_research_limits=_limits(),
-        )
-
-    assert not (tmp_path / "campaign").exists()
+    assert limits == _limits()
+    assert normalized_envelope == (envelope or ResourceEnvelope())
 
 
 def test_k2_valid_composition_persists_config_and_projects_frozen_mode(
@@ -157,7 +142,7 @@ def test_k2_valid_composition_persists_config_and_projects_frozen_mode(
     assert summary["proposal_runtime_mode"] == _K2_MODE
 
 
-class _K2ThenCodeFailureClient:
+class _K2ThenCodeAuthFailureClient:
     model = "k2-artifact-boundary-model"
 
     def __init__(self, *, loser: str, selected: str) -> None:
@@ -202,7 +187,7 @@ class _K2ThenCodeFailureClient:
         del system_blocks
         if request_kind == "hypothesis_research_turn":
             return deepcopy(self._hypothesis_responses.pop(0))
-        raise LLMProviderError("synthetic code provider stop")
+        raise LLMAuthError("synthetic code auth stop")
 
 
 def test_k2_loser_is_trace_only_and_never_authoritative(tmp_path: Path) -> None:
@@ -210,7 +195,7 @@ def test_k2_loser_is_trace_only_and_never_authoritative(tmp_path: Path) -> None:
     selected = "K2_CAMPAIGN_SELECTED_SENTINEL"
     cm = _campaign(
         tmp_path,
-        llm_client=_K2ThenCodeFailureClient(loser=loser, selected=selected),
+        llm_client=_K2ThenCodeAuthFailureClient(loser=loser, selected=selected),
         resource_envelope=_complete_envelope(),
         code_research_limits=_limits(),
     )
@@ -247,7 +232,7 @@ def test_k2_loser_is_trace_only_and_never_authoritative(tmp_path: Path) -> None:
     assert json.loads(summary_text)["proposal_runtime_mode"] == _K2_MODE
 
 
-class _K2SelectedBasisThenCodeFailureClient:
+class _K2SelectedBasisThenCodeAuthFailureClient:
     model = "k2-selected-basis-model"
 
     def __init__(self) -> None:
@@ -293,7 +278,7 @@ class _K2SelectedBasisThenCodeFailureClient:
         del system_blocks
         if request_kind == "hypothesis_research_turn":
             return deepcopy(self._hypothesis_responses.pop(0))
-        raise LLMProviderError("synthetic code provider stop")
+        raise LLMAuthError("synthetic code auth stop")
 
 
 class _K1SelectedBasisClient:
@@ -326,7 +311,7 @@ class _K1SelectedBasisClient:
         del system_blocks
         if request_kind == "hypothesis_research_turn":
             return deepcopy(self._hypothesis_responses.pop(0))
-        raise LLMProviderError("synthetic code provider stop")
+        raise LLMAuthError("synthetic code auth stop")
 
 
 def _summary_steps(tmp_path: Path) -> list[dict[str, Any]]:
@@ -341,7 +326,7 @@ def _summary_steps(tmp_path: Path) -> list[dict[str, Any]]:
 def test_k2_summary_uses_only_the_selected_slot_research_basis(
     tmp_path: Path,
 ) -> None:
-    client = _K2SelectedBasisThenCodeFailureClient()
+    client = _K2SelectedBasisThenCodeAuthFailureClient()
     cm = _campaign(
         tmp_path,
         llm_client=client,

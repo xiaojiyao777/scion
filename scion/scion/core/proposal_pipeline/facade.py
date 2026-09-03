@@ -9,6 +9,7 @@ from typing import Any
 
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.execution_outcome import (
+    PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
     ExecutionOutcome,
     ExecutionOutcomeRecord,
 )
@@ -70,17 +71,18 @@ _KNOWN_PROVIDER_ERRORS = (
     ProposalValidationError,
 )
 
-_ORDINARY_HYPOTHESIS_REJECTION_REASONS = frozenset(
-    {
-        "HYPOTHESIS_PROPOSAL_INVALID",
-        "HYPOTHESIS_RESEARCH_ABSTAINED",
-    }
-)
-_HYPOTHESIS_RESEARCH_RESOURCE_REASONS = frozenset(
+_HYPOTHESIS_RESEARCH_LIMIT_REASONS = frozenset(
     {
         "HYPOTHESIS_RESEARCH_RESULT_CAP_EXHAUSTED",
         "HYPOTHESIS_RESEARCH_TRANSCRIPT_EXHAUSTED",
         "HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED",
+    }
+)
+_ORDINARY_HYPOTHESIS_REJECTION_REASONS = frozenset(
+    {
+        "HYPOTHESIS_PROPOSAL_INVALID",
+        "HYPOTHESIS_RESEARCH_ABSTAINED",
+        *_HYPOTHESIS_RESEARCH_LIMIT_REASONS,
     }
 )
 _HYPOTHESIS_REJECTION_COUNT_LIMIT = 99
@@ -117,6 +119,8 @@ class ProposalPipeline:
         branch: Branch,
     ) -> ProposalAttempt[HypothesisProposal]:
         selected_research_basis: dict[str, Any] | None = None
+        research_session: HypothesisResearchSession | None = None
+        research_limits = self.code_research_limits
         try:
             champion = self._champion_snapshot()
         except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
@@ -128,17 +132,15 @@ class ProposalPipeline:
                 branch,
                 champion,
             )
-            if self.code_research_limits is None and latest_live_failure_frontier_refs(
+            if research_limits is None and latest_live_failure_frontier_refs(
                 context_snapshot.provider_context(include_renderer_inputs=True)
             ):
-                raise ValueError(
-                    "latest live-campaign failure frontier requires bounded "
-                    "hypothesis research; configure code_research_limits to enable "
-                    "HypothesisResearchSession"
-                )
+                # A live failure frontier needs the read/review tools, but an
+                # omitted optional limits file must not stop a long campaign.
+                research_limits = CodeResearchLimits()
             public_sources: tuple[Mapping[str, Any], ...] = ()
             source_prefixes: tuple[str, ...] = ()
-            if self.code_research_limits is not None:
+            if research_limits is not None:
                 public_sources = tuple(
                     self.problem_runtime.hypothesis_research_public_sources()
                 )
@@ -163,12 +165,12 @@ class ProposalPipeline:
             )
 
         try:
-            if self.code_research_limits is None:
+            if research_limits is None:
                 hypothesis = self.creative.generate_direct_hypothesis(prompt_snapshot)
             else:
                 research_session = HypothesisResearchSession(
                     self.creative,
-                    self.code_research_limits,
+                    research_limits,
                     record_candidate_completed=(
                         self.record_hypothesis_candidate_completed
                     ),
@@ -219,7 +221,16 @@ class ProposalPipeline:
             )
         except _KNOWN_PROVIDER_ERRORS as exc:
             return self._hypothesis_failure(
-                self._handle_provider_failure(branch, "hypothesis", exc)
+                self._handle_provider_failure(
+                    branch,
+                    "hypothesis",
+                    exc,
+                    hypothesis_research_provider_calls=(
+                        research_session.provider_calls_used
+                        if research_session is not None
+                        else 0
+                    ),
+                )
             )
         except Exception as exc:  # noqa: BLE001 - return one typed proposal outcome
             return self._hypothesis_failure(
@@ -396,21 +407,32 @@ class ProposalPipeline:
         error: Exception,
         *,
         balance: bool = False,
+        hypothesis_research_provider_calls: int = 0,
     ) -> ExecutionOutcomeRecord:
         call_cap_exhausted = isinstance(error, ProviderCallCapExhausted)
+        transient_provider_failure = isinstance(
+            error,
+            (
+                LLMTimeoutError,
+                LLMTransportError,
+                LLMProviderError,
+                LLMRateLimitError,
+            ),
+        )
         invalid = isinstance(error, (LLMFormatError, ProposalValidationError))
         validation_reason = (
             _proposal_validation_reason_code(error, phase=phase) if invalid else None
         )
-        h_research_resource_exhausted = (
+        h_research_unstarted_limit = (
             phase == "hypothesis"
-            and validation_reason in _HYPOTHESIS_RESEARCH_RESOURCE_REASONS
+            and validation_reason in _HYPOTHESIS_RESEARCH_LIMIT_REASONS
+            and hypothesis_research_provider_calls == 0
         )
         outcome_value = (
             ExecutionOutcome.RESOURCE_EXHAUSTED
-            if balance or call_cap_exhausted or h_research_resource_exhausted
+            if balance or call_cap_exhausted or h_research_unstarted_limit
             else ExecutionOutcome.RESEARCH_REJECTED
-            if invalid
+            if invalid or transient_provider_failure
             else ExecutionOutcome.BLOCKED_INFRA
         )
         reason_code = (
@@ -418,6 +440,8 @@ class ProposalPipeline:
             if balance
             else "PROVIDER_CALL_CAP_EXHAUSTED"
             if call_cap_exhausted
+            else PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+            if transient_provider_failure
             else validation_reason
             if invalid
             else "PROVIDER_CALL_BLOCKED_INFRA"

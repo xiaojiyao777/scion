@@ -1,17 +1,18 @@
 """Tests for T16: LLMClient and MockLLMClient."""
 from __future__ import annotations
 
-import json
 import inspect
+import json
 import time
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from scion.proposal.llm_client import (
-    LLMClient,
     LLMAuthError,
     LLMBalanceError,
+    LLMClient,
     LLMError,
     LLMFormatError,
     LLMProviderError,
@@ -25,7 +26,6 @@ from scion.proposal.schemas import (
     HYPOTHESIS_TOOL,
     PATCH_TOOL,
 )
-
 
 # ---------------------------------------------------------------------------
 # MockLLMClient tests
@@ -938,10 +938,36 @@ def test_code_tool_policy_contains_only_transport_and_output_facts(monkeypatch):
     )
 
     assert policy["request_kind"] == "code"
-    assert policy["timeout_sec"] == 180.0
+    assert policy["timeout_sec"] == 300.0
     assert policy["provider"] == "anthropic"
     assert policy["output_token_policy"] == "provider_native_required"
     assert not any("retri" in key for key in policy)
+
+
+@pytest.mark.parametrize(
+    ("request_kind", "expected_timeout_sec"),
+    [
+        ("hypothesis", 180.0),
+        ("hypothesis_research_turn", 180.0),
+        ("code", 300.0),
+        ("code_research_turn", 300.0),
+        ("code_research_finalize", 300.0),
+    ],
+)
+def test_default_request_timeouts_support_long_research_calls(
+    monkeypatch,
+    request_kind,
+    expected_timeout_sec,
+):
+    monkeypatch.delenv("SCION_LLM_TIMEOUT_SEC", raising=False)
+    monkeypatch.delenv(
+        f"SCION_LLM_{request_kind.upper()}_TIMEOUT_SEC",
+        raising=False,
+    )
+
+    policy = LLMClient().resolve_request_policy(request_kind=request_kind)
+
+    assert policy["timeout_sec"] == expected_timeout_sec
 
 
 def test_code_tool_policy_ignores_removed_retry_env(monkeypatch):
@@ -969,7 +995,7 @@ def test_code_tool_timeout_is_typed_and_does_not_duplicate_prompt():
                 client.call_with_tool("prompt", tool)
 
     assert fake_anthropic_client.messages.create.call_count == 1
-    assert fake_anthropic_client.messages.create.call_args.kwargs["timeout"] == 180.0
+    assert fake_anthropic_client.messages.create.call_args.kwargs["timeout"] == 300.0
     mock_sleep.assert_not_called()
 
 

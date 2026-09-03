@@ -270,6 +270,44 @@ def test_typed_reconcile_housekeeping_schedules_forward_through_36_stages() -> N
     assert "requested_rounds_completed" in run.stopped
 
 
+@pytest.mark.parametrize("action", ("skip", "create_branch"))
+def test_cleaned_stale_explore_attempt_is_counted_and_schedules_forward(
+    action: str,
+) -> None:
+    stale_result = StepResult(
+        action=action,
+        branch_id="stale-during-explore",
+        reason="stale_during_explore",
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.NOT_EVALUATED,
+            reason_code="BRANCH_STALE_DURING_EXPLORE",
+            provenance={"stage": "verification"},
+        ),
+    )
+
+    run = _run([stale_result, _evaluated()], rounds=1)
+
+    assert run.calls == 2
+    stale_status = next(
+        status
+        for status in run.statuses
+        if status["execution_outcome_counts"]["not_evaluated"] == 1
+        and status["evaluated_rounds"] == 0
+    )
+    assert stale_status["scheduled_calls"] == 1
+    assert stale_status["last_execution_outcome"] == {
+        "outcome": "not_evaluated",
+        "reason_code": "BRANCH_STALE_DURING_EXPLORE",
+        "stage": "verification",
+    }
+    status = run.statuses[-1]
+    assert status["evaluated_rounds"] == 1
+    assert status["scheduled_calls"] == 2
+    assert status["execution_outcome_counts"]["not_evaluated"] == 1
+    assert status["execution_outcome_counts"]["evaluated"] == 1
+    assert "requested_rounds_completed" in run.stopped
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     (
