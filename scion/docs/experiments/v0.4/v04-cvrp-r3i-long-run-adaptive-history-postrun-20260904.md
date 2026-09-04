@@ -115,8 +115,8 @@ wall). Targeted Ruff `E9,F,I` and diff check are green.
 
 ## R4 handoff
 
-The provider-free R4 fixed-candidate comparison is preregistered and prepared,
-but not launched. See the
+The provider-free R4 fixed-candidate comparison was preregistered, committed,
+and launched once at `2026-09-04T13:22:36Z`. See the
 [`R4 preregistration`](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md).
 It compares ordinary read-only copies of the exact R3i starting B0 and
 `champion_v2`; direct comparison has exactly the three changed modules named
@@ -127,5 +127,5 @@ canary is reused only as a non-estimand smoke check and uses a fresh seed.
 
 `run_fixed_candidate_funnel.py --check` returned `PREPARED` with zero provider
 calls, 85 maximum pairs, 170 serial solver subprocesses, 10,160 nominal and
-15,260 guarded subject-seconds, and a 21,600-second outer hardwall. The reserved
-output directory does not exist, so no live solver evidence has been produced.
+15,260 guarded subject-seconds, and a 21,600-second outer hardwall. Its canary
+passed and the first effect pair completed; no terminal result is yet available.

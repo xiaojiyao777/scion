@@ -608,7 +608,9 @@ R3b result and R3c continuity:
   R3-R3i metrics; the reused controlled canary is a non-estimand smoke check
   with a fresh seed. The retained stage uses the pre-R3 reserved 12-case final
   block and seeds `157,163`. The fixed-funnel check returned `PREPARED` for at
-  most 85 pairs / 170 serial solver subprocesses; no live solver has started. See the
+  most 85 pairs / 170 serial solver subprocesses. The frozen run launched once
+  at `2026-09-04T13:22:36Z`; its canary passed and its first effect pair
+  completed under the healthy local tmux carrier. See the
   [R4 preregistration](docs/experiments/v0.4/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md).
 - [ ] After a promotion, run the reserved final population with no LLM calls,
   comparing the exact promoted snapshot directly to original CVRP B0.

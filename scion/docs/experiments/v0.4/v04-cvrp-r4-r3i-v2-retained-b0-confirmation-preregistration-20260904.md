@@ -1,6 +1,7 @@
 # CVRP R4 R3i-v2 retained-B0 confirmation preregistration
 
-**State:** prepared, checked, not launched
+**State:** frozen before launch; launched once at `2026-09-04T13:22:36Z` and
+running
 
 **Label:** `v04-cvrp-r4-r3i-v2-retained-b0-confirmation-20260904`
 
@@ -9,6 +10,13 @@
 
 **Reserved output:**
 `/home/clawd/research/scion-experiments/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-20260904`
+
+The prelaunch specification was committed as `923bafae` before the output root
+was created. The live run uses local tmux session
+`scion-r4-r3i-v2-retained-b0-confirmation-20260904`; the carrier is not part of
+the estimand. Initial observation confirmed a passed canary and one completed
+effect pair. No outcome was inspected or available when this administrative
+launch note was added.
 
 ## Question and fixed estimand
 

@@ -22,11 +22,13 @@ superiority. R3i then stopped `valid_incomplete / execution_blocked_infra` at
 synthetic no-usable-account 401 and that sentinel was misclassified as real
 authentication failure. The root is terminal and will not be resumed.
 
-R4 is preregistered and provider-/solver-free preparation returns `PREPARED`.
-It will compare exact v2 directly with the R3i starting B0 on a deterministic
-fresh effect population whose cases do not overlap R3-R3i metrics. Its reused
-controlled canary is a non-estimand smoke check with a fresh seed. No R4 live
-solver has started, so CVRP retained improvement is still unestablished.
+R4 was frozen and launched once at `2026-09-04T13:22:36Z` in local tmux
+session `scion-r4-r3i-v2-retained-b0-confirmation-20260904`. It compares exact
+v2 directly with the R3i starting B0 on a deterministic fresh effect population
+whose cases do not overlap R3-R3i metrics. The non-estimand controlled canary
+passed, the first effect pair completed, and the second pair began under a live
+Python owner. No result is yet available, so CVRP retained improvement remains
+unestablished.
 
 ## Runtime boundary
 
@@ -360,7 +362,8 @@ wall); targeted Ruff and diff check are green.
 
 The
 [`R4 fixed-candidate preregistration`](../experiments/v0.4/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md)
-is prepared but not launched. Its ordinary read-only B0/v2/data inputs passed
+is now running once from its frozen ordinary read-only B0/v2/data inputs, which
+passed
 `run_fixed_candidate_funnel.py --check`: zero provider calls, 85 maximum pairs,
 170 serial solver subprocesses, 10,160 nominal and 15,260 guarded
 subject-seconds. Its 36 effect cases have zero overlap with all R3-R3i metric
