@@ -80,6 +80,15 @@ class LLMTransportError(LLMError):
 class LLMProviderError(LLMError):
     """The provider/gateway failed before producing a usable response."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        retry_after: float | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
 
 class LLMFormatError(LLMError):
     """LLM response does not conform to the expected JSON schema."""

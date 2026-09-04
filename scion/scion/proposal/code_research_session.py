@@ -43,6 +43,13 @@ _MAX_PATH_CHARS = 4096
 _MAX_QUERY_CHARS = 256
 _MAX_ABANDON_REASON_CHARS = 2000
 _MAX_EVIDENCE_REFS_PER_CHANGE = 32
+_CANONICAL_REVISE_WRAPPER = (
+    '{"action":"revise","patch":{"file_path":"operators/main.py",'
+    '"action":"modify","edit_intent":"exact_replace",'
+    '"old_string":"<exact current source>","new_string":"<replacement>",'
+    '"replace_all":false,"evidence_refs":[],"test_hint":null,'
+    '"additional_changes":[]}}'
+)
 
 
 @dataclass(frozen=True)
@@ -93,7 +100,10 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
         "description": (
             "Take exactly one bounded source-research action. read_source reveals "
             "one exact source from the listed source corpus; search_source performs "
-            "case-sensitive literal search only; revise stages a typed draft; "
+            "case-sensitive literal search only; revise stages a typed draft and "
+            "requires every patch field inside its patch object. Each file_path may "
+            "appear only once; combine multiple same-file edits into one enclosing "
+            "replacement or a justified full_file change. "
             "test_patch optionally runs one self-authored pytest falsifier, then "
             "runs host-selected public development checks on that draft; a failed "
             "falsifier permanently rejects that executable patch value for this "
@@ -101,8 +111,7 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
             "while any other falsifier outcome does not establish readiness; all "
             "work shares the existing test budget. ready (with no patch field) "
             "freezes only the latest non-rejected draft whose latest test_patch "
-            "host-check outcome passed; "
-            "patch that a later independent final decision may confirm."
+            "host-check outcome passed and returns that exact frozen patch."
         ),
         "input_schema": {
             "oneOf": [
@@ -289,6 +298,12 @@ class CodeResearchSession:
                     "Choose exactly one bounded research action. Use read_source "
                     "for exact current source, search_source for case-sensitive "
                     "literal discovery, revise to stage a complete typed draft, "
+                    "using this one canonical wrapper: "
+                    f"{_CANONICAL_REVISE_WRAPPER} "
+                    "Keep every patch field, including evidence_refs, test_hint, "
+                    "and additional_changes, inside patch. Include each file_path "
+                    "only once; combine multiple edits to one file into one "
+                    "enclosing exact_replace or a justified full_file change. "
                     "test_patch to optionally run one self-authored pytest falsifier "
                     "and then the host-selected checks on that draft. A failed "
                     "falsifier permanently rejects that executable patch value for "
@@ -307,7 +322,15 @@ class CodeResearchSession:
                 ),
             )
             self._record_action(raw)
-            command = _parse_research_command(raw)
+            try:
+                command = _parse_research_command(raw)
+            except ProposalValidationError as exc:
+                result = _tool_error(
+                    "code_research_turn",
+                    _research_command_validation_reason(raw, exc),
+                )
+                self._record_tool_result(result)
+                continue
             if command.action == "read_source":
                 result = self._read_source(command.path, corpus, visible_paths)
             elif command.action == "search_source":
@@ -412,7 +435,8 @@ class CodeResearchSession:
                     }
             self._record_tool_result(result)
             if command.action == "ready" and result.get("ok") is True:
-                break
+                assert ready_patch is not None
+                return deepcopy(ready_patch)
 
         final_context = self._provider_context(
             approved_hypothesis=approved_hypothesis,
@@ -775,6 +799,27 @@ def _parse_research_command(
         "code research action must be read_source, search_source, revise, "
         "test_patch, or ready"
     )
+
+
+def _research_command_validation_reason(
+    raw: Mapping[str, Any],
+    error: ProposalValidationError,
+) -> str:
+    """Return bounded correction feedback without reflecting provider content."""
+
+    action = raw.get("action")
+    if action == "revise":
+        return "revise_wrapper_invalid"
+    if isinstance(action, str) and action in {"modify", "create", "delete"}:
+        return "revise_wrapper_required"
+    message = str(error).lower()
+    if "character bound" in message:
+        return "command_field_too_long"
+    if "non-empty trimmed text" in message:
+        return "command_field_invalid"
+    if "action must be" in message:
+        return "unsupported_action"
+    return "command_schema_invalid"
 
 
 def _parse_final_decision(raw: Mapping[str, Any]) -> CodeResearchFinalDecision:

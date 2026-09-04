@@ -80,6 +80,16 @@ class _SequenceClient:
         return outcome
 
 
+class _ClassifyingSequenceClient(_SequenceClient):
+    def call_with_tool(self, *args, **kwargs):
+        try:
+            return super().call_with_tool(*args, **kwargs)
+        except LLMError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - exercise transport classification
+            LLMClient._raise_classified(exc)
+
+
 def _snapshot() -> PromptTurnSnapshot:
     return PromptTurnSnapshot(
         render_kind="hypothesis",
@@ -307,6 +317,45 @@ def test_two_bounded_redispatches_use_deterministic_short_backoff(
     assert [trace["attempt_index"] for trace in traces] == [0, 1, 2]
 
 
+def test_rate_limit_then_local_proxy_unavailable_reuses_frozen_request(
+    tmp_path: Path,
+    _skip_real_redispatch_backoff: list[float],
+) -> None:
+    rate_limit = Exception("Error code: 429 - rate_limit_exceeded")
+    rate_limit.response = SimpleNamespace(  # type: ignore[attr-defined]
+        status_code=429,
+        headers={"Retry-After": "7"},
+    )
+    local_proxy_unavailable = Exception(
+        "Error code: 401 - {'error': {'message': "
+        "'Not authenticated. Please login first at /', "
+        "'type': 'invalid_request_error', 'code': 'invalid_api_key'}}"
+    )
+    client = _ClassifyingSequenceClient(
+        [
+            rate_limit,
+            local_proxy_unavailable,
+            {"ok": True},
+        ]
+    )
+    budget = ProviderCallBudget(3)
+
+    assert _call(tmp_path, client, budget=budget, retries=2) == {"ok": True}
+
+    assert client.calls[0] == client.calls[1] == client.calls[2]
+    assert client.policy_calls == 1
+    assert budget.used == 3
+    assert _skip_real_redispatch_backoff == [7.0, 20.0 * 60.0]
+    traces = _traces(tmp_path)
+    assert [trace["attempt_index"] for trace in traces] == [0, 1, 2]
+    assert [trace["ok"] for trace in traces] == [False, False, True]
+    assert [trace.get("error_type") for trace in traces] == [
+        "LLMRateLimitError",
+        "LLMProviderError",
+        None,
+    ]
+
+
 def test_rate_limit_backoff_obeys_retry_after_after_writing_failure_trace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -349,14 +398,16 @@ def test_rate_limit_backoff_obeys_retry_after_after_writing_failure_trace(
         True,
     ],
 )
-def test_invalid_retry_after_falls_back_to_bounded_delay(
+@pytest.mark.parametrize("error_type", [LLMRateLimitError, LLMProviderError])
+def test_invalid_retry_after_falls_back_to_bounded_delay_for_advisory_errors(
     tmp_path: Path,
     _skip_real_redispatch_backoff: list[float],
     retry_after: object,
+    error_type: type[LLMRateLimitError | LLMProviderError],
 ) -> None:
     client = _SequenceClient(
         [
-            LLMRateLimitError("rate limited", retry_after=retry_after),  # type: ignore[arg-type]
+            error_type("temporarily unavailable", retry_after=retry_after),  # type: ignore[arg-type]
             {"ok": True},
         ]
     )
@@ -366,13 +417,28 @@ def test_invalid_retry_after_falls_back_to_bounded_delay(
     assert _skip_real_redispatch_backoff == [5.0]
 
 
-def test_signal_during_rate_limit_backoff_prevents_dispatch_charge_and_trace(
+@pytest.mark.parametrize(
+    ("error", "expected_delay"),
+    [
+        (LLMRateLimitError("rate limited", retry_after=120.0), 120.0),
+        (
+            LLMProviderError(
+                "local proxy has no usable account",
+                retry_after=20.0 * 60.0,
+            ),
+            20.0 * 60.0,
+        ),
+    ],
+)
+def test_signal_during_advisory_backoff_prevents_dispatch_charge_and_trace(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    error: Exception,
+    expected_delay: float,
 ) -> None:
     client = _SequenceClient(
         [
-            LLMRateLimitError("rate limited", retry_after=120.0),
+            error,
             {"would": "run after signal"},
         ]
     )
@@ -388,7 +454,7 @@ def test_signal_during_rate_limit_backoff_prevents_dispatch_charge_and_trace(
     with pytest.raises(KeyboardInterrupt, match="operator signal"):
         _call(tmp_path, client, budget=budget, retries=2)
 
-    assert delays == [120.0]
+    assert delays == [expected_delay]
     assert len(client.calls) == 1
     assert budget.used == 1
     traces = _traces(tmp_path)
@@ -551,6 +617,41 @@ def test_transport_provider_classification_is_status_bounded(
         assert type(raised.value) is LLMError
 
 
+def test_local_proxy_synthetic_401_is_temporary_provider_availability() -> None:
+    raw_error = Exception(
+        "Error code: 401 - {'error': {'message': "
+        "'Not authenticated. Please login first at /', "
+        "'type': 'invalid_request_error', 'code': 'invalid_api_key'}}"
+    )
+
+    with pytest.raises(LLMProviderError) as raised:
+        LLMClient._raise_classified(raw_error)
+
+    assert raised.value.retry_after == 20.0 * 60.0
+    assert raised.value.__cause__ is raw_error
+
+
+@pytest.mark.parametrize(
+    "raw_error",
+    [
+        Exception("Error code: 401 - invalid api key"),
+        Exception(
+            "Error code: 401 - {'error': {'message': "
+            "'Not authenticated. Please login first at / again'}}"
+        ),
+        Exception(
+            "Error code: 403 - {'error': {'message': "
+            "'Not authenticated. Please login first at /'}}"
+        ),
+    ],
+)
+def test_real_or_nonexact_auth_failures_remain_terminal(
+    raw_error: Exception,
+) -> None:
+    with pytest.raises(LLMAuthError):
+        LLMClient._raise_classified(raw_error)
+
+
 @pytest.mark.parametrize(
     ("module_name", "constructor_name", "getter_name"),
     [
@@ -687,6 +788,42 @@ def test_cross_layer_rate_limit_exhausts_two_redispatches_as_one_rejection(
     assert len(client.calls) == 3
     assert budget.used == 3
     assert _skip_real_redispatch_backoff == [7.0, 30.0]
+    assert [trace["attempt_index"] for trace in _traces(tmp_path)] == [0, 1, 2]
+
+
+def test_cross_layer_proxy_unavailability_exhaustion_is_attempt_local(
+    tmp_path: Path,
+    _skip_real_redispatch_backoff: list[float],
+) -> None:
+    failures = [
+        Exception(
+            "Error code: 401 - {'error': {'message': "
+            "'Not authenticated. Please login first at /', "
+            "'type': 'invalid_request_error', 'code': 'invalid_api_key'}}"
+        )
+        for _ in range(3)
+    ]
+    client = _ClassifyingSequenceClient([*failures, _VALID_HYPOTHESIS_RESPONSE])
+    budget = ProviderCallBudget(3)
+    creative = CreativeLayer(
+        client,
+        trace_dir=str(tmp_path / "traces"),
+        provider_call_budget=budget,
+        provider_transient_retries=2,
+    )
+    pipeline, branch, _runtime, _balance = _pipeline(creative=creative)
+
+    attempt = pipeline.generate_hypothesis(branch)
+
+    assert attempt.proposal is None
+    assert attempt.execution_outcome is not None
+    assert attempt.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
+    assert attempt.execution_outcome.reason_code == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+    assert pipeline.step_history == []
+    assert pipeline._hypothesis_rejection_counts == {}
+    assert len(client.calls) == 3
+    assert budget.used == 3
+    assert _skip_real_redispatch_backoff == [20.0 * 60.0, 20.0 * 60.0]
     assert [trace["attempt_index"] for trace in _traces(tmp_path)] == [0, 1, 2]
 
 

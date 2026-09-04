@@ -438,7 +438,6 @@ class TestContinueExplore:
             "code_research_turn",
             "code_research_turn",
             "code_research_turn",
-            "code_research_finalize",
             "hypothesis_research_turn",
             "hypothesis_research_turn",
             "hypothesis_research_turn",
@@ -446,7 +445,6 @@ class TestContinueExplore:
             "code_research_turn",
             "code_research_turn",
             "code_research_turn",
-            "code_research_finalize",
         ]
 
         hypothesis_calls = [
@@ -599,12 +597,10 @@ class TestContinueExplore:
             "code_research_turn",
             "code_research_turn",
             "code_research_turn",
-            "code_research_finalize",
             "hypothesis_research_turn",
             "hypothesis_research_turn",
             "hypothesis_research_turn",
             "code_research_turn",
             "code_research_turn",
             "code_research_turn",
-            "code_research_finalize",
         ]

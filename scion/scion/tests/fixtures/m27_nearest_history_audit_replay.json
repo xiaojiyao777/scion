@@ -26,8 +26,9 @@
     "prior_observations": 6,
     "history_files": 14,
     "native_history": 37,
-    "provider_history_entries": 43,
-    "eligible_headline_entries": 37,
+    "provider_scientific_history": 24,
+    "provider_history_entries": 30,
+    "eligible_headline_entries": 24,
     "m26_history_lines": 2,
     "m26_history_bytes": 51034,
     "provider_observation_refs": [
@@ -39,10 +40,10 @@
       "history-0006"
     ],
     "m26_history_provider_refs": [
-      "history-0042",
-      "history-0043"
+      "history-0029",
+      "history-0030"
     ],
-    "generic_fake_h_required_ref": "history-0031",
+    "generic_fake_h_required_ref": "history-0021",
     "provider_turns": 4,
     "feedback_reason": "nearest_history_audit_required"
   }

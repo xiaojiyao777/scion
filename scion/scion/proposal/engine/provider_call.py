@@ -318,7 +318,7 @@ def _is_retryable_provider_error(exc: Exception) -> bool:
 
 def _provider_redispatch_backoff_sec(exc: Exception, attempt_index: int) -> float:
     base = _PROVIDER_REDISPATCH_BACKOFF_SEC[attempt_index]
-    if not isinstance(exc, LLMRateLimitError):
+    if not isinstance(exc, (LLMProviderError, LLMRateLimitError)):
         return base
     retry_after = getattr(exc, "retry_after", None)
     if (

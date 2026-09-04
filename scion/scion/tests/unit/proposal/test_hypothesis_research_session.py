@@ -712,7 +712,7 @@ def test_history_index_contains_every_record_without_recent_top_k() -> None:
     assert "ordinary prior 049" in first
 
 
-def test_proposal_code_rejection_is_safe_and_visible_to_next_h() -> None:
+def test_proposal_code_shape_rejection_is_not_next_h_algorithm_evidence() -> None:
     secret_detail = "FORBIDDEN_PROVIDER_DETAIL_AND_DRAFT_SOURCE"
     secret_target = "private/provider/target.py"
     hypothesis = HypothesisProposal(
@@ -748,55 +748,7 @@ def test_proposal_code_rejection_is_safe_and_visible_to_next_h() -> None:
         ),
     )
     observations = proposal_pre_protocol_observations([rejected])
-    assert observations == [
-        {
-            "round_num": 1,
-            "relation": "current",
-            "hypothesis": {
-                "hypothesis_text": "Try one bounded implementation.",
-                "change_locus": "generic",
-                "action": "modify",
-                "predicted_direction": "exploratory",
-                "target_weakness": "The current mechanism is incomplete.",
-            },
-            "patch": {"present": False},
-            "outcome": {
-                "stage": "proposal_code",
-                "reason_code": "PATCH_PROPOSAL_INVALID",
-                "checks": [],
-            },
-        }
-    ]
-    followup_hypothesis = _hypothesis()
-    followup_hypothesis.update(
-        hypothesis_text="Try one bounded implementation.",
-        target_weakness="The current mechanism is incomplete.",
-    )
-    session, client = _run(
-        [
-            {"action": "read_source", "ref": "source-0001"},
-            {"action": "read_history", "ref": "history-0002"},
-            {
-                "action": "finalize_hypothesis",
-                "hypothesis": followup_hypothesis,
-                "research_basis": _basis(
-                    "source-0001",
-                    "history-0002",
-                    nearest_prior_refs=("history-0002",),
-                ),
-            },
-        ],
-        limits=CodeResearchLimits(max_turns=3),
-    )
-
-    result = session.run(_snapshot(pre_protocol_observations=observations))
-
-    assert isinstance(result, HypothesisResearchFinalized)
-    rendered = "\n".join(call["system_text"] for call in client.calls)
-    assert "proposal_code" in rendered
-    assert "PATCH_PROPOSAL_INVALID" in rendered
-    assert secret_detail not in rendered
-    assert secret_target not in rendered
+    assert observations == []
 
 
 def test_finalize_basis_rejection_can_be_corrected_within_remaining_turns() -> None:

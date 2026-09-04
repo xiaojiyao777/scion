@@ -31,6 +31,9 @@ from .errors import (
 
 logger = logging.getLogger(__name__)
 
+_LOCAL_PROXY_UNAVAILABLE_MESSAGE = "Not authenticated. Please login first at /"
+_LOCAL_PROXY_UNAVAILABLE_RETRY_AFTER_SEC = 20.0 * 60.0
+
 
 def _serialized_argument_diagnostics(arguments: Any) -> tuple[int | None, bool]:
     """Describe an SDK-parsed argument value using one explicit encoding."""
@@ -462,6 +465,15 @@ class TransportMixin:
             raise LLMTimeoutError(f"Request timed out: {exc}") from exc
         if status_code == 403 and _is_balance_error_text(err_str):
             raise LLMBalanceError(f"API balance exhausted: {exc}") from exc
+        if _is_local_proxy_temporary_unavailable(
+            exc,
+            status_code=status_code,
+            raw_error=raw_error,
+        ):
+            raise LLMProviderError(
+                f"Local provider proxy temporarily unavailable: {exc}",
+                retry_after=_LOCAL_PROXY_UNAVAILABLE_RETRY_AFTER_SEC,
+            ) from exc
         if status_code in {401, 403} or _is_auth_error_text(err_str):
             raise LLMAuthError(f"API authentication failed: {exc}") from exc
         if status_code == 429 or "rate_limit" in err_str or "ratelimit" in err_str:
@@ -544,6 +556,44 @@ def _provider_status_code(exc: Exception, *, raw_error: str) -> int | None:
     if match is None:
         return None
     return int(match.group(1) or match.group(2))
+
+
+def _is_local_proxy_temporary_unavailable(
+    exc: Exception,
+    *,
+    status_code: int | None,
+    raw_error: str,
+) -> bool:
+    """Recognize the local proxy's exact no-usable-account 401 response."""
+    if status_code != 401:
+        return False
+
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        source = error if isinstance(error, dict) else body
+        message = source.get("message")
+        if isinstance(message, str):
+            return message == _LOCAL_PROXY_UNAVAILABLE_MESSAGE
+
+    message_pattern = re.compile(
+        rf"""["']message["']\s*:\s*["']"""
+        rf"{re.escape(_LOCAL_PROXY_UNAVAILABLE_MESSAGE)}"
+        rf"""["']"""
+    )
+    if message_pattern.search(raw_error) is not None:
+        return True
+
+    normalized = raw_error.strip()
+    stable_prefixes = (
+        "Error code: 401 - ",
+        "Status code: 401 - ",
+        "HTTP 401: ",
+    )
+    return any(
+        normalized == prefix + _LOCAL_PROXY_UNAVAILABLE_MESSAGE
+        for prefix in stable_prefixes
+    )
 
 
 def _is_balance_error_text(err_str: str) -> bool:

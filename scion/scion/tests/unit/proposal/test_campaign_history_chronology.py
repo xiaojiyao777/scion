@@ -120,6 +120,29 @@ def _provider_transient_step(round_num: int, branch_id: str) -> StepRecord:
     )
 
 
+def _proposal_shape_failure(round_num: int, branch_id: str) -> StepRecord:
+    return StepRecord(
+        round_num=round_num,
+        branch_id=branch_id,
+        hypothesis=_hypothesis("malformed provider tool envelope"),
+        patch=None,
+        contract_passed=True,
+        verification_passed=False,
+        protocol_result=None,
+        decision=None,
+        failure_stage="proposal_code",
+        failure_detail="PRIVATE malformed response",
+        base_champion_version=1,
+        base_source_ref="champion:v1",
+        changed_files=(),
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code="PATCH_PROPOSAL_INVALID",
+            provenance={"stage": "proposal_code"},
+        ),
+    )
+
+
 def _experiment_history_record(
     round_num: int,
     relation: str,
@@ -209,6 +232,51 @@ def test_provider_transient_rejection_is_not_algorithm_failure_feedback() -> Non
         "HYPOTHESIS_CONTRACT_REJECTED"
     )
     assert PROVIDER_TRANSIENT_RETRIES_EXHAUSTED not in str(projected)
+
+
+def test_proposal_shape_failure_is_not_algorithm_failure_feedback() -> None:
+    scientific = _pre_protocol_step(1, "current-branch", "contract rejection")
+    operational = _proposal_shape_failure(2, "current-branch")
+
+    projected = proposal_pre_protocol_observations(
+        [scientific, operational],
+        current_branch_id="current-branch",
+    )
+
+    assert [item["round_num"] for item in projected] == [1]
+    assert "PATCH_PROPOSAL_INVALID" not in str(projected)
+
+
+def test_duplicate_patch_draft_is_not_algorithm_failure_feedback() -> None:
+    step = _proposal_shape_failure(1, "current-branch")
+    assert step.execution_outcome is not None
+    step.execution_outcome = ExecutionOutcomeRecord(
+        outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        reason_code="PATCH_DRAFT_DUPLICATE_FILE",
+        provenance={"stage": "proposal_code"},
+    )
+
+    assert proposal_pre_protocol_observations([step]) == []
+
+
+def test_development_regression_remains_algorithm_failure_feedback() -> None:
+    step = _proposal_shape_failure(1, "current-branch")
+    assert step.execution_outcome is not None
+    step.execution_outcome = ExecutionOutcomeRecord(
+        outcome=ExecutionOutcome.RESEARCH_REJECTED,
+        reason_code="DEVELOPMENT_REGRESSION_REJECTED",
+        provenance={"stage": "proposal_code"},
+    )
+
+    projected = proposal_pre_protocol_observations(
+        [step],
+        current_branch_id="current-branch",
+    )
+
+    assert len(projected) == 1
+    assert projected[0]["outcome"]["reason_code"] == (
+        "DEVELOPMENT_REGRESSION_REJECTED"
+    )
 
 
 def test_live_campaign_history_without_round_metadata_fails_closed() -> None:

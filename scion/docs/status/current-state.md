@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-02*
+*Current as of: 2026-09-04*
 
 Read [`../../TASK.md`](../../TASK.md) first. The sole architecture authority is
 [`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md)
@@ -14,18 +14,19 @@ Warehouse has demonstrated real retained improvement:
 - synthetic Scion promoted and independently retained `v1 -> v2 -> v3`;
 - production-style Scion promoted and independently retained `v1 -> v2`.
 
-CVRP remains open. R3f completed its full 20-stage horizon through a stable
-local tmux carrier with 19 screening stages, one prospective validation and no
-frozen stage. One cumulative candidate passed initial and expanded screening,
-but its validation obtained 94/96 valid pairs and two candidate-only timeouts;
-Decision correctly abandoned it for incomplete runtime evidence. Champion
-B0/v1 remains unchanged, and R4 retained-B0 evaluation is correctly blocked.
+CVRP remains open, but R3i promoted cumulative champion v2 after complete
+expanded screening, validation and frozen passes. This is safe three-stage
+evidence for the exact bundle, not an isolated 2-for-1 effect or retained-B0
+superiority. R3i then stopped `valid_incomplete / execution_blocked_infra` at
+16/40 evaluated stages when a provider 429 was followed by the local proxy's
+synthetic no-usable-account 401 and that sentinel was misclassified as real
+authentication failure. The root is terminal and will not be resumed.
 
-The final R3f cumulative candidate completed a safe `32/32` exact-relocate
-initial screen and requested expansion, but this was evaluated stage 20. It has
-no expanded result and is a formal-horizon censor, not a pass, failure,
-interruption or promotion. R3f is therefore valid negative research evidence
-classified `VALID_20_STAGE_HORIZON_CENSORED`.
+R4 is preregistered and provider-/solver-free preparation returns `PREPARED`.
+It will compare exact v2 directly with the R3i starting B0 on a deterministic
+fresh effect population whose cases do not overlap R3-R3i metrics. Its reused
+controlled canary is a non-estimand smoke check with a fresh seed. No R4 live
+solver has started, so CVRP retained improvement is still unestablished.
 
 ## Runtime boundary
 
@@ -330,33 +331,52 @@ lifecycle was added. The final repair suite is `2351 passed, 1 skipped, 0
 failed` in 467.79 seconds; focused tests are `438 passed`, Ruff and diff checks
 pass.
 
-R3i is now live from commit `738d741e` in the isolated
-`or-autoresearch-agent-r3i-dev` worktree and fresh
-`v04-cvrp-r3i-normal-k1-sol-20260903-r1` root. Its first H/C closed with 11
-successful first-attempt provider calls out of the 2,000-call envelope; the
-unbounded transcript setting and widened 12-turn/8-read limits were loaded.
-Proposal Verification and the formal canary passed, and initial screening
-recorded its first valid pair with zero candidate, champion, shared, or
-bilateral failures. The 40-stage campaign remains healthy in its local tmux
-carrier and continues in background.
+[`R3i`](../experiments/v0.4/v04-cvrp-r3i-long-run-adaptive-history-postrun-20260904.md)
+is terminal `stopped / valid_incomplete / execution_blocked_infra`. It
+completed 16/40 evaluated stages in 25 scheduled calls, admitted 170/2,000
+provider dispatches and produced 16 complete metrics totaling 896/896 valid
+pairs with no runtime, feasibility or protected-objective failure. The final H
+request received provider 429 followed by the local proxy's exact synthetic
+401 `Not authenticated. Please login first at /`; treating that proxy sentinel
+as real credential failure stopped the invocation. No H/C or solver timeout,
+provider cap or scientific gate caused the terminal.
+
+R3i's cumulative v2 bundle passed expanded screening at `+2.5 [0,10.5]`, case
+W/L/T `6/1/5`; validation at `+1 [0,14.5]`, `7/0/5`; and frozen at `+1.25
+[0,6.5]`, `6/1/5`. It combines dynamic perturbation frontier, post-repair
+admissibility/smallest-route consolidation, orientation-changing 2-opt-star and
+inter-route 2-for-1. Generic VNS telemetry cannot isolate the final mechanism,
+and lower interval bounds are zero. Current ejection-chain, always-on SWAP*
+and pure certificate/throughput directions are closed as negative or
+non-useful; exact v2 remains the retained candidate.
+
+The prospective working-tree repair recognizes only the proxy's exact
+synthetic 401 as transient, keeps malformed C wrapper correction inside the
+bounded session, removes a redundant post-`ready` closure and filters
+operational failures from later H algorithm history. It adds no Trust/Hash,
+identity, lease or registry path. The stable full suite completed with `2383
+passed`, `1 skipped` and `0 failed` in 478.87 seconds (480.61 seconds outer
+wall); targeted Ruff and diff check are green.
+
+The
+[`R4 fixed-candidate preregistration`](../experiments/v0.4/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md)
+is prepared but not launched. Its ordinary read-only B0/v2/data inputs passed
+`run_fixed_candidate_funnel.py --check`: zero provider calls, 85 maximum pairs,
+170 serial solver subprocesses, 10,160 nominal and 15,260 guarded
+subject-seconds. Its 36 effect cases have zero overlap with all R3-R3i metric
+cases; the controlled canary is excluded from effect claims, and retained uses
+the pre-R3 reserved 12-case final block with seeds `157,163`.
 
 ## Next scientific rung
 
-1. Let the already launched R3i campaign continue in its one named local tmux
-   carrier. Do not respawn it; only durable ordinary artifacts establish
-   result validity.
-2. R3i started from B0 in a fresh root. It is not a resume/retry of R3h.
-3. Complete the 40-stage normal CVRP campaign with the exact 65 eligible R3 through
-   R3h H-only records available for voluntary uptake. Keep validation and all
-   prior candidate/process state excluded. Use the explicit no-transcript-cap
-   limits and a generous 2,000-call / 14-day operator envelope.
-4. Treat screening as adaptive development. Validation remains stage-held-out
-   from H/C and prospective for each independent exact R3i candidate, but is
-   not called globally never-observed because R3f already reached it. Let a
-   successful exact candidate drain validation -> frozen -> deterministic
-   promotion without reconstruction.
-5. Only after promotion, compare that exact snapshot with original B0 on a
-   newly frozen independent retained population with no LLM calls.
+1. Do not resume R3i. Its promoted v2 snapshot and durable evidence are the
+   only candidate inputs for R4.
+2. Run the already-prepared provider-free R4 funnel once, comparing exact v2
+   directly with exact starting B0. Preserve complete-pair, feasibility, fleet,
+   practical-effect and uncertainty gates.
+3. If R4 retains v2, use a separate direct `v2 minus _exchange_2_for_1`
+   ablation to answer causality; do not make that ablation a retroactive R4
+   gate. If R4 does not retain, report the negative result and keep CVRP open.
 
 The tmux session is a single local process carrier, not a service, deployment,
 distribution, scheduler or build. Additional authority objects,

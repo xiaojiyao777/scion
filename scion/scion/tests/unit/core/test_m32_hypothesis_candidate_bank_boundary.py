@@ -64,7 +64,7 @@ def _research_history_record() -> dict[str, Any]:
         "outcome": {
             "outcome": "research_rejected",
             "stage": "proposal_code",
-            "reason_code": "PATCH_PROPOSAL_INVALID",
+            "reason_code": "DEVELOPMENT_REGRESSION_REJECTED",
         },
         "protocol": None,
         "decision": None,

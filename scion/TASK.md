@@ -577,11 +577,39 @@ R3b result and R3c continuity:
   stages with a generous 2,000-call / 14-day operator envelope. The first H/C
   closed with 11/2,000 all-successful attempt-0 provider calls; proposal
   Verification and formal canary passed; screening produced its first valid
-  pair with zero failures while the tmux/Python process remained healthy. R3i
-  is now running in background from the frozen worktree and fresh root.
+  pair with zero failures while the tmux/Python process remained healthy.
+- [x] Preserve R3i as terminal `valid_incomplete / execution_blocked_infra`,
+  not resumable: 16/40 evaluated stages and 25 scheduled calls ended after a
+  real 429 was followed by the local proxy's synthetic no-usable-account 401,
+  which the transport misclassified as real authentication failure. The run
+  used only 170/2,000 provider calls and had no H/C or solver timeout at the
+  terminal. See the
+  [R3i postrun](docs/experiments/v0.4/v04-cvrp-r3i-long-run-adaptive-history-postrun-20260904.md).
+- [x] Record R3i's complete scientific subset: 16 complete metrics and 896/896
+  valid pairs with no failures or protected regression; the cumulative v2
+  bundle passed expanded screening `+2.5 [0,10.5]`, validation `+1 [0,14.5]`
+  and frozen `+1.25 [0,6.5]`, then promoted. Keep bundle attribution explicit;
+  stop current ejection-chain, always-on SWAP* and pure certificate/throughput
+  directions, and do not claim retained-B0 improvement from R3i.
+- [x] Finish the prospective post-R3i repair gate. The exact local-proxy 401 is
+  now treated as retryable temporary unavailability without weakening real
+  auth failure; malformed C wrappers receive bounded corrective feedback;
+  successful `ready` avoids redundant final closure; operational rows are
+  excluded from future algorithm context; and ordinary history input ceilings
+  are widened. The stable full suite completed with `2383 passed`, `1 skipped`
+  and `0 failed` in 478.87 seconds (480.61 seconds outer wall); targeted Ruff
+  and diff check are green.
 
 ### R4 — Independent retained-B0 confirmation
 
+- [x] Preregister and provider-/solver-free check the exact R3i v2 versus its
+  starting B0 using ordinary read-only source/data copies. The deterministic
+  36-case effect population has zero case or case-seed overlap with all 68
+  R3-R3i metrics; the reused controlled canary is a non-estimand smoke check
+  with a fresh seed. The retained stage uses the pre-R3 reserved 12-case final
+  block and seeds `157,163`. The fixed-funnel check returned `PREPARED` for at
+  most 85 pairs / 170 serial solver subprocesses; no live solver has started. See the
+  [R4 preregistration](docs/experiments/v0.4/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md).
 - [ ] After a promotion, run the reserved final population with no LLM calls,
   comparing the exact promoted snapshot directly to original CVRP B0.
 - [ ] Require complete paired execution, feasibility, no fleet regression and a

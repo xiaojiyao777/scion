@@ -59,8 +59,9 @@
   "expected": {
     "prior_observations": 5,
     "native_history": 35,
-    "provider_history_entries": 40,
+    "provider_scientific_history": 22,
+    "provider_history_entries": 27,
     "code_research_provider_calls": 4,
-    "nearest_history_refs": ["history-0032", "history-0034"]
+    "nearest_history_refs": ["history-0022", "history-0023"]
   }
 }

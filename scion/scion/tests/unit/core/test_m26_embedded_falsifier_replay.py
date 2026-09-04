@@ -116,7 +116,7 @@ class _SequenceClient:
         return deepcopy(self.responses.pop(0))
 
 
-def test_m26_real_context_has_five_observations_then_thirty_five_history() -> None:
+def test_m26_real_context_keeps_native_audit_and_filters_provider_history() -> None:
     fixture = _fixture()
     prior_input = _load_research_input(_M25_INPUT)
     research_input = _load_research_input(_M26_INPUT)
@@ -212,9 +212,13 @@ def test_m26_real_context_has_five_observations_then_thirty_five_history() -> No
     assert [entry["kind"] for entry in histories[:5]] == [
         "prior_research_observations"
     ] * 5
-    assert [entry["kind"] for entry in histories[5:]] == ["prior_research_history"] * 35
+    assert [entry["kind"] for entry in histories[5:]] == [
+        "prior_research_history"
+    ] * fixture["expected"]["provider_scientific_history"]
     assert compact["prior_research_observations"]["record_count"] == 5
-    assert compact["prior_research_history"]["record_count"] == 35
+    assert compact["prior_research_history"]["record_count"] == fixture["expected"][
+        "provider_scientific_history"
+    ]
     assert histories[4]["record"] == (
         CvrpPriorResearchObservationProvider().project_prior_research_observation(
             observation=terminal
@@ -251,11 +255,11 @@ def test_m26_h1_h2_history_indexes_remain_complete_without_host_ranking() -> Non
     expected_refs = fixture["expected"]["nearest_history_refs"]
 
     _, h1_histories, _ = build_hypothesis_research_corpus(provider_context)
-    assert (
-        h1_histories[30]["index"]["hypothesis"]
-        == (h1_histories[31]["index"]["hypothesis"])
-    )
-    assert expected_refs[0] == "history-0032"
+    h1_by_ref = {entry["ref"]: entry for entry in h1_histories}
+    assert h1_by_ref["history-0021"]["index"]["hypothesis"] == h1_by_ref[
+        expected_refs[0]
+    ]["index"]["hypothesis"]
+    assert expected_refs[0] == "history-0022"
     assert expected_refs[0] in {entry["ref"] for entry in h1_histories}
 
     h2_context = deepcopy(provider_context)
@@ -267,8 +271,8 @@ def test_m26_h1_h2_history_indexes_remain_complete_without_host_ranking() -> Non
         }
     ]
     _, h2_histories, _ = build_hypothesis_research_corpus(h2_context)
-    assert len(h2_histories) == 41
-    assert expected_refs[1] == "history-0034"
+    assert len(h2_histories) == fixture["expected"]["provider_history_entries"] + 1
+    assert expected_refs[1] == "history-0023"
     assert expected_refs[1] in {entry["ref"] for entry in h2_histories}
 
 

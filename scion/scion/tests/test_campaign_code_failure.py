@@ -128,11 +128,9 @@ class TestCodeFailureDirect:
             "code_research_finalize",
             "hypothesis_research_turn",
             "hypothesis_research_turn",
-            "hypothesis_research_turn",
             "code_research_turn",
             "code_research_turn",
             "code_research_turn",
-            "code_research_finalize",
         ]
         attempt_events = [
             event
@@ -215,11 +213,9 @@ class TestCodeFailureDirect:
             "code_research_finalize",
             "hypothesis_research_turn",
             "hypothesis_research_turn",
-            "hypothesis_research_turn",
             "code_research_turn",
             "code_research_turn",
             "code_research_turn",
-            "code_research_finalize",
         ]
         assert captured_contexts
         assert all("prior_code_failure" not in context for context in captured_contexts)
@@ -461,8 +457,11 @@ def test_unexpected_proposal_context_failure_is_typed_and_publicly_redacted(
     summary = json.loads(
         (campaign_dir / "campaign_summary.json").read_text(encoding="utf-8")
     )
-    history = json.loads(
-        (campaign_dir / "research_history.jsonl").read_text(encoding="utf-8")
+    history_path = campaign_dir / "research_history.jsonl"
+    history = (
+        json.loads(history_path.read_text(encoding="utf-8"))
+        if history_path.exists()
+        else None
     )
     assert status["last_result"]["reason"] == "PROPOSAL_UNEXPECTED_FAILURE"
     assert summary["steps"][0]["failure_detail"] == (
@@ -474,11 +473,7 @@ def test_unexpected_proposal_context_failure_is_typed_and_publicly_redacted(
         "detail": "",
         "provenance": {"stage": failure_stage},
     }
-    assert history["outcome"] == {
-        "outcome": "blocked_infra",
-        "stage": failure_stage,
-        "reason_code": "PROPOSAL_UNEXPECTED_FAILURE",
-    }
+    assert history is None
     public_artifacts = json.dumps(
         {"status": status, "summary": summary, "history": history},
         sort_keys=True,

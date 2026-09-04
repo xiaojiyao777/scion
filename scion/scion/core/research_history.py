@@ -25,8 +25,8 @@ from scion.core.selected_hypothesis_basis import (
 )
 
 RESEARCH_HISTORY_SCHEMA = "scion.research_history.step.v1"
-MAX_RESEARCH_HISTORY_FILES = 16
-MAX_RESEARCH_HISTORY_RECORDS = 256
+MAX_RESEARCH_HISTORY_FILES = 64
+MAX_RESEARCH_HISTORY_RECORDS = 1024
 MAX_RESEARCH_HISTORY_LINE_BYTES = 1 * 1024 * 1024
 MAX_RESEARCH_HISTORY_FILE_BYTES = 32 * 1024 * 1024
 MAX_RESEARCH_HISTORY_TOTAL_BYTES = 64 * 1024 * 1024
@@ -104,6 +104,34 @@ _OPEN_COMPONENTS = frozenset(
     {"detail", "details", "path", "paths", "seed", "seeds", "identity", "identities"}
 )
 _HELD_OUT = frozenset({"validation", "frozen"})
+_OPERATIONAL_HISTORY_STAGES = frozenset(
+    {
+        "reconcile_source",
+        "reconcile_apply",
+        "candidate_disposition",
+    }
+)
+_OPERATIONAL_HISTORY_REASON_CODES = frozenset(
+    {
+        PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+        "PROVIDER_CALL_BLOCKED_INFRA",
+        "PROVIDER_BALANCE_EXHAUSTED",
+        "PROVIDER_CALL_CAP_EXHAUSTED",
+        "PROPOSAL_CONTEXT_INVALID",
+        "PROPOSAL_UNEXPECTED_FAILURE",
+        "PROPOSAL_RESPONSE_INVALID",
+        "HYPOTHESIS_PROPOSAL_INVALID",
+        "HYPOTHESIS_RESEARCH_TRANSCRIPT_EXHAUSTED",
+        "HYPOTHESIS_RESEARCH_TURN_CAP_EXHAUSTED",
+        "HYPOTHESIS_RESEARCH_RESULT_CAP_EXHAUSTED",
+        "PATCH_PROPOSAL_INVALID",
+        "PATCH_DRAFT_DUPLICATE_FILE",
+        "CODE_RESEARCH_ABANDONED",
+        "CODE_RESEARCH_TRANSCRIPT_EXHAUSTED",
+        "CODE_RESEARCH_TURN_CAP_EXHAUSTED",
+        "CODE_RESEARCH_RESULT_CAP_EXHAUSTED",
+    }
+)
 _CASE_FEEDBACK_PATH = re.compile(
     r"^\$\.protocol\.evidence\.case_outcomes\.case_feedback\[\d+\]$"
 )
@@ -182,7 +210,7 @@ class ResearchHistoryWriter:
 def project_research_history_step(
     step: StepRecord, *, problem_id: str
 ) -> dict[str, Any] | None:
-    if _is_held_out(step) or _is_operational_provider_rejection(step):
+    if _is_held_out(step) or _is_operational_rejection(step):
         return None
     return normalize_research_history_record(
         {
@@ -201,12 +229,14 @@ def project_research_history_step(
     )
 
 
-def _is_operational_provider_rejection(step: StepRecord) -> bool:
+def _is_operational_rejection(step: StepRecord) -> bool:
     outcome = step.execution_outcome
+    if outcome is None:
+        return False
+    stage = str(step.failure_stage or outcome.provenance.get("stage") or "").strip()
     return bool(
-        outcome is not None
-        and outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
-        and outcome.reason_code == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
+        outcome.reason_code in _OPERATIONAL_HISTORY_REASON_CODES
+        or stage in _OPERATIONAL_HISTORY_STAGES
     )
 
 
@@ -262,7 +292,12 @@ def load_research_histories(
 def provider_research_history(
     records: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Strip transport fields from records normalized at the input boundary."""
+    """Return only provider-safe scientific records from prior campaigns.
+
+    Operational proposal/provider/reconcile rows remain in their original
+    campaign ledger for audit, but they are not algorithm evidence and must not
+    consume H attention in later campaigns.
+    """
 
     return [
         deepcopy(
@@ -273,7 +308,20 @@ def provider_research_history(
             }
         )
         for record in records
+        if not _is_operational_history_record(record)
     ]
+
+
+def _is_operational_history_record(record: Mapping[str, Any]) -> bool:
+    outcome = record.get("outcome")
+    if not isinstance(outcome, Mapping):
+        return False
+    stage = str(outcome.get("stage") or "").strip()
+    reason_code = str(outcome.get("reason_code") or "").strip()
+    return bool(
+        stage in _OPERATIONAL_HISTORY_STAGES
+        or reason_code in _OPERATIONAL_HISTORY_REASON_CODES
+    )
 
 
 def normalize_research_history_record(

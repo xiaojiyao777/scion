@@ -299,12 +299,12 @@ class TestFullMockCampaign:
             for action in research_actions
             if action in {"revise", "test_patch", "ready", "finalize_patch"}
         ]
-        assert code_actions[:4] == [
+        assert code_actions[:3] == [
             "revise",
             "test_patch",
             "ready",
-            "finalize_patch",
         ]
+        assert "finalize_patch" not in code_actions
         branch = cm._branch_ctrl.get_branch(results[-1].branch_id)
         workspace = Path(cm._branch_workspaces[branch.branch_id])
         assert branch.current_code_hash is not None

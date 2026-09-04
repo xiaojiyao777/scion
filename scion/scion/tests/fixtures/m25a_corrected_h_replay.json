@@ -63,6 +63,9 @@
     "feedback_reason": "nearest_prior_refs_not_read_and_cited",
     "provider_turns": 4,
     "cross_attempt_invalid_repetitions": 105,
-    "saturated_rejection_count": 99
+    "saturated_rejection_count": 99,
+    "native_history": 33,
+    "provider_scientific_history": 20,
+    "provider_history_entries": 24
   }
 }

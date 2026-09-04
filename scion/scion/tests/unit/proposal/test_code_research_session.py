@@ -172,7 +172,8 @@ def _passing_development_test(_patch, _remaining, _corpus, _falsifier_source=Non
     }
 
 
-def test_read_search_ready_then_independent_finalize_in_order() -> None:
+def test_read_search_ready_returns_frozen_patch_without_finalize() -> None:
+    budget = ProviderCallBudget(5)
     session, client = _run(
         [
             {"action": "read_source", "path": _SUPPORT_PATH},
@@ -180,9 +181,9 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
             {"action": "revise", "patch": _patch()},
             {"action": "test_patch"},
             {"action": "ready"},
-            {"outcome": "finalize_patch"},
         ],
         limits=CodeResearchLimits(max_turns=5),
+        budget=budget,
     )
     session._test_patch = _passing_development_test
 
@@ -197,7 +198,6 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
         "code_research_turn",
         "code_research_turn",
         "code_research_turn",
-        "code_research_finalize",
     ]
     assert [call["tool_name"] for call in client.calls] == [
         "code_research_turn",
@@ -205,12 +205,69 @@ def test_read_search_ready_then_independent_finalize_in_order() -> None:
         "code_research_turn",
         "code_research_turn",
         "code_research_turn",
-        "finalize_code_research",
     ]
     assert "def helper(value)" not in client.calls[0]["system_text"]
     assert "def helper(value)" in client.calls[1]["system_text"]
-    assert "frozen_ready_patch" in client.calls[-1]["system_text"]
-    assert session.provider_calls_used == 6
+    assert "frozen_ready_patch" not in client.calls[-1]["system_text"]
+    assert session.provider_calls_used == 5
+    assert budget.used == 5
+    assert client.responses == []
+
+
+@pytest.mark.parametrize(
+    ("malformed", "reason"),
+    [
+        (
+            {
+                "action": "revise",
+                "patch": _patch(),
+                "test_hint": "MALFORMED_PROVIDER_SENTINEL",
+            },
+            "revise_wrapper_invalid",
+        ),
+        (
+            {**_patch(), "test_hint": "MALFORMED_PROVIDER_SENTINEL"},
+            "revise_wrapper_required",
+        ),
+        (
+            {
+                "action": ["modify"],
+                "unknown": "MALFORMED_PROVIDER_SENTINEL",
+            },
+            "unsupported_action",
+        ),
+    ],
+)
+def test_malformed_command_feedback_allows_corrected_revise(
+    malformed: dict[str, Any],
+    reason: str,
+) -> None:
+    budget = ProviderCallBudget(4)
+    session, client = _run(
+        [
+            malformed,
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
+        ],
+        limits=CodeResearchLimits(max_turns=4),
+        budget=budget,
+    )
+    session._test_patch = _passing_development_test
+
+    result = session.run(_snapshot())
+
+    assert isinstance(result, PatchProposal)
+    assert reason in client.calls[1]["system_text"]
+    assert "MALFORMED_PROVIDER_SENTINEL" not in client.calls[1]["system_text"]
+    assert '{"action":"revise","patch":' in client.calls[0]["prompt"]
+    assert (
+        "including evidence_refs, test_hint, and additional_changes"
+        in (client.calls[0]["prompt"])
+    )
+    assert "Include each file_path only once" in client.calls[0]["prompt"]
+    assert session.provider_calls_used == 4
+    assert budget.used == 4
 
 
 def test_failed_falsifier_rejects_exact_patch_without_replaying_source() -> None:
@@ -933,7 +990,6 @@ def test_invalid_duplicate_file_draft_is_actionable_and_can_be_revised() -> None
             {"action": "revise", "patch": _patch()},
             {"action": "test_patch"},
             {"action": "ready"},
-            {"outcome": "finalize_patch"},
         ],
         limits=CodeResearchLimits(max_turns=4),
     )
@@ -943,6 +999,8 @@ def test_invalid_duplicate_file_draft_is_actionable_and_can_be_revised() -> None
 
     assert isinstance(result, PatchProposal)
     assert "duplicate_file_path" in client.calls[1]["system_text"]
+    assert "combine multiple edits to one file" in client.calls[0]["prompt"]
+    assert len(client.calls) == 4
 
 
 def test_transcript_accounting_counts_provider_wire_not_trace_metadata() -> None:
@@ -1079,7 +1137,6 @@ def test_enabled_limits_reach_the_normal_proposal_pipeline() -> None:
             {"action": "revise", "patch": _patch()},
             {"action": "test_patch"},
             {"action": "ready"},
-            {"outcome": "finalize_patch"},
         ],
         limits=CodeResearchLimits(max_turns=3),
     )
@@ -1132,7 +1189,6 @@ def test_enabled_limits_reach_the_normal_proposal_pipeline() -> None:
         "code_research_turn",
         "code_research_turn",
         "code_research_turn",
-        "code_research_finalize",
     ]
 
 

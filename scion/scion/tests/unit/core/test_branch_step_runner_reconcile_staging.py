@@ -556,7 +556,7 @@ def test_reconcile_same_file_sibling_drift_fails_closed_without_overwrite() -> N
     assert controller.get_branch(branch.branch_id).state is BranchState.ABANDONED
 
 
-def test_reconcile_source_conflict_is_complete_non_decision_science(
+def test_reconcile_source_conflict_is_complete_audit_only_not_science(
     tmp_path: Path,
 ) -> None:
     runner, _controller, branch, _workspaces, _applied, _rejected, _digests = (
@@ -603,19 +603,8 @@ def test_reconcile_source_conflict_is_complete_non_decision_science(
     )
     assert step.selected_hypothesis_research_basis == basis
     assert step.execution_outcome.reason_code == "RECONCILE_SOURCE_CONFLICT"
-    assert proposal_pre_protocol_observations([step])[0]["outcome"] == {
-        "stage": "reconcile_source",
-        "reason_code": "RECONCILE_SOURCE_CONFLICT",
-        "checks": [],
-    }
-    history = project_research_history_step(step, problem_id="generic_demo")
-    assert history is not None
-    assert history["hypothesis"]["text"] == (
-        branch.accepted_changes[0].hypothesis.hypothesis_text
-    )
-    assert history["patch"]["changes"][0]["file_path"] == (
-        "operators/local_search.py"
-    )
+    assert proposal_pre_protocol_observations([step]) == []
+    assert project_research_history_step(step, problem_id="generic_demo") is None
     summary = EvidenceRecorder(
         campaign_id="campaign-1",
         campaign_dir=tmp_path,

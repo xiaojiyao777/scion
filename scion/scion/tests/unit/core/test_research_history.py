@@ -30,11 +30,14 @@ from scion.core.models import (
 )
 from scion.core.problem_runtime import ProblemRuntime
 from scion.core.research_history import (
+    MAX_RESEARCH_HISTORY_FILES,
+    MAX_RESEARCH_HISTORY_RECORDS,
     RESEARCH_HISTORY_SCHEMA,
     ResearchHistoryWriter,
     load_research_histories,
     normalize_research_history_record,
     project_research_history_step,
+    provider_research_history,
 )
 from scion.proposal.context_manager import ContextManager
 from scion.proposal.context_snapshot import freeze_proposal_context
@@ -289,6 +292,113 @@ def test_provider_transient_step_remains_auditable_but_not_scientific_history(
     ) is None
     assert (tmp_path / "research_history.jsonl").read_bytes() == before
     assert PROVIDER_TRANSIENT_RETRIES_EXHAUSTED.encode() not in before
+
+
+@pytest.mark.parametrize(
+    ("stage", "reason_code"),
+    (
+        ("proposal_code", "PATCH_PROPOSAL_INVALID"),
+        ("proposal_code", "PATCH_DRAFT_DUPLICATE_FILE"),
+        ("proposal_code", "CODE_RESEARCH_ABANDONED"),
+        ("reconcile_source", "RECONCILE_SOURCE_CONFLICT"),
+        ("reconcile_apply", "RECONCILE_APPLY_FAILED"),
+    ),
+)
+def test_operational_rejection_stays_in_step_ledger_not_scientific_history(
+    stage: str,
+    reason_code: str,
+) -> None:
+    step = replace(
+        _verification_rejection(),
+        failure_stage=stage,
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code=reason_code,
+            provenance={"stage": stage},
+        ),
+    )
+
+    assert project_research_history_step(step, problem_id="generic_demo") is None
+
+
+@pytest.mark.parametrize(
+    "reason_code", ("PATCH_PROPOSAL_INVALID", "PATCH_DRAFT_DUPLICATE_FILE")
+)
+def test_external_operational_rows_are_removed_from_provider_history(
+    reason_code: str,
+) -> None:
+    scientific = _record(_verification_rejection())
+    operational = json.loads(json.dumps(scientific))
+    operational["outcome"] = {
+        "outcome": "research_rejected",
+        "stage": "proposal_code",
+        "reason_code": reason_code,
+    }
+    normalized_operational = normalize_research_history_record(
+        operational,
+        expected_problem_id="generic_demo",
+    )
+
+    projected = provider_research_history([normalized_operational, scientific])
+
+    assert len(projected) == 1
+    assert projected[0]["outcome"]["stage"] == "verification"
+
+
+@pytest.mark.parametrize(
+    "reason_code",
+    ("PROVIDER_BALANCE_EXHAUSTED", "PROVIDER_CALL_CAP_EXHAUSTED"),
+)
+def test_h_provider_resource_stop_is_audit_only_not_scientific_history(
+    reason_code: str,
+) -> None:
+    step = replace(
+        _hypothesis_failure(),
+        failure_detail=reason_code,
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESOURCE_EXHAUSTED,
+            reason_code=reason_code,
+            provenance={"stage": "proposal_hypothesis"},
+        ),
+    )
+    assert project_research_history_step(step, problem_id="generic_demo") is None
+
+    historical = _record(_hypothesis_failure())
+    historical["outcome"] = {
+        "outcome": "resource_exhausted",
+        "stage": "proposal_hypothesis",
+        "reason_code": reason_code,
+    }
+    normalized = normalize_research_history_record(
+        historical,
+        expected_problem_id="generic_demo",
+    )
+    assert provider_research_history([normalized]) == []
+
+
+def test_development_regression_remains_scientific_history() -> None:
+    step = replace(
+        _verification_rejection(),
+        failure_stage="proposal_code",
+        execution_outcome=ExecutionOutcomeRecord(
+            outcome=ExecutionOutcome.RESEARCH_REJECTED,
+            reason_code="DEVELOPMENT_REGRESSION_REJECTED",
+            provenance={
+                "stage": "proposal_code",
+                "contract_checks": [
+                    {"name": "D4_regression_tests", "passed": False}
+                ],
+            },
+        ),
+    )
+
+    record = project_research_history_step(step, problem_id="generic_demo")
+
+    assert record is not None
+    assert record["outcome"]["reason_code"] == "DEVELOPMENT_REGRESSION_REJECTED"
+    assert provider_research_history([record])[0]["outcome"]["stage"] == (
+        "proposal_code"
+    )
 
 
 def test_hypothesis_free_attempt_round_trips_as_one_redacted_history_row(
@@ -1069,6 +1179,40 @@ def test_explicit_multi_history_loader_preserves_file_and_line_order(
     assert [item["hypothesis"]["text"] for item in loaded] == ["first", "second"]
     with pytest.raises(ValueError, match="problem_id mismatch"):
         load_research_histories([first], expected_problem_id="another_problem")
+
+
+def test_longitudinal_history_file_boundary_is_64_inclusive(tmp_path: Path) -> None:
+    line = json.dumps(_record(_verification_rejection())) + "\n"
+    paths = []
+    for index in range(MAX_RESEARCH_HISTORY_FILES + 1):
+        path = tmp_path / f"history-{index:02d}.jsonl"
+        path.write_text(line, encoding="utf-8")
+        paths.append(path)
+
+    assert len(
+        load_research_histories(
+            paths[:MAX_RESEARCH_HISTORY_FILES],
+            expected_problem_id="generic_demo",
+        )
+    ) == MAX_RESEARCH_HISTORY_FILES
+    with pytest.raises(ValueError, match="too many research history files"):
+        load_research_histories(paths, expected_problem_id="generic_demo")
+
+
+def test_longitudinal_history_record_boundary_is_1024_inclusive(
+    tmp_path: Path,
+) -> None:
+    line = json.dumps(_record(_verification_rejection())) + "\n"
+    accepted = tmp_path / "accepted.jsonl"
+    rejected = tmp_path / "rejected.jsonl"
+    accepted.write_text(line * MAX_RESEARCH_HISTORY_RECORDS, encoding="utf-8")
+    rejected.write_text(line * (MAX_RESEARCH_HISTORY_RECORDS + 1), encoding="utf-8")
+
+    assert len(
+        load_research_histories([accepted], expected_problem_id="generic_demo")
+    ) == MAX_RESEARCH_HISTORY_RECORDS
+    with pytest.raises(ValueError, match="too many research history records"):
+        load_research_histories([rejected], expected_problem_id="generic_demo")
 
 
 @pytest.mark.parametrize(

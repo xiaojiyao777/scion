@@ -161,9 +161,7 @@ class _SequenceCreative:
         return deepcopy(self.responses.pop(0))
 
 
-def test_m27_real_context_is_six_observations_then_thirty_seven_native_records() -> (
-    None
-):
+def test_m27_real_context_keeps_native_audit_and_filters_provider_history() -> None:
     fixture = _fixture()
     prior_input = _load_research_input(_M26_INPUT)
     research_input, history, context = _provider_context(fixture)
@@ -194,7 +192,8 @@ def test_m27_real_context_is_six_observations_then_thirty_seven_native_records()
     _sources, indexed_history, compact = build_hypothesis_research_corpus(context)
     assert len(indexed_history) == expected["provider_history_entries"]
     assert [entry["ref"] for entry in indexed_history] == [
-        f"history-{ordinal:04d}" for ordinal in range(1, 44)
+        f"history-{ordinal:04d}"
+        for ordinal in range(1, expected["provider_history_entries"] + 1)
     ]
     assert [entry["ref"] for entry in indexed_history[:6]] == expected[
         "provider_observation_refs"
@@ -204,7 +203,7 @@ def test_m27_real_context_is_six_observations_then_thirty_seven_native_records()
     ] * 6
     assert [entry["kind"] for entry in indexed_history[6:]] == [
         "prior_research_history"
-    ] * 37
+    ] * expected["provider_scientific_history"]
     assert [entry["ref"] for entry in indexed_history[-2:]] == expected[
         "m26_history_provider_refs"
     ]
@@ -212,7 +211,9 @@ def test_m27_real_context_is_six_observations_then_thirty_seven_native_records()
         context["prior_research_history"][-2:]
     )
     assert compact["prior_research_observations"]["record_count"] == 6
-    assert compact["prior_research_history"]["record_count"] == 37
+    assert compact["prior_research_history"]["record_count"] == expected[
+        "provider_scientific_history"
+    ]
     eligible_fields = (
         "text",
         "hypothesis_text",
@@ -235,7 +236,8 @@ def test_m27_real_context_is_six_observations_then_thirty_seven_native_records()
     ]
     assert len(eligible) == expected["eligible_headline_entries"]
     assert [entry["ref"] for entry in eligible] == [
-        f"history-{ordinal:04d}" for ordinal in range(7, 44)
+        f"history-{ordinal:04d}"
+        for ordinal in range(7, expected["provider_history_entries"] + 1)
     ]
 
 

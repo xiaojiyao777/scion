@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r4-r3i-v2-retained-b0-confirmation
+
+screening:
+  - 10007
+  - 10009
+  - 10037
+  - 10039
+
+validation:
+  - 10061
+  - 10067
+
+frozen:
+  - 10069
+  - 10079
+
+canary:
+  - 10091

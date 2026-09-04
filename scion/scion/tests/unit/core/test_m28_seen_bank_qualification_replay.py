@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
+
 from scion.cli.commands.init_run import _load_research_input
 from scion.config.problem import ProtocolConfig, SeedLedgerConfig, SplitManifest
 from scion.core.code_research_limits import load_code_research_limits
@@ -271,9 +272,7 @@ class _SequenceCreative:
         return deepcopy(self.responses.pop(0))
 
 
-def test_m28_real_context_is_seven_observations_then_thirty_nine_native_records() -> (
-    None
-):
+def test_m28_real_context_keeps_native_audit_and_filters_provider_history() -> None:
     fixture = _fixture()
     prior_input = _load_research_input(_M27_INPUT)
     research_input, history, context = _provider_context(fixture)
@@ -304,7 +303,8 @@ def test_m28_real_context_is_seven_observations_then_thirty_nine_native_records(
     _sources, indexed_history, compact = build_hypothesis_research_corpus(context)
     assert len(indexed_history) == expected["provider_history_entries"]
     assert [entry["ref"] for entry in indexed_history] == [
-        f"history-{ordinal:04d}" for ordinal in range(1, 47)
+        f"history-{ordinal:04d}"
+        for ordinal in range(1, expected["provider_history_entries"] + 1)
     ]
     assert [entry["ref"] for entry in indexed_history[:7]] == expected[
         "provider_observation_refs"
@@ -314,7 +314,7 @@ def test_m28_real_context_is_seven_observations_then_thirty_nine_native_records(
     ] * 7
     assert [entry["kind"] for entry in indexed_history[7:]] == [
         "prior_research_history"
-    ] * 39
+    ] * expected["provider_scientific_history"]
     assert [entry["ref"] for entry in indexed_history[-2:]] == expected[
         "m27_history_provider_refs"
     ]
@@ -322,7 +322,9 @@ def test_m28_real_context_is_seven_observations_then_thirty_nine_native_records(
         context["prior_research_history"][-2:]
     )
     assert compact["prior_research_observations"]["record_count"] == 7
-    assert compact["prior_research_history"]["record_count"] == 39
+    assert compact["prior_research_history"]["record_count"] == expected[
+        "provider_scientific_history"
+    ]
     eligible_fields = (
         "text",
         "hypothesis_text",
@@ -345,7 +347,8 @@ def test_m28_real_context_is_seven_observations_then_thirty_nine_native_records(
     ]
     assert len(eligible) == expected["eligible_headline_entries"]
     assert [entry["ref"] for entry in eligible] == [
-        f"history-{ordinal:04d}" for ordinal in range(8, 47)
+        f"history-{ordinal:04d}"
+        for ordinal in range(8, expected["provider_history_entries"] + 1)
     ]
 
 

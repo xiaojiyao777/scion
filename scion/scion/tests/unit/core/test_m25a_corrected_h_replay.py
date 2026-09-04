@@ -211,6 +211,8 @@ class _RepeatedInvalidCreative(FakeCreative):
 
 
 def test_m25_input_reaches_real_h_context_without_m24_identity() -> None:
+    fixture = _fixture()
+    expected_counts = fixture["expected"]
     prior_input = _load_research_input(_M23_INPUT)
     research_input, context = _real_m25_h_context()
 
@@ -273,23 +275,31 @@ def test_m25_input_reaches_real_h_context_without_m24_identity() -> None:
     assert projected[3]["terminal"]["seed"] == "not_reached"
     assert not any(projected[3]["observed_outputs"].values())
     assert len(_M25_HISTORY_PATHS) == 12
-    assert len(context["prior_research_history"]) == 33
+    assert expected_counts["native_history"] == 33
+    assert len(context["prior_research_history"]) == expected_counts[
+        "provider_scientific_history"
+    ]
     assert context["research_question"] == {
         "current_question": research_input["current_question"]
     }
 
     _sources, histories, compact = build_hypothesis_research_corpus(context)
-    assert len(histories) == 37
+    assert len(histories) == expected_counts["provider_history_entries"]
     assert [entry["ref"] for entry in histories] == [
-        f"history-{ordinal:04d}" for ordinal in range(1, 38)
+        f"history-{ordinal:04d}"
+        for ordinal in range(1, expected_counts["provider_history_entries"] + 1)
     ]
     assert [entry["kind"] for entry in histories[:4]] == [
         "prior_research_observations"
     ] * 4
     assert [entry["ordinal"] for entry in histories[:4]] == [1, 2, 3, 4]
     assert [entry["record"] for entry in histories[:4]] == projected
-    assert [entry["kind"] for entry in histories[4:]] == ["prior_research_history"] * 33
-    assert [entry["ordinal"] for entry in histories[4:]] == list(range(1, 34))
+    assert [entry["kind"] for entry in histories[4:]] == [
+        "prior_research_history"
+    ] * expected_counts["provider_scientific_history"]
+    assert [entry["ordinal"] for entry in histories[4:]] == list(
+        range(1, expected_counts["provider_scientific_history"] + 1)
+    )
     assert [entry["record"] for entry in histories[4:]] == context[
         "prior_research_history"
     ]
@@ -299,7 +309,7 @@ def test_m25_input_reaches_real_h_context_without_m24_identity() -> None:
     }
     assert compact["prior_research_history"] == {
         "indexed": True,
-        "record_count": 33,
+        "record_count": expected_counts["provider_scientific_history"],
     }
 
 

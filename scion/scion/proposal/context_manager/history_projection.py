@@ -23,6 +23,21 @@ _PRE_PROTOCOL_STAGES = frozenset(
         "verification",
     }
 )
+_OPERATIONAL_PRE_PROTOCOL_STAGES = frozenset(
+    {"reconcile_source", "reconcile_apply"}
+)
+_OPERATIONAL_PRE_PROTOCOL_REASONS = frozenset(
+    {
+        PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
+        "PATCH_PROPOSAL_INVALID",
+        "PATCH_DRAFT_DUPLICATE_FILE",
+        "PROPOSAL_RESPONSE_INVALID",
+        "CODE_RESEARCH_ABANDONED",
+        "CODE_RESEARCH_TRANSCRIPT_EXHAUSTED",
+        "CODE_RESEARCH_TURN_CAP_EXHAUSTED",
+        "CODE_RESEARCH_RESULT_CAP_EXHAUSTED",
+    }
+)
 _STAGE_REASON_CODES = {
     "hypothesis_contract": frozenset({"HYPOTHESIS_CONTRACT_REJECTED"}),
     "proposal_code": frozenset(
@@ -33,6 +48,7 @@ _STAGE_REASON_CODES = {
             "CODE_RESEARCH_TRANSCRIPT_EXHAUSTED",
             "CODE_RESEARCH_TURN_CAP_EXHAUSTED",
             "CODE_RESEARCH_RESULT_CAP_EXHAUSTED",
+            "DEVELOPMENT_REGRESSION_REJECTED",
         }
     ),
     "patch_contract": frozenset({"PATCH_CONTRACT_REJECTED"}),
@@ -176,6 +192,8 @@ def proposal_pre_protocol_observations(
             or outcome.outcome is not ExecutionOutcome.RESEARCH_REJECTED
             or outcome.reason_code == PROVIDER_TRANSIENT_RETRIES_EXHAUSTED
             or stage not in _PRE_PROTOCOL_STAGES
+            or stage in _OPERATIONAL_PRE_PROTOCOL_STAGES
+            or outcome.reason_code in _OPERATIONAL_PRE_PROTOCOL_REASONS
         ):
             continue
         observations.append(

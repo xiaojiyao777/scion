@@ -1,0 +1,37 @@
+version: 0.4-cvrp-r4-r3i-v2-retained-b0-confirmation
+
+safe_data_roots:
+  - /home/clawd/research/scion-experiment-inputs/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-20260904/data
+
+screening:
+  - cvrplib/A/A-n34-k5.vrp
+  - cvrplib/tai/tai100b.vrp
+  - cvrplib/X/X-n367-k17.vrp
+  - cvrplib/A/A-n53-k7.vrp
+  - cvrplib/X/X-n186-k15.vrp
+  - cvrplib/X/X-n573-k30.vrp
+
+validation:
+  - cvrplib/A/A-n39-k5.vrp
+  - cvrplib/X/X-n110-k13.vrp
+  - cvrplib/X/X-n393-k38.vrp
+  - cvrplib/A/A-n61-k9.vrp
+  - cvrplib/X/X-n214-k11.vrp
+  - cvrplib/X/X-n685-k75.vrp
+
+frozen:
+  - cvrplib/A/A-n45-k6.vrp
+  - cvrplib/X/X-n134-k13.vrp
+  - cvrplib/X/X-n429-k61.vrp
+  - cvrplib/B/B-n50-k7.vrp
+  - cvrplib/X/X-n153-k22.vrp
+  - cvrplib/X/X-n480-k70.vrp
+  - cvrplib/B/B-n68-k9.vrp
+  - cvrplib/X/X-n270-k35.vrp
+  - cvrplib/X/X-n766-k71.vrp
+  - cvrplib/tai/tai75a.vrp
+  - cvrplib/X/X-n322-k28.vrp
+  - cvrplib/X/X-n957-k87.vrp
+
+canary:
+  - controlled/data/synthetic_controlled_canary_5.vrp
