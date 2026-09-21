@@ -32,10 +32,13 @@ authority or authorize another run.
   `NOT_CONFIRMED`; its terminal file was written by `16:44:12.811Z` on September
   21. Its tmux pane is dead without a usable exit-status value. Raw terminal and
   metric evidence below establish completion independently of the carrier.
-- R7 autonomous continuation is prepared under the user's September 21 request
-  to analyze then optimize. Runtime is unchanged. Focused continuation/CLI/
-  history/input/fixed-funnel tests passed 143 tests; two new prospective-input
-  tests pass. No solver campaign is active at this prelaunch snapshot.
+- R7 autonomous continuation launched once at `2026-09-21T23:21:02Z` from clean
+  `ffde7f66`, under the user's analysis/optimization request. Runtime is unchanged.
+  Focused continuation/CLI/history/input/fixed-funnel and new input tests passed
+  `145/145` in 2.39 seconds before launch. Real H read-source/history calls have
+  succeeded; the initial complete champion snapshot matches the selected source.
+  This is startup evidence, not a formal result. tmux is
+  `scion-r7-source-continuation-20260921`, driver PID 86636.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -191,15 +194,15 @@ baseline does not confer that scientific status.
    preserve the first shared-infeasible result and the second complete 4/4 A/A
    ties with deterministic negative Decision. They are not improvement evidence.
 4. [R7](../experiments/v0.4/v04-cvrp-r7-autonomous-source-continuation-preregistration-20260921.md)
-   is prepared: fresh autonomous research from R6's complete candidate snapshot,
+   is running: fresh autonomous research from R6's complete candidate snapshot,
    12 evaluated stages, unchanged scientific gates, fresh seeds above 40,000.
    R6 screening becomes explicit adaptive development; its unexecuted validation
    and frozen partitions remain held out. R3–R3i history loads in order, and
    R4/R5/R6 observations remain H-only. No forced mechanism or host solver patch.
-   Freeze the prospective record and inputs, verify no concurrent workload, then
-   launch once into
+   Read ordinary status/summary, then the exact H/C and metric references from
    `/home/clawd/research/scion-experiments/v04-cvrp-r7-autonomous-source-continuation-20260921`.
-   Do not run cleanup, large tests or another solver alongside it. A later local
+   Keep runtime/inputs frozen; do not retry or resume terminal state. Do not run
+   cleanup, large tests or another solver alongside it. A later local
    promotion still requires independent exact-candidate B0 evidence for closeout.
 
 Current work excludes distribution, deployment, installation, packaging, build,

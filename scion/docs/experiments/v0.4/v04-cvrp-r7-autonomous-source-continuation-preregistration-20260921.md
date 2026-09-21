@@ -1,6 +1,16 @@
 # CVRP R7: autonomous complete-source continuation
 
-State: prospectively prepared; not yet launched.
+State: launched once at `2026-09-21T23:21:02Z` from clean `ffde7f66` in
+`scion-r7-source-continuation-20260921` (driver PID 86636). The prospective inputs
+below are frozen; this administrative update does not change them.
+
+Initial status is running, version 1 / weight revision 0, one explore branch,
+zero evaluated rounds. The first three provider traces report successful
+`gpt-5.6-sol` H turns: read two source files and one historical record. The
+actual H index offers all 3 prior observations plus 65 scientific history rows;
+index availability does not imply every record has been read. The new
+`champions/champion_v1` snapshot is byte-equal to all 100 files of the selected
+source. No scientific result or promotion is inferred from this startup evidence.
 
 The user requested experiment analysis followed by optimization on 2026-09-21.
 The [R6 postrun](v04-cvrp-r6-minus-2for1-b0-postrun-20260921.md) closes its
@@ -12,7 +22,8 @@ fresh autonomous development campaign, not an R6 retry or a confirmation claim.
 Runtime is the current main checkout on `v0.4-dev`, with implementation
 unchanged from `e405bfd2`. New files are this prospective record, ordinary
 scientific/research inputs, a focused input test and status/postrun documents.
-They will be committed before launch; source and inputs remain frozen thereafter.
+They were committed as `ffde7f66` before launch; source and inputs remain frozen
+thereafter. Any later launch-status edit is documentation only.
 
 The starting source is the complete, read-only R6
 [input snapshot](/home/clawd/research/scion-experiments/v04-cvrp-r6-minus-2for1-b0-20260921/input_snapshots/candidate):

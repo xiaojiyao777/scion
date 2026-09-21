@@ -8,7 +8,7 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R7 prospective autonomous complete-source continuation: open H/C research after R6](v04-cvrp-r7-autonomous-source-continuation-preregistration-20260921.md)
+- [R7 running: autonomous complete-source continuation and open H/C research after R6](v04-cvrp-r7-autonomous-source-continuation-preregistration-20260921.md)
 - [R6 postrun: NOT_CONFIRMED, mixed effects and initial-search budget consumption; overlapping cleanup disclosed](v04-cvrp-r6-minus-2for1-b0-postrun-20260921.md)
 - [R6 frozen design: complete v2-minus-2-for-1 versus B0](v04-cvrp-r6-minus-2for1-b0-preregistration-20260921.md)
 - [P1b Warehouse A/A wiring diagnostics: first shared-infeasible, second complete valid ties; no improvement claim](v04-p1b-warehouse-aa-control-postrun-20260921.md)

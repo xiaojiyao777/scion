@@ -228,8 +228,9 @@ partial campaign.
 - [x] Preserve existing gates and held-out isolation; declare R6 screening as
   adaptive development. Validate the new input projection and source/history
   continuation without prescribing a mechanism or changing generic core.
-- [ ] Freeze inputs and launch R7 once under the user's analysis/optimization
-  request, with no overlapping cleanup, tests or solver job.
+- [x] Freeze inputs and launch R7 once under the user's analysis/optimization
+  request, with no overlapping cleanup, tests or solver job. Started at
+  `2026-09-21T23:21:02Z` from clean `ffde7f66`; runtime/inputs are frozen.
 - [ ] Analyze actual H/C, verified source continuation and terminal paired
   evidence. A local R7 promotion is not retained superiority over original B0;
   preregister that separate comparison only if a candidate warrants it.
@@ -262,9 +263,12 @@ partial campaign.
   case medians, feasibility/fleet equality, AB/BA order and both 100-file source
   snapshots have been checked. Performance contamination is disclosed above.
 - R7 preparation: 143 existing focused tests plus 2 prospective-input tests
-  pass. All 24 cases parse, scientific gates match R6, source selection and
+  pass (`145 passed` in 2.39 s combined). All 24 cases parse, scientific gates match R6, source selection and
   fresh output validate, and all prior observations project to H in order.
   No runtime implementation changed; no new full-suite or Warehouse run needed.
+- R7 is now running in `scion-r7-source-continuation-20260921` from `ffde7f66`.
+  Initial real H calls succeeded and the new 100-file champion snapshot matches
+  the selected complete source. No evaluated result or promotion at startup.
 - R4 and R5 tmux panes are dead with exit status zero; their terminal JSON files
   report `NOT_CONFIRMED` and `DIAGNOSTIC_COMPLETE`, respectively.
 
