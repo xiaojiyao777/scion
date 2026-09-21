@@ -15,8 +15,9 @@ class TestT06ObservabilityFields:
         from scion.protocol.experiment import ExperimentProtocol, SeedLedger, SplitManager
         from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
-        op_dir = tmp_path / "operators"
-        op_dir.mkdir()
+        source_dir = tmp_path / "source"
+        op_dir = source_dir / "operators"
+        op_dir.mkdir(parents=True)
         (op_dir / "local_search.py").write_text("class LocalSearch: pass\n")
 
         metric_specs = (
@@ -24,7 +25,7 @@ class TestT06ObservabilityFields:
         )
         spec = ProblemSpec(
             name="test",
-            root_dir=str(tmp_path),
+            root_dir=str(source_dir),
             operator_categories=["local_search"],
             search_space=SearchSpace(
                 editable=["operators/*.py"],
@@ -35,7 +36,7 @@ class TestT06ObservabilityFields:
         adapter = protocol_test_adapter(metric_specs, problem_spec=spec)
         champion = ChampionState(
             version=1, operator_pool={},
-            code_snapshot_path=str(tmp_path),
+            code_snapshot_path=str(source_dir),
         )
         split = SplitManifest(
             screening=["screening-case"],

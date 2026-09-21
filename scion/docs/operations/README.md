@@ -1,11 +1,13 @@
 # Operations Docs
 
-*Last updated: 2026-08-16*
+*Last updated: 2026-09-05*
 
-Current operation is bounded by
-[`scion-architecture-v3.md`](../../design/scion-architecture-v3.md),
-[`TASK.md`](../../TASK.md), and
-[`current-state.md`](../status/current-state.md). Historical launcher,
+Enter through the repository-level [`AGENTS.md`](../../../AGENTS.md) and read
+the current handoff in its declared order. Current operation remains bounded by
+[`scion-architecture-v3.md`](../../design/scion-architecture-v3.md), while
+[`TASK.md`](../../TASK.md) and
+[`current-state.md`](../status/current-state.md) supply the current objective and
+snapshot. Historical launcher,
 prepare/readiness, detached-root, postrun-closure, identity/receipt, and
 root/systemd procedures are not current entry points.
 

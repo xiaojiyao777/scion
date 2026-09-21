@@ -79,6 +79,7 @@ def run_research_environment_preflight(
     *,
     adapter: Any | None = None,
     verification_gate: Any | None = None,
+    source_root: str | None = None,
 ) -> ResearchEnvironmentPreflightReport:
     """Validate concrete runtime and source prerequisites before the first H."""
 
@@ -90,7 +91,7 @@ def run_research_environment_preflight(
     except RuntimeDependencyPreflightError as exc:
         reasons.extend(exc.reasons)
 
-    reasons.extend(_research_surface_reasons(spec))
+    reasons.extend(_research_surface_reasons(spec, source_root=source_root))
     if not any(reason.startswith("research surface") for reason in reasons):
         checks.append("research_surfaces")
 
@@ -110,11 +111,15 @@ def run_research_environment_preflight(
     )
 
 
-def _research_surface_reasons(spec: Any) -> tuple[str, ...]:
+def _research_surface_reasons(
+    spec: Any, *, source_root: str | None = None,
+) -> tuple[str, ...]:
     surfaces = list(getattr(spec, "research_surfaces", ()) or ())
     if not surfaces:
         return ()
-    root_text = str(getattr(spec, "root_dir", "") or "").strip()
+    root_text = str(
+        source_root if source_root is not None else getattr(spec, "root_dir", "")
+    ).strip()
     root = Path(root_text).expanduser() if root_text else None
     reasons: list[str] = []
     for surface in surfaces:

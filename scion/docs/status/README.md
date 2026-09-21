@@ -1,6 +1,10 @@
 # Status Docs
 
-*Last updated: 2026-06-18*
+*Last updated: 2026-09-05*
+
+Enter through the repository-level [`AGENTS.md`](../../../AGENTS.md). This
+directory contains status projections, not a competing onboarding or authority
+source.
 
 - [Current state](current-state.md)
 - [v0.4 milestone index](v0.4-history.md)

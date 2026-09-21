@@ -213,6 +213,7 @@ class CampaignManager:
             self._problem_runtime.spec,
             adapter=self._problem_runtime.adapter,
             verification_gate=self._vgate,
+            source_root=self._champion.code_snapshot_path,
         )
         self._research_preflight_checked = True
 
@@ -252,7 +253,13 @@ class CampaignManager:
             if step.protocol_result is not None
             and step.protocol_result.stage == ExperimentStage.SCREENING
         )
-        branch_rows = [_branch_state_row(b) for b in branches]
+        branch_rows = [
+            {
+                **_branch_state_row(b),
+                "source_tree": self._branch_workspaces.get(b.branch_id),
+            }
+            for b in branches
+        ]
         protocol_config = getattr(self, "_protocol_config", None)
         measurement_readiness = reduced_measurement_readiness_payload(
             getattr(protocol_config, "measurement_readiness", None)
@@ -275,6 +282,8 @@ class CampaignManager:
             "n_active_branches": active_slots["used"],
             "active_slots": active_slots,
             "champion_version": self._champion.version,
+            "initial_source_tree": self._initial_source_tree,
+            "champion_source_tree": self._champion.code_snapshot_path,
             "champion_weight_revision": getattr(self._champion, "weight_revision", 0),
             "balance_exhausted": self._balance_exhausted,
             "branches": branch_rows,
@@ -411,14 +420,7 @@ class CampaignManager:
     # ------------------------------------------------------------------
 
     def _run_reconcile_step(self, branch: Branch) -> StepResult:
-        """Attempt to rebase a STALE branch on the new champion.
-
-        T06: Full reconcile pipeline — Contract → Verification → re-screening.
-        A stale branch may only resume EXPLORE (→ READY_VALIDATE) if the patch
-        passes all three gates against the new champion.
-        If the VerificationGate or ExperimentProtocol is missing (skeleton mode),
-        the stale branch is abandoned rather than silently passing.
-        """
+        """Verify and re-screen the accepted complete tree against new champion."""
         return self._branch_step_runner.run_reconcile_step(branch)
 
     # ------------------------------------------------------------------

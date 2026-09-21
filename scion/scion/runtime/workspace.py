@@ -27,6 +27,17 @@ _DEFAULT_FROZEN_PATTERNS = frozenset()
 logger = logging.getLogger(__name__)
 
 
+def validate_source_tree(source_tree: str, campaign_dir: str) -> Path:
+    """Resolve an ordinary source directory without copying campaign state."""
+
+    source = Path(source_tree).resolve()
+    if not source.is_dir():
+        raise ValueError(f"source tree is not a directory: {source}")
+    if Path(campaign_dir).resolve().is_relative_to(source):
+        raise ValueError("campaign output must be outside the source tree")
+    return source
+
+
 class FrozenFileError(Exception):
     """Raised when apply_patch attempts to modify a frozen file."""
 
@@ -278,20 +289,21 @@ class WorkspaceMaterializer:
         Returns:
             Absolute path to the snapshot directory.
         """
-        src = Path(champion.code_snapshot_path)
+        src = Path(champion.code_snapshot_path).resolve()
         dest = Path(target_dir) / f"champion_v{champion.version}"
-
-        if dest.exists():
-            # Make writable first so we can remove it
-            _make_tree_writable(dest)
-            shutil.rmtree(dest)
-
-        shutil.copytree(src, dest, symlinks=False)
-
-        # Make the whole tree read-only
-        _make_tree_readonly(dest)
-
-        return str(dest)
+        if dest.resolve().is_relative_to(src):
+            raise ValueError("champion snapshot must be outside the source tree")
+        if dest.exists() or dest.is_symlink():
+            raise FileExistsError(f"champion snapshot already exists: {dest}")
+        complete = False
+        try:
+            shutil.copytree(src, dest, symlinks=False)
+            _make_tree_readonly(dest)
+            complete = True
+            return str(dest.resolve())
+        finally:
+            if not complete:
+                self._cleanup_tree_best_effort(dest, context="initial champion snapshot")
 
     def cleanup(self, workspace: str) -> None:
         """Remove the workspace directory (best-effort).

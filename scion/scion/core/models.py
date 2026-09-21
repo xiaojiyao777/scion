@@ -466,8 +466,8 @@ class Branch:
     # Tainted research evidence for the current accepted H. It is copied only
     # into StepRecord artifacts and is never a Protocol or Decision input.
     selected_hypothesis_research_basis: dict[str, Any] | None = None
-    # Accepted H/C increments are replayed in order when this head becomes stale.
-    # They are plain research values, not identities or lifecycle authorities.
+    # Ordinary accepted H/C evidence for history and proposal observations.
+    # Executable continuation always uses the complete workspace, never replay.
     accepted_changes: List[AcceptedBranchChange] = field(default_factory=list)
     # Stage-specific counts for preregistered Protocol sample expansion. A new
     # hypothesis resets them; evaluation increments the active stage count.
@@ -495,7 +495,7 @@ def branch_changed_files(
     branch: Branch,
     patch: PatchProposal | None = None,
 ) -> Tuple[str, ...]:
-    """Return every file changed from the branch's declared champion base."""
+    """Return the branch's accepted file-change history plus the current patch."""
 
     ordered: Dict[str, None] = {}
     for accepted in branch.accepted_changes:

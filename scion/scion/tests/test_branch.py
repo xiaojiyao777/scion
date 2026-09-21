@@ -147,12 +147,12 @@ def test_get_code_base_with_accepted_hash():
     assert ctrl.get_code_base(b.branch_id) == "branch_workspace"
 
 
-def test_get_code_base_stale_returns_champion():
+def test_get_code_base_stale_preserves_the_verified_branch():
     ctrl = _ctrl()
     b = ctrl.create_branch(_champion())
     ctrl.accept_verified_code(b.branch_id, "abc123")
     ctrl.mark_all_stale(new_champion_id=1)
-    assert ctrl.get_code_base(b.branch_id) == "champion"
+    assert ctrl.get_code_base(b.branch_id) == "branch_workspace"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

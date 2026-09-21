@@ -1,16 +1,16 @@
 # Scion Reading Profiles
 
-*Last updated: 2026-05-10*
+*Last updated: 2026-09-05*
 
-Use this guide to keep new sessions small. Start with the base pack, choose one
-profile, and stop reading when the next action is clear.
+This is a subordinate context router. Start with the canonical repository entry
+[`../../AGENTS.md`](../../AGENTS.md), complete the current handoff it names,
+then choose at most one profile below.
 
 ## Base Pack
 
-Read these for every session:
-
-1. [Agent onboarding](AGENT_ONBOARDING.md)
-2. [v0.4 current state](status/current-state.md)
+Read the files in the exact order declared by
+[`../../AGENTS.md`](../../AGENTS.md). Do not create a competing base-pack order
+here.
 
 Do not read `status/v0.4-history.md`, old experiment docs, full engineering
 references, raw run directories, or source trees unless the selected profile or
@@ -18,12 +18,14 @@ current task requires them.
 
 ## Document Roles
 
-- `status/current-state.md`: short current operating truth. Keep it small and
+- `../TASK.md`: current goal, boundary, accepted work, and next action.
+- `status/current-state.md`: short current operating snapshot. Keep it small and
   replace stale conclusions instead of appending event history.
 - `status/v0.4-history.md`: curated milestone index. Read only for provenance
   questions or when the current state points to a specific milestone.
 - `../design/`: design-source documents and accepted architecture contracts.
-- `engineering/`: code responsibility maps and implementation references.
+- `engineering/`: historical code maps and implementation references. Treat
+  them as locators and verify every claim against current source.
 - `experiments/`: bounded post-run analysis. Prefer these over raw run
   artifacts.
 - `audits/`: audit findings and governance reviews.
@@ -42,12 +44,14 @@ Read:
 4. Raw run artifacts only through a bounded analysis task when the checked-in
    docs are insufficient.
 
-For APS-backed runs, analyze both phases per round:
+For autonomous H/C runs, analyze both creative phases per attempt:
 
 - hypothesis/research session;
 - code/implementation session;
 - tools called and context observed;
-- selected surface and forced-surface constraints;
+- the complete problem-owned algorithm object and any declared editable
+  boundary; forced targets are diagnostic-only and cannot become formal
+  research evidence;
 - exact hypothesis content, declared locus/action and whether prior evidence was
   used without turning novelty into a gate;
 - patch target and actual mechanism/strategy change;
@@ -67,10 +71,13 @@ Read:
 1. Base pack.
 2. [Scion architecture v3](../design/scion-architecture-v3.md) if the task
    touches governance boundaries or the user asks about Scion logic.
-3. [v0.4 design index](../design/v0.4/README.md), then only the relevant
-   design source.
+3. [Direct-runtime addendum](../design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)
+   for the smaller current implementation.
+4. [v0.4 design index](../design/v0.4/README.md), then only a source explicitly
+   relevant to the task. The index is historical/problem-design context, not a
+   second authority.
 
-Common design docs:
+Task-specific historical/problem design sources:
 
 - Algorithm research surfaces and APS:
   [`v0.4-algorithm-design-space-upgrade.md`](../design/v0.4/v0.4-algorithm-design-space-upgrade.md)
@@ -91,16 +98,18 @@ Read:
 1. Base pack.
 2. The relevant design source only if the behavior is governed by a design
    contract.
-3. [Framework code map](engineering/framework-code-map/README.md).
-4. One or two relevant code-map sections:
+3. Current source reached from the execution order in
+   [Agent onboarding](AGENT_ONBOARDING.md).
+4. Optionally use the [historical framework code map](engineering/framework-code-map/README.md)
+   only as a locator, then verify the named files and symbols still exist:
    - campaign flow and branch state: `01-core-campaign.md`;
-   - proposal/context/APS: `02-proposal-context.md`;
+   - proposal/context (historical path labels): `02-proposal-context.md`;
    - gates/protocol/decision: `03-evaluation-decision.md`;
    - evidence/lineage: `04-evidence-lineage.md`;
    - adapter boundary: `05-problem-adapter-boundary.md`;
    - CVRP package: `06-cvrp-package-map.md`;
    - extension risks: `07-extension-points-and-risks.md`.
-5. Source files only after the map identifies the likely responsible components.
+5. Read only the responsible current components and their focused tests.
 
 Update:
 
@@ -112,7 +121,7 @@ Update:
 Verification:
 
 - use focused tests first;
-- use `/home/clawd/miniconda3/envs/claw/bin/python`;
+- use the Python path declared by the current handoff;
 - broaden to the full suite when touching shared boundaries, protocol,
   adapters, or campaign flow.
 
@@ -128,7 +137,8 @@ Read:
 
 Keep the boundary clear:
 
-- Scion core may add generic surface/governance hooks.
+- Scion core owns only problem-neutral research, safety, scientific, and
+  scheduling boundaries.
 - CVRP package owns solver hooks, allowed components, policy files, runtime
   field meanings, and controlled fixtures.
 - `solver_design` is the top-level problem-object boundary. It is backed by
@@ -159,8 +169,9 @@ The output should name:
 - runtime audit fields;
 - smoke tests and formal split policy.
 
-Do not let the LLM directly edit arbitrary solver internals during campaigns.
-First make the solver into a Scion-native research object.
+Expose a complete, runnable algorithm object through a problem-owned adapter and
+an explicit editable boundary. Core must not learn the problem's mechanisms,
+case names, solver structure, or telemetry meanings.
 
 ## Profile: Audit Or Governance Review
 
@@ -189,6 +200,8 @@ Rules:
 
 - Keep `AGENT_ONBOARDING.md` short.
 - Keep `status/current-state.md` short enough to be a resume point.
+- Keep one canonical repository entry in `../../AGENTS.md`; other entry-like
+  documents route to it rather than restating authority.
 - Keep `status/v0.4-history.md` as a sparse milestone index, not a chronology.
 - Put experiment detail in `experiments/v0.4/`, not current-state.
 - Put engineering implementation maps in `engineering/`, not design docs.
@@ -196,13 +209,14 @@ Rules:
 
 ## What Not To Load By Default
 
-- `/home/clawd/research/scion-experiments/` raw run directories.
+- External raw experiment/run directories.
 - Raw protocol metrics JSON/CSV.
 - Long run logs.
 - CVRPLIB raw instances and `.sol` files.
 - `archive/` and `../design/archive/`.
 - `status/v0.4-history.md`.
-- Full source trees before using code maps.
+- Full source trees before the task and current entry identify the responsible
+  components.
 
 ## Handoff Checklist
 

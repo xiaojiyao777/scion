@@ -1,10 +1,13 @@
 # Scion direct-V3 运行后分析交接
 
-*最后更新：2026-08-10*
+*最后更新：2026-09-05*
 
 本文说明如何对已结束的 Warehouse 或 CVRP 运行做轻量、只读分析，从正常研究循环留下
 的证据分别判断框架是否按 V3 边界正确执行，以及 agent 是否完成有质量、可归因的算法
 研究。进程正常退出、生成代码或某一步通过，都不能单独证明研究有效。
+
+新会话先读 [`../../../AGENTS.md`](../../../AGENTS.md) 及其指向的当前交接。本文只定义
+运行后分析方法，不定义当前项目状态、修改/提交权限或后续实验授权。
 
 ## 1. 唯一架构 authority
 
@@ -19,8 +22,14 @@ Extractor 把允许的数值和枚举交给 Decision。LLM 自由文本不能进
 
 ## 2. 范围与只读约束
 
-交给分析者 `RUN_ROOT` 与其中的 `campaign/`、exact runtime commit、问题与模型、阶段
-配置、case/seed roster、solver time limit，以及预先要回答的研究问题。
+交给分析者 direct runtime 的 `CAMPAIGN_DIR`（campaign directory 本身就是证据根）、
+运行时源码位置/revision、问题与模型、阶段配置、case/seed roster、solver time limit，
+以及预先要回答的研究问题。provider-free fixed funnel 则交付它自己的 fresh output
+root；不要为两者虚构共同的 `RUN_ROOT/campaign/` 包装层。
+
+源码位置和 Git revision 只是帮助定位当时运行的普通事实，不签发、登记或授权一个
+算法对象。不要为分析补建 source hash、identity、lease、receipt、manifest closure
+或 Trust 链。
 
 分析者只读现有产物，不修改 campaign 状态，不启动或恢复 invocation，不调用外部模型，
 不补跑候选。缺失证据必须如实收窄结论，不能用新的框架产物填补。
@@ -30,18 +39,26 @@ formal candidate index 当作前提，也不得为了分析而恢复它。
 
 ## 3. 普通运行证据
 
-按需读取以下既有证据，不要求额外生成交接包：
+按需读取以下既有证据，不要求额外生成交接包。direct runtime 路径都相对于
+`$CAMPAIGN_DIR`：
 
-- `campaign/scion.db` 中的 proposal、branch 和 experiment events；
-- `campaign/llm_traces/` 中 H/C 调用的上下文、响应和终态；
-- `campaign/workspaces/` 的分支源码与 `campaign/champions/` 的 champion snapshot；
-- summary 或 events 中的 Contract 与 Verification 结果；
-- `campaign/metrics/` 中 Protocol 产生的原始 case/seed/pair 记录；
+- `status.json` 与 `campaign_summary.json` 中的终态、step、Contract、Verification、
+  Protocol、Decision 和 ordinary artifact refs；
+- `research_history.jsonl` 与其他已有 JSON/JSONL events；
+- `llm_traces/` 中 H/C 调用的上下文、响应和终态；
+- `candidate_workspaces/` 中实际送入 Verification/Protocol 的完整 candidate 源码，
+  `workspaces/` 中的完整 branch 源码，以及 `champions/` 的完整 champion snapshot；
+- `metrics/` 中 Protocol 产生的原始 case/seed/pair 记录；
 - Protocol 聚合、Safe Features 与已记录的 Decision。
 
-路径和字段可能随问题 adapter 不同。沿数据库事件中的普通引用定位即可；不要要求每种
-运行都有同名汇总文件。结论引用最短且足够的证据位置，例如 event id、branch、trace、
-workspace 文件或 raw metric 文件。
+优先使用 JSON、JSONL、raw metrics 与普通源码树，沿其中的 ordinary refs 定位。
+不要直接打开 live/original `scion.db`：普通 SQLite 客户端可能创建 WAL/SHM/journal
+sidecar 或干扰仍在运行的现场。只有上述证据确实缺失关键事实时，才在进程停止后使用
+单独的只读数据库快照作为次级定位手段，且不得把查询产物写回 campaign。
+
+路径和字段可能随问题 adapter 不同；不要要求每种运行都有同名可选文件。结论引用最短
+且足够的证据位置，例如 JSON/JSONL event、branch、trace、workspace 文件或 raw metric
+文件。
 
 ## 4. 分析顺序
 
@@ -84,21 +101,22 @@ Verification 只回答候选是否仍在解同一个问题：语法与接口、f
 一致性、状态泄漏、确定性、crash 和 timeout。失败必须归因到 candidate、framework、
 problem/data 或 infra；不完整诊断本身不应覆盖正确的 solver 结果。
 
-### 4.5 候选源码可重建性
+### 4.5 候选完整源码与归因
 
-只有同时满足以下条件，才可把指标归因到某个具体 C：
+算法对象首先是一棵完整、可运行的普通源码树，不是一条 patch/hash/receipt 链。把
+Protocol 指标归因到某个候选至少需要：
 
-1. ordinary branch/experiment lineage 给出明确的基线与步骤顺序；
-2. 对应终态 C trace 保留 exact patch 或完整的文件修改；
-3. 这些修改能够按顺序 exact compose 到该基线；
-4. 可用 workspace 或 champion snapshot 与重建结果相符。
+1. ordinary branch/experiment event 指向实际评估的 branch/candidate；
+2. 对应 stage 使用的完整 workspace 或 champion snapshot 仍可只读取得；
+3. Contract、Verification、Protocol 的普通引用与这棵源码树相符；
+4. 若进一步声称某个 H/C 机制导致结果，对应终态 C trace 或普通 diff 足以说明该
+   机制确实进入执行路径。
 
-若任一条件不能由现有证据证明，将该候选标为 `UNIDENTIFIABLE`。此时仍可报告 H/C
-行为、Verification 事实和未归因的 Protocol 观测，但不得声称某个代码机制导致了结果。
-
-分析可以在临时只读副本中做确定性的文本组合；不得写回 campaign，也不得新增长期
-recorder。若少于研究设计所需的可重建候选数，直接报告 attribution unidentifiable，
-而不是扩大声明。
+完整 stage source 存在时，不要求从起始基线重复重放整条 accepted-patch chain，也不
+为它补建 identity、digest closure 或来源证明。完整 source 缺失时，可以在临时只读
+副本中把 ordinary patch sequence 作为兼容性定位手段；若仍不能确定实际受测源码，标为
+`UNIDENTIFIABLE`，只报告可直接观察的 H/C、Verification 和未归因 Protocol 事实。
+不得写回 campaign，也不得为分析新增长期 recorder 或自证账本。
 
 ### 4.6 Protocol、Safe Features 与 Decision
 
@@ -164,7 +182,7 @@ V3 职责，ordinary events 和原始指标是否足以支持已记录事实，�
 ## Research effectiveness
 - H source grounding:
 - C implementation fidelity:
-- Candidate reconstruction: RECONSTRUCTED | UNIDENTIFIABLE
+- Candidate source: FULL_SOURCE_IDENTIFIED | PATCH_FALLBACK_IDENTIFIED | UNIDENTIFIABLE
 - Raw quality / feasibility / runtime evidence:
 - Verdict and claim boundary:
 
@@ -174,5 +192,6 @@ V3 职责，ordinary events 和原始指标是否足以支持已记录事实，�
 - Next clean experiment, if needed:
 ```
 
-若结论改变项目状态，再更新 `scion/TASK.md` 与 `scion/docs/status/current-state.md`。
+若结论改变项目状态，按 `AGENTS.md` 声明的当前交接文档职责更新
+`scion/TASK.md` 与 `scion/docs/status/current-state.md`。
 推测、缺失证据和未来实验必须与已观察事实明确分开。

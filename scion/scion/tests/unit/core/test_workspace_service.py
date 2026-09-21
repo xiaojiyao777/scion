@@ -8,7 +8,6 @@ import pytest
 
 from scion.core.branch import BranchController
 from scion.core.models import (
-    AcceptedBranchChange,
     AcceptedFileBeforeSource,
     ChampionState,
     HypothesisProposal,
@@ -365,109 +364,76 @@ def test_candidate_captures_each_touched_file_before_source(tmp_path: Path) -> N
     service.reject_candidate(applied)
 
 
-def test_reconcile_source_conflict_detects_same_file_sibling_drift(
-    tmp_path: Path,
-) -> None:
-    service, _branch, durable, _ = _registry_service(tmp_path)
-    staging = service.create_reconcile_workspace(str(durable))
-    shared_file = Path(staging) / "operators" / "ls.py"
-    shared_file.write_text(
-        "class LocalSearch:\n    sibling_version = 7\n",
-        encoding="utf-8",
-    )
-    hypothesis = HypothesisProposal(
-        hypothesis_text="Change the old local-search source.",
-        change_locus="local_search",
-        action="modify",
-        target_file="operators/ls.py",
-    )
-    accepted_change = AcceptedBranchChange(
-        hypothesis=hypothesis,
-        patch=PatchProposal(
-            file_path="operators/ls.py",
-            action="modify",
-            code_content="class LocalSearch:\n    branch_version = 2\n",
-        ),
-        before_sources=(
-            AcceptedFileBeforeSource(
-                file_path="operators/ls.py",
-                source="class LocalSearch:\n    version = 1\n",
-            ),
-        ),
-    )
-
-    conflicts = service.reconcile_source_conflicts(staging, accepted_change)
-
-    assert conflicts == ("operators/ls.py",)
-    assert "sibling_version = 7" in shared_file.read_text(encoding="utf-8")
-    service.discard_reconcile_workspace(staging)
-
-
-def test_reconcile_create_then_modify_uses_one_workspace_and_registry(
+def test_reconcile_copies_complete_head_and_registry_without_replaying(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from scion.runtime.pool_manager import read_registry
-
-    service, _branch, durable, _ = _registry_service(tmp_path)
-    staging = service.create_reconcile_workspace(str(durable))
-    create_hypothesis = HypothesisProposal(
-        hypothesis_text="Add a new move.",
-        change_locus="local_search",
-        action="create_new",
-        target_file="operators/new_move.py",
-        suggested_weight=0.2,
-    )
-    service.apply_reconcile_change(
-        staging,
+    service, branch, durable, _ = _registry_service(tmp_path)
+    (durable / "support.txt").write_text("ordinary complete source\n")
+    created = service.apply_candidate_patch(
+        str(durable),
         PatchProposal(
             file_path="operators/new_move.py",
             action="create",
             code_content="class NewMove:\n    version = 1\n",
         ),
-        hypothesis=create_hypothesis,
+        hypothesis=HypothesisProposal(
+            hypothesis_text="Add a new move.",
+            change_locus="local_search",
+            action="create_new",
+            target_file="operators/new_move.py",
+            suggested_weight=0.2,
+        ),
+        sync_registry=True,
     )
-    service.apply_reconcile_change(
-        staging,
+    head = service.accept_candidate(branch, created)
+    refined = service.apply_candidate_patch(
+        head,
         PatchProposal(
             file_path="operators/new_move.py",
             action="modify",
             code_content="class NewMove:\n    version = 2\n",
         ),
-        hypothesis=HypothesisProposal(
-            hypothesis_text="Refine the new move.",
-            change_locus="local_search",
-            action="modify",
-            target_file="operators/new_move.py",
-        ),
     )
+    head = service.accept_candidate(branch, refined)
+    source_files = {
+        path.relative_to(head).as_posix(): path.read_bytes()
+        for path in Path(head).rglob("*") if path.is_file()
+    }
+    champion_root = Path(service.get_champion().code_snapshot_path)
+    (champion_root / "operators" / "ls.py").write_text("SIBLING = True\n")
 
-    pool = read_registry(str(Path(staging) / "registry.yaml"))
-    assert set(pool) == {"ls", "new_move"}
-    assert pool["new_move"].class_name == "NewMove"
-    assert (Path(staging) / "operators" / "new_move.py").read_text(
-        encoding="utf-8"
-    ) == "class NewMove:\n    version = 2\n"
-    digest_calls: list[str] = []
+    def no_replay(*_args, **_kwargs):
+        pytest.fail("Reconcile must not apply proposals or rewrite the registry")
+
+    monkeypatch.setattr(service.materializer, "apply_ephemeral_patch", no_replay)
+    monkeypatch.setattr(service, "sync_pool_registry", no_replay)
+    digest_calls = []
     compute_code_hash = service.materializer.compute_code_hash
 
-    def count_digest(workspace: str) -> str:
+    def count_digest(workspace):
         digest_calls.append(workspace)
         return compute_code_hash(workspace)
 
     monkeypatch.setattr(service.materializer, "compute_code_hash", count_digest)
+    staging = service.create_reconcile_workspace(head)
     candidate = service.seal_reconcile_candidate(
         staging,
-        base_workspace=str(durable),
-        changed_files=("operators/new_move.py",),
+        base_workspace=str(champion_root),
+        changed_files=("operators/new_move.py", "registry.yaml"),
     )
     service.verify_candidate(candidate)
+
+    assert {
+        path.relative_to(staging).as_posix(): path.read_bytes()
+        for path in Path(staging).rglob("*") if path.is_file()
+    } == source_files
+    assert (champion_root / "operators" / "ls.py").read_text() == "SIBLING = True\n"
     assert digest_calls == [staging, staging]
-    assert candidate.changed_files == (
-        "operators/new_move.py",
-        "registry.yaml",
-    )
+    assert candidate.changed_files == ("operators/new_move.py", "registry.yaml")
     service.discard_reconcile_workspace(staging)
+    assert Path(head).is_dir()
+    assert service.branch_workspaces[branch.branch_id] == head
 
 
 def test_rejected_created_operator_preserves_durable_registry_and_source(

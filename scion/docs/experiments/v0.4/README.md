@@ -1,10 +1,31 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-08-26*
+*Last updated: 2026-09-05*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
 referenced, not copied into development prompts.
+
+## Current CVRP interpretation
+
+- [R5 exact 2-for-1 inclusion postrun: completed diagnostic-only, no promotion](v04-cvrp-r5-v2-2for1-ablation-postrun-20260905.md)
+- [R4 retained-B0 confirmation postrun: terminal NOT_CONFIRMED at expanded screening](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-postrun-20260905.md)
+- [R4 frozen preregistration and terminal status](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md)
+- [R3i long-run postrun: cumulative v2 promoted on R3i populations; run later stopped on provider infrastructure](v04-cvrp-r3i-long-run-adaptive-history-postrun-20260904.md)
+
+## Supporting R3 adaptive-history lineage
+
+Read these only when the current R3i/R4/R5 interpretation needs provenance;
+their dated launch instructions and status words are historical.
+
+- [R3 postrun](v04-cvrp-r3-normal-k1-sol-postrun-20260829.md)
+- [R3b interruption](v04-cvrp-r3b-adaptive-history-k1-sol-interruption-20260830.md)
+- [R3c postrun](v04-cvrp-r3c-adaptive-history-k1-sol-postrun-20260830.md)
+- [R3d interruption](v04-cvrp-r3d-adaptive-history-k1-sol-interruption-20260830.md)
+- [R3e interruption](v04-cvrp-r3e-adaptive-history-k1-sol-interruption-20260831.md)
+- [R3f postrun](v04-cvrp-r3f-adaptive-history-k1-sol-postrun-20260901.md)
+- [R3g postrun](v04-cvrp-r3g-adaptive-history-k1-sol-postrun-20260902.md)
+- [R3h postrun](v04-cvrp-r3h-adaptive-history-k1-sol-postrun-20260903.md)
 
 ## Designs
 

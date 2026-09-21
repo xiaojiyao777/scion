@@ -2,19 +2,24 @@
 
 *Status: implementation note for v0.4; it cannot override
 `scion-architecture-v3.md`*
-*Updated: 2026-08-21*
+*Updated: 2026-09-20*
 
 ## Purpose and precedence
 
 V3 is the sole architecture authority for component ownership and control
 boundaries. This addendum records the smaller v0.4 runtime selected after the
 warehouse/CVRP experiment audit. It prevents old implementation examples from
-being mistaken for requirements to restore adaptive provider retry loops,
-algorithm-quality budgets, steering or context loss. Finite resource/action
-bounds remain operational only; this addendum introduces no independent
-normative layer.
+being mistaken for requirements to restore adaptive provider loops,
+algorithm-quality budgets, steering, context loss, or self-attesting object
+lifecycles. Bounded transport redispatch and proposal-local actions remain
+operational only; there is no default transcript-lifetime cap. This addendum
+introduces no independent normative layer.
 
-For v0.4, use this order:
+Repository sessions enter through [`../../AGENTS.md`](../../AGENTS.md) and the
+current handoff it names. That entry determines what is current and what work is
+authorized; it does not replace V3 as architecture authority.
+
+For v0.4, after the repository entry, use this precedence:
 
 1. `scion-architecture-v3.md` for every architecture or boundary question;
 2. `scion/TASK.md` and `scion/docs/status/current-state.md` for current work and
@@ -62,12 +67,12 @@ For v0.4:
 |---|---|---|
 | §4.2 | `recent_retry_count` and `budget_remaining_ratio` in the example `DecisionFeatures` | They are not Decision inputs. Decision consumes hard-safety facts and the typed Protocol gate outcome. |
 | §5.1 | Contract `novelty check` | Contract checks schema, locus, path, source, interface, import/API and approved-H binding. Novelty/material difference is not a hard gate. |
-| §8.7 | automatic infra retry | Provider SDK retries are zero. An ordinary resource envelope may explicitly allow at most two `ProviderCaller` redispatches of the same frozen request for a typed timeout, transport fault or provider fault. The ordinary bounded backoff is 5 seconds before the first redispatch and 20 seconds before the second. Each physical dispatch consumes the shared provider cap and writes its own terminal trace; 429, authentication, balance, format, schema, response-size, generic and interruption faults are never redispatched. A successful redispatch remains one H/C turn and exposes only its successful response. Exhaustion after the third physical dispatch follows the existing typed terminal path. Statistical expand remains a Protocol action and is not a provider redispatch. Historical runs retain their actually configured counts and attempt sequences; this boundary is prospective and does not rewrite them. |
-| §10.4, §13 | LLM repair after light Contract/Verification failure | While a bounded Creative session is open, an invalid draft/action may receive enumerated feedback and a later deliberate revision; no H/C has yet been exported. A direct one-shot terminal response, or a bounded session closed without a valid export, becomes `RESEARCH_REJECTED`: it ends that H/C attempt, does not count as a formal round, and scheduler-forward schedules a fresh H on the exact clean base. Contract/Verification rejection follows the same attempt-terminal rule. Missing provider terminal response, transport/auth/timeout/resource failure, missing or invalid local proposal context, missing typed outcome, and interruption remain invocation-terminal. |
-| §11.5, §12.2 | candidate fix budgets and campaign budget termination | v0.4 has no algorithm-quality, novelty or adaptive retry budget. An enabled Creative session has explicit finite provider-turn, read, search, public-test, output, transcript and shared provider-call limits. An ordinary resource envelope may additionally choose zero, one or two typed transient redispatches per frozen provider request, with the fixed 5-second then 20-second bounded backoff when applicable; it neither adds logical turns nor expands the shared physical-dispatch cap. These are resource/action bounds only: they cannot select research content, alter Protocol or enter Safe Features/Decision. An operator-selected formal-round target and scientific subprocess/solver limits remain explicit experiment boundaries. |
+| §8.7 | automatic infra retry | Provider SDK retries are zero. An ordinary resource envelope may explicitly allow at most two `ProviderCaller` redispatches of the same frozen request for a typed timeout, transport fault, provider fault, or rate limit. Each physical dispatch consumes the shared cap and writes its own best-effort terminal trace. Backoff lower bounds are 5 seconds and 20 seconds; a provider `Retry-After` may extend them. The local proxy's exact synthetic no-usable-account 401 is temporary provider unavailability, while real authentication and balance failures remain distinct and terminal. A successful redispatch remains one H/C turn. Exhausted typed transient/rate-limit dispatches reject only the current proposal attempt and scheduler-forward; they never enter H, history, Protocol, or Decision. Statistical expansion is a Protocol action, not provider redispatch. Historical artifacts retain their actual behavior. |
+| §10.4, §13 | LLM repair after light Contract/Verification failure | While a bounded Creative session is open, an invalid draft, action, or malformed wrapper may receive bounded enumerated feedback and a later deliberate revision; no H/C has yet been exported. A successful Code `ready` after the latest exact draft passes its host development check returns that patch immediately, without a redundant final confirmation turn. A closed attempt without valid export, Contract/Verification rejection, a started proposal-local limit, or exhausted typed transient/rate-limit provider dispatches becomes attempt-local `RESEARCH_REJECTED`, counts no formal round, and scheduler-forward schedules a fresh H. Exported H/C values are never repaired or replayed. Real auth/balance, explicit shared call-cap exhaustion, interruption, and unclassified infrastructure failures keep their separate typed stop/hold lanes. |
+| §11.5, §12.2 | candidate fix budgets and campaign budget termination | v0.4 has no algorithm-quality, novelty, adaptive-retry, or transcript-lifetime budget. `max_transcript_chars` defaults to absent. Optional proposal-local turn/read/search/public-test/output limits constrain one H/C attempt and cannot select research content, silently truncate source/history, alter Protocol, or enter Safe Features/Decision. The shared physical-dispatch cap, an explicitly selected formal-round target, and scientific subprocess/solver limits remain experiment boundaries; none is a hidden lifetime limit on a branch algorithm object. |
 | §11.1, §11.5 | one branch is one iterative direction; `max_active_branches = 3` is configurable | The v0.4 production default admits at most three active branches. State priority and FIFO choose runnable work; each branch deepens its own natural research direction without a host-authored diversity or mechanism gate. |
 | §15.1–15.3 | recent-N context, compression, blacklist | H receives complete safe current context plus one canonical record per visible screening attempt. C receives the approved H and a complete ordinary path/content source mapping. There is no compact-to-fit, top-N, blacklist steering, or summary substitution. |
-| §18 | `continue` after proposal/verification failure, possibly returning to Code | Open-session enumerated feedback is internal deliberation, not repair of an exported H/C. Once the direct response/session finalizes, abstains, abandons or closes without a valid export, proposal or Contract/Verification `RESEARCH_REJECTED` is attempt-terminal but scheduler-forward: no exported-H/C repair, no formal-round count, then a new H on the exact clean base. Provider turns without a terminal response and local/infrastructure outcomes stop/hold the invocation. |
+| §18 | `continue` after proposal/verification failure, possibly returning to Code | Open-session enumerated feedback is internal deliberation, not repair of an exported H/C. A closed-invalid proposal, started local-limit stop, exhausted typed transient/rate-limit dispatches, Contract rejection, or Verification rejection is attempt-terminal `RESEARCH_REJECTED`: no exported-H/C repair, no formal-round count, then a new H on the exact clean base. Real authentication/balance, explicit global cap, interruption, and other infrastructure outcomes retain their typed stop/hold lanes. |
 
 ## Direct v0.4 control flow
 
@@ -96,9 +101,11 @@ the typed patch and exact per-file source binding.
 
 An invalid bounded action may return enumerated feedback while the Creative
 session is still open. A later deliberate revision is internal deliberation,
-not repair or retry of an exported H/C. Once the session finalizes, abstains,
-abandons, is rejected or loses a provider terminal response, that H/C cannot be
-repaired, replayed, resumed or regenerated.
+not repair or retry of an exported H/C. A Code session's successful `ready`
+returns the latest exact draft only after its current host development check
+passes; it does not trigger a second confirmation/closure turn. Once an H/C is
+exported, abstained, abandoned, or rejected, that value cannot be repaired,
+replayed, resumed, or regenerated.
 
 ## Pre-Protocol research rejection
 
@@ -109,7 +116,7 @@ The typed boundary is:
 | Execution outcome | Attempt | Invocation | Formal count |
 |---|---|---|---:|
 | `EVALUATED` | complete | continue or finish target | 1 |
-| finalized `RESEARCH_REJECTED` | rejected and immutable | schedule a new H | 0 |
+| attempt-local `RESEARCH_REJECTED` | rejected and immutable | schedule a new H | 0 |
 | `NOT_EVALUATED` | no trusted research conclusion | stop/hold | 0 |
 | `BLOCKED_INFRA` | unavailable | stop/hold | 0 |
 | `RESOURCE_EXHAUSTED` | unavailable | stop/hold | 0 |
@@ -119,23 +126,24 @@ Scheduler-forward rejection includes a direct one-shot terminal response or a
 bounded Creative session that closes without a valid H/C export. Open-session
 invalid actions may receive enumerated feedback, but no exported proposal is
 being repaired. Rejection also includes a structured H Contract, Patch
-Contract or Verification rejection. Each `RESEARCH_REJECTED` records its phase
-and typed diagnostic, ends the rejected attempt, and schedules a fresh H on the
-clean base. It cannot repair, replay or regenerate an exported H/C, and it never
-counts as a formal Protocol round.
+Contract or Verification rejection, a started proposal-local limit, and an
+exhausted typed timeout/transport/provider/rate-limit dispatch sequence. Each
+`RESEARCH_REJECTED` records its phase and typed diagnostic, ends the rejected
+attempt, and schedules a fresh H on the clean base. It cannot repair, replay or
+regenerate an exported H/C, and it never counts as a formal Protocol round.
 
-A deliberate provider turn with no terminal response is different: transport, auth,
-provider timeout, or upstream termination cannot establish a tainted H/C to
-reject. Resource exhaustion, missing or invalid local proposal context, a
-missing typed execution outcome, and interruption are likewise
-invocation-terminal. They remain `NOT_EVALUATED`, `BLOCKED_INFRA`,
-`RESOURCE_EXHAUSTED`, or `INTERRUPTED` as applicable and never authorize a new
-provider turn inside that session or invocation.
+Real authentication or balance failure, explicit shared provider-cap
+exhaustion, interruption, missing typed execution outcome, and unclassified
+local/infrastructure failure are different. They remain `NOT_EVALUATED`,
+`BLOCKED_INFRA`, `RESOURCE_EXHAUSTED`, or `INTERRUPTED` as applicable and do not
+become algorithm history. The exact local-proxy synthetic 401 exception remains
+narrowly classified as temporary provider unavailability; it does not weaken
+real authentication handling.
 
-There is no algorithm-quality, novelty or content-similarity gate. Explicit
-Creative action/resource limits, provider transport limits and scientific
-solver limits are operational boundaries, not research-quality gates; an
-operator may stop explicitly at an attempt boundary.
+There is no algorithm-quality, novelty, content-similarity, or default total
+transcript gate. Optional proposal-local action limits, provider transport
+limits, explicit shared caps, and scientific solver limits are operational
+boundaries, not research-quality gates or hidden campaign lifetime limits.
 
 ## Gate interpretation
 
@@ -156,8 +164,9 @@ The hard gates exist to protect V3 control boundaries, not to grade research sty
 ## v0.4 scientific-iteration scheduling and candidate ancestry
 
 The default direct runtime admits at most three active scheduling branches.
-Evidence
-continuity and code inheritance are separate:
+Each branch's research object is its complete runnable source tree, not an
+object ID, patch receipt, or hash chain. Evidence continuity and code
+inheritance are separate:
 
 ```text
 screening observation on branch A
@@ -172,9 +181,10 @@ Verification leaves the candidate in isolated staging and does not itself
 advance the branch research head. Once the verified candidate is exposed to
 Protocol, the branch carries only a plain evaluation marker: `pending` or
 `completed`, the hypothesis reference, and `explore` or `reconcile` kind. The
-Verification-to-Protocol boundary retains one code-hash equality check for the
-same executable candidate; it creates no artifact identity, snapshot digest,
-owner, receipt, or self-proof lifecycle. Expansion and queued
+Verification-to-Protocol boundary retains one local exact-content equality
+check for the same executable candidate (the implementation may compact that
+single comparison with a digest); it creates no artifact identity, digest
+lineage, owner, receipt, or self-proof lifecycle. Expansion and queued
 validation/frozen stages reuse the exact candidate without another H/C call.
 After Contract and Verification pass and screening completes,
 `CONTINUE_EXPLORE` retains that verified candidate as the provisional branch
@@ -211,13 +221,14 @@ family association are non-authoritative proposal-only context. Only an
 exported H/C proceeds through the unchanged Contract -> Verification ->
 Protocol -> Safe Features -> Decision chain.
 
-### Post-R3 bounded research responsibilities
+### Post-R3 development safeguards
 
 The completed CVRP R3 campaign supplied the experiment evidence required by
 the reintroduction rule below. Five consecutive late H attempts did not read
 the latest live runtime/code failure records, and the final C attempt advanced
 after its own falsifier reported a counterexample. These observations justify
-exactly two finite Creative-session responsibilities:
+one narrow executable safeguard and better ordinary context; they do not
+justify a failure-reading proof or history authority layer:
 
 - A self-authored falsifier result of `failed` is a negative counterexample to
   the exact executable patch value in that open C session. The same materialized
@@ -226,42 +237,45 @@ exactly two finite Creative-session responsibilities:
   tested normally. This uses ordinary value equality, resets with the C
   session, and is not a cross-session blacklist, digest, identity, registry or
   substitute for Contract/Verification.
-- Before a bounded H finalizes, or before each K=2 slot is staged, the agent
-  must dispose of every explicit failure at the latest ordinary live round of
-  each `current` and `sibling` relation. A later pass closes an older failure
-  only within the same relation; activity in one relation cannot hide a live
-  failure in the other.
-  `used` means the agent read the record and cites it in the selected H basis;
-  `rejected` needs an agent-authored bounded reason and does not force a read.
-  External and older history remain optional. The host applies only this
-  chronological failure frontier: it does not rank history, choose a nearest
-  reference, choose a mechanism, assess the scientific merit of the reason or
-  inject the disposition into Safe Features or Decision. K=2 retains only the
-  selected slot's independently authored disposition.
-
-A direct one-shot H interface cannot express the second responsibility. When
-the frontier is nonempty it therefore exports no H and records one typed local
-context outcome; a later explicit invocation must enable the bounded H session.
-This is a mode-feasibility check, not a hypothesis-quality gate. The ordinary
-formal runtime already declares a bounded H session, so a valid agent can
-always continue by reading/citing a frontier record or rejecting it with a
-reason. The selected basis and disposition remain tainted H-only evidence and
-are persisted through the existing StepRecord, research-history, summary and
-SQLite lineage write points without any new authority lifecycle.
+- Recent current/sibling failures remain complete ordinary H-visible evidence.
+  The agent may read, use, or ignore them; the host must not choose a nearest
+  record or mechanism, require an exact `used/rejected/cited` closure, grade an
+  agent-authored reason, or inject history use into Safe Features or Decision.
+  Any reachable compatibility check that still requires exact failure-frontier
+  disposition is implementation debt, not a V3 invariant. It must not be
+  expanded or made a precondition for multi-day algorithm research.
 
 Campaign reopen is not part of the fresh v0.4 research-effectiveness acceptance
 path, so no active implementation work is allocated to reopen proofs or a
 separate identity, signing, lease, or closure lifecycle. Current experiments
 either continue their live branch state or start a fresh campaign explicitly.
 
+Stale reconciliation now copies the already materialized branch tree into
+isolated staging, repeats Verification and screens it against the new champion.
+Its prior Contract acceptance still applies: no new H/C is exported and no
+archived patch is reapplied or re-contracted. Champion edits are not merged into
+the branch. A missing verified tree is a typed operational failure, never a
+request to reconstruct it from history. Decision reanchors the comparison and
+resets its sample-expansion counts; subsequent stages reuse the exact candidate.
+
+The normal CLI accepts `--source-tree` for an explicitly selected complete
+algorithm directory, defaulting to the problem root. Campaign composition copies
+the initial source into its own read-only champion snapshot. CLI baseline version,
+branches, stages and provider counters start fresh; optional `--research-history`
+remains ordered H-only evidence. Status exposes ordinary source paths for the
+initial tree, current champion and live branch heads. No manifest or restoration
+of old campaign state is involved.
+
 This setting changes only scheduling topology; the Scheduler itself does not
 cap provider calls, hypotheses, files, tokens, formal rounds or campaign
-duration. A declared Creative session and global resource envelope may impose
-finite action/resource limits without becoming research-quality policy.
+duration. Optional proposal-local limits and an explicit global resource
+envelope may impose finite operational boundaries without becoming
+research-quality policy or a default transcript lifetime.
 Scheduler-forward `RESEARCH_REJECTED` continuation is a new attempt, not retry
 authorization.
-Provider calls without a terminal response and local/infrastructure/resource/
-interruption outcomes remain invocation-terminal. The three-slot
+Exhausted typed transient/rate-limit calls are attempt-local; real auth,
+balance, explicit global caps, interruption, and other infrastructure outcomes
+retain their typed stop/hold lanes. The three-slot
 maximum enables V3 breadth while preserving depth and evidence continuity
 within every branch; it does not force the provider to invent distinct
 mechanisms.
@@ -271,6 +285,8 @@ mechanisms.
 An autonomous v0.4 H/C control uses a fresh campaign on the selected current
 source and must:
 
+- begin from the repository entry and current authorization named in
+  `AGENTS.md`; this addendum does not authorize a launch;
 - parse its concrete command with the current `scion.cli.main run` CLI;
 - optionally perform a provider/proxy health check before launch; this is an
   operator diagnostic, not a scientific gate or completion preflight;
@@ -280,13 +296,14 @@ source and must:
   ordinary evidence, not campaign reopen;
 - retain ordinary run status, H/C traces, Protocol evidence, and Decision state;
 - preserve provider SDK retry zero; if an ordinary resource envelope explicitly
-  allows up to two typed transient `ProviderCaller` redispatches, apply only the
-  fixed 5-second then 20-second bounded backoff, charge and trace each physical
-  dispatch, and keep the transport fact out of H/C, research history, Protocol,
-  Safe Features and Decision;
-- record every declared Creative/global resource limit and provider-required
-  transport ceiling explicitly; never use a limit to rank mechanisms or
-  silently truncate source/history;
+  allows up to two typed timeout/transport/provider/rate-limit `ProviderCaller`
+  redispatches, use the 5-second then 20-second lower bounds plus a longer
+  provider `Retry-After` when supplied, charge and trace each physical dispatch,
+  and keep the transport fact out of H/C, research history, Protocol, Safe
+  Features and Decision; exhaustion rejects only that attempt;
+- record every explicitly selected proposal-local/global resource limit and
+  provider-required transport ceiling; the total transcript limit is absent by
+  default, and no limit may rank mechanisms or silently truncate source/history;
 - use the production default maximum of three active scientific-iteration
   branches rather than a formal-only scheduling override.
 

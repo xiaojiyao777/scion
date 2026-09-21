@@ -1,387 +1,173 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-04*
+*Current as of: 2026-09-20*
 
-Read [`../../TASK.md`](../../TASK.md) first. The sole architecture authority is
-[`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md)
-and its direct-runtime addendum. Historical experiment reports preserve
-evidence; they do not define current runtime authority.
+Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
+[`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
+[`../../TASK.md`](../../TASK.md) after it. The sole architecture authority is
+[`../../design/scion-architecture-v3.md`](../../design/scion-architecture-v3.md);
+the direct-runtime addendum only narrows the current implementation. Historical
+plans and experiment reports preserve evidence but do not define current runtime
+authority or authorize another run.
 
-## Outcome
+## Checkout and verification snapshot
 
-Warehouse has demonstrated real retained improvement:
+- Working branch: `v0.4-dev`.
+- HEAD: `922dbc52` (`Record R4 retained confirmation launch`), aligned with the
+  local `origin/v0.4-dev` ref. The worktree includes the existing uncommitted
+  documentation handoff plus the source-continuation implementation below.
+- Full suite on this worktree: `2393 passed, 1 skipped, 0 failed` in 440.46
+  seconds, with no live provider or formal campaign. From the repository root:
+  `env PYTHONPATH=scion:. /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests`.
+  The explicit import path avoids this machine's older editable installation.
+- Focused continuation tests cover cold-process startup, H-only history, source
+  isolation, rollback, same-file sibling drift and exact held-out reuse.
+  Targeted Ruff (`F,E9`, excluding existing star-import rules `F403,F405`) and
+  `git diff --check` pass. Calendar-dependent calibration diagnostics are tested
+  at explicit fresh/stale dates; runtime age limits are unchanged.
+- R4 and R5 both ended normally. Their retained tmux panes are dead with exit
+  status zero; no experiment is currently running or authorized by this file.
 
-- synthetic Scion promoted and independently retained `v1 -> v2 -> v3`;
-- production-style Scion promoted and independently retained `v1 -> v2`.
+A new session must re-run the ordinary read-only `git` and tmux checks in
+`AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
+authority; read the exact terminal and metric artifacts linked below.
 
-CVRP remains open, but R3i promoted cumulative champion v2 after complete
-expanded screening, validation and frozen passes. This is safe three-stage
-evidence for the exact bundle, not an isolated 2-for-1 effect or retained-B0
-superiority. R3i then stopped `valid_incomplete / execution_blocked_infra` at
-16/40 evaluated stages when a provider 429 was followed by the local proxy's
-synthetic no-usable-account 401 and that sentinel was misclassified as real
-authentication failure. The root is terminal and will not be resumed.
+## Current runtime truth
 
-R4 was frozen and launched once at `2026-09-04T13:22:36Z` in local tmux
-session `scion-r4-r3i-v2-retained-b0-confirmation-20260904`. It compares exact
-v2 directly with the R3i starting B0 on a deterministic fresh effect population
-whose cases do not overlap R3-R3i metrics. The non-estimand controlled canary
-passed, the first effect pair completed, and the second pair began under a live
-Python owner. No result is yet available, so CVRP retained improvement remains
-unestablished.
-
-## Runtime boundary
-
-Scion is a problem-neutral engine. A problem enters Campaign, Contract,
-Verification and Protocol only through its adapter.
+Scion is a problem-neutral research engine. Problem algorithms, objective and
+feasibility semantics, research surfaces, checks, protocol inputs, and telemetry
+meanings stay in problem-owned packages. Generic core only carries typed values
+through this path:
 
 ```text
-adapter + safe source/history
+problem adapter + complete safe source/history
   -> agent H research -> tainted H -> Hypothesis Contract
   -> agent C research -> tainted C -> Patch Contract
-  -> isolated candidate workspace -> Verification
-  -> problem Protocol -> Safe Features -> deterministic Decision
-  -> exact candidate stage drain / branch continuation / promotion
+  -> isolated complete candidate workspace -> Verification
+  -> problem-owned Protocol -> Safe Features -> deterministic Decision
+  -> exact stage reuse, branch continuation, or promotion
 ```
 
-The normal scheduler supports up to three continuous branches. K=2 remains an
-optional bounded H drafting strategy inside the same campaign, not a separate
-qualification mode. Exact candidates progress through ordinary screening,
-validation and frozen states; there is no qualification parking or candidate
-reconstruction path.
+### Persistent algorithm research space
 
-History remains complete, ordered H-only proposal evidence. The agent may
-search/read any ordinary record and chooses whether it is scientifically used.
-The host does not rank a nearest record or select a mechanism. A small control
-now requires an agent-authored disposition only for explicit failures at the
-latest ordinary round of the `current` and `sibling` relations independently:
-use a record after reading/citing it, or reject it with a reason. A later pass
-closes an older failure only in the same relation. External and older history
-stays fully optional. Held-out validation/frozen evidence never enters H
-context.
+Within a live campaign, a branch's `current` value is a complete ordinary source
+tree. After Contract and Verification pass and screening completes,
+`CONTINUE_EXPLORE` retains that candidate as the branch's verified provisional
+head even when the scientific screen fails. The next H receives the complete safe
+screening evidence and the next C edits that complete source tree. Contract or
+Verification failure falls back to the last clean branch source; held-out stages
+reuse the exact candidate and cannot be bypassed.
 
-Candidate workspaces use ordinary fresh temporary directories and local
-cleanup. The retained integrity mechanism is one final exact-content equality
-around Verification and Protocol handoff; object identity, leases, owner
-registries, signing, receipts and repeated manifest closure are absent from the
-reachable runtime.
+This live-branch path gives the agent depth without a host mechanism selector.
+When a champion change makes another branch stale, reconcile now copies that
+branch's already materialized complete tree for isolated Verification and fresh
+screening against the new champion. It does not replay accepted patches or merge
+champion edits. Prior H/C records remain evidence. Missing source holds the
+invocation rather than reconstructing code. Decision reanchors the comparator
+and resets expansion counts; later held-out stages reuse the exact candidate.
 
-## Completed evidence
+CLI `--source-tree` explicitly selects an ordinary complete directory as a fresh
+baseline; absent that option, the problem root is used. Campaign composition
+copies the initial source into a read-only champion snapshot. CLI versions,
+branches, stages and provider counters start fresh, with optional ordered H-only
+`--research-history`. Status exposes `initial_source_tree`,
+`champion_source_tree` and `branches[].source_tree` as ordinary paths.
 
-R1 closed the problem boundary and deleted the post-M32 S2c authority island,
-qualification-only runtime, parking/carrier/audit paths and the obsolete
-effectiveness scorer. The ordinary trajectory evaluator, K1/K2 continuous
-campaign and direct adapter boundary remain.
+Generic models and runtime observation still retain
+operator-shaped names such as `operator_pool`, `operator`, `policy`,
+`construction`, and `portfolio`; there is no direct Warehouse/CVRP branch in core,
+but this taxonomy is not fully algorithm-object-neutral. Terminal or interrupted
+campaign state itself must not be resumed.
 
-R2 ran a five-block, ten-arm matched CVRP history study. All 20 requested
-screening stages completed. The additional 45 heterogeneous external records
-were prompt-visible in the ON arm but no selected H read or cited them, so the
-study found no attributable external uptake or demonstrated benefit and that
-corpus remains disabled. This is an availability/index-exposure ITT, not proof
-of zero indirect content effect. Ordinary within-campaign history was read and
-cited, and selected bases attributed later direction changes to it; because
-both arms had local history, R2 does not estimate its benefit. The next adaptive
-campaign therefore loads only the narrower, same-problem R3 history while
-retaining local current/sibling history.
+The source-continuation slice adds no identities, digest authority, manifests, leases,
+signing, registration, receipts or reconstruction lifecycle.
+Do not add another operator/mechanism field to generic runtime.
+Move existing operator-shaped observation and configuration meanings toward
+problem-declared or opaque values in a separate, test-bounded cleanup; do not make
+that cleanup a new scientific gate.
 
-R3 ran one preregistered K1 `gpt-5.6-sol` campaign through the local proxy:
+### Provider and bounded-session semantics
 
-- terminal `completed`, `requested_rounds_completed`, validity `valid`;
-- 21 scheduled research steps, 16 formal screenings and five typed research
-  rejections;
-- 114/272 provider dispatches, all attempts closed;
-- 16 distinct formal H episodes, 12 observed distinct H+patch pairs and five
-  exact-candidate expanded screens;
-- 832 attempted pairs, 827 valid and five candidate-only timeout failures;
-- no invalid output, infeasibility, protected regression, validation, frozen
-  test or promotion.
+- Provider SDK retries are zero. An explicit ResourceEnvelope may redispatch the
+  same frozen request a finite number of times after typed transient failures;
+  every physical dispatch is charged and best-effort traced.
+- Exhausting transient redispatches or a local turn/result/transcript bound after a
+  session has started rejects only that attempt and schedules a fresh H. These
+  operational rows do not become algorithm-failure history.
+- H/C transcript total characters are unbounded by default. If a user explicitly
+  sets a bound that the complete initial H context cannot satisfy before the first
+  dispatch, the invocation remains `RESOURCE_EXHAUSTED`; source/history must not be
+  truncated, ranked, compacted, or summarized to fit.
+- A passing Code draft exported with `ready` is terminal for that session and does
+  not require a second provider confirmation or closure. If the turn loop ends with
+  an already passing frozen draft but no `ready`, the one final decision is only
+  `finalize_patch` or `abandon`.
+- The local proxy's exact synthetic no-usable-account 401 is temporary provider
+  unavailability. Real/non-exact authentication, balance, explicit global call cap,
+  missing provider terminal response, invalid local context, missing typed outcome,
+  and interruption remain terminal or hold outcomes.
 
-The full R3 analysis is
-[`../experiments/v0.4/v04-cvrp-r3-normal-k1-sol-postrun-20260829.md`](../experiments/v0.4/v04-cvrp-r3-normal-k1-sol-postrun-20260829.md).
-It is valid negative research evidence, not a failed launch.
+Contract, Verification, complete-pair Protocol, held-out isolation, feasibility,
+protected objectives, and deterministic Decision remain necessary research
+boundaries. Algorithm novelty, host mechanism preference, telemetry prose, and
+incidental operational limits are not promotion gates.
 
-## Post-R3 controls
+## Accepted scientific state
 
-The framework defects exposed by R3 have been corrected without adding a
-Trust/Hash authority layer:
+Warehouse has demonstrated retained improvement: synthetic Scion promoted and
+independently retained `v1 -> v2 -> v3`, and production-style Scion promoted and
+independently retained `v1 -> v2`.
 
-- a failed self-authored code falsifier permanently vetoes that exact patch
-  value for the current C session; omitting or weakening a later probe cannot
-  reopen it, while a genuinely different patch may be tested normally;
-- explicit failures at each relation's latest ordinary live round must receive
-  one agent-authored used/rejected disposition before H finalizes, while search
-  is case-insensitive token-OR and returns at most one discovery hit per ordered
-  history record;
-- the selected H basis, including the frontier review when present, and the
-  typed evaluated outcome now flow through the original StepRecord, SQLite
-  lineage, summary and research-history JSONL write points. Old R3 rows remain
-  untouched and truthfully null;
-- candidate/workspace disposition failure becomes one typed `BLOCKED_INFRA`
-  fact that preserves either the interrupted outcome or completed Protocol plus
-  unapplied Decision. It is not counted as an evaluated/applied-Decision
-  closure, and nested validation/frozen facts remain excluded from H history;
-- a stale branch with no accepted change closes as null-H/null-basis
-  non-attempt housekeeping. Accepted-chain replay preserves its exact head
-  basis, and cleanup failure cannot replace an already applied Decision or
-  delete a durable accepted workspace.
+CVRP remains open:
 
-Problem-owned CVRP guidance also requires a self-authored activation falsifier
-for performance mechanisms and a public synthetic large-shape deadline check.
-These are development diagnostics only; mechanism telemetry and history never
-enter Safe Features or Decision.
+- [`R3i`](../experiments/v0.4/v04-cvrp-r3i-long-run-adaptive-history-postrun-20260904.md)
+  promoted cumulative v2 after complete expanded screening, validation, and frozen
+  passes. The bundle combines dynamic perturbation frontier, post-repair
+  admissibility/small-route consolidation, orientation-changing 2-opt-star, and
+  inter-route 2-for-1. This is exact-bundle evidence, not component causality or
+  retained superiority over original B0. R3i later stopped on provider/proxy
+  infrastructure and is terminal, not resumable.
+- [`R4 postrun`](../experiments/v0.4/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-postrun-20260905.md)
+  compared exact v2 directly with original R3i B0 on a fresh effect population.
+  It completed normally as `NOT_CONFIRMED` at expanded screening: 24/24 valid
+  pairs, no failures or fleet regression, case W/L/T `1/0/5`, median distance
+  delta `0`, CI `[0,130.5]`, and `SCREENING_FAIL_CASE_QUALITY`. The sole winning
+  case reversed sign across seeds. R4 therefore found safe but sparse/unstable
+  benefit and did not expose validation, frozen, or retained stages. See the
+  [terminal](/home/clawd/research/scion-experiments/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-20260904/terminal.json)
+  and [metric](/home/clawd/research/scion-experiments/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-20260904/metrics/ab7e221a-0d68-497c-a18e-87e80451cfe1.json).
+- [`R5 postrun`](../experiments/v0.4/v04-cvrp-r5-v2-2for1-ablation-postrun-20260905.md)
+  records a provider-free, case-conditioned diagnostic of exact full v2 versus an
+  ordinary v2 copy with only the `_exchange_2_for_1` registry entry removed. It
+  completed normally as `DIAGNOSTIC_COMPLETE`: 24/24 valid pairs, no failures or
+  fleet regression, case W/L/T `0/2/4`, median `0`, CI `[-281.75,0]`, and
+  essentially equal runtime. On this already outcome-known R4 population, the
+  result does not support including 2-for-1 and is compatible with harm on two
+  cases. It is diagnostic only and cannot promote either arm. See the
+  [preregistration](/home/clawd/research/scion-experiment-inputs/v04-cvrp-r5-v2-2for1-ablation-20260904/PREREGISTRATION.md),
+  [terminal](/home/clawd/research/scion-experiments/v04-cvrp-r5-v2-2for1-ablation-20260904/terminal.json),
+  and [metric](/home/clawd/research/scion-experiments/v04-cvrp-r5-v2-2for1-ablation-20260904/metrics/72cbb5bf-1b86-4f12-aa7c-b4ba1d8e21b7.json).
 
-The post-SIGHUP frozen provider-free, non-campaign regression is green: `2260
-passed, 1 skipped` in 439.42 seconds. The exact signal, resource, history and
-CVRP formal-readiness slice is also green at `107 passed`. This includes the
-public 719-customer deadline case, frontier/falsifier adversarial tests,
-exact-candidate stage continuity, adapter boundaries and candidate-disposition
-fault injection.
+Thus v2 is not a confirmed retained-B0 improvement, and v2-minus-2-for-1 is not a
+champion. Both are ordinary complete source values that may inform a later,
+prospectively declared development comparison.
 
-R3b then launched once and produced one complete initial-screen result. Its
-route-distinct regret candidate completed 32/32 valid pairs, case W/L/T `6/0/2`,
-median `+6.5`, CI `[0,18]`, and received `expand_screening`. It used no external
-R3 record. During expanded screening the interactive process disappeared after
-33/96 completed/valid pairs. No expanded metric, event or Decision exists.
-The stale `running` root is therefore preserved as
-`INTERRUPTED_UNFINALIZED_EXTERNAL_PROCESS_LOSS`, not resumed or rewritten.
+## Active next work
 
-SIGHUP now uses the existing typed interruption path, closing the specific
-stale-status gap without adding a Trust/Hash authority. R3c used one foreground
-PTY attached to this Codex task's terminal panel; it was not backgrounded,
-installed no service and created no identity, lease, signature, registry or
-receipt.
+1. Keep the compact R4/R5 postruns as the current interpretation and preserve both
+   raw terminal roots unchanged.
+2. P1 source continuation is implemented and validated. Keep the separate P1b
+   operator-shaped vocabulary cleanup bounded and outside scientific gates.
+3. Treat v2-minus-2-for-1 only as the R5-supported next candidate. Before any
+   retained claim, compare it directly with original B0 on unseen cases and seeds
+   under a prospectively frozen complete-pair protocol.
+4. This documentation update does not launch an experiment. Under the user's
+   existing authorization, a later agent may prepare and autonomously launch the
+   next run only after code and scientific inputs are frozen, no experiment is
+   active, and a fresh root plus the runbook's ordinary scientific checks are in
+   place.
 
-R3c then started once from fresh B0 with the 22 complete R3/R3b records. Its
-first scheduler candidate passed Contract, Verification and canary and
-completed 32/32 screening pairs safely, but every case median tied: case W/L/T
-`0/0/8`, pair W/L/T `3/2/27`, total-distance median `0`, CI `[0,0]`.
-Protocol returned `SCREENING_FAIL_CASE_QUALITY` and Decision continued research.
-The next H session read the new sibling failure, then its following provider
-request hit the explicit 120-second `LLMTimeoutError`. With SDK retries disabled
-and no Scion redispatch boundary, R3c stopped `valid_incomplete` with typed
-`PROVIDER_CALL_BLOCKED_INFRA`; it reached no validation, frozen test or
-promotion. Its terminal root remains untouched and is not resumable.
-
-The repair is deliberately smaller than an adaptive retry system. An explicit
-ordinary ResourceEnvelope value may allow `ProviderCaller` to redispatch the
-same frozen request once after a typed timeout, transport fault or provider
-fault. The SDK remains at zero retries; 429, auth, balance, format, schema,
-response-size, generic and interruption faults are excluded. Each physical
-dispatch consumes the unchanged shared cap and writes one terminal trace. The
-redispatch remains one logical H/C turn and exposes no retry fact to H, research
-history, Protocol, Safe Features or Decision. It adds no request identity,
-lease, registration, receipt, request hash or repeated closure.
-
-The bounded provider-retry repair gate was green at `2293 passed, 1 skipped` in
-452.12 seconds, with zero failures. Focused provider/CLI/history gates and an
-independent minimal-boundary review were also green. That evidence froze R3d as
-a fresh-B0 experiment loading exactly 24 complete records in R3 -> R3b -> R3c
-order with unchanged formal inputs.
-
-R3d then launched once. Its first H read and cited R3b's complete
-route-distinct-regret record and proposed a one-step capacity-scarcity
-look-ahead. The exact candidate changed only `destroy_repair.py`, passed
-Contract, Verification and canary, and completed all `32/32` initial-screen
-pairs without subject or protected-objective failure. Case W/L/T was `4/0/4`,
-pair W/L/T `15/7/10`, total-distance median `+2.25`, CI `[0,18]`; Protocol and
-Decision required expanded screening. This is attributable history uptake and
-weak positive adaptive-development evidence, not history-benefit, mechanism or
-promotion evidence.
-
-During the same candidate's expansion, the foreground process disappeared
-after `35` attempted and `34` completed/valid pairs of `96`. No expanded
-metric, event or Decision exists. The original shell, Python and solver child
-are gone, while the root remains stale `running / pending`. With no OOM,
-recorded signal or typed provider/solver failure, the root is classified
-`INTERRUPTED_UNFINALIZED_EXTERNAL_PROCESS_LOSS` and will not be resumed or
-rewritten. Its single history row contains only the complete initial screen;
-the partial expanded counters are excluded from future H context. Full details
-are in the
-[`R3d interruption report`](../experiments/v0.4/v04-cvrp-r3d-adaptive-history-k1-sol-interruption-20260830.md).
-
-The operational diagnosis found that R3d ran in a unified tool PTY that never
-became the visible app terminal; its exposure request remained `queued`, and
-the unattached session later disappeared. R3b and R3d's PTY-backed invocations
-failed after `4957.185` and `5039.302` seconds. By comparison, R3's ordinary
-non-TTY unified-exec foreground invocation completed exit `0` after
-`77359.3004` seconds. This comparison is operational evidence, not a lifetime
-guarantee or scientific result. A separate typed-finalization race was also
-corrected: the CLI now keeps SIGTERM, SIGINT and SIGHUP handlers installed until
-`finalize_requested_stop` is durable and suppresses repeated handler re-entry.
-This cannot catch `SIGKILL`.
-
-R3e then launched once through that non-TTY carrier from fresh B0 with the 25
-complete R3 -> R3b -> R3c -> R3d records available. Its H read only current
-source `source-0005`, not external history, and independently proposed a
-bounded beam regret repair. The exact candidate passed Contract, Verification,
-self-authored checks and canary and completed a safe `32/32` initial screen.
-Case W/L/T was `3/1/4`, pair W/L/T `12/7/13`, total-distance median was `0`,
-CI `[0,7]`, and Protocol required expanded screening. This is uncertain
-adaptive-development evidence, not attributable history uptake, an expanded
-screen pass, validation or promotion.
-
-During the same candidate's expanded screen, R3e's non-TTY unified-exec
-carrier also disappeared. It returned `failed/-1` after `7704.372878714`
-seconds with empty stderr. The last heartbeat recorded `59` attempted and `58`
-completed/valid pairs of `96`, zero observed failures, and no expanded metric,
-event or Decision. No Scion process remains, while the root is stale `running /
-pending`; journals contain no OOM, segfault or recorded process kill. The
-low-level reaper or signal is unknown. R3e is therefore preserved as
-`INTERRUPTED_UNFINALIZED_EXTERNAL_PROCESS_LOSS`, not resumed, rewritten or
-backfilled. Full details are in the
-[`R3e interruption report`](../experiments/v0.4/v04-cvrp-r3e-adaptive-history-k1-sol-interruption-20260831.md).
-
-The R3 precedent did not establish a non-TTY lifetime guarantee. A minimal
-provider/solver-free carrier probe has now verified one local tmux session:
-create a lazy pane, set window-local `remain-on-exit`, replace it once with a
-foreground command, and observe it from a later independent exec call. The
-tmux server reparented to PID 1, the session survived the creating tool call,
-and the dead pane retained process exit status or signal. This is operational
-evidence only. The pane, console and tmux state never enter H, Protocol, Safe
-Features or Decision and cannot authorize promotion or relaunch.
-
-R3f then launched once through the preregistered tmux carrier and finished
-normally: terminal `completed / requested_rounds_completed / valid`, 20/20
-evaluated stages, 23 scheduled calls, three research rejections, 145/340
-provider dispatches, three active branches and champion v1 unchanged. The
-retained dead pane has exit status zero and agrees operationally with the
-ordinary terminal artifacts; it is not scientific authority.
-
-The one candidate to reach stage-held-out validation was cumulative across
-`destroy_repair.py` and `scheduler.py`. It completed initial screening at
-32/32 valid, case W/L/T `5/1/2`, median `+5.25`, CI `[0,14.5]`, then expanded
-screening at 96/96 valid, case W/L/T `6/1/5`, median `+3`, CI `[0,9.5]`.
-Validation attempted all 96 pairs but produced two candidate-only timeouts on
-`X-n401-k29`, seeds 53 and 71. The champion had no failures. Protocol returned
-`INCOMPLETE_EVIDENCE` and `CANDIDATE_RUNTIME_FAILURE`; Decision abandoned the
-candidate. The observed case win rate was also only `0.50` against a `0.66`
-threshold, and optimistic recovery of the two missing pairs cannot create a
-seventh case win. This is negative candidate algorithm/runtime evidence, not
-root infrastructure, a validation pass or promotion. The validation row is
-excluded from H-only history.
-
-R3f's final exact-relocate initial screen completed 32/32 valid pairs, case
-W/L/T `2/1/5`, median `0`, CI `[0,25]`, and requested expansion at the formal
-horizon. No expanded-stage metric or Decision artifact exists. V3
-cumulative-depth semantics remain in force: this is association evidence for
-a cumulative `scheduler.py` + `local_search.py` candidate, not an isolated
-current-step effect and not an executable candidate to reconstruct in R3g.
-Full evidence is in the
-[`R3f postrun`](../experiments/v0.4/v04-cvrp-r3f-adaptive-history-k1-sol-postrun-20260901.md).
-
-The R3f terminal history is frozen at 22 strict `cvrp` rows: 19 evaluated
-screening rows and three research rejections, with no validation/frozen row.
-The prospective R3g loader reads
-`[21,1,2,1,1,22] = 48` ordered rows across R3 -> R3b -> R3c -> R3d -> R3e ->
-R3f. No R3f candidate source, workspace, status, metric, SQLite state or tmux
-state is an R3g input.
-
-Three bounded prospective corrections address the R3f evidence without
-rewriting it:
-
-- nested destroy/repair loops poll the existing monotonic deadline and exit
-  reserve; a typed internal expiry causes the partially mutated local candidate
-  to be discarded before the scheduler exits its ALNS loop;
-- ordinary before-source text captured at candidate materialization follows
-  the current-step patch into exact-stage proposal evidence, so workspace
-  cleanup cannot erase bounded before/after attribution;
-- every Protocol stage and subprocess launch clears stale completion, phase,
-  child-exit and child-elapsed progress fields before new work begins.
-
-These changes add no mechanism selector, held-out exposure, identity, lease,
-issuance, registration, signature, receipt, hash or repeated closure. The
-adaptive embedded-VNS direction is a strong negative; pre-polish tournament
-and initial-VNS budget directions receive no more host-directed investment.
-Exact inter-route evaluation remains only promising cumulative association
-evidence, not a fixed replay.
-
-[`R3g`](../experiments/v0.4/v04-cvrp-r3g-adaptive-history-k1-sol-postrun-20260902.md)
-launched from that isolated tree and stopped cleanly as
-`valid_incomplete / execution_blocked_infra` after one evaluated screening and
-one proposal-infrastructure step. Its three-route cyclic-exchange candidate
-completed 32/32 valid pairs with no runtime or protected-objective failure,
-case W/L/T `1/2/5`, pair W/L/T `4/6/22`, median `0`, CI `[-2,0]`, and
-`SCREENING_FAIL_CASE_QUALITY`. The next H read current source but exported no
-hypothesis: one frozen request received two charged/traced 502 overload
-responses only milliseconds apart. R3g stopped at 10/340 provider dispatches;
-champion v1 and all held-out stages remained unchanged. Its two strict history
-rows preserve exactly those facts.
-
-The first provider repair was ordinary and bounded: SDK retries remained zero;
-a frozen request could receive at most two charged and traced Scion
-redispatches after typed timeout/transport/provider faults. R3h then showed the
-larger issue was a local transcript classification, not provider reliability.
-The successor also treats exhausted transient/429 dispatches as an operational
-proposal rejection so research schedules forward. Authentication, balance and
-explicit global cost boundaries remain terminal.
-
-[`R3h`](../experiments/v0.4/v04-cvrp-r3h-adaptive-history-k1-sol-postrun-20260903.md)
-stopped cleanly as `valid_incomplete` after 11 evaluated stages. All 113
-provider calls succeeded; the stop was an H session's configured 1.5M-character
-transcript limit being misclassified as global resource exhaustion. It was not
-a provider, solver, disk, or scientific-gate failure. Champion v1 remained
-unchanged and R3h contributes 15 ordinary history rows.
-
-The prospective long-run repair makes started proposal-local caps and exhausted
-typed transient/429 calls reject only the current attempt; removes the default
-total transcript cap; widens default H/C timeouts; auto-enables bounded H tools
-when a live frontier needs them; makes output-history policy limits nonfatal;
-and removes incidental K2/SIGHUP/stale-run blockers. Authentication, balance,
-explicit operator cost/time boundaries, correctness checks, held-out isolation,
-and promotion rules remain. No identity, lease, registration, receipt, or hash
-lifecycle was added. The final repair suite is `2351 passed, 1 skipped, 0
-failed` in 467.79 seconds; focused tests are `438 passed`, Ruff and diff checks
-pass.
-
-[`R3i`](../experiments/v0.4/v04-cvrp-r3i-long-run-adaptive-history-postrun-20260904.md)
-is terminal `stopped / valid_incomplete / execution_blocked_infra`. It
-completed 16/40 evaluated stages in 25 scheduled calls, admitted 170/2,000
-provider dispatches and produced 16 complete metrics totaling 896/896 valid
-pairs with no runtime, feasibility or protected-objective failure. The final H
-request received provider 429 followed by the local proxy's exact synthetic
-401 `Not authenticated. Please login first at /`; treating that proxy sentinel
-as real credential failure stopped the invocation. No H/C or solver timeout,
-provider cap or scientific gate caused the terminal.
-
-R3i's cumulative v2 bundle passed expanded screening at `+2.5 [0,10.5]`, case
-W/L/T `6/1/5`; validation at `+1 [0,14.5]`, `7/0/5`; and frozen at `+1.25
-[0,6.5]`, `6/1/5`. It combines dynamic perturbation frontier, post-repair
-admissibility/smallest-route consolidation, orientation-changing 2-opt-star and
-inter-route 2-for-1. Generic VNS telemetry cannot isolate the final mechanism,
-and lower interval bounds are zero. Current ejection-chain, always-on SWAP*
-and pure certificate/throughput directions are closed as negative or
-non-useful; exact v2 remains the retained candidate.
-
-The prospective working-tree repair recognizes only the proxy's exact
-synthetic 401 as transient, keeps malformed C wrapper correction inside the
-bounded session, removes a redundant post-`ready` closure and filters
-operational failures from later H algorithm history. It adds no Trust/Hash,
-identity, lease or registry path. The stable full suite completed with `2383
-passed`, `1 skipped` and `0 failed` in 478.87 seconds (480.61 seconds outer
-wall); targeted Ruff and diff check are green.
-
-The
-[`R4 fixed-candidate preregistration`](../experiments/v0.4/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md)
-is now running once from its frozen ordinary read-only B0/v2/data inputs, which
-passed
-`run_fixed_candidate_funnel.py --check`: zero provider calls, 85 maximum pairs,
-170 serial solver subprocesses, 10,160 nominal and 15,260 guarded
-subject-seconds. Its 36 effect cases have zero overlap with all R3-R3i metric
-cases; the controlled canary is excluded from effect claims, and retained uses
-the pre-R3 reserved 12-case final block with seeds `157,163`.
-
-## Next scientific rung
-
-1. Do not resume R3i. Its promoted v2 snapshot and durable evidence are the
-   only candidate inputs for R4.
-2. Run the already-prepared provider-free R4 funnel once, comparing exact v2
-   directly with exact starting B0. Preserve complete-pair, feasibility, fleet,
-   practical-effect and uncertainty gates.
-3. If R4 retains v2, use a separate direct `v2 minus _exchange_2_for_1`
-   ablation to answer causality; do not make that ablation a retroactive R4
-   gate. If R4 does not retain, report the negative result and keep CVRP open.
-
-The tmux session is a single local process carrier, not a service, deployment,
-distribution, scheduler or build. Additional authority objects,
-identity/lease/receipt/hash lifecycles and repeated closure remain out of
-scope. Scientific truth remains in ordinary durable campaign artifacts.
+Current work excludes distribution, deployment, installation, packaging, build,
+root/systemd, Trust/Hash authority, object identity, leases, signing, registration,
+receipts, duplicate closure, host-selected algorithm mechanisms, and new incidental
+research-quality gates.

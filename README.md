@@ -2,9 +2,17 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version: v0.3](https://img.shields.io/badge/version-v0.3-blue.svg)](#)
+[![Version: v0.4](https://img.shields.io/badge/version-v0.4-blue.svg)](#)
 
-**Scion**（嫁接/分支）是一个研究项目，探索如何利用 LLM 的推理能力自动改进组合优化算法中的启发式算子。与传统的 LLM+进化算法方法不同，Scion 将 LLM 视为**推理主体**（而非随机变异算子），通过假设驱动的搜索、三级统计验证、契约式治理和参数层优化，在保证安全性的前提下实现算子自动发现与权重优化。
+**Scion**（嫁接/分支）是一个研究项目，探索如何利用 LLM 的推理能力持续改进
+problem-owned、完整且可运行的组合优化算法对象。与传统的 LLM+进化算法方法不同，
+Scion 将 LLM 视为**推理主体**（而非随机变异算子），让 agent 在分支源码空间中提出
+假设、实现代码并依据实验反馈继续研究；Contract、Verification、Protocol 与
+deterministic Decision 保留必要的安全和科学边界。
+
+> **Agent / maintainer entry:** start with [`AGENTS.md`](AGENTS.md), then read
+> the current handoff it names. Do not infer current experiment state or
+> authority from the historical results below.
 
 ## 项目结构
 
@@ -14,7 +22,7 @@
 ├── surrogate/           # Surrogate Solver — 仓配协同 VNS 求解器
 ├── vrp/                 # CVRP baseline staging — v0.4 第二问题基线
 ├── docs/blog/           # 博客文章与致谢
-└── reviews/             # 架构审核报告
+└── scion/reviews/       # 架构审核报告
 ```
 
 ---
@@ -49,13 +57,13 @@ best champion vs v1 baseline:
 
 完整报告：
 
-- [`scion/docs/evidence-manifest.md`](scion/docs/evidence-manifest.md)
-- [`scion/docs/v0.3-final-visual-report.md`](scion/docs/v0.3-final-visual-report.md)
-- [`scion/docs/v0.3-final-12campaign-analysis.md`](scion/docs/v0.3-final-12campaign-analysis.md)
-- [`scion/docs/v0.3-production-timeout-fix-analysis.md`](scion/docs/v0.3-production-timeout-fix-analysis.md)
-- [`scion/docs/v0.4-evidence-harness.md`](scion/docs/v0.4-evidence-harness.md)
+- [`scion/docs/evidence/manifest.md`](scion/docs/evidence/manifest.md)
+- [`scion/docs/archive/v0.3/v0.3-final-visual-report.md`](scion/docs/archive/v0.3/v0.3-final-visual-report.md)
+- [`scion/docs/archive/v0.3/v0.3-final-12campaign-analysis.md`](scion/docs/archive/v0.3/v0.3-final-12campaign-analysis.md)
+- [`scion/docs/archive/v0.3/v0.3-production-timeout-fix-analysis.md`](scion/docs/archive/v0.3/v0.3-production-timeout-fix-analysis.md)
+- [`scion/design/v0.4/v0.4-evidence-harness.md`](scion/design/v0.4/v0.4-evidence-harness.md)
 
-v0.3 的工程结论：Scion 已经具备完整的 agentic algorithm optimization 闭环；synthetic 优化能力强，production 在强模型 Sonnet 下能得到完整证据的 cost 改进。v0.4 将继续补强 performance-aware optimization，并引入 **CVRP** 作为第二个真实问题来检验框架泛化。
+v0.3 的工程结论：Scion 已经具备完整的 agentic algorithm optimization 闭环；synthetic 优化能力强，production 在强模型 Sonnet 下能得到完整证据的 cost 改进。当时的 v0.4 规划随后已完成 **CVRP** package 与 direct-runtime 接入；CVRP retained-B0 改进证据仍未完成，详见[当前状态](scion/docs/status/current-state.md)。
 
 ---
 
@@ -71,7 +79,7 @@ v0.3 的工程结论：Scion 已经具备完整的 agentic algorithm optimizatio
 
 2. **治理先于搜索**：LLM 输出不可信（幻觉、state leak、越界）。先把安全边界做硬（Contract Gate + Verification Gate + Decision Input Guard），再放开搜索空间。
 
-3. **两层嵌套搜索**（v0.2）：外层 LLM 搜索算子结构（发现新算子），内层算法搜索参数（优化算子权重配比）。结构决定"有什么工具"，参数决定"怎么用这些工具"。
+3. **两层嵌套搜索**（v0.2 历史形态）：外层 LLM 搜索算子结构（发现新算子），内层算法搜索参数（优化算子权重配比）。当前 Scion 不把这种分解固化为 generic core 的算法对象结构。
 
 ### 认识论定位
 
@@ -87,20 +95,20 @@ Scion 不是精确算法与启发式之间的折中，而是接受“复杂组�
 
 > **既然必须使用启发式，怎样才能系统化、持续地把启发式做得更好？**
 
-它工作的不是传统的**解空间（solution space）**，而是更高一层的**算子设计空间（operator design space）**：
+它工作的不是传统的**解空间（solution space）**，而是更高一层的**算法设计空间（algorithm design space）**；算子设计只是历史上用过的一种具体形态：
 
 ```text
 解空间（Solution Space）
   ← 精确算法 vs 启发式算法的主战场
 
-算子设计空间（Operator Design Space）
+算法设计空间（Algorithm Design Space）
   ← Scion 工作的地方
 ```
 
 这个视角下，Scion 与精确算法存在一个有趣的平行结构：
 
 - **精确算法**：在指数级解空间里，用 bound + 剪枝做智能枚举
-- **Scion**：在开放的算子设计空间里，用 LLM 推理 + 统计验证做智能枚举
+- **Scion**：在开放的算法设计空间里，用 LLM 推理 + 统计验证做智能枚举
 
 两者都面对组合爆炸，都需要“方向感”避免盲目搜索。区别只是，前者搜索解，后者搜索算法结构。
 
@@ -134,7 +142,8 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 - **Decision Input Guard**：决策层仅接收 `DecisionFeatures`（数值+枚举），彻底隔离 LLM 文本干扰
 - **两轮 Proposal**：Round 1 Hypothesis（假设推理）→ Round 2 Code（代码生成）
 - **三级实验协议**：Screening → Validation → Frozen Holdout，Bootstrap CI 控制过拟合
-- **字典序多目标**：业务聚合（subcategory splits）> 物流成本 > 求解效率
+- **问题语义归 adapter/package**：objective、feasibility、solver、case、research
+  surface 与 telemetry 含义不进入 generic core
 
 > 📖 详细架构：[`scion/design/scion-architecture-v3.md`](scion/design/scion-architecture-v3.md)（基石设计，22 条关键决策）
 
@@ -150,9 +159,9 @@ Scion 的 Round 1 不是让 LLM 直接吐代码，而是先要求它把“理解
 
 **Benchmark**：48 个实例（22→990 orders），覆盖合成数据 + 真实生产数据统计特征。
 
-### v0.4 第二问题：CVRP
+### v0.4 第二问题：CVRP（历史接入背景）
 
-v0.4 将接入 **Capacitated Vehicle Routing Problem (CVRP)** 作为第二个真实问题。CVRP 是标准 routing 问题，解表示、目标函数、可行性检查和算子语义都不同于当前 warehouse assignment/bin-packing 问题，因此更适合检验 Scion 的 adapter boundary 是否真正泛化。
+v0.4 已使用 **Capacitated Vehicle Routing Problem (CVRP)** 作为第二个真实问题。下面保留的是早期接入动机与 baseline 背景；package 接入已经完成，但 retained-B0 改进证据仍未完成。当前实现、实验结论和下一步只从 [`AGENTS.md`](AGENTS.md) 指向的[当前状态](scion/docs/status/current-state.md)读取。
 
 CVRP baseline 已作为 `vrp/` staging baseline 纳入仓库，`vrp/cvrplib/` benchmark 原始数据不跟踪。seed0 baseline 已跑完 10,330 个 EUC_2D 实例，全部返回 CVRP 可行解，无 timeout / crash；A/B/P/E 可作为快速回归集合，X 子集是 v0.4 首个中规模优化目标。
 
@@ -160,8 +169,8 @@ CVRP baseline 报告：
 
 - [`vrp/README.md`](vrp/README.md)
 - [`vrp/docs/experiment_results_seed0.md`](vrp/docs/experiment_results_seed0.md)
-- [`scion/docs/v0.4-cvrp-plan.md`](scion/docs/v0.4-cvrp-plan.md)
-- [`scion/docs/v0.4-evidence-harness.md`](scion/docs/v0.4-evidence-harness.md)
+- [`scion/design/v0.4/v0.4-cvrp-plan.md`](scion/design/v0.4/v0.4-cvrp-plan.md)
+- [`scion/design/v0.4/v0.4-evidence-harness.md`](scion/design/v0.4/v0.4-evidence-harness.md)
 
 ---
 
@@ -215,8 +224,8 @@ Scion 在 v0.3 能证明的是：**在受控 synthetic frozen-gate 验证中，L
 1. 改进一定能无缝泛化到线上生产环境，生产落地仍需要 shadow deployment / 灰度验证。
 2. production 成功可以跨所有模型稳定复现；GPT-mini 的结果说明模型能力和代码可靠性仍是边界。
 3. LLM “真的理解了问题”，统计证据只能说明它持续做对了，不能区分“真懂”与“碰对”。
-4. 当前 champion 就是最优算子设计，开放设计空间没有穷尽证明。
-5. Scion 已经泛化到第二个问题类别；CVRP 将在 v0.4 承担这个验证，v1.0 再做跨问题证据固化。
+4. 当前 champion 就是最优算法设计，开放设计空间没有穷尽证明。
+5. CVRP package 已接入第二个问题类别，但当前实验尚未给出 retained-B0 改进证据；不能把“已接入”写成“已完成跨问题研究目标”。
 
 统计证据已经是这类系统里最强的可操作保证，但它不是数学证明。
 
@@ -227,25 +236,24 @@ Scion 在 v0.3 能证明的是：**在受控 synthetic frozen-gate 验证中，L
 ```bash
 # 安装
 git clone https://github.com/xiaojiyao777/scion.git
-cd scion/scion && pip install -e .
+cd scion/scion
+SCION_PYTHON="${SCION_PYTHON:-python}"
+"$SCION_PYTHON" -m pip install -e .
 
 # 运行测试
-python -m pytest scion/scion/tests/test_protocol.py scion/scion/tests/test_contract.py -q
+"$SCION_PYTHON" -m pytest -q
 
-# 运行 Campaign
-export SCION_API_KEY="your-api-key"
-export SCION_MODEL="claude-opus-4-6"
-cd scion
-python run_validation_campaign.py --model claude-sonnet-4-6 --variant synthetic --seed 11 --max-rounds 30
+# 查看当前 Campaign CLI；正式启动参数以当前交接和 runbook 为准
+PYTHONPATH=. "$SCION_PYTHON" -m scion.cli.main run --help
 ```
 
-## 开发路线
+## 历史开发路线快照
 
 - [x] **v0.1** — MVP：核心循环、Contract Gate、三级实验协议、SQLite Lineage ✅
 - [x] **v0.1.1** — 调优：ContextManager 重写、prompt caching、subprocess 修复 ✅
 - [x] **v0.2** — 参数层搜索、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
 - [x] **v0.3** — 框架工程化、adapter/objective 泛化、production protocol、sync weight opt、完整证据 gate ✅
-- [ ] **v0.4** — Performance-aware optimization + CVRP 第二问题接入
+- [ ] **v0.4** — direct runtime 与 CVRP package 已接入；retained-B0 改进证据仍开放
 - [ ] **v1.0** — warehouse + CVRP 跨问题验证、机制研究、工程化收敛
 
 ## 致谢
@@ -263,4 +271,4 @@ MIT
 
 ---
 
-*Built with precision — Scion Framework v0.3*
+*Current agent handoff: [`AGENTS.md`](AGENTS.md). Historical v0.3 evidence is retained above.*

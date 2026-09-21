@@ -6,7 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from scion.core.execution_outcome import ExecutionOutcome
-from scion.core.models import ContractResult, OperatorConfig
+from scion.core.models import OperatorConfig
 from scion.core.scheduler import Scheduler
 
 from .campaign_test_support import *
@@ -314,31 +314,24 @@ class TestStalePath:
         branch = cm._branch_ctrl.get_branch(accepted.branch_id)
         accepted_changes = tuple(branch.accepted_changes)
         champion, sibling_source = _promote_same_file_sibling(cm)
-        apply_calls = []
-        apply_change = cm._branch_step_runner.apply_reconcile_change
-
-        def observe_apply(*args, **kwargs):
-            apply_calls.append((args, kwargs))
-            assert apply_change is not None
-            return apply_change(*args, **kwargs)
-
-        cm._branch_step_runner.apply_reconcile_change = observe_apply
+        previous_workspace = Path(cm._branch_workspaces[branch.branch_id])
+        branch_source = (previous_workspace / "operators" / "local_search.py").read_text()
 
         reconciled = cm.run_one_step()
 
         branch = cm._branch_ctrl.get_branch(accepted.branch_id)
-        assert reconciled.execution_outcome is not None
-        assert reconciled.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
-        assert reconciled.execution_outcome.reason_code == "RECONCILE_SOURCE_CONFLICT"
-        assert reconciled.failure_stage == "reconcile_source"
-        assert apply_calls == []
-        assert branch.state is BranchState.ABANDONED
+        assert reconciled.execution_outcome.outcome is ExecutionOutcome.EVALUATED
+        assert branch.state is BranchState.READY_VALIDATE
+        assert branch.base_champion_id == champion.version
+        assert (
+            Path(cm._branch_workspaces[branch.branch_id]) / "operators" / "local_search.py"
+        ).read_text() == branch_source
         assert tuple(branch.accepted_changes) == accepted_changes
         assert (
             Path(champion.code_snapshot_path) / "operators" / "local_search.py"
         ).read_text() == sibling_source
 
-    def test_stale_reconcile_replays_the_complete_accepted_change_chain(
+    def test_stale_reconcile_keeps_complete_source_and_resets_comparison_counts(
         self,
         tmp_path,
         monkeypatch,
@@ -440,11 +433,15 @@ class TestStalePath:
             class_name="LocalSearch",
         )
         cm._champion.operator_pool = {local_search.name: local_search}
+        # Complete the test fixture before any research starts.
+        from scion.runtime.workspace import _make_tree_writable
+        _make_tree_writable(Path(cm._champion.code_snapshot_path))
         PoolManager(cm._champion.operator_pool).export_registry(
             cm._champion.operator_pool,
             cm._champion.code_snapshot_path,
         )
 
+        cm._materializer.freeze_snapshot(cm._champion.code_snapshot_path)
         contract_calls = []
         validate_patch = cm._contract_gate.validate_patch
 
@@ -491,7 +488,10 @@ class TestStalePath:
         accepted_changes = tuple(branch.accepted_changes)
         verification_calls_before_reconcile = len(verification_gate.patch_files)
 
+        contract_calls_before = len(contract_calls)
         champion = _promote_changed_sibling(cm)
+        branch.screening_expand_count = 1
+        branch.validation_expand_count = 1
         reconciled = cm.run_one_step()
 
         branch = cm._branch_ctrl.get_branch(first.branch_id)
@@ -501,29 +501,22 @@ class TestStalePath:
         assert branch.base_champion_id == champion.version
         assert tuple(branch.accepted_changes) == accepted_changes
         assert len(verification_gate.patch_files) == verification_calls_before_reconcile + 1
-        assert [target for target, _patch, _base in contract_calls[-2:]] == [
-            "operators/other_op.py",
-            "operators/local_search.py",
-        ]
-        assert [patch for _target, patch, _base in contract_calls[-2:]] == [
-            "operators/other_op.py",
-            "operators/local_search.py",
-        ]
-        assert contract_calls[-2][2] == contract_calls[-1][2]
-        assert contract_calls[-2][2] != champion.code_snapshot_path
+        assert len(contract_calls) == contract_calls_before
+        assert branch.screening_expand_count == 0
+        assert branch.validation_expand_count == 0
         assert "candidate = solution" in (
             workspace / "operators" / "local_search.py"
         ).read_text()
         assert (workspace / "operators" / "other_op.py").read_text() == _VALID_CODE
-        assert (workspace / "operators" / "champion_added.py").is_file()
+        assert not (workspace / "operators" / "champion_added.py").exists()
         assert set(read_registry(str(workspace / "registry.yaml"))) == {
             "local_search",
             "other_op",
         }
         assert cm._step_history[-1].changed_files == (
             "operators/other_op.py",
-            "operators/local_search.py",
             "registry.yaml",
+            "operators/local_search.py",
         )
 
     def test_stale_after_evaluation_rejects_staging_before_reconcile(
@@ -710,73 +703,28 @@ class TestStalePath:
         ).read_text() == accepted_source
         assert not (clean_branch_workspace / "operators" / "champion_added.py").exists()
 
-    def test_reconcile_contract_reject_records_typed_failure_without_pollution(
-        self,
-        tmp_path,
+    def test_reconcile_reuses_approved_source_without_new_contract_or_proposal(
+        self, tmp_path, monkeypatch,
     ):
-        cm = _campaign(
-            tmp_path,
-            experiment_protocol=MockExperimentProtocol(
-                results=[_make_protocol_result(ExperimentStage.SCREENING)]
-            ),
-        )
+        cm = _campaign(tmp_path)
         initial = cm.run_one_step()
-        bid = initial.branch_id
-        branch = cm._branch_ctrl.get_branch(bid)
-        clean_branch_workspace = Path(cm._branch_workspaces[bid])
-        clean_source = (
-            clean_branch_workspace / "operators" / "local_search.py"
-        ).read_text()
-        clean_hash = branch.current_code_hash
+        branch = cm._branch_ctrl.get_branch(initial.branch_id)
         _install_changed_champion_and_mark_stale(cm, tmp_path)
 
-        class RejectingContract:
-            def validate_patch(
-                self,
-                patch,
-                approved_hypothesis,
-                *,
-                base_snapshot_path=None,
-            ):
-                del patch, approved_hypothesis, base_snapshot_path
-                check = CheckResult(
-                    name="C_RECONCILE_SCOPE",
-                    passed=False,
-                    severity="heavy",
-                    detail="reconcile scope rejected",
-                    elapsed_ms=3,
-                    metadata={"policy": "outer"},
-                )
-                return ContractResult(
-                    passed=False,
-                    checks=(check,),
-                    failure_reason="C_RECONCILE_SCOPE",
-                )
+        def no_new_proposal(*_args, **_kwargs):
+            raise AssertionError("Re-evaluation must not replay or re-propose H/C")
 
-        cm._branch_step_runner.contract_gate = RejectingContract()
-        rejected = cm.run_one_step()
+        monkeypatch.setattr(cm._contract_gate, "validate_patch", no_new_proposal)
+        monkeypatch.setattr(cm._llm_client, "call_with_tool", no_new_proposal)
+        result = cm.run_one_step()
 
-        branch = cm._branch_ctrl.get_branch(bid)
-        assert rejected.execution_outcome.outcome is ExecutionOutcome.RESEARCH_REJECTED
-        assert rejected.failure_stage == "patch_contract"
-        assert rejected.failure_category == "research_rejected"
-        assert cm._step_history[-1].contract_passed is False
-        lineage = cm._registry.query_execution_outcomes(branch_id=bid)[0]
-        assert lineage["event_kind"] == "contract_fail"
-        assert lineage["reason_code"] == "PATCH_CONTRACT_REJECTED"
-        assert lineage["provenance"]["contract_checks"][0] == {
-            "name": "C_RECONCILE_SCOPE",
-            "passed": False,
-            "severity": "heavy",
-            "detail": "reconcile scope rejected",
-            "elapsed_ms": 3,
-            "metadata": {"policy": "outer"},
-        }
-        assert branch.state is BranchState.ABANDONED
-        assert branch.current_code_hash == clean_hash
-        assert (
-            clean_branch_workspace / "operators" / "local_search.py"
-        ).read_text() == clean_source
+        assert result.execution_outcome.outcome is ExecutionOutcome.EVALUATED
+        assert result.decision is Decision.QUEUE_VALIDATE
+        step = cm._step_history[-1]
+        assert step.contract_passed is True
+        assert step.base_source_ref == f"branch:{branch.branch_id}:accepted-head:1"
+        assert len(branch.accepted_changes) == 1
+
 
     def test_default_gate_passes_valid_syntax(self, tmp_path):
         gate = VerificationGate()

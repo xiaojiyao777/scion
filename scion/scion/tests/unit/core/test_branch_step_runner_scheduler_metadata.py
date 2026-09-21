@@ -38,7 +38,6 @@ def _runner(action: SchedulerAction) -> BranchStepRunner:
         branch_workspaces={},
         branch_patches={},
         experiment_protocol_provider=lambda: None,
-        contract_gate=None,
         verification_gate=None,
         drain_weight_opt_events=lambda: None,
         should_stop=lambda: False,

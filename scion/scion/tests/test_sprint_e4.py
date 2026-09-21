@@ -205,9 +205,11 @@ class TestCampaignTypedProviderTermination:
         from scion.problem.spec import ObjectiveMetricSpec
 
         tmpdir = tempfile.mkdtemp()
+        source_dir = Path(tmpdir) / "source"
+        source_dir.mkdir()
         spec = ProblemSpec(
             name="test",
-            root_dir=tmpdir,
+            root_dir=str(source_dir),
             operator_categories=["local_search"],
             search_space=SearchSpace(
                 editable=["operators/*.py"],
@@ -225,7 +227,7 @@ class TestCampaignTypedProviderTermination:
         champion = ChampionState(
             version=0,
             operator_pool={},
-            code_snapshot_path=tmpdir,
+            code_snapshot_path=str(source_dir),
         )
         metric_specs = (
             ObjectiveMetricSpec(
@@ -252,7 +254,7 @@ class TestCampaignTypedProviderTermination:
             seed_ledger=seed_ledger,
             llm_client=llm_client,
             champion=champion,
-            campaign_dir=tmpdir,
+            campaign_dir=str(Path(tmpdir) / "campaign"),
             experiment_protocol=protocol_runtime,
             adapter=SimpleNamespace(spec=spec),
         )

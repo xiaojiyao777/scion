@@ -20,7 +20,6 @@ from scion.core.execution_outcome import (
     record_execution_outcome_event,
 )
 from scion.core.models import (
-    AcceptedBranchChange,
     Branch,
     BranchState,
     ChampionState,
@@ -53,7 +52,6 @@ class BranchStepRunner:
     branch_workspaces: MutableMapping[str, str]
     branch_patches: MutableMapping[str, PatchProposal]
     experiment_protocol_provider: Callable[[], Any]
-    contract_gate: Any
     verification_gate: Any
     drain_weight_opt_events: Callable[[], None]
     should_stop: Callable[[], bool]
@@ -72,10 +70,6 @@ class BranchStepRunner:
     registry: Any = None
     campaign_id: str = ""
     create_reconcile_workspace: Callable[[str], str] | None = None
-    reconcile_source_conflicts: (
-        Callable[[str, AcceptedBranchChange], tuple[str, ...]] | None
-    ) = None
-    apply_reconcile_change: Callable[..., Any] | None = None
     seal_reconcile_candidate: Callable[..., CandidateWorkspace] | None = None
     verify_reconcile_candidate: (
         Callable[[CandidateWorkspace], CandidateWorkspace] | None
@@ -442,14 +436,13 @@ class BranchStepRunner:
         return result
 
     def run_reconcile_step(self, branch: Branch) -> StepResult:
-        """Attempt to rebase a stale branch on the new champion."""
+        """Re-evaluate the complete accepted tree against the new champion."""
         bid = branch.branch_id
         accepted_changes = tuple(branch.accepted_changes)
         staging_workspace: str | None = None
         staging_handed_off = False
         staging_disposition_failed = False
         candidate: CandidateWorkspace | None = None
-        replay_contract_checks: list[Any] = []
 
         def discard_staging(
             *,
@@ -581,14 +574,14 @@ class BranchStepRunner:
             )
             outcome, disposition_failed = discard_staging(
                 interrupted_outcome=outcome,
-                selected_hypothesis_research_basis=replay_head_basis,
+                selected_hypothesis_research_basis=accepted_head_basis,
             )
             if not disposition_failed:
                 self._record_execution_outcome(
                     branch,
                     outcome,
                     event_kind="reconcile_not_evaluated_outcome",
-                    selected_hypothesis_research_basis=replay_head_basis,
+                    selected_hypothesis_research_basis=accepted_head_basis,
                 )
             failure_stage = (
                 "candidate_disposition"
@@ -596,13 +589,13 @@ class BranchStepRunner:
                 else "evaluation_metadata"
             )
             failure_detail = outcome.detail if disposition_failed else detail
-            replay_head = accepted_changes[-1]
+            accepted_head = accepted_changes[-1]
             self.record_step(
                 StepRecord(
                     round_num=self.increment_round(),
                     branch_id=bid,
-                    hypothesis=replay_head.hypothesis,
-                    patch=replay_head.patch,
+                    hypothesis=accepted_head.hypothesis,
+                    patch=accepted_head.patch,
                     contract_passed=contract_passed,
                     verification_passed=verification_passed,
                     protocol_result=None,
@@ -611,7 +604,7 @@ class BranchStepRunner:
                     failure_detail=failure_detail,
                     execution_outcome=outcome,
                     selected_hypothesis_research_basis=deepcopy(
-                        replay_head_basis
+                        accepted_head_basis
                     ),
                     **reconcile_source_fields,
                 )
@@ -656,7 +649,7 @@ class BranchStepRunner:
                 execution_outcome=outcome,
             )
 
-        replay_head_basis = deepcopy(
+        accepted_head_basis = deepcopy(
             accepted_changes[-1].selected_hypothesis_research_basis
         )
 
@@ -665,7 +658,7 @@ class BranchStepRunner:
         champion_workspace = champion.code_snapshot_path
         reconcile_source_fields = {
             "base_champion_version": champion.version,
-            "base_source_ref": f"champion:v{champion.version}",
+            "base_source_ref": branch_base_source_ref(branch),
             "changed_files": branch_changed_files(branch),
         }
 
@@ -681,8 +674,6 @@ class BranchStepRunner:
 
         candidate_callbacks = (
             self.create_reconcile_workspace,
-            self.reconcile_source_conflicts,
-            self.apply_reconcile_change,
             self.seal_reconcile_candidate,
             self.verify_reconcile_candidate,
             self.discard_reconcile_workspace,
@@ -694,10 +685,16 @@ class BranchStepRunner:
             )
 
         try:
+            branch_workspace = self.branch_workspaces.get(bid)
+            if not branch.current_code_hash or not branch_workspace:
+                return preserve_stale(
+                    reason_code="RECONCILE_WORKSPACE_UNAVAILABLE",
+                    detail="accepted branch source is missing; refusing reconstruction",
+                )
             try:
                 assert self.create_reconcile_workspace is not None
                 staging_workspace = self.create_reconcile_workspace(
-                    champion_workspace
+                    branch_workspace
                 )
             except BaseException as exc:
                 if not isinstance(exc, Exception):
@@ -707,128 +704,18 @@ class BranchStepRunner:
                     detail=str(exc),
                 )
 
-            for change_index, accepted_change in enumerate(
-                accepted_changes,
-                start=1,
-            ):
-                hypothesis = accepted_change.hypothesis
-                patch = accepted_change.patch
-                contract_result = self.contract_gate.validate_patch(
-                    patch,
-                    approved_hypothesis=hypothesis,
-                    base_snapshot_path=staging_workspace,
-                )
-                if not contract_result.passed:
-                    logger.info(
-                        "Branch %s: reconcile change %d failed contract gate: %s",
-                        bid,
-                        change_index,
-                        contract_result.failure_reason,
-                    )
-                    reason = (
-                        f"reconcile change {change_index} contract failed: "
-                        f"{contract_result.failure_reason}"
-                    )
-                    checks = tuple(_contract_check_payload(contract_result))
-                    outcome = _contract_rejection_outcome(contract_result, patch)
-                    return abandon_stale(
-                        reason,
-                        hypothesis=hypothesis,
-                        patch=patch,
-                        selected_hypothesis_research_basis=deepcopy(
-                            accepted_change.selected_hypothesis_research_basis
-                        ),
-                        source_fields=reconcile_source_fields,
-                        reason_code="PATCH_CONTRACT_REJECTED",
-                        failure_stage="patch_contract",
-                        contract_passed=False,
-                        contract_diagnostics=checks,
-                        outcome_override=outcome,
-                        event_kind="contract_fail",
-                    )
-                replay_contract_checks.extend(contract_result.checks)
-
-                assert self.reconcile_source_conflicts is not None
-                conflicts = self.reconcile_source_conflicts(
-                    staging_workspace,
-                    accepted_change,
-                )
-                if conflicts:
-                    conflict_paths = ", ".join(conflicts)
-                    logger.info(
-                        "Branch %s: reconcile change %d conflicts at %s",
-                        bid,
-                        change_index,
-                        conflict_paths,
-                    )
-                    return abandon_stale(
-                        "accepted change "
-                        f"{change_index} before-source conflict: {conflict_paths}",
-                        hypothesis=hypothesis,
-                        patch=patch,
-                        selected_hypothesis_research_basis=deepcopy(
-                            accepted_change.selected_hypothesis_research_basis
-                        ),
-                        source_fields=reconcile_source_fields,
-                        reason_code="RECONCILE_SOURCE_CONFLICT",
-                        failure_stage="reconcile_source",
-                        contract_diagnostics=tuple(
-                            _contract_check_payload(contract_result)
-                        ),
-                    )
-
-                try:
-                    assert self.apply_reconcile_change is not None
-                    self.apply_reconcile_change(
-                        staging_workspace,
-                        patch,
-                        hypothesis=hypothesis,
-                    )
-                except BaseException as exc:
-                    if not isinstance(exc, Exception):
-                        raise
-                    logger.info(
-                        "Branch %s: reconcile change %d apply_patch failed: %s",
-                        bid,
-                        change_index,
-                        exc,
-                    )
-                    return abandon_stale(
-                        "apply_patch failed for accepted change "
-                        f"{change_index}: {exc}",
-                        hypothesis=hypothesis,
-                        patch=patch,
-                        selected_hypothesis_research_basis=deepcopy(
-                            accepted_change.selected_hypothesis_research_basis
-                        ),
-                        source_fields=reconcile_source_fields,
-                        reason_code="RECONCILE_APPLY_FAILED",
-                        failure_stage="reconcile_apply",
-                        contract_diagnostics=tuple(
-                            _contract_check_payload(contract_result)
-                        ),
-                    )
-
             hypothesis = accepted_changes[-1].hypothesis
             patch = accepted_changes[-1].patch
-            contract_result = ContractResult(
-                passed=True,
-                checks=tuple(replay_contract_checks),
-            )
+            # No new H/C was exported. This source already passed Contract;
+            # archived proposals are evidence, not a recipe to rebuild it.
+            contract_result = ContractResult(passed=True, checks=())
 
             try:
                 assert self.seal_reconcile_candidate is not None
-                replayed_patch_files = tuple(
-                    dict.fromkeys(
-                        change.file_path
-                        for accepted_change in accepted_changes
-                        for change in accepted_change.patch.iter_file_changes()
-                    )
-                )
                 candidate = self.seal_reconcile_candidate(
                     staging_workspace,
                     base_workspace=champion_workspace,
-                    changed_files=replayed_patch_files,
+                    changed_files=branch_changed_files(branch),
                 )
                 reconcile_source_fields["changed_files"] = candidate.changed_files
             except BaseException as exc:
@@ -927,14 +814,14 @@ class BranchStepRunner:
             if execution_outcome.outcome is not ExecutionOutcome.EVALUATED:
                 execution_outcome, disposition_failed = discard_staging(
                     interrupted_outcome=execution_outcome,
-                    selected_hypothesis_research_basis=replay_head_basis,
+                    selected_hypothesis_research_basis=accepted_head_basis,
                 )
                 if not disposition_failed:
                     self._record_execution_outcome(
                         branch,
                         execution_outcome,
                         event_kind="reconcile_evaluation_outcome",
-                        selected_hypothesis_research_basis=replay_head_basis,
+                        selected_hypothesis_research_basis=accepted_head_basis,
                     )
                 failure_stage = (
                     "candidate_disposition"
@@ -976,7 +863,7 @@ class BranchStepRunner:
                         canary_result=canary_result,
                         execution_outcome=execution_outcome,
                         selected_hypothesis_research_basis=deepcopy(
-                            replay_head_basis
+                            accepted_head_basis
                         ),
                         **reconcile_source_fields,
                     )
@@ -986,7 +873,7 @@ class BranchStepRunner:
                 raise ValueError("evaluated result missing Decision")
 
             branch.selected_hypothesis_research_basis = deepcopy(
-                replay_head_basis
+                accepted_head_basis
             )
             result = self.apply_decision_and_finalize(
                 branch=branch,
@@ -1041,7 +928,7 @@ class BranchStepRunner:
                     canary_result=result.canary_result,
                     execution_outcome=result.execution_outcome,
                     selected_hypothesis_research_basis=deepcopy(
-                        replay_head_basis
+                        accepted_head_basis
                     ),
                     **reconcile_source_fields,
                 ),
@@ -1081,7 +968,7 @@ class BranchStepRunner:
         source_fields: Mapping[str, Any],
         event_already_recorded: bool = False,
     ) -> None:
-        """Persist one non-Decision stale replay result as ordinary science."""
+        """Persist one non-Decision stale re-evaluation result as ordinary science."""
 
         base_champion_version = source_fields["base_champion_version"]
         base_source_ref = source_fields["base_source_ref"]
@@ -1300,36 +1187,6 @@ def _verification_rejection_outcome(
             "stage": "verification",
             "severity": severity,
             "verification_checks": checks,
-            "patch": {
-                "action": patch.action,
-                "files": [change.file_path for change in patch.iter_file_changes()],
-            },
-        },
-    )
-
-
-def _contract_rejection_outcome(
-    result: ContractResult,
-    patch: PatchProposal,
-) -> ExecutionOutcomeRecord:
-    checks = [
-        {
-            "name": check.name,
-            "passed": check.passed,
-            "severity": check.severity,
-            "detail": check.detail,
-            "elapsed_ms": check.elapsed_ms,
-            "metadata": dict(check.metadata or {}),
-        }
-        for check in result.checks
-    ]
-    return ExecutionOutcomeRecord(
-        outcome=ExecutionOutcome.RESEARCH_REJECTED,
-        reason_code="PATCH_CONTRACT_REJECTED",
-        detail=result.failure_reason or "",
-        provenance={
-            "stage": "patch_contract",
-            "contract_checks": checks,
             "patch": {
                 "action": patch.action,
                 "files": [change.file_path for change in patch.iter_file_changes()],

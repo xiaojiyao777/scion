@@ -113,11 +113,12 @@ closure was added. The stable provider-free full suite completed with `2383
 passed`, `1 skipped` and `0 failed` in 478.87 seconds (480.61 seconds outer
 wall). Targeted Ruff `E9,F,I` and diff check are green.
 
-## R4 handoff
+## R4 handoff and terminal result
 
 The provider-free R4 fixed-candidate comparison was preregistered, committed,
 and launched once at `2026-09-04T13:22:36Z`. See the
-[`R4 preregistration`](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md).
+[`R4 preregistration`](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md)
+and [`R4 postrun`](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-postrun-20260905.md).
 It compares ordinary read-only copies of the exact R3i starting B0 and
 `champion_v2`; direct comparison has exactly the three changed modules named
 above. Its 36 CVRPLIB effect cases have zero case overlap and zero case-seed
@@ -127,5 +128,10 @@ canary is reused only as a non-estimand smoke check and uses a fresh seed.
 
 `run_fixed_candidate_funnel.py --check` returned `PREPARED` with zero provider
 calls, 85 maximum pairs, 170 serial solver subprocesses, 10,160 nominal and
-15,260 guarded subject-seconds, and a 21,600-second outer hardwall. Its canary
-passed and the first effect pair completed; no terminal result is yet available.
+15,260 guarded subject-seconds, and a 21,600-second outer hardwall. The live
+run then passed its canary and completed all `24/24` expanded-screening pairs
+without failure. It terminated normally as `completed / NOT_CONFIRMED` with
+case W/L/T `1/0/5`, median distance delta `0` and interval `[0,130.5]`.
+Validation, frozen and retained were not opened. Thus R3i's v2 promotion
+remains limited to its own three populations; R4 did not confirm retained
+superiority over the starting B0.

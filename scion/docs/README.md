@@ -1,22 +1,25 @@
 # Scion Documentation Index
 
-*Last updated: 2026-05-10*
+*Last updated: 2026-09-05*
 
-This directory is the active documentation entry point for Scion. It is
-organized by document purpose, so a new development session can find the current
-state, engineering map, experiment analysis, and operational references without
-scanning every historical note.
+The repository-level entry point is [`../../AGENTS.md`](../../AGENTS.md). This
+file is a subordinate index organized by document purpose; it does not define
+current work, experiment authority, or runtime state.
 
 ## Read First
 
-For a new agent session, read only the base pack first:
+For a new agent session, use the exact order in
+[`../../AGENTS.md`](../../AGENTS.md):
 
-1. [Agent onboarding](AGENT_ONBOARDING.md) - project model, Scion invariants, and hard rules.
-2. [v0.4 current state](status/current-state.md) - latest operating truth.
-3. [Reading profiles](READING_PROFILES.md) - choose the smallest additional context pack for the task.
+1. [Agent onboarding](AGENT_ONBOARDING.md) - stable model, boundaries, and source map.
+2. [Current state](status/current-state.md) - current implementation and experiment snapshot.
+3. [`TASK.md`](../TASK.md) - accepted objective, active work, and next falsifiable rung.
+4. [Reading profiles](READING_PROFILES.md) - choose the smallest task-specific context pack.
 
 Do not automatically read all design docs, engineering docs, historical status
-logs, old experiments, or source trees. Load them through the relevant profile.
+logs, old experiments, raw run roots, or source trees. Load them through the
+relevant profile and verify live process state directly when the task requires
+it. A dated report never overrides the current handoff or current source.
 
 ## Directory Contract
 
@@ -36,6 +39,8 @@ logs, old experiments, or source trees. Load them through the relevant profile.
 
 ### Status
 
+- [Repository agent entry](../../AGENTS.md)
+- [Current task and boundary](../TASK.md)
 - [Agent onboarding](AGENT_ONBOARDING.md)
 - [Reading profiles](READING_PROFILES.md)
 - [v0.4 current state](status/current-state.md)
@@ -52,14 +57,15 @@ logs, old experiments, or source trees. Load them through the relevant profile.
 
 ### Engineering
 
-- [Framework code map](engineering/framework-code-map/README.md)
+- [Historical framework code map](engineering/framework-code-map/README.md) - use only as a locator and verify against current source.
 - [Agentic proposal reference](engineering/agentic-proposal-reference/README.md)
 
 ### Planning
 
 - [v0.4 planning index](planning/v0.4/README.md)
-- [P4-05 matrix readiness](planning/v0.4/v0.4-p4-05-matrix-readiness.md)
-- [P0 postrun repair task](planning/v0.4/v0.4-p0-postrun-repair-task.md)
+
+Planning files are historical unless the current `TASK.md` explicitly adopts
+one. They are not a second work queue.
 
 ### Experiments And Audits
 
@@ -71,8 +77,8 @@ logs, old experiments, or source trees. Load them through the relevant profile.
 - [Evidence manifest](evidence/manifest.md)
 - [Scion v0.4 本地实验运行、回溯与复现手册](operations/experiment-runbook.zh.md)
 - [Post-run analysis handoff](operations/postrun-analysis-handoff.md)
-- [Experiment quick reference](operations/experiment-quickref.md)
-- [Experiment baseline management](operations/experiment-baseline-management.md)
+- [Historical experiment quick reference](operations/experiment-quickref.md)
+- [Historical experiment baseline management](operations/experiment-baseline-management.md)
 - [Metrics guide](reference/metrics-guide.md)
 - [Glossary](reference/glossary.md)
 - [MILP model](reference/milp-model.md)
@@ -86,4 +92,6 @@ design sources go under `design/`; run interpretation goes under
 `experiments/`; audits go under `audits/`; task execution notes go under
 `planning/`. When a document stops being an operating source, move it into the
 matching `archive/vX.Y/` directory or leave it in the dated experiment/audit
-folder with a clear index entry.
+folder with a clear index entry. Do not copy live state into multiple entry
+documents and do not add hashes, signatures, receipts, registries, or other
+self-attestation machinery to documentation handoff.

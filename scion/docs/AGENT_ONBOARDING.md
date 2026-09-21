@@ -1,17 +1,24 @@
 # Scion v0.4 direct-v3 Onboarding
 
-*Last updated: 2026-08-21*
+*Last updated: 2026-09-20*
 
-本文是维护者进入当前 Scion 的源码导览，不是历史实验汇总。v0.4 的目标是让同一套精简 V3 runtime 在 warehouse 与 CVRP 上都能进行有效算法研究，同时保留确定性的安全、科学与证据边界。
+本文是维护者进入当前 Scion 的稳定源码导览，不是当前状态或历史实验汇总。
+v0.4 的目标是让同一套 problem-neutral 精简 V3 runtime 接入不同问题包，为 agent
+提供能够持续深入的完整算法源码空间，同时保留必要的安全、科学与证据边界。
 
 ## 先读什么
 
-不要从旧报告、旧实验记录或工程地图开始。按下面顺序建立当前事实：
+从仓库根 [`AGENTS.md`](../../AGENTS.md) 进入后，按下面顺序建立当前事实：
 
-1. [`scion/TASK.md`](../TASK.md)：当前任务、已接受实现、阻塞点与下一步。
-2. [`current-state.md`](status/current-state.md)：当前工作树、验证状态与运行环境。
-3. [`scion-architecture-v3.md`](../design/scion-architecture-v3.md)：组件职责与信任边界的基石设计。
-4. [`scion-architecture-v3-v0.4-direct-runtime-addendum.md`](../design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)：当 V3 的早期运行示例与 v0.4 冲突时，以此收窄运行语义。
+1. 本文：稳定心智模型、不可变边界和源码入口。
+2. [`current-state.md`](status/current-state.md)：可替换的当前工作树、验证和实验快照。
+3. [`scion/TASK.md`](../TASK.md)：当前目标、已接受实现与下一条可证伪研究阶梯。
+4. [`READING_PROFILES.md`](READING_PROFILES.md)：只选择当前任务所需的一组附加材料。
+
+只有修改 Scion core 或控制边界时，才继续完整阅读
+[`scion-architecture-v3.md`](../design/scion-architecture-v3.md)，再读
+[`scion-architecture-v3-v0.4-direct-runtime-addendum.md`](../design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)。
+V3 是唯一架构权威；addendum 只收窄当前实现。
 
 准备或分析实验时，再读：
 
@@ -49,12 +56,28 @@ abstain、abandon、reject 或丢失 provider terminal response，就不能修�
 恢复或重新生成该 H/C。
 
 bounded Creative session 尚未导出 H/C 时，invalid draft/action 可以收到枚举反馈并
-作一次新的 deliberate revision；这不是修补已经导出的 proposal。direct one-shot
-response 或 bounded session 在没有有效导出的情况下关闭时，该 tainted attempt 记为
-`RESEARCH_REJECTED`，不计 formal round；scheduler 随后从 exact clean base 进入
-fresh H。Contract 或 Verification 的 `RESEARCH_REJECTED` 遵循相同规则。
+作新的 deliberate revision；这不是修补已经导出的 proposal。Code session 中通过
+development checks 的最新 draft 调用 `ready` 后立即导出该 patch，不再要求另一次
+provider confirmation 或 closure；若 turn 用尽时已有通过检查的冻结 draft，才使用一次
+`finalize_patch`/`abandon` 终局选择。direct one-shot response 或 bounded session 在
+没有有效导出的情况下关闭时，该 tainted attempt 记为 `RESEARCH_REJECTED`，不计
+formal round；scheduler 随后进入 fresh H。Contract 或 Verification 的
+`RESEARCH_REJECTED` 遵循相同规则。
 
-Provider turn 没有返回终态，或发生 transport、auth、provider timeout、resource、local proposal context、missing typed outcome、interruption 等失败时，当前 session/invocation 停止。这些结果分别保持 `NOT_EVALUATED`、`BLOCKED_INFRA`、`RESOURCE_EXHAUSTED` 或 `INTERRUPTED`，不能被改写为研究否决来继续调用 provider。每个 deliberate provider turn 最多写一个 best-effort terminal trace；trace 不是 receipt 或 call identity，写失败不能改变有效 provider 结果。
+默认 H/C transcript 总字符数不设上限，但每个 deliberate provider turn、read、
+search、public-test 和 output 仍精确计数；显式 operator-selected limit 只是资源边界，
+不是研究质量策略。一个已经 dispatch 的 session 耗尽本地 turn/result/transcript
+上限时只拒绝当前 attempt 并继续调度；若完整初始上下文本身在第一次 dispatch 前就
+无法满足显式 H limit，则保持 `RESOURCE_EXHAUSTED`，不能靠截断或摘要偷偷开始。
+
+Provider SDK retry 始终为零。显式 ResourceEnvelope 可以让同一个冻结请求对 typed
+timeout、transport、provider 或 rate-limit failure 做有限次 charged/traced
+redispatch；耗尽后只产生一次 attempt-local operational `RESEARCH_REJECTED`，不进入
+后续算法历史。local proxy 的精确 synthetic 401 sentinel 归为 temporary provider
+unavailability；真实或非精确 auth、balance、显式全局 provider-call cap、没有 provider
+terminal response、无效 local context、missing typed outcome 和 interruption 仍是
+terminal/hold 类结果。每次物理 dispatch 最多写一个 best-effort terminal trace；
+trace 不是 receipt 或 call identity，写失败不能改变有效 provider 结果。
 
 ## 不可变边界
 
@@ -73,8 +96,27 @@ Provider turn 没有返回终态，或发生 transport、auth、provider timeout
 - direct H 获得完整安全上下文；启用 bounded research 时，H 先获得完整普通 source/history 索引，并按需有界读取 target、依赖、调用方、显式 public tests 与历史正文，不做 recent-N/top-k。
 - C 获得一个批准的 H 和普通的完整 path/content source mapping；每个可见文件只有规范路径与完整内容，多文件算法改动不是例外路径。
 - validation/frozen 原始记录、Decision 输入和其他禁止暴露的事实不得进入 proposal context。
-- bounded Creative path 有显式 provider-turn/read/search/public-test/output/transcript 资源上限；这些上限只 fail-closed，不能选择研究方向，也不做 top-N、静默截断、compact-to-fit 或摘要替代。
+- bounded Creative path 有显式 provider-turn/read/search/public-test/output 计数；
+  transcript 默认不设总字符上限，operator 仍可显式声明资源边界。所有限制都不能
+  选择研究方向，也不做 top-N、静默截断、compact-to-fit 或摘要替代。
 - provider 必需的 transport ceiling 与 solver/subprocess 的科学 time limit 必须显式记录；它们不是 Scion 的语义研究预算或隐藏终止策略。
+
+### Branch 是完整算法对象的持续研究空间
+
+- 每个 live branch 的 `current` 是一棵普通、完整、可执行的源码树，不是 patch
+  identity 或 manifest；正常连续研究直接使用这棵完整 tree。
+- Contract 与 Verification 通过且 screening 完成后，`CONTINUE_EXPLORE`（包括科学
+  screening fail）保留该 candidate 为 branch 的 verified provisional head。下一次 H
+  看到完整安全证据，下一次 C 从该完整源码树继续修改。
+- Contract/Verification 失败的代码不能进入 executable head；此时回到最后一棵 clean
+  branch source，从未产生 verified head 的 branch 才回到 champion。
+- expansion、validation 与 frozen 复用同一个 exact candidate，不重新生成、拼接或
+  重放 patch。provisional head 不能绕过 held-out 或 promotion。
+- live campaign 可以长时间沿 branch head 继续研究；terminal/interrupted campaign
+  不恢复半截 mutable state。champion 变化后的 stale reconcile 在完整 branch tree
+  的隔离副本上重新 Verification/screening，不重放 patch 或合并 champion 改动。
+  CLI `--source-tree` 可显式选择完整目录作为 fresh campaign baseline，并独立复制为
+  只读 snapshot；可选 `--research-history` 仍只供 H 使用，不恢复旧状态。
 
 ### Gate 只保护自己的边界
 
@@ -122,11 +164,11 @@ host mechanism selection、Protocol gate、Safe Feature 或 Decision input。
 - `scion/scion/core/decision_finalizer.py`：Decision 后的状态与证据收口。
 
 阅读时逐个追踪 `ExecutionOutcome` 和 `StepResult`。direct proposal/session closed
-without valid export、Contract 或 Verification `RESEARCH_REJECTED` 不计 formal
-round，且 scheduler-forward 到 fresh H；open-session invalid action 不产生另一个
-attempt。无 provider 终态以及其他 local/infra/resource/interruption 非
-`EVALUATED` 结果停止当前 outer-loop invocation。不要从 `--rounds` 猜测 provider
-调用次数。
+without valid export、started-session local limit、transient-provider exhaustion、
+Contract 或 Verification `RESEARCH_REJECTED` 不计 formal round，且 scheduler-forward
+到 fresh H；open-session invalid action 不产生另一个 attempt。auth、balance、global
+cap、pre-dispatch context/resource、missing terminal/local typed outcome 与 interruption
+仍停止或 hold 当前 outer-loop invocation。不要从 `--rounds` 猜测 provider 调用次数。
 
 ### 2. Proposal 与 Context
 
@@ -142,11 +184,12 @@ attempt。无 provider 终态以及其他 local/infra/resource/interruption 非
 - `scion/scion/proposal/schemas/`：H 与 typed multi-file patch schema；
 - `scion/scion/proposal/llm/`：transport、timeout、错误分类与 SDK policy。
 
-检查某次失败时，先确认完整 source/history index、按需读取的 ordinary
-context、可用 trace 与 typed outcome。open session 的 invalid action 只返回枚举
-反馈；direct response/session closed without valid export 才是 scheduler-forward
-proposal `RESEARCH_REJECTED`。没有 provider 终态或 local/infra/resource failure
-则终止 session/invocation。不要仅凭日志里的自然语言归因。
+检查某次失败时，先确认完整 source/history index、按需读取的 ordinary context、
+是否已经发生 provider dispatch、可用 trace 与 typed outcome。open session 的
+invalid action 只返回枚举反馈；successful `ready` 直接导出；session closed without
+valid export、started-session local-limit 或 transient-provider exhaustion 是
+scheduler-forward proposal `RESEARCH_REJECTED`。其他 terminal/hold lane 仍保持其
+原始 typed category。不要仅凭日志里的自然语言归因。
 
 ### 3. Contract -> Verification -> Protocol -> Decision
 
@@ -182,6 +225,12 @@ proposal `RESEARCH_REJECTED`。没有 provider 终态或 local/infra/resource fa
 
 generic 层可以声明接口、传递 typed facts、执行通用安全/科学流程，但不得推断 route、capacity、warehouse assignment、某种 local search 或某个历史 successor 的算法语义。新问题应通过 problem-owned spec、adapter、provider 和 checks 接入，而不是在 core 中增加问题名分支。
 
+当前 generic core 没有直接按 Warehouse/CVRP 分支，但仍残留
+`operator_pool`、`operator`、`policy`、`construction`、`portfolio` 等算法形状词汇。
+这是已知 problem-neutrality 债务，不是可继续扩展的模板。后续应把含义移到
+problem-owned declaration 或 opaque observation，并保持它们不进入新的
+Protocol/Decision gate；不要为修它引入 registry、identity 或 telemetry 自证层。
+
 ### 6. Warehouse
 
 warehouse 是 assignment/bin-packing 型 surrogate，不是 routing 问题。阅读：
@@ -212,7 +261,7 @@ generic Contract 可以调用 CVRP-owned checks，但不得复制其中的 solve
 
 1. 单元/集成测试证明组件职责、schema、failure lane 和模块组合符合预期。
 2. direct warehouse/CVRP outer smoke 证明控制流能够穿过 Contract -> Verification -> Protocol -> Decision。
-3. 从 exact clean commit 运行的正式 warehouse 与 open CVRP control，才可能证明模型做出了有效研究。
+3. 从运行期间冻结、如实记录的完整源码状态执行正式 problem control，才可能证明模型做出了有效研究；Git clean/commit 是方便的定位方式，不是算法研究 gate。
 
 框架测试、HTTP 200、非空 completion、生成 patch、进程正常退出或 report 状态都不能单独证明算法研究有效。研究验收必须阅读实际 H、批准绑定、完整 patch、solver 行为变化、Protocol 结果与 full-solver outcome。
 
@@ -222,7 +271,9 @@ generic Contract 可以调用 CVRP-owned checks，但不得复制其中的 solve
 - 一个事实只保留一个普通 writer/source；summary 与 report 只能引用或投影它。
 - 保持 problem semantics 在 problem package，保持 generic core 问题无关。
 - 修改热路径前先定位对应 Contract/Verification/Protocol/Decision 边界和 durable evidence；同步更新针对该边界的测试。
-- 不恢复自动 provider retry、响应修补、partial resume、上下文压缩、语义预算、novelty/material-difference gate 或 telemetry-quality gate。
+- 不恢复隐藏 SDK retry、响应修补、partial resume、上下文压缩、语义预算、
+  novelty/material-difference gate 或 telemetry-quality gate；只有显式 ResourceEnvelope
+  内同一冻结请求的有限 charged/traced transient redispatch 可以存在。
 - 不用 forced surface/action/target 的诊断运行充当正式研究证据。
 - 不用历史 campaign 的成功命名、自然语言总结或 successor 关系替代当前源码和当前运行证据。
 - 当前阶段不投入 distribution、packaging、build、deploy、root/systemd、
@@ -231,7 +282,7 @@ generic Contract 可以调用 CVRP-owned checks，但不得复制其中的 solve
 
 ## 正式运行纪律
 
-自主 H/C 正式实验使用当前 CLI 直跑：在仓库根目录设置 `PYTHONPATH=.` 后，
+自主 H/C 正式实验使用当前 CLI 直跑：在仓库根目录设置 `PYTHONPATH=scion:.` 后，
 通过 `python -m scion.cli.main run` 传入问题、protocol、split、seeds 与独立的
 `--campaign-dir`。已冻结 exact candidate 的 provider-free estimand 只使用
 `run_fixed_candidate_funnel.py`，导出 H/C 与 provider calls 均为零，同时保留
@@ -240,13 +291,16 @@ launcher、prepared/readiness 与 postrun 工具都不是入口。
 
 共同边界：
 
-- exact clean commit 和 clean worktree；
+- 明确记录并在运行期间冻结的完整源码状态；如有 Git revision 或未提交 diff，
+  如实记录即可，不把 clean commit/worktree 变成身份或授权 gate；
 - 由当前真实 CLI 或 narrow fixed-funnel driver 解析并记录问题、protocol、split
   与 seeds；
 - 不使用 forced surface/action/target；
 - 不从旧 campaign resume；显式 H-only ordinary history 不等于 mutable reopen；
-- 自主 CVRP H/C control 需 warehouse control 先行；provider-free fixed funnel
-  不伪造 H/C，也不受这条 control 顺序约束；
+- 普通 problem-owned 算法研究只运行本问题声明的 Contract、Verification、canary
+  与 Protocol；只有 shared core/adapter boundary 改动或明确的跨问题验收任务，才按
+  当前预注册额外运行另一个问题的 control。不要把 Warehouse→CVRP 顺序固化成
+  generic Scion gate；
 - 按 [`experiment-runbook.zh.md`](operations/experiment-runbook.zh.md) 低频监控，不用高频轮询干扰长实验分析。
 
 当前 worktree 是否获准 stage、commit、prepare 或 launch，只以 `TASK.md` 和 `current-state.md` 为准；不要从本文推断授权。
@@ -266,17 +320,19 @@ WSL `scion`：
 - Python：`/home/xjy-ubuntu/miniconda3/envs/scion/bin/python`；
 - 仅在重新确认连接、代码同步和当前 CLI 配置后用于大型或并发验证。
 
-两边必须从相同 clean commit 分别创建并运行独立 campaign。不要跨机器复用
-campaign state 或运行产物，也不要假设 shell 环境变量会跨命令持久存在。
+两边必须从同一份明确记录且运行期间冻结的完整源码状态分别创建独立 campaign。
+不要跨机器复用 campaign state 或运行产物，也不要假设 shell 环境变量会跨命令持久存在。
 
 ## 开始工作前的检查
 
-- 我是否先读了 `TASK.md` 和 `current-state.md`？
+- 我是否按根 `AGENTS.md` 的唯一顺序读完了 onboarding、`current-state.md`、
+  `TASK.md` 和所选 reading profile？
 - 我的判断是否服从 V3 与 v0.4 addendum 的职责边界？
 - 我是否沿真实控制流定位了问题，而不是只看 facade 或 summary？
 - 我是否保持完整安全上下文和 ordinary path/content source mapping，没有引入内容丢失或 identity wrapper？
 - 我新增或修改的 gate 是否只保护它有权拥有的边界？
 - 我是否区分框架正确、运行有效和算法研究有效？
-- 若涉及正式实验，我是否确认 clean commit、当前 CLI 配置、无 forced binding、无 resume 和当前明确授权？
+- 若涉及正式实验，我是否确认源码状态已记录并冻结、当前 CLI 配置、无 forced
+  binding、无 resume，并且行动没有超出 `TASK.md`/`current-state.md` 记录的用户授权范围？
 
 如果其中任何一项答案不明确，先补证据，不要通过新增控制机制来掩盖不确定性。

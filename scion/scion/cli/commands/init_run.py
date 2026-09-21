@@ -332,6 +332,14 @@ def register_run_command(app: typer.Typer) -> None:
             "--problem",
             help="Path to problem.yaml",
         ),
+        source_tree: str | None = typer.Option(
+            None,
+            "--source-tree",
+            help=(
+                "Complete algorithm source directory to copy as the fresh baseline; "
+                "defaults to the problem root and restores no campaign state"
+            ),
+        ),
         research_input: Optional[str] = typer.Option(
             None,
             "--research-input",
@@ -458,6 +466,18 @@ def register_run_command(app: typer.Typer) -> None:
             raise typer.Exit(code=1)
         spec = adapter.spec
         problem_v1 = spec
+        from scion.core.production_boundary import validate_fresh_campaign_output
+        from scion.runtime.workspace import validate_source_tree
+
+        try:
+            validate_fresh_campaign_output(campaign_path)
+            initial_source = validate_source_tree(
+                source_tree if source_tree is not None else spec.root_dir,
+                str(campaign_path),
+            )
+        except ValueError as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
         try:
             research_history_value = _load_research_histories(
                 [Path(path) for path in (research_history or [])],
@@ -568,7 +588,7 @@ def register_run_command(app: typer.Typer) -> None:
         from scion.core.models import ChampionState
         from scion.runtime.pool_manager import read_registry
 
-        registry_path = os.path.join(spec.root_dir, "registry.yaml")
+        registry_path = os.path.join(initial_source, "registry.yaml")
         if os.path.exists(registry_path):
             try:
                 operator_pool = read_registry(registry_path)
@@ -584,7 +604,7 @@ def register_run_command(app: typer.Typer) -> None:
         champion = ChampionState(
             version=1,
             operator_pool=operator_pool,
-            code_snapshot_path=spec.root_dir,
+            code_snapshot_path=str(initial_source),
         )
 
         from scion.core.campaign import CampaignManager

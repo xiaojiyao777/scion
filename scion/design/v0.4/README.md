@@ -1,6 +1,6 @@
 # Scion v0.4 Design Index
 
-*Last updated: 2026-05-10*
+*Last reviewed: 2026-09-05*
 
 These are historical and problem-design sources from the v0.4 development
 line. They are not a second architecture authority. Current implementation
@@ -13,9 +13,10 @@ records the smaller current implementation. Older AgenticProposalSession,
 readiness, owner, identity, lease, receipt/hash or closure designs must not be
 restored from this index.
 
-For onboarding, do not read every file here by default. Start from
-[docs/READING_PROFILES.md](../../docs/READING_PROFILES.md) and choose the one
-or two design sources that match the task.
+For onboarding, do not read every file here by default. Start from the
+repository-level [AGENTS.md](../../../AGENTS.md), then use
+[docs/READING_PROFILES.md](../../docs/READING_PROFILES.md) to choose only the
+one or two design sources that match the task.
 
 ## Historical and problem design sources
 

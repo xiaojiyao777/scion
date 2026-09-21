@@ -1,5 +1,25 @@
 # Core Campaign
 
+> Current boundary update (2026-09-20): the source-continuation and reconcile
+> sections below describe current direct-v3 code. Other sections retain the
+> historical map's scope and must be checked against current source.
+
+## Complete source continuation (current)
+
+`cli/commands/init_run.py` accepts `--source-tree`, defaulting to the problem
+root, and reads any problem-local registry from that tree. The initial
+`ChampionState.code_snapshot_path` is the existing plain source input;
+`campaign_composition.py` validates that the fresh output is outside it and uses
+`WorkspaceMaterializer.create_champion_snapshot()` to copy it into the campaign.
+The snapshot is read-only and an existing snapshot is never overwritten.
+`CampaignManager` checks research-surface availability on the selected snapshot.
+The adapter continues to own problem, feasibility and objective semantics.
+
+No prior campaign state is loaded. Branches, stage counters and provider calls
+start fresh; explicitly supplied `research_history` is ordinary H-only context.
+Status reports `initial_source_tree`, `champion_source_tree` and the source path
+of each live branch. These are locations, not authority or resume tokens.
+
 ## Scope / Sources
 
 Sources read: `scion/scion/core/campaign.py`, `campaign_composition.py`, `campaign_loop.py`, `branch.py`, `branch_step_runner.py`, `explore_step_pipeline.py`, `evaluation_orchestrator.py`, `decision_finalizer.py`, `promotion_lifecycle.py`, `promotion_service.py`, `scheduler.py`, `campaign_governance.py`, `termination.py`, `workspace_lifecycle.py`, `models.py`, and CLI wiring in `scion/scion/cli/main.py`.
@@ -133,17 +153,24 @@ Missing eval workspace/hypothesis is treated as an abandon/hard-abandon conditio
 
 Promotion and weight optimization can stale active branches. `BranchController.mark_all_stale()` marks active non-frozen branches `STALE` after champion promotion. `mark_stale_for_weight_update()` marks selected active states `STALE_WEIGHT_UPDATE` after weight revision changes.
 
-`BranchStepRunner.run_reconcile_step()` rebases stale branches on the new champion:
+`BranchStepRunner.run_reconcile_step()` re-evaluates the complete accepted tree:
 
-1. Recreate workspace from champion.
-2. Reapply the stored patch without updating remembered patch state.
-3. Re-run patch contract.
-4. Re-run verification against the new champion.
-5. Require an experiment protocol for re-screening.
-6. Move the branch back to `EXPLORE` on reconcile success.
-7. Re-evaluate and finalize the decision.
+1. Copy the existing branch workspace into isolated staging, preserving every
+   file and its problem-owned configuration. Do not apply archived patches or
+   merge new champion code.
+2. Carry the source's existing Contract acceptance; no new proposal is exported.
+3. Run Verification against the new champion, retaining the single local
+   candidate-content equality check before Protocol.
+4. Run fresh screening through Protocol, Safe Features and Decision.
+5. On continuation, `DecisionFinalizer` binds the accepted tree and the new
+   comparison champion, resets expansion counts and applies the typed Decision.
+   Expansion and held-out stages reuse that exact candidate.
 
-If any reconcile prerequisite is absent or fails, the branch is abandoned. Reconcile does not silently resume a branch without re-gating.
+The last accepted H/C remains ordinary evidence. `base_source_ref` points to the
+branch head; `base_champion_version` records the new comparator. Missing source
+or infrastructure yields a typed operational stop/hold without reconstruction.
+Verification rejection cannot modify the prior clean tree. A failed scientific
+screen can still keep the verified tree under `CONTINUE_EXPLORE`.
 
 ## Budget and Termination
 

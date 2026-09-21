@@ -186,7 +186,7 @@ class BranchController:
         self, branch_id: str, success: bool, new_champion: ChampionState
     ) -> None:
         """
-        Complete stale reconcile: if reconcile succeeded → EXPLORE (on new champion),
+        Complete stale reconcile: if successful → EXPLORE against new champion,
         else → ABANDONED.
         """
         branch = self._get(branch_id)
@@ -205,13 +205,11 @@ class BranchController:
     def get_code_base(self, branch_id: str) -> str:
         """
         Return the code-base identifier for the branch (§4.5):
-        - "champion"          if branch is STALE or has no accepted branch source
+        - "champion"          if branch has no accepted branch source
         - "branch_workspace"  if current_code_hash identifies a verified, accepted
                               durable branch workspace
         """
         branch = self._get(branch_id)
-        if branch.state in (BranchState.STALE, BranchState.STALE_WEIGHT_UPDATE):
-            return "champion"
         if branch.current_code_hash is None:
             return "champion"
         return "branch_workspace"

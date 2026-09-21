@@ -1,7 +1,10 @@
 # CVRP R4 R3i-v2 retained-B0 confirmation preregistration
 
-**State:** frozen before launch; launched once at `2026-09-04T13:22:36Z` and
-running
+**State:** frozen before launch; terminal `completed / NOT_CONFIRMED` at
+expanded screening
+
+**Postrun:**
+[`R4 terminal analysis`](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-postrun-20260905.md)
 
 **Label:** `v04-cvrp-r4-r3i-v2-retained-b0-confirmation-20260904`
 
@@ -12,11 +15,14 @@ running
 `/home/clawd/research/scion-experiments/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-20260904`
 
 The prelaunch specification was committed as `923bafae` before the output root
-was created. The live run uses local tmux session
+was created. The run used local tmux session
 `scion-r4-r3i-v2-retained-b0-confirmation-20260904`; the carrier is not part of
-the estimand. Initial observation confirmed a passed canary and one completed
-effect pair. No outcome was inspected or available when this administrative
-launch note was added.
+the estimand. At launch, initial observation confirmed a passed canary and one
+completed effect pair, and no outcome was inspected or available when that
+administrative note was added. The terminal artifact was subsequently written
+at `2026-09-04T13:57:21Z`: all 24 expanded-screening pairs were valid, the
+scientific quality gate failed, and no later stage was opened. See the linked
+postrun for the result rather than treating this frozen design as live status.
 
 ## Question and fixed estimand
 

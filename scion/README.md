@@ -4,9 +4,18 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Version: v0.4 direct--runtime](https://img.shields.io/badge/version-v0.4%20direct--runtime-blue.svg)](#)
 
-**Scion**（分支/嫁接）是一个面向组合优化问题的 **LLM 驱动算法自动改进框架**。它通过 LLM 的先验知识与推理能力，在人类定义的"算法沙盒"内自主探索、验证并迭代启发式算子，并通过参数层搜索优化算子配比。
+**Scion**（分支/嫁接）是一个面向组合优化问题的 **LLM 驱动算法自动改进框架**。
+它让 agent 在 problem-owned 边界内持续研究一棵完整、可运行的算法源码树，并用
+Contract、Verification、Protocol 与 deterministic Decision 分离创造性提案、安全
+正确性和科学晋升。算子级与参数级搜索是历史上使用过的研究形态，不是 generic core
+必须假定的算法对象结构。
 
-> **当前 v0.4 direct-runtime**：从 [`TASK.md`](TASK.md) 获取当前任务、授权和验收状态；运行语义见 [direct-runtime addendum](design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)，正式 CLI 入口是 `python -m scion.cli.main run`，操作步骤见 [实验运行手册](docs/operations/experiment-runbook.zh.md)。
+> **Agent / maintainer entry**：先读仓库根目录
+> [`AGENTS.md`](../AGENTS.md)，再按其顺序读取当前交接。当前任务和
+> 状态分别位于 [`TASK.md`](TASK.md) 与
+> [`docs/status/current-state.md`](docs/status/current-state.md)。正式实验入口与当前
+> carrier 必须从交接和
+> [实验运行手册](docs/operations/experiment-runbook.zh.md) 确认，不从下文历史示例推断。
 
 > **历史资料提示**：下文的 v0.2/v0.3 结果、两层搜索和 weight optimization 是历史记录，不是当前 v0.4 的运行入口、架构语义或验收依据。
 
@@ -143,8 +152,9 @@ chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
 - **Decision Input Guard**：Decision Layer 仅接收数值化的 DecisionFeatures，屏蔽 LLM 文本干扰
 - **两轮 Proposal**：Round 1 Hypothesis（假设） → Round 2 Code（实现）
 - **分支内迭代演化**：方案在分支内迭代，不是每次从 champion 重新分叉
-- **Champion 是池级别**：不是单个算子，而是整个 operator pool + weights 的快照
-- **字典序多目标**：业务聚合（subcategory splits）> 成本（total cost）> 效率（solve time）
+- **算法对象是完整源码树**：分支保留可运行的完整算法 head，不用对象身份、Trust/Hash 链或重复闭包证明它
+- **问题语义归 problem package**：objective、feasibility、solver、case、surface 与
+  telemetry 含义经 adapter 提供，generic core 不选择问题机制
 - **直接值语义**：H、CandidateWorkspace、ProtocolResult 和 Decision 沿同一调用链传递，不构建自证生命周期
 
 ## 快速开始
@@ -152,29 +162,20 @@ chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
 ### 安装
 
 ```bash
-git clone https://github.com/xiaojiyao777/or-autoresearch-agent.git
-cd or-autoresearch-agent/scion
+git clone https://github.com/xiaojiyao777/scion.git
+cd scion/scion
 pip install -e .
 ```
 
 ### 运行 Campaign
 
 ```bash
-# v0.4 CLI campaign (需要 LLM API key)
-export SCION_API_KEY="your-api-key"
-export SCION_MODEL="claude-sonnet-4-6"
-cd /path/to/or-autoresearch-agent-v3-hotpath/scion
-PYTHONPATH=. python -m scion.cli.main run \
-  --problem scion/problems/cvrp/problem.yaml \
-  --protocol scion/problems/cvrp/formal/protocol.yaml \
-  --split scion/problems/cvrp/formal/split_manifest.yaml \
-  --seeds scion/problems/cvrp/formal/seed_ledger.yaml \
-  --campaign-dir /tmp/scion_v04_run \
-  --rounds 5 \
-  --time-limit-sec 10
-
-# controlled CVRP E2E smoke (不需要 LLM API key)
-python run_cvrp_controlled_e2e.py --output-dir /tmp/scion_cvrp_controlled
+# 先查看当前 CLI。模型、provider、科学输入、资源边界与输出根
+# 均以 AGENTS.md 指向的当前交接和 runbook 为准。
+cd "$(git rev-parse --show-toplevel)/scion"
+SCION_PYTHON="${SCION_PYTHON:-python}"
+PYTHONPATH=. "$SCION_PYTHON" \
+  -m scion.cli.main run --help
 ```
 
 Historical v0.2/v0.3 launcher scripts are archived under
@@ -183,15 +184,16 @@ Historical v0.2/v0.3 launcher scripts are archived under
 ### 运行测试
 
 ```bash
-cd /path/to/or-autoresearch-agent-v3-hotpath/scion
-PYTHONPATH=. python -m pytest scion/tests/unit/ -q
+cd "$(git rev-parse --show-toplevel)/scion"
+SCION_PYTHON="${SCION_PYTHON:-python}"
+PYTHONPATH=. "$SCION_PYTHON" -m pytest -q
 ```
 
 ## 项目结构
 
 ```
 scion/
-├── scion/                    # 核心框架（57 个 Python 文件，~11,400 行）
+├── scion/                    # problem-neutral 核心框架与 problem packages
 │   ├── core/                 # Campaign, Branch, Decision, Scheduler, Termination, Features
 │   ├── config/               # ProblemSpec, ProtocolConfig, SplitManifest, SeedLedger (Pydantic v2)
 │   ├── contract/             # ContractGate (C1-C10 静态检查)
@@ -223,9 +225,9 @@ Scion 在**仓配协同 VNS + Solution Pool** 场景下完成验证：
 - **目标函数**：字典序——业务聚合 > 物流总成本 > 求解效率
 - **生产数据**：引入真实生产统计特征生成的实例 + 真实日数据
 
-## v0.4：CVRP 第二问题
+## v0.4：CVRP 第二问题（历史接入背景）
 
-v0.4 将把 **CVRP** 接入 Scion，作为第二个真实组合优化问题。这个选择替代了早期路线图中“优先接 FCMCNF + Benders”的安排；FCMCNF 会保留为后续 v1.x 的 lower-bound/decomposition track。
+v0.4 已把 **CVRP** 接入 Scion，作为第二个真实组合优化问题。下面保留的是早期接入背景与 baseline；package 接入已经完成，但 retained-B0 改进证据仍未完成。当前实验结论和下一条研究阶梯只从 [`../AGENTS.md`](../AGENTS.md) 指向的[当前状态](docs/status/current-state.md)读取。
 
 CVRP 的价值在于它是标准 routing 问题，具有成熟 benchmark 和经典局部搜索算子族，而且它的 route-sequence 语义与当前 warehouse assignment/bin-packing 问题明显不同。它会直接检验 `ProblemAdapter`、operator interface、verification gate、quality/runtime harness 是否真的泛化。
 
@@ -246,15 +248,15 @@ Baseline 报告：
 - [docs/evidence/manifest.md](docs/evidence/manifest.md)
 - [design/v0.4/v0.4-evidence-harness.md](design/v0.4/v0.4-evidence-harness.md)
 
-接入 Scion 后，v0.4 不只记录 promotion 次数，还会对每个 campaign final champion 做固定评估集上的 baseline quality/runtime 对比。
+早期计划不只记录 promotion 次数，还要求在固定评估集上比较 baseline quality/runtime；它不是当前实验授权或验收状态。
 
-## 开发路线
+## 历史开发路线快照
 
 - [x] **v0.1 MVP**：核心循环、Contract Gate、三级实验协议、SQLite Lineage ✅
 - [x] **v0.1.1 调优**：ContextManager 重写、prompt caching、subprocess timeout ✅
 - [x] **v0.2 参数层**：Weight Optimization、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
 - [x] **v0.3 工程化框架**：adapter/objective 泛化、production protocol、sync weight opt、完整证据 gate ✅
-- [ ] **v0.4 性能感知优化 + CVRP 接入**：runtime/complexity 作为公共优化维度，并用 CVRP 检验第二问题泛化
+- [ ] **v0.4 direct runtime + CVRP**：package 已接入；retained-B0 改进证据仍开放
 - [ ] **v1.0 多问题证据固化**：warehouse + CVRP 跨问题验证、机制研究、工程化收敛
 
 ## 实验历史
@@ -281,13 +283,10 @@ Baseline 报告：
 
 ## 当前状态
 
-**v0.3 完成** (2026-04-28)
-
-- 框架闭环完成：hypothesis -> code -> verification -> protocol -> promote -> sync weight opt -> lineage。
-- Synthetic 优化能力明确成立。
-- Production 在 Sonnet 下可产生完整证据的改进；GPT-mini 仍受代码生成质量限制。
-- 生产 timeout / incomplete evidence 问题已修复并记录到 v0.4 performance-aware plan。
-- v0.4 已确定引入 CVRP 作为第二真实问题，详见 [v0.4-cvrp-plan.md](design/v0.4/v0.4-cvrp-plan.md)。
+本文中的 v0.2/v0.3 数据是历史证据，不是当前工作树或实验状态。
+请从 [`../AGENTS.md`](../AGENTS.md) 进入，并以它指向的
+[`TASK.md`](TASK.md) 和
+[`docs/status/current-state.md`](docs/status/current-state.md) 为当前交接。
 
 ## 开源协议
 
@@ -295,4 +294,4 @@ Baseline 报告：
 
 ---
 
-*Built with precision — Scion Framework v0.3*
+*Historical results retained; current work follows the repository handoff.*

@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any, Callable, MutableMapping, Protocol
 
 from scion.core.models import (
-    AcceptedBranchChange,
     AcceptedFileBeforeSource,
     Branch,
     ChampionState,
@@ -152,21 +151,9 @@ class WorkspaceService:
                 self._cleanup_candidate_best_effort(candidate)
 
     def create_reconcile_workspace(self, base_workspace: str) -> str:
-        """Create the sole disposable staging tree for an accepted-chain replay."""
+        """Copy the complete accepted branch tree for isolated re-evaluation."""
 
         return self.materializer.create_candidate_workspace(base_workspace)
-
-    def apply_reconcile_change(
-        self,
-        workspace: str,
-        patch: PatchProposal,
-        *,
-        hypothesis: HypothesisProposal,
-    ) -> None:
-        """Apply one accepted change in place without copying or hashing."""
-
-        self.materializer.apply_ephemeral_patch(workspace, patch)
-        self.sync_pool_registry(workspace, hypothesis, patch)
 
     def seal_reconcile_candidate(
         self,
@@ -175,7 +162,7 @@ class WorkspaceService:
         base_workspace: str,
         changed_files: tuple[str, ...],
     ) -> CandidateWorkspace:
-        """Compute the replayed candidate's one pre-Verification digest."""
+        """Capture the copied candidate before Verification's equality check."""
 
         cumulative_changed_files = tuple(dict.fromkeys(changed_files))
         if self._file_content_differs(
@@ -193,48 +180,9 @@ class WorkspaceService:
         )
 
     def discard_reconcile_workspace(self, workspace: str) -> None:
-        """Discard a replay staging tree before ownership reaches Decision."""
+        """Discard a re-evaluation copy before ownership reaches Decision."""
 
         self.materializer.cleanup_candidate_workspace(workspace)
-
-    def reconcile_source_conflicts(
-        self,
-        workspace: str,
-        accepted_change: AcceptedBranchChange,
-    ) -> tuple[str, ...]:
-        """Return touched paths whose exact pre-change source no longer matches."""
-
-        touched_paths = tuple(
-            normalize_relative_patch_path(change.file_path)
-            for change in patch_file_changes(accepted_change.patch)
-        )
-        expected: dict[str, str | None] = {}
-        malformed: set[str] = set()
-        for before_source in accepted_change.before_sources:
-            file_path = normalize_relative_patch_path(before_source.file_path)
-            if file_path in expected:
-                malformed.add(file_path)
-            expected[file_path] = before_source.source
-        if set(touched_paths) != set(expected) or len(touched_paths) != len(expected):
-            malformed.update(set(touched_paths).symmetric_difference(expected))
-            malformed.update(
-                file_path
-                for file_path in touched_paths
-                if touched_paths.count(file_path) > 1
-            )
-        conflicts = set(malformed)
-        for file_path in touched_paths:
-            if file_path not in expected:
-                conflicts.add(file_path)
-                continue
-            try:
-                current_source = self._read_plain_source(workspace, file_path)
-            except (OSError, UnicodeError, ValueError):
-                conflicts.add(file_path)
-                continue
-            if current_source != expected[file_path]:
-                conflicts.add(file_path)
-        return tuple(sorted(conflicts))
 
     def accept_candidate(
         self,

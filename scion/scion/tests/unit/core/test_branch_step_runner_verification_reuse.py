@@ -78,7 +78,6 @@ def _runner_for_outcome_test(
         branch_workspaces={branch.branch_id: "/tmp/workspace"},
         branch_patches={branch.branch_id: _patch()},
         experiment_protocol_provider=lambda: object(),
-        contract_gate=None,
         verification_gate=None,
         drain_weight_opt_events=lambda: None,
         should_stop=lambda: False,

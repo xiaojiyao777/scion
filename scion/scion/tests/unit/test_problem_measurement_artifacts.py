@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -93,9 +93,21 @@ def test_checked_in_problem_measurement_artifacts_are_ready(
         _REPO_ROOT / "scion" / "problems" / "warehouse_delivery" / "problem-v1.yaml",
     ],
 )
+@pytest.mark.parametrize(
+    ("as_of", "warehouse_status"),
+    [(date(2026, 6, 19), "ready"), (date(2026, 9, 20), "degraded")],
+)
 def test_checked_in_problem_measurement_diagnostics_stay_reduced(
-    problem_path: Path,
+    problem_path: Path, as_of: date, warehouse_status: str, monkeypatch,
 ) -> None:
+    # Test both freshness states without making this projection test depend on
+    # the wall clock. Runtime calibration age limits remain unchanged.
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(as_of.year, as_of.month, as_of.day, tzinfo=tz)
+
+    monkeypatch.setattr("scion.measurement.readiness.datetime", FixedDatetime)
     spec_v1 = load_problem_spec_v1_from_yaml(problem_path)
     legacy = legacy_problem_spec_from_v1(spec_v1)
 
@@ -111,7 +123,7 @@ def test_checked_in_problem_measurement_diagnostics_stay_reduced(
     assert diagnostics["effect_scale"]["metric"] == (
         spec_v1.measurement.effect_scale.metric
     )
-    expected_status = "not_ready" if spec_v1.id == "cvrp" else "ready"
+    expected_status = "not_ready" if spec_v1.id == "cvrp" else warehouse_status
     assert diagnostics["measurement_readiness"]["status"] == expected_status
     assert problem_owned["schema_version"]
     _assert_forbidden_raw_measurement_fields_absent(diagnostics)

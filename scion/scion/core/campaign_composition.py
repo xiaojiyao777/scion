@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import threading
 from contextlib import nullcontext
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -60,7 +61,7 @@ from scion.core.weight_opt_committer import WeightOptCommitter
 from scion.core.workspace_service import WorkspaceService
 from scion.lineage.registry import LineageRegistry
 from scion.proposal.engine import CreativeLayer
-from scion.runtime.workspace import WorkspaceMaterializer
+from scion.runtime.workspace import WorkspaceMaterializer, validate_source_tree
 from scion.verification.development import (
     declared_development_problem_package_paths,
     declared_development_suites,
@@ -129,6 +130,7 @@ def compose_campaign_services(
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     validate_fresh_campaign_output(campaign_dir)
+    source_tree = validate_source_tree(champion.code_snapshot_path, campaign_dir)
     problem_spec = getattr(adapter, "spec", None)
     if problem_spec is None:
         raise TypeError("campaign adapter must expose its problem spec")
@@ -197,6 +199,7 @@ def compose_campaign_services(
     owner._seed_ledger = seed_ledger
     owner._llm_client = llm_client
     owner._champion = champion
+    owner._initial_source_tree = str(source_tree)
     owner._campaign_dir = campaign_dir
     # Campaign IDs are ordinary labels used to group records.
     owner._campaign_id = Path(campaign_dir).name or "campaign"
@@ -233,6 +236,10 @@ def compose_campaign_services(
         campaign_dir,
         **_materializer_kwargs_from_problem_spec(problem_spec),
     )
+    snapshot = owner._materializer.create_champion_snapshot(
+        champion, str(owner._materializer._champions_dir)
+    )
+    owner._champion = replace(champion, code_snapshot_path=snapshot)
     owner._code_development_evaluator = (
         None
         if owner._code_research_limits is None
@@ -453,7 +460,6 @@ def compose_campaign_services(
         branch_workspaces=owner._branch_workspaces,
         branch_patches=owner._branch_patches,
         experiment_protocol_provider=lambda: owner._experiment_protocol,
-        contract_gate=owner._contract_gate,
         verification_gate=owner._vgate,
         drain_weight_opt_events=owner._drain_weight_opt_events,
         should_stop=owner.should_stop,
@@ -471,10 +477,6 @@ def compose_campaign_services(
         create_reconcile_workspace=(
             owner._workspace_service.create_reconcile_workspace
         ),
-        reconcile_source_conflicts=(
-            owner._workspace_service.reconcile_source_conflicts
-        ),
-        apply_reconcile_change=(owner._workspace_service.apply_reconcile_change),
         seal_reconcile_candidate=(
             owner._workspace_service.seal_reconcile_candidate
         ),

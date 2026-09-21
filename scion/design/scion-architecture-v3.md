@@ -614,8 +614,15 @@ base source 引用。实现可以为同一份 source 保留内容 digest，但�
 
 当 champion 变化时：
 1. 所有活跃分支标记为 STALE
-2. Stale 分支执行 reconcile：重新应用 patch → Contract → Verification → re-Screening
-3. 仍有正信号则恢复到 READY_VALIDATE，否则 ABANDONED
+2. Stale 分支保留已经通过 Contract 的完整源码树；在隔离副本上执行
+   Verification，并与新 champion 重新进行 screening。不得通过重放历史 patch
+   重建分支，也不自动合并新 champion 的算法改动。
+3. Protocol → Safe Features → Decision 决定继续研究、扩大样本、进入 validation
+   或淘汰。重新比较重置该比较的 expansion 计数；后续 held-out 复用同一候选。
+
+完整源码树也是 fresh campaign 可显式选择的普通输入。新进程隔离复制该树作为
+初始 baseline，可另行接收允许的 H-only history，但不恢复旧 campaign 的 branch、
+champion、provider session 或阶段状态。源码路径不构成身份或权限。
 
 ### 11.5 预算规则
 

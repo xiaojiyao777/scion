@@ -451,6 +451,8 @@ class DecisionFinalizer:
             branch.state = BranchState.EXPLORE
             branch.base_champion_id = reanchor_champion.version
             branch.weight_revision = reanchor_champion.weight_revision
+            branch.screening_expand_count = 0
+            branch.validation_expand_count = 0
         _consume_completed_protocol_expansion(branch, protocol_result)
         if decision is Decision.ABANDON:
             _mark_branch_abandoned(
@@ -816,7 +818,7 @@ def _lineage_source_before_decision(
 ) -> _LineageSource:
     if reanchor_champion is not None:
         base_champion_version = reanchor_champion.version
-        base_source_ref = f"champion:v{reanchor_champion.version}"
+        base_source_ref = branch_base_source_ref(branch)
     else:
         base_champion_version = branch.base_champion_id
         base_source_ref = branch_base_source_ref(branch)
