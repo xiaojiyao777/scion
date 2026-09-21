@@ -150,7 +150,8 @@ On this already outcome-known R4 population, inclusion was unsupported and
 compatible with harm. R5 cannot promote either arm; v2-minus-2-for-1 is only the
 next evidence-supported candidate.
 
-Exact R4/R5 artifacts are linked by [`current-state.md`](docs/status/current-state.md). No experiment is active.
+Exact R4/R5 artifacts are linked by [`current-state.md`](docs/status/current-state.md).
+R6 is active from `2026-09-21T16:09:27Z`; no new scientific result yet.
 
 ## Ordered active work
 
@@ -200,10 +201,11 @@ partial campaign.
 - [x] Keep complete pairs, feasibility, fleet protection, practical-effect and
   uncertainty gates. Do not weaken `SCREENING_FAIL_CASE_QUALITY` merely because
   R4 or R5 was negative.
-- [ ] This documentation handoff does not launch a run. Under the user's existing
-  authorization, a later agent may prepare and autonomously launch it only after
-  code and scientific inputs are frozen, no experiment is active, and a fresh
-  output root plus ordinary runbook checks are in place.
+- [x] Under the user's explicit continuation request, freeze code and scientific
+  inputs, complete regression/control, verify no experiment is active, and launch
+  once into a fresh root. R6 started from clean `e405bfd2`; runtime is frozen.
+- [ ] Read R6's terminal and exact metric artifacts after completion, publish
+  its bounded postrun, and leave CVRP open unless retained evidence supports it.
 
 ### v0.4 closeout
 
@@ -215,7 +217,7 @@ partial campaign.
 ## Verification snapshot
 
 - Branch: `v0.4-dev`. P1 and the handoff were committed as `a112e60c`;
-  P1b and prospective R6 inputs form the next frozen change.
+  P1b and prospective R6 inputs were committed as `e405bfd2` before launch.
 - P1b full suite: `2397 passed, 1 skipped, 0 failed` in 436.38 seconds, with no
   live provider or formal campaign. The earlier P1 suite passed 2393 tests.
   Focused P1b tests: 103 observation/evidence/boundary tests and 48 campaign/
@@ -225,7 +227,12 @@ partial campaign.
   directories; calibration projection tests use explicit fresh/stale dates.
 - R6 and the independent Warehouse A/A control passed read-only `--check`.
   R6 gates/stage counts match R4; its source and data copies were compared
-  directly, and all 11 seeds are disjoint from R3–R5 ledgers. No run yet.
+  directly, and all 11 seeds are disjoint from R3–R5 ledgers.
+- [Warehouse wiring controls](docs/experiments/v0.4/v04-p1b-warehouse-aa-control-postrun-20260921.md):
+  preserve the first incomplete shared-infeasible result; the second completed
+  4/4 valid ties and deterministic `CONTINUE_EXPLORE` on the same runtime.
+- R6 is running in `scion-r6-minus-2for1-b0-20260921`, launched at
+  `2026-09-21T16:09:27Z` from clean `e405bfd2`. No terminal evidence yet.
 - R4 and R5 tmux panes are dead with exit status zero; their terminal JSON files
   report `NOT_CONFIRMED` and `DIAGNOSTIC_COMPLETE`, respectively.
 

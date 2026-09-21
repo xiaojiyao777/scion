@@ -14,7 +14,8 @@ authority or authorize another run.
 
 - Working branch: `v0.4-dev`.
 - P1 and the R4/R5 documentation handoff were committed as `a112e60c`.
-  P1b observation cleanup and R6 preparation follow that commit.
+  P1b observation cleanup and R6 preparation were committed as `e405bfd2`.
+  R6 launched from that clean revision; subsequent status edits are docs-only.
 - P1b full suite: `2397 passed, 1 skipped, 0 failed` in 436.38
   seconds, with no live provider or formal campaign. From the repository root:
   `env PYTHONPATH=scion:. /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests`.
@@ -28,7 +29,10 @@ authority or authorize another run.
   campaign/held-out regression tests: 48 passed. The previous P1 suite passed
   2393 tests. Protocol gates and Safe Features are unchanged.
 - R4 and R5 both ended normally. Their retained tmux panes are dead with exit
-  status zero; no experiment is currently running or authorized by this file.
+  status zero. R6 launched once at `2026-09-21T16:09:27Z` under the user's explicit
+  request, in `scion-r6-minus-2for1-b0-20260921`; no terminal result yet.
+  At `16:11:04Z`, its live child was executing screening B-n34-k5 / seed 20021.
+  This is operational progress, not scientific outcome evidence.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -170,13 +174,16 @@ prospectively declared development comparison.
    prospectively compares the exact R5 minus-2-for-1 tree with original B0.
    Main cases exclude all R3 and R4 main cases; all seeds are fresh. The
    pre-R3 retained block remains conditional and unexecuted. Read-only preparation
-   passed for R6 and the independent Warehouse A/A wiring control; neither has
-   launched yet. No new improvement claim follows from preparation.
-4. This documentation update does not launch an experiment. Under the user's
-   existing authorization, a later agent may prepare and autonomously launch the
-   next run only after code and scientific inputs are frozen, no experiment is
-   active, and a fresh root plus the runbook's ordinary scientific checks are in
-   place.
+   passed; R6 is now running from frozen `e405bfd2`. Independent
+   [Warehouse wiring diagnostics](../experiments/v0.4/v04-p1b-warehouse-aa-control-postrun-20260921.md)
+   preserve the first shared-infeasible result and the second complete 4/4 A/A
+   ties with deterministic negative Decision. They are not improvement evidence.
+4. Keep R6 runtime, source and scientific inputs frozen. Read its
+   [input](/home/clawd/research/scion-experiments/v04-cvrp-r6-minus-2for1-b0-20260921/input.json)
+   and later `terminal.json` under the same fresh output root, followed only by
+   exact metric paths it names. Do not start another run, retry, alter gates,
+   or infer promotion from process health. Update the bounded postrun after the
+   terminal exists. Until then the accepted scientific state is unchanged.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,
