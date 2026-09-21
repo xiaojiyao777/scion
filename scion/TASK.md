@@ -21,7 +21,8 @@ The project goal is retained solver improvement produced by Scion itself:
   `v1 -> v2 -> v3`; production-style Scion promoted and independently retained
   `v1 -> v2`.
 - CVRP remains open. R3i produced a promoted development bundle, but R4 did not
-  confirm that bundle against original B0, and R5 is diagnostic only.
+  confirm it against B0, R5 is diagnostic only, and R6 did not confirm the
+  minus-2-for-1 bundle. R7 continues autonomous development from that source.
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -150,8 +151,20 @@ On this already outcome-known R4 population, inclusion was unsupported and
 compatible with harm. R5 cannot promote either arm; v2-minus-2-for-1 is only the
 next evidence-supported candidate.
 
-Exact R4/R5 artifacts are linked by [`current-state.md`](docs/status/current-state.md).
-R6 is active from `2026-09-21T16:09:27Z`; no new scientific result yet.
+### CVRP R6
+
+The [R6 postrun](docs/experiments/v0.4/v04-cvrp-r6-minus-2for1-b0-postrun-20260921.md)
+records normal `NOT_CONFIRMED`: 24/24 valid pairs, no failure/fleet regression,
+case W/L/T `2/1/3`, median `0`, CI `[-258,97.75]` and unchanged
+`SCREENING_FAIL_CASE_QUALITY`. X-n351-k40 lost at every seed. Both large cases
+used their algorithm-local budget in initial VNS with zero subsequent ALNS
+iterations in both arms. This is development evidence, not mechanism causality.
+Cleanup overlapped the wall-clock-budgeted run, so performance interpretation
+is exploratory; the original negative Decision remains unchanged. Later stages
+and the final retained block stayed unopened.
+
+Exact R4–R6 artifacts are linked by
+[`current-state.md`](docs/status/current-state.md).
 
 ## Ordered active work
 
@@ -204,8 +217,22 @@ partial campaign.
 - [x] Under the user's explicit continuation request, freeze code and scientific
   inputs, complete regression/control, verify no experiment is active, and launch
   once into a fresh root. R6 started from clean `e405bfd2`; runtime is frozen.
-- [ ] Read R6's terminal and exact metric artifacts after completion, publish
+- [x] Read R6's terminal and exact metric artifacts after completion, publish
   its bounded postrun, and leave CVRP open unless retained evidence supports it.
+
+### P3 — Autonomous optimization after R6
+
+- [x] Preregister [R7](docs/experiments/v0.4/v04-cvrp-r7-autonomous-source-continuation-preregistration-20260921.md)
+  from the complete minus-2-for-1 source, with fresh campaign state, all ordered
+  H-only scientific history and the distinct R4/R5/R6 screening observations.
+- [x] Preserve existing gates and held-out isolation; declare R6 screening as
+  adaptive development. Validate the new input projection and source/history
+  continuation without prescribing a mechanism or changing generic core.
+- [ ] Freeze inputs and launch R7 once under the user's analysis/optimization
+  request, with no overlapping cleanup, tests or solver job.
+- [ ] Analyze actual H/C, verified source continuation and terminal paired
+  evidence. A local R7 promotion is not retained superiority over original B0;
+  preregister that separate comparison only if a candidate warrants it.
 
 ### v0.4 closeout
 
@@ -231,8 +258,13 @@ partial campaign.
 - [Warehouse wiring controls](docs/experiments/v0.4/v04-p1b-warehouse-aa-control-postrun-20260921.md):
   preserve the first incomplete shared-infeasible result; the second completed
   4/4 valid ties and deterministic `CONTINUE_EXPLORE` on the same runtime.
-- R6 is running in `scion-r6-minus-2for1-b0-20260921`, launched at
-  `2026-09-21T16:09:27Z` from clean `e405bfd2`. No terminal evidence yet.
+- R6 completed normally at expanded screening; terminal, all 24 raw pairs,
+  case medians, feasibility/fleet equality, AB/BA order and both 100-file source
+  snapshots have been checked. Performance contamination is disclosed above.
+- R7 preparation: 143 existing focused tests plus 2 prospective-input tests
+  pass. All 24 cases parse, scientific gates match R6, source selection and
+  fresh output validate, and all prior observations project to H in order.
+  No runtime implementation changed; no new full-suite or Warehouse run needed.
 - R4 and R5 tmux panes are dead with exit status zero; their terminal JSON files
   report `NOT_CONFIRMED` and `DIAGNOSTIC_COMPLETE`, respectively.
 

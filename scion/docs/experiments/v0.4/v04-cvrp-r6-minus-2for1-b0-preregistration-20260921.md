@@ -1,15 +1,17 @@
 # CVRP R6 complete v2-minus-2-for-1 versus original B0
 
-State: launched once at `2026-09-21T16:09:27Z`, running; no terminal result yet.
+State: completed normally as `NOT_CONFIRMED` at expanded screening. See the
+[postrun](v04-cvrp-r6-minus-2for1-b0-postrun-20260921.md), including the disclosed
+overlap with server cleanup. The frozen prospective design below is unchanged.
 
 The prospective code/input record was committed as `e405bfd2` before any R6
 solver execution. Launch used a clean checkout at that revision and tmux
 `scion-r6-minus-2for1-b0-20260921`. This administrative status does not alter the
 frozen design below. Runtime/source/configuration files remain unchanged.
 Output: `/home/clawd/research/scion-experiments/v04-cvrp-r6-minus-2for1-b0-20260921`.
-At `16:11:04Z`, the live child was executing screening case B-n34-k5 at seed
-20021. This establishes progression past canary, not a valid-pair count or
-effect estimate; terminal metrics were not yet available.
+Launch was `2026-09-21T16:09:27Z`; the terminal file was written by `16:44:12.811Z`.
+Its 24/24 valid screening pairs yielded case W/L/T 2/1/3, median 0,
+CI [-258,97.75] and `SCREENING_FAIL_CASE_QUALITY`. Later stages stayed unopened.
 
 The [Warehouse control postrun](v04-p1b-warehouse-aa-control-postrun-20260921.md)
 preserves both diagnostics: the first had two shared-infeasible pairs; a

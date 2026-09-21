@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r7-autonomous-source-continuation
+
+screening:
+  - 40009
+  - 40013
+  - 40031
+  - 40037
+
+validation:
+  - 40039
+  - 40063
+
+frozen:
+  - 40087
+  - 40093
+
+canary:
+  - 40099

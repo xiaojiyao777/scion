@@ -28,11 +28,14 @@ authority or authorize another run.
 - P1b focused observation/evidence/boundary tests: 103 passed; additional
   campaign/held-out regression tests: 48 passed. The previous P1 suite passed
   2393 tests. Protocol gates and Safe Features are unchanged.
-- R4 and R5 both ended normally. Their retained tmux panes are dead with exit
-  status zero. R6 launched once at `2026-09-21T16:09:27Z` under the user's explicit
-  request, in `scion-r6-minus-2for1-b0-20260921`; no terminal result yet.
-  At `16:11:04Z`, its live child was executing screening B-n34-k5 / seed 20021.
-  This is operational progress, not scientific outcome evidence.
+- R4, R5 and R6 are terminal. R6 ended normally at expanded screening as
+  `NOT_CONFIRMED`; its terminal file was written by `16:44:12.811Z` on September
+  21. Its tmux pane is dead without a usable exit-status value. Raw terminal and
+  metric evidence below establish completion independently of the carrier.
+- R7 autonomous continuation is prepared under the user's September 21 request
+  to analyze then optimize. Runtime is unchanged. Focused continuation/CLI/
+  history/input/fixed-funnel tests passed 143 tests; two new prospective-input
+  tests pass. No solver campaign is active at this prelaunch snapshot.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -160,30 +163,44 @@ CVRP remains open:
   [terminal](/home/clawd/research/scion-experiments/v04-cvrp-r5-v2-2for1-ablation-20260904/terminal.json),
   and [metric](/home/clawd/research/scion-experiments/v04-cvrp-r5-v2-2for1-ablation-20260904/metrics/72cbb5bf-1b86-4f12-aa7c-b4ba1d8e21b7.json).
 
-Thus v2 is not a confirmed retained-B0 improvement, and v2-minus-2-for-1 is not a
-champion. Both are ordinary complete source values that may inform a later,
-prospectively declared development comparison.
+- [R6 postrun](../experiments/v0.4/v04-cvrp-r6-minus-2for1-b0-postrun-20260921.md):
+  exact minus-2-for-1 versus original B0 completed 24/24 valid pairs, with no
+  failures or fleet regression. Case W/L/T `2/1/3`, median `0`, CI
+  `[-258,97.75]`; `SCREENING_FAIL_CASE_QUALITY` / `CONTINUE_EXPLORE`, terminal
+  `NOT_CONFIRMED`. Later stages stayed unopened. X-n351-k40 lost at all four
+  seeds. Both arms on both large cases had zero ALNS iterations after initial
+  VNS consumed the algorithm-local budget. This is observational, not component
+  causality. Server cleanup overlapped R6; its performance estimates are
+  exploratory because host resource contention cannot be bounded. The original
+  negative Decision is preserved. Exact
+  [terminal](/home/clawd/research/scion-experiments/v04-cvrp-r6-minus-2for1-b0-20260921/terminal.json)
+  and [metric](/home/clawd/research/scion-experiments/v04-cvrp-r6-minus-2for1-b0-20260921/metrics/c9a5fe82-83d3-4897-8ea8-3b428b1c208b.json).
+
+Neither v2 nor minus-2-for-1 is a confirmed retained-B0 improvement. Both are
+ordinary complete source values. Selecting the latter as R7's fresh local
+baseline does not confer that scientific status.
 
 ## Active next work
 
-1. Keep the compact R4/R5 postruns as the current interpretation and preserve both
-   raw terminal roots unchanged.
+1. Preserve the compact R4/R5/R6 postruns and all raw terminal/source roots.
 2. P1 source continuation is implemented and validated; P1b observation cleanup
    is implemented. Legacy configuration/pool terminology remains out of this slice.
-3. [R6](../experiments/v0.4/v04-cvrp-r6-minus-2for1-b0-preregistration-20260921.md)
-   prospectively compares the exact R5 minus-2-for-1 tree with original B0.
-   Main cases exclude all R3 and R4 main cases; all seeds are fresh. The
-   pre-R3 retained block remains conditional and unexecuted. Read-only preparation
-   passed; R6 is now running from frozen `e405bfd2`. Independent
+3. R6 is closed without confirmation; its pre-R3 retained block remains
+   unexecuted. Independent
    [Warehouse wiring diagnostics](../experiments/v0.4/v04-p1b-warehouse-aa-control-postrun-20260921.md)
    preserve the first shared-infeasible result and the second complete 4/4 A/A
    ties with deterministic negative Decision. They are not improvement evidence.
-4. Keep R6 runtime, source and scientific inputs frozen. Read its
-   [input](/home/clawd/research/scion-experiments/v04-cvrp-r6-minus-2for1-b0-20260921/input.json)
-   and later `terminal.json` under the same fresh output root, followed only by
-   exact metric paths it names. Do not start another run, retry, alter gates,
-   or infer promotion from process health. Update the bounded postrun after the
-   terminal exists. Until then the accepted scientific state is unchanged.
+4. [R7](../experiments/v0.4/v04-cvrp-r7-autonomous-source-continuation-preregistration-20260921.md)
+   is prepared: fresh autonomous research from R6's complete candidate snapshot,
+   12 evaluated stages, unchanged scientific gates, fresh seeds above 40,000.
+   R6 screening becomes explicit adaptive development; its unexecuted validation
+   and frozen partitions remain held out. R3–R3i history loads in order, and
+   R4/R5/R6 observations remain H-only. No forced mechanism or host solver patch.
+   Freeze the prospective record and inputs, verify no concurrent workload, then
+   launch once into
+   `/home/clawd/research/scion-experiments/v04-cvrp-r7-autonomous-source-continuation-20260921`.
+   Do not run cleanup, large tests or another solver alongside it. A later local
+   promotion still requires independent exact-candidate B0 evidence for closeout.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,
