@@ -580,15 +580,7 @@ class CampaignSummaryMixin:
                     if pr.candidate_first_runtime_failure
                     else None
                 ),
-                "candidate_operator_attempts": pr.candidate_operator_attempts,
-                "candidate_operator_accepted": pr.candidate_operator_accepted,
-                "candidate_operator_errors": pr.candidate_operator_errors,
-                "candidate_operator_invalid_outputs": (
-                    pr.candidate_operator_invalid_outputs
-                ),
-                "candidate_policy_errors": pr.candidate_policy_errors,
-                "candidate_construction_errors": pr.candidate_construction_errors,
-                "candidate_portfolio_errors": pr.candidate_portfolio_errors,
+                "candidate_runtime_counters": dict(pr.candidate_runtime_counters),
                 "candidate_runtime_stop_reasons": dict(
                     pr.candidate_runtime_stop_reasons or {}
                 ),

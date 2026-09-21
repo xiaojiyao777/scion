@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r6-minus-2for1-b0
+
+screening:
+  - 20011
+  - 20021
+  - 20023
+  - 20029
+
+validation:
+  - 20047
+  - 20051
+
+frozen:
+  - 20063
+  - 20071
+
+canary:
+  - 20107

@@ -1,6 +1,6 @@
 # Core Campaign
 
-> Current boundary update (2026-09-20): the source-continuation and reconcile
+> Current boundary update (2026-09-21): the source-continuation, observation and reconcile
 > sections below describe current direct-v3 code. Other sections retain the
 > historical map's scope and must be checked against current source.
 
@@ -19,6 +19,21 @@ No prior campaign state is loaded. Branches, stage counters and provider calls
 start fresh; explicitly supplied `research_history` is ordinary H-only context.
 Status reports `initial_source_tree`, `champion_source_tree` and the source path
 of each live branch. These are locations, not authority or resume tokens.
+
+## Problem-owned runtime observations (current)
+
+`ProtocolResult.candidate_runtime_counters` replaces the seven fixed
+operator/policy/construction/portfolio counter attributes. The Protocol
+observation helper aggregates fields from existing problem telemetry
+declarations; `evidence_recording/summary.py` carries the opaque mapping.
+Raw pair diagnostics preserve scalar and event values without an algorithm
+namespace allowlist. The host no longer infers `no_accepted_moves` as a failure.
+Actual execution failure attribution, Safe Features and scientific gates are
+unchanged. `evaluation_pipeline.py` excludes arbitrary problem counters from
+held-out exposed summaries. Historical terminal artifacts are not migrated.
+
+This is a bounded observation cleanup. The legacy `OperatorConfig` and
+`ChampionState.operator_pool` configuration path remains separate debt.
 
 ## Scope / Sources
 

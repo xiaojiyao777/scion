@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-20*
+*Current as of: 2026-09-21*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -13,10 +13,9 @@ authority or authorize another run.
 ## Checkout and verification snapshot
 
 - Working branch: `v0.4-dev`.
-- HEAD: `922dbc52` (`Record R4 retained confirmation launch`), aligned with the
-  local `origin/v0.4-dev` ref. The worktree includes the existing uncommitted
-  documentation handoff plus the source-continuation implementation below.
-- Full suite on this worktree: `2393 passed, 1 skipped, 0 failed` in 440.46
+- P1 and the R4/R5 documentation handoff were committed as `a112e60c`.
+  P1b observation cleanup and R6 preparation follow that commit.
+- P1b full suite: `2397 passed, 1 skipped, 0 failed` in 436.38
   seconds, with no live provider or formal campaign. From the repository root:
   `env PYTHONPATH=scion:. /home/clawd/miniconda3/envs/claw/bin/python -m pytest -q scion/scion/tests`.
   The explicit import path avoids this machine's older editable installation.
@@ -25,6 +24,9 @@ authority or authorize another run.
   Targeted Ruff (`F,E9`, excluding existing star-import rules `F403,F405`) and
   `git diff --check` pass. Calendar-dependent calibration diagnostics are tested
   at explicit fresh/stale dates; runtime age limits are unchanged.
+- P1b focused observation/evidence/boundary tests: 103 passed; additional
+  campaign/held-out regression tests: 48 passed. The previous P1 suite passed
+  2393 tests. Protocol gates and Safe Features are unchanged.
 - R4 and R5 both ended normally. Their retained tmux panes are dead with exit
   status zero; no experiment is currently running or authorized by this file.
 
@@ -73,18 +75,24 @@ branches, stages and provider counters start fresh, with optional ordered H-only
 `--research-history`. Status exposes `initial_source_tree`,
 `champion_source_tree` and `branches[].source_tree` as ordinary paths.
 
-Generic models and runtime observation still retain
-operator-shaped names such as `operator_pool`, `operator`, `policy`,
-`construction`, and `portfolio`; there is no direct Warehouse/CVRP branch in core,
-but this taxonomy is not fully algorithm-object-neutral. Terminal or interrupted
+P1b replaces the seven fixed operator/policy/construction/portfolio Protocol
+counter attributes with `candidate_runtime_counters`, aggregated from existing
+problem declarations and carried opaquely into evidence summaries. Scalar/event
+raw observations no longer use an algorithm-prefix allowlist. The host no longer
+infers failure from attempted-but-unaccepted moves; actual runtime audit and
+Protocol/Decision gates are unchanged. Arbitrary problem counters are excluded
+from held-out exposed summaries. Historical artifacts are not rewritten.
+
+`OperatorConfig`, `ChampionState.operator_pool` and their legacy configuration
+management remain separate debt. Core has no direct Warehouse/CVRP branch, but
+these interfaces still assume an algorithm shape. Terminal or interrupted
 campaign state itself must not be resumed.
 
 The source-continuation slice adds no identities, digest authority, manifests, leases,
 signing, registration, receipts or reconstruction lifecycle.
 Do not add another operator/mechanism field to generic runtime.
-Move existing operator-shaped observation and configuration meanings toward
-problem-declared or opaque values in a separate, test-bounded cleanup; do not make
-that cleanup a new scientific gate.
+Keep future configuration cleanup separate and test-bounded; do not make it a
+new scientific gate.
 
 ### Provider and bounded-session semantics
 
@@ -156,11 +164,14 @@ prospectively declared development comparison.
 
 1. Keep the compact R4/R5 postruns as the current interpretation and preserve both
    raw terminal roots unchanged.
-2. P1 source continuation is implemented and validated. Keep the separate P1b
-   operator-shaped vocabulary cleanup bounded and outside scientific gates.
-3. Treat v2-minus-2-for-1 only as the R5-supported next candidate. Before any
-   retained claim, compare it directly with original B0 on unseen cases and seeds
-   under a prospectively frozen complete-pair protocol.
+2. P1 source continuation is implemented and validated; P1b observation cleanup
+   is implemented. Legacy configuration/pool terminology remains out of this slice.
+3. [R6](../experiments/v0.4/v04-cvrp-r6-minus-2for1-b0-preregistration-20260921.md)
+   prospectively compares the exact R5 minus-2-for-1 tree with original B0.
+   Main cases exclude all R3 and R4 main cases; all seeds are fresh. The
+   pre-R3 retained block remains conditional and unexecuted. Read-only preparation
+   passed for R6 and the independent Warehouse A/A wiring control; neither has
+   launched yet. No new improvement claim follows from preparation.
 4. This documentation update does not launch an experiment. Under the user's
    existing authorization, a later agent may prepare and autonomously launch the
    next run only after code and scientific inputs are frozen, no experiment is

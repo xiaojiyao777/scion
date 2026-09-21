@@ -1,6 +1,6 @@
 # Scion v0.4 direct-v3 Onboarding
 
-*Last updated: 2026-09-20*
+*Last updated: 2026-09-21*
 
 本文是维护者进入当前 Scion 的稳定源码导览，不是当前状态或历史实验汇总。
 v0.4 的目标是让同一套 problem-neutral 精简 V3 runtime 接入不同问题包，为 agent
@@ -225,11 +225,13 @@ scheduler-forward proposal `RESEARCH_REJECTED`。其他 terminal/hold lane 仍�
 
 generic 层可以声明接口、传递 typed facts、执行通用安全/科学流程，但不得推断 route、capacity、warehouse assignment、某种 local search 或某个历史 successor 的算法语义。新问题应通过 problem-owned spec、adapter、provider 和 checks 接入，而不是在 core 中增加问题名分支。
 
-当前 generic core 没有直接按 Warehouse/CVRP 分支，但仍残留
-`operator_pool`、`operator`、`policy`、`construction`、`portfolio` 等算法形状词汇。
-这是已知 problem-neutrality 债务，不是可继续扩展的模板。后续应把含义移到
-problem-owned declaration 或 opaque observation，并保持它们不进入新的
-Protocol/Decision gate；不要为修它引入 registry、identity 或 telemetry 自证层。
+当前 generic core 没有直接按 Warehouse/CVRP 分支。ProtocolResult 与证据摘要的
+`candidate_runtime_counters` 只携带 problem-declared 计数；原始 scalar/event
+观测不再按 operator/policy/construction/portfolio 前缀筛选。通用层不再从
+“尝试但未接受移动”推断机制失败；真实运行错误仍由原有 runtime audit 判定。
+held-out 摘要不暴露任意问题计数，Safe Features 和科学门槛不变。
+`OperatorConfig`、`ChampionState.operator_pool` 及旧配置管理仍是独立遗留债务，
+不是可扩展模板。迁移它们不能引入 registry、identity 或 telemetry 自证层。
 
 ### 6. Warehouse
 

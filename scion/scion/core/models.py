@@ -300,13 +300,8 @@ class ProtocolResult:
     candidate_phase_telemetry_summary: Dict[str, Any] = field(default_factory=dict)
     candidate_runtime_failure_categories: Dict[str, int] = field(default_factory=dict)
     candidate_first_runtime_failure: Optional[Dict[str, Any]] = None
-    candidate_operator_attempts: int = 0
-    candidate_operator_accepted: int = 0
-    candidate_operator_errors: int = 0
-    candidate_operator_invalid_outputs: int = 0
-    candidate_policy_errors: int = 0
-    candidate_construction_errors: int = 0
-    candidate_portfolio_errors: int = 0
+    # Problem-declared diagnostic counters, never Safe Features or a gate.
+    candidate_runtime_counters: Dict[str, int] = field(default_factory=dict)
     candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
     runtime_confidence: str = "high"
     runtime_model: Optional[Literal["comparative", "budget_exhausting"]] = None

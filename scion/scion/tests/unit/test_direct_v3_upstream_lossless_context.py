@@ -293,7 +293,7 @@ def test_direct_v3_hypothesis_context_is_complete_without_control_pile(
                 ),
             ),
             candidate_phase_telemetry_summary={"phase": hidden_phase_telemetry},
-            candidate_operator_attempts=99,
+            candidate_runtime_counters={"operator_attempts": 99},
             mechanism_evidence={"mechanism": hidden_phase_telemetry},
             candidate_runtime_failure_categories={"crash": 1},
             candidate_first_runtime_failure={"detail": runtime_error_tail},

@@ -20,42 +20,16 @@ from .failures import _runtime_failure_summary
 from .values import _as_int, _increment_category, _is_json_scalar, _json_value
 
 
-_DEFAULT_RUNTIME_COUNTERS = (
-    "operator_attempts",
-    "operator_accepted",
-    "operator_errors",
-    "operator_invalid_outputs",
-    "policy_errors",
-    "construction_errors",
-    "portfolio_errors",
-)
-_DEFAULT_ERROR_COUNTERS = (
-    "construction_errors",
-    "portfolio_errors",
-    "policy_errors",
-    "operator_invalid_outputs",
-    "operator_errors",
-)
-_DEFAULT_RUNTIME_PREFIXES = (
-    "baseline_",
-    "operator_",
-    "policy_",
-    "construction_",
-    "portfolio_",
-)
-_DEFAULT_EVENT_FIELDS = ("operator_events", "policy_events")
-
-
 def _candidate_runtime_counter_template(
     *,
     problem_spec: Any | None = None,
     selected_surface: str | None = None,
 ) -> dict[str, int]:
     surface = find_research_surface(problem_spec, selected_surface)
-    counters = {name: 0 for name in _DEFAULT_RUNTIME_COUNTERS}
-    for field in declared_counter_runtime_fields(surface, problem_spec=problem_spec):
-        counters.setdefault(field, 0)
-    return counters
+    return {
+        field: 0
+        for field in declared_counter_runtime_fields(surface, problem_spec=problem_spec)
+    }
 
 
 def _candidate_runtime_observation(
@@ -79,13 +53,9 @@ def _candidate_runtime_observation(
     categories: dict[str, int] = {}
     first_failure: dict[str, Any] | None = None
 
-    error_counters = [
-        *_DEFAULT_ERROR_COUNTERS,
-        *declared_error_runtime_fields(surface, problem_spec=problem_spec),
-    ]
-    for counter_name in dict.fromkeys(error_counters):
+    for counter_name in declared_error_runtime_fields(surface, problem_spec=problem_spec):
         category = _runtime_error_category(counter_name)
-        count = counters[counter_name]
+        count = _as_int(runtime_path_value(runtime, counter_name))
         if count <= 0:
             continue
         categories[category] = categories.get(category, 0) + count
@@ -98,13 +68,8 @@ def _candidate_runtime_observation(
                 detail_summary=f"solver runtime reported {counter_name}={count}",
             )
 
-    if counters["operator_attempts"] > 0 and counters["operator_accepted"] == 0:
-        categories["no_accepted_moves"] = categories.get("no_accepted_moves", 0) + 1
-
     stop_reasons: dict[str, int] = {}
-    for key in dict.fromkeys(
-        ("operator_stop_reason", *declared_stop_reason_fields(surface, problem_spec=problem_spec))
-    ):
+    for key in declared_stop_reason_fields(surface, problem_spec=problem_spec):
         stop_reason = str(runtime_path_value(runtime, key) or "").strip()
         if stop_reason:
             stop_reasons[stop_reason] = stop_reasons.get(stop_reason, 0) + 1
@@ -186,20 +151,16 @@ def _runtime_audit_summary(
         declared_surface_telemetry_fields(surface, problem_spec=problem_spec)
     )
     declared_fields.update(str(field) for field in required_runtime_fields if str(field))
+    # Solver-emitted scalar diagnostics are opaque facts, not a host taxonomy.
     summary = {
         key: value
         for key, value in runtime.items()
-        if (
-            key.startswith(_DEFAULT_RUNTIME_PREFIXES)
-            or key in declared_fields
-        )
-        and key not in _DEFAULT_EVENT_FIELDS
-        and _is_json_scalar(value)
+        if _is_json_scalar(value)
     }
     for field in declared_fields:
         if runtime_path_present(runtime, field):
             summary[field] = _json_value(runtime_path_value(runtime, field))
-    event_fields = set(_DEFAULT_EVENT_FIELDS)
+    event_fields = {str(key) for key in runtime if str(key).endswith("events")}
     for field in declared_fields:
         if str(field).replace(".", "_").endswith("events"):
             event_fields.add(field)
@@ -212,26 +173,15 @@ def _runtime_audit_summary(
 
 
 def _format_runtime_counter_summary(counters: Mapping[str, int]) -> str:
-    default_parts = (
-        f" candidate_operator_attempts={counters.get('operator_attempts', 0)}"
-        f" candidate_operator_accepted={counters.get('operator_accepted', 0)}"
-        f" candidate_operator_errors={counters.get('operator_errors', 0)}"
-        f" candidate_invalid_outputs={counters.get('operator_invalid_outputs', 0)}"
-    )
-    declared_parts = [
+    parts = [
         f"{name}:{value}"
         for name, value in sorted(counters.items())
-        if name not in _DEFAULT_RUNTIME_COUNTERS and value
     ]
-    if declared_parts:
-        return default_parts + " candidate_runtime_counters=" + ";".join(
-            declared_parts
-        )
-    return default_parts
+    return " candidate_runtime_counters=" + ";".join(parts) if parts else ""
 
 
 def _runtime_error_category(counter_name: str) -> str:
-    if counter_name == "operator_invalid_outputs":
+    if counter_name.endswith(("_invalid_outputs", ".invalid_outputs")):
         return "invalid_output"
     component = component_from_runtime_field(counter_name)
     if not component:

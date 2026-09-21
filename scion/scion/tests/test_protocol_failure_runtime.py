@@ -1,6 +1,7 @@
 """Focused tests split from test_protocol.py."""
 
 import uuid
+from dataclasses import replace
 
 from scion.config.problem import ProtocolConfig
 from scion.core.decision import DecisionEngine
@@ -645,7 +646,7 @@ def test_validation_bilateral_audit_failure_is_not_candidate_only(
     )
 
 
-def test_protocol_result_exposes_bounded_candidate_runtime_categories(tmp_path):
+def test_protocol_result_exposes_problem_declared_runtime_counters(tmp_path):
     runner = MagicMock()
     runner.run_solver.side_effect = [
         _make_run_result(1, 800),
@@ -665,7 +666,13 @@ def test_protocol_result_exposes_bounded_candidate_runtime_categories(tmp_path):
             },
         ),
     ]
-    proto = _make_protocol(runner, tmp_path)
+    problem_spec = SimpleNamespace(
+        telemetry_guard={"runtime_field_roles": {
+            "activity": ["operator_attempts", "operator_accepted"],
+            "diagnostic": ["operator_errors", "operator_invalid_outputs", "policy_errors", "operator_stop_reason"],
+        }},
+    )
+    proto = _make_protocol(runner, tmp_path, problem_spec=problem_spec)
 
     result = proto.run_experiment(
         ExperimentStage.SCREENING, "/cand", "/champ", "modify"
@@ -674,7 +681,7 @@ def test_protocol_result_exposes_bounded_candidate_runtime_categories(tmp_path):
     assert result.candidate_runtime_failure_categories["operator_error"] == 1
     assert result.candidate_runtime_failure_categories["invalid_output"] == 1
     assert result.candidate_runtime_failure_categories["policy_error"] == 1
-    assert result.candidate_runtime_failure_categories["no_accepted_moves"] == 1
+    assert "no_accepted_moves" not in result.candidate_runtime_failure_categories
     assert result.candidate_first_runtime_failure == {
         "category": "operator_error",
         "code": "operator_errors",
@@ -682,13 +689,16 @@ def test_protocol_result_exposes_bounded_candidate_runtime_categories(tmp_path):
         "component": "operator",
         "detail_summary": "solver runtime reported operator_errors=1",
     }
-    assert result.candidate_operator_attempts == 4
-    assert result.candidate_operator_accepted == 0
-    assert result.candidate_operator_errors == 1
-    assert result.candidate_operator_invalid_outputs == 1
-    assert result.candidate_policy_errors == 1
+    assert result.candidate_runtime_counters["operator_attempts"] == 4
+    assert result.candidate_runtime_counters["operator_accepted"] == 0
+    assert result.candidate_runtime_counters["operator_errors"] == 1
+    assert result.candidate_runtime_counters["operator_invalid_outputs"] == 1
+    assert result.candidate_runtime_counters["policy_errors"] == 1
     assert result.candidate_runtime_stop_reasons == {"no_improvement_round": 1}
     assert "candidate_runtime_categories=" in result.exposed_summary
+    assert _decision_for_screening_result(result) == _decision_for_screening_result(
+        replace(result, candidate_runtime_counters={"anything": 10**12})
+    )
 
 
 def test_frozen_fails_when_champion_runtime_failure_makes_pair_invalid(tmp_path):

@@ -1166,17 +1166,7 @@ def run_experiment(
         ),
         candidate_runtime_failure_categories=dict(candidate_runtime_categories),
         candidate_first_runtime_failure=candidate_first_runtime_failure,
-        candidate_operator_attempts=candidate_runtime_counters["operator_attempts"],
-        candidate_operator_accepted=candidate_runtime_counters["operator_accepted"],
-        candidate_operator_errors=candidate_runtime_counters["operator_errors"],
-        candidate_operator_invalid_outputs=(
-            candidate_runtime_counters["operator_invalid_outputs"]
-        ),
-        candidate_policy_errors=candidate_runtime_counters["policy_errors"],
-        candidate_construction_errors=(
-            candidate_runtime_counters["construction_errors"]
-        ),
-        candidate_portfolio_errors=candidate_runtime_counters["portfolio_errors"],
+        candidate_runtime_counters=dict(candidate_runtime_counters),
         candidate_runtime_stop_reasons=dict(candidate_runtime_stop_reasons),
         runtime_confidence=runtime_confidence,
         runtime_model=runtime_model,

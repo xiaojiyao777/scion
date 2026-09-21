@@ -180,8 +180,6 @@ def _sanitize_protocol_exposure(result: ProtocolResult) -> ProtocolResult:
         f"runtime_regression_rate={_fmt_optional(stats.runtime_regression_rate)} "
         f"candidate_runtime_categories="
         f"{_fmt_category_counts(result.candidate_runtime_failure_categories)} "
-        f"candidate_operator_attempts={result.candidate_operator_attempts} "
-        f"candidate_operator_accepted={result.candidate_operator_accepted}"
         f" runtime_confidence={result.runtime_confidence}"
         f"{runtime_budget_suffix}"
     )

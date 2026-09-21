@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-09-05*
+*Last updated: 2026-09-21*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,6 +8,7 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
+- [R6 prospective complete v2-minus-2-for-1 versus B0: fresh main population and conditional retained comparison](v04-cvrp-r6-minus-2for1-b0-preregistration-20260921.md)
 - [R5 exact 2-for-1 inclusion postrun: completed diagnostic-only, no promotion](v04-cvrp-r5-v2-2for1-ablation-postrun-20260905.md)
 - [R4 retained-B0 confirmation postrun: terminal NOT_CONFIRMED at expanded screening](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-postrun-20260905.md)
 - [R4 frozen preregistration and terminal status](v04-cvrp-r4-r3i-v2-retained-b0-confirmation-preregistration-20260904.md)

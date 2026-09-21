@@ -94,6 +94,10 @@ def test_generic_layers_do_not_contain_cvrp_solver_design_semantics() -> None:
 
 TAXONOMY_BOUNDARY_FILES = (
     "runtime/audit.py",
+    "protocol/experiment/runtime_observation.py",
+    "protocol/experiment/stages.py",
+    "core/evidence_recording/summary.py",
+    "core/evaluation_pipeline.py",
 )
 FORBIDDEN_TAXONOMY_LITERALS = {
     "local_search",

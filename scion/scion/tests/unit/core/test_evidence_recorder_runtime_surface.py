@@ -105,13 +105,16 @@ def test_campaign_summary_exposes_complete_runtime_failure_summary(
             "component": "operator",
             "detail_summary": "solver runtime reported operator_errors=2",
         },
-        candidate_operator_attempts=8,
-        candidate_operator_accepted=0,
-        candidate_operator_errors=2,
-        candidate_operator_invalid_outputs=1,
-        candidate_policy_errors=3,
-        candidate_construction_errors=4,
-        candidate_portfolio_errors=5,
+        candidate_runtime_counters={
+            "operator_attempts": 8,
+            "operator_accepted": 0,
+            "operator_errors": 2,
+            "operator_invalid_outputs": 1,
+            "policy_errors": 3,
+            "construction_errors": 4,
+            "portfolio_errors": 5,
+            "problem_defined.calls": 6,
+        },
     )
 
     summary = recorder.write_campaign_summary(
@@ -126,13 +129,8 @@ def test_campaign_summary_exposes_complete_runtime_failure_summary(
         "invalid_output": 1,
     }
     assert protocol["candidate_first_runtime_failure"]["category"] == "operator_error"
-    assert protocol["candidate_operator_attempts"] == 8
-    assert protocol["candidate_operator_accepted"] == 0
-    assert protocol["candidate_operator_errors"] == 2
-    assert protocol["candidate_operator_invalid_outputs"] == 1
-    assert protocol["candidate_policy_errors"] == 3
-    assert protocol["candidate_construction_errors"] == 4
-    assert protocol["candidate_portfolio_errors"] == 5
+    assert protocol["candidate_runtime_counters"] == step.protocol_result.candidate_runtime_counters
+    assert "candidate_operator_attempts" not in protocol
 
 
 def test_campaign_summary_exposes_selected_surface_runtime_summary(

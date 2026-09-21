@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-09-20*
+*Current as of: 2026-09-21*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -102,13 +102,14 @@ or operational facts, not authority objects.
   optional ordered H-only history remains separate from branch/stage/provider
   state. Status reports ordinary paths for initial, champion and branch source.
 
-One separate implementation debt remains:
+P1b observation cleanup is implemented:
 
-- Generic models and runtime observation still carry operator-shaped names
-   (`operator_pool`, `operator`, `policy`, `construction`, `portfolio`). Core has
-   no direct Warehouse/CVRP branch, but these names assume an algorithm shape.
-   Do not extend them; migrate their meaning toward problem-declared or opaque
-   observations separately from scientific gate logic.
+- Protocol results and summaries carry problem-declared `candidate_runtime_counters`
+  instead of seven fixed algorithm-shaped fields. Raw scalar/event observations
+  are opaque; generic no-accepted-moves inference is removed. Actual execution
+  audits and scientific gates are unchanged; held-out exposure remains filtered.
+- `OperatorConfig`, `ChampionState.operator_pool` and the legacy configuration
+  management path remain separate debt. Do not extend their assumed algorithm shape.
 
 ## Scientific checkpoint
 
@@ -186,16 +187,17 @@ partial campaign.
 
 ### P1b — Separate vocabulary cleanup
 
-- [ ] In a focused slice, move existing generic operator/policy/construction/
+- [x] In a focused slice, move existing generic operator/policy/construction/
   portfolio meanings behind problem-owned declarations or opaque observations,
-  with focused tests and no new Decision/Protocol gate.
+  with focused tests and no new Decision/Protocol gate. Configuration/pool
+  interfaces are explicitly outside this observation slice.
 
 ### P2 — Next CVRP evidence rung
 
-- [ ] After P0 and the required P1 boundary work, preregister a direct comparison
+- [x] After P0 and the required P1 boundary work, preregister a direct comparison
   of the complete v2-minus-2-for-1 candidate against original B0 on unseen cases
-  and seeds.
-- [ ] Keep complete pairs, feasibility, fleet protection, practical-effect and
+  and seeds: [R6](docs/experiments/v0.4/v04-cvrp-r6-minus-2for1-b0-preregistration-20260921.md).
+- [x] Keep complete pairs, feasibility, fleet protection, practical-effect and
   uncertainty gates. Do not weaken `SCREENING_FAIL_CASE_QUALITY` merely because
   R4 or R5 was negative.
 - [ ] This documentation handoff does not launch a run. Under the user's existing
@@ -212,14 +214,18 @@ partial campaign.
 
 ## Verification snapshot
 
-- Branch/HEAD: `v0.4-dev` at `922dbc52`, aligned with the local origin ref.
-  Existing handoff edits and this implementation remain uncommitted.
-- Full suite: `2393 passed, 1 skipped, 0 failed` in 440.46 seconds, with no live
-  provider or formal campaign. Focused tests cover source isolation, a real fresh
-  process, optional H-only history, stale comparison and held-out reuse.
+- Branch: `v0.4-dev`. P1 and the handoff were committed as `a112e60c`;
+  P1b and prospective R6 inputs form the next frozen change.
+- P1b full suite: `2397 passed, 1 skipped, 0 failed` in 436.38 seconds, with no
+  live provider or formal campaign. The earlier P1 suite passed 2393 tests.
+  Focused P1b tests: 103 observation/evidence/boundary tests and 48 campaign/
+  held-out regression tests. Arbitrary counter values do not alter Decision.
 - Targeted Ruff (`F,E9`, excluding existing `F403,F405` star-import rules) and
   `git diff --check` passed. Three older fixtures now separate source/output
   directories; calibration projection tests use explicit fresh/stale dates.
+- R6 and the independent Warehouse A/A control passed read-only `--check`.
+  R6 gates/stage counts match R4; its source and data copies were compared
+  directly, and all 11 seeds are disjoint from R3–R5 ledgers. No run yet.
 - R4 and R5 tmux panes are dead with exit status zero; their terminal JSON files
   report `NOT_CONFIRMED` and `DIAGNOSTIC_COMPLETE`, respectively.
 
