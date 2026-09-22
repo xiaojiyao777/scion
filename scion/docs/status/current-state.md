@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-21*
+*Current as of: 2026-09-22*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -30,15 +30,20 @@ authority or authorize another run.
   2393 tests. Protocol gates and Safe Features are unchanged.
 - R4, R5 and R6 are terminal. R6 ended normally at expanded screening as
   `NOT_CONFIRMED`; its terminal file was written by `16:44:12.811Z` on September
-  21. Its tmux pane is dead without a usable exit-status value. Raw terminal and
+  21. Its tmux pane is now dead with status zero. Raw terminal and
   metric evidence below establish completion independently of the carrier.
-- R7 autonomous continuation launched once at `2026-09-21T23:21:02Z` from clean
-  `ffde7f66`, under the user's analysis/optimization request. Runtime is unchanged.
-  Focused continuation/CLI/history/input/fixed-funnel and new input tests passed
-  `145/145` in 2.39 seconds before launch. Real H read-source/history calls have
-  succeeded; the initial complete champion snapshot matches the selected source.
-  This is startup evidence, not a formal result. tmux is
-  `scion-r7-source-continuation-20260921`, driver PID 86636.
+- R7 completed normally at `2026-09-22T03:23:30.659934+00:00` after 12 evaluated
+  screening stages and one Contract rejection. No promotion or held-out stage.
+  Its final positive initial screen requests expansion, but the terminal campaign
+  must not resume. The pane is dead; JSON, not carrier status, establishes completion.
+- R8 launched once at `2026-09-22T14:45:38.550230+00:00` in
+  `scion-r8-r7-final-b0-20260922`, driver PID 117138. Runtime is unchanged;
+  preparation adds docs, frozen prospective inputs and an input test only, atop
+  launch HEAD `75ce0265`; the docs/input/test diff was frozen before execution
+  and is being committed after launch at the user's request. Fixed-funnel/R7/R8 tests: 27 passed
+  in 0.55 s; read-only `--check` returned `PREPARED` before launch. Source
+  snapshots exist and strict canary has passed; expanded screening is executing.
+  No terminal or completed formal-stage result yet at this launch check.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -183,9 +188,23 @@ Neither v2 nor minus-2-for-1 is a confirmed retained-B0 improvement. Both are
 ordinary complete source values. Selecting the latter as R7's fresh local
 baseline does not confer that scientific status.
 
+- [R7 postrun](../experiments/v0.4/v04-cvrp-r7-autonomous-source-continuation-postrun-20260922.md):
+  139 provider dispatches, 12 H/C attempts, 11 distinct evaluated candidates,
+  12 screening stages, 90/90 valid pairs and no fleet regression. One positive
+  initial screen became negative on expansion. The final C-branch candidate
+  (`candidate-3bsvzm8k`) instead finished at initial W/L/T `2/0/1`, median `40`,
+  CI `[0,608.5]`, with `SCREENING_EXPAND_REQUIRED_FOR_PASS`; no promotion.
+  All three surviving complete branch trees match ordinary C continuation.
+  X-n351-k40 ran zero ALNS iterations in both arms across all 26 pairs, and
+  identical-comparator repeats vary greatly. Its final positive delta cannot
+  be attributed to the changed ALNS code; tai100a's +38/+42 is only a discovery
+  signal. R7's default champion-first order was not counterbalanced. Exact
+  [summary](/home/clawd/research/scion-experiments/v04-cvrp-r7-autonomous-source-continuation-20260921/campaign_summary.json)
+  and [final metric](/home/clawd/research/scion-experiments/v04-cvrp-r7-autonomous-source-continuation-20260921/metrics/24ac3290-cb42-4a19-bcd4-46f36fe4fc65.json).
+
 ## Active next work
 
-1. Preserve the compact R4/R5/R6 postruns and all raw terminal/source roots.
+1. Preserve the compact R4–R7 postruns and all raw terminal/source roots.
 2. P1 source continuation is implemented and validated; P1b observation cleanup
    is implemented. Legacy configuration/pool terminology remains out of this slice.
 3. R6 is closed without confirmation; its pre-R3 retained block remains
@@ -193,17 +212,17 @@ baseline does not confer that scientific status.
    [Warehouse wiring diagnostics](../experiments/v0.4/v04-p1b-warehouse-aa-control-postrun-20260921.md)
    preserve the first shared-infeasible result and the second complete 4/4 A/A
    ties with deterministic negative Decision. They are not improvement evidence.
-4. [R7](../experiments/v0.4/v04-cvrp-r7-autonomous-source-continuation-preregistration-20260921.md)
-   is running: fresh autonomous research from R6's complete candidate snapshot,
-   12 evaluated stages, unchanged scientific gates, fresh seeds above 40,000.
-   R6 screening becomes explicit adaptive development; its unexecuted validation
-   and frozen partitions remain held out. R3–R3i history loads in order, and
-   R4/R5/R6 observations remain H-only. No forced mechanism or host solver patch.
-   Read ordinary status/summary, then the exact H/C and metric references from
-   `/home/clawd/research/scion-experiments/v04-cvrp-r7-autonomous-source-continuation-20260921`.
-   Keep runtime/inputs frozen; do not retry or resume terminal state. Do not run
-   cleanup, large tests or another solver alongside it. A later local
-   promotion still requires independent exact-candidate B0 evidence for closeout.
+4. [R8](../experiments/v0.4/v04-cvrp-r8-r7-final-b0-preregistration-20260922.md)
+   is running: R7's exact final C tree is frozen and compared with original B0
+   using the existing provider-free, AB/BA-counterbalanced fixed funnel and
+   seeds above 60,000. Screening remains outcome-known adaptive development;
+   validation, frozen and the original retained block are still unopened.
+   Gates and solver source are unchanged. This is not R7 resumption or proof
+   of its pending minus-2-for-1 contrast. Fresh output:
+   `/home/clawd/research/scion-experiments/v04-cvrp-r8-r7-final-b0-20260922`.
+   Read its ordinary `input.json`, `terminal.json` when present and exact metric
+   references. During measurement, freeze code/inputs and avoid overlapping
+   tests, maintenance or another experiment. Do not restart the fresh output.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

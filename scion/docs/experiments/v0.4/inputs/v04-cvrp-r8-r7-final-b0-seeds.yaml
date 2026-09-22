@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r8-r7-final-b0
+
+screening:
+  - 60013
+  - 60017
+  - 60029
+  - 60037
+
+validation:
+  - 60041
+  - 60077
+
+frozen:
+  - 60083
+  - 60089
+
+canary:
+  - 60103

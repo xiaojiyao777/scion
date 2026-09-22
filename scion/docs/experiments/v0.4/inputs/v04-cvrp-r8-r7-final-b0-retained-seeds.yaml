@@ -1,0 +1,11 @@
+version: 0.4-cvrp-r8-r7-final-b0
+
+screening: []
+
+validation: []
+
+frozen:
+  - 60091
+  - 60101
+
+canary: []

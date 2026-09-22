@@ -1,10 +1,15 @@
 # CVRP R7: autonomous complete-source continuation
 
-State: launched once at `2026-09-21T23:21:02Z` from clean `ffde7f66` in
+State: completed normally at `2026-09-22T03:23:30.659934+00:00` with
+`requested_rounds_completed`: 12 evaluated screening stages, one Contract
+rejection, no promotion or held-out evaluation. The final positive initial
+screen requests expansion at the round-count stop; terminal R7 must not resume.
+See the [postrun](v04-cvrp-r7-autonomous-source-continuation-postrun-20260922.md).
+Launched once at `2026-09-21T23:21:02Z` from clean `ffde7f66` in
 `scion-r7-source-continuation-20260921` (driver PID 86636). The prospective inputs
-below are frozen; this administrative update does not change them.
+below remain frozen; this administrative update does not change them.
 
-Initial status is running, version 1 / weight revision 0, one explore branch,
+At launch, status was running, version 1 / weight revision 0, one explore branch,
 zero evaluated rounds. The first three provider traces report successful
 `gpt-5.6-sol` H turns: read two source files and one historical record. The
 actual H index offers all 3 prior observations plus 65 scientific history rows;

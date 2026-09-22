@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-09-21*
+*Current as of: 2026-09-22*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -22,7 +22,8 @@ The project goal is retained solver improvement produced by Scion itself:
   `v1 -> v2`.
 - CVRP remains open. R3i produced a promoted development bundle, but R4 did not
   confirm it against B0, R5 is diagnostic only, and R6 did not confirm the
-  minus-2-for-1 bundle. R7 continues autonomous development from that source.
+  minus-2-for-1 bundle. R7 completed autonomous development without promotion;
+  its final discovery candidate is selected for a fresh R8 B0 comparison.
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -166,6 +167,19 @@ and the final retained block stayed unopened.
 Exact R4–R6 artifacts are linked by
 [`current-state.md`](docs/status/current-state.md).
 
+### CVRP R7
+
+The [R7 postrun](docs/experiments/v0.4/v04-cvrp-r7-autonomous-source-continuation-postrun-20260922.md)
+records normal completion after 12 screening stages / 11 distinct evaluated
+candidates, 139 provider calls and one pre-evaluation Contract rejection.
+All 90 formal pairs were valid with no fleet regression; no promotion or
+held-out stage occurred. A positive initial screen turned negative on expansion.
+The final candidate instead ends at W/L/T 2/0/1, median +40, CI [0,608.5],
+with expansion pending at the requested-round stop. Its large-case gains occur
+with zero ALNS iterations and a highly variable unchanged comparator; only
+limited active-path medium-case evidence supports further checking. Complete
+branch source continuity is verified. R7 is terminal, not resumable.
+
 ## Ordered active work
 
 ### P0 — Close the completed evidence
@@ -231,9 +245,24 @@ partial campaign.
 - [x] Freeze inputs and launch R7 once under the user's analysis/optimization
   request, with no overlapping cleanup, tests or solver job. Started at
   `2026-09-21T23:21:02Z` from clean `ffde7f66`; runtime/inputs are frozen.
-- [ ] Analyze actual H/C, verified source continuation and terminal paired
-  evidence. A local R7 promotion is not retained superiority over original B0;
-  preregister that separate comparison only if a candidate warrants it.
+- [x] Analyze actual H/C, verified source continuation and terminal paired
+  evidence. R7 did not promote; the final active-path tai100a signal warrants
+  one bounded prospective check, not an improvement claim or a solver rewrite.
+
+### P4 — Test the exact R7 discovery candidate against B0
+
+- [x] Preregister [R8](docs/experiments/v0.4/v04-cvrp-r8-r7-final-b0-preregistration-20260922.md)
+  using the existing counterbalanced provider-free fixed funnel, unchanged
+  complete source and scientific gates, fresh seeds, known screening cases
+  and conditionally unopened validation/frozen/retained populations.
+- [x] Verify source/scope, prospective inputs, full conditional resource matrix
+  and read-only preparation; finish focused tests before measurement.
+- [x] Launch once into a fresh output under the user's optimization request,
+  with no overlapping solver, cleanup or tests. R8 started at
+  `2026-09-22T14:45:38.550230+00:00`, driver PID 117138; R7 stays terminal.
+- [ ] Analyze R8's terminal and exact raw pairs. Retain the original Decision;
+  a negative keeps CVRP open and becomes evidence for later autonomous H/C,
+  not permission to loosen gates or hand-select a solver mechanism.
 
 ### v0.4 closeout
 
@@ -266,9 +295,16 @@ partial campaign.
   pass (`145 passed` in 2.39 s combined). All 24 cases parse, scientific gates match R6, source selection and
   fresh output validate, and all prior observations project to H in order.
   No runtime implementation changed; no new full-suite or Warehouse run needed.
-- R7 is now running in `scion-r7-source-continuation-20260921` from `ffde7f66`.
-  Initial real H calls succeeded and the new 100-file champion snapshot matches
-  the selected complete source. No evaluated result or promotion at startup.
+- R7 is completed without promotion. All 139 H/C traces, 12 metric files,
+  90 complete pairs and three final complete source trees were checked read-only;
+  earlier source continuation matched visible C inputs and the surviving trees.
+- R8 prospective inputs and existing fixed-funnel/R7 tests: `27 passed` in
+  0.55 s; read-only `--check` returned `PREPARED`. No runtime implementation
+  changed. R8 is live in `scion-r8-r7-final-b0-20260922`; snapshots are created,
+  strict canary passed and expanded screening started, without a completed
+  formal-stage result at this launch check. The docs/test/input-only diff atop
+  launch HEAD `75ce0265` was frozen before execution; the user subsequently
+  requested its commit and push. Runtime and scientific inputs remain unchanged.
 - R4 and R5 tmux panes are dead with exit status zero; their terminal JSON files
   report `NOT_CONFIRMED` and `DIAGNOSTIC_COMPLETE`, respectively.
 
