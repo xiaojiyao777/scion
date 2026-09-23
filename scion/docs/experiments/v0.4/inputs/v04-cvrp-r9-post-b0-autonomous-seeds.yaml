@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r9-post-b0-autonomous
+
+screening:
+  - 80021
+  - 80039
+  - 80051
+  - 80071
+
+validation:
+  - 80077
+  - 80107
+
+frozen:
+  - 80111
+  - 80141
+
+canary:
+  - 80147

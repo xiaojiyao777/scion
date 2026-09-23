@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-09-22*
+*Current as of: 2026-09-23*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -23,7 +23,9 @@ The project goal is retained solver improvement produced by Scion itself:
 - CVRP remains open. R3i produced a promoted development bundle, but R4 did not
   confirm it against B0, R5 is diagnostic only, and R6 did not confirm the
   minus-2-for-1 bundle. R7 completed autonomous development without promotion;
-  its final discovery candidate is selected for a fresh R8 B0 comparison.
+  R8 did not confirm its final candidate against B0. R9 completed autonomous
+  research without promotion. R10 is running the equal wider-budget B0 check
+  of R9's complete C candidate, not restored campaign state.
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -180,6 +182,27 @@ with zero ALNS iterations and a highly variable unchanged comparator; only
 limited active-path medium-case evidence supports further checking. Complete
 branch source continuity is verified. R7 is terminal, not resumable.
 
+### CVRP R8
+
+The [R8 postrun](docs/experiments/v0.4/v04-cvrp-r8-r7-final-b0-postrun-20260922.md)
+records normal `NOT_CONFIRMED`: 24/24 valid, counterbalanced pairs, no failures
+or fleet regression; case W/L/T 1/1/4, median 0, CI [-159.5,71.75]. tai100a
+wins four seeds, X-n351-k40 loses three; both large cases run zero ALNS
+iterations, and X-n190-k8 only 1–3 candidate iterations. All later populations
+remain unopened. These are whole-bundle facts, not component-causal findings.
+
+### CVRP R9
+
+The [R9 postrun](docs/experiments/v0.4/v04-cvrp-r9-post-b0-autonomous-postrun-20260923.md)
+records normal completion: eight H/C candidates, 12 screening stages, 144 valid
+pairs, 92 physical calls with two recovered timeouts, no promotion/held-out
+stage. Three positive initial screens failed to establish expanded benefit.
+Final C: 2/0/4, median 0, CI [0,170.25], uncertain. Final B: 1/2/3, median 0,
+CI [-154,22.75], failed case quality. All 48 large-case pairs have zero ALNS
+iterations in both arms. Source review distinguishes ineffective count-based
+depth allocation and an unimplemented yield-controller hypothesis from actual
+algorithm changes. All final complete trees are identified; R9 is terminal.
+
 ## Ordered active work
 
 ### P0 — Close the completed evidence
@@ -260,9 +283,42 @@ partial campaign.
 - [x] Launch once into a fresh output under the user's optimization request,
   with no overlapping solver, cleanup or tests. R8 started at
   `2026-09-22T14:45:38.550230+00:00`, driver PID 117138; R7 stays terminal.
-- [ ] Analyze R8's terminal and exact raw pairs. Retain the original Decision;
-  a negative keeps CVRP open and becomes evidence for later autonomous H/C,
-  not permission to loosen gates or hand-select a solver mechanism.
+- [x] Analyze R8's terminal, 24 raw pairs, complete source snapshots, AB/BA
+  order and phase behavior. Preserve the negative Decision and keep CVRP open.
+
+### P5 — Autonomous research after the R8 B0 check
+
+- [x] Preregister [R9](docs/experiments/v0.4/v04-cvrp-r9-post-b0-autonomous-preregistration-20260922.md)
+  from R8's complete candidate, adding R8's distinct observation and explicit
+  unconfirmed-B0 question, with all ordered R3–R3i/R7 history and unchanged gates.
+- [x] Verify source/input/CLI/history projection and focused regressions before
+  provider or solver execution. No host-authored algorithm or generic-core change.
+- [x] Launch once into the fresh R9 root with no overlapping maintenance,
+  tests or solver. Started `2026-09-22T23:22:20.486583+00:00`, driver PID 126943.
+  Initial source snapshot and actual H input/call success are verified without
+  forcing reads; subsequent H/C and scientific outcomes remain to be analyzed.
+- [x] Analyze R9 terminal H/C, source fidelity and paired evidence. Preserve
+  negative/uncertain Decisions and all original artifacts. No local promotion
+  or B0 improvement was established.
+
+### P6 — Equal wider-budget comparison with original B0
+
+- [x] Under the user's explicit budget-widening approval, preregister
+  [R10](docs/experiments/v0.4/v04-cvrp-r10-wide-budget-b0-preregistration-20260923.md)
+  using R9's ordinary complete C candidate and original B0. Double formal
+  dimension-band solver limits for both arms; retain all science/safety gates,
+  AB/BA order, fresh seeds and held-out isolation. No host solver patch.
+- [x] Verify prospective inputs, source scope and the complete conditional
+  resource matrix; focused regressions and provider-free read-only `--check`.
+- [x] Launch once into fresh R10 output with no competing solver/tests/cleanup.
+  Started `2026-09-23T15:02:15Z`, tmux `scion-r10-wide-budget-b0-20260923`,
+  driver PID 154657. Both 100-file snapshots equal their originals; a real
+  screening arm uses 60 s on B-n34-k5 / seed 90001. Freeze runtime, scientific
+  inputs and source values during measurement; no formal stage result yet.
+- [ ] Read exact terminal and paired evidence, including whether extra time
+  actually allows ALNS on large cases. Do not infer that more time guarantees
+  useful search or pool the new contrast with R8/R9. Any retained result is
+  specific to the wider-budget regime.
 
 ### v0.4 closeout
 
@@ -298,13 +354,23 @@ partial campaign.
 - R7 is completed without promotion. All 139 H/C traces, 12 metric files,
   90 complete pairs and three final complete source trees were checked read-only;
   earlier source continuation matched visible C inputs and the surviving trees.
-- R8 prospective inputs and existing fixed-funnel/R7 tests: `27 passed` in
-  0.55 s; read-only `--check` returned `PREPARED`. No runtime implementation
-  changed. R8 is live in `scion-r8-r7-final-b0-20260922`; snapshots are created,
-  strict canary passed and expanded screening started, without a completed
-  formal-stage result at this launch check. The docs/test/input-only diff atop
-  launch HEAD `75ce0265` was frozen before execution; the user subsequently
-  requested its commit and push. Runtime and scientific inputs remain unchanged.
+- R8 inputs and fixed-funnel/R7 tests passed 27 tests before launch; R8 is now
+  terminal. Both 100-file snapshots match their originals; all 48 formal arms,
+  raw deltas, case medians and 12 AB/12 BA orders have been checked read-only.
+- R9 preparation: 138 focused continuation/source-CLI/history/redteam/input/
+  fixed-funnel tests passed in 2.25 s. All 24 formal cases plus canary parse,
+  four observations project losslessly, and 101 prior rows yield 78 scientific
+  H-only records. Runtime is unchanged. R9 is now terminal; all 92 traces,
+  12 metric files / 144 pairs, final source trees and C branch continuation
+  were checked read-only. Its initial 100-file champion equals R8's candidate.
+- R10 preparation: 106 fixed-funnel/source-continuation/source-CLI/Code-session/
+  R7–R10 input tests passed in 1.83 s. Ruff F/E9 and formatting pass. Read-only
+  `--check` validates all 37 case inputs, exact three-file source difference,
+  equal doubled formal limits and the 170-subprocess maximum without creating
+  output or invoking a solver/provider. R10 subsequently launched once with
+  runtime/inputs frozen; startup source and actual solver-limit checks passed.
+  Pending R8–R10 docs/input/test-only changes atop `39b03166` have not been
+  committed/pushed.
 - R4 and R5 tmux panes are dead with exit status zero; their terminal JSON files
   report `NOT_CONFIRMED` and `DIAGNOSTIC_COMPLETE`, respectively.
 

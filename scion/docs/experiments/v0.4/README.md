@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-09-22*
+*Last updated: 2026-09-23*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,11 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R8 running: exact final R7 candidate versus B0, fresh seeds and counterbalanced order](v04-cvrp-r8-r7-final-b0-preregistration-20260922.md)
+- [R10 running: complete R9 C candidate versus B0, equal doubled solver limits](v04-cvrp-r10-wide-budget-b0-preregistration-20260923.md)
+- [R9 postrun: valid no-promotion result, implementation-fidelity gaps and unresolved initial-search budget](v04-cvrp-r9-post-b0-autonomous-postrun-20260923.md)
+- [R9 frozen design and terminal pointer](v04-cvrp-r9-post-b0-autonomous-preregistration-20260922.md)
+- [R8 postrun: valid NOT_CONFIRMED, one winning and one losing case, limited repeated search](v04-cvrp-r8-r7-final-b0-postrun-20260922.md)
+- [R8 frozen design and terminal pointer](v04-cvrp-r8-r7-final-b0-preregistration-20260922.md)
 - [R7 postrun: complete source research, no promotion, final initial positive pending expansion and timing-sensitive large-case gains](v04-cvrp-r7-autonomous-source-continuation-postrun-20260922.md)
 - [R7 frozen design and terminal pointer](v04-cvrp-r7-autonomous-source-continuation-preregistration-20260921.md)
 - [R6 postrun: NOT_CONFIRMED, mixed effects and initial-search budget consumption; overlapping cleanup disclosed](v04-cvrp-r6-minus-2for1-b0-postrun-20260921.md)

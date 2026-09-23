@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r10-wide-budget-b0
+
+screening:
+  - 90001
+  - 90007
+  - 90011
+  - 90017
+
+validation:
+  - 90019
+  - 90023
+
+frozen:
+  - 90031
+  - 90053
+
+canary:
+  - 90071

@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-22*
+*Current as of: 2026-09-23*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -36,14 +36,23 @@ authority or authorize another run.
   screening stages and one Contract rejection. No promotion or held-out stage.
   Its final positive initial screen requests expansion, but the terminal campaign
   must not resume. The pane is dead; JSON, not carrier status, establishes completion.
-- R8 launched once at `2026-09-22T14:45:38.550230+00:00` in
-  `scion-r8-r7-final-b0-20260922`, driver PID 117138. Runtime is unchanged;
-  preparation adds docs, frozen prospective inputs and an input test only, atop
-  launch HEAD `75ce0265`; the docs/input/test diff was frozen before execution
-  and is being committed after launch at the user's request. Fixed-funnel/R7/R8 tests: 27 passed
-  in 0.55 s; read-only `--check` returned `PREPARED` before launch. Source
-  snapshots exist and strict canary has passed; expanded screening is executing.
-  No terminal or completed formal-stage result yet at this launch check.
+- R8 completed normally as `NOT_CONFIRMED` at expanded screening by
+  `2026-09-22T15:20:22.070227352+00:00`; pane dead with status zero. Runtime
+  was unchanged; frozen docs/inputs/tests were subsequently pushed as `39b03166`.
+- R9 completed normally at `2026-09-23T04:02:58.157595+00:00`: 12 screening
+  stages, eight distinct candidates, 144 valid pairs, no promotion/held-out stage.
+  Its 92 physical calls include two recovered typed timeouts; the 600-call cap
+  was not exhausted. The pane is dead with no exit-status value; terminal facts
+  come from ordinary status/summary and metrics, not the carrier.
+- R10 launched once at `2026-09-23T15:02:15Z`, driver PID 154657, in
+  `scion-r10-wide-budget-b0-20260923`, under explicit equal-budget widening approval:
+  complete R9 C source versus original B0 with doubled formal solver limits.
+  Runtime remains unchanged from `e405bfd2`; pending R8–R10 changes atop
+  `39b03166` are docs/input/test only, not committed/pushed. Focused R10 checks:
+  106 passed in 1.83 s; source/scope, 37 case inputs, full resource matrix and
+  read-only `--check` pass. No solver executed during preparation. Both initial
+  100-file snapshots match their originals, and real expanded-screening execution
+  on B-n34-k5 / seed 90001 uses the declared 60 s limit. No formal result yet.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -202,9 +211,32 @@ baseline does not confer that scientific status.
   [summary](/home/clawd/research/scion-experiments/v04-cvrp-r7-autonomous-source-continuation-20260921/campaign_summary.json)
   and [final metric](/home/clawd/research/scion-experiments/v04-cvrp-r7-autonomous-source-continuation-20260921/metrics/24ac3290-cb42-4a19-bcd4-46f36fe4fc65.json).
 
+- [R8 postrun](../experiments/v0.4/v04-cvrp-r8-r7-final-b0-postrun-20260922.md):
+  exact R7 final candidate versus original B0, 24/24 valid pairs, 12 AB/12 BA,
+  no failures or fleet regression; case W/L/T `1/1/4`, median `0`, CI
+  `[-159.5,71.75]`, `NOT_CONFIRMED` / `SCREENING_FAIL_CASE_QUALITY`. tai100a
+  wins all four seeds (+143.5 case median), X-n351-k40 loses three (-319 median),
+  four cases tie. Both large cases have zero ALNS iterations; X-n190-k8 has
+  only 1–3 candidate iterations. These are whole-bundle observations, not
+  component causality. Validation/frozen/retained stayed unopened. Exact
+  [terminal](/home/clawd/research/scion-experiments/v04-cvrp-r8-r7-final-b0-20260922/terminal.json)
+  and [metric](/home/clawd/research/scion-experiments/v04-cvrp-r8-r7-final-b0-20260922/metrics/78267022-b4e9-4e7d-be18-6d43be40f9d9.json).
+
+R9 [postrun](../experiments/v0.4/v04-cvrp-r9-post-b0-autonomous-postrun-20260923.md):
+the final C expanded result is 2/0/4, median 0, CI [0,170.25], uncertain;
+final B is 1/2/3, median 0, CI [-154,22.75], failed case quality. Three positive
+initial screens did not survive expansion. Both arms had zero ALNS iterations
+on all 48 large-case pairs. Count-based VNS allowances are not time quotas;
+one proposed yield controller was absent from its final exported source.
+All three surviving complete branch trees are identified; no original-B0
+improvement is established. Exact
+[summary](/home/clawd/research/scion-experiments/v04-cvrp-r9-post-b0-autonomous-20260922/campaign_summary.json),
+[C expanded metric](/home/clawd/research/scion-experiments/v04-cvrp-r9-post-b0-autonomous-20260922/metrics/8458fb2b-7cf5-4e34-930c-3f23daf567f7.json),
+and [B expanded metric](/home/clawd/research/scion-experiments/v04-cvrp-r9-post-b0-autonomous-20260922/metrics/c2d635b6-6196-44be-be4a-1a0220bd8701.json).
+
 ## Active next work
 
-1. Preserve the compact R4–R7 postruns and all raw terminal/source roots.
+1. Preserve the R4–R9 postruns and all raw terminal/source roots.
 2. P1 source continuation is implemented and validated; P1b observation cleanup
    is implemented. Legacy configuration/pool terminology remains out of this slice.
 3. R6 is closed without confirmation; its pre-R3 retained block remains
@@ -212,17 +244,20 @@ baseline does not confer that scientific status.
    [Warehouse wiring diagnostics](../experiments/v0.4/v04-p1b-warehouse-aa-control-postrun-20260921.md)
    preserve the first shared-infeasible result and the second complete 4/4 A/A
    ties with deterministic negative Decision. They are not improvement evidence.
-4. [R8](../experiments/v0.4/v04-cvrp-r8-r7-final-b0-preregistration-20260922.md)
-   is running: R7's exact final C tree is frozen and compared with original B0
-   using the existing provider-free, AB/BA-counterbalanced fixed funnel and
-   seeds above 60,000. Screening remains outcome-known adaptive development;
-   validation, frozen and the original retained block are still unopened.
-   Gates and solver source are unchanged. This is not R7 resumption or proof
-   of its pending minus-2-for-1 contrast. Fresh output:
-   `/home/clawd/research/scion-experiments/v04-cvrp-r8-r7-final-b0-20260922`.
-   Read its ordinary `input.json`, `terminal.json` when present and exact metric
-   references. During measurement, freeze code/inputs and avoid overlapping
-   tests, maintenance or another experiment. Do not restart the fresh output.
+4. [R10](../experiments/v0.4/v04-cvrp-r10-wide-budget-b0-preregistration-20260923.md)
+   is running: uses R9's complete `candidate_workspaces/candidate-sm2ft2v2`
+   against original B0 with both arms' formal 30/45/60/90/120 s limits doubled
+   to 60/90/120/180/240 s. Preserve algorithm-owned 0.80/reserve settings,
+   canary, gates and known-screening/unopened-held-out partitions. This is a
+   fresh provider-free AB/BA comparison, not autonomous resume or a claim that
+   C's prior large-case gain came from its changed ALNS code. Fresh seeds above
+   90,000; maximum 170 subprocesses, 20,300 nominal / 25,400 guarded seconds;
+   explicit outer guard 43,200 s. No host solver patch or threshold relaxation.
+   Output: `/home/clawd/research/scion-experiments/v04-cvrp-r10-wide-budget-b0-20260923`.
+   Launched once after ordinary no-overlap/fresh-output checks. Freeze
+   inputs/runtime and avoid tests/cleanup/other solvers. Read `terminal.json`
+   and its exact metrics after completion. A positive applies only to this
+   wider-budget regime; do not pool effects with R8/R9 or resume terminal state.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

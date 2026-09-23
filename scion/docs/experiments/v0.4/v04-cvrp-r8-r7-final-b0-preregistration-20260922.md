@@ -1,13 +1,13 @@
 # CVRP R8: exact final R7 candidate versus original B0
 
-State: launched once at `2026-09-22T14:45:38.550230+00:00`, tmux
-`scion-r8-r7-final-b0-20260922`, driver PID 117138, under the user's
-experiment-analysis/optimization request. The frozen design below is unchanged.
-The normal `input.json` points to both output-local source snapshots and the
-declared original source directories; provider calls are zero. The driver has
-passed its strict canary and entered expanded screening (real B-n34-k5 calls
-observed). No terminal or completed formal-stage result yet at this launch
-check. Do not infer improvement from startup or partial metrics.
+State: completed normally as `NOT_CONFIRMED` at expanded screening; terminal
+written by `2026-09-22T15:20:22.070227352+00:00`. All 24 pairs were valid,
+case W/L/T 1/1/4, median 0, CI [-159.5,71.75], with
+`SCREENING_FAIL_CASE_QUALITY` / `CONTINUE_EXPLORE`. No later stage or promotion.
+See the [postrun](v04-cvrp-r8-r7-final-b0-postrun-20260922.md).
+Launched once at `2026-09-22T14:45:38.550230+00:00`, tmux
+`scion-r8-r7-final-b0-20260922`, driver PID 117138. The frozen design below is
+unchanged; terminal R8 must not be restarted or resumed.
 
 ## Question and source selection
 
