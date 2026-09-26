@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-09-23*
+*Last updated: 2026-09-26*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,14 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R10 running: complete R9 C candidate versus B0, equal doubled solver limits](v04-cvrp-r10-wide-budget-b0-preregistration-20260923.md)
+- [R13 running: independent constructor repair, complete R12 A versus B0-fixed, unchanged budgets/gates](v04-cvrp-r13-constructor-fixed-b0-preregistration-20260926.md)
+- [Independent constructor repair: synthetic tests and four complete-solver correctness diagnostics, not quality evidence](v04-cvrp-constructor-repair-diagnostic-20260926.md)
+- [R12 postrun: narrow screening pass, repeated shared validation failure, no promotion](v04-cvrp-r12-post-r11-autonomous-postrun-20260926.md)
+- [R12 frozen design and terminal pointer](v04-cvrp-r12-post-r11-autonomous-preregistration-20260924.md)
+- [R11 postrun: modest uncertain B signal, inactive threshold handoffs, 108 valid pairs and no promotion](v04-cvrp-r11-wide-budget-autonomous-postrun-20260924.md)
+- [R11 frozen design and terminal pointer](v04-cvrp-r11-wide-budget-autonomous-preregistration-20260923.md)
+- [R10 postrun: screening pass, shared validation construction failure, incomplete comparator evidence](v04-cvrp-r10-wide-budget-b0-postrun-20260923.md)
+- [R10 frozen design and terminal pointer](v04-cvrp-r10-wide-budget-b0-preregistration-20260923.md)
 - [R9 postrun: valid no-promotion result, implementation-fidelity gaps and unresolved initial-search budget](v04-cvrp-r9-post-b0-autonomous-postrun-20260923.md)
 - [R9 frozen design and terminal pointer](v04-cvrp-r9-post-b0-autonomous-preregistration-20260922.md)
 - [R8 postrun: valid NOT_CONFIRMED, one winning and one losing case, limited repeated search](v04-cvrp-r8-r7-final-b0-postrun-20260922.md)

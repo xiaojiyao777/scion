@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-23*
+*Current as of: 2026-09-26*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -42,17 +42,49 @@ authority or authorize another run.
 - R9 completed normally at `2026-09-23T04:02:58.157595+00:00`: 12 screening
   stages, eight distinct candidates, 144 valid pairs, no promotion/held-out stage.
   Its 92 physical calls include two recovered typed timeouts; the 600-call cap
-  was not exhausted. The pane is dead with no exit-status value; terminal facts
+  was not exhausted. The pane is now dead with exit status zero; terminal facts
   come from ordinary status/summary and metrics, not the carrier.
-- R10 launched once at `2026-09-23T15:02:15Z`, driver PID 154657, in
-  `scion-r10-wide-budget-b0-20260923`, under explicit equal-budget widening approval:
-  complete R9 C source versus original B0 with doubled formal solver limits.
-  Runtime remains unchanged from `e405bfd2`; pending R8–R10 changes atop
-  `39b03166` are docs/input/test only, not committed/pushed. Focused R10 checks:
-  106 passed in 1.83 s; source/scope, 37 case inputs, full resource matrix and
-  read-only `--check` pass. No solver executed during preparation. Both initial
-  100-file snapshots match their originals, and real expanded-screening execution
-  on B-n34-k5 / seed 90001 uses the declared 60 s limit. No formal result yet.
+- R8–R10 docs/inputs/tests were committed and pushed as `841de42b` under
+  the user's September 23 request, before the following new analysis/preparation.
+- R10 is terminal: `completed_incomplete` /
+  `INCOMPLETE_COMPARATOR_EVIDENCE` at validation, terminal written by
+  `2026-09-23T16:38:14.659955255Z`; pane dead exit zero. Expanded screening
+  passed: 24 valid pairs, W/L/T 3/0/3, median 19.75, CI [0,179]. Validation
+  executed all 12 pairs but two failed in both arms at shared construction.
+  No promotion, frozen or retained evidence. Both 100-file snapshots still
+  equal their originals; all 36 formal pair orders/limits and valid deltas
+  were checked. See the operator-only postrun and exact raw refs below.
+- R11 completed normally at `2026-09-24T05:58:23.243135+00:00`, 12 screening
+  stages / ten distinct candidates, 108 valid pairs, no promotion or held-out
+  stage; pane dead exit zero. All 101 provider traces, raw pairs, visible C
+  source values and three final complete trees were checked read-only.
+  One typed H 502 recovered on the same frozen request; no cap exhaustion.
+- R12 is terminal: final status `2026-09-24T18:01:02.790088+00:00`,
+  `EVALUATION_CHAMPION_EVIDENCE_BLOCKED` at validation; pane dead exit 20.
+  Nine screening stages / six candidates yielded 108 valid pairs; final A
+  passed expanded screening +2.25 [0,11.25], 3/0/3. Validation attempted 12
+  pairs, ten valid / two shared construction failures, no Decision/promotion.
+  All 62 provider calls succeeded; 131 visible C source values and all three
+  complete 100-file final trees match. No global resource cap was exhausted.
+- September 26 user authorization: independent GPT-6-Astra constructor repair,
+  concurrent remaining design, then a fresh run only after checks. The repair
+  is problem-owned engineering, not autonomous Scion research: construction.py
+  plus three caller files, preserving successful greedy paths and explicit
+  failures. No core, adapter, Protocol or Decision implementation changes.
+  Same minimal patch applied to fresh B0-fixed and R12-A-fixed complete copies;
+  original B0/R10/R12 sources and evidence stay untouched. Independent checks:
+  136 tests pass in 71.21 s, four complete-solver correctness diagnostics pass,
+  exact same four-file repair in both 100-file copies, source scope and all
+  37 inputs pass read-only preparation. See R13 and the engineering report.
+  At R13 launch, prior R10–R12 and new R13 work were uncommitted atop pushed
+  `841de42b`. The user's subsequent September 26 request authorizes committing
+  and pushing this frozen change set; no running algorithm/input is changed.
+- R13 launched once at `2026-09-26T01:13:23Z`, driver PID 242261, tmux
+  `scion-r13-constructor-fixed-b0-20260926`. Both 100-file input snapshots
+  equal the declared sources; screening started on B-n34-k5 / seed 120011
+  with the correct 60-second limit after paired canary. No formal result yet.
+  Runtime/source/data/scientific inputs are frozen; avoid tests/cleanup/solvers.
+  A chat-service interruption left the driver running; it was not relaunched.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -234,32 +266,65 @@ improvement is established. Exact
 [C expanded metric](/home/clawd/research/scion-experiments/v04-cvrp-r9-post-b0-autonomous-20260922/metrics/8458fb2b-7cf5-4e34-930c-3f23daf567f7.json),
 and [B expanded metric](/home/clawd/research/scion-experiments/v04-cvrp-r9-post-b0-autonomous-20260922/metrics/c2d635b6-6196-44be-be4a-1a0220bd8701.json).
 
+R10 [postrun](../experiments/v0.4/v04-cvrp-r10-wide-budget-b0-postrun-20260923.md):
+the equal wider-budget comparison establishes a screening pass, not retained
+improvement. X-n513-k21 wins all four seeds by 198 despite zero candidate ALNS
+iterations; X-n351-k40 has mixed signs and zero ALNS in both arms. Validation
+is incomplete due to a shared construction failure; it is now operator-exposed,
+not unopened. Its valid-subset effects must not replace the complete matrix.
+Exact [terminal](/home/clawd/research/scion-experiments/v04-cvrp-r10-wide-budget-b0-20260923/terminal.json),
+[screening](/home/clawd/research/scion-experiments/v04-cvrp-r10-wide-budget-b0-20260923/metrics/b749b312-cde2-4e05-8856-1898d0ab4bba.json)
+and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r10-wide-budget-b0-20260923/metrics/edac77fa-c07e-44c0-9f5d-5a25d0e2fa2c.json).
+Frozen and the independent pre-R3 retained block remain unopened.
+
+R11 [postrun](../experiments/v0.4/v04-cvrp-r11-wide-budget-autonomous-postrun-20260924.md):
+final B expanded W/L/T 3/1/2, median +10, CI [-1,216.75], uncertain against
+the local R10-candidate champion, not B0. Its tai100a and both large-case effects
+are positive at every seed, with small-case regression. Final A has a large-case
+-8557 median; final C ends negative. Early phase handoffs are guarded above
+2000 customers and never activate on the <=512-customer screening population.
+All X-n351 pairs and final-B X-n513 pairs still have zero ALNS. Increased
+throughput alone did not guarantee better distance. Exact
+[summary](/home/clawd/research/scion-experiments/v04-cvrp-r11-wide-budget-autonomous-20260923/campaign_summary.json)
+and [final B metric](/home/clawd/research/scion-experiments/v04-cvrp-r11-wide-budget-autonomous-20260923/metrics/892458a5-2492-4162-a58e-7331266c898a.json).
+
+R12 [postrun](../experiments/v0.4/v04-cvrp-r12-post-r11-autonomous-postrun-20260926.md):
+final A expanded screening passes narrowly against R11 B, not original B0.
+Both large screening cases still execute zero ALNS, so lazy worst removal
+cannot receive credit for their effects. B/C variants are negative/uncertain;
+C's two-pair cap hides an exhaustive opportunity-ranking scan. One multi-file
+patch was correctly rejected for a primary-target mismatch and never entered
+the branch head. Validation repeats the R10 constructor failure; valid-subset
+effects include losses and cannot replace a full verdict. Exact
+[status](/home/clawd/research/scion-experiments/v04-cvrp-r12-post-r11-autonomous-20260924/status.json),
+[A screening](/home/clawd/research/scion-experiments/v04-cvrp-r12-post-r11-autonomous-20260924/metrics/182c2070-66b6-407b-997e-bf4a8269d8bf.json),
+and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r12-post-r11-autonomous-20260924/metrics/4d029e0f-ec63-4525-b960-3b99bdc48e24.json).
+
 ## Active next work
 
-1. Preserve the R4–R9 postruns and all raw terminal/source roots.
-2. P1 source continuation is implemented and validated; P1b observation cleanup
-   is implemented. Legacy configuration/pool terminology remains out of this slice.
-3. R6 is closed without confirmation; its pre-R3 retained block remains
-   unexecuted. Independent
-   [Warehouse wiring diagnostics](../experiments/v0.4/v04-p1b-warehouse-aa-control-postrun-20260921.md)
-   preserve the first shared-infeasible result and the second complete 4/4 A/A
-   ties with deterministic negative Decision. They are not improvement evidence.
-4. [R10](../experiments/v0.4/v04-cvrp-r10-wide-budget-b0-preregistration-20260923.md)
-   is running: uses R9's complete `candidate_workspaces/candidate-sm2ft2v2`
-   against original B0 with both arms' formal 30/45/60/90/120 s limits doubled
-   to 60/90/120/180/240 s. Preserve algorithm-owned 0.80/reserve settings,
-   canary, gates and known-screening/unopened-held-out partitions. This is a
-   fresh provider-free AB/BA comparison, not autonomous resume or a claim that
-   C's prior large-case gain came from its changed ALNS code. Fresh seeds above
-   90,000; maximum 170 subprocesses, 20,300 nominal / 25,400 guarded seconds;
-   explicit outer guard 43,200 s. No host solver patch or threshold relaxation.
-   Output: `/home/clawd/research/scion-experiments/v04-cvrp-r10-wide-budget-b0-20260923`.
-   Launched once after ordinary no-overlap/fresh-output checks. Freeze
-   inputs/runtime and avoid tests/cleanup/other solvers. Read `terminal.json`
-   and its exact metrics after completion. A positive applies only to this
-   wider-budget regime; do not pool effects with R8/R9 or resume terminal state.
+1. Preserve R4–R12 postruns and original terminal/source roots. R10/R12 are
+   scientifically incomplete; R11 completed without promotion. Never resume them.
+2. P1 source continuation and P1b observation cleanup are implemented.
+   Legacy configuration/pool terminology remains separate debt.
+3. CVRP is open. The unchanged necessary held-out and runtime-audit gates
+   must preserve the R10 comparator failure. Do not patch original B0, drop
+   a failed validation case, leak held-out diagnostics to H/C or backfill evidence.
+4. [R13](../experiments/v0.4/v04-cvrp-r13-constructor-fixed-b0-preregistration-20260926.md)
+   is running under the explicit repair-and-launch request, after independent
+   correctness/complete-source checks: one provider-free counterbalanced
+   comparison of R12-A-fixed against B0-fixed. Both share the
+   same minimal repair; budgets and scientific gates are unchanged. Exposed
+   validation remains a development gate; frozen/retained remain unopened.
+   A positive result would be against B0-fixed, never unchanged original B0,
+   and does not close the original project objective by relabeling it.
+   Inputs and separate engineering diagnostics:
+   `/home/clawd/research/scion-experiment-inputs/v04-cvrp-r13-constructor-fixed-b0-20260926`.
+   Live output (do not restart/resume):
+   `/home/clawd/research/scion-experiments/v04-cvrp-r13-constructor-fixed-b0-20260926`.
+   After terminal completion, analyze paired evidence before selecting another rung.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,
-receipts, duplicate closure, host-selected algorithm mechanisms, and new incidental
-research-quality gates.
+receipts, duplicate closure, host-selected autonomous research mechanisms, and
+new incidental research-quality gates. The expressly authorized independent
+constructor repair is separately labeled engineering, not Scion H/C evidence.

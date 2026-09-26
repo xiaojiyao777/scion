@@ -1,12 +1,20 @@
 # CVRP R10: equal wider-budget comparison of the complete R9 C candidate and B0
 
-State: launched once at `2026-09-23T15:02:15Z` (process start), tmux
+State: terminal `completed_incomplete` / `INCOMPLETE_COMPARATOR_EVIDENCE`
+at validation by `2026-09-23T16:38:14.659955255Z`. Expanded screening passed
+(24 valid pairs, 3/0/3, median 19.75, CI [0,179]); validation attempted 12 pairs
+but two failed in both arms at shared construction. No promotion, frozen or
+retained evidence. See the operator-only
+[postrun](v04-cvrp-r10-wide-budget-b0-postrun-20260923.md). R10 is terminal and
+must not resume. The prospective design below remains unchanged.
+
+Launched once at `2026-09-23T15:02:15Z` (process start), tmux
 `scion-r10-wide-budget-b0-20260923`, driver PID 154657, under the user's explicit
 approval to widen solver budgets equally, analyze R9 and start the next experiment.
 `input.json` was recorded at `15:02:15.963863784Z`; both 100-file snapshots
 match their declared originals. At startup, a real screening solver was observed
 on B-n34-k5 / seed 90001 with `--time-limit 60`, after the canary phase.
-No terminal or formal stage result yet. R9 is terminal and will not resume. The
+Startup observations are not formal results. R9 is terminal and will not resume. The
 [R9 postrun](v04-cvrp-r9-post-b0-autonomous-postrun-20260923.md) records its
 negative/uncertain evidence and implementation limitations.
 

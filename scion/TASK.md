@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-09-23*
+*Current as of: 2026-09-26*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -24,8 +24,12 @@ The project goal is retained solver improvement produced by Scion itself:
   confirm it against B0, R5 is diagnostic only, and R6 did not confirm the
   minus-2-for-1 bundle. R7 completed autonomous development without promotion;
   R8 did not confirm its final candidate against B0. R9 completed autonomous
-  research without promotion. R10 is running the equal wider-budget B0 check
-  of R9's complete C candidate, not restored campaign state.
+  research without promotion. R10 passed wider-budget screening against B0,
+  then stopped on incomplete shared validation evidence. R11 completed without
+  promotion, leaving a modest uncertain B-branch signal. R12 passed a narrow
+  local screen but stopped on the same shared validation construction failure.
+  The user now authorizes independent constructor remediation and a fresh
+  common-repair comparison, not relabeling it as unchanged-B0 superiority.
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -203,6 +207,26 @@ iterations in both arms. Source review distinguishes ineffective count-based
 depth allocation and an unimplemented yield-controller hypothesis from actual
 algorithm changes. All final complete trees are identified; R9 is terminal.
 
+### CVRP R10
+
+The [R10 postrun](docs/experiments/v0.4/v04-cvrp-r10-wide-budget-b0-postrun-20260923.md)
+records 24 valid screening pairs, W/L/T 3/0/3, median 19.75, CI [0,179],
+SCREENING_PASS. Both large cases still have zero candidate ALNS iterations;
+one wins all four seeds by 198. Validation attempted 12 pairs but two failed
+in both arms at shared construction: `INCOMPLETE_COMPARATOR_EVIDENCE`, no
+promotion, frozen or retained execution. Validation is now operator-exposed.
+Do not remove failed pairs or feed held-out outcomes to research proposals.
+
+### CVRP R11
+
+The [R11 postrun](docs/experiments/v0.4/v04-cvrp-r11-wide-budget-autonomous-postrun-20260924.md)
+records 12 screening stages / ten candidates, 108 valid pairs, 101 provider
+calls with one recovered 502 and no promotion or held-out stage. Final B's
+expanded +10 [-1,216.75] is modest and uncertain; A's final large-case median
+is -8557, C ends negative. Both early phase handoffs are guarded above 2000
+customers and never activate on this screening population. All three final
+complete source trees are identified; throughput alone did not ensure quality.
+
 ## Ordered active work
 
 ### P0 — Close the completed evidence
@@ -313,12 +337,77 @@ partial campaign.
 - [x] Launch once into fresh R10 output with no competing solver/tests/cleanup.
   Started `2026-09-23T15:02:15Z`, tmux `scion-r10-wide-budget-b0-20260923`,
   driver PID 154657. Both 100-file snapshots equal their originals; a real
-  screening arm uses 60 s on B-n34-k5 / seed 90001. Freeze runtime, scientific
-  inputs and source values during measurement; no formal stage result yet.
-- [ ] Read exact terminal and paired evidence, including whether extra time
+  screening arm uses 60 s on B-n34-k5 / seed 90001. Runtime, scientific inputs
+  and source values remained frozen during measurement.
+- [x] Read exact terminal and paired evidence, including whether extra time
   actually allows ALNS on large cases. Do not infer that more time guarantees
   useful search or pool the new contrast with R8/R9. Any retained result is
   specific to the wider-budget regime.
+
+### P7 — Autonomous research in the wider-budget regime
+
+- [x] Preregister [R11](docs/experiments/v0.4/v04-cvrp-r11-wide-budget-autonomous-preregistration-20260923.md)
+  from R10's ordinary complete candidate, with unchanged wide budgets/gates,
+  fresh seeds, four prior observations, R10 screening-only question context
+  and all ordered R3–R3i/R7/R9 scientific history. No host-selected mechanism.
+- [x] Validate new input/projection and focused regressions: 208 passed in
+  2.75 seconds. Preserve the known unresolved validation comparator limitation;
+  neither drop the case nor leak its failure to H/C.
+- [x] Finish source/history/data/provider/no-overlap checks and launch once
+  into fresh R11 output at `2026-09-23T23:47:06Z`, driver PID 166821.
+  Initial champion equals all 100 source files; first two real H calls succeed
+  with the exact question and four-observation / 90-history index. No formal
+  result yet. Freeze runtime/inputs throughout measurement.
+- [x] Analyze actual H/C and terminal paired evidence: 108 valid pairs, no
+  promotion, final B +10 [-1,216.75], uncertain. Two phase handoffs never
+  activated because the imported threshold is 2000; no host repair/gate added.
+  Local development is not B0 retained confirmation.
+
+### P8 — Autonomous research after the R11 source/activation audit
+
+- [x] Preregister [R12](docs/experiments/v0.4/v04-cvrp-r12-post-r11-autonomous-preregistration-20260924.md)
+  from complete final B, with all R11 history, screening-only observations and
+  source-grounded threshold facts, fresh seeds and unchanged budgets/gates.
+  Do not merge siblings, prescribe an algorithm or leak held-out failure details.
+- [x] Verify inputs/projection, complete source, all 25 case inputs, ordered
+  125 raw / 102 scientific history records and focused regressions (211 passed).
+- [x] Check provider and no-overlap/fresh-output state; launch once at
+  `2026-09-24T11:48:32Z`, driver PID 195869. All 100 initial champion files
+  match; first two actual H calls succeed with the exact question and
+  four-observation / 102-history index. Freeze runtime/inputs during measurement.
+  The known validation comparator issue remains; no formal R12 result yet.
+- [x] Analyze actual H/C, terminal decisions, source fidelity and paired outcomes:
+  [R12 postrun](docs/experiments/v0.4/v04-cvrp-r12-post-r11-autonomous-postrun-20260926.md).
+  108 valid screening pairs; final A +2.25 [0,11.25] passes, then shared
+  construction blocks validation (10/12 valid). No promotion. Preserve all evidence.
+
+### P9 — Independent constructor repair and common-repair comparison
+
+- [x] User explicitly authorizes a GPT-6-Astra repair subagent and concurrent
+  remaining design, with a new experiment only after all checks pass.
+- [x] Implement minimal problem-owned bounded packing recovery and remaining-
+  time passthrough. Preserve successful greedy behavior, explicit failures,
+  original B0/candidates and all historical incomplete/negative results.
+- [x] Preregister [R13](docs/experiments/v0.4/v04-cvrp-r13-constructor-fixed-b0-preregistration-20260926.md):
+  complete R12 A plus the same repair applied to new B0-fixed; equal budgets,
+  counterbalancing, fresh seeds, unchanged gates, no sibling merge or additional
+  host performance patch. This is not autonomous discovery or unchanged-B0 proof.
+- [x] Finish independent repair review, full-solver correctness diagnostics,
+  focused regressions, complete-source comparison and read-only preparation:
+  [diagnostic](docs/experiments/v0.4/v04-cvrp-constructor-repair-diagnostic-20260926.md).
+  136 tests pass; four complete solver checks pass; both 100-file trees have
+  identical minimal repair; `--check` returns PREPARED without execution.
+- [x] Freeze runtime/sources/inputs and launch once into fresh output, without
+  overlapping tests/maintenance/solvers. Exposed validation is development;
+  unopened frozen/retained evidence remains conditional. Do not resume R12.
+  R13 started `2026-09-26T01:13:23Z`, PID 242261. Both 100-file snapshots
+  equal the declared repaired sources; actual screening uses the correct 60 s.
+  No formal result yet; only launch-status docs change after startup.
+- [ ] Analyze R13 terminal paired evidence before selecting another rung.
+
+The user's subsequent September 26 request authorizes committing and pushing
+the frozen R10–R13 work. This changes Git bookkeeping and handoff wording only;
+R13's running algorithm and scientific inputs remain unchanged.
 
 ### v0.4 closeout
 
@@ -369,8 +458,25 @@ partial campaign.
   equal doubled formal limits and the 170-subprocess maximum without creating
   output or invoking a solver/provider. R10 subsequently launched once with
   runtime/inputs frozen; startup source and actual solver-limit checks passed.
-  Pending R8–R10 docs/input/test-only changes atop `39b03166` have not been
-  committed/pushed.
+  R8–R10 docs/input/test-only changes were committed and pushed as `841de42b`
+  before R10 postrun analysis and R11 preparation. No implementation changed.
+- R11 preparation: 208 focused tests passed in 2.75 s; all 25 case inputs
+  parse, 113 ordered prior rows yield 90 H-visible records, and the four
+  observations/new question project correctly. Startup source and actual H
+  contexts are checked. R11 is now terminal; all 108 raw pairs, 101 traces,
+  284 visible C source entries and three final 100-file trees were checked.
+- R12 preparation: 211 focused tests passed in 2.81 s; all 25 case inputs
+  parse, 125 ordered rows yield 102 scientific H-visible records; the question,
+  four unchanged observations and held-out exclusion checks pass. Ruff F/E9,
+  formatting, CLI help and diff checks pass. Startup source/actual H contexts
+  are verified. New R10–R12 analysis/preparation work was uncommitted at launch.
+- R13 independent repair: 136 CVRP/fixed-funnel/input tests passed in 71.21 s;
+  four complete-solver checks on the exposed failing case pass active-algorithm,
+  zero-error, coverage/capacity/fleet and independent objective/runtime-audit
+  checks. Both 100-file copies have the identical minimal four-file repair;
+  all 37 inputs and the unchanged 170-subprocess envelope pass `--check`.
+  No source/Protocol/Decision gates weakened. R13 launched once; startup source
+  and actual solver-limit checks pass. Code/inputs are frozen for measurement.
 - R4 and R5 tmux panes are dead with exit status zero; their terminal JSON files
   report `NOT_CONFIRMED` and `DIAGNOSTIC_COMPLETE`, respectively.
 

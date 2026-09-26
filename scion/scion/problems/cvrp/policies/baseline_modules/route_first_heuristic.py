@@ -42,6 +42,7 @@ class RouteFirstHeuristicSolver:
             instance,
             max_routes=self.max_routes,
             max_starts=self.max_starts,
+            remaining_time=lambda: self.context.remaining_time() - reserve,
         ):
             if not self._within_budget(start_ms, reserve):
                 budget_hit = True
@@ -115,7 +116,11 @@ class RouteFirstHeuristicSolver:
         if self.max_routes is None:
             return _Solution(instance, [])
         try:
-            return _capacity_balanced_construction(instance, self.max_routes)
+            return _capacity_balanced_construction(
+                instance,
+                self.max_routes,
+                remaining_time=self.context.remaining_time,
+            )
         except ValueError:
             return _Solution(instance, [])
 

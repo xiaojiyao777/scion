@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r12-post-r11-autonomous
+
+screening:
+  - 110017
+  - 110023
+  - 110039
+  - 110051
+
+validation:
+  - 110059
+  - 110063
+
+frozen:
+  - 110069
+  - 110083
+
+canary:
+  - 110119

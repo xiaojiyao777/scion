@@ -11,7 +11,7 @@ from .construction import (
 from .state import _Route, _Solution, _demand, _node
 
 
-def route_first_seed_candidates(instance, *, max_routes, max_starts):
+def route_first_seed_candidates(instance, *, max_routes, max_starts, remaining_time=None):
     """Yield feasible-start attempts for the route-first comparison solver."""
 
     yield _clarke_wright_savings(instance, target_routes=max_routes)
@@ -19,7 +19,9 @@ def route_first_seed_candidates(instance, *, max_routes, max_starts):
         yield _capacity_split(instance, order)
     if max_routes is not None:
         try:
-            yield _capacity_balanced_construction(instance, max_routes)
+            yield _capacity_balanced_construction(
+                instance, max_routes, remaining_time=remaining_time
+            )
         except ValueError:
             pass
     yield _nearest_neighbor(instance)

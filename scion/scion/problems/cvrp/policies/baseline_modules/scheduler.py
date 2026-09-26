@@ -397,7 +397,11 @@ class _ALNSVNSSolver:
         else:
             solution = _clarke_wright_savings(instance, target_routes=self.max_routes)
         if self.max_routes is not None and len(solution.routes) > self.max_routes:
-            solution = _capacity_balanced_construction(instance, self.max_routes)
+            solution = _capacity_balanced_construction(
+                instance,
+                self.max_routes,
+                remaining_time=lambda: self.context.remaining_time() - reserve,
+            )
         if not solution.is_feasible():
             solution = _nearest_neighbor(instance)
         if not solution.is_feasible():
