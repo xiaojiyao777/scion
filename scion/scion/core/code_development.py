@@ -19,12 +19,13 @@ from scion.core.path_match import segment_glob_match
 from scion.core.research_surface_index import editable_patterns
 from scion.verification.development import (
     BubblewrapDevelopmentSandbox,
+    DevelopmentCheckObservation,
     DevelopmentCheckRun,
     DevelopmentSuiteManifest,
     copy_declared_development_files,
     copy_development_suite_closure,
     development_probe_path_conflicts,
-    development_safety_preflight,
+    development_safety_preflight_failure,
     run_development_checks,
     write_development_probe_source,
     write_development_source_corpus,
@@ -80,7 +81,16 @@ class CodeDevelopmentEvaluator:
                     *(change.file_path for change in patch.iter_file_changes()),
                 )
             ):
-                return DevelopmentCheckRun(outcome="preflight_rejected")
+                return DevelopmentCheckRun(
+                    outcome="preflight_rejected",
+                    checks=(
+                        DevelopmentCheckObservation(
+                            name="D0_preflight",
+                            outcome="preflight_rejected",
+                            reason_code="reserved_probe_path_conflict",
+                        ),
+                    ),
+                )
             prepared = self._prepare_scratch(
                 source_corpus=source_corpus,
                 patch=patch,
@@ -91,12 +101,15 @@ class CodeDevelopmentEvaluator:
             candidate = prepared.path
             remaining_files = prepared.remaining_files
             remaining_bytes = prepared.remaining_bytes
-            if not development_safety_preflight(
+            preflight_failure = development_safety_preflight_failure(
                 patch=patch,
                 problem_spec=self.problem_spec,
                 candidate_workspace=candidate,
-            ):
-                return DevelopmentCheckRun(outcome="preflight_rejected")
+            )
+            if preflight_failure is not None:
+                return DevelopmentCheckRun(
+                    outcome="preflight_rejected", checks=(preflight_failure,)
+                )
             falsifier_outcome = None
             if falsifier_source is not None:
                 probe_bytes = len(falsifier_source.encode("utf-8"))
@@ -162,7 +175,16 @@ class CodeDevelopmentEvaluator:
             )
             return replace(run, falsifier_outcome=falsifier_outcome)
         except (OSError, TypeError, ValueError):
-            return DevelopmentCheckRun(outcome="preflight_rejected")
+            return DevelopmentCheckRun(
+                outcome="preflight_rejected",
+                checks=(
+                    DevelopmentCheckObservation(
+                        name="D0_preflight",
+                        outcome="preflight_rejected",
+                        reason_code="development_setup_failed",
+                    ),
+                ),
+            )
         finally:
             if candidate is not None:
                 self.materializer.cleanup_candidate_workspace(candidate)

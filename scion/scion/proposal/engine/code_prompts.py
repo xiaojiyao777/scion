@@ -20,9 +20,7 @@ def _split_code_context(
             {
                 **source,
                 "content": (
-                    source.get("content")
-                    if source.get("visible") is True
-                    else None
+                    source.get("content") if source.get("visible") is True else None
                 ),
             }
             for source in source_context["sources"]
@@ -51,7 +49,17 @@ def _split_code_context(
                 "You are implementing an approved research hypothesis for a "
                 "combinatorial optimisation solver. Produce a source-bound typed "
                 "edit set that preserves the problem-owned interface, feasibility, "
-                "determinism, and declared higher-priority objectives."
+                "determinism, and declared higher-priority objectives.\n\n"
+                "The supplied current source is the complete edit base, which "
+                "may already contain earlier branch changes; it is not necessarily "
+                "the champion comparator. Untouched inherited code remains in "
+                "the resulting candidate. Implement the approved hypothesis's "
+                "delta against this source. If it calls for replacing a prior "
+                "mechanism, include the necessary companion edits within the "
+                "declared editable boundary; describing an alternative does not "
+                "remove the inherited implementation. Do not infer an automatic "
+                "rollback or an extra ablation requirement. Protocol evaluates "
+                "the complete resulting candidate, not this edit in isolation."
             ),
             "cache_control": _CACHE_5M,
         },

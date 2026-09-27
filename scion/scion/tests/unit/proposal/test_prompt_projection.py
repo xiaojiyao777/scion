@@ -174,6 +174,82 @@ def test_hypothesis_prompt_keeps_history_optional_and_non_directive() -> None:
     assert "Otherwise pivot" not in projection.user_prompt
 
 
+@pytest.mark.parametrize("mode", ["direct", "bounded", "bounded_candidates"])
+def test_hypothesis_source_and_evidence_guidance_reaches_every_mode(mode: str) -> None:
+    from scion.proposal.hypothesis_research_session import (
+        _candidate_research_snapshot,
+        _research_snapshot,
+    )
+
+    context = _hypothesis_context()
+    context["branch_current_code"] = "def solve(): return 'inherited candidate'\n"
+    if mode == "direct":
+        blocks, _ = _split_hypothesis_context(context)
+    else:
+        context["hypothesis_research"] = {}
+        render = (
+            _candidate_research_snapshot
+            if mode == "bounded_candidates"
+            else _research_snapshot
+        )
+        snapshot = render(context, tool={}, allowed_loci=("local_search",))
+        blocks = snapshot.system_blocks
+        assert json.loads(snapshot.structured_context_json) == context
+
+    instructions = blocks[0]["text"]
+    assert "retains the complete candidate even when screening fails" in instructions
+    assert "Untouched inherited code" in instructions
+    assert "against the champion, not against the preceding branch head" in instructions
+    assert "do not isolate the latest edit's effect" in instructions
+    assert "necessary companion edits" in instructions
+    assert "evaluated cases, seeds and stage" in instructions
+    assert "population absent from that evaluation remains untested" in instructions
+    assert "mechanism did not execute" in instructions
+    assert "not an additional acceptance gate" in instructions
+    assert "or a requirement to read history, ablate, or roll back code" in instructions
+    assert "You choose which mechanisms to retain, replace or remove" in instructions
+
+
+@pytest.mark.parametrize("mode", ["direct", "bounded"])
+def test_code_cumulative_edit_guidance_reaches_every_mode_without_history(
+    mode: str,
+) -> None:
+    from scion.proposal.code_research_session import _research_snapshot
+
+    context = _code_context()
+    context["experiment_history"] = [{"private_history_marker": "not-for-code"}]
+    if mode == "direct":
+        blocks, _ = _split_code_context(context)
+    else:
+        # Code research receives the already filtered Code context, not H history.
+        context.pop("experiment_history")
+        context["code_research"] = {}
+        snapshot = _research_snapshot(context, provider_tool={}, user_prompt="revise")
+        blocks = snapshot.system_blocks
+        assert json.loads(snapshot.structured_context_json) == context
+
+    instructions = blocks[0]["text"]
+    assert "may already contain earlier branch changes" in instructions
+    assert "not necessarily the champion comparator" in instructions
+    assert "Untouched inherited code remains" in instructions
+    assert "approved hypothesis's delta against this source" in instructions
+    assert (
+        "necessary companion edits within the declared editable boundary"
+        in instructions
+    )
+    assert (
+        "Do not infer an automatic rollback or an extra ablation requirement"
+        in instructions
+    )
+    assert "not this edit in isolation" in instructions
+    canonical = json.loads(blocks[1]["text"].split("\n", 1)[1])
+    assert canonical == {
+        "approved_hypothesis": context["approved_hypothesis"],
+        "editable_source_context": context["editable_source_context"],
+    }
+    assert "not-for-code" not in "\n".join(block["text"] for block in blocks)
+
+
 def test_prompt_projection_has_no_authority_or_capability_dependency() -> None:
     source = inspect.getsource(subject)
 

@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-09-26*
+*Last updated: 2026-09-27*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,13 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R13 running: independent constructor repair, complete R12 A versus B0-fixed, unchanged budgets/gates](v04-cvrp-r13-constructor-fixed-b0-preregistration-20260926.md)
+- [R15 launched: safe preflight feedback, cumulative-source guidance and five-case initial screening](v04-cvrp-r15-feedback-repair-autonomous-preregistration-20260927.md)
+- [R15 independent Warehouse H/C control r2: two valid negative stages, source fidelity verified](v04-r15-warehouse-feedback-control-r2-20260927.md)
+- [R15 first Warehouse control: startup rejected public-test/formal overlap, zero provider/solver calls](v04-r15-warehouse-feedback-control-20260927.md)
+- [R14 postrun: 108 valid pairs, no promotion; opaque preflight feedback and cumulative-source attribution gaps](v04-cvrp-r14-post-r13-autonomous-postrun-20260927.md)
+- [R14 frozen design and terminal pointer](v04-cvrp-r14-post-r13-autonomous-preregistration-20260927.md)
+- [R13 postrun: 24 valid pairs, broader wins but CI crosses zero; NOT_CONFIRMED versus B0-fixed](v04-cvrp-r13-constructor-fixed-b0-postrun-20260927.md)
+- [R13 frozen design and terminal pointer](v04-cvrp-r13-constructor-fixed-b0-preregistration-20260926.md)
 - [Independent constructor repair: synthetic tests and four complete-solver correctness diagnostics, not quality evidence](v04-cvrp-constructor-repair-diagnostic-20260926.md)
 - [R12 postrun: narrow screening pass, repeated shared validation failure, no promotion](v04-cvrp-r12-post-r11-autonomous-postrun-20260926.md)
 - [R12 frozen design and terminal pointer](v04-cvrp-r12-post-r11-autonomous-preregistration-20260924.md)

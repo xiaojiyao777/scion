@@ -1,5 +1,15 @@
 # Proposal Context
 
+## Current direct-runtime research guidance (2026-09-27)
+
+The historical map below is a locator, not current runtime authority. Current
+direct H/C prompts live in `proposal/engine/hypothesis_prompts.py` and
+`code_prompts.py`. Their base system blocks also reach bounded H/K2/C sessions,
+which replace the base user prompt. They explain cumulative branch inheritance,
+the champion comparator and whole-candidate attribution. C still receives only
+approved H plus complete source, not H history. Interpretation guidance adds no
+required read, ablation, rollback, mechanism preference or scientific gate.
+
 ## Scope / Sources
 
 Sources read: `scion/scion/core/proposal_pipeline.py`, `scion/scion/core/problem_runtime.py`, `scion/scion/proposal/context_manager.py`, `engine.py`, `schemas.py`, `search_memory.py`, `classifier.py`, `research_log.py`, `saturation.py`, `mechanism_labels.py`, plus `ProblemSpecV1` research surface/taxonomy fields in `scion/scion/problem/spec.py`.

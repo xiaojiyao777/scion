@@ -12,6 +12,7 @@ from scion.runtime.workspace import WorkspaceMaterializer
 from scion.verification.development import (
     BubblewrapDevelopmentSandbox,
     DevelopmentSuiteManifest,
+    development_safety_preflight_failure,
 )
 from scion.verification.gate import VerificationGate
 
@@ -28,6 +29,73 @@ def _problem_spec(problem_root: Path) -> ProblemSpec:
             import_whitelist=[],
         ),
     )
+
+
+@pytest.mark.parametrize("checker", ["check_sensitive_api", "check_import_whitelist"])
+def test_preflight_feedback_never_projects_checker_detail(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, checker: str
+) -> None:
+    from types import SimpleNamespace
+
+    import scion.verification.development as development
+
+    secret = "/host/heldout/PRIVATE_SENTINEL"
+    monkeypatch.setattr(
+        development,
+        checker,
+        lambda *_args, **_kwargs: SimpleNamespace(passed=False, detail=secret),
+    )
+    failure = development_safety_preflight_failure(
+        patch=PatchProposal(
+            file_path="operators/main.py",
+            action="modify",
+            code_content="def improve(value): return value\n",
+        ),
+        problem_spec=_problem_spec(tmp_path),
+        candidate_workspace=str(tmp_path),
+    )
+    assert failure is not None
+    assert failure.file_path == "operators/main.py"
+    assert secret not in repr(failure)
+    assert "PRIVATE_SENTINEL" not in repr(failure)
+
+
+def test_development_setup_failure_does_not_echo_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    secret = "/host/heldout/PRIVATE_SENTINEL"
+
+    def fail_setup(*_args, **_kwargs):
+        raise ValueError(secret)
+
+    monkeypatch.setattr(CodeDevelopmentEvaluator, "_prepare_scratch", fail_setup)
+    evaluator = CodeDevelopmentEvaluator(
+        materializer=None,
+        problem_spec=_problem_spec(tmp_path),
+        suites=(
+            DevelopmentSuiteManifest("D3_unit_tests", str(tmp_path), "tests/public.py"),
+        ),
+        workspace_paths=(),
+        problem_package_paths=(),
+        limits=CodeResearchLimits(),
+    )
+    run = evaluator.evaluate(
+        source_corpus={"operators/main.py": "def improve(value): return value\n"},
+        patch=PatchProposal(
+            "operators/main.py", "modify", "def improve(value): return value + 1\n"
+        ),
+        selected_surface=None,
+        total_timeout_sec=10,
+    )
+    assert run.outcome == "preflight_rejected"
+    assert run.provider_projection()["checks"] == [
+        {
+            "name": "D0_preflight",
+            "outcome": "preflight_rejected",
+            "reason_code": "development_setup_failed",
+        }
+    ]
+    assert secret not in repr(run.provider_projection())
 
 
 def test_c9_bypass_cannot_read_host_or_masked_framework_or_write_work(

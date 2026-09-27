@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r14-post-r13-autonomous
+
+screening:
+  - 130003
+  - 130021
+  - 130027
+  - 130043
+
+validation:
+  - 130051
+  - 130057
+
+frozen:
+  - 130069
+  - 130073
+
+canary:
+  - 130079

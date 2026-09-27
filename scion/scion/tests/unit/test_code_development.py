@@ -7,7 +7,7 @@ import pytest
 from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.code_development import CodeDevelopmentEvaluator
 from scion.core.code_research_limits import CodeResearchLimits
-from scion.core.models import PatchProposal
+from scion.core.models import PatchFileChange, PatchProposal
 from scion.runtime.workspace import WorkspaceMaterializer
 from scion.verification.development import (
     BubblewrapDevelopmentSandbox,
@@ -18,6 +18,8 @@ from scion.verification.development import (
     declared_development_problem_package_paths,
     declared_development_suites,
     declared_development_workspace_paths,
+    development_safety_preflight_failure,
+    run_development_checks,
     validate_development_closure_boundary,
 )
 
@@ -395,21 +397,44 @@ def test_falsifier_copy_charge_is_not_refunded_before_host_copy(
 
 
 @pytest.mark.parametrize(
-    "unsafe_source",
+    ("unsafe_source", "check_name", "reason_code"),
     [
         (
             "import subprocess\n"
             "def improve(value):\n"
             "    subprocess.run(['true'])\n"
-            "    return value\n"
+            "    return value\n",
+            "C9_sensitive_api",
+            "sensitive_api_rejected",
         ),
-        "import definitely_not_whitelisted\ndef improve(value):\n    return value\n",
+        (
+            "import definitely_not_whitelisted\ndef improve(value):\n    return value\n",
+            "C8_import_whitelist",
+            "import_whitelist_rejected",
+        ),
+        (
+            "def improve(value):\n    return __import__('inspect').signature(value)\n",
+            "C9_sensitive_api",
+            "sensitive_api_rejected",
+        ),
+        (
+            "import inspect\ndef improve(value):\n    return inspect.signature(value)\n",
+            "C8_import_whitelist",
+            "import_whitelist_rejected",
+        ),
+        (
+            "def improve(value):\n    return (\n",
+            "D0_preflight",
+            "syntax_invalid",
+        ),
     ],
 )
 def test_unsafe_patch_never_dispatches_falsifier_or_formal_gates(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     unsafe_source: str,
+    check_name: str,
+    reason_code: str,
 ) -> None:
     problem_root = tmp_path / "problem"
     (problem_root / "tests").mkdir(parents=True)
@@ -457,6 +482,87 @@ def test_unsafe_patch_never_dispatches_falsifier_or_formal_gates(
     assert run.outcome == "preflight_rejected"
     assert sandbox.probe_calls == 0
     assert sandbox.host_calls == 0
+    assert run.provider_projection() == {
+        "outcome": "preflight_rejected",
+        "checks": [
+            {
+                "name": check_name,
+                "outcome": "preflight_rejected",
+                "reason_code": reason_code,
+                "file_path": "operators/main.py",
+            }
+        ],
+        "counts": {"total": 1, "passed": 0, "failed": 1},
+    }
+    assert list((tmp_path / "campaign/candidate_workspaces").iterdir()) == []
+
+
+def test_preflight_reports_secondary_patch_file_and_preserves_check_order(
+    tmp_path: Path,
+) -> None:
+    patch = _patch()
+    patch.additional_changes = (
+        PatchFileChange(
+            file_path="operators/helper.py",
+            action="create",
+            code_content="import inspect\n",
+        ),
+    )
+    failure = development_safety_preflight_failure(
+        patch=patch,
+        problem_spec=_spec(tmp_path),
+        candidate_workspace=str(tmp_path),
+    )
+    assert failure is not None
+    assert failure.name == "C8_import_whitelist"
+    assert failure.file_path == "operators/helper.py"
+    assert failure.reason_code == "import_whitelist_rejected"
+
+    sandbox = _RecordingSandbox()
+    run = run_development_checks(
+        patch=patch,
+        candidate_workspace=str(tmp_path),
+        problem_spec=_spec(tmp_path),
+        selected_surface=None,
+        operator_execute_signature=None,
+        suites=(),
+        per_suite_timeout_sec=10,
+        total_timeout_sec=10,
+        sandbox=sandbox,
+        problem_runtime_root=str(tmp_path),
+    )
+    assert run.outcome == "preflight_rejected"
+    assert [check.name for check in run.checks] == [
+        "D1_syntax",
+        "D1b_undefined_names",
+        "D2_interface",
+        "C8_import_whitelist",
+    ]
+    assert run.checks[-1] == failure
+    assert sandbox.host_calls == 0
+
+
+@pytest.mark.parametrize(
+    ("file_path", "reason_code"),
+    [
+        ("private/heldout.py", "source_not_editable"),
+        ("operators/frozen.py", "source_frozen"),
+    ],
+)
+def test_preflight_source_boundary_does_not_echo_noneditable_or_frozen_paths(
+    tmp_path: Path, file_path: str, reason_code: str
+) -> None:
+    spec = _spec(tmp_path)
+    spec.search_space.frozen.append("operators/frozen.py")
+    patch = _patch()
+    patch.file_path = file_path
+    failure = development_safety_preflight_failure(
+        patch=patch, problem_spec=spec, candidate_workspace=str(tmp_path)
+    )
+    assert failure is not None
+    assert failure.name == "D0_preflight"
+    assert failure.reason_code == reason_code
+    assert failure.file_path is None
 
 
 def test_reserved_falsifier_suite_path_fails_before_dispatch(tmp_path: Path) -> None:
@@ -494,6 +600,8 @@ def test_reserved_falsifier_suite_path_fails_before_dispatch(tmp_path: Path) -> 
     assert run.outcome == "preflight_rejected"
     assert sandbox.probe_calls == 0
     assert sandbox.host_calls == 0
+    assert run.checks[0].reason_code == "reserved_probe_path_conflict"
+    assert run.checks[0].file_path is None
 
 
 def test_manifest_rejects_absolute_traversal_and_symlink(tmp_path: Path) -> None:

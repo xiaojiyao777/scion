@@ -1,5 +1,11 @@
 # CVRP R13: R12 A plus common construction repair versus B0-fixed
 
+Terminal update, September 27: completed `NOT_CONFIRMED` at expanded screening,
+terminal written September 26 at 02:22:17.944813 UTC. All 24 pairs valid,
+case W/L/T 4/1/1, median +91.5, CI [-36,296.75], uncertain. No validation,
+frozen, retained or promotion. See the [postrun](v04-cvrp-r13-constructor-fixed-b0-postrun-20260927.md).
+R13 must not resume. The design and startup wording below are historical.
+
 State: launched once at `2026-09-26T01:13:23Z`, driver PID 242261, tmux
 `scion-r13-constructor-fixed-b0-20260926`. The user explicitly authorized
 an independent GPT-6-Astra constructor-repair subagent, concurrent remaining

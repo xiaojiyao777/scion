@@ -1,5 +1,18 @@
 # Evaluation Decision
 
+## Current development preflight feedback (2026-09-27)
+
+`core/code_development.py` uses
+`verification/development.py::development_safety_preflight_failure` to return
+the first bounded rejection from the existing editable/frozen/import/API
+checks. C8/C9 carry fixed reason enums and eligible patch-relative file paths;
+D0 carries fixed setup/source/syntax reasons. Raw check text, exceptions and
+private/support paths are not projected. `proposal/code_research_session.py`
+independently validates names, reasons, outcomes and membership in the current
+patch. Failed preflight still consumes the same test call and executes no
+development subprocess. These hints are not Contract/Verification evidence;
+formal Protocol/Safe Features/Decision are unchanged.
+
 ## Scope / Sources
 
 Sources read: `scion/scion/contract/gate.py`, `scion/scion/verification/gate.py`, `scion/scion/verification/feasibility.py`, `objective.py`, `state_mutation.py`, `perf_guard.py`, `nondeterminism.py`, `scion/scion/core/evaluation_pipeline.py`, `evaluation_orchestrator.py`, `features.py`, `decision.py`, `decision_coordinator.py`, `decision_finalizer.py`, `scion/scion/protocol/experiment.py`, `gates.py`, `stats.py`, `evaluation.py`, and `scion/scion/problem/objectives.py`.

@@ -622,6 +622,9 @@ class CodeResearchSession:
         result = _bounded_test_projection(
             projection,
             draft_revision=draft_revision,
+            patch_paths=frozenset(
+                change.file_path for change in patch.iter_file_changes()
+            ),
         )
         rendered_chars = len(_bounded_json(result))
         if (
@@ -988,6 +991,7 @@ def _bounded_test_projection(
     value: Mapping[str, Any],
     *,
     draft_revision: int,
+    patch_paths: frozenset[str],
 ) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise ProposalValidationError("development test result must be an object")
@@ -1000,11 +1004,25 @@ def _bounded_test_projection(
         "unavailable",
     }
     check_names = {
+        "D0_preflight",
+        "C8_import_whitelist",
+        "C9_sensitive_api",
         "D1_syntax",
         "D1b_undefined_names",
         "D2_interface",
         "D3_unit_tests",
         "D4_regression_tests",
+    }
+    preflight_reasons = {
+        "D0_preflight": {
+            "source_not_editable",
+            "source_frozen",
+            "reserved_probe_path_conflict",
+            "development_setup_failed",
+            "syntax_invalid",
+        },
+        "C8_import_whitelist": {"import_whitelist_rejected"},
+        "C9_sensitive_api": {"sensitive_api_rejected"},
     }
     reason_codes = {
         "syntax_invalid",
@@ -1024,15 +1042,17 @@ def _bounded_test_projection(
     outcome = value.get("outcome")
     falsifier_outcome = value.get("falsifier_outcome")
     raw_checks = value.get("checks")
-    if outcome not in outcomes or not isinstance(raw_checks, list):
+    if (
+        not isinstance(outcome, str)
+        or outcome not in outcomes
+        or not isinstance(raw_checks, list)
+    ):
         raise ProposalValidationError("development test result has invalid fields")
-    if "falsifier_outcome" in value and falsifier_outcome not in {
-        "passed",
-        "failed",
-        "inconclusive",
-        "timeout",
-        "unavailable",
-    }:
+    if "falsifier_outcome" in value and (
+        not isinstance(falsifier_outcome, str)
+        or falsifier_outcome
+        not in {"passed", "failed", "inconclusive", "timeout", "unavailable"}
+    ):
         raise ProposalValidationError("development test result has invalid fields")
     if len(raw_checks) > len(check_names):
         raise ProposalValidationError("development test result has too many checks")
@@ -1042,7 +1062,7 @@ def _bounded_test_projection(
         if (
             not isinstance(raw_check, Mapping)
             or not set(raw_check).issubset(
-                {"name", "outcome", "reason_code", "test_path"}
+                {"name", "outcome", "reason_code", "test_path", "file_path"}
             )
             or not {"name", "outcome"}.issubset(raw_check)
         ):
@@ -1051,10 +1071,41 @@ def _bounded_test_projection(
         check_outcome = raw_check.get("outcome")
         reason_code = raw_check.get("reason_code")
         test_path = raw_check.get("test_path")
-        if name not in check_names or name in seen or check_outcome not in outcomes:
+        file_path = raw_check.get("file_path")
+        if (
+            not isinstance(name, str)
+            or name not in check_names
+            or name in seen
+            or not isinstance(check_outcome, str)
+            or check_outcome not in outcomes
+        ):
             raise ProposalValidationError("development check result is invalid")
-        if reason_code is not None and reason_code not in reason_codes:
+        if reason_code is not None and (
+            not isinstance(reason_code, str)
+            or reason_code not in preflight_reasons.get(name, reason_codes)
+        ):
             raise ProposalValidationError("development check result is invalid")
+        if name in preflight_reasons and (
+            outcome != "preflight_rejected"
+            or check_outcome != "preflight_rejected"
+            or reason_code not in preflight_reasons[name]
+            or test_path is not None
+        ):
+            raise ProposalValidationError("development check result is invalid")
+        if file_path is not None:
+            try:
+                canonical_file_path = normalize_relative_patch_path(file_path)
+            except (TypeError, ValueError):
+                canonical_file_path = None
+            if (
+                not isinstance(file_path, str)
+                or len(file_path) > _MAX_PATH_CHARS
+                or canonical_file_path != file_path
+                or file_path not in patch_paths
+                or name not in preflight_reasons
+                or (name == "D0_preflight" and reason_code != "syntax_invalid")
+            ):
+                raise ProposalValidationError("development check result is invalid")
         if test_path is not None:
             try:
                 canonical_test_path = normalize_relative_patch_path(test_path)
@@ -1072,6 +1123,7 @@ def _bounded_test_projection(
                 "outcome": check_outcome,
                 **({"reason_code": reason_code} if reason_code is not None else {}),
                 **({"test_path": test_path} if test_path is not None else {}),
+                **({"file_path": file_path} if file_path is not None else {}),
             }
         )
         seen.add(name)

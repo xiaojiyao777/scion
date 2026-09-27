@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-26*
+*Current as of: 2026-09-27*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -79,12 +79,39 @@ authority or authorize another run.
   At R13 launch, prior R10–R12 and new R13 work were uncommitted atop pushed
   `841de42b`. The user's subsequent September 26 request authorizes committing
   and pushing this frozen change set; no running algorithm/input is changed.
-- R13 launched once at `2026-09-26T01:13:23Z`, driver PID 242261, tmux
-  `scion-r13-constructor-fixed-b0-20260926`. Both 100-file input snapshots
-  equal the declared sources; screening started on B-n34-k5 / seed 120011
-  with the correct 60-second limit after paired canary. No formal result yet.
-  Runtime/source/data/scientific inputs are frozen; avoid tests/cleanup/solvers.
-  A chat-service interruption left the driver running; it was not relaunched.
+- R10–R13 analysis/preparation and the common constructor repair were committed
+  and pushed as `964a9622`; September 27 entry checks found a clean checkout.
+- R13 completed normally as `NOT_CONFIRMED` at expanded screening, terminal
+  written by `2026-09-26T02:22:17.944813+00:00`. All 24 pairs are valid,
+  W/L/T 4/1/1, median +91.5, CI [-36,296.75], uncertain against B0-fixed.
+  No validation/frozen/retained or promotion. Pane dead (no exit-status value);
+  JSON establishes completion. Both 100-file snapshots match their sources;
+  12 AB/12 BA, all limits, objective differences and runtime safety checked.
+  The constructor repair has engineering evidence but R13 did not test the
+  formerly failing formal validation matrix. See the bounded postrun below.
+- R14 completed normally at `2026-09-27T08:44:52.323359+00:00`: twelve
+  screening stages / ten evaluated candidates, 108 valid pairs, no promotion
+  or held-out execution. All 120 provider calls succeed; 480 of 600 remain.
+  One Code attempt abandoned after four opaque preflight rejections. All 302
+  visible C source values and three complete final trees match branch history.
+  Persistent research works, but C's missing preflight reasons and H's
+  cumulative-source attribution need attention. See the postrun below.
+  The subsequent status/diagnosis audit made no runtime edit or launch.
+- September 27 follow-up explicitly authorizes subagents to repair research
+  feedback and then launch fresh R15. Safe typed C preflight reasons and
+  problem-neutral cumulative-source/comparator guidance are implemented;
+  2471 tests pass / one skip, focused regressions and independent review pass.
+  Warehouse r2 completes two valid negative H/C screening stages after the
+  first input correctly failed public/formal-overlap checks before execution.
+  R15 keeps R12-A-fixed as its complete starting tree, appends all R14 history,
+  and prospectively broadens initial screening to five cases (including
+  X190/X513), with strict six-case/four-seed expansion and unchanged gates.
+  R15 started once at 13:54:37 UTC, PID 289227. All 100 initial files match;
+  first actual H calls succeed with exact question, five observations and
+  124 prior-history entries. Runtime/inputs are frozen; no scientific result yet.
+- The subsequent September 27 user request authorizes committing and pushing
+  the frozen R13–R15 change set. This does not change the running R15 runtime
+  or scientific inputs; its launch-time dirty-checkout record is preserved.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -302,26 +329,45 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
 
 ## Active next work
 
-1. Preserve R4–R12 postruns and original terminal/source roots. R10/R12 are
+1. Preserve R4–R13 postruns and original terminal/source roots. R10/R12 are
    scientifically incomplete; R11 completed without promotion. Never resume them.
 2. P1 source continuation and P1b observation cleanup are implemented.
    Legacy configuration/pool terminology remains separate debt.
 3. CVRP is open. The unchanged necessary held-out and runtime-audit gates
    must preserve the R10 comparator failure. Do not patch original B0, drop
    a failed validation case, leak held-out diagnostics to H/C or backfill evidence.
-4. [R13](../experiments/v0.4/v04-cvrp-r13-constructor-fixed-b0-preregistration-20260926.md)
-   is running under the explicit repair-and-launch request, after independent
-   correctness/complete-source checks: one provider-free counterbalanced
-   comparison of R12-A-fixed against B0-fixed. Both share the
-   same minimal repair; budgets and scientific gates are unchanged. Exposed
-   validation remains a development gate; frozen/retained remain unopened.
-   A positive result would be against B0-fixed, never unchanged original B0,
-   and does not close the original project objective by relabeling it.
-   Inputs and separate engineering diagnostics:
-   `/home/clawd/research/scion-experiment-inputs/v04-cvrp-r13-constructor-fixed-b0-20260926`.
-   Live output (do not restart/resume):
-   `/home/clawd/research/scion-experiments/v04-cvrp-r13-constructor-fixed-b0-20260926`.
-   After terminal completion, analyze paired evidence before selecting another rung.
+4. [R13 postrun](../experiments/v0.4/v04-cvrp-r13-constructor-fixed-b0-postrun-20260927.md)
+   preserves broader positive but uncertain screening versus B0-fixed, not
+   unchanged B0. X-n190 median -72 remains unstable; its 2–4 candidate ALNS
+   iterations spend 57.786–64.337 seconds in embedded VNS. Both large cases
+   still have zero candidate ALNS. These are bundle observations, not causal
+   attribution. Exact [terminal](/home/clawd/research/scion-experiments/v04-cvrp-r13-constructor-fixed-b0-20260926/terminal.json)
+   and [metric](/home/clawd/research/scion-experiments/v04-cvrp-r13-constructor-fixed-b0-20260926/metrics/361aae52-87e4-4628-84ca-fd921a6efa77.json).
+5. [R14 postrun](../experiments/v0.4/v04-cvrp-r14-post-r13-autonomous-postrun-20260927.md)
+   records valid non-promotion and two actionable gaps: preflight drops C8/C9
+   rejection reasons before C sees them; the final one-hop proposal retains
+   the preceding failed time quantum despite its alternative-method rationale.
+   All X-n351 pairs have zero ALNS; later X-n190-focused proposals were only
+   initial-screened without X-n190. Preserve these scope limits and Decisions.
+   The user authorized bounded safe feedback repair and prospective
+   cumulative-source/population design, then a fresh run. Do not resume R14.
+   [R15 preregistration](../experiments/v0.4/v04-cvrp-r15-feedback-repair-autonomous-preregistration-20260927.md)
+   and [independent Warehouse control](../experiments/v0.4/v04-r15-warehouse-feedback-control-20260927.md)
+   are prepared. Full suite: 2471 passed, 1 skipped in 430.51 s. Warehouse
+   first control startup correctly rejected public-test/formal case overlap,
+   before provider/solver/output. The [input-only r2 correction](../experiments/v0.4/v04-r15-warehouse-feedback-control-r2-20260927.md)
+   passes full closure checks and completed at 13:51:19 UTC: two valid
+   negative stages, no framework blocker. Actual source fidelity is verified;
+   sibling-inheritance wording remains a model reasoning limitation.
+   R15 started once at 13:54:37 UTC, PID 289227, tmux
+   `scion-r15-feedback-repair-autonomous-20260927`; startup checks pass.
+   Read its exact status/summary under
+   `/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927`.
+   Keep runtime and scientific inputs frozen; next work is postrun H/C,
+   source-continuity and paired-evidence analysis after terminal completion.
+   Validation remains exposed;
+   frozen/retained unopened. No B0-fixed/original-B0 superiority. Terminal root:
+   `/home/clawd/research/scion-experiments/v04-cvrp-r14-post-r13-autonomous-20260927`.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

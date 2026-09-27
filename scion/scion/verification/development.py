@@ -31,6 +31,9 @@ from scion.verification.syntax import check_syntax
 from scion.verification.undefined_names import check_undefined_names
 
 DevelopmentCheckName = Literal[
+    "D0_preflight",
+    "C8_import_whitelist",
+    "C9_sensitive_api",
     "D1_syntax",
     "D1b_undefined_names",
     "D2_interface",
@@ -46,6 +49,12 @@ DevelopmentOutcome = Literal[
     "unavailable",
 ]
 DevelopmentReasonCode = Literal[
+    "source_not_editable",
+    "source_frozen",
+    "reserved_probe_path_conflict",
+    "development_setup_failed",
+    "sensitive_api_rejected",
+    "import_whitelist_rejected",
     "syntax_invalid",
     "undefined_names",
     "interface_mismatch",
@@ -110,6 +119,7 @@ class DevelopmentCheckObservation:
     outcome: DevelopmentOutcome
     reason_code: DevelopmentReasonCode | None = None
     test_path: str | None = None
+    file_path: str | None = None
 
     @property
     def passed(self) -> bool:
@@ -149,6 +159,11 @@ class DevelopmentCheckRun:
                     **(
                         {"test_path": check.test_path}
                         if check.test_path is not None
+                        else {}
+                    ),
+                    **(
+                        {"file_path": check.file_path}
+                        if check.file_path is not None
                         else {}
                     ),
                 }
@@ -525,14 +540,15 @@ def run_development_checks(
         if not passed:
             return DevelopmentCheckRun(outcome="failed", checks=tuple(checks))
 
-    if not development_safety_preflight(
+    preflight_failure = development_safety_preflight_failure(
         patch=patch,
         problem_spec=problem_spec,
         candidate_workspace=candidate_workspace,
-    ):
+    )
+    if preflight_failure is not None:
         return DevelopmentCheckRun(
             outcome="preflight_rejected",
-            checks=tuple(checks),
+            checks=(*checks, preflight_failure),
         )
     if not sandbox.available:
         return DevelopmentCheckRun(outcome="unavailable", checks=tuple(checks))
@@ -867,12 +883,17 @@ class BubblewrapDevelopmentSandbox:
         return argv
 
 
-def development_safety_preflight(
+def development_safety_preflight_failure(
     *,
     patch: PatchProposal,
     problem_spec: Any,
     candidate_workspace: str,
-) -> bool:
+) -> DevelopmentCheckObservation | None:
+    """Return the first safe rejection without exposing raw checker details.
+
+    These are development hints from the existing static checks, not a formal
+    Contract result. Only an editable, non-frozen patch path may be projected.
+    """
     patterns = editable_patterns(problem_spec)
     search_space = getattr(problem_spec, "search_space", None)
     frozen_patterns = tuple(getattr(search_space, "frozen", ()) or ())
@@ -901,13 +922,33 @@ def development_safety_preflight(
             test_hint=change.test_hint,
         )
         if not is_editable(change.file_path):
-            return False
+            return DevelopmentCheckObservation(
+                name="D0_preflight",
+                outcome="preflight_rejected",
+                reason_code="source_not_editable",
+            )
         if any(
             segment_glob_match(change.file_path, pattern) for pattern in frozen_patterns
         ):
-            return False
+            return DevelopmentCheckObservation(
+                name="D0_preflight",
+                outcome="preflight_rejected",
+                reason_code="source_frozen",
+            )
+        try:
+            visible_path = normalize_relative_patch_path(change.file_path)
+        except ValueError:
+            visible_path = None
         if not check_sensitive_api(single).passed:
-            return False
+            syntax_valid = check_syntax(single).passed
+            return DevelopmentCheckObservation(
+                name="C9_sensitive_api" if syntax_valid else "D0_preflight",
+                outcome="preflight_rejected",
+                reason_code="sensitive_api_rejected"
+                if syntax_valid
+                else "syntax_invalid",
+                file_path=visible_path,
+            )
         if not check_import_whitelist(
             single,
             problem_spec=problem_spec,
@@ -916,8 +957,13 @@ def development_safety_preflight(
             relative_import_file_exists=lambda path: read_source(path) is not None,
             relative_import_source=read_source,
         ).passed:
-            return False
-    return True
+            return DevelopmentCheckObservation(
+                name="C8_import_whitelist",
+                outcome="preflight_rejected",
+                reason_code="import_whitelist_rejected",
+                file_path=visible_path,
+            )
+    return None
 
 
 def _validated_suite_order(
@@ -1039,7 +1085,7 @@ __all__ = [
     "declared_development_workspace_paths",
     "declared_development_suites",
     "development_probe_path_conflicts",
-    "development_safety_preflight",
+    "development_safety_preflight_failure",
     "run_development_checks",
     "validate_development_closure_boundary",
     "write_development_source_corpus",

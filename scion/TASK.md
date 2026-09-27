@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-09-26*
+*Current as of: 2026-09-27*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -28,8 +28,9 @@ The project goal is retained solver improvement produced by Scion itself:
   then stopped on incomplete shared validation evidence. R11 completed without
   promotion, leaving a modest uncertain B-branch signal. R12 passed a narrow
   local screen but stopped on the same shared validation construction failure.
-  The user now authorizes independent constructor remediation and a fresh
-  common-repair comparison, not relabeling it as unchanged-B0 superiority.
+  R13's common-repair comparison completed valid but uncertain screening
+  (+91.5 [-36,296.75]) against B0-fixed, not unchanged B0. The user now requests
+  fresh analysis and autonomous optimization from the complete repaired source.
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -403,11 +404,62 @@ partial campaign.
   R13 started `2026-09-26T01:13:23Z`, PID 242261. Both 100-file snapshots
   equal the declared repaired sources; actual screening uses the correct 60 s.
   No formal result yet; only launch-status docs change after startup.
-- [ ] Analyze R13 terminal paired evidence before selecting another rung.
+- [x] Analyze [R13 terminal paired evidence](docs/experiments/v0.4/v04-cvrp-r13-constructor-fixed-b0-postrun-20260927.md):
+  24 valid pairs, 4/1/1, +91.5 [-36,296.75], uncertain; no later stages.
+  Preserve original evidence and the distinction between engineering repair,
+  B0-fixed comparisons and unchanged-original-B0 retained improvement.
 
-The user's subsequent September 26 request authorizes committing and pushing
-the frozen R10–R13 work. This changes Git bookkeeping and handoff wording only;
-R13's running algorithm and scientific inputs remain unchanged.
+The September 26 commit/push request completed as `964a9622`; no running
+algorithm or scientific input changed. A subsequent September 27 request
+authorizes committing and pushing the frozen R13–R15 change set without
+changing the running R15 runtime or scientific inputs.
+
+### P10 — Autonomous optimization after the repaired-comparator screen
+
+- [x] Preregister [R14](docs/experiments/v0.4/v04-cvrp-r14-post-r13-autonomous-preregistration-20260927.md)
+  from R13's complete candidate snapshot, all ordered R12 history and safe
+  screening evidence, with fresh seeds and unchanged budgets/gates. H/C choose
+  algorithms; preserve adverse results and exclude private regression details.
+- [x] Verify prospective inputs, complete source/history projection and all 25
+  data cases: 225 tests pass in 3.07 seconds, 100 source files parse, 135 raw /
+  112 H-visible records and five observations project correctly. Ruff and diff
+  checks pass. Final provider/fresh-output checks precede launch.
+- [x] Freeze runtime/sources/inputs, verify provider/fresh output/no overlap and
+  launch once at `2026-09-27T02:19:53Z`, PID 267274. All 100 initial files
+  match; first actual H call succeeds with exact question and five-observation /
+  112-history indexes. No formal result yet; do not resume R13 or claim B0 proof.
+- [x] Analyze [R14 H/C, source continuity and paired evidence](docs/experiments/v0.4/v04-cvrp-r14-post-r13-autonomous-postrun-20260927.md):
+  completed 08:44:52 UTC, 108 valid pairs, ten candidates, no promotion.
+  120 successful calls, no global exhaustion; one Code abandonment. All 302
+  visible C source values and three final trees match. Opaque preflight reasons,
+  cumulative-source reasoning and hypothesis/population coverage need attention.
+  The subsequent diagnosis preserved all evidence without a runtime edit.
+
+### P11 — Repair research feedback, then a fresh autonomous experiment
+
+- [x] September 27 user explicitly authorizes coordinated subagents to repair
+  the diagnosed research-support gaps and then start another experiment.
+- [x] Add safe typed development preflight feedback and cumulative-source /
+  comparator interpretation guidance. Keep import/API rejection, test counts,
+  complete source/history, held-out isolation and all scientific gates.
+- [x] Preregister [R15](docs/experiments/v0.4/v04-cvrp-r15-feedback-repair-autonomous-preregistration-20260927.md)
+  from the same complete R12-A-fixed tree, all ordered R14 history and fresh
+  seeds. Initial five-case screening covers X190/X513; expansion still adds
+  the sixth case and requires four seeds. No host algorithm change or merge.
+- [x] Complete focused/full regressions and the independent
+  [Warehouse control](docs/experiments/v0.4/v04-r15-warehouse-feedback-control-20260927.md)
+  on the same frozen runtime, since shared research code changed. Full suite:
+  2471 passed / 1 skipped; focused repair/context/input tests and independent
+  review pass. The first control input correctly failed startup overlap checks;
+  [r2](docs/experiments/v0.4/v04-r15-warehouse-feedback-control-r2-20260927.md)
+  completes two valid negative stages, 48 successful calls, no framework blocker.
+- [x] Freeze inputs/runtime, verify no overlapping work and launch R15 once
+  at `2026-09-27T13:54:37Z`, PID 289227. All 100 source files match; first
+  actual H calls succeed with exact question, five observations, 124 history
+  entries and repaired guidance. Startup is not improved-reasoning/quality proof.
+- [ ] After terminal completion, analyze actual H/C, preflight feedback use,
+  complete source and paired evidence. Preserve adverse results and remaining
+  model reasoning limitations; never resume a terminal campaign.
 
 ### v0.4 closeout
 
@@ -485,6 +537,21 @@ Documentation does not replace code verification. Use
 `PYTHONPATH=scion:.` from the repository root so imports use this checkout.
 
 ## Working discipline
+
+Latest R14 preparation: 225 focused tests passed in 3.07 seconds, Ruff F/E9,
+formatting/CLI/diff checks pass; all 25 cases parse and source/input/history
+projection checks pass. No core/adapter/algorithm implementation changed.
+R14 is terminal without promotion. The subsequent user explicitly authorized
+team repair and a fresh experiment; P11 records that scope. R15 read-only
+preparation passes (100 source files, 25 cases, 147 raw / 124 H-visible rows,
+five observations). Shared-runtime repair verification/control is complete:
+2471 passed / 1 skipped, independent Warehouse r2 valid negative, no framework
+blocker. Its first input startup failure is preserved; input-only correction
+has seven passing regressions. R15 started at 13:54:37 UTC, PID 289227;
+source and actual H startup checks pass. Runtime/inputs are frozen. Work
+was uncommitted at launch; the subsequent September 27 user request authorizes
+committing and pushing this frozen change set. Git records the resulting
+revision; the launch-time checkout description remains historical evidence.
 
 - Read V3 before changing runtime ownership; prefer subtraction and ordinary
   values over registries, identities, gates, manifests, or proof lifecycles.

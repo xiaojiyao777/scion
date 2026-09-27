@@ -1288,6 +1288,168 @@ def test_development_projection_rejects_unapproved_diagnostic_values(
         session.run(_snapshot())
 
 
+@pytest.mark.parametrize(
+    ("unsafe_source", "check_name", "reason_code"),
+    [
+        (
+            "def improve(value): return __import__('inspect').signature(value)\n",
+            "C9_sensitive_api",
+            "sensitive_api_rejected",
+        ),
+        (
+            "import inspect\ndef improve(value): return inspect.signature(value)\n",
+            "C8_import_whitelist",
+            "import_whitelist_rejected",
+        ),
+    ],
+)
+def test_preflight_feedback_reaches_next_turn_and_allows_deliberate_revision(
+    tmp_path: Path, unsafe_source: str, check_name: str, reason_code: str
+) -> None:
+    from scion.config.problem import ProblemSpec, SearchSpace
+    from scion.verification.development import (
+        DevelopmentCheckRun,
+        development_safety_preflight_failure,
+    )
+
+    spec = ProblemSpec(
+        name="generic_subject",
+        root_dir=str(tmp_path),
+        operator_categories=["generic"],
+        search_space=SearchSpace(
+            editable=["operators/*.py"], frozen=[], import_whitelist=[]
+        ),
+    )
+
+    def test_patch(patch_value, _remaining, _corpus, _falsifier_source):
+        failure = development_safety_preflight_failure(
+            patch=patch_value, problem_spec=spec, candidate_workspace=str(tmp_path)
+        )
+        if failure is not None:
+            return DevelopmentCheckRun(
+                outcome="preflight_rejected", checks=(failure,)
+            ).provider_projection()
+        return _passing_development_test(None, 1.0, {})
+
+    session, client = _run(
+        [
+            {
+                "action": "revise",
+                "patch": {
+                    **_patch(),
+                    "old_string": _TARGET_SOURCE,
+                    "new_string": unsafe_source,
+                },
+            },
+            {"action": "test_patch"},
+            {"action": "ready"},
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch"},
+            {"action": "ready"},
+        ],
+        limits=CodeResearchLimits(max_turns=6),
+    )
+    session._test_patch = test_patch
+    result = session.run(_snapshot())
+
+    assert check_name in client.calls[2]["system_text"]
+    assert reason_code in client.calls[2]["system_text"]
+    assert (
+        bounded_json(
+            {
+                "name": check_name,
+                "outcome": "preflight_rejected",
+                "reason_code": reason_code,
+                "file_path": _TARGET_PATH,
+            }
+        )
+        in client.calls[2]["system_text"]
+    )
+    assert "latest_draft_not_passing" in client.calls[3]["system_text"]
+    assert session._test_calls == 2
+    assert session.provider_calls_used == 6
+    assert result.code_content == _TARGET_SOURCE.replace(
+        "return value", "return value + 1"
+    )
+    assert client.responses == []
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"file_path": "/host/private.py"},
+        {"file_path": "operators/../private.py"},
+        {"file_path": "operators/private_not_in_patch.py"},
+        {"file_path": _SUPPORT_PATH},
+        {"file_path": "tests/test_public.py"},
+        {"file_path": ["operators/main.py"]},
+        {"detail": "/host/PRIVATE_SENTINEL"},
+        {"reason_code": "raw_traceback"},
+        {"reason_code": "sensitive_api_rejected"},
+        {"test_path": "tests/private.py"},
+        {"outcome": "passed"},
+        {"name": "D3_unit_tests"},
+        {"name": "D3_unit_tests", "file_path": None},
+        {"name": "D0_preflight", "reason_code": "development_setup_failed"},
+    ],
+)
+def test_preflight_projection_rejects_arbitrary_checker_metadata(
+    updates: dict[str, Any],
+) -> None:
+    from scion.proposal.code_research_session import _bounded_test_projection
+
+    with pytest.raises(ProposalValidationError, match="development check"):
+        _bounded_test_projection(
+            {
+                "outcome": "preflight_rejected",
+                "checks": [
+                    {
+                        "name": "C8_import_whitelist",
+                        "outcome": "preflight_rejected",
+                        "reason_code": "import_whitelist_rejected",
+                        "file_path": _TARGET_PATH,
+                        **updates,
+                    }
+                ],
+            },
+            draft_revision=1,
+            patch_paths=frozenset({_TARGET_PATH}),
+        )
+
+
+def test_preflight_check_cannot_project_a_passing_overall_outcome() -> None:
+    from scion.proposal.code_research_session import _bounded_test_projection
+
+    with pytest.raises(ProposalValidationError, match="development check"):
+        _bounded_test_projection(
+            {
+                "outcome": "passed",
+                "checks": [
+                    {
+                        "name": "C9_sensitive_api",
+                        "outcome": "preflight_rejected",
+                        "reason_code": "sensitive_api_rejected",
+                        "file_path": _TARGET_PATH,
+                    }
+                ],
+            },
+            draft_revision=1,
+            patch_paths=frozenset({_TARGET_PATH}),
+        )
+
+
+@pytest.mark.parametrize("outcome", [[], {}, ["passed"]])
+def test_development_projection_rejects_unhashable_falsifier_outcome(outcome) -> None:
+    from scion.proposal.code_research_session import _bounded_test_projection
+
+    with pytest.raises(ProposalValidationError, match="development test result"):
+        _bounded_test_projection(
+            {"outcome": "passed", "checks": [], "falsifier_outcome": outcome},
+            draft_revision=1,
+            patch_paths=frozenset({_TARGET_PATH}),
+        )
+
+
 def test_global_provider_cap_blocks_test_before_evaluator_dispatch() -> None:
     calls: list[int] = []
 
@@ -1312,11 +1474,24 @@ def test_global_provider_cap_blocks_test_before_evaluator_dispatch() -> None:
     assert session.provider_calls_used == 1
 
 
-def test_test_call_cap_blocks_second_evaluator_dispatch() -> None:
+@pytest.mark.parametrize("outcome", ["passed", "preflight_rejected"])
+def test_test_call_cap_blocks_second_evaluator_dispatch(outcome: str) -> None:
     calls: list[int] = []
 
     def test_patch(_patch_value, _remaining, _corpus, _falsifier_source):
         calls.append(1)
+        if outcome == "preflight_rejected":
+            return {
+                "outcome": outcome,
+                "checks": [
+                    {
+                        "name": "C8_import_whitelist",
+                        "outcome": outcome,
+                        "reason_code": "import_whitelist_rejected",
+                        "file_path": _TARGET_PATH,
+                    }
+                ],
+            }
         return _passing_development_test(None, 1.0, {})
 
     session, client = _run(
