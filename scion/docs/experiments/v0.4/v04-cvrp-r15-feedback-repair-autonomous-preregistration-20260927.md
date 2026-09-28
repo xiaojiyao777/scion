@@ -1,5 +1,11 @@
 # CVRP R15: actionable development feedback and broader initial screening
 
+Terminal update (2026-09-28, original preregistration below unchanged): completed
+at `2026-09-27T22:04:54.956555+00:00`, twelve evaluated stages / 136 valid
+pairs, no promotion. Expanded screening passes; complete validation fails
+quality. The final fresh initial-screen positive is unexpanded. See the
+[read-only postrun](v04-cvrp-r15-feedback-repair-autonomous-postrun-20260928.md).
+
 State: launched once at `2026-09-27T13:54:37Z`, driver PID 289227,
 tmux `scion-r15-feedback-repair-autonomous-20260927`. September 27 user explicitly
 authorizes coordinated subagent repairs followed by one fresh experiment.

@@ -12,6 +12,7 @@ from scion.runtime.workspace import WorkspaceMaterializer
 from scion.verification.development import (
     BubblewrapDevelopmentSandbox,
     DevelopmentSandboxResult,
+    DevelopmentProbeResult,
     DevelopmentSuiteManifest,
     copy_declared_development_files,
     copy_development_suite_closure,
@@ -305,7 +306,7 @@ class _RecordingSandbox:
 
     def run_probe(self, **_kwargs):
         self.probe_calls += 1
-        return self.probe_outcome
+        return DevelopmentProbeResult(self.probe_outcome)
 
     def run_pytest(self, *, workspace: str, **_kwargs):
         self.host_calls += 1

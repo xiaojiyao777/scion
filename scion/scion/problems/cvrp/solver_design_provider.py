@@ -67,7 +67,15 @@ class CvrpSolverDesignProvider:
             "a direct functional consequence of activation. Also falsify deadline "
             "behavior at the largest public synthetic shape in the declared "
             "regression tests. Do not treat emitted telemetry alone as activation "
-            "proof, and do not infer any formal Protocol case, seed, or outcome."
+            "proof, and do not infer any formal Protocol case, seed, or outcome. "
+            "The public tests/test_solver.py includes PUBLIC_PROBE_EXAMPLE, an "
+            "optional copyable falsifier scaffold: it calls the real solve entry "
+            "with unchanged configuration, wraps rather than replaces a real "
+            "scheduler method, and exercises real route/state/operator objects. "
+            "Its small synthetic shape and lightweight context are not the "
+            "production runtime or proof of your mechanism. Adapt the fixture "
+            "and functional assertions to your claim; check the imported "
+            "configuration guards and real collaborator methods."
         )
         return f"{target_guidance}{development_guidance}".strip()
 

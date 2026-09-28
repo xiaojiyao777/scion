@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-09-27*
+*Last updated: 2026-09-28*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,10 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R15 launched: safe preflight feedback, cumulative-source guidance and five-case initial screening](v04-cvrp-r15-feedback-repair-autonomous-preregistration-20260927.md)
+- [R16 prospective safe self-test hints and real-entry research support](v04-cvrp-r16-probe-diagnostics-autonomous-preregistration-20260928.md)
+- [R16 independent Warehouse research-support control](v04-r16-warehouse-probe-control-20260928.md)
+- [R15 postrun: 136 valid pairs, complete negative validation; inactive-path and self-test integration gaps remain](v04-cvrp-r15-feedback-repair-autonomous-postrun-20260928.md)
+- [R15 frozen design and terminal pointer](v04-cvrp-r15-feedback-repair-autonomous-preregistration-20260927.md)
 - [R15 independent Warehouse H/C control r2: two valid negative stages, source fidelity verified](v04-r15-warehouse-feedback-control-r2-20260927.md)
 - [R15 first Warehouse control: startup rejected public-test/formal overlap, zero provider/solver calls](v04-r15-warehouse-feedback-control-20260927.md)
 - [R14 postrun: 108 valid pairs, no promotion; opaque preflight feedback and cumulative-source attribution gaps](v04-cvrp-r14-post-r13-autonomous-postrun-20260927.md)

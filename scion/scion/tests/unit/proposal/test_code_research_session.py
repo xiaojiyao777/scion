@@ -291,6 +291,11 @@ def test_failed_falsifier_rejects_exact_patch_without_replaying_source() -> None
         return {
             **_passing_development_test(None, 1.0, {}),
             "falsifier_outcome": "failed",
+            "falsifier_diagnostic": {
+                "phase": "call",
+                "exception_kind": "assertion_error",
+                "probe_line": 2,
+            },
         }
 
     session._test_patch = test_patch
@@ -305,6 +310,8 @@ def test_failed_falsifier_rejects_exact_patch_without_replaying_source() -> None
     assert observed[0][1] is not None and sentinel in observed[0][1]
     assert observed[0][2][_TARGET_PATH] == _TARGET_SOURCE
     assert '"falsifier_outcome":"failed"' in client.calls[2]["system_text"]
+    assert '"probe_line":2' in client.calls[2]["system_text"]
+    assert '"exception_kind":"assertion_error"' in client.calls[2]["system_text"]
     assert sentinel not in client.calls[2]["system_text"]
     assert "falsifier_source" not in client.calls[2]["system_text"]
 

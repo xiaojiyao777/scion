@@ -7,6 +7,7 @@ are never VerificationResult values and cannot be reused as formal evidence.
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import resource
@@ -14,6 +15,7 @@ import signal
 import stat
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -26,6 +28,11 @@ from scion.core.models import PatchProposal, patch_file_changes
 from scion.core.path_match import segment_glob_match
 from scion.core.paths import normalize_relative_patch_path
 from scion.core.research_surface_index import editable_patterns
+from scion.verification.development_probe import (
+    MAX_PROBE_REPORT_BYTES,
+    PROBE_RUNNER,
+    bounded_probe_diagnostic,
+)
 from scion.verification.interface import check_interface
 from scion.verification.syntax import check_syntax
 from scion.verification.undefined_names import check_undefined_names
@@ -133,6 +140,7 @@ class DevelopmentCheckRun:
     outcome: DevelopmentOutcome
     checks: tuple[DevelopmentCheckObservation, ...] = ()
     falsifier_outcome: DevelopmentProbeOutcome | None = None
+    falsifier_diagnostic: dict[str, str | int] | None = None
 
     @property
     def passed(self) -> bool:
@@ -145,6 +153,11 @@ class DevelopmentCheckRun:
             **(
                 {"falsifier_outcome": self.falsifier_outcome}
                 if self.falsifier_outcome is not None
+                else {}
+            ),
+            **(
+                {"falsifier_diagnostic": dict(self.falsifier_diagnostic)}
+                if self.falsifier_diagnostic is not None
                 else {}
             ),
             "checks": [
@@ -183,6 +196,12 @@ class DevelopmentSandboxResult:
 
     outcome: DevelopmentOutcome
     reason_code: DevelopmentReasonCode | None = None
+
+
+@dataclass(frozen=True)
+class DevelopmentProbeResult:
+    outcome: DevelopmentProbeOutcome
+    diagnostic: dict[str, str | int] | None = None
 
 
 def declared_development_suites(
@@ -709,47 +728,67 @@ class BubblewrapDevelopmentSandbox:
         probe_path: str,
         timeout_sec: float,
         problem_runtime_root: str,
-    ) -> DevelopmentProbeOutcome:
+    ) -> DevelopmentProbeResult:
         """Run one pytest falsifier with no host framework tree mounted."""
 
         if not self._available(require_framework=False):
-            return "unavailable"
+            return DevelopmentProbeResult("unavailable")
         workspace_path = Path(workspace).resolve()
         if probe_path != _DEVELOPMENT_PROBE_PATH:
-            return "unavailable"
+            return DevelopmentProbeResult("unavailable")
         host_probe = workspace_path / probe_path
         try:
             _require_destination_inside_scratch(workspace_path, host_probe)
         except ValueError:
-            return "unavailable"
+            return DevelopmentProbeResult("unavailable")
         if not host_probe.is_file() or host_probe.is_symlink():
-            return "unavailable"
+            return DevelopmentProbeResult("unavailable")
         runtime_path = Path(problem_runtime_root).resolve()
         if not runtime_path.is_dir() or not runtime_path.is_relative_to(workspace_path):
-            return "unavailable"
-        status, return_code = self._execute(
-            self._argv(
-                workspace_path,
-                _DEVELOPMENT_PROBE_PATH,
-                runtime_path,
-                profile="probe",
-            ),
-            timeout_sec,
-        )
+            return DevelopmentProbeResult("unavailable")
+        # Anonymous descriptor: no child-created path, symlink, or host file is
+        # opened for a report. Child file writes retain the existing FSIZE cap;
+        # host reads at most 513 bytes and never projects raw output.
+        with tempfile.TemporaryFile() as report:
+            status, return_code = self._execute(
+                self._argv(
+                    workspace_path,
+                    _DEVELOPMENT_PROBE_PATH,
+                    runtime_path,
+                    profile="probe",
+                ),
+                timeout_sec,
+                stdout=report,
+            )
+            report.seek(0)
+            raw = report.read(MAX_PROBE_REPORT_BYTES + 1)
         if status == "launch_error":
-            return "unavailable"
+            return DevelopmentProbeResult("unavailable")
         if status == "timeout":
-            return "timeout"
+            return DevelopmentProbeResult("timeout")
         if return_code == 0:
-            return "passed"
-        if return_code == 1:
-            return "failed"
-        return "inconclusive"
+            return DevelopmentProbeResult("passed")
+        diagnostic = None
+        if return_code in {1, 2} and len(raw) <= MAX_PROBE_REPORT_BYTES:
+            try:
+                diagnostic = bounded_probe_diagnostic(
+                    json.loads(raw),
+                    max_probe_line=len(
+                        host_probe.read_text(encoding="utf-8").splitlines()
+                    ),
+                )
+            except (ValueError, UnicodeError, OSError):
+                pass
+        return DevelopmentProbeResult(
+            "failed" if return_code == 1 else "inconclusive", diagnostic
+        )
 
     def _execute(
         self,
         argv: list[str],
         timeout_sec: float,
+        *,
+        stdout: Any = subprocess.DEVNULL,
     ) -> tuple[str, int | None]:
         try:
             proc = self._popen(
@@ -757,7 +796,7 @@ class BubblewrapDevelopmentSandbox:
                 cwd="/",
                 env={},
                 stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
+                stdout=stdout,
                 stderr=subprocess.DEVNULL,
                 shell=False,
                 close_fds=True,
@@ -866,8 +905,7 @@ class BubblewrapDevelopmentSandbox:
                 sandbox_python,
                 "-S",
                 "-B",
-                "-m",
-                "pytest",
+                *(("-c", PROBE_RUNNER) if profile == "probe" else ("-m", "pytest")),
                 f"{_SANDBOX_WORKSPACE}/{relative_test}",
                 "-q",
                 "--tb=no",
@@ -1075,6 +1113,7 @@ __all__ = [
     "DevelopmentCheckObservation",
     "DevelopmentCheckRun",
     "DevelopmentProbeOutcome",
+    "DevelopmentProbeResult",
     "DevelopmentReasonCode",
     "DevelopmentSandboxResult",
     "DevelopmentOutcome",

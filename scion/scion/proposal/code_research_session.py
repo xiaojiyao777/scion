@@ -38,6 +38,7 @@ from scion.proposal.engine.exceptions import ProposalValidationError
 from scion.proposal.engine.parsing import _parse_patch
 from scion.proposal.engine.provider_call import PromptTurnSnapshot
 from scion.proposal.schemas import PATCH_PROPOSAL_SCHEMA
+from scion.verification.development_probe import bounded_probe_diagnostic
 
 _MAX_PATH_CHARS = 4096
 _MAX_QUERY_CHARS = 256
@@ -625,6 +626,9 @@ class CodeResearchSession:
             patch_paths=frozenset(
                 change.file_path for change in patch.iter_file_changes()
             ),
+            max_probe_line=len(falsifier_source.splitlines())
+            if falsifier_source
+            else 0,
         )
         rendered_chars = len(_bounded_json(result))
         if (
@@ -992,6 +996,7 @@ def _bounded_test_projection(
     *,
     draft_revision: int,
     patch_paths: frozenset[str],
+    max_probe_line: int = 0,
 ) -> dict[str, Any]:
     if not isinstance(value, Mapping):
         raise ProposalValidationError("development test result must be an object")
@@ -1127,6 +1132,13 @@ def _bounded_test_projection(
             }
         )
         seen.add(name)
+    diagnostic = (
+        bounded_probe_diagnostic(
+            value.get("falsifier_diagnostic"), max_probe_line=max_probe_line
+        )
+        if falsifier_outcome in {"failed", "inconclusive"} and max_probe_line > 0
+        else None
+    )
     passed = sum(check["outcome"] == "passed" for check in checks)
     return {
         "action": "test_patch",
@@ -1139,6 +1151,7 @@ def _bounded_test_projection(
             else {}
         ),
         "checks": checks,
+        **({"falsifier_diagnostic": diagnostic} if diagnostic is not None else {}),
         "counts": {
             "total": len(checks),
             "passed": passed,

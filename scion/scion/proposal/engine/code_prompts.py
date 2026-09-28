@@ -59,7 +59,22 @@ def _split_code_context(
                 "declared editable boundary; describing an alternative does not "
                 "remove the inherited implementation. Do not infer an automatic "
                 "rollback or an extra ablation requirement. Protocol evaluates "
-                "the complete resulting candidate, not this edit in isolation."
+                "the complete resulting candidate, not this edit in isolation.\n\n"
+                "Testing guidance, not an extra gate: calling a helper directly "
+                "does not show that the real entrypoint reaches it. Trace relevant "
+                "callers and configuration guards when assessing activation. A "
+                "mock collaborator can test wiring without showing that the real "
+                "class implements the called methods; an integration probe with "
+                "real collaborators can expose that gap. Mocks remain useful for "
+                "isolated claims. Optional falsifier_diagnostic contains only an "
+                "untrusted failure phase, exception category and, when available, "
+                "a one-based line in your submitted probe. It is not "
+                "an exception message or proof of a hypothesis failure; setup, "
+                "probe and implementation defects can all cause exceptions. It "
+                "does not change the failed exact-patch rule. Passing host checks "
+                "after omitting a previously failed probe does not establish its "
+                "claim, even for a different executable revision. Choose tests "
+                "suited to the claim; no read, probe style or mechanism is required."
             ),
             "cache_control": _CACHE_5M,
         },

@@ -75,7 +75,13 @@ def _split_direct_v3_hypothesis_context(
                 "candidate gain alone is not evidence of its benefit. These are "
                 "interpretation guidelines, not an additional acceptance gate "
                 "or a requirement to read history, ablate, or roll back code. "
-                "You choose which mechanisms to retain, replace or remove."
+                "You choose which mechanisms to retain, replace or remove. "
+                "For activation claims, distinguish a helper's behavior from "
+                "whether the real entrypoint and its configuration guards can "
+                "reach it on the evaluated population. A mock-only test does "
+                "not establish real collaborator compatibility. Treat absent "
+                "activation evidence as uncertainty, not as proof of benefit "
+                "or a mandatory activity gate."
             ),
             "cache_control": _CACHE_5M,
         },

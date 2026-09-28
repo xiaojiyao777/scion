@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-09-27*
+*Current as of: 2026-09-28*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -29,8 +29,12 @@ The project goal is retained solver improvement produced by Scion itself:
   promotion, leaving a modest uncertain B-branch signal. R12 passed a narrow
   local screen but stopped on the same shared validation construction failure.
   R13's common-repair comparison completed valid but uncertain screening
-  (+91.5 [-36,296.75]) against B0-fixed, not unchanged B0. The user now requests
-  fresh analysis and autonomous optimization from the complete repaired source.
+  (+91.5 [-36,296.75]) against B0-fixed, not unchanged B0. R14 and R15 are now
+  terminal without promotion. R15 completes the repaired validation matrix but
+  fails quality; its final fresh candidate remains an unexpanded initial signal.
+  The September 28 follow-up authorizes the proposed bounded self-test feedback
+  and real-entry/integration research support, then a fresh experiment, commit
+  and push. Scientific gates and all terminal evidence remain unchanged.
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -457,9 +461,30 @@ changing the running R15 runtime or scientific inputs.
   at `2026-09-27T13:54:37Z`, PID 289227. All 100 source files match; first
   actual H calls succeed with exact question, five observations, 124 history
   entries and repaired guidance. Startup is not improved-reasoning/quality proof.
-- [ ] After terminal completion, analyze actual H/C, preflight feedback use,
-  complete source and paired evidence. Preserve adverse results and remaining
-  model reasoning limitations; never resume a terminal campaign.
+- [x] Analyze terminal H/C, preflight feedback use, source and paired evidence:
+  [R15 postrun](docs/experiments/v0.4/v04-cvrp-r15-feedback-repair-autonomous-postrun-20260928.md).
+  136 valid pairs, 125 successful calls, no promotion; expanded +11.5 passes,
+  complete validation -39.75 fails. Final fresh initial +9 is unexpanded.
+  Source fidelity holds; three candidates target an inactive path, one real
+  implementation is incomplete behind a passing mock probe, and self-test
+  diagnostics remain opaque. No live C8/C9 event tests the new preflight hint.
+- [x] Obtain fresh authorization before implementing proposed research-support
+  improvements or launching another run. Preserve scientific gates, private
+  validation isolation and all original evidence; never resume terminal R15.
+
+### P12 — Safe self-test hints and real-entry research support
+
+- [x] September 28 user approves the proposed direction, a fresh experiment,
+  and Git commit/push. No algorithm selection or budget expansion is implied.
+- [x] Add bounded phase/exception-category/probe-line feedback without raw
+  exceptions, paths, readiness changes or private-suite exposure.
+- [x] Add optional problem-owned real-entry/real-collaborator examples and
+  interpretation guidance; no mandatory style, mock ban or new quality gate.
+- [ ] Finish focused, adversarial and full regressions, then independent
+  Warehouse control on the frozen shared runtime with separate public/formal data.
+- [ ] Preregister and launch fresh R16 from unchanged complete R12-A-fixed
+  algorithm source, fresh seeds and complete ordered safe H-only history.
+- [ ] Verify real startup/source/context, update handoff, commit and push.
 
 ### v0.4 closeout
 
@@ -552,6 +577,12 @@ source and actual H startup checks pass. Runtime/inputs are frozen. Work
 was uncommitted at launch; the subsequent September 27 user request authorizes
 committing and pushing this frozen change set. Git records the resulting
 revision; the launch-time checkout description remains historical evidence.
+The set was committed/pushed as `f73e89e7`. R15 subsequently completed at
+22:04:54 UTC without promotion. September 28 analysis checks all 136 raw pairs,
+125 traces, 374 visible C source values and three final complete trees; no
+solver/provider/test rerun or runtime/input mutation. P11 and its postrun
+record the remaining research issues. The subsequent user approval authorizes
+P12 implementation, fresh control/CVRP experiments, commit and push.
 
 - Read V3 before changing runtime ownership; prefer subtraction and ordinary
   values over registries, identities, gates, manifests, or proof lifecycles.

@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-27*
+*Current as of: 2026-09-28*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -108,10 +108,28 @@ authority or authorize another run.
   X190/X513), with strict six-case/four-seed expansion and unchanged gates.
   R15 started once at 13:54:37 UTC, PID 289227. All 100 initial files match;
   first actual H calls succeed with exact question, five observations and
-  124 prior-history entries. Runtime/inputs are frozen; no scientific result yet.
-- The subsequent September 27 user request authorizes committing and pushing
-  the frozen R13–R15 change set. This does not change the running R15 runtime
-  or scientific inputs; its launch-time dirty-checkout record is preserved.
+  124 prior-history entries. The frozen R13–R15 set was committed/pushed as
+  `f73e89e7`; no running runtime/input changed. Launch provenance is preserved.
+- R15 completed normally at `2026-09-27T22:04:54.956555+00:00`: twelve
+  evaluated stages (eleven screening, one validation), ten distinct evaluated
+  candidates, 136 valid pairs and no promotion. All 125 calls succeed; 475 of
+  600 remain. Ejection-chain expanded screening passes +11.5 [0,43.25], then
+  complete validation fails -39.75 [-459.5,2.75], 1/4/1. Shared construction
+  does not block this matrix. Final fresh SWAP* candidate is only initial
+  +9 [-140,16], expansion pending at terminal stop. Frozen/retained unopened.
+  All 374 visible C source values and three surviving 100-file trees match.
+  Three A-branch candidates target an inactive >2000-customer path; one C
+  revision calls unimplemented real methods hidden by a mock self-test and is
+  correctly rejected by V5. Self-test failure feedback remains opaque. The
+  Initial September 28 request was analysis only. The subsequent user approval
+  authorizes safe self-test diagnostics and optional real-entry/integration
+  support, followed by a fresh run, Git commit and push (TASK P12). Work is in
+  progress; no new experiment has launched yet. P12 diagnostics and optional
+  real-entry examples are implemented; full suite 2514 passed / 1 skipped
+  (426.78 s), focused/security/input checks and exact H/C source/input
+  projection pass. [R16 design](../experiments/v0.4/v04-cvrp-r16-probe-diagnostics-autonomous-preregistration-20260928.md)
+  and [Warehouse control](../experiments/v0.4/v04-r16-warehouse-probe-control-20260928.md)
+  are prospectively frozen; independent control must finish before CVRP.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -359,14 +377,18 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    passes full closure checks and completed at 13:51:19 UTC: two valid
    negative stages, no framework blocker. Actual source fidelity is verified;
    sibling-inheritance wording remains a model reasoning limitation.
-   R15 started once at 13:54:37 UTC, PID 289227, tmux
-   `scion-r15-feedback-repair-autonomous-20260927`; startup checks pass.
-   Read its exact status/summary under
-   `/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927`.
-   Keep runtime and scientific inputs frozen; next work is postrun H/C,
-   source-continuity and paired-evidence analysis after terminal completion.
-   Validation remains exposed;
-   frozen/retained unopened. No B0-fixed/original-B0 superiority. Terminal root:
+   R15 is now terminal; see the
+   [read-only postrun](../experiments/v0.4/v04-cvrp-r15-feedback-repair-autonomous-postrun-20260928.md),
+   [status](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/status.json),
+   [expanded screen](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/metrics/1bb82728-0573-458e-b424-f52691e80f3e.json),
+   [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/metrics/4e5b9aba-3bd9-43d6-a1af-d07524fb040e.json)
+   and [last initial screen](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/metrics/52df4158-65c7-4889-90b9-050cbcd5a1ae.json).
+   Complete validation rejects the candidate on quality, not comparator failure.
+   Preserve the localized X351 discovery separately from the last SWAP* signal.
+   Next authorized work is safe self-test diagnostics and real-entry/integration
+   research support (TASK P12); no mechanism prescription
+   or additional quality gate. Do not resume R15. Validation remains exposed;
+   frozen/retained unopened. No B0-fixed/original-B0 superiority. R14 root:
    `/home/clawd/research/scion-experiments/v04-cvrp-r14-post-r13-autonomous-20260927`.
 
 Current work excludes distribution, deployment, installation, packaging, build,

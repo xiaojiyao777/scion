@@ -111,6 +111,7 @@ class CodeDevelopmentEvaluator:
                     outcome="preflight_rejected", checks=(preflight_failure,)
                 )
             falsifier_outcome = None
+            falsifier_diagnostic = None
             if falsifier_source is not None:
                 probe_bytes = len(falsifier_source.encode("utf-8"))
                 if remaining_files < 1 or probe_bytes > remaining_bytes:
@@ -130,12 +131,14 @@ class CodeDevelopmentEvaluator:
                     )
                     if probe_timeout <= 0:
                         return DevelopmentCheckRun(outcome="timeout")
-                    falsifier_outcome = self.sandbox.run_probe(
+                    probe_result = self.sandbox.run_probe(
                         workspace=candidate,
                         probe_path=probe_path,
                         timeout_sec=probe_timeout,
                         problem_runtime_root=str(prepared.problems_root),
                     )
+                    falsifier_outcome = probe_result.outcome
+                    falsifier_diagnostic = probe_result.diagnostic
                     probe_file = Path(candidate) / probe_path
                     probe_file.unlink()
                     probe_file.parent.rmdir()
@@ -157,6 +160,7 @@ class CodeDevelopmentEvaluator:
                 return DevelopmentCheckRun(
                     outcome="timeout",
                     falsifier_outcome=falsifier_outcome,
+                    falsifier_diagnostic=falsifier_diagnostic,
                 )
             run = run_development_checks(
                 patch=patch,
@@ -173,7 +177,11 @@ class CodeDevelopmentEvaluator:
                 sandbox=self.sandbox,
                 problem_runtime_root=str(prepared.problems_root),
             )
-            return replace(run, falsifier_outcome=falsifier_outcome)
+            return replace(
+                run,
+                falsifier_outcome=falsifier_outcome,
+                falsifier_diagnostic=falsifier_diagnostic,
+            )
         except (OSError, TypeError, ValueError):
             return DevelopmentCheckRun(
                 outcome="preflight_rejected",

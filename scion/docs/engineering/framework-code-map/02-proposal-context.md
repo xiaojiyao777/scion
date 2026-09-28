@@ -1,6 +1,6 @@
 # Proposal Context
 
-## Current direct-runtime research guidance (2026-09-27)
+## Current direct-runtime research guidance (2026-09-28)
 
 The historical map below is a locator, not current runtime authority. Current
 direct H/C prompts live in `proposal/engine/hypothesis_prompts.py` and
@@ -9,6 +9,17 @@ which replace the base user prompt. They explain cumulative branch inheritance,
 the champion comparator and whole-candidate attribution. C still receives only
 approved H plus complete source, not H history. Interpretation guidance adds no
 required read, ablation, rollback, mechanism preference or scientific gate.
+
+Self-authored development probes now use `verification/development_probe.py`
+for a fixed isolated pytest runner and bounded structural diagnostics. The
+sandbox host and `proposal/code_research_session.py` each validate the exact
+phase/category/optional probe-line projection; arbitrary stdout, paths,
+exceptions and private suites never enter it. Hints are untrusted support,
+not readiness or Decision inputs. Exit-code outcomes, exact failed-patch
+rejection and shared test budgets are unchanged. Direct/bounded prompts also
+distinguish actual entry activation and real collaborator compatibility from
+helper/mock-only results. CVRP's public suite contains an optional copyable
+example string, not a new collected test or generic-core mechanism.
 
 ## Scope / Sources
 
