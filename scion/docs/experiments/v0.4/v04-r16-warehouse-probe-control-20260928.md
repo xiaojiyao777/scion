@@ -1,6 +1,13 @@
 # R16 independent Warehouse research-support control
 
-State: preregistered, not launched. Same frozen shared runtime as
+State: terminal `stopped` / `execution_resource_exhausted`, **valid_incomplete**
+at `2026-09-28T15:43:16.084971+00:00`; pane dead, exit 21.
+Only **one of two requested evaluated stages** completed. Not a completed
+two-stage control, not quality improvement. Launched once at
+`2026-09-28T15:32:15Z`, tmux PID 331073.
+Implementation and inputs were committed as `d67f9800` before launch;
+checkout was clean, all tests/diagnostics finished, and output/session absent.
+Only status documentation may change during measurement. Same frozen runtime as
 [R16](v04-cvrp-r16-probe-diagnostics-autonomous-preregistration-20260928.md).
 This cross-problem control follows the runbook because generic development
 feedback and H/C interpretation guidance changed. It does not qualify CVRP
@@ -37,15 +44,15 @@ Do not infer hint usefulness from a run that never emits a failed self-test.
 Output: `/home/clawd/research/scion-experiments/v04-r16-warehouse-probe-control-20260928`.
 Tmux: `scion-r16-warehouse-probe-control-20260928`.
 
-## Invocation (not yet executed)
+## Invocation (executed once)
 
 Read-only preflight passes: 406 non-cache source files, all five case inputs
 parsed, two public suites and complete support closure disjoint from formal
 cases, strict expansion/resource/production/Verification setup, sandbox
 availability and absent output. No provider/solver/output was created.
 Shared focused/input tests pass; full suite **2514 passed, 1 skipped in
-426.78 s**. Runtime/input changes are complete and will be committed before
-this control. No formal execution has occurred yet.
+426.78 s**. Runtime/input changes were committed before this control.
+Provider credential/model-catalog checks passed without exposing credentials.
 
 ```bash
 set -Eeuo pipefail
@@ -73,3 +80,59 @@ exec env \
     --provider-transient-retries 2 --outer-hardwall-sec 7200 \
     --campaign-dir /home/clawd/research/scion-experiments/v04-r16-warehouse-probe-control-20260928
 ```
+
+## Terminal audit and limited inference
+
+[Status](/home/clawd/research/scion-experiments/v04-r16-warehouse-probe-control-20260928/status.json)
+and [summary](/home/clawd/research/scion-experiments/v04-r16-warehouse-probe-control-20260928/campaign_summary.json)
+record five scheduled attempts, five H exports, one C ready export, three
+research rejections and a final provider-cap stop. All 80 physical calls
+succeed at attempt index zero: H26, C-turn51, C-finalization3. No hidden retry,
+unknown outcome, infrastructure exception or budget widening. Champion v1 /
+weight revision zero; validation/frozen unopened. Never resume this root.
+
+| Attempt | Result |
+|---|---|
+| MergeVehicles | Self-test fails; revised draft remains untested at turn limit; invalid finalization correctly rejected |
+| DestroyRebuild | Contract/Verification/canary pass; one complete valid screening pair ties; continue_explore |
+| new subcategory ejection chain | Draft first staged at last turn; untested finalization rejected |
+| MoveOrder | Explicit C abandonment; no formal evidence |
+| continuation of DestroyRebuild branch | Global 80-call cap correctly stops C; accepted source preserved |
+
+The sole [metric](/home/clawd/research/scion-experiments/v04-r16-warehouse-probe-control-20260928/metrics/8ba2db4d-e24a-42a1-8537-581b25eed9db.json)
+is small_6 / 170003, two-second limits, 1/1 valid pairs, no failures or protected
+subcategory-split regression. Both objective deltas are zero, case/CI zero;
+SCREENING_FAIL_WIN_RATE / CONTINUE_EXPLORE is preserved. Runtime ratio is
+1.4627 (candidate +217 ms), not a speedup. No expansion or second formal pair.
+
+All 406 champion files equal the declared source. All 52 visible C source
+values match the correct base: champion for attempts 1–4, the accepted
+DestroyRebuild head for attempt 5. The retained complete 406-file candidate
+`candidate_workspaces/candidate-v20rqg4w` differs only in the exact history
+DestroyRebuild source plus registry formatting/default empty-category fields;
+typed registry values are equal via the ordinary registry reader. No sibling
+mixing, fabricated stage snapshot, candidate execution rerun or SQLite access.
+
+The failed MergeVehicles falsifier actually reaches C as
+`failed / call / assertion_error / probe_line=68`, locating its self-authored
+identity assertion; no raw exception/path is returned. Its host D1–D4 checks
+pass, but the failed exact draft remains rejected. DestroyRebuild's self-test
+passes and immediate ready exports the exact candidate. Guidance is present
+in all applicable actual H/C calls. This establishes delivery and boundaries,
+not that the model used the hint well or that the self-test claim is sufficient.
+
+Research efficiency remains poor: 16 source_not_visible and 19
+command_field_invalid tool results consume C turns. The model repeatedly
+requests unavailable frozen sources or invalid search fields, often stages
+its implementation too late, and cannot complete two stages within 80 calls.
+This is an observed limitation, not evidence that larger budgets repair it.
+The control is not a controlled estimate of the prompt change's effect.
+
+Operator launch decision: the planned two-stage target was not reached and is
+not retrospectively marked complete. The runbook's shared-runtime check has
+nevertheless exercised actual H/C, safe failure feedback, exact source
+continuation, Contract/Verification/canary and a complete Protocol/Decision
+path, with no framework blocker found; the full suite also passes. Proceed
+with the already preregistered CVRP trial under this explicitly limited control
+coverage. No control rerun, larger cap, algorithm change, new scientific gate,
+or control-result injection into CVRP H/C is introduced.

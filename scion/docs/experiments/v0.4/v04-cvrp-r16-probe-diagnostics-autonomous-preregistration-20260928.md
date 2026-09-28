@@ -1,6 +1,7 @@
 # CVRP R16: bounded self-test hints and real-entry research support
 
-State: preregistered, not launched. User's September 28 follow-up approves
+State: launched once at `2026-09-28T15:48:59Z`, PID 331499, tmux
+`scion-r16-probe-diagnostics-autonomous-20260928`. User's September 28 follow-up approves
 the R15 analysis direction, a fresh experiment, Git commit and push.
 Profile: Code Repair Or Feature Work; canonical entry, full V3/addendum,
 runbook and linked R15 postrun/preregistration read. R15 is terminal and is
@@ -95,7 +96,13 @@ pass for all 100 unchanged source files, 25 parsed case inputs, full declared
 public/formal closure, strict expansion, resource/production/Verification setup
 and exact H projection. No provider, solver or output directory is created by
 that preparation. Full suite: **2514 passed, 1 skipped in 426.78 s** on the
-final runtime. Independent Warehouse control remains pending.
+final runtime. Independent Warehouse terminal audit is now complete, with
+limited coverage: **one of two requested stages**, valid_incomplete at the
+unchanged 80-call cap. One complete valid tie, correct deterministic negative
+Decision, actual failed-probe hint delivery and exact source continuation;
+no framework blocker. See its full audit and launch rationale, including
+35 source/schema tool errors. This is not a completed two-stage control or
+evidence of improved research efficiency. No cap is increased or run resumed.
 Two final ephemeral development checks on the exact selected R12-A-fixed
 algorithm also pass all D1/D1b/D2/D3/D4 checks: the public example passes its
 probe; an intentional missing-attribute probe returns failed/call/attribute_error
@@ -107,13 +114,18 @@ A valid negative control is acceptable; a framework defect blocks launch.
 No concurrent tests, solvers or maintenance during either formal run.
 
 Runtime checkout: v0.4-dev, approved P12 repair/tests plus R15 analysis and
-R16 inputs/docs, to be committed before the control. Exact commit/launch
-status will be recorded below; the CVRP run has not yet started.
+R16 inputs/docs committed as `d67f9800` before the control. Warehouse launched
+once at 15:32:15 UTC and stopped at 15:43:16 UTC; runtime and inputs remain
+frozen. The limited terminal audit above permits the declared CVRP trial;
+R16 launched once at 15:48:59 UTC. Only post-control/launch status docs were
+uncommitted at launch; runtime and all inputs exactly match `d67f9800`.
+No test, solver, maintenance or other agent overlapped launch. Credential /
+model-catalog and absent output/session checks passed without secret output.
 
 Output: `/home/clawd/research/scion-experiments/v04-cvrp-r16-probe-diagnostics-autonomous-20260928`.
 Tmux: `scion-r16-probe-diagnostics-autonomous-20260928`.
 
-## Frozen invocation (not yet executed)
+## Frozen invocation (executed once)
 
 ```bash
 set -Eeuo pipefail
@@ -165,3 +177,17 @@ provider calls. Startup is not algorithm success. Freeze implementation/input
 files; only status docs/Git work during measurement. Terminal analysis must
 separate framework correctness, reasoning/test quality, valid scientific
 evidence and retained improvement.
+
+## Actual startup verification
+
+[Status](/home/clawd/research/scion-experiments/v04-cvrp-r16-probe-diagnostics-autonomous-20260928/status.json)
+is running in initial H research, champion v1 / weight revision zero.
+All 100 initial champion files exactly match the declared R12-A-fixed tree.
+The first actual H dispatch succeeds at attempt index zero on gpt-5.6-sol;
+the exact 8502-character question and repaired system guidance are delivered.
+Its bounded research index has **141 entries: 136 ordinary safe history rows
+plus five distinct external observations**. The context's indexed wrappers
+record those counts separately; they are not missing/truncated records.
+This establishes startup/input fidelity, not scientific improvement or agent
+compliance. No formal result at this snapshot. Preserve the control's incomplete
+coverage and do not change runtime/inputs during measurement.

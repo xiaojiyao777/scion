@@ -120,16 +120,26 @@ authority or authorize another run.
   All 374 visible C source values and three surviving 100-file trees match.
   Three A-branch candidates target an inactive >2000-customer path; one C
   revision calls unimplemented real methods hidden by a mock self-test and is
-  correctly rejected by V5. Self-test failure feedback remains opaque. The
-  Initial September 28 request was analysis only. The subsequent user approval
+  correctly rejected by V5. R15 self-test failure feedback was opaque.
+- The initial September 28 request was analysis only. The subsequent user approval
   authorizes safe self-test diagnostics and optional real-entry/integration
-  support, followed by a fresh run, Git commit and push (TASK P12). Work is in
-  progress; no new experiment has launched yet. P12 diagnostics and optional
+  support, followed by a fresh run, Git commit and push (TASK P12). Diagnostics and optional
   real-entry examples are implemented; full suite 2514 passed / 1 skipped
   (426.78 s), focused/security/input checks and exact H/C source/input
   projection pass. [R16 design](../experiments/v0.4/v04-cvrp-r16-probe-diagnostics-autonomous-preregistration-20260928.md)
   and [Warehouse control](../experiments/v0.4/v04-r16-warehouse-probe-control-20260928.md)
-  are prospectively frozen; independent control must finish before CVRP.
+  were prospectively frozen and committed as `d67f9800` before measurement.
+  Warehouse ended at 15:43:16 UTC as valid_incomplete: only 1/2 requested
+  stages at its unchanged 80-call cap. One complete valid tie and actual safe
+  failed-probe hint, 52 exact C source values, no framework blocker; 35
+  source/schema tool errors remain a research-efficiency limitation. The
+  incomplete control is not relabeled complete; its limited launch rationale
+  is recorded. No control outcome enters CVRP H/C.
+  R16 launched once at 15:48:59 UTC, PID 331499; [live status](/home/clawd/research/scion-experiments/v04-cvrp-r16-probe-diagnostics-autonomous-20260928/status.json).
+  All 100 initial files match; actual H calls succeed with the exact question,
+  136 prior-history plus five observation indexes and new guidance. No formal
+  result yet. Runtime/inputs match d67f9800; only status docs change during
+  measurement. The following docs-only Git handoff/push does not alter the run.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -385,9 +395,11 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    and [last initial screen](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/metrics/52df4158-65c7-4889-90b9-050cbcd5a1ae.json).
    Complete validation rejects the candidate on quality, not comparator failure.
    Preserve the localized X351 discovery separately from the last SWAP* signal.
-   Next authorized work is safe self-test diagnostics and real-entry/integration
-   research support (TASK P12); no mechanism prescription
-   or additional quality gate. Do not resume R15. Validation remains exposed;
+   Authorized P12 support is implemented and R16 is running, with the partial
+   Warehouse control caveat above. Next inspect R16's actual H/C, diagnostic
+   use, real-entry/real-collaborator test fidelity, source continuation and paired
+   results after terminal completion; no additional repair or launch is implied.
+   Do not resume R15 or the resource-stopped Warehouse control. Validation remains exposed;
    frozen/retained unopened. No B0-fixed/original-B0 superiority. R14 root:
    `/home/clawd/research/scion-experiments/v04-cvrp-r14-post-r13-autonomous-20260927`.
 

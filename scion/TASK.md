@@ -480,11 +480,19 @@ changing the running R15 runtime or scientific inputs.
   exceptions, paths, readiness changes or private-suite exposure.
 - [x] Add optional problem-owned real-entry/real-collaborator examples and
   interpretation guidance; no mandatory style, mock ban or new quality gate.
-- [ ] Finish focused, adversarial and full regressions, then independent
-  Warehouse control on the frozen shared runtime with separate public/formal data.
-- [ ] Preregister and launch fresh R16 from unchanged complete R12-A-fixed
+- [x] Finish focused/adversarial tests and full suite (2514 passed / 1 skipped),
+  then terminal-audit the independent Warehouse control. It is valid_incomplete:
+  1/2 requested stages at the unchanged 80-call cap, one valid tie, actual safe
+  failed-probe feedback and complete generic evaluation path; no framework
+  blocker. Preserve its 35 source/schema tool errors and incomplete coverage.
+- [x] Preregister and launch fresh R16 from unchanged complete R12-A-fixed
   algorithm source, fresh seeds and complete ordered safe H-only history.
-- [ ] Verify real startup/source/context, update handoff, commit and push.
+  Launched once 2026-09-28 15:48:59 UTC, PID 331499, runtime/inputs d67f9800.
+- [x] Verify real startup/source/context and update handoff: 100 source files,
+  exact question, 136 ordinary-history plus five observation indexes, successful
+  actual H calls. Startup is not scientific success. Implementation was
+  committed before launch; following docs-only commit/push completes the
+  user-authorized Git handoff (consult Git for the resulting tip).
 
 ### v0.4 closeout
 

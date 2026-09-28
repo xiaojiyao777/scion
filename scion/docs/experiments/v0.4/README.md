@@ -8,8 +8,8 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R16 prospective safe self-test hints and real-entry research support](v04-cvrp-r16-probe-diagnostics-autonomous-preregistration-20260928.md)
-- [R16 independent Warehouse research-support control](v04-r16-warehouse-probe-control-20260928.md)
+- [R16 running: safe self-test hints, optional real-entry examples, unchanged algorithm start and scientific gates](v04-cvrp-r16-probe-diagnostics-autonomous-preregistration-20260928.md)
+- [R16 Warehouse control: valid_incomplete at 80 calls, 1/2 stages, one valid tie and actual hint delivery; query inefficiency remains](v04-r16-warehouse-probe-control-20260928.md)
 - [R15 postrun: 136 valid pairs, complete negative validation; inactive-path and self-test integration gaps remain](v04-cvrp-r15-feedback-repair-autonomous-postrun-20260928.md)
 - [R15 frozen design and terminal pointer](v04-cvrp-r15-feedback-repair-autonomous-preregistration-20260927.md)
 - [R15 independent Warehouse H/C control r2: two valid negative stages, source fidelity verified](v04-r15-warehouse-feedback-control-r2-20260927.md)
