@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-10-03*
+*Current as of: 2026-10-04*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -176,11 +176,60 @@ authority or authorize another run.
   R17 startup checks pass: all 100 champion files equal the selected source;
   actual first H succeeds at attempt0 on gpt-5.6-sol with the exact 10,347-character
   question and 147-entry index (142 safe history rows, five observations).
-  Initial H research is running; no scientific improvement is inferred.
+  Those are launch-time facts, superseded by the terminal audit below.
+- October 4 request: commit/push preceding work first, then read-only experiment
+  analysis and query-efficiency diagnosis. `7e1fd7dc` is pushed to
+  `origin/v0.4-dev`; it captures the frozen P13 runtime/tests/inputs and handoff.
+  [R17 postrun](../experiments/v0.4/v04-cvrp-r17-quota-aware-autonomous-postrun-20261004.md):
+  completed October 3 23:24:56 UTC (October 4 07:24:56 Asia/Shanghai), valid,
+  12/12 stages, 178/178 valid pairs, seven candidates, 69/600 successful calls,
+  zero research rejections, no quota event and no promotion. Final expanded
+  screen +15.25 [1.5,82], 5/0/1; validation -1.5 [-2933.75,824], 2/3/1,
+  VALIDATION_FAIL_CASE_QUALITY. Frozen/retained unopened. All 146 visible C
+  source values match branch bases; champion and surviving B/C have complete
+  100-file source matches. Abandoned A has no surviving full stage tree;
+  changed values remain, but full-stage source attribution is limited.
+  Real algorithm work exists; exact-kernel equivalence, real scheduler probes
+  and self-authored test oracles remain research limitations. No rerun here.
+- Query-efficiency diagnosis: Warehouse has 28 failed queries plus two patch
+  selector errors in 43 C turns. Its frozen public `models.py` dependency is
+  genuinely absent from the query corpus (context-composition gap), while eleven
+  searches wrongly supply an empty path and the model repeats unavailable reads.
+  Earlier "no framework blocker" refers to exercised execution/scientific gates,
+  not a defect-free research interface. CVRP R17 has only one failed query plus
+  one duplicate-file patch error; query waste does not explain its validation
+  failure. Further repairs/control/experiments are proposed, not authorized by
+  the October 4 inspection request; no runtime/input change has been made.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
 authority; read the exact terminal and metric artifacts linked below.
+
+### Current authorized implementation
+
+The subsequent October 4 user approval supersedes the analysis-only scope above:
+coordinate subagents to repair declared public read-only dependency access and
+bounded query feedback, then improve optional real-entry/exact-reference test
+support; verify, commit/push and start fresh experiments. TASK P14 tracks this
+work. Entry finds `7e1fd7dc` synchronized with origin, only the six R17 analysis
+documents dirty, all listed carriers dead and R17 terminal completed/valid.
+Three subagents completed source-context plumbing, query feedback and
+problem-owned probe support. Independent cross-review found no remaining blocker;
+focused groups pass 132 / 113 / 51 tests (overlapping coverage, not an additive
+total). Full regression passes 2622 tests / one skip in 446.02 s. The first full
+run found two old-schema projection fixtures; only those fixtures were aligned,
+keeping exact assertions and adding a nonempty readonly body. The second full
+run passes with unchanged production code. Changed-file Ruff and diff checks pass.
+The [R18 design](../experiments/v0.4/v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md)
+and [Warehouse control](../experiments/v0.4/v04-r18-warehouse-research-context-control-20261004.md)
+are preregistered, not launched. Read-only preflight checks 100 initial CVRP
+source files, 25 CVRP and five Warehouse cases, seventeen whole histories / 176
+raw records / 153 safe H records plus five observations, and the exact 11,345
+character question. Public readonly dependency inventories contain 17 CVRP and
+nine Warehouse sources; `models.py` is readable but absent from editable files.
+No algorithm edit, budget widening, gate relaxation, private validation exposure,
+historical mutation or terminal resume is authorized. New measurement waits for
+focused/full tests and a frozen runtime, followed by a fresh Warehouse control.
 
 ## Current runtime truth
 
@@ -442,9 +491,13 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    Safe hints work; production-path reasoning and probe coverage remain limited.
    October 3 follow-up approves the narrow quota-stop repair and fresh R17.
    Full tests, provider inference and independent Warehouse audit now pass;
-   R17 is running on the same frozen runtime. Check only its exact linked
-   status/traces/terminal metrics; no concurrent tests/solvers/maintenance.
-   No Git action is implied by this follow-up.
+   R17 subsequently completed all 12 stages; the October 4 request authorized
+   commit/push (`7e1fd7dc`, done) and the linked read-only postrun, not a new run.
+   Retain the negative validation and source/probe limitations. The subsequent
+   approval authorizes P14; its source/feedback/probe repairs are implemented
+   and pass full regression; commit/push and fresh R18 controls follow as linked above.
+   Do not inject private validation into H/C, choose
+   the agent's algorithm, widen budgets or weaken gates to hide these issues.
    Do not resume R15 or the resource-stopped Warehouse control. Validation remains exposed;
    frozen/retained unopened. No B0-fixed/original-B0 superiority. R14 root:
    `/home/clawd/research/scion-experiments/v04-cvrp-r14-post-r13-autonomous-20260927`.

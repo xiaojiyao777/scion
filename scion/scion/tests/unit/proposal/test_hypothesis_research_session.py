@@ -327,6 +327,29 @@ def test_compact_indexes_are_complete_and_bodies_are_read_on_demand() -> None:
     assert session.provider_calls_used == 5
 
 
+def test_public_dependency_body_is_readable_but_not_in_initial_bounded_prompt() -> None:
+    context = _context(include_history=False)
+    body = "PUBLIC_DEPENDENCY_SENTINEL = 14\n"
+    context["public_support_sources"] = [
+        {"path": "models.py", "content": body, "visible": True}
+    ]
+    session, client = _run(
+        [
+            {"action": "read_source", "ref": "source-0001"},
+            {"action": "abstain", "reason": "No useful research change."},
+        ]
+    )
+
+    result = session.run(build_prompt_turn_snapshot("hypothesis", context))
+
+    assert isinstance(result, HypothesisResearchAbstain)
+    assert '"path":"models.py"' in client.calls[0]["system_text"]
+    assert "public_dependency" in client.calls[0]["system_text"]
+    assert "PUBLIC_DEPENDENCY_SENTINEL" not in client.calls[0]["system_text"]
+    assert "PUBLIC_DEPENDENCY_SENTINEL = 14" in client.calls[1]["system_text"]
+    assert session.provider_calls_used == 2
+
+
 def test_search_over_result_cap_returns_no_partial_top_k() -> None:
     session, client = _run(
         [
@@ -650,9 +673,7 @@ def test_source_and_frontier_two_turn_budget_fails_before_provider() -> None:
 
     with pytest.raises(HypothesisResearchContextError, match="max_turns"):
         session.run(
-            build_prompt_turn_snapshot(
-                "hypothesis", _latest_failure_frontier_context()
-            )
+            build_prompt_turn_snapshot("hypothesis", _latest_failure_frontier_context())
         )
 
     assert session.provider_calls_used == 0
@@ -878,9 +899,7 @@ def test_hidden_finalize_action_cannot_bypass_frontier_review() -> None:
 
     with pytest.raises(ProposalValidationError, match="turn cap exhausted"):
         session.run(
-            build_prompt_turn_snapshot(
-                "hypothesis", _latest_failure_frontier_context()
-            )
+            build_prompt_turn_snapshot("hypothesis", _latest_failure_frontier_context())
         )
 
     assert "finalize_hypothesis" not in {

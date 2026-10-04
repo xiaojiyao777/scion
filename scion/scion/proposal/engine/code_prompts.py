@@ -36,6 +36,15 @@ def _split_code_context(
             }
             for public_test in source_context["public_tests"]
         ],
+        "read_only_sources": [
+            {
+                **source,
+                "content": source.get("content")
+                if source.get("visible") is True
+                else None,
+            }
+            for source in source_context.get("read_only_sources", [])
+        ],
     }
     provider_context = {
         "approved_hypothesis": context["approved_hypothesis"],
@@ -91,7 +100,10 @@ def _split_code_context(
         "Implement the approved hypothesis from the current source and target API "
         "guidance as one coherent patch. Source roles identify the target, its "
         "local dependencies, callers, and unread peer inventory; public_tests are "
-        "read-only development references. Include necessary companion edits; "
+        "read-only development references. read_only_sources contains declared "
+        "public dependencies, not editable targets: workspace dependencies use "
+        "the selected source tree and problem-package dependencies use the "
+        "frozen runtime package. Include necessary companion edits; "
         "follow the tool schema's edit protocol and return the patch through the "
         "required tool schema."
     )

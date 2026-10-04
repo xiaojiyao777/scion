@@ -30,7 +30,7 @@ from scion.proposal.bounded_research import require_exact_keys as _require_exact
 from scion.proposal.bounded_research import tool_error as _tool_error
 from scion.proposal.edit_protocol.source_discovery import (
     all_source_files_from_context,
-    public_test_files_from_context,
+    read_only_files_from_context,
     research_files_from_context,
 )
 from scion.proposal.engine.code_prompts import _split_code_context
@@ -101,7 +101,11 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
         "description": (
             "Take exactly one bounded source-research action. read_source reveals "
             "one exact source from the listed source corpus; search_source performs "
-            "case-sensitive literal search only; revise stages a typed draft and "
+            "case-sensitive literal search only. Paths name exact listed files, "
+            "not directories or filesystem queries. To search the entire corpus, "
+            "omit path; do not send an empty path. An unavailable source is not "
+            "accessible through these tools. read_only_sources and public_tests "
+            "are readable but cannot be edited. revise stages a typed draft and "
             "requires every patch field inside its patch object. Each file_path may "
             "appear only once; combine multiple same-file edits into one enclosing "
             "replacement or a justified full_file change. "
@@ -146,6 +150,7 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
                         "action": {"type": "string", "enum": ["read_source"]},
                         "path": {
                             "type": "string",
+                            "description": "Exact file path from the source inventory, never a directory.",
                             "minLength": 1,
                             "maxLength": _MAX_PATH_CHARS,
                         },
@@ -159,11 +164,17 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
                         "action": {"type": "string", "enum": ["search_source"]},
                         "query": {
                             "type": "string",
+                            "description": "Non-empty case-sensitive literal text, not a regular expression.",
                             "minLength": 1,
                             "maxLength": _MAX_QUERY_CHARS,
                         },
                         "path": {
                             "type": "string",
+                            "description": (
+                                "Optional exact listed file path. Omit this field "
+                                "to search all sources; never use an empty string "
+                                "or a directory."
+                            ),
                             "minLength": 1,
                             "maxLength": _MAX_PATH_CHARS,
                         },
@@ -264,7 +275,7 @@ class CodeResearchSession:
         editable_corpus = all_source_files_from_context(
             {"editable_source_context": source_context}
         )
-        public_test_corpus = public_test_files_from_context(
+        read_only_corpus = read_only_files_from_context(
             {"editable_source_context": source_context}
         )
         corpus = research_files_from_context(
@@ -298,7 +309,10 @@ class CodeResearchSession:
                 user_prompt=(
                     "Choose exactly one bounded research action. Use read_source "
                     "for exact current source, search_source for case-sensitive "
-                    "literal discovery, revise to stage a complete typed draft, "
+                    "literal discovery. Paths must be exact listed file paths, "
+                    "not directories. Omit search_source.path to search all sources; "
+                    "an empty path is invalid. read_only_sources and public_tests "
+                    "may be read but never edited. Use revise to stage a complete typed draft, "
                     "using this one canonical wrapper: "
                     f"{_CANONICAL_REVISE_WRAPPER} "
                     "Keep every patch field, including evidence_refs, test_hint, "
@@ -326,10 +340,7 @@ class CodeResearchSession:
             try:
                 command = _parse_research_command(raw)
             except ProposalValidationError as exc:
-                result = _tool_error(
-                    "code_research_turn",
-                    _research_command_validation_reason(raw, exc),
-                )
+                result = _research_command_validation_feedback(raw, exc)
                 self._record_tool_result(result)
                 continue
             if command.action == "read_source":
@@ -344,7 +355,14 @@ class CodeResearchSession:
                         command.patch,
                         existing_paths=frozenset(editable_corpus),
                         visible_paths=frozenset(visible_paths),
-                        public_test_paths=frozenset(public_test_corpus),
+                        public_test_paths=frozenset(
+                            entry["path"] for entry in source_context["public_tests"]
+                        ),
+                        read_only_paths=frozenset(read_only_corpus)
+                        | frozenset(
+                            entry["path"]
+                            for entry in source_context.get("read_only_sources", [])
+                        ),
                     )
                     parsed = _parse_patch(
                         command.patch,
@@ -535,6 +553,20 @@ class CodeResearchSession:
             ],
             "target_api_guidance": source_context["target_api_guidance"],
         }
+        if "read_only_sources" in source_context:
+            visible_source_context["read_only_sources"] = [
+                {
+                    **dict(entry),
+                    "visible": str(entry["path"]) in visible_paths,
+                    "content": (
+                        corpus[str(entry["path"])]
+                        if str(entry["path"]) in visible_paths
+                        and str(entry["path"]) in corpus
+                        else None
+                    ),
+                }
+                for entry in source_context["read_only_sources"]
+            ]
         state: dict[str, Any] = {
             "max_action_bytes": self._limits.max_action_bytes,
             "turn_index": turn_index,
@@ -664,10 +696,10 @@ class CodeResearchSession:
             return _tool_error("read_source", "read_call_cap_exhausted")
         canonical = _requested_source_path(path)
         if canonical is None:
-            return _tool_error("read_source", "invalid_path")
+            return _source_path_feedback("read_source", "invalid_path")
         content = corpus.get(canonical)
         if content is None:
-            return _tool_error("read_source", "source_not_visible")
+            return _source_path_feedback("read_source", "source_not_visible")
         chars = len(content)
         content_bytes = len(content.encode("utf-8"))
         lines = text_line_count(content)
@@ -697,10 +729,10 @@ class CodeResearchSession:
         else:
             canonical = _requested_source_path(path)
             if canonical is None:
-                return _tool_error("search_source", "invalid_path")
+                return _source_path_feedback("search_source", "invalid_path")
             content = corpus.get(canonical)
             if content is None:
-                return _tool_error("search_source", "source_not_visible")
+                return _source_path_feedback("search_source", "source_not_visible")
             candidates = ((canonical, content),)
 
         collector = BoundedMatchCollector(
@@ -829,6 +861,55 @@ def _research_command_validation_reason(
     return "command_schema_invalid"
 
 
+def _source_path_feedback(action: str, reason: str) -> dict[str, Any]:
+    """Describe exact-file query syntax without echoing or probing a path."""
+
+    return {
+        **_tool_error(action, reason),
+        "field": "path",
+        "correction": (
+            "omit_path_or_use_exact_listed_file"
+            if action == "search_source"
+            else "use_exact_listed_file"
+        ),
+    }
+
+
+def _research_command_validation_feedback(
+    raw: Mapping[str, Any], error: ProposalValidationError
+) -> dict[str, Any]:
+    """Return fixed correction enums; never reflect raw values or exceptions."""
+
+    reason = _research_command_validation_reason(raw, error)
+    result = _tool_error("code_research_turn", reason)
+    action = raw.get("action")
+    if action != "read_source" and action != "search_source":
+        return result
+    if reason not in {"command_field_invalid", "command_field_too_long"}:
+        return {
+            **result,
+            "field": "command",
+            "correction": "use_declared_action_fields",
+        }
+    # These are the parser's own fixed field labels, never provider field names.
+    field = "query" if str(error).startswith("query ") else "path"
+    if field == "path":
+        return {
+            **result,
+            "field": field,
+            "correction": _source_path_feedback(str(action), reason)["correction"],
+        }
+    return {
+        **result,
+        "field": field,
+        "correction": (
+            "shorten_literal_query"
+            if reason == "command_field_too_long"
+            else "provide_nonempty_literal_query"
+        ),
+    }
+
+
 def _parse_final_decision(raw: Mapping[str, Any]) -> CodeResearchFinalDecision:
     outcome = raw.get("outcome")
     if outcome == "finalize_patch":
@@ -851,10 +932,12 @@ def _source_inventory(source_context: Mapping[str, Any]) -> tuple[str, frozenset
     target = source_context.get("approved_target")
     sources = source_context.get("sources")
     public_tests = source_context.get("public_tests")
+    read_only_sources = source_context.get("read_only_sources", [])
     if (
         not isinstance(target, str)
         or not isinstance(sources, list)
         or not isinstance(public_tests, list)
+        or not isinstance(read_only_sources, list)
     ):
         raise TypeError("editable source context is invalid")
     paths = tuple(
@@ -869,11 +952,21 @@ def _source_inventory(source_context: Mapping[str, Any]) -> tuple[str, frozenset
         for entry in public_tests
         if isinstance(entry, Mapping) and isinstance(entry.get("path"), str)
     )
-    if len(public_paths) != len(public_tests) or set(paths) & set(public_paths):
+    read_only_paths = tuple(
+        entry["path"]
+        for entry in read_only_sources
+        if isinstance(entry, Mapping) and isinstance(entry.get("path"), str)
+    )
+    all_paths = (*paths, *public_paths, *read_only_paths)
+    if (
+        len(public_paths) != len(public_tests)
+        or len(read_only_paths) != len(read_only_sources)
+        or len(set(all_paths)) != len(all_paths)
+    ):
         raise ValueError("editable source context inventory is invalid")
     initial_paths = frozenset(
         str(entry["path"])
-        for entry in (*sources, *public_tests)
+        for entry in (*sources, *public_tests, *read_only_sources)
         if isinstance(entry, Mapping) and entry.get("visible") is True
     )
     return target, initial_paths
@@ -918,6 +1011,7 @@ def _require_existing_patch_sources_visible(
     existing_paths: frozenset[str],
     visible_paths: frozenset[str],
     public_test_paths: frozenset[str],
+    read_only_paths: frozenset[str] = frozenset(),
 ) -> None:
     additional = patch.get("additional_changes", [])
     changes = [patch, *(additional if isinstance(additional, list) else [])]
@@ -935,6 +1029,10 @@ def _require_existing_patch_sources_visible(
         if path in public_test_paths:
             raise ProposalValidationError(
                 "draft patch cannot modify a read-only public development test"
+            )
+        if path in read_only_paths:
+            raise ProposalValidationError(
+                "draft patch cannot modify a read-only dependency source"
             )
         if path in existing_paths and path not in visible_paths:
             raise ProposalValidationError(
@@ -1173,6 +1271,7 @@ def _patch_validation_reason(error: ProposalValidationError) -> str:
         ("source unavailable", "source_not_visible"),
         ("was not read", "source_not_read"),
         ("read-only public", "public_test_read_only"),
+        ("read-only dependency", "source_read_only"),
         ("max_patch_files", "patch_file_cap_exhausted"),
         ("max_patch_chars", "patch_char_cap_exhausted"),
         ("canonical relative path", "invalid_patch_path"),

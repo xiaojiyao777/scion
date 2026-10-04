@@ -75,7 +75,20 @@ class CvrpSolverDesignProvider:
             "Its small synthetic shape and lightweight context are not the "
             "production runtime or proof of your mechanism. Adapt the fixture "
             "and functional assertions to your claim; check the imported "
-            "configuration guards and real collaborator methods."
+            "configuration guards and real collaborator methods. It also "
+            "demonstrates independent objective recomputation from public "
+            "geometry or matrix arcs, a tiny exhaustive fixed-start reference, "
+            "and a bounded large public entry fixture. For an equivalence claim, "
+            "compare the claimed transitions and outcomes for every affected "
+            "kernel, not just feasibility or cached candidate costs. The one "
+            "reference neighborhood is an illustration, not an algorithm "
+            "prescription or a new check. If a probe fails, independently check "
+            "the test's expected value before attributing the failure to the "
+            "algorithm; a handwritten expected scalar can itself be wrong. "
+            "That diagnosis does not clear a failed exact draft: existing "
+            "falsifier readiness rules still apply. A real-entry call shows "
+            "only the paths actually reached with unchanged guards; tiny "
+            "correctness, activation, and timed performance are separate claims."
         )
         return f"{target_guidance}{development_guidance}".strip()
 

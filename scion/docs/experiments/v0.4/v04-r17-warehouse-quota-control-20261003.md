@@ -8,6 +8,14 @@ provider classification change on the same frozen runtime as
 [CVRP R17](v04-cvrp-r17-quota-aware-autonomous-preregistration-20261003.md).
 No control result enters CVRP H/C; no intentional live quota exhaustion.
 
+October 4 read-only [follow-up diagnosis](v04-cvrp-r17-quota-aware-autonomous-postrun-20261004.md#what-query-inefficiency-means)
+clarifies the query limitation: 28 failed queries plus two patch-edit errors,
+not database latency. Public frozen `models.py` is genuinely absent from C's
+query corpus; repeated requests, empty optional paths and coarse feedback also
+waste turns. The historical no-blocker launch verdict below covers exercised
+execution/scientific checks, not absence of a research-context defect. Terminal
+outcomes are unchanged; no repair or rerun occurs in this follow-up.
+
 Complete ordinary source/data: repository `surrogate`, 406 non-cache files.
 Same problem, source and population as the R16 control. The inherited population
 is outcome-informed engineering selection, not an independent quality estimate.

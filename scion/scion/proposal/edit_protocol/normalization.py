@@ -10,6 +10,7 @@ from scion.proposal.edit_protocol.exact_line_replace import apply_exact_line_rep
 from scion.proposal.edit_protocol.exact_replace import apply_exact_replace
 from scion.proposal.edit_protocol.source_discovery import (
     public_test_files_from_context,
+    read_only_files_from_context,
     source_files_from_context,
 )
 from scion.proposal.schemas.patch import (
@@ -40,6 +41,7 @@ def normalize_patch_typed_edits(
 
     source_files = source_files_from_context(context)
     read_only_public_tests = public_test_files_from_context(context)
+    read_only_sources = read_only_files_from_context(context)
     slots: list[tuple[str, Mapping[str, Any]]] = [("/", normalized)]
     additional = normalized.get("additional_changes")
     if isinstance(additional, list):
@@ -64,6 +66,10 @@ def normalize_patch_typed_edits(
         if path in read_only_public_tests:
             raise PatchEditProtocolError(
                 f"{pointer}: cannot modify read-only public development test {path}"
+            )
+        if path in read_only_sources:
+            raise PatchEditProtocolError(
+                f"{pointer}: cannot modify read-only public dependency {path}"
             )
         changes[pointer] = _normalize_change(
             raw_change,
@@ -96,9 +102,7 @@ def _normalize_change(
             "exact_line_replace, or full_file"
         )
     if intent not in {"exact_replace", "exact_line_replace", "full_file"}:
-        raise PatchEditProtocolError(
-            f"{pointer}: unsupported edit_intent {intent!r}"
-        )
+        raise PatchEditProtocolError(f"{pointer}: unsupported edit_intent {intent!r}")
 
     before = source_files.get(path)
     if intent == "exact_replace":
@@ -176,9 +180,7 @@ def _validate_full_file_change(
                 f"{pointer}: delete must not supply content_after"
             )
         return ""
-    raise PatchEditProtocolError(
-        f"{pointer}: unsupported patch action {action!r}"
-    )
+    raise PatchEditProtocolError(f"{pointer}: unsupported patch action {action!r}")
 
 
 def _normalized_path(value: Any) -> str:

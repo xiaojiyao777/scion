@@ -1,6 +1,29 @@
 # Proposal Context
 
-## Current direct-runtime research guidance (2026-09-28)
+## Current direct-runtime research guidance (2026-10-04)
+
+`proposal/context_manager/public_sources.py` collects only the existing explicit
+`development_workspace_paths` and `development_problem_package_paths`. Workspace
+dependencies come from the selected current research workspace, with no champion
+fallback; package dependencies come from the frozen problem runtime. Canonical
+paths, symlinks, editable aliases and public/formal closure are checked before
+exposure. H receives `public_support_sources` (indexed as `public_dependency` in
+bounded research); C receives a separate `read_only_sources` inventory. Both
+direct and bounded generation can inspect these sources, but typed edits cannot
+modify, create or delete them. A missing body is not an empty readable file.
+No suite fixture, arbitrary file or held-out case is added to the corpus.
+
+`proposal/code_research_session.py` preserves query error reasons and charging,
+adding bounded `field`/`correction` enums for exact-file reads and searches.
+An all-corpus search omits `path`; an empty string is still invalid. Feedback
+does not echo arbitrary input, probe the filesystem, repair requests, retry or
+enlarge budgets. H's existing terminal handling of invalid actions is unchanged.
+
+CVRP's optional public example now supports real solve/scheduler/VNS activation,
+independent arc/objective and feasibility checks, and exhaustive tiny reference
+comparisons. The large synthetic shape uses a precomputed equivalent distance
+matrix and does not establish geometric-lookup throughput or production timing.
+The example remains a copyable string, not a new collected acceptance gate.
 
 The historical map below is a locator, not current runtime authority. Current
 direct H/C prompts live in `proposal/engine/hypothesis_prompts.py` and

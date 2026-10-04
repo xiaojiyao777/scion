@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-03*
+*Current as of: 2026-10-04*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -39,6 +39,13 @@ The project goal is retained solver improvement produced by Scion itself:
   failure: 7/12 stages, 86 valid pairs, completed negative validation and no
   promotion. The October 3 follow-up now approves explicit quota-stop repair
   and fresh R17 after verification, not resuming R16 or Git commit/push.
+  The October 4 request separately authorizes committing/pushing the preceding
+  work (`7e1fd7dc`, done), then inspection. R17 completes 12/12 stages and 178
+  valid pairs with no quota event or promotion: expanded +15.25 [1.5,82], then
+  validation -1.5 [-2933.75,824], 2/3/1. The subsequent October 4 approval
+  authorizes coordinated subagents to repair public read-only access/query
+  feedback, strengthen optional real-entry/exact-reference research support,
+  then commit/push and run fresh experiments after verification (P14 below).
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -529,8 +536,48 @@ changing the running R15 runtime or scientific inputs.
   files match, actual first H succeeds at attempt0 with the exact 10,347-character
   question, 142 safe history rows plus five observations (147 index entries).
   Keep source/runtime/inputs frozen; no overlapping tests/solvers/maintenance.
-- [ ] Audit R17 only after its own terminal artifacts exist; startup is not
-  scientific or retained improvement. Never resume R16 or this terminal control.
+- [x] October 4 [R17 terminal audit](docs/experiments/v0.4/v04-cvrp-r17-quota-aware-autonomous-postrun-20261004.md):
+  12/12 stages, 178 valid pairs, seven candidates, 69/600 successful calls,
+  zero research rejections, no promotion. Expanded screening passes 5/0/1;
+  complete validation fails 2/3/1. All 146 visible C sources and surviving
+  complete B/C heads match; full abandoned A source is unavailable. Preserve
+  operator-only validation and exact-reference/integration/oracle-test limits.
+- [x] Commit and push prior completed work before analysis: `7e1fd7dc`.
+- [x] Diagnose query inefficiency: Warehouse 28 query errors plus two editing
+  errors / 43 C turns; frozen public dependency absent from C corpus, repeated
+  invalid queries and coarse correction feedback. CVRP has only one query
+  error plus one duplicate-file edit error; not its scientific bottleneck.
+- [x] Follow-up authorized and transferred to P14: separate public dependencies from
+  editable source and improve bounded field/path feedback; test frozen-edit,
+  held-out, source-continuation boundaries and a fresh Warehouse control.
+  Strengthen optional real-entry/exact-reference probe support without a
+  prescribed algorithm, private validation hints or a new quality gate.
+  No repair or new experiment is executed in this inspection. Never resume
+  R16, R17 or their terminal controls; retained CVRP confirmation stays open.
+
+### P14 — Public research sources, actionable query feedback and exact probes
+
+- [x] October 4 user authorizes team implementation, Git commit/push and a
+  fresh experiment following the R17 report. Entry selects Code Repair profile;
+  V3/addendum and the runbook are read, Git/tmux/terminal state checked. Preserve
+  the six uncommitted R17 analysis documents and all original experiment roots.
+- [x] Expose explicitly declared public dependencies as read-only ordinary
+  source, separate from editable files, on the exact current branch base.
+  Preserve private-suite/data exclusion, frozen edits and source completeness.
+- [x] Return bounded, problem-neutral query correction feedback without raw
+  error/path leakage, command repair, new retries or increased local limits.
+- [x] Strengthen optional public real-entry and independent exact-reference
+  examples; test real collaborators and reference arithmetic without selecting
+  an algorithm, replacing the model's mechanism or adding a quality gate.
+- [ ] Complete focused/adversarial checks, independent cross-review, full suite
+  and prospective input/source/history projection. Freeze runtime and inputs,
+  commit and push before new measurement.
+- [ ] Run a fresh two-stage Warehouse control on that runtime; inspect actual
+  source access/feedback and complete science before CVRP. Preserve any negative
+  or incomplete result rather than resuming or silently widening its envelope.
+- [ ] Launch fresh CVRP R18 from unchanged complete R12-A-fixed source with all
+  safe R17 history, fresh seeds and unchanged Protocol/budgets. Verify actual
+  startup source/context. No private validation hints or R17 candidate merge.
 
 ### v0.4 closeout
 
@@ -541,11 +588,19 @@ changing the running R15 runtime or scientific inputs.
 
 ## Verification snapshot
 
+- P14 / R18 prelaunch: full suite 2622 passed / one skip in 446.02 s;
+  focused groups 132 / 113 / 51 (overlapping), 17 prompt/input checks and
+  independent cross-review pass. Initial full run's two old-schema fixture
+  failures were corrected without production edits or weakened assertions;
+  the entire suite was rerun. Read-only input/source/history/public-formal
+  projection passes for both fresh designs; no formal measurement yet.
 - P13 / R17: 2554 passed, 1 skipped in 434.47 s; 163 focused provider/quota
   tests and ten R16/R17 input tests pass. Independent Warehouse completes 2/2
   valid negative stages with 70 successful calls, correct source continuation
-  and no framework blocker. R17 startup source/actual H delivery pass; ongoing.
-  Runtime is 505dce03 plus frozen uncommitted quota repair, no commit/push this turn.
+  and no observed execution/scientific blocker. R17 completes 12/12, with 178
+  valid pairs and negative validation. Query context and research-test limits
+  are detailed in the October 4 postrun. Frozen runtime is now committed/pushed
+  as `7e1fd7dc`. No tests/provider/solver rerun or runtime change in this audit.
 - Branch: `v0.4-dev`. P1 and the handoff were committed as `a112e60c`;
   P1b and prospective R6 inputs were committed as `e405bfd2` before launch.
 - P1b full suite: `2397 passed, 1 skipped, 0 failed` in 436.38 seconds, with no

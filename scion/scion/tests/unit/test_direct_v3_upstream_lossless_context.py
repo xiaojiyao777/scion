@@ -1552,6 +1552,7 @@ def test_direct_v3_code_context_contains_source_not_research_history(
         "approved_target",
         "sources",
         "public_tests",
+        "read_only_sources",
         "target_api_guidance",
     }
     assert provider_sources["sources"]

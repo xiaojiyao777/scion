@@ -98,3 +98,19 @@ def test_cvrp_code_guidance_has_one_problem_fact_packet() -> None:
     assert "case ids" in rendered
     assert "source ledger" not in rendered
     assert "stable entrypoint" not in rendered
+
+
+def test_cvrp_reference_probe_guidance_is_optional_and_scoped() -> None:
+    rendered = _provider().solver_design_target_api_guidance(
+        "policies/baseline_modules/local_search.py"
+    )
+
+    assert "optional copyable falsifier scaffold" in rendered
+    assert "independent objective recomputation" in rendered
+    assert "every affected kernel" in rendered
+    assert "test's expected value" in rendered
+    assert "not an algorithm prescription or a new check" in rendered
+    assert "does not clear a failed exact draft" in rendered
+    assert "tiny correctness, activation, and timed performance are separate claims" in rendered
+    assert "R17" not in rendered
+    assert "tai385" not in rendered

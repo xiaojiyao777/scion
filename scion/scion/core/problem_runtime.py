@@ -66,6 +66,7 @@ class ProblemRuntime:
             adapter=adapter,
             research_input=self._research_input,
             research_history=self._research_history,
+            split_manifest=self._split_manifest,
         )
 
     # ------------------------------------------------------------------

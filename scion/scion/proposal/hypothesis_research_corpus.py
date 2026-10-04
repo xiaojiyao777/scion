@@ -64,6 +64,8 @@ def build_hypothesis_research_corpus(
     for key in ("champion_operators_code", "branch_current_code"):
         if key in compact:
             compact[key] = marker
+    if "public_support_sources" in compact:
+        compact["public_support_sources"] = marker
     for key in HISTORY_KEYS:
         if key in compact:
             compact[key] = {
@@ -162,17 +164,26 @@ def _sources(
     found = _parse_bundle(context.get("champion_operators_code"), "champion", paths)
     found.update(_parse_bundle(context.get("branch_current_code"), "branch", paths))
     public = _public_sources(public_sources, forbidden_paths=paths | set(found))
+    support = _public_support_sources(
+        context.get("public_support_sources", []),
+        forbidden_paths=paths | set(found) | set(public),
+    )
     graph_input = {
         path: found.get(path, ("declared", None))[1]
         for path in sorted(paths | set(found))
     }
+    graph_input.update({path: record["content"] for path, record in support.items()})
     links = source_graph_links(graph_input, qualified_prefixes=qualified_prefixes)
     entries: list[dict[str, Any]] = []
-    for number, path in enumerate(sorted(paths | set(found) | set(public)), 1):
+    for number, path in enumerate(
+        sorted(paths | set(found) | set(public) | set(support)), 1
+    ):
         owner, body = found.get(path, ("declared", None))
         public_entry = public.get(path)
         if public_entry is not None:
             owner, body = "development", public_entry["content"]
+        if path in support:
+            owner, body = "development", support[path]["content"]
         ref = f"source-{number:04d}"
         index = {
             "ref": ref,
@@ -187,8 +198,32 @@ def _sources(
             index.update(roles=["public_test"], check_name=public_entry["check_name"])
         else:
             index.update(links.get(path, {"dependencies": (), "callers": ()}))
+            if path in support:
+                index["roles"] = ["public_dependency"]
         entries.append({"ref": ref, "path": path, "body": body, "index": index})
     return entries
+
+
+def _public_support_sources(
+    values: Any, *, forbidden_paths: set[str]
+) -> dict[str, dict[str, str]]:
+    if not isinstance(values, list):
+        raise TypeError("public support sources must be a list")
+    records: dict[str, dict[str, str]] = {}
+    for entry in values:
+        if not isinstance(entry, Mapping) or set(entry) != {
+            "path",
+            "content",
+            "visible",
+        }:
+            raise ValueError("public support source has unknown or missing fields")
+        path = _source_path(entry["path"])
+        if path in forbidden_paths or path in records:
+            raise ValueError(f"duplicate hypothesis research source path: {path}")
+        if not isinstance(entry["content"], str) or entry["visible"] is not True:
+            raise ValueError("public support source requires complete visible text")
+        records[path] = {"content": entry["content"]}
+    return records
 
 
 def _public_sources(

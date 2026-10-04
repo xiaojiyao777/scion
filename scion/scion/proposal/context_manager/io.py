@@ -1,4 +1,5 @@
 """File and code-reading helpers for proposal context assembly."""
+
 from __future__ import annotations
 
 import os
@@ -7,6 +8,7 @@ from typing import Any, List, Mapping, Optional
 
 from scion.core.models import ChampionState
 from scion.proposal.context.surfaces import _surface_file_targets, surface_target_files
+
 
 def _read_champion_operators(
     champion: ChampionState,
@@ -21,15 +23,15 @@ def _read_champion_operators(
     sections: List[str] = []
     try:
         filenames = sorted(
-            f for f in os.listdir(operators_dir)
+            f
+            for f in os.listdir(operators_dir)
             if f.endswith(".py") and f not in ("__init__.py", "base.py")
         )
     except OSError as exc:
         return f"(could not list operators directory: {exc})"
 
     excluded = {
-        str(item or "").replace("\\", "/").lstrip("/")
-        for item in excluded_paths
+        str(item or "").replace("\\", "/").lstrip("/") for item in excluded_paths
     }
     for fname in filenames:
         if f"operators/{fname}" in excluded:
@@ -44,6 +46,7 @@ def _read_champion_operators(
 
     return "\n\n".join(sections) if sections else "(no operator files found)"
 
+
 def _read_surface_file(champion: ChampionState, file_rel: str, *, label: str) -> str:
     fpath = os.path.join(champion.code_snapshot_path, file_rel)
     try:
@@ -52,6 +55,7 @@ def _read_surface_file(champion: ChampionState, file_rel: str, *, label: str) ->
         return f"### {file_rel} ({label})\n```python\n{content}\n```"
     except OSError as exc:
         return f"### {file_rel}\n(unreadable: {exc})"
+
 
 def _list_champion_operator_files(champion: ChampionState) -> list[str]:
     files: set[str] = set()
@@ -69,6 +73,7 @@ def _list_champion_operator_files(champion: ChampionState) -> list[str]:
         except OSError:
             pass
     return sorted(files)
+
 
 def _list_champion_surface_files(
     champion: ChampionState,
@@ -97,6 +102,7 @@ def _list_champion_surface_files(
             and os.path.isfile(os.path.join(champion.code_snapshot_path, file_rel))
         }
     )
+
 
 def _expand_surface_targets_for_champion(
     champion: ChampionState,
@@ -164,9 +170,11 @@ def _list_branch_surface_files(
         if "*" not in item
     ]
 
+
 def _append_unique(items: list[str], value: str) -> None:
     if value not in items:
         items.append(value)
+
 
 def _read_solver_design_context_artifact(
     rel: str,
@@ -233,12 +241,14 @@ def _read_solver_design_context_artifact(
         "content": f"# could not read {normalized}",
     }
 
+
 def _read_branch_code_projection(
     branch_workspace: str,
     champion: ChampionState,
     *,
     research_surfaces: Optional[list[Any]] = None,
     include_operator_files: bool = True,
+    excluded_paths: tuple[str, ...] = (),
 ) -> tuple[Optional[str], tuple[str, ...]]:
     """Return branch-current source plus paths that differ from champion.
 
@@ -268,13 +278,16 @@ def _read_branch_code_projection(
     if include_operator_files and os.path.isdir(branch_ops_dir):
         try:
             filenames = sorted(
-                f for f in os.listdir(branch_ops_dir)
+                f
+                for f in os.listdir(branch_ops_dir)
                 if f.endswith(".py") and f not in ("__init__.py", "base.py")
             )
         except OSError:
             filenames = []
 
         for fname in filenames:
+            if f"operators/{fname}" in excluded_paths:
+                continue
             branch_path = os.path.join(branch_ops_dir, fname)
             champ_path = os.path.join(champ_ops_dir, fname)
 
@@ -299,12 +312,15 @@ def _read_branch_code_projection(
         if os.path.isdir(champ_ops_dir):
             try:
                 champion_filenames = sorted(
-                    f for f in os.listdir(champ_ops_dir)
+                    f
+                    for f in os.listdir(champ_ops_dir)
                     if f.endswith(".py") and f not in ("__init__.py", "base.py")
                 )
             except OSError:
                 champion_filenames = []
             for fname in champion_filenames:
+                if f"operators/{fname}" in excluded_paths:
+                    continue
                 if not os.path.isfile(os.path.join(branch_ops_dir, fname)):
                     deleted_path = f"operators/{fname}"
                     record_changed(deleted_path)
@@ -319,6 +335,8 @@ def _read_branch_code_projection(
     )
     exact_surface_files = _surface_file_targets(research_surfaces or [])
     for file_rel in sorted(set(exact_surface_files) | set(branch_surface_files)):
+        if file_rel in excluded_paths:
+            continue
         branch_path = os.path.join(branch_workspace, file_rel)
         champ_path = os.path.join(champion.code_snapshot_path, file_rel)
         if not os.path.isfile(branch_path):
@@ -344,6 +362,8 @@ def _read_branch_code_projection(
         champion,
         research_surfaces=research_surfaces or [],
     ):
+        if file_rel in excluded_paths:
+            continue
         if not os.path.isfile(os.path.join(branch_workspace, file_rel)):
             record_changed(file_rel)
             sections.append(

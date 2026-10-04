@@ -25,7 +25,7 @@ def _hypothesis_context() -> dict:
 
 
 def _code_context() -> dict:
-    return editable_code_context(
+    context = editable_code_context(
         {
             "problem_summary": "Synthetic routing control.",
             "branch_id": "branch-pure-projection",
@@ -46,6 +46,10 @@ def _code_context() -> dict:
             "frozen_patterns": ["solver.py"],
         }
     )
+    context["editable_source_context"]["read_only_sources"] = [
+        {"path": "models.py", "content": "PUBLIC_SUPPORT = 1\n", "visible": True}
+    ]
+    return context
 
 
 @pytest.mark.parametrize(

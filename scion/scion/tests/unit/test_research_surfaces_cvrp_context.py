@@ -160,6 +160,7 @@ def test_direct_cvrp_declared_sources_are_unique_complete_source_pairs() -> None
         "approved_target",
         "sources",
         "public_tests",
+        "read_only_sources",
         "target_api_guidance",
     }
     assert source_context["approved_target"] == target
@@ -167,8 +168,7 @@ def test_direct_cvrp_declared_sources_are_unique_complete_source_pairs() -> None
     assert Counter(source_paths) == Counter({path: 1 for path in active_paths})
     assert source_context["public_tests"] == []
     assert all(
-        set(source) == {"path", "content", "roles", "visible"}
-        for source in sources
+        set(source) == {"path", "content", "roles", "visible"} for source in sources
     )
     assert all(isinstance(source["content"], str) for source in sources)
     source_by_path = {source["path"]: source for source in sources}

@@ -1,8 +1,14 @@
 # CVRP R17: explicit quota stop and fresh autonomous research
 
-State: running, launched once at 2026-10-03T13:40:12Z, tmux PID 460131.
-October 3 follow-up approves the proposed
-quota fix and fresh run. No Git commit or push is requested in this turn.
+State: completed / requested_rounds_completed, valid, at
+2026-10-03T23:24:56Z (October 4 07:24:56 Asia/Shanghai). Launched once at
+2026-10-03T13:40:12Z, tmux PID 460131. Twelve stages, 178 valid pairs,
+69 successful calls, no promotion. See the operator-only
+[postrun](v04-cvrp-r17-quota-aware-autonomous-postrun-20261004.md).
+The October 4 request subsequently authorized commit/push of preceding work
+(`7e1fd7dc`, done) and analysis, not a new run. The design and launch record below
+remain historical: the October 3 follow-up approved the proposed
+quota fix and fresh run but did not then request Git commit or push.
 R16 remains terminal and immutable; this is not a resume.
 
 ## Intervention and limits

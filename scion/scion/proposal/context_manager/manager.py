@@ -75,6 +75,7 @@ from .io import (
     _list_champion_surface_files,
     _read_branch_code_projection,
 )
+from .public_sources import public_support_sources
 
 _MEASUREMENT_PRIVATE_FIELDS = frozenset(
     {
@@ -121,8 +122,10 @@ class ContextManager:
         adapter: Any | None = None,
         research_input: Mapping[str, Any] | None = None,
         research_history: Sequence[Mapping[str, Any]] = (),
+        split_manifest: Any | None = None,
     ) -> None:
         self._adapter = adapter
+        self._split_manifest = split_manifest
         self._research_input = (
             normalize_research_input(research_input)
             if research_input is not None
@@ -185,12 +188,25 @@ class ContextManager:
         include_operator_files = _include_operator_files_for_research_code(
             visible_surfaces
         )
+        if branch.current_code_hash and not (
+            branch_workspace and os.path.isdir(branch_workspace)
+        ):
+            raise ValueError(
+                "branch-current code requires its materialized branch workspace"
+            )
+        public_sources = public_support_sources(
+            adapter_spec or problem_spec,
+            source_root=branch_workspace or champion.code_snapshot_path,
+            split_manifest=self._split_manifest,
+        )
+        public_paths = tuple(source["path"] for source in public_sources)
         branch_source, branch_changed_paths = (
             _read_branch_code_projection(
                 branch_workspace,
                 champion,
                 research_surfaces=visible_surfaces,
                 include_operator_files=include_operator_files,
+                excluded_paths=public_paths,
             )
             if branch_workspace
             else (None, ())
@@ -199,13 +215,16 @@ class ContextManager:
             champion,
             research_surfaces=visible_surfaces,
             include_operator_files=include_operator_files,
-            excluded_paths=branch_changed_paths,
+            excluded_paths=(*branch_changed_paths, *public_paths),
         )
         existing_target_files = _existing_target_files(
             champion,
             branch_workspace=branch_workspace,
             research_surfaces=visible_surfaces,
         )
+        existing_target_files = [
+            path for path in existing_target_files if path not in public_paths
+        ]
         create_path_patterns = sorted(
             {
                 str(pattern).lstrip("/")
@@ -264,6 +283,8 @@ class ContextManager:
         }
         if branch_source:
             context["branch_current_code"] = branch_source
+        if public_sources:
+            context["public_support_sources"] = public_sources
         if pre_protocol_observations:
             context["pre_protocol_observations"] = pre_protocol_observations
 
@@ -348,6 +369,11 @@ class ContextManager:
             editable_patterns=tuple(problem_spec.search_space.editable),
             frozen_patterns=tuple(problem_spec.search_space.frozen),
             development_suites=development_suites,
+            read_only_sources=public_support_sources(
+                adapter_spec or problem_spec,
+                source_root=source_root,
+                split_manifest=self._split_manifest,
+            ),
             qualified_module_prefixes=qualified_module_prefixes,
         )
         operator_interface_spec = _build_operator_interface_spec(

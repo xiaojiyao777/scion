@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-10-03*
+*Last updated: 2026-10-04*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,10 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R17 running: explicit quota stop, unchanged source/gates/budgets, complete safe R16 history](v04-cvrp-r17-quota-aware-autonomous-preregistration-20261003.md)
+- [R18 preregistration: explicit public read-only dependencies, bounded query correction and optional exact-reference/real-entry support](v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md)
+- [R18 Warehouse control preregistration: same frozen runtime, fresh two-stage/80-call cross-problem check before CVRP](v04-r18-warehouse-research-context-control-20261004.md)
+- [R17 postrun: 12/12 stages, 178 valid pairs, positive screen then negative validation; query-context and probe diagnosis](v04-cvrp-r17-quota-aware-autonomous-postrun-20261004.md)
+- [R17 frozen design and terminal pointer: explicit quota stop, unchanged source/gates/budgets, complete safe R16 history](v04-cvrp-r17-quota-aware-autonomous-preregistration-20261003.md)
 - [R17 Warehouse control completed: 2/2 valid negative stages, 70 successful calls, correct source continuation; query inefficiency remains](v04-r17-warehouse-quota-control-20261003.md)
 - [R16 postrun: quota outage then 48-hour stop; 7/12 stages, 86 valid pairs, negative validation and remaining activation/test gaps](v04-cvrp-r16-probe-diagnostics-autonomous-postrun-20261003.md)
 - [R16 frozen design and terminal pointer](v04-cvrp-r16-probe-diagnostics-autonomous-preregistration-20260928.md)

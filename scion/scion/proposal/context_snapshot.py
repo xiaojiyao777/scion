@@ -46,6 +46,7 @@ _HYPOTHESIS_KEYS = frozenset(
         "problem_measurement_diagnostics",
         "champion_operators_code",
         "branch_current_code",
+        "public_support_sources",
         "branch_id",
         "research_question",
         "prior_research_observations",

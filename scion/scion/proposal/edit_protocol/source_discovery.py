@@ -14,8 +14,12 @@ _DEVELOPMENT_CHECKS = ("D3_unit_tests", "D4_regression_tests")
 def source_files_from_context(context: Mapping[str, Any] | None) -> dict[str, str]:
     """Return provider-visible editable source keyed by canonical path."""
 
-    sources, _public_tests, visible_sources = _source_context_files(context)
-    return {path: content for path, content in sources.items() if path in visible_sources}
+    sources, _public_tests, visible_sources, _dependencies = _source_context_files(
+        context
+    )
+    return {
+        path: content for path, content in sources.items() if path in visible_sources
+    }
 
 
 def all_source_files_from_context(
@@ -39,23 +43,42 @@ def research_files_from_context(
 ) -> dict[str, str]:
     """Return the combined editable and read-only code-research corpus."""
 
-    sources, public_tests, _visible_sources = _source_context_files(context)
-    return {**sources, **public_tests}
+    sources, public_tests, _visible_sources, dependencies = _source_context_files(
+        context
+    )
+    dependencies = {
+        path: content
+        for path, content in dependencies.items()
+        if isinstance(content, str)
+    }
+    return {**sources, **dependencies, **public_tests}
+
+
+def read_only_files_from_context(
+    context: Mapping[str, Any] | None,
+) -> dict[str, str | None]:
+    """Return public dependencies and tests, without granting patch access."""
+
+    _sources, public_tests, _visible, dependencies = _source_context_files(context)
+    return {**dependencies, **public_tests}
 
 
 def _source_context_files(
     context: Mapping[str, Any] | None,
-) -> tuple[dict[str, str], dict[str, str], frozenset[str]]:
+) -> tuple[dict[str, str], dict[str, str], frozenset[str], dict[str, str | None]]:
     if not context:
-        return {}, {}, frozenset()
+        return {}, {}, frozenset(), {}
     source_context = context.get("editable_source_context")
     if not isinstance(source_context, Mapping):
-        return {}, {}, frozenset()
-    if set(source_context) != {
+        return {}, {}, frozenset(), {}
+    required = {
         "approved_target",
         "sources",
         "public_tests",
         "target_api_guidance",
+    }
+    if not required <= set(source_context) or set(source_context) - required - {
+        "read_only_sources"
     }:
         raise ValueError("editable source context has unknown or missing keys")
     target = _canonical_path(source_context.get("approved_target"))
@@ -125,7 +148,29 @@ def _source_context_files(
             raise ValueError(f"public test visibility must be boolean: {path}")
         if isinstance(content, str):
             public_records[path] = content
-    return records, public_records, frozenset(visible_sources)
+    dependencies: dict[str, str | None] = {}
+    read_only = source_context.get("read_only_sources", [])
+    if not isinstance(read_only, list):
+        raise ValueError("read-only source context must be a list")
+    for entry in read_only:
+        if not isinstance(entry, Mapping) or set(entry) != {
+            "path",
+            "content",
+            "visible",
+        }:
+            raise ValueError("read-only source entry has unknown or missing keys")
+        path = _canonical_path(entry.get("path"))
+        if path in seen:
+            raise ValueError(f"duplicate research source path: {path}")
+        seen.add(path)
+        content = entry.get("content")
+        if content is not None and not isinstance(content, str):
+            raise ValueError(f"read-only source content must be text or null: {path}")
+        if not isinstance(entry.get("visible"), bool):
+            raise ValueError(f"read-only source visibility must be boolean: {path}")
+        # A redacted read-only source is still forbidden as a patch target.
+        dependencies[path] = content
+    return records, public_records, frozenset(visible_sources), dependencies
 
 
 def _canonical_path(value: Any) -> str:

@@ -78,6 +78,7 @@ def _build_editable_source_context(
     editable_patterns: Sequence[str],
     frozen_patterns: Sequence[str],
     development_suites: Sequence[Any] = (),
+    read_only_sources: Sequence[dict[str, Any]] = (),
     qualified_module_prefixes: tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Collect current selected-surface source and its public development tests."""
@@ -117,9 +118,7 @@ def _build_editable_source_context(
     )
     add(target)
     for path in surface_paths:
-        if not any(
-            segment_glob_match(path, pattern) for pattern in editable_patterns
-        ):
+        if not any(segment_glob_match(path, pattern) for pattern in editable_patterns):
             continue
         if any(segment_glob_match(path, pattern) for pattern in frozen_patterns):
             continue
@@ -144,6 +143,11 @@ def _build_editable_source_context(
     ordered_paths = ordered_source_paths(roles)
     public_tests: list[dict[str, Any]] = []
     seen_paths = set(sources)
+    for source in read_only_sources:
+        path = _normalize_source_path(source["path"])
+        if path in seen_paths:
+            raise ValueError(f"public dependency overlaps research source: {path}")
+        seen_paths.add(path)
     for suite in development_suites:
         check_name = str(getattr(suite, "check_name", "") or "")
         test_path = _normalize_source_path(getattr(suite, "test_path", ""))
@@ -182,6 +186,7 @@ def _build_editable_source_context(
             for path in ordered_paths
         ],
         "public_tests": public_tests,
+        "read_only_sources": list(read_only_sources),
         "target_api_guidance": _solver_design_target_api_guidance(provider, target),
     }
 
