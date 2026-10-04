@@ -139,6 +139,10 @@ local/infrastructure failure are different. They remain `NOT_EVALUATED`,
 become algorithm history. The exact local-proxy synthetic 401 exception remains
 narrowly classified as temporary provider unavailability; it does not weaken
 real authentication handling.
+Explicit HTTP 429 usage-quota exhaustion uses the existing balance/resource
+terminal lane, not transient redispatch or a fresh H. Recognition is limited to
+known quota codes or exact usage-limit messages; ordinary rate throttling stays
+transient. This adds no outage counter, recovery state or campaign resume.
 
 There is no algorithm-quality, novelty, content-similarity, or default total
 transcript gate. Optional proposal-local action limits, provider transport

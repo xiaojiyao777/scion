@@ -70,7 +70,7 @@ class LLMAuthError(LLMError):
 
 
 class LLMBalanceError(LLMError):
-    """API balance/credits are exhausted."""
+    """API balance, credits or explicitly reported usage quota are exhausted."""
 
 
 class LLMTransportError(LLMError):
@@ -95,7 +95,7 @@ class LLMFormatError(LLMError):
 
 
 class LLMRateLimitError(LLMError):
-    """HTTP 429 with an advisory bounded-redispatch delay."""
+    """Transient rate limit with an advisory bounded-redispatch delay."""
 
     def __init__(self, message: str, retry_after: float = 60.0) -> None:
         super().__init__(message)

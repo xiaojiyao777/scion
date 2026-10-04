@@ -1,6 +1,12 @@
 # CVRP R16: bounded self-test hints and real-entry research support
 
-State: launched once at `2026-09-28T15:48:59Z`, PID 331499, tmux
+State: terminal at `2026-09-30T15:49:01.133122+00:00`, valid_incomplete,
+`OUTER_HARDWALL_EXCEEDED` after persistent account-quota/provider unavailability.
+Seven of twelve evaluated stages, 86 valid pairs, no promotion. See the
+[October 3 read-only postrun](v04-cvrp-r16-probe-diagnostics-autonomous-postrun-20261003.md).
+The following launch/verification statements preserve their September 28 snapshot.
+
+Launched once at `2026-09-28T15:48:59Z`, PID 331499, tmux
 `scion-r16-probe-diagnostics-autonomous-20260928`. User's September 28 follow-up approves
 the R15 analysis direction, a fresh experiment, Git commit and push.
 Profile: Code Repair Or Feature Work; canonical entry, full V3/addendum,

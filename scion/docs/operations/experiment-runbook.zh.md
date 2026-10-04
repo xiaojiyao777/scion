@@ -71,6 +71,11 @@ terminal trace。通常 backoff 下界为 5 秒和 20 秒，provider `Retry-Afte
 auth/balance、显式共享 provider cap 和中断保持各自 typed 边界。本地 proxy 的精确
 synthetic no-usable-account 401 只表示临时不可用，不得扩展成对真实 401/403 的
 宽松分类。Trace 是诊断，不是 receipt、call identity 或重放授权。
+明确的 HTTP 429 usage-quota exhaustion 复用 `LLMBalanceError` /
+`RESOURCE_EXHAUSTED` / `PROVIDER_BALANCE_EXHAUSTED` 终止路径，不 backoff、
+redispatch 或 scheduler-forward。仅匹配已知 quota code 或精确 usage-limit
+消息；普通速率限制不升级为额度耗尽。恢复额度后重新检查 provider 并使用 fresh
+campaign，不续跑 terminal root，也不把故障写为算法研究失败。
 
 v0.4 production Scheduler 默认最多允许三个 active research branches，并按
 state priority/FIFO 选择 runnable branch。一个 branch 仍表示一个可持续深入的

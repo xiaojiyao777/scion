@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-09-28*
+*Current as of: 2026-10-03*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -135,11 +135,48 @@ authority or authorize another run.
   source/schema tool errors remain a research-efficiency limitation. The
   incomplete control is not relabeled complete; its limited launch rationale
   is recorded. No control outcome enters CVRP H/C.
-  R16 launched once at 15:48:59 UTC, PID 331499; [live status](/home/clawd/research/scion-experiments/v04-cvrp-r16-probe-diagnostics-autonomous-20260928/status.json).
+  R16 launched once at 15:48:59 UTC, PID 331499; [terminal status](/home/clawd/research/scion-experiments/v04-cvrp-r16-probe-diagnostics-autonomous-20260928/status.json).
   All 100 initial files match; actual H calls succeed with the exact question,
   136 prior-history plus five observation indexes and new guidance. No formal
-  result yet. Runtime/inputs match d67f9800; only status docs change during
-  measurement. The following docs-only Git handoff/push does not alter the run.
+  result at that launch snapshot. Runtime/inputs match d67f9800; the docs-only
+  handoff was pushed as `505dce03`. October 3 entry found a clean checkout there.
+- [R16 postrun](../experiments/v0.4/v04-cvrp-r16-probe-diagnostics-autonomous-postrun-20261003.md):
+  stopped September 30 at 15:49:01 UTC, `OUTER_HARDWALL_EXCEEDED`,
+  valid_incomplete, 7/12 stages and 86 valid pairs; no promotion. All formal
+  metrics precede the September 28 20:38:49 account-quota 429. Fifty successful
+  calls are followed by 196 failed dispatches (one quota 429, 195 synthetic
+  no-usable-account 401s), 65 operational attempt rejections and a final
+  interrupted attempt. 246/600 calls used, 354 remain: not call-cap exhaustion.
+  The persistent outage lasts another 43 h 10 m until the 48-hour guard.
+  Expanded +4.75 [0,16.75] passes, complete validation 0 [-12.5,1302.75]
+  fails case quality (2/2/2); later outage does not invalidate those pairs.
+  All 140 visible C source values and three surviving 100-file heads match.
+  Both failed-probe hints reach C, but forced sweep activation (>1500 customer
+  production threshold) and mock-only dispatch checks remain reasoning limits.
+  Frozen/retained unopened. The initial October 3 inspection did not change
+  runtime or relaunch. The subsequent follow-up now approves the proposed
+  quota-stop fix and fresh R17 after checks, not Git commit/push or R16 resume.
+- P13: explicit HTTP 429 usage quota exhaustion now follows the existing
+  balance/resource terminal lane; ordinary transient faults keep bounded retry.
+  No algorithm/gate/prompt change or outage/recovery state. Focused tests:
+  163 provider/quota/client plus ten R16/R17 input tests pass. Full suite:
+  2554 passed, 1 skipped in 434.47 s. [R17 preregistration](../experiments/v0.4/v04-cvrp-r17-quota-aware-autonomous-preregistration-20261003.md)
+  and [independent Warehouse control](../experiments/v0.4/v04-r17-warehouse-quota-control-20261003.md)
+  are executed. Warehouse completes 2/2 at 13:35:48 UTC, valid, pane exit0;
+  70/80 successful calls, two valid ties, two research rejections, no framework
+  blocker. All 406 source files and 45 visible C values match, including exact
+  accepted-head continuation. Query inefficiency remains. CVRP R17 launches
+  once at 13:40:12 UTC, PID 460131; [live status](/home/clawd/research/scion-experiments/v04-cvrp-r17-quota-aware-autonomous-20261003/status.json).
+  Same R12-A-fixed source, unchanged scientific
+  gates/budgets and all safe R16 history. Runtime is 505dce03 plus the frozen
+  uncommitted transport/error repair. One bounded real inference succeeds at
+  13:21 UTC; initial source/data/closure/production and exact H projection pass.
+  No competing tests/solver/maintenance at either launch. Freeze all runtime
+  and inputs until both measurements finish; only status docs may change.
+  R17 startup checks pass: all 100 champion files equal the selected source;
+  actual first H succeeds at attempt0 on gpt-5.6-sol with the exact 10,347-character
+  question and 147-entry index (142 safe history rows, five observations).
+  Initial H research is running; no scientific improvement is inferred.
 
 A new session must re-run the ordinary read-only `git` and tmux checks in
 `AGENTS.md`. A commit label, tmux pane, summary, or this prose is not scientific
@@ -225,6 +262,9 @@ new scientific gate.
   unavailability. Real/non-exact authentication, balance, explicit global call cap,
   missing provider terminal response, invalid local context, missing typed outcome,
   and interruption remain terminal or hold outcomes.
+- Explicit usage-quota 429 is balance/resource exhaustion, not ordinary rate
+  throttling: stop after its charged trace, no redispatch/fresh H, no algorithm
+  history. Recovery permits a new campaign only, never a terminal resume.
 
 Contract, Verification, complete-pair Protocol, held-out isolation, feasibility,
 protected objectives, and deterministic Decision remain necessary research
@@ -395,10 +435,16 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    and [last initial screen](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/metrics/52df4158-65c7-4889-90b9-050cbcd5a1ae.json).
    Complete validation rejects the candidate on quality, not comparator failure.
    Preserve the localized X351 discovery separately from the last SWAP* signal.
-   Authorized P12 support is implemented and R16 is running, with the partial
-   Warehouse control caveat above. Next inspect R16's actual H/C, diagnostic
-   use, real-entry/real-collaborator test fidelity, source continuation and paired
-   results after terminal completion; no additional repair or launch is implied.
+   Authorized P12 support is implemented; R16 is now terminal valid_incomplete,
+   with the partial Warehouse control caveat above. Its
+   [read-only postrun](../experiments/v0.4/v04-cvrp-r16-probe-diagnostics-autonomous-postrun-20261003.md)
+   separates completed negative validation from the subsequent quota outage.
+   Safe hints work; production-path reasoning and probe coverage remain limited.
+   October 3 follow-up approves the narrow quota-stop repair and fresh R17.
+   Full tests, provider inference and independent Warehouse audit now pass;
+   R17 is running on the same frozen runtime. Check only its exact linked
+   status/traces/terminal metrics; no concurrent tests/solvers/maintenance.
+   No Git action is implied by this follow-up.
    Do not resume R15 or the resource-stopped Warehouse control. Validation remains exposed;
    frozen/retained unopened. No B0-fixed/original-B0 superiority. R14 root:
    `/home/clawd/research/scion-experiments/v04-cvrp-r14-post-r13-autonomous-20260927`.

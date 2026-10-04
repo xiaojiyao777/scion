@@ -78,6 +78,10 @@ unavailability；真实或非精确 auth、balance、显式全局 provider-call 
 terminal response、无效 local context、missing typed outcome 和 interruption 仍是
 terminal/hold 类结果。每次物理 dispatch 最多写一个 best-effort terminal trace；
 trace 不是 receipt 或 call identity，写失败不能改变有效 provider 结果。
+明确的 HTTP 429 usage-quota exhaustion（已知 quota code 或精确 usage-limit
+错误）走现有 balance/resource terminal lane，不进入 transient redispatch 或
+fresh H；普通 requests/tokens-per-minute 限流仍是 transient。额度恢复只能开始
+新 campaign，不能续跑已终止记录。
 
 ## 不可变边界
 

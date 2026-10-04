@@ -456,6 +456,10 @@ class TransportMixin:
         status_code = _provider_status_code(exc, raw_error=raw_error)
         type_name = type(exc).__name__.lower()
 
+        if _is_exhausted_usage_quota(
+            exc, status_code=status_code, raw_error=raw_error
+        ):
+            raise LLMBalanceError(f"API usage quota exhausted: {exc}") from exc
         if (
             status_code == 408
             or isinstance(exc, TimeoutError)
@@ -594,6 +598,49 @@ def _is_local_proxy_temporary_unavailable(
         normalized == prefix + _LOCAL_PROXY_UNAVAILABLE_MESSAGE
         for prefix in stable_prefixes
     )
+
+
+def _is_exhausted_usage_quota(
+    exc: Exception, *, status_code: int | None, raw_error: str
+) -> bool:
+    """Separate explicit exhausted quota from an ordinary transient HTTP 429.
+
+    Reuse the existing terminal balance/resource lane, without retry counters,
+    outage timers or a campaign recovery mechanism. A structured SDK body takes
+    precedence over formatted text; generic rate limits and account availability
+    messages alone do not establish exhausted usage quota.
+    """
+    if status_code != 429:
+        return False
+    quota_codes = ("insufficient_quota", "usage_limit_reached")
+    message_pattern = (
+        r"(?:All accounts exhausted \(\d+ rate-limited\)\. "
+        r"Codex API error \(429\): )?The usage limit has been reached\.?"
+    )
+    body = getattr(exc, "body", None)
+    if body is not None:
+        if not isinstance(body, dict):
+            return False
+        error = body.get("error", body)
+        if not isinstance(error, dict):
+            return False
+        if any(error.get(field) in quota_codes for field in ("code", "type")):
+            return True
+        message = error.get("message")
+        return (
+            isinstance(message, str)
+            and re.fullmatch(message_pattern, message) is not None
+        )
+
+    # Some compatible clients expose only the SDK-formatted error. Match exact
+    # quoted fields, not a substring such as "accounts exhausted" or "quota".
+    return re.search(
+        r"""["'](?:code|type)["']\s*:\s*["'](?:insufficient_quota|usage_limit_reached)["']""",
+        raw_error,
+    ) is not None or re.search(
+        rf"""["']message["']\s*:\s*["']{message_pattern}["']""",
+        raw_error,
+    ) is not None
 
 
 def _is_balance_error_text(err_str: str) -> bool:

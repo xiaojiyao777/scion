@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-09-28*
+*Current as of: 2026-10-03*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -35,6 +35,10 @@ The project goal is retained solver improvement produced by Scion itself:
   The September 28 follow-up authorizes the proposed bounded self-test feedback
   and real-entry/integration research support, then a fresh experiment, commit
   and push. Scientific gates and all terminal evidence remain unchanged.
+  R16 subsequently stops at its 48-hour guard after persistent account-quota
+  failure: 7/12 stages, 86 valid pairs, completed negative validation and no
+  promotion. The October 3 follow-up now approves explicit quota-stop repair
+  and fresh R17 after verification, not resuming R16 or Git commit/push.
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -77,6 +81,8 @@ problem adapter + complete safe current source + optional ordered H-only history
   An explicit ResourceEnvelope may allow up to two charged/traced redispatches of
   one frozen request after typed transient/rate-limit/proxy-unavailable failures.
   Exhaustion rejects only that attempt and does not enter algorithm history.
+- Explicit usage-quota exhaustion uses the existing balance/resource terminal
+  lane, not transient retry or fresh H; ordinary rate limits remain transient.
 - Real authentication, balance, global call cap, missing terminal/typed outcome,
   invalid initial context, and interruption remain terminal or hold outcomes.
 - Transcript total characters are unbounded by default. A started explicit local
@@ -493,6 +499,38 @@ changing the running R15 runtime or scientific inputs.
   actual H calls. Startup is not scientific success. Implementation was
   committed before launch; following docs-only commit/push completes the
   user-authorized Git handoff (consult Git for the resulting tip).
+- [x] October 3 read-only [R16 postrun](docs/experiments/v0.4/v04-cvrp-r16-probe-diagnostics-autonomous-postrun-20261003.md):
+  seven complete stages / 86 valid pairs before quota outage, expanded +4.75
+  passes and complete validation fails. Fifty successful calls then 196 failed
+  dispatches; 246/600 used, no call-cap exhaustion. Outer guard stops September
+  30 at 15:49:01 UTC. Safe hints reach C; inactive sweep and mock-only probes
+  remain research limitations. Preserve original evidence; never resume R16.
+- [x] October 3 follow-up authorizes the proposed explicit-quota handling fix
+  and fresh experiment after verification. No terminal resume or Git action.
+
+### P13 — Stop explicit quota exhaustion, then fresh R17
+
+- [x] Classify explicit quota 429 as existing balance/resource exhaustion.
+  Preserve ordinary rate-limit/timeout/proxy retry, real auth, charged traces,
+  clean algorithm history and all scientific gates. No outage/recovery system.
+- [x] Focused quota/provider/client tests: 163 pass, including actual SDK error
+  shape and both H/C-to-campaign one-dispatch terminal behavior.
+- [x] Preregister [R17](docs/experiments/v0.4/v04-cvrp-r17-quota-aware-autonomous-preregistration-20261003.md)
+  from unchanged R12-A-fixed with all six R16 safe rows and fresh seeds.
+  Ten R16/R17 input/seed/closure tests pass; no private later-stage injection.
+- [x] Full suite: 2554 passed, 1 skipped in 434.47 s; read-only source/data/
+  closure/production/exact H projection pass. Real provider inference recovers.
+  Run the independent
+  [Warehouse control](docs/experiments/v0.4/v04-r17-warehouse-quota-control-20261003.md)
+  on the same frozen runtime: completed 2/2 at 13:35:48 UTC, 70 successful
+  calls, two valid negative screens, exact source continuation, no framework
+  blocker. Preserve query inefficiency and two research-rejected attempts.
+- [x] Launch fresh R17 once at 13:40:12 UTC, PID 460131. All 100 champion
+  files match, actual first H succeeds at attempt0 with the exact 10,347-character
+  question, 142 safe history rows plus five observations (147 index entries).
+  Keep source/runtime/inputs frozen; no overlapping tests/solvers/maintenance.
+- [ ] Audit R17 only after its own terminal artifacts exist; startup is not
+  scientific or retained improvement. Never resume R16 or this terminal control.
 
 ### v0.4 closeout
 
@@ -503,6 +541,11 @@ changing the running R15 runtime or scientific inputs.
 
 ## Verification snapshot
 
+- P13 / R17: 2554 passed, 1 skipped in 434.47 s; 163 focused provider/quota
+  tests and ten R16/R17 input tests pass. Independent Warehouse completes 2/2
+  valid negative stages with 70 successful calls, correct source continuation
+  and no framework blocker. R17 startup source/actual H delivery pass; ongoing.
+  Runtime is 505dce03 plus frozen uncommitted quota repair, no commit/push this turn.
 - Branch: `v0.4-dev`. P1 and the handoff were committed as `a112e60c`;
   P1b and prospective R6 inputs were committed as `e405bfd2` before launch.
 - P1b full suite: `2397 passed, 1 skipped, 0 failed` in 436.38 seconds, with no
