@@ -1,6 +1,7 @@
 # CVRP R18: public research context and exact-reference support
 
-State: preregistered, not launched. October 4 user explicitly authorizes
+State: **running**, launched once on October 4 at 12:04:15 Beijing / 04:04:15 UTC.
+October 4 user explicitly authorizes
 coordinated subagents to implement the R17 follow-up, verify, commit/push, then
 run fresh experiments. [R17 postrun](v04-cvrp-r17-quota-aware-autonomous-postrun-20261004.md)
 is operator-only; its private validation findings are not research inputs.
@@ -84,7 +85,8 @@ Tmux: `scion-r18-research-context-autonomous-20261004`.
 
 ## Planned direct CLI invocation
 
-Not executed at preregistration. No generated launcher or prepared runtime.
+Frozen at preregistration, subsequently executed once as recorded below.
+No generated launcher or prepared runtime.
 
 ```bash
 set -Eeuo pipefail
@@ -151,4 +153,32 @@ Full suite passes **2622 tests / one skip in 446.02 s**. The first full run had
 aligned to include a nonempty readonly source, retaining all exact assertions.
 Seventeen prompt/input tests and the complete second suite pass. Production code
 was unchanged between full runs. Changed-file Ruff F/E9 and diff checks pass.
-Git push and terminal Warehouse audit remain pending.
+Runtime and inputs committed/pushed as `1596347c` before provider dispatch.
+Warehouse started once at 11:39:12 Beijing (03:39:12 UTC), after a successful
+single bounded inference health check. It completed at 12:00:17 Beijing:
+2/2 valid tie stages, 48 successful calls, one C research rejection, no observed
+execution/scientific blocker. Independent source/context and feedback audits
+pass. Three repeated new-file read errors, three rejected readonly edits and
+three import-preflight rejections remain visible research limitations; no causal
+efficiency or algorithm-quality claim. See the full control report. Its outcomes
+are operator-only and are not appended to the frozen CVRP research input.
+
+CVRP subsequently launched once at **12:04:15 Beijing / 04:04:15 UTC**, PID 480652,
+on the same `1596347c` runtime and inputs. All subsequent checkout changes are
+status/analysis docs only. Before launch no live tests/solvers were present;
+the completed Warehouse carrier was dead. The direct CLI remains running in
+the named tmux session; do not restart or resume a later terminal campaign.
+
+Startup audit compares all 100 initial files byte-for-byte with the selected
+complete R12-A-fixed source. Actual first H succeeds (04:04:17–04:04:21 UTC),
+with exact 11,345-character question, 158 history-index entries (153 safe records
+and five observations), 30 source entries including 17 declared readonly
+dependencies. Resource envelope is exactly 600 calls / 172800 seconds / two
+charged transient redispatches. No Warehouse control output or private R17
+validation detail is added. Startup has zero evaluated stages and is not an
+algorithm-quality or research-efficiency result.
+
+[Live ordinary status](/home/clawd/research/scion-experiments/v04-cvrp-r18-research-context-autonomous-20261004/status.json)
+is the next operational pointer; use corresponding terminal/metric evidence
+when available. Frozen/retained confirmation and any original-B0 superiority
+remain open.

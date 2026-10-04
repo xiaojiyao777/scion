@@ -222,14 +222,30 @@ keeping exact assertions and adding a nonempty readonly body. The second full
 run passes with unchanged production code. Changed-file Ruff and diff checks pass.
 The [R18 design](../experiments/v0.4/v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md)
 and [Warehouse control](../experiments/v0.4/v04-r18-warehouse-research-context-control-20261004.md)
-are preregistered, not launched. Read-only preflight checks 100 initial CVRP
+are frozen at pushed `1596347c`. Warehouse completed normally at October 4
+12:00:17 Beijing (04:00:17 UTC):2/2 valid tie stages,48 successful calls and
+one rejected C attempt. Exact source/readonly/feedback/science audits pass;
+three repeated new-target reads, three readonly-edit refusals and three import
+preflight failures remain. C lacks explicit complete import permissions and
+the H-only automatic new-operator integration explanation. These are remaining
+research-support limitations, not observed execution/scientific blockers; no
+algorithm-quality or causal efficiency gain is established.
+CVRP R18 started once at12:04:15 Beijing (04:04:15 UTC), PID480652, after that
+terminal audit; first actual H succeeds. All100 initial files match the frozen
+R12-A-fixed source. The actual H carries158 history-index entries and17 public
+readonly dependencies. No tests, other solvers, maintenance or code/input edits
+overlap R18; only status/analysis documentation changes. One prior bounded
+inference succeeded at11:38:49 Beijing with SDK retry0.
+[Live R18 status](/home/clawd/research/scion-experiments/v04-cvrp-r18-research-context-autonomous-20261004/status.json)
+reports running at startup, zero evaluated stages; no result claim yet.
+Read-only preflight checks 100 initial CVRP
 source files, 25 CVRP and five Warehouse cases, seventeen whole histories / 176
 raw records / 153 safe H records plus five observations, and the exact 11,345
 character question. Public readonly dependency inventories contain 17 CVRP and
 nine Warehouse sources; `models.py` is readable but absent from editable files.
 No algorithm edit, budget widening, gate relaxation, private validation exposure,
-historical mutation or terminal resume is authorized. New measurement waits for
-focused/full tests and a frozen runtime, followed by a fresh Warehouse control.
+historical mutation or terminal resume is authorized. Full tests, frozen/pushed
+runtime and fresh terminal Warehouse control precede the R18 launch above.
 
 ## Current runtime truth
 
@@ -495,7 +511,10 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    commit/push (`7e1fd7dc`, done) and the linked read-only postrun, not a new run.
    Retain the negative validation and source/probe limitations. The subsequent
    approval authorizes P14; its source/feedback/probe repairs are implemented
-   and pass full regression; commit/push and fresh R18 controls follow as linked above.
+   and pass full regression; pushed `1596347c` has completed its Warehouse control
+   and started fresh R18 as linked above. Next inspect its actual H/C and metrics;
+   preserve remaining C guidance limits instead of asserting all research issues
+   are resolved. Do not modify the live runtime or scientific inputs.
    Do not inject private validation into H/C, choose
    the agent's algorithm, widen budgets or weaken gates to hide these issues.
    Do not resume R15 or the resource-stopped Warehouse control. Validation remains exposed;

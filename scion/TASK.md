@@ -569,15 +569,23 @@ changing the running R15 runtime or scientific inputs.
 - [x] Strengthen optional public real-entry and independent exact-reference
   examples; test real collaborators and reference arithmetic without selecting
   an algorithm, replacing the model's mechanism or adding a quality gate.
-- [ ] Complete focused/adversarial checks, independent cross-review, full suite
+- [x] Complete focused/adversarial checks, independent cross-review, full suite
   and prospective input/source/history projection. Freeze runtime and inputs,
   commit and push before new measurement.
-- [ ] Run a fresh two-stage Warehouse control on that runtime; inspect actual
+  Frozen runtime/inputs: `1596347c`, pushed to origin before provider dispatch.
+- [x] Run a fresh two-stage Warehouse control on that runtime; inspect actual
   source access/feedback and complete science before CVRP. Preserve any negative
   or incomplete result rather than resuming or silently widening its envelope.
-- [ ] Launch fresh CVRP R18 from unchanged complete R12-A-fixed source with all
+  Completed valid2/2,48 calls all successful; both pairs tie. Exact sources and
+  readonly protection pass; three query errors, three readonly-edit refusals and
+  three import preflight failures preserve remaining research support limits.
+- [x] Launch fresh CVRP R18 from unchanged complete R12-A-fixed source with all
   safe R17 history, fresh seeds and unchanged Protocol/budgets. Verify actual
   startup source/context. No private validation hints or R17 candidate merge.
+  Started once at October4 12:04:15 Beijing /04:04:15 UTC, PID480652; all100
+  source files and actual H's153 histories+five observations match. Running,
+  no formal quality result at startup. Next inspect terminal/metrics and H/C
+  research; do not modify the live runtime/input or resume a terminal campaign.
 
 ### v0.4 closeout
 
@@ -593,7 +601,11 @@ changing the running R15 runtime or scientific inputs.
   independent cross-review pass. Initial full run's two old-schema fixture
   failures were corrected without production edits or weakened assertions;
   the entire suite was rerun. Read-only input/source/history/public-formal
-  projection passes for both fresh designs; no formal measurement yet.
+  projection passes for both fresh designs. Pushed runtime/inputs `1596347c`:
+  Warehouse completed2/2 valid ties at12:00:17 Beijing with48 successful calls;
+  readonly/source/feedback/science audits pass with remaining C guidance and
+  repeated-query limits documented. CVRP R18 started at12:04:15 Beijing and
+  actual initial source/H inputs pass startup audit; no improvement claim yet.
 - P13 / R17: 2554 passed, 1 skipped in 434.47 s; 163 focused provider/quota
   tests and ten R16/R17 input tests pass. Independent Warehouse completes 2/2
   valid negative stages with 70 successful calls, correct source continuation

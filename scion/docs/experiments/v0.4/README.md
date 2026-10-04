@@ -8,8 +8,8 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R18 preregistration: explicit public read-only dependencies, bounded query correction and optional exact-reference/real-entry support](v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md)
-- [R18 Warehouse control preregistration: same frozen runtime, fresh two-stage/80-call cross-problem check before CVRP](v04-r18-warehouse-research-context-control-20261004.md)
+- [R18 running: pushed public-readonly/query/probe repair, unchanged complete initial source, full safe history and startup verified](v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md)
+- [R18 Warehouse control completed: two valid ties, 48 successful calls, exact public-source delivery; three query errors and C guidance gaps remain](v04-r18-warehouse-research-context-control-20261004.md)
 - [R17 postrun: 12/12 stages, 178 valid pairs, positive screen then negative validation; query-context and probe diagnosis](v04-cvrp-r17-quota-aware-autonomous-postrun-20261004.md)
 - [R17 frozen design and terminal pointer: explicit quota stop, unchanged source/gates/budgets, complete safe R16 history](v04-cvrp-r17-quota-aware-autonomous-preregistration-20261003.md)
 - [R17 Warehouse control completed: 2/2 valid negative stages, 70 successful calls, correct source continuation; query inefficiency remains](v04-r17-warehouse-quota-control-20261003.md)

@@ -1,6 +1,9 @@
 # R18 independent Warehouse public-research-context control
 
-State: preregistered, not launched. October 4 user authorizes repair, verification,
+State: **completed / valid**, two of two evaluated stages, both valid ties.
+Started once on October 4 at 11:39:12 Beijing / 03:39:12 UTC; terminal status
+written at 12:00:17 Beijing / 04:00:17 UTC. No promotion or held-out execution.
+October 4 user authorizes repair, verification,
 commit/push and fresh experiments. This checks shared read-only dependency and
 query-feedback changes on the same frozen runtime as
 [CVRP R18](v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md).
@@ -57,7 +60,7 @@ Tmux: `scion-r18-warehouse-research-context-control-20261004`.
 
 ## Planned direct CLI invocation
 
-Not executed at preregistration.
+Frozen at preregistration, subsequently executed once as recorded below.
 
 ```bash
 set -Eeuo pipefail
@@ -95,4 +98,86 @@ H has 17 source-index entries; C has nine explicitly declared readonly
 dependencies. `models.py` is readable but not an editable file. No campaign
 directory, solver or provider call is created. Full suite passes 2622 tests /
 one skip in 446.02 s; exact prompt-fixture alignment and the first run are
-disclosed in the CVRP design. Ruff F/E9 and diff checks pass. Git push pending.
+disclosed in the CVRP design. Ruff F/E9 and diff checks pass.
+
+Runtime/inputs committed and pushed as `1596347c` before dispatch. A single
+bounded model inference succeeded at 11:38:49 Beijing (03:38:49 UTC), SDK retry0,
+60-second limit. The direct command above then started once at 11:39:12 Beijing
+(03:39:12 UTC), PID 479201. Actual H calls succeed and carry the new declared
+public-support inventory. No other tests/solvers or maintenance overlap the run.
+Terminal status is `completed`, `requested_rounds_completed`, `valid`: three
+scheduled attempts, two evaluated candidates and one C research rejection.
+All 48 provider calls succeed (19 H turns, 28 C turns, one C finalization),
+32 of 80 remain. No provider retry/quota event or global resource exhaustion.
+The carrier is dead (no exit-status value); JSON establishes completion.
+
+### Scientific results and actual mechanisms
+
+Both metrics contain one complete valid pair on `instance_small_6.json`,
+seed210011, two seconds per arm. Both objective vectors tie, delta0, CI[0,0],
+`SCREENING_FAIL_WIN_RATE -> CONTINUE_EXPLORE`. No infeasible/failed pair or
+protected-objective regression. Contract, Verification and paired canary pass
+for both evaluated candidates. No validation/frozen/retained or promotion.
+The declared protected-objective list is empty; do not infer an extra safety gate
+from the empty regression list. Lexicographic primary objective equality is checked.
+The inherited calibration is still stale/degraded (115 days); not relabeled.
+
+| Attempt | Actual research / implementation | Outcome |
+| --- | --- | --- |
+| 1 | MergeVehicles ranks eligible pairs by shared subcategories, examines 24, applies complete feasibility and lexicographic improvement checks. Pair enumeration/ranking is still O(V²). Initial forbidden oracle import is repaired by reading the public implementation and inlining checks. | Valid tie; candidate427ms / champion501ms. |
+| 2 | New ConsolidateSubcategory; three reads of its not-yet-created source, three drafts trying readonly edits, then a forbidden-import preflight failure. Final replacement still imports oracle and has not completed its required tests. | `PATCH_PROPOSAL_INVALID`, no paired evaluation. |
+| 3 | MoveOrder evacuates a whole subcategory occurrence with locked-group closure, considers existing destinations, resizes affected vehicles, checks full feasibility and strict lexicographic improvement. Initial forbidden oracle import is repaired. | Valid tie; candidate1386ms / champion616ms (2.25× single-pair runtime). |
+
+Each evaluated candidate starts from champion v1 in a separate branch; they are
+not a cumulative merge. Natural same-branch continuation is not covered here.
+Operator invocation/improvement counters show activation, not additive final
+benefit: MergeVehicles reports107 improving invocations and MoveOrder40, yet
+both final objectives tie. One pair per candidate cannot establish speedup or
+generality; the second candidate has an observed runtime cost, not a benefit.
+
+### Query and interface interpretation
+
+All actual C requests receive nine declared readonly sources, including the
+complete `models.py`. Public oracle searches/reads succeed; dependencies remain
+outside editable source. Three source queries still fail: C repeatedly reads
+the explicitly not-yet-created target. Each receives bounded path/correction
+feedback, but immediate retries persist. Three readonly-edit attempts are
+correctly denied. Three separate `test_patch` calls are rejected by C8 import
+policy; those are preflight failures, not query errors or provider failures.
+
+Independent terminal source audit checks 171 H dependency-index entries,
+four actual visible dependency bodies, 261 readonly C values across 29 contexts,
+32 editable C values and 58 public-test values, all exact. Thirteen new-target
+projections honestly have no body. Champion and both surviving candidate trees
+have 406 non-cache files and equal their initial source plus the recorded patch;
+the only additional registry normalization reformats/adds empty category fields
+without changing membership, order or weights. No historical roots or original
+SQLite files were modified or opened by the audit.
+
+R17 had 28 query errors / 43 C turns and 70 total calls; R18 has 3 query errors /
+28 C turns and 48 calls. This is descriptive evidence of removed missing-source
+failures, not a paired causal efficiency/cost estimate: hypotheses, outputs and
+seeds differ, and readonly source delivery adds prompt text. Correction feedback
+delivery is proven, immediate behavioral recovery is not guaranteed.
+
+Remaining research support debt: H sees the existing automatic new-operator
+integration explanation but C lacks the same statement; C misreads default
+operator lists as requiring frozen-file edits. C also does not receive an
+explicit complete allowed-import list in its current API guidance, and repeatedly
+confuses readable oracle code with an allowed candidate import. Existing gates
+reject these errors. No access leak, readonly escape, broken execution or
+scientific-integrity blocker is observed; this is not a defect-free or efficient
+research claim. Keep the frozen runtime and record these limitations for a
+subsequent scoped improvement, not a mid-run patch or silent budget extension.
+
+Launch decision: proceed with preregistered CVRP R18 on the unchanged frozen
+`1596347c` runtime. The control exercises actual public reading, readonly refusal,
+feedback delivery, complete candidate verification and science. It does not
+establish improved algorithm quality, causal efficiency or universal recovery.
+
+Ordinary evidence (operator-only; no control outputs enter CVRP H/C):
+
+- [Terminal status](/home/clawd/research/scion-experiments/v04-r18-warehouse-research-context-control-20261004/status.json)
+- [Campaign summary and H/Decision trace](/home/clawd/research/scion-experiments/v04-r18-warehouse-research-context-control-20261004/campaign_summary.json)
+- [MergeVehicles metric](/home/clawd/research/scion-experiments/v04-r18-warehouse-research-context-control-20261004/metrics/a36125de-82bf-46cb-be2e-22c6bc08a80c.json)
+- [MoveOrder metric](/home/clawd/research/scion-experiments/v04-r18-warehouse-research-context-control-20261004/metrics/707abc2c-c088-477d-be64-a051d6476a6f.json)
