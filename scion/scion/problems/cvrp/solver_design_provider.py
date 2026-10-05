@@ -88,7 +88,16 @@ class CvrpSolverDesignProvider:
             "That diagnosis does not clear a failed exact draft: existing "
             "falsifier readiness rules still apply. A real-entry call shows "
             "only the paths actually reached with unchanged guards; tiny "
-            "correctness, activation, and timed performance are separate claims."
+            "correctness, activation, and timed performance are separate claims. "
+            "The optional example also contains a rational arithmetic worksheet "
+            "and a multi-size/capacity/seed real-entry probe. Sanity-check the "
+            "reference before submitting assertions; a test named brute-force "
+            "must actually enumerate its claimed space to support that claim. "
+            "Observe real calls without replacing construction, the budget or "
+            "the operators when claiming integration. Distinguish path entry, "
+            "completed work, acceptance and best improvement with functional "
+            "observations. These are optional testing aids, not prescribed "
+            "mechanisms or new acceptance requirements."
         )
         return f"{target_guidance}{development_guidance}".strip()
 
@@ -112,7 +121,11 @@ class CvrpSolverDesignProvider:
                 "population. A same-seed A/A check can expose an obvious "
                 "false-pass path but does not establish MDE or power. Runtime "
                 "errors may explain failed outcomes but do not replace objective "
-                "evidence."
+                "evidence. Inspect the complete seed pattern within each case: "
+                "a favorable median can hide large opposite-sign effects. "
+                "An initial subset, a changed seed population and an expanded "
+                "screen are different estimands, not an improvement trajectory. "
+                "Public-data-fitted guards remain hypotheses about generalization."
             ),
             (
                 "Do not propose generic Scion core, metadata, contract, gate, "

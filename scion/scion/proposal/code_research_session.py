@@ -109,7 +109,9 @@ def bind_code_research_turn_tool(limits: CodeResearchLimits) -> dict[str, Any]:
             "requires every patch field inside its patch object. Each file_path may "
             "appear only once; combine multiple same-file edits into one enclosing "
             "replacement or a justified full_file change. "
-            "test_patch optionally runs one self-authored pytest falsifier, then "
+            "test_patch optionally runs one self-authored pytest falsifier. Put "
+            "assertions inside collected test_* functions; module-level assertions "
+            "alone collect no tests. It then "
             "runs host-selected public development checks on that draft; a failed "
             "falsifier permanently rejects that executable patch value for this "
             "session (test_hint text cannot change that value), "
@@ -313,13 +315,21 @@ class CodeResearchSession:
                     "not directories. Omit search_source.path to search all sources; "
                     "an empty path is invalid. read_only_sources and public_tests "
                     "may be read but never edited. Use revise to stage a complete typed draft, "
-                    "using this one canonical wrapper: "
+                    "replacing the previous draft against the session's original "
+                    "current source, not applying another edit on top of that draft. "
+                    "read_source/search_source expose that same original edit base; "
+                    "latest_draft_patch describes the staged changes. To correct a "
+                    "draft, resubmit the complete intended changes against the base "
+                    "(or use a justified full_file change). "
+                    "Use this one canonical wrapper: "
                     f"{_CANONICAL_REVISE_WRAPPER} "
                     "Keep every patch field, including evidence_refs, test_hint, "
                     "and additional_changes, inside patch. Include each file_path "
                     "only once; combine multiple edits to one file into one "
                     "enclosing exact_replace or a justified full_file change. "
                     "test_patch to optionally run one self-authored pytest falsifier "
+                    "with assertions in collected test_* functions (module-level "
+                    "assertions alone collect no tests), "
                     "and then the host-selected checks on that draft. A failed "
                     "falsifier permanently rejects that executable patch value for "
                     "this session; changing test_hint text cannot clear it. Passing, "
@@ -658,6 +668,10 @@ class CodeResearchSession:
             patch_paths=frozenset(
                 change.file_path for change in patch.iter_file_changes()
             ),
+            patch_line_counts={
+                change.file_path: len(change.code_content.splitlines())
+                for change in patch.iter_file_changes()
+            },
             max_probe_line=len(falsifier_source.splitlines())
             if falsifier_source
             else 0,
@@ -1094,6 +1108,7 @@ def _bounded_test_projection(
     *,
     draft_revision: int,
     patch_paths: frozenset[str],
+    patch_line_counts: Mapping[str, int] | None = None,
     max_probe_line: int = 0,
 ) -> dict[str, Any]:
     if not isinstance(value, Mapping):
@@ -1159,13 +1174,13 @@ def _bounded_test_projection(
         raise ProposalValidationError("development test result has invalid fields")
     if len(raw_checks) > len(check_names):
         raise ProposalValidationError("development test result has too many checks")
-    checks: list[dict[str, str]] = []
+    checks: list[dict[str, Any]] = []
     seen: set[str] = set()
     for raw_check in raw_checks:
         if (
             not isinstance(raw_check, Mapping)
             or not set(raw_check).issubset(
-                {"name", "outcome", "reason_code", "test_path", "file_path"}
+                {"name", "outcome", "reason_code", "test_path", "file_path", "source_line"}
             )
             or not {"name", "outcome"}.issubset(raw_check)
         ):
@@ -1175,6 +1190,7 @@ def _bounded_test_projection(
         reason_code = raw_check.get("reason_code")
         test_path = raw_check.get("test_path")
         file_path = raw_check.get("file_path")
+        source_line = raw_check.get("source_line")
         if (
             not isinstance(name, str)
             or name not in check_names
@@ -1209,6 +1225,13 @@ def _bounded_test_projection(
                 or (name == "D0_preflight" and reason_code != "syntax_invalid")
             ):
                 raise ProposalValidationError("development check result is invalid")
+        if "source_line" in raw_check and (
+            name != "C8_import_whitelist"
+            or not isinstance(file_path, str)
+            or type(source_line) is not int
+            or not 1 <= source_line <= (patch_line_counts or {}).get(file_path, 0)
+        ):
+            raise ProposalValidationError("development check result is invalid")
         if test_path is not None:
             try:
                 canonical_test_path = normalize_relative_patch_path(test_path)
@@ -1227,6 +1250,7 @@ def _bounded_test_projection(
                 **({"reason_code": reason_code} if reason_code is not None else {}),
                 **({"test_path": test_path} if test_path is not None else {}),
                 **({"file_path": file_path} if file_path is not None else {}),
+                **({"source_line": source_line} if source_line is not None else {}),
             }
         )
         seen.add(name)
@@ -1236,6 +1260,15 @@ def _bounded_test_projection(
         )
         if falsifier_outcome in {"failed", "inconclusive"} and max_probe_line > 0
         else None
+    )
+    probe_reason = value.get("falsifier_reason_code")
+    # Independently bound this optional hint. It cannot change either outcome,
+    # readiness, a failed executable value, or any formal scientific evidence.
+    no_tests_collected = (
+        falsifier_outcome == "inconclusive"
+        and max_probe_line > 0
+        and isinstance(probe_reason, str)
+        and probe_reason == "pytest_no_tests_collected"
     )
     passed = sum(check["outcome"] == "passed" for check in checks)
     return {
@@ -1250,6 +1283,11 @@ def _bounded_test_projection(
         ),
         "checks": checks,
         **({"falsifier_diagnostic": diagnostic} if diagnostic is not None else {}),
+        **(
+            {"falsifier_reason_code": "pytest_no_tests_collected"}
+            if no_tests_collected
+            else {}
+        ),
         "counts": {
             "total": len(checks),
             "passed": passed,

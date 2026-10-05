@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-10-04*
+*Current as of: 2026-10-05*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -207,45 +207,121 @@ authority; read the exact terminal and metric artifacts linked below.
 
 ### Current authorized implementation
 
-The subsequent October 4 user approval supersedes the analysis-only scope above:
-coordinate subagents to repair declared public read-only dependency access and
-bounded query feedback, then improve optional real-entry/exact-reference test
-support; verify, commit/push and start fresh experiments. TASK P14 tracks this
-work. Entry finds `7e1fd7dc` synchronized with origin, only the six R17 analysis
-documents dirty, all listed carriers dead and R17 terminal completed/valid.
-Three subagents completed source-context plumbing, query feedback and
-problem-owned probe support. Independent cross-review found no remaining blocker;
-focused groups pass 132 / 113 / 51 tests (overlapping coverage, not an additive
-total). Full regression passes 2622 tests / one skip in 446.02 s. The first full
-run found two old-schema projection fixtures; only those fixtures were aligned,
-keeping exact assertions and adding a nonempty readonly body. The second full
-run passes with unchanged production code. Changed-file Ruff and diff checks pass.
-The [R18 design](../experiments/v0.4/v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md)
-and [Warehouse control](../experiments/v0.4/v04-r18-warehouse-research-context-control-20261004.md)
-are frozen at pushed `1596347c`. Warehouse completed normally at October 4
-12:00:17 Beijing (04:00:17 UTC):2/2 valid tie stages,48 successful calls and
-one rejected C attempt. Exact source/readonly/feedback/science audits pass;
-three repeated new-target reads, three readonly-edit refusals and three import
-preflight failures remain. C lacks explicit complete import permissions and
-the H-only automatic new-operator integration explanation. These are remaining
-research-support limitations, not observed execution/scientific blockers; no
-algorithm-quality or causal efficiency gain is established.
-CVRP R18 started once at12:04:15 Beijing (04:04:15 UTC), PID480652, after that
-terminal audit; first actual H succeeds. All100 initial files match the frozen
-R12-A-fixed source. The actual H carries158 history-index entries and17 public
-readonly dependencies. No tests, other solvers, maintenance or code/input edits
-overlap R18; only status/analysis documentation changes. One prior bounded
-inference succeeded at11:38:49 Beijing with SDK retry0.
-[Live R18 status](/home/clawd/research/scion-experiments/v04-cvrp-r18-research-context-autonomous-20261004/status.json)
-reports running at startup, zero evaluated stages; no result claim yet.
-Read-only preflight checks 100 initial CVRP
-source files, 25 CVRP and five Warehouse cases, seventeen whole histories / 176
-raw records / 153 safe H records plus five observations, and the exact 11,345
-character question. Public readonly dependency inventories contain 17 CVRP and
-nine Warehouse sources; `models.py` is readable but absent from editable files.
-No algorithm edit, budget widening, gate relaxation, private validation exposure,
-historical mutation or terminal resume is authorized. Full tests, frozen/pushed
-runtime and fresh terminal Warehouse control precede the R18 launch above.
+October 5 request authorizes terminal analysis, optimization and a fresh experiment,
+prioritizing test reliability, actual execution paths and stable gains (TASK P15).
+No new Git commit/push or historical resume is requested. Entry is at pushed
+`484433ea`, preserving the three preceding R18 analysis/status edits; all carriers
+were dead at entry. P14 runtime/inputs were pushed as `1596347c`; later pre-P15 changes are
+documentation only.
+
+[R18 terminal analysis](../experiments/v0.4/v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md#terminal-analysis-october-5):
+completed/valid October4 21:56:58 Beijing,12/12 screening stages, eight cumulative
+candidates,176/176 valid pairs, no promotion/validation/frozen. All352 solver sides
+are feasible with fleet_violation0 and empty errors. H40 successful; C49 includes
+one recovered timeout;511/600 calls remain. A3's initial X351 +1712.5 does not
+survive expansion: X351 -501.5, seed deltas +3791,+1537,-2714,-2540; complete
+expanded W/L/T1/2/3, median0 [-255.5,0.25]. Last B3 initial2/1/2, median0
+[-12.5,25] requests expansion but terminal R18 must not resume.
+
+B3's true-displacement claim is not implemented: its materializer removes a
+resident then requires that customer to remain in the source at the next step,
+rejecting genuine multi-step chains. C identifies the bug but three repairs select
+draft text against the original edit base and fail; ready retains draft1. Passing
+host checks and activation counters do not establish that transition. This is
+research-correctness debt, not an observed formal feasibility failure.
+
+Terminal source audit checks299 editable C values,833 readonly values,98 public
+tests across49 C contexts,40 H visible values and champion/A3/B3/C2 complete
+100-file trees. Frozen public tests match `1596347c`, not the new P15 examples.
+All raw pair deltas/case medians/aggregate medians reconcile. Five superseded
+complete stage trees are absent; do not reconstruct executable historical
+candidates or overclaim full-stage attribution. Raw R18/SQLite stay untouched.
+
+P15 implemented and under verification: bounded no-tests-collected feedback,
+independent expected-value/collection guidance, explicit full-draft replacement
+against the original session source, optional rational reference and multishape/
+seed real-entry examples preserving real collaborators and guards. No failed
+exact-patch rule, host gate, solver algorithm or private-data boundary is relaxed.
+Focused200 probe/development tests and92 revision/input tests pass (overlapping).
+The complete optional example passes on unchanged selected R12-A-fixed source
+within ten seconds. Full suite2659 passed / one skip in453.27 seconds; Ruff/diff
+checks pass. Preflight validates100 CVRP files/25 cases, five Warehouse cases,
+public/formal closure and exact13,556-character question with165 safe histories
+plus five observations (170 entries). Warehouse starts once October5 14:21:18
+Beijing, PID530783, after a successful bounded service inference, then stops at
+14:37:22 with **0/2 evaluated stages**, invalid_no_evaluated_outcome, pane exit21.
+All80 calls are used:37 successful,43 explicit upstream overloaded-server502
+failures; no quota429 or local test failure. Eight operational attempt rejections
+and a ninth call-cap stop produce no scientific history/metrics or accepted C
+candidate. All34 bounded redispatches preserve their exact request.137 H visible
+bodies,16 editable C values,144 readonly values,32 public tests and the unchanged
+406-file champion match. Actual no-tests feedback, correction and formal gates
+are not exercised; regression coverage is not completed live-control evidence.
+CVRP has not launched and its output does not exist. After service recovery,
+preregister a new complete control with fresh output/seeds before CVRP. Never
+resume the exhausted control or silently enlarge its cap. Executed Warehouse
+inputs retain their disclosed old descriptive version labels; after terminal,
+unexecuted CVRP labels and one regression assertion are corrected only. Five
+input tests pass again; no runtime, seed value, population or gate changes.
+
+[Fresh R19 design](../experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-preregistration-20261005.md)
+and [Warehouse control](../experiments/v0.4/v04-r19-warehouse-reliable-probes-control-20261005.md)
+record the prepared design and terminal service failure. R19 keeps the unchanged100-file R12-A-fixed starting tree and
+all eighteen whole safe-history files, adding all twelve R18 screening records.
+Initial five cases×four seeds and required six-case×six-seed expansion increase
+sampling only; thresholds, per-solve limits, held-out populations,12 stages,
+600 calls and48-hour cap remain unchanged. No candidate merge or host-selected
+mechanism. Fresh two-stage/80-call Warehouse control on the same runtime must
+precede CVRP launch and be audited honestly. Known readonly/import/query research
+inefficiencies remain, and more seeds do not remove champion-first ordering,
+adaptive known-case exposure or missing matched calibration.
+
+The control's runtime/inputs stayed frozen through terminal; no tests, competing
+solvers, maintenance or runtime/input edits overlapped measurement. No campaign
+was running at that terminal audit. The fresh control below freezes its own
+prospective inputs before dispatch. Keep negative science, invalid no-evaluation service
+runs, incomplete coverage and retained improvement distinct. No new commit/push.
+
+October5 follow-up selects gpt-6.1-sol high. The
+[Sol Warehouse control](../experiments/v0.4/v04-r19-warehouse-reliable-probes-sol61-control-20261005.md)
+completed/valid at16:36:07 Beijing:2/2 screens, four attempts,78/80 calls,
+77 successes and one recovered H502. Two research attempts abandon on C8.
+Both evaluated candidates pass public checks/final probes, Verification and
+canary, then tie small_6/seed240007; elapsed715/385 and524/376 ms. No expansion,
+held-out or promotion. All48 editable/432 readonly/96 public-test visible C
+bodies match; surviving trees change only their operator and registry.yaml.
+Original evidence/inputs remain unchanged. Service works in this run; neither
+model retirement nor resource reallocation is established.
+
+Latest approval permits continuing scoped optimization and a fresh experiment,
+still without Git commit/push. P16 repairs a concrete shared-context gap: the
+internal import whitelist did not reach final C rendering. Actual C8 absolute
+roots now share one implementation with target guidance; optional rejection
+source_line points into the submitted editable draft. Acceptance/import/API
+rules are unchanged. Generic optional testing guidance separates forced wiring,
+ordinary activation, completed transitions and improvement. No algorithm edit,
+new quality gate, provider retry, cap expansion or private-data exposure.
+197 focused regressions pass;42 additional context/import tests pass (overlap).
+Full suite2678 passed / one skip in451.05 seconds;24 input tests, Ruff/diff and
+source/data/context checks pass. Bounded model inference succeeds18:25:59 Beijing.
+Runtime/inputs are frozen for the new
+[import-feedback control](../experiments/v0.4/v04-r19-warehouse-import-feedback-control-20261005.md).
+It starts once18:26:58 Beijing /10:26:58 UTC, PID543472; startup running0/2.
+All406 champion files match; first two actual H calls succeed at attempt0 on
+gpt-6.1-sol. Stored limits and unchanged production diff pass startup audit.
+That fresh2-stage/80-call control uses primes above250000 and unchanged source,
+populations/gates. CVRP R19 remains unlaunched; its prepared four-/six-seed
+design, complete R12-A-fixed source and safe histories are unchanged, pending
+the new runtime's complete control. No tests/solvers/maintenance or runtime/input
+edits during measurement. Never resume either prior control.
+
+Subsequent October5 request explicitly authorizes Git commit/push of this frozen
+P15/P16 change set. The follow-up asks whether CVRP R19 can start; its existing
+complete-control and nonoverlap conditions remain unchanged. Read-only inspection
+at18:31 Beijing finds the import-feedback control still running,0/2 evaluated
+stages, first Code research in progress. CVRP is not launched. Committing the
+unchanged runtime/inputs does not change the control's launch-time provenance
+(`484433ea` plus then-uncommitted P15/P16); no tests or competing solver are run.
 
 ## Current runtime truth
 
@@ -512,7 +588,10 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    Retain the negative validation and source/probe limitations. The subsequent
    approval authorizes P14; its source/feedback/probe repairs are implemented
    and pass full regression; pushed `1596347c` has completed its Warehouse control
-   and started fresh R18 as linked above. Next inspect its actual H/C and metrics;
+   and started fresh R18 as linked above. Its ten-stage interim H/C/metric audit
+   finds no confirmed improvement; next inspect its normal terminal evidence,
+   including the still-running A3 expanded screen. Do not extrapolate its two-seed
+   X351 gain into whole-population or retained improvement;
    preserve remaining C guidance limits instead of asserting all research issues
    are resolved. Do not modify the live runtime or scientific inputs.
    Do not inject private validation into H/C, choose

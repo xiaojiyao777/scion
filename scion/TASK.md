@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-04*
+*Current as of: 2026-10-05*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -46,6 +46,10 @@ The project goal is retained solver improvement produced by Scion itself:
   authorizes coordinated subagents to repair public read-only access/query
   feedback, strengthen optional real-entry/exact-reference research support,
   then commit/push and run fresh experiments after verification (P14 below).
+  That work is pushed; R18 completes12/12 screening stages and176 valid pairs
+  without promotion. October5 authorizes analysis, optimization and a fresh run,
+  emphasizing test reliability, real paths and stable gains (P15). No new Git
+  commit/push, host algorithm selection or terminal resume is requested.
 
 A valid negative run improves the research record but does not complete CVRP.
 v0.4 closes only when both problem packages have retained improvement under
@@ -583,9 +587,104 @@ changing the running R15 runtime or scientific inputs.
   safe R17 history, fresh seeds and unchanged Protocol/budgets. Verify actual
   startup source/context. No private validation hints or R17 candidate merge.
   Started once at October4 12:04:15 Beijing /04:04:15 UTC, PID480652; all100
-  source files and actual H's153 histories+five observations match. Running,
-  no formal quality result at startup. Next inspect terminal/metrics and H/C
-  research; do not modify the live runtime/input or resume a terminal campaign.
+  source files and actual H's153 histories+five observations match.
+- [x] Latest analysis-only request: inspect ten completed R18 stages / seven
+  candidates at October4 21:05 Beijing. All142 pairs valid; no completed expanded
+  screen passes, no validation/promotion. A3 initial X351 +1712.5 with four ties;
+  round11 expansion running,21/24 pairs complete. Of77 calls,76 succeed and one
+  bounded C timeout recovers; no quota exhaustion. Source delivery/current full
+  trees and raw objective aggregation checks pass. Independent tiny exact probes
+  improve, but mistaken expectations, mocked/uncollected scheduler probes and
+  activation/generalization gaps remain. Detailed evidence is appended to the
+  existing R18 design; only analysis/status docs changed, no tests or rerun.
+- [x] Inspect R18 terminal/metrics and final H/C:12 stages,176 valid pairs,
+  no promotion. A3 expanded X351 reverses to -501.5; B3 has a materializer defect
+  and three unsuccessful draft-relative corrections. All current source/context
+  comparisons pass. Preserve terminal evidence and the five missing historical
+  full-stage source limits; do not resume or claim retained improvement.
+
+### P15 — Reliable tests real paths and stable gains
+
+- [x] October5 authorization: implement scoped research support after terminal
+  analysis, verify and start a fresh experiment. No new commit/push requested.
+- [x] Explain pytest exit5 as no tests collected with bounded optional feedback;
+  preserve inconclusive/readiness and failed exact-patch semantics. Guide collected
+  assertions and independent reference checks without new candidate gates.
+- [x] Explain revise as complete-draft replacement against the original session
+  source, not an edit over the staged draft. Regression checks rejected selectors,
+  base reads and successful complete corrected replacement; no automatic repair.
+- [x] Extend optional problem-owned rational arithmetic and multishape/seed real
+  entry examples; preserve real constructors/operators/guards and independently
+  recompute feasibility/cost. Mutation tests falsify actual stated faults.
+- [x] Preregister [R19](docs/experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-preregistration-20261005.md)
+  with four initial and six expanded seeds, unchanged gates/solver limits/caps,
+  complete R12-A-fixed source and all safe R18 history. No candidate merge or
+  private validation hints. Five new input regressions pass.
+- [x] Full regression2659 passed / one skip in453.27 seconds; Ruff/diff checks
+  pass.100 CVRP source files/25 cases, five Warehouse cases, public/formal closure
+  and exact H question/history projection pass (188 raw/165 safe rows +five
+  observations,170 entries). No output/provider/solver created by preflight.
+- [x] Freeze runtime/inputs; attempt and audit the fresh two-stage/80-call
+  [Warehouse control](docs/experiments/v0.4/v04-r19-warehouse-reliable-probes-control-20261005.md).
+  Stops October5 14:37:22 Beijing at80 calls with43 upstream overloaded-server502
+  failures; **0/2 evaluated stages**, invalid_no_evaluated_outcome.37 calls succeed,
+  no completed C candidate or scientific history/metrics. All recorded source
+  payloads and34 frozen-request retries match. No overlapping tests/solvers or
+  runtime/input edits; no extension/resume or completeness relabeling.
+- [x] After service recovery, preregister a fresh complete Warehouse control with
+  new output/seeds; inspect actual H/C/gates/science. R19 control is terminal and
+  cannot serve as completed live validation. No larger budget is authorized here.
+  October5 follow-up approves gpt-6.1-sol high after two successful bounded
+  tool probes. [Fresh Sol control](docs/experiments/v0.4/v04-r19-warehouse-reliable-probes-sol61-control-20261005.md)
+  starts once at15:42:59 Beijing, PID537412, new root and primes above240000,
+  unchanged2 stages/80 calls;22 input regressions, preflight and bounded inference
+  pass. Runtime/inputs stay frozen. CVRP's still-unexecuted invocation selects
+  the same model, pending the complete terminal audit. No proxy
+  restart, runtime/prompt change, budget expansion or new commit/push. Model
+  and P15 effects are not separately identifiable; existing evidence is preserved.
+  Interim15:59: first18 calls all succeed, but one C attempt is abandoned after
+  four prohibited-oracle-import preflight failures. No public/self-test executes;
+  control still0/2, fresh H active. Preserve this remaining research-efficiency
+  limit. Successful transport is not a completed control or authority for CVRP.
+  Terminal audit supersedes that interim: completed/valid16:36:07 Beijing,
+  2/2 negative screens,78 calls (77 successes/one recovered502), two C8-related
+  abandonments, no promotion. All48 editable/432 readonly/96 public-test C values
+  and surviving complete source trees match. Preserve import-guidance omission
+  and missing production-activation evidence; P16 addresses shared support next.
+- [ ] Launch CVRP R19 once after that control; verify actual source, safe history,
+  successful H and resource envelope. Later inspect accepted transitions and all
+  seed patterns; startup and more samples do not demonstrate stable improvement.
+  CVRP is not launched. After Warehouse terminal, only its unexecuted CVRP version
+  labels and a label assertion are corrected; five input tests pass. Executed
+  Warehouse inputs and runtime stay unchanged. No new Git commit/push.
+
+### P16 — Visible import rules and precise draft feedback
+
+- [x] Latest October5 approval permits scoped optimization and a fresh experiment;
+  keep gpt-6.1-sol high. No Git action, terminal resume or proxy changes.
+- [x] Expose actual effective C8 absolute roots through final direct/bounded C
+  target guidance; distinguish read-only visibility from import permission.
+  Reuse one checker policy, without extending its acceptance set.
+- [x] Add optional one-based rejected-import source_line bound to submitted
+  editable draft content. Keep raw checker/exception/private data out, failed
+  exact-patch semantics and formal Contract/Verification rules unchanged.
+- [x] Clarify optional testing interpretation: forced wiring is not ordinary
+  activation; entry counts are not completed transitions/acceptance/improvement.
+  Preserve P15 reference/real-entry support and four-/six-seed CVRP design.
+- [x] Complete full regression, fresh input/source/context and provider checks;
+  freeze runtime/inputs and launch the
+  [import-feedback control](docs/experiments/v0.4/v04-r19-warehouse-import-feedback-control-20261005.md)
+  once with fresh seeds/output and unchanged2 stages/80 calls.
+  Started once18:26:58 Beijing /10:26:58 UTC, PID543472. All406 initial source
+  files match; first two actual H calls succeed at attempt0; stored resource/C
+  limits and frozen runtime diff match. Control running0/2; startup is not science.
+- [ ] Audit its terminal H/C, source, tests/corrections and paired science before
+  launching still-prospective CVRP R19 on the same runtime. Never send Warehouse
+  outcomes/recipes to CVRP or relabel regression-only paths as live coverage.
+- [x] Subsequent October5 request authorizes committing/pushing the frozen
+  P15/P16 set. Read-only launch-readiness inspection at18:31 Beijing still finds
+  the fresh control running0/2, first Code research in progress. Keep CVRP
+  unlaunched pending the complete audit; no overlapping solver or runtime edit.
 
 ### v0.4 closeout
 
@@ -596,6 +695,16 @@ changing the running R15 runtime or scientific inputs.
 
 ## Verification snapshot
 
+- P16: full suite2678 passed / one skip in451.05 seconds;197 focused plus42
+  context/import checks overlap.24 R16–R19 input regressions pass; Ruff/diff,
+  source/data/public-formal closure and exact safe question/history checks pass.
+  Single gpt-6.1-sol high tool inference succeeds18:25:59 Beijing,3.524 seconds.
+  Freeze ordinary uncommitted runtime/inputs before fresh control dispatch.
+- P15 / R19 preparation:2659 passed / one skip in453.27 seconds; focused200 and92
+  groups overlap. Complete optional probe passes on both repository and selected
+  R12-A-fixed source. All preflight/source/input checks pass. After the invalid
+  service control terminates, five prospective input/label tests pass again.
+  No scientific validation of P15 benefits yet; no CVRP R19 launch or commit/push.
 - P14 / R18 prelaunch: full suite 2622 passed / one skip in 446.02 s;
   focused groups 132 / 113 / 51 (overlapping), 17 prompt/input checks and
   independent cross-review pass. Initial full run's two old-schema fixture

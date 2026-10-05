@@ -316,6 +316,29 @@ def test_failed_falsifier_rejects_exact_patch_without_replaying_source() -> None
     assert "falsifier_source" not in client.calls[2]["system_text"]
 
 
+def test_no_tests_collected_hint_reaches_next_turn_without_changing_readiness():
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "test_patch", "falsifier_source": "assert True"},
+            {"action": "ready"},
+        ]
+    )
+    session._test_patch = lambda *_args: {
+        **_passing_development_test(None, 1.0, {}),
+        "falsifier_outcome": "inconclusive",
+        "falsifier_reason_code": "pytest_no_tests_collected",
+    }
+    result = session.run(_snapshot())
+    assert isinstance(result, PatchProposal)
+    assert (
+        '"falsifier_reason_code":"pytest_no_tests_collected"'
+        in client.calls[2]["system_text"]
+    )
+    assert "module-level assertions alone collect no tests" in client.calls[0]["prompt"]
+    assert session.provider_calls_used == 3
+
+
 @pytest.mark.parametrize(
     "later_falsifier_outcome",
     [None, "passed", "inconclusive", "unavailable"],
@@ -649,6 +672,36 @@ def test_revising_after_a_passing_test_clears_finalize_eligibility() -> None:
         match="latest draft to pass development checks",
     ):
         session.run(_snapshot())
+
+
+def test_draft_correction_reads_original_base_and_resubmits_complete_edit() -> None:
+    on_draft = _patch()
+    on_draft.update(old_string="return value + 1", new_string="return value + 2")
+    corrected = _patch()
+    corrected["new_string"] = "return value + 2"
+    session, client = _run(
+        [
+            {"action": "revise", "patch": _patch()},
+            {"action": "revise", "patch": on_draft},
+            {"action": "read_source", "path": _TARGET_PATH},
+            {"action": "revise", "patch": corrected},
+            {"action": "test_patch"},
+            {"action": "ready"},
+        ]
+    )
+    session._test_patch = _passing_development_test
+    result = session.run(_snapshot())
+    assert result.code_content == _TARGET_SOURCE.replace(
+        "return value", "return value + 2"
+    )
+    assert "selector_not_found" in client.calls[2]["system_text"]
+    assert "latest_draft_patch" in client.calls[3]["system_text"]
+    assert 'draft_revision":1' in client.calls[3]["system_text"]
+    assert "original edit base" in client.calls[3]["prompt"]
+    assert (
+        "resubmit the complete intended changes against the base"
+        in client.calls[3]["prompt"]
+    )
 
 
 def test_read_peer_then_revise_can_bind_that_exact_source() -> None:
@@ -1368,6 +1421,7 @@ def test_preflight_feedback_reaches_next_turn_and_allows_deliberate_revision(
                 "outcome": "preflight_rejected",
                 "reason_code": reason_code,
                 "file_path": _TARGET_PATH,
+                **({"source_line": 1} if check_name == "C8_import_whitelist" else {}),
             }
         )
         in client.calls[2]["system_text"]

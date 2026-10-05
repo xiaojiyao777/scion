@@ -120,13 +120,14 @@ class DevelopmentSuiteManifest:
 
 @dataclass(frozen=True)
 class DevelopmentCheckObservation:
-    """One enum-only observation safe to project to the provider."""
+    """One bounded observation, without child messages or private source."""
 
     name: DevelopmentCheckName
     outcome: DevelopmentOutcome
     reason_code: DevelopmentReasonCode | None = None
     test_path: str | None = None
     file_path: str | None = None
+    source_line: int | None = None
 
     @property
     def passed(self) -> bool:
@@ -141,6 +142,7 @@ class DevelopmentCheckRun:
     checks: tuple[DevelopmentCheckObservation, ...] = ()
     falsifier_outcome: DevelopmentProbeOutcome | None = None
     falsifier_diagnostic: dict[str, str | int] | None = None
+    falsifier_reason_code: Literal["pytest_no_tests_collected"] | None = None
 
     @property
     def passed(self) -> bool:
@@ -160,6 +162,11 @@ class DevelopmentCheckRun:
                 if self.falsifier_diagnostic is not None
                 else {}
             ),
+            **(
+                {"falsifier_reason_code": self.falsifier_reason_code}
+                if self.falsifier_reason_code is not None
+                else {}
+            ),
             "checks": [
                 {
                     "name": check.name,
@@ -177,6 +184,11 @@ class DevelopmentCheckRun:
                     **(
                         {"file_path": check.file_path}
                         if check.file_path is not None
+                        else {}
+                    ),
+                    **(
+                        {"source_line": check.source_line}
+                        if check.source_line is not None
                         else {}
                     ),
                 }
@@ -202,6 +214,7 @@ class DevelopmentSandboxResult:
 class DevelopmentProbeResult:
     outcome: DevelopmentProbeOutcome
     diagnostic: dict[str, str | int] | None = None
+    reason_code: Literal["pytest_no_tests_collected"] | None = None
 
 
 def declared_development_suites(
@@ -768,6 +781,12 @@ class BubblewrapDevelopmentSandbox:
             return DevelopmentProbeResult("timeout")
         if return_code == 0:
             return DevelopmentProbeResult("passed")
+        if return_code == 5:
+            # Host classification of the process exit, never child report text.
+            # Preserve inconclusive/readiness semantics; explain the missing test.
+            return DevelopmentProbeResult(
+                "inconclusive", reason_code="pytest_no_tests_collected"
+            )
         diagnostic = None
         if return_code in {1, 2} and len(raw) <= MAX_PROBE_REPORT_BYTES:
             try:
@@ -987,19 +1006,27 @@ def development_safety_preflight_failure(
                 else "syntax_invalid",
                 file_path=visible_path,
             )
-        if not check_import_whitelist(
+        import_check = check_import_whitelist(
             single,
             problem_spec=problem_spec,
             patch_graph=graph,
             is_editable_solver_file=is_editable,
             relative_import_file_exists=lambda path: read_source(path) is not None,
             relative_import_source=read_source,
-        ).passed:
+        )
+        if not import_check.passed:
+            source_line = getattr(import_check, "metadata", {}).get("source_line")
+            if (
+                type(source_line) is not int
+                or not 1 <= source_line <= len(single.code_content.splitlines())
+            ):
+                source_line = None
             return DevelopmentCheckObservation(
                 name="C8_import_whitelist",
                 outcome="preflight_rejected",
                 reason_code="import_whitelist_rejected",
                 file_path=visible_path,
+                source_line=source_line,
             )
     return None
 

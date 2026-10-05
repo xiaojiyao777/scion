@@ -176,6 +176,25 @@ def test_real_problem_direct_and_bounded_context_include_only_declared_dependenc
         freeze_proposal_context(phase, context)
     direct_h, _ = _split_direct_v3_hypothesis_context(h)
     direct_c, _ = _split_code_context(c)
+    from scion.contract.checks.security import effective_import_whitelist
+
+    policy = "allowed absolute import roots are " + ", ".join(sorted(effective_import_whitelist(legacy)))
+    assert policy in c["editable_source_context"]["target_api_guidance"]
+    assert policy in str(direct_c)
+    assert "Read-only source visibility is not permission to import" in str(direct_c)
+    assert "forced weights or altered guards" in str(direct_c)
+    from scion.proposal.engine import build_prompt_turn_snapshot
+    from scion.core.code_research_limits import CodeResearchLimits
+    from scion.tests.unit.proposal.test_code_research_session import _run
+
+    session, client = _run(
+        [{"action": "read_source", "path": target},
+         {"outcome": "abandon", "reason": "context audit"}],
+        limits=CodeResearchLimits(max_turns=1),
+    )
+    session.run(build_prompt_turn_snapshot("code", c))
+    assert policy in client.calls[0]["system_text"]
+    assert "Read-only source visibility is not permission to import" in client.calls[0]["system_text"]
     for rendered in (str(direct_h), str(direct_c)):
         assert "class " in rendered and "models.py" in rendered
         assert 'tiny_development.json"' not in rendered  # support body is not exposed

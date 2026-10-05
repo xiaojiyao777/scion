@@ -43,6 +43,15 @@ _SAFE_ALGORITHM_STDLIB = frozenset(
 )
 
 
+def effective_import_whitelist(problem_spec: Any) -> frozenset[str]:
+    """The existing C8 absolute-import roots, also exposed as research context."""
+    return frozenset({
+        *problem_spec.search_space.import_whitelist,
+        *_SAFE_ALGORITHM_STDLIB,
+        *_declared_runtime_modules(problem_spec),
+    })
+
+
 def check_import_whitelist(
     patch: PatchProposal,
     *,
@@ -62,11 +71,7 @@ def check_import_whitelist(
             t0,
         )
 
-    whitelist = {
-        *problem_spec.search_space.import_whitelist,
-        *_SAFE_ALGORITHM_STDLIB,
-        *_declared_runtime_modules(problem_spec),
-    }
+    whitelist = effective_import_whitelist(problem_spec)
 
     try:
         tree = ast.parse(patch.code_content)
@@ -80,12 +85,14 @@ def check_import_whitelist(
         )
 
     violations: list[str] = []
+    rejected_lines: list[int] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 top = alias.name.split(".")[0]
                 if not _in_whitelist(top, whitelist):
                     violations.append(alias.name)
+                    rejected_lines.append(node.lineno)
         elif isinstance(node, ast.ImportFrom):
             same_patch_import = (
                 patch_graph is not None
@@ -119,20 +126,26 @@ def check_import_whitelist(
                     violations.extend(
                         f"missing relative import symbol: {name}" for name in missing
                     )
+                    rejected_lines.append(node.lineno)
                 continue
             if node.module:
                 top = node.module.split(".")[0]
                 if not _in_whitelist(top, whitelist):
                     violations.append(node.module)
+                    rejected_lines.append(node.lineno)
             elif node.level > 0:
                 for alias in node.names:
                     name = str(alias.name or "")
                     if name and name != "*" and not _in_whitelist(name, whitelist):
                         violations.append(name)
+                        rejected_lines.append(node.lineno)
 
     passed = len(violations) == 0
     detail = "imports ok" if passed else f"non-whitelisted imports: {violations}"
-    return check_result("C8_import_whitelist", passed, "heavy", detail, t0)
+    return check_result(
+        "C8_import_whitelist", passed, "heavy", detail, t0,
+        metadata={"source_line": min(rejected_lines)} if rejected_lines else None,
+    )
 
 
 def _allows_existing_relative_import(
@@ -316,7 +329,7 @@ def is_string_literal_node(node: ast.AST) -> bool:
     return isinstance(node, ast.Constant) and isinstance(node.value, str)
 
 
-def _in_whitelist(module_top: str, whitelist: set) -> bool:
+def _in_whitelist(module_top: str, whitelist: set[str] | frozenset[str]) -> bool:
     return module_top in whitelist
 
 

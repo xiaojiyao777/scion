@@ -1,6 +1,23 @@
 # Proposal Context
 
-## Current direct-runtime research guidance (2026-10-04)
+## Current direct-runtime research guidance (2026-10-05)
+
+`contract/checks/security.py::effective_import_whitelist` is the same C8 policy
+used by the checker and `context_manager/manager.py`'s target guidance. Exposing
+the complete allowed absolute roots there makes them visible in direct and
+bounded C projections, unlike the old discarded outer import_whitelist field.
+Read-only visibility grants neither candidate import nor edit permission.
+Development C8 feedback may include only the earliest rejected statement's
+one-based source_line alongside the submitted editable file; the session bounds
+it to that draft's line count. Raw checker messages are not projected, relative
+import and sensitive-API acceptance rules are unchanged, and no feedback enters
+Protocol/Decision. Optional prompts distinguish forced wiring and mere entry
+counts from ordinary activation and completed/accepted state transitions.
+
+P15 also explains pytest exit5 with optional pytest_no_tests_collected while
+preserving inconclusive and exact failed-patch semantics. Revise replaces the
+whole draft against the original session source; it does not edit the staged
+draft. Public reference/real-entry examples remain optional problem-owned support.
 
 `proposal/context_manager/public_sources.py` collects only the existing explicit
 `development_workspace_paths` and `development_problem_package_paths`. Workspace

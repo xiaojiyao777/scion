@@ -257,8 +257,17 @@ def test_test_patch_falsifier_hides_framework_and_leaves_no_host_residue(
     assert host_sentinel.read_text(encoding="utf-8").startswith("HOST_")
 
 
+@pytest.mark.parametrize(
+    "source,reason",
+    [
+        ("def test_broken(: pass", None),
+        ("assert 1 + 1 == 2", "pytest_no_tests_collected"),
+    ],
+)
 def test_invalid_falsifier_is_inconclusive_but_host_checks_still_run(
     tmp_path: Path,
+    source: str,
+    reason: str | None,
 ) -> None:
     problem_root = tmp_path / "problem"
     (problem_root / "tests").mkdir(parents=True)
@@ -287,12 +296,14 @@ def test_invalid_falsifier_is_inconclusive_but_host_checks_still_run(
         source_corpus={"operators/main.py": "def improve(value):\n    return value\n"},
         patch=_patch(),
         selected_surface=None,
-        falsifier_source="def test_broken(: pass",
+        falsifier_source=source,
         total_timeout_sec=10.0,
     )
 
     assert run.outcome == "passed"
     assert run.falsifier_outcome == "inconclusive"
+    assert run.falsifier_reason_code == reason
+    assert run.provider_projection().get("falsifier_reason_code") == reason
     assert list((tmp_path / "campaign/candidate_workspaces").iterdir()) == []
 
 
@@ -491,6 +502,7 @@ def test_unsafe_patch_never_dispatches_falsifier_or_formal_gates(
                 "outcome": "preflight_rejected",
                 "reason_code": reason_code,
                 "file_path": "operators/main.py",
+                **({"source_line": 1} if check_name == "C8_import_whitelist" else {}),
             }
         ],
         "counts": {"total": 1, "passed": 0, "failed": 1},
@@ -518,6 +530,7 @@ def test_preflight_reports_secondary_patch_file_and_preserves_check_order(
     assert failure.name == "C8_import_whitelist"
     assert failure.file_path == "operators/helper.py"
     assert failure.reason_code == "import_whitelist_rejected"
+    assert failure.source_line == 1
 
     sandbox = _RecordingSandbox()
     run = run_development_checks(

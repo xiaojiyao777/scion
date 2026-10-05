@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from scion.config.problem import ProblemSpec
+from scion.contract.checks.security import effective_import_whitelist
 from scion.contract.patch_paths import matches_config_pattern
 from scion.core.models import (
     Branch,
@@ -428,6 +429,14 @@ class ContextManager:
         ).strip()
         guidance_parts = [
             editable_source_context["target_api_guidance"],
+            "Candidate import policy (Contract C8): allowed absolute import "
+            "roots are " + ", ".join(sorted(effective_import_whitelist(problem_spec)))
+            + ". Read-only source visibility is not permission to import a module. "
+            "Relative imports within editable source remain subject to the existing "
+            "patch-graph, file and exported-symbol checks. Import permission does "
+            "not waive sensitive-API restrictions. A C8 source_line identifies "
+            "the first rejected import statement in the submitted draft, not the "
+            "original edit base.",
             positive_operator_interface,
             research_surface.get("implementation_guidance", ""),
             *positive_code_constraints,

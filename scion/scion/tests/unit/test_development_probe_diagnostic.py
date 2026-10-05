@@ -118,6 +118,72 @@ def test_probe_without_diagnostic_keeps_exit_semantics(tmp_path, source, outcome
     assert result.diagnostic is None
 
 
+@pytest.mark.parametrize("source", ["assert 1 + 1 == 2", "def helper(): pass"])
+def test_no_collected_tests_has_explicit_nonpassing_hint(tmp_path, source):
+    result = _probe(tmp_path, source)
+    assert result.outcome == "inconclusive"
+    assert result.reason_code == "pytest_no_tests_collected"
+    assert result.diagnostic is None
+
+
+@pytest.mark.parametrize("exit_code", [0, 1, 2, 3, 4, 5, 99])
+def test_no_tests_hint_comes_from_exit_not_child_text(tmp_path, exit_code):
+    class ForgedSandbox(BubblewrapDevelopmentSandbox):
+        def _execute(self, argv, timeout_sec, *, stdout):
+            stdout.write(b'{"reason_code":"pytest_no_tests_collected","path":"SECRET"}')
+            return "exited", exit_code
+
+    result = _probe(tmp_path, "def test_one(): pass", sandbox=ForgedSandbox())
+    assert result.reason_code == (
+        "pytest_no_tests_collected" if exit_code == 5 else None
+    )
+    assert result.outcome == (
+        "passed" if exit_code == 0 else "failed" if exit_code == 1 else "inconclusive"
+    )
+    assert "SECRET" not in repr(result)
+
+
+@pytest.mark.parametrize("reason", [None, "SECRET", [], {}, 5, True])
+def test_invalid_probe_reason_is_not_projected(reason):
+    result = _bounded_test_projection(
+        {
+            "outcome": "passed",
+            "checks": [],
+            "falsifier_outcome": "inconclusive",
+            "falsifier_reason_code": reason,
+        },
+        draft_revision=1,
+        patch_paths=frozenset(),
+        max_probe_line=1,
+    )
+    assert "falsifier_reason_code" not in result
+    assert result["outcome"] == "passed"
+    assert result["falsifier_outcome"] == "inconclusive"
+
+
+@pytest.mark.parametrize(
+    "outcome", ["passed", "failed", "inconclusive", "timeout", "unavailable"]
+)
+@pytest.mark.parametrize("lines", [0, 1])
+def test_probe_reason_cannot_change_outcomes_or_appear_without_probe(outcome, lines):
+    result = _bounded_test_projection(
+        {
+            "outcome": "failed",
+            "checks": [],
+            "falsifier_outcome": outcome,
+            "falsifier_reason_code": "pytest_no_tests_collected",
+        },
+        draft_revision=1,
+        patch_paths=frozenset(),
+        max_probe_line=lines,
+    )
+    assert ("falsifier_reason_code" in result) == (
+        outcome == "inconclusive" and lines > 0
+    )
+    assert result["outcome"] == "failed"
+    assert result["falsifier_outcome"] == outcome
+
+
 def test_skips_and_expected_failures_do_not_mask_first_actual_failure(tmp_path):
     result = _probe(
         tmp_path,

@@ -31,10 +31,33 @@ import itertools
 import math
 import random
 import time
+from fractions import Fraction
 from policies import baseline_algorithm
 from policies.baseline_modules import local_search, scheduler
 from policies.baseline_modules.state import _Route, _Solution
 from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
+
+# Assertions belong in collected test_* functions, not just module-level code.
+# An arithmetic worksheet, not a proposed scheduling policy. Derive the formula
+# for YOUR claim independently before testing a candidate. Exact decimal inputs
+# and rational sanity checks avoid accidental handwritten float expectations.
+def reference_reserved_seconds(total, minimum, exit_fraction, retained_fraction):
+    total, minimum, exit_fraction, retained_fraction = (
+        Fraction(str(value))
+        for value in (total, minimum, exit_fraction, retained_fraction)
+    )
+    reserve = max(minimum, total * exit_fraction)
+    return float(reserve + max(Fraction(0), total - reserve) * retained_fraction)
+
+def test_reference_arithmetic_before_candidate_assertions():
+    assert reference_reserved_seconds(1, .05, .03, .30) == float(Fraction(67, 200))
+    assert reference_reserved_seconds(10, .05, .03, .30) == float(Fraction(321, 100))
+    for total in (.2, 1, 10):
+        reserve = max(.05, total * .03)
+        assert math.isclose(reference_reserved_seconds(total, .05, .03, 0), reserve)
+        assert math.isclose(reference_reserved_seconds(total, .05, .03, 1), total)
+# For an observed float, compare to an independently derived reference using
+# math.isclose; never fix a failing probe by copying the candidate's output.
 
 # Independent of candidate _Route.cost, _Solution.total_cost, and cost helpers.
 # This is the declared CVRP objective, NOT a claimed optimum for a solver.
@@ -159,6 +182,56 @@ def test_real_operator_collaborators():
         assert_internal_consistent(current)
     # If adding a new collaborator/oracle, instantiate its REAL class here.
     # A fake class with invented methods cannot establish integration correctness.
+
+def test_real_entry_across_public_route_shapes(monkeypatch):
+    # Multiple synthetic sizes/capacities and seeds; none is a Protocol case.
+    # Keep real construction, budget, registry and operators. Wrappers OBSERVE
+    # calls and return the real result; they do not force a guard or route shape.
+    real_initial = scheduler._ALNSVNSSolver._initial_solution
+    real_registry = scheduler._default_vns_operators
+    constructions, operations = [], []
+    def initial(self, instance, reserve):
+        result = real_initial(self, instance, reserve)
+        assert_internal_consistent(result)
+        constructions.append(tuple(len(route.customers) for route in result.routes))
+        return result
+    def wrap(operation):
+        def observe(*args, **kwargs):
+            result = operation(*args, **kwargs)
+            operations.append(operation.__name__)
+            return result
+        return observe
+    monkeypatch.setattr(scheduler._ALNSVNSSolver, '_initial_solution', initial)
+    monkeypatch.setattr(scheduler, '_default_vns_operators',
+                        lambda: [wrap(operation) for operation in real_registry()])
+    for count, capacity in ((40, 10), (320, 10), (320, 40)):
+        nodes = (CvrpNode(0, 0., 0., 0),) + tuple(
+            CvrpNode(i, float(i // 8), float(i % 8), 1)
+            for i in range(1, count + 1)
+        )
+        matrix = tuple(tuple(float(math.floor(math.hypot(a.x-b.x, a.y-b.y) + .5))
+                             for b in nodes) for a in nodes)
+        instance = CvrpInstance(name='public_entry_shapes', capacity=capacity,
+                                depot=0, allowed_routes=count // capacity,
+                                nodes=nodes, edge_weights=matrix)
+        for seed in (1703, 1709):
+            constructions.clear(); operations.clear()
+            # Allow actual construction time at the larger size. This is a
+            # public fixture budget, not a patched clock/guard or Protocol limit.
+            seconds = .35 if count == 40 else 1.4
+            result = baseline_algorithm.solve(
+                instance, random.Random(seed), seconds, PublicContext(seconds)
+            )
+            assert len(constructions) == 1
+            assert operations  # An empty or bypassed registry is not coverage.
+            assert_feasible(instance, result.routes)
+            assert math.isfinite(exact_solution_cost(instance, result.routes))
+    # This establishes only the observed real entry/construction/operator paths.
+    # Add functional assertions at YOUR actual accepted transition to distinguish
+    # entering a method, completing a trial, accepting it, and improving best.
+    # Do not infer those events from method names or an iteration counter alone.
+    # More public seeds/shapes do not prove timed improvement or generalization;
+    # complete paired Protocol evidence remains the quality comparison.
 
 def reference_two_opt(instance, start):
     # Tiny fixed-start first-improvement reference, deliberately rescoring every

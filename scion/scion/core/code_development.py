@@ -112,6 +112,7 @@ class CodeDevelopmentEvaluator:
                 )
             falsifier_outcome = None
             falsifier_diagnostic = None
+            falsifier_reason_code = None
             if falsifier_source is not None:
                 probe_bytes = len(falsifier_source.encode("utf-8"))
                 if remaining_files < 1 or probe_bytes > remaining_bytes:
@@ -139,6 +140,7 @@ class CodeDevelopmentEvaluator:
                     )
                     falsifier_outcome = probe_result.outcome
                     falsifier_diagnostic = probe_result.diagnostic
+                    falsifier_reason_code = probe_result.reason_code
                     probe_file = Path(candidate) / probe_path
                     probe_file.unlink()
                     probe_file.parent.rmdir()
@@ -161,6 +163,7 @@ class CodeDevelopmentEvaluator:
                     outcome="timeout",
                     falsifier_outcome=falsifier_outcome,
                     falsifier_diagnostic=falsifier_diagnostic,
+                    falsifier_reason_code=falsifier_reason_code,
                 )
             run = run_development_checks(
                 patch=patch,
@@ -181,6 +184,7 @@ class CodeDevelopmentEvaluator:
                 run,
                 falsifier_outcome=falsifier_outcome,
                 falsifier_diagnostic=falsifier_diagnostic,
+                falsifier_reason_code=falsifier_reason_code,
             )
         except (OSError, TypeError, ValueError):
             return DevelopmentCheckRun(

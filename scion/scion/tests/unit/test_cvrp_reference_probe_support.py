@@ -83,8 +83,23 @@ def _run(tmp_path: Path, source: str):
             "test_real_operator_collaborators",
             'monkeypatch.setattr(CvrpInstance, "distance", lambda *a: 0.)',
         ),
+        (
+            "test_real_entry_across_public_route_shapes",
+            'monkeypatch.setattr(scheduler, "_default_vns_operators", lambda: [])',
+        ),
+        (
+            "test_real_entry_across_public_route_shapes",
+            'monkeypatch.setattr(baseline_algorithm, "solve", lambda *a: CvrpSolution(()))',
+        ),
     ],
-    ids=["skipped-improvements", "mock-only-vns", "empty-registry", "wrong-cost"],
+    ids=[
+        "skipped-improvements",
+        "mock-only-vns",
+        "empty-registry",
+        "wrong-cost",
+        "shape-empty-registry",
+        "shape-entry-bypass",
+    ],
 )
 def test_public_example_falsifies_concrete_mutations(tmp_path, test_name, mutation):
     source = _example(test_name) + (
@@ -100,8 +115,24 @@ def test_public_example_falsifies_concrete_mutations(tmp_path, test_name, mutati
     assert result.diagnostic["exception_kind"] == "assertion_error"
 
 
+def test_reference_worksheet_rejects_wrong_expected_arithmetic(tmp_path):
+    source = _example("test_reference_arithmetic_before_candidate_assertions")
+    source = source.replace("Fraction(67, 200)", "Fraction(321, 1000)")
+    assert "Fraction(321, 1000)" in source
+    result = _run(tmp_path, source)
+    assert result.outcome == "failed"
+    assert result.diagnostic["exception_kind"] == "assertion_error"
+
+
+def test_public_multishape_example_runs_without_disabling_real_paths(tmp_path):
+    result = _run(tmp_path, _example("test_real_entry_across_public_route_shapes"))
+    assert result.outcome == "passed", result
+
+
 def test_reference_is_independent_of_candidate_cache_and_cost_helpers(tmp_path):
-    source = _example() + """
+    source = (
+        _example()
+        + """
 def test_independent_reference(monkeypatch):
     def unavailable(*args, **kwargs):
         raise AssertionError('candidate helper must not be the reference')
@@ -115,6 +146,7 @@ def test_independent_reference(monkeypatch):
     assert exact_solution_cost(instance, routes) == expected
     assert_feasible(instance, routes)
 """
+    )
     result = _run(tmp_path, source)
 
     assert result.outcome == "passed", result
@@ -124,7 +156,9 @@ def test_independent_reference(monkeypatch):
 def test_reference_preserves_declared_matrix_and_geometry_semantics(
     tmp_path, integer_cost
 ):
-    source = _example() + f"""
+    source = (
+        _example()
+        + f"""
 def test_reference_semantics():
     nodes = tuple(CvrpNode(i, i * .9, i * 1.3, int(i > 0)) for i in range(5))
     instance = CvrpInstance(name='public_reference_semantics', capacity=4,
@@ -141,6 +175,7 @@ def test_reference_semantics():
     assert exact_route_cost(matrix_instance, route) == matrix_instance.route_distance(route)
     assert exact_route_cost(matrix_instance, ()) == 0
 """
+    )
     result = _run(tmp_path, source)
 
     assert result.outcome == "passed", result
