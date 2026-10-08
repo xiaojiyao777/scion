@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-05*
+*Current as of: 2026-10-08*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -651,10 +651,11 @@ changing the running R15 runtime or scientific inputs.
   abandonments, no promotion. All48 editable/432 readonly/96 public-test C values
   and surviving complete source trees match. Preserve import-guidance omission
   and missing production-activation evidence; P16 addresses shared support next.
-- [ ] Launch CVRP R19 once after that control; verify actual source, safe history,
+- [x] Launch CVRP R19 once after the fresh P16 control; verify actual source, safe history,
   successful H and resource envelope. Later inspect accepted transitions and all
   seed patterns; startup and more samples do not demonstrate stable improvement.
-  CVRP is not launched. After Warehouse terminal, only its unexecuted CVRP version
+  CVRP launched October6 at17:31:21 Beijing, PID578803, after the complete
+  P16 audit below. After the first Warehouse terminal, only its unexecuted CVRP version
   labels and a label assertion are corrected; five input tests pass. Executed
   Warehouse inputs and runtime stay unchanged. No new Git commit/push.
 
@@ -678,13 +679,52 @@ changing the running R15 runtime or scientific inputs.
   Started once18:26:58 Beijing /10:26:58 UTC, PID543472. All406 initial source
   files match; first two actual H calls succeed at attempt0; stored resource/C
   limits and frozen runtime diff match. Control running0/2; startup is not science.
-- [ ] Audit its terminal H/C, source, tests/corrections and paired science before
+- [x] Audit its terminal H/C, source, tests/corrections and paired science before
   launching still-prospective CVRP R19 on the same runtime. Never send Warehouse
   outcomes/recipes to CVRP or relabel regression-only paths as live coverage.
+  Completed October5 at18:41:23 Beijing, valid2/2;42 successful calls, no research
+  rejection, two quality ties. C8 lines9/17 reach C; both draft2 corrections and
+  collected probes pass. Source/full-tree and paired-metric checks pass. H2's
+  mistaken sibling-inheritance description and narrow activation evidence remain
+  research limitations, not execution/boundary blockers.
 - [x] Subsequent October5 request authorizes committing/pushing the frozen
   P15/P16 set. Read-only launch-readiness inspection at18:31 Beijing still finds
   the fresh control running0/2, first Code research in progress. Keep CVRP
   unlaunched pending the complete audit; no overlapping solver or runtime edit.
+- [x] Frozen set pushed as6380a59e; October6 user asks to recheck and proceed.
+  24 input tests and final read-only preflight pass; bounded inference succeeds.
+  Launch unchanged CVRP R19 once at17:31:21 Beijing /09:31:21 UTC, PID578803.
+  All100 initial files, exact question/170 history/30 source indexes, first
+  successful actual H, model/effort and stored resource/C limits match.
+- [x] Inspect R19 terminal H/C, accepted transitions, reference reliability and
+  complete seed patterns. Valid12/12,320 pairs,105 successful calls; final
+  expanded4/0/2,+17.75 [0,5841.5], pending validation at the stage cap.
+  Eight probes pass; small real-entry and independent transition evidence is
+  stronger, but large-path acceptance/retention and sibling-grounding limits
+  remain. [Postrun](docs/experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md).
+
+### P17 — Independently test the exact R19 discovery
+
+- [x] October8 user authorizes inspection, analysis/optimization and another run.
+  No shared-runtime defect justifies a new implementation intervention. Preserve
+  A3 unchanged and improve measurement design: existing provider-free fixed funnel,
+  AB/BA order, fresh eight-seed expanded screening and four-seed later stages.
+- [x] Preregister [R20](docs/experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md)
+  against the existing B0-fixed100-file source. Candidate is the exact R19 A3
+  tree, no sibling merge; the three-file difference includes inherited research.
+  This is not R19's R12-A-fixed contrast or unchanged-original-B0 superiority.
+- [x]61 input/fixed-funnel/paired-execution tests pass; full-source Python parsing,
+  scientific data/closure and read-only fixed-driver preparation pass. No runtime,
+  algorithm, gate or per-solve limit change; no model or extra Warehouse control.
+- [x] Launch fresh R20 once after final no-overlap/output checks: October8
+  23:36:28 Beijing /15:36:28 UTC, PID652580. Both100-file snapshots equal
+  declared sources; stored resources and real seed260209/10-second canary match.
+- [ ] Freeze during measurement, then audit R20 terminal and every paired stage
+  before more research. Startup is running, not a scientific verdict.
+  Negative/uncertain/incomplete outcomes stand; no adaptive extra samples.
+  Exposed validation remains development, later populations conditionally unopened.
+  Previous five dirty docs are preserved/updated. The subsequent October8 user
+  request authorizes commit/push of this frozen set without altering the live run.
 
 ### v0.4 closeout
 

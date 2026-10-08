@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-10-05*
+*Current as of: 2026-10-08*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -12,6 +12,18 @@ authority or authorize another run.
 
 ## Checkout and verification snapshot
 
+- Latest October8: R19 completed October7 at10:19:30 Beijing, valid12/12,
+  320 pairs,105/600 calls all successful. Final expanded screen4/0/2,
+  median+17.75 [0,5841.5], with X351 roughly27% better than R12-A-fixed.
+  Five individual expanded pairs lose; no validation/promotion. See the
+  [bounded postrun](../experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md).
+  Next is [R20](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md),
+  running since October8 at23:36:28 Beijing /15:36:28 UTC, PID652580:
+  fixed-candidate comparison versus B0-fixed, not a terminal resume. Both100-file
+  startup snapshots, stored resource envelope and actual10-second canary match.
+  Canary has passed; actual seed260003/60-second screening dispatch is observed.
+  Runtime unchanged6380a59e;61 input/fixed-funnel/paired-order tests pass in1.09s.
+  Earlier launch-status wording below is historical, superseded by this snapshot.
 - Working branch: `v0.4-dev`.
 - P1 and the R4/R5 documentation handoff were committed as `a112e60c`.
   P1b observation cleanup and R6 preparation were committed as `e405bfd2`.
@@ -293,35 +305,44 @@ bodies match; surviving trees change only their operator and registry.yaml.
 Original evidence/inputs remain unchanged. Service works in this run; neither
 model retirement nor resource reallocation is established.
 
-Latest approval permits continuing scoped optimization and a fresh experiment,
-still without Git commit/push. P16 repairs a concrete shared-context gap: the
-internal import whitelist did not reach final C rendering. Actual C8 absolute
-roots now share one implementation with target guidance; optional rejection
-source_line points into the submitted editable draft. Acceptance/import/API
-rules are unchanged. Generic optional testing guidance separates forced wiring,
-ordinary activation, completed transitions and improvement. No algorithm edit,
-new quality gate, provider retry, cap expansion or private-data exposure.
-197 focused regressions pass;42 additional context/import tests pass (overlap).
-Full suite2678 passed / one skip in451.05 seconds;24 input tests, Ruff/diff and
-source/data/context checks pass. Bounded model inference succeeds18:25:59 Beijing.
-Runtime/inputs are frozen for the new
-[import-feedback control](../experiments/v0.4/v04-r19-warehouse-import-feedback-control-20261005.md).
-It starts once18:26:58 Beijing /10:26:58 UTC, PID543472; startup running0/2.
-All406 champion files match; first two actual H calls succeed at attempt0 on
-gpt-6.1-sol. Stored limits and unchanged production diff pass startup audit.
-That fresh2-stage/80-call control uses primes above250000 and unchanged source,
-populations/gates. CVRP R19 remains unlaunched; its prepared four-/six-seed
-design, complete R12-A-fixed source and safe histories are unchanged, pending
-the new runtime's complete control. No tests/solvers/maintenance or runtime/input
-edits during measurement. Never resume either prior control.
+P16 exposes existing effective C8 roots through final C guidance and an optional
+rejected-import line in the submitted draft. Generic testing guidance separates
+forced wiring, ordinary activation and completed transitions. Import/API rules,
+algorithms, scientific gates, retries, caps and private boundaries are unchanged.
+Full regression2678 passed / one skip in451.05 seconds;197 focused plus42
+context/import checks overlap. Frozen P15/P16 runtime/inputs and analysis were
+committed/pushed as6380a59e under the subsequent October5 Git request. That does
+not rewrite the control's484433ea-plus-uncommitted launch provenance.
 
-Subsequent October5 request explicitly authorizes Git commit/push of this frozen
-P15/P16 change set. The follow-up asks whether CVRP R19 can start; its existing
-complete-control and nonoverlap conditions remain unchanged. Read-only inspection
-at18:31 Beijing finds the import-feedback control still running,0/2 evaluated
-stages, first Code research in progress. CVRP is not launched. Committing the
-unchanged runtime/inputs does not change the control's launch-time provenance
-(`484433ea` plus then-uncommitted P15/P16); no tests or competing solver are run.
+The [import-feedback control](../experiments/v0.4/v04-r19-warehouse-import-feedback-control-20261005.md#terminal-audit--october6)
+completed October5 at18:41:23 Beijing: valid2/2,42/80 calls all successful,
+no research rejection. Both drafts corrected their actual C8 line9/line17
+failures and passed collected final probes, public checks, Verification and
+canary. Both formal quality results tie; elapsed2080/470 and390/480 ms are
+single-pair observations, not stable benefits. Full source/draft fidelity and
+paired evidence pass read-only audit. A small MergeVehicles real-entry test
+observes a completed retained improvement with default weights, not formal-case
+or production generalization. H2 wrongly calls sibling beam code inherited;
+actual branch bases and delivered sources are correct. No execution/boundary
+blocker is found in exercised paths; no Warehouse result enters CVRP H/C.
+
+October6 user asks to recheck and proceed. Entry6380a59e is clean, all prior
+carriers dead.24 input tests pass in1.75 seconds; source/data/closure and exact
+H projection pass. One bounded inference succeeds17:29:06 Beijing. The unchanged
+[CVRP R19 design](../experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-preregistration-20261005.md)
+starts once October6 at17:31:21 Beijing /09:31:21 UTC, PID578803, model
+gpt-6.1-sol high. The20261005 output/session label is the preregistration date.
+All100 initial files match; first actual H succeeds at attempt0 with the exact
+13,556-character question,170 history indexes and30 source indexes. Stored
+600-call/two-redispatch/172800-second envelope and C limits match. That startup
+snapshot is superseded by the October8 terminal audit: valid12/12,320 pairs,
+seven candidates,105 successful calls, final expanded SCREENING_PASS. Candidate
+A3 is100 files, only local_search differs from the100-file R12-A-fixed champion.
+Eight submitted probes pass, including independent transition references and
+small real-entry completed computations; large-path/retained-effect coverage
+and sibling-inheritance reasoning remain limitations. No core execution repair
+is indicated. R20 freezes A3 and improves independent measurement against the
+existing B0-fixed baseline, with unchanged gates. No terminal resume/Git action.
 
 ## Current runtime truth
 
@@ -538,67 +559,30 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
 
 ## Active next work
 
-1. Preserve R4–R13 postruns and original terminal/source roots. R10/R12 are
-   scientifically incomplete; R11 completed without promotion. Never resume them.
-2. P1 source continuation and P1b observation cleanup are implemented.
-   Legacy configuration/pool terminology remains separate debt.
-3. CVRP is open. The unchanged necessary held-out and runtime-audit gates
-   must preserve the R10 comparator failure. Do not patch original B0, drop
-   a failed validation case, leak held-out diagnostics to H/C or backfill evidence.
-4. [R13 postrun](../experiments/v0.4/v04-cvrp-r13-constructor-fixed-b0-postrun-20260927.md)
-   preserves broader positive but uncertain screening versus B0-fixed, not
-   unchanged B0. X-n190 median -72 remains unstable; its 2–4 candidate ALNS
-   iterations spend 57.786–64.337 seconds in embedded VNS. Both large cases
-   still have zero candidate ALNS. These are bundle observations, not causal
-   attribution. Exact [terminal](/home/clawd/research/scion-experiments/v04-cvrp-r13-constructor-fixed-b0-20260926/terminal.json)
-   and [metric](/home/clawd/research/scion-experiments/v04-cvrp-r13-constructor-fixed-b0-20260926/metrics/361aae52-87e4-4628-84ca-fd921a6efa77.json).
-5. [R14 postrun](../experiments/v0.4/v04-cvrp-r14-post-r13-autonomous-postrun-20260927.md)
-   records valid non-promotion and two actionable gaps: preflight drops C8/C9
-   rejection reasons before C sees them; the final one-hop proposal retains
-   the preceding failed time quantum despite its alternative-method rationale.
-   All X-n351 pairs have zero ALNS; later X-n190-focused proposals were only
-   initial-screened without X-n190. Preserve these scope limits and Decisions.
-   The user authorized bounded safe feedback repair and prospective
-   cumulative-source/population design, then a fresh run. Do not resume R14.
-   [R15 preregistration](../experiments/v0.4/v04-cvrp-r15-feedback-repair-autonomous-preregistration-20260927.md)
-   and [independent Warehouse control](../experiments/v0.4/v04-r15-warehouse-feedback-control-20260927.md)
-   are prepared. Full suite: 2471 passed, 1 skipped in 430.51 s. Warehouse
-   first control startup correctly rejected public-test/formal case overlap,
-   before provider/solver/output. The [input-only r2 correction](../experiments/v0.4/v04-r15-warehouse-feedback-control-r2-20260927.md)
-   passes full closure checks and completed at 13:51:19 UTC: two valid
-   negative stages, no framework blocker. Actual source fidelity is verified;
-   sibling-inheritance wording remains a model reasoning limitation.
-   R15 is now terminal; see the
-   [read-only postrun](../experiments/v0.4/v04-cvrp-r15-feedback-repair-autonomous-postrun-20260928.md),
-   [status](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/status.json),
-   [expanded screen](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/metrics/1bb82728-0573-458e-b424-f52691e80f3e.json),
-   [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/metrics/4e5b9aba-3bd9-43d6-a1af-d07524fb040e.json)
-   and [last initial screen](/home/clawd/research/scion-experiments/v04-cvrp-r15-feedback-repair-autonomous-20260927/metrics/52df4158-65c7-4889-90b9-050cbcd5a1ae.json).
-   Complete validation rejects the candidate on quality, not comparator failure.
-   Preserve the localized X351 discovery separately from the last SWAP* signal.
-   Authorized P12 support is implemented; R16 is now terminal valid_incomplete,
-   with the partial Warehouse control caveat above. Its
-   [read-only postrun](../experiments/v0.4/v04-cvrp-r16-probe-diagnostics-autonomous-postrun-20261003.md)
-   separates completed negative validation from the subsequent quota outage.
-   Safe hints work; production-path reasoning and probe coverage remain limited.
-   October 3 follow-up approves the narrow quota-stop repair and fresh R17.
-   Full tests, provider inference and independent Warehouse audit now pass;
-   R17 subsequently completed all 12 stages; the October 4 request authorized
-   commit/push (`7e1fd7dc`, done) and the linked read-only postrun, not a new run.
-   Retain the negative validation and source/probe limitations. The subsequent
-   approval authorizes P14; its source/feedback/probe repairs are implemented
-   and pass full regression; pushed `1596347c` has completed its Warehouse control
-   and started fresh R18 as linked above. Its ten-stage interim H/C/metric audit
-   finds no confirmed improvement; next inspect its normal terminal evidence,
-   including the still-running A3 expanded screen. Do not extrapolate its two-seed
-   X351 gain into whole-population or retained improvement;
-   preserve remaining C guidance limits instead of asserting all research issues
-   are resolved. Do not modify the live runtime or scientific inputs.
-   Do not inject private validation into H/C, choose
-   the agent's algorithm, widen budgets or weaken gates to hide these issues.
-   Do not resume R15 or the resource-stopped Warehouse control. Validation remains exposed;
-   frozen/retained unopened. No B0-fixed/original-B0 superiority. R14 root:
-   `/home/clawd/research/scion-experiments/v04-cvrp-r14-post-r13-autonomous-20260927`.
+1. R19 is terminal; never resume it. [Postrun](../experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md)
+   records valid12/12 stages,320 pairs,105 successful calls, seven candidates and
+   final SCREENING_PASS/queue_validate. Validation was not scheduled before the
+   stage cap. No promotion/frozen/retained. Complete A3 source survives.
+2. Preserve stronger independent-reference and real-entry probes while keeping
+   their limits explicit: small completed calculations do not prove large-case
+   accepted/retained improvements. H's sibling-inheritance error is not a delivered
+   source error. No shared runtime fix is supported by this run.
+3. October8 request authorizes the next measurement optimization:
+   [R20 exact A3 versus B0-fixed](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md),
+   provider-free, new seeds, AB/BA,48 screening pairs and conditional24/48/48
+   validation/frozen/retained pairs. Gates and per-solve limits stay unchanged.
+   R19's comparator was R12-A-fixed; R20 is a distinct contrast, not pooled evidence.
+4. R20 launched once October8 at23:36:28 Beijing, PID652580. Both100-file
+   private snapshots equal declared sources; input/resources and real canary match.
+   Freeze runtime/inputs and inspect only ordinary JSON/process evidence. No
+   concurrent tests, solvers or maintenance. Terminal does not yet exist.
+   Next autonomous H/C remains agent-directed; no sibling merge or host algorithm
+   patch. Do not leak private later-stage outcomes into research history.
+5. Existing R4–R19 terminal evidence and source roots remain unchanged. Validation
+   is already exposed; frozen/retained open only after earlier passes. Even a
+   B0-fixed retained success cannot silently close original-B0 superiority. No
+   runtime change is made. The subsequent October8 request authorizes commit/push
+   of the frozen inputs/tests/docs; launch runtime remains6380a59e.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

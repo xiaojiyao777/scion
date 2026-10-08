@@ -1,6 +1,12 @@
 # CVRP R19 reliable tests real paths and gain stability
 
-State: **prepared, not launched; P16 shared-feedback amendment awaits a fresh complete control**.
+State: **completed**, October7 at10:19:30 Beijing /02:19:30 UTC; valid12/12,
+320 pairs,105 successful calls, final SCREENING_PASS/queue_validate but no
+validation or promotion before the requested-stage cap. Never resume. See the
+[October8 postrun](v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md).
+Started once October6 at17:31:21 Beijing /09:31:21 UTC, PID578803, after the
+fresh P16 control completed and passed its terminal audit. The design and startup
+wording below is historical, not a current launch instruction.
 October 5 user authorizes analysis,
 optimization and a fresh experiment, emphasizing test reliability, actual-path
 coverage and stable gains. [R18 terminal analysis](v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md#terminal-analysis-october-5)
@@ -246,3 +252,53 @@ preflight pass. The new control starts once18:26:58 Beijing, PID543472; initial
 406-file equality, actual H model calls and frozen resource limits pass startup
 audit. CVRP remains unlaunched until its complete terminal audit; no production
 or scientific input edits/tests overlap the running control.
+
+## October6 launch authorization and final preflight
+
+User asks to check again and proceed now that the control should be complete.
+It completed October5 at18:41:23 Beijing, valid2/2 with42 successful calls and
+two valid quality ties. The October6 terminal/source/feedback/metric audit in its
+linked report finds no execution/boundary blocker. Live C8 corrections and a
+small real-entry probe are observed; cross-branch attribution and population
+benefit remain limitations, not relabeled successes. No control result is added
+to CVRP inputs.
+
+Runtime/scientific inputs are pushed6380a59e, unchanged from that control. Fresh
+entry is clean; all prior experiment carriers are dead. Twenty-four R16–R19 input
+tests pass in1.75 seconds; the earlier2678-pass/one-skip full suite still applies
+to unchanged runtime. Read-only preflight rechecks100 source files/48 Python
+parses,25 cases, public/formal closure,18 whole history files/188 raw/165 safe
+rows plus five projected observations,170 history indexes, exact13,556-character
+question,30 H sources and17 readonly C sources. Ad hoc audit assertions initially
+compared raw observations to normalized projections and omitted the two explicit
+public H test sources; using the actual provider projection/corpus resolves both
+without runtime/input changes. One bounded real tool inference succeeds on
+gpt-6.1-sol high at17:29:06 Beijing October6 in3.764 seconds, with SDK retry0.
+
+The preregistered20261005 output/session names remain unused and are retained as
+design labels; actual execution will be dated October6. Source, histories, seeds,
+model, gates, twelve stages,600 calls and48-hour hardwall remain unchanged. Only
+status/analysis docs change; no new commit/push is requested this turn.
+
+## Actual October6 launch and startup
+
+The exact documented direct CLI launches once at17:31:21 Beijing, PID578803,
+using the unused preregistered output/session above. No campaign, solver or test
+process overlaps launch; production/source inputs still equal6380a59e. The
+[startup status](/home/clawd/research/scion-experiments/v04-cvrp-r19-reliable-probes-autonomous-20261005/status.json)
+records running/pending0/12 in first H research. All100 non-cache champion files
+are byte-equal to the selected R12-A-fixed source. Stored resource envelope is
+600 calls/two charged typed redispatches/172800 seconds, and stored C limits
+equal the unchanged preregistered input.
+
+The [first actual H trace](/home/clawd/research/scion-experiments/v04-cvrp-r19-reliable-probes-autonomous-20261005/llm_traces/20261006T093130753165_hypothesis_research_turn_4c383593.json)
+succeeds at attempt0 on gpt-6.1-sol, timeout180, with read_source. Process model
+and reasoning effort are gpt-6.1-sol high. Actual question exactly matches all
+13,556 characters; actual170-entry history and30-entry source indexes exactly
+match the normal safe provider projection, including five observations and165
+safe history records. Index comparison uses the same JSON representation
+(source adjacency tuples serialize as lists), not raw Python-type equality.
+No runtime or input was changed during these read-only checks. This establishes
+startup fidelity, not improved research correctness or retained scientific gain.
+Freeze runtime/inputs and avoid tests, competing solvers and maintenance while
+measurement runs; never resume the old terminal controls.

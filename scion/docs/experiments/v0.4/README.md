@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-10-05*
+*Last updated: 2026-10-08*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,8 +8,10 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R19 prepared with GPT-6.1 Sol: reliable probes and four-/six-seed screening; awaits fresh complete control](v04-cvrp-r19-reliable-probes-autonomous-preregistration-20261005.md)
-- [R19 import-feedback control running since18:26 Beijing: actual C8 policy and rejected draft line, unchanged gates/budgets](v04-r19-warehouse-import-feedback-control-20261005.md)
+- [R20 running since October8 23:36 Beijing: exact R19 A3 versus B0-fixed, counterbalanced fresh8/4-seed fixed funnel; source and resources verified](v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md)
+- [R19 completed12/12:320 valid pairs,105 successful calls, final screening pass but no validation; stronger probes and remaining grounding/coverage limits](v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md)
+- [R19 frozen design and startup](v04-cvrp-r19-reliable-probes-autonomous-preregistration-20261005.md)
+- [R19 import-feedback control completed valid2/2:42 successful calls, actual C8 corrections, two quality ties; source/metric audit passes](v04-r19-warehouse-import-feedback-control-20261005.md)
 - [R19 GPT-6.1 Sol Warehouse control completed valid2/2: two ties,78 calls, import-context gap and activation limits](v04-r19-warehouse-reliable-probes-sol61-control-20261005.md)
 - [R19 Warehouse stopped invalid: 43 upstream overloads, 80-call cap, zero evaluated stages; never resume](v04-r19-warehouse-reliable-probes-control-20261005.md)
 - [R18 completed: 12 stages, 176 valid pairs, no promotion; unstable gains and final displacement/correction defect](v04-cvrp-r18-research-context-autonomous-preregistration-20261004.md)
