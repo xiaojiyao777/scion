@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-08*
+*Current as of: 2026-10-09*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -719,12 +719,38 @@ changing the running R15 runtime or scientific inputs.
 - [x] Launch fresh R20 once after final no-overlap/output checks: October8
   23:36:28 Beijing /15:36:28 UTC, PID652580. Both100-file snapshots equal
   declared sources; stored resources and real seed260209/10-second canary match.
-- [ ] Freeze during measurement, then audit R20 terminal and every paired stage
-  before more research. Startup is running, not a scientific verdict.
-  Negative/uncertain/incomplete outcomes stand; no adaptive extra samples.
-  Exposed validation remains development, later populations conditionally unopened.
-  Previous five dirty docs are preserved/updated. The subsequent October8 user
-  request authorizes commit/push of this frozen set without altering the live run.
+- [x] Freeze during measurement and audit R20 terminal/every pair before research.
+  Completed October9 at03:05:39 Beijing:72 valid pairs; screening5/0/1,
+  +135.25 [1,6115.5], validation4/1/1,+1389.75 [-20.5,6526]. NOT_CONFIRMED,
+  no promotion or later stages. No resource/service/construction failure. Sources,
+  AB/BA, limits, deltas, case medians and CIs match. See the
+  [postrun](docs/experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md).
+  No adaptive extension; private results stay operator-only. October8 frozen work
+  was committed/pushed as3d2123e3 without changing launch runtime6380a59e.
+
+### P18 — Whole-source continuation and reliable evidence interpretation
+
+- [x] October9 user authorizes inspection, optimization and a fresh run. No new
+  shared execution defect is evidenced. Select the complete existing R19 A3/R20
+  candidate as local development baseline, not promotion or a sibling merge.
+- [x] Preregister [R21](docs/experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md):
+  explicit current-source frame, unchanged complete historical question and five
+  observations, all nineteen whole histories, all public R20 screening cells.
+  Distinguish independent references/real entry/completion/acceptance/retention;
+  H/C choose algorithms/tests. No private validation facts or host mechanism.
+  R20 sample counts, fresh seeds, unchanged gates/resources/model/runtime.
+- [x]171 focused regressions pass;100-file/48-Python source,25 cases, public/formal
+  closure and exact H/C projection pass. One bounded model inference succeeds.
+  Launch once October9 at20:49:38 Beijing /12:49:38 UTC, PID696534. All100
+  initial files, stored question/C limits/resources and first successful H with
+  exact182 history/30 source indexes match. No evaluated stage at startup audit.
+  Freeze runtime/scientific inputs; only lifecycle docs may change during the run.
+- [ ] After R21 terminal, audit actual H/C/source, complete paired patterns and
+  real-path/test claims before proposing independent confirmation or more work.
+  Never resume R19/R20/R21 terminals or infer original-B0 success. Preserve all
+  existing evidence. Subsequent October9 user request authorizes committing and
+  pushing this frozen analysis/input/test/doc set, with no live-runtime or
+  scientific-input changes and no overlapping test run.
 
 ### v0.4 closeout
 

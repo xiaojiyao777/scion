@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-10-08*
+*Current as of: 2026-10-09*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -12,17 +12,23 @@ authority or authorize another run.
 
 ## Checkout and verification snapshot
 
-- Latest October8: R19 completed October7 at10:19:30 Beijing, valid12/12,
-  320 pairs,105/600 calls all successful. Final expanded screen4/0/2,
-  median+17.75 [0,5841.5], with X351 roughly27% better than R12-A-fixed.
-  Five individual expanded pairs lose; no validation/promotion. See the
-  [bounded postrun](../experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md).
-  Next is [R20](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md),
-  running since October8 at23:36:28 Beijing /15:36:28 UTC, PID652580:
-  fixed-candidate comparison versus B0-fixed, not a terminal resume. Both100-file
-  startup snapshots, stored resource envelope and actual10-second canary match.
-  Canary has passed; actual seed260003/60-second screening dispatch is observed.
-  Runtime unchanged6380a59e;61 input/fixed-funnel/paired-order tests pass in1.09s.
+- Latest October9: [R20 completed NOT_CONFIRMED](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
+  at03:05:39 Beijing /October8 19:05:39 UTC. All72 formal pairs valid, no
+  service/quota/construction failure. Screening5/0/1,+135.25 [1,6115.5];
+  operator-only validation4/1/1,+1389.75 [-20.5,6526], insufficient evidence.
+  No promotion/frozen/retained. Both complete100-file snapshots and all pair
+  orders/limits/deltas/medians/CIs audited. Never resume R19 or R20.
+  [Fresh R21](../experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md)
+  launched once October9 at20:49:38 Beijing /12:49:38 UTC, PID696534,
+  from exact complete R20 candidate/R19 A3. All100 initial files, stored inputs/
+  resources and first successful H's exact question/182 history/30 source indexes
+  match. Running first-round research, no new formal result at startup audit.
+  Optimize current-source grounding, whole safe history and test interpretation;
+  no host solver patch or shared-runtime change. Private validation stays out of
+  H/C. New seeds, R20 sampling and unchanged gates/caps; gpt-6.1-sol high.
+  Launch preparation entered at clean3d2123e3; production runtime unchanged6380a59e.
+  Subsequent October9 user request authorizes committing/pushing the frozen
+  R20 analysis and R21 inputs/tests/docs, without changing live runtime or inputs.
   Earlier launch-status wording below is historical, superseded by this snapshot.
 - Working branch: `v0.4-dev`.
 - P1 and the R4/R5 documentation handoff were committed as `a112e60c`.
@@ -341,8 +347,10 @@ A3 is100 files, only local_search differs from the100-file R12-A-fixed champion.
 Eight submitted probes pass, including independent transition references and
 small real-entry completed computations; large-path/retained-effect coverage
 and sibling-inheritance reasoning remain limitations. No core execution repair
-is indicated. R20 freezes A3 and improves independent measurement against the
-existing B0-fixed baseline, with unchanged gates. No terminal resume/Git action.
+is indicated. R20 froze A3 and completed independent measurement against the
+existing B0-fixed baseline: valid screening pass, validation uncertainty, no
+promotion. October9 prepares fresh R21 from that complete source; no terminal
+resume, shared-runtime change or new Git action.
 
 ## Current runtime truth
 
@@ -567,22 +575,27 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    their limits explicit: small completed calculations do not prove large-case
    accepted/retained improvements. H's sibling-inheritance error is not a delivered
    source error. No shared runtime fix is supported by this run.
-3. October8 request authorizes the next measurement optimization:
-   [R20 exact A3 versus B0-fixed](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md),
-   provider-free, new seeds, AB/BA,48 screening pairs and conditional24/48/48
-   validation/frozen/retained pairs. Gates and per-solve limits stay unchanged.
-   R19's comparator was R12-A-fixed; R20 is a distinct contrast, not pooled evidence.
-4. R20 launched once October8 at23:36:28 Beijing, PID652580. Both100-file
-   private snapshots equal declared sources; input/resources and real canary match.
-   Freeze runtime/inputs and inspect only ordinary JSON/process evidence. No
-   concurrent tests, solvers or maintenance. Terminal does not yet exist.
-   Next autonomous H/C remains agent-directed; no sibling merge or host algorithm
-   patch. Do not leak private later-stage outcomes into research history.
-5. Existing R4–R19 terminal evidence and source roots remain unchanged. Validation
-   is already exposed; frozen/retained open only after earlier passes. Even a
-   B0-fixed retained success cannot silently close original-B0 superiority. No
-   runtime change is made. The subsequent October8 request authorizes commit/push
-   of the frozen inputs/tests/docs; launch runtime remains6380a59e.
+3. [R20 terminal audit](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
+   is complete:72/72 pairs, screening pass and validation CI crossing zero.
+   This is valid uncertainty, not resource exhaustion or invalid execution.
+   Keep all evidence, no adaptive extra seeds or gate relaxation. R19 and R20
+   have different comparators; do not pool their effects.
+4. October9 authorizes [R21 autonomous continuation](../experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md).
+   Started once October9 at20:49:38 Beijing, PID696534, after171 focused tests,
+   source/data/closure/context checks and one successful bounded health inference.
+   Starts from exact R20 candidate;
+   preserve nineteen whole histories and five observations, distinguish current
+   source from complete historical question, expose public screening only.
+   No sibling merge, host algorithm patch, private later-stage input or new gate.
+   Same runtime/model/caps; denser R20 sampling and fresh seeds. Actual100-file
+   source, stored inputs/resources and first H context are verified. Freeze during
+   measurement: no tests, maintenance, competing solvers or runtime/input edits.
+5. Existing R4–R20 evidence and source roots remain unchanged. Validation is
+   already exposed; frozen/retained open only after earlier passes. Any promising
+   R21 result needs independent exact-source confirmation; its A3 comparison
+   cannot establish B0-fixed or unchanged-original-B0 retained superiority.
+   October8 work is pushed as3d2123e3. The subsequent October9 request authorizes
+   commit/push of the frozen R20/R21 set; launch provenance remains unchanged.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

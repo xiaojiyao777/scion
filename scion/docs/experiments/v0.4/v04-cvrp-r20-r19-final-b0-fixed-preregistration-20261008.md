@@ -1,7 +1,12 @@
 # CVRP R20: exact R19 discovery versus B0-fixed
 
-State: running, launched once October8 at23:36:28 Beijing /15:36:28 UTC,
-PID652580, tmux `scion-r20-r19-final-b0-fixed-20261008`.
+State: **completed NOT_CONFIRMED at validation**, October9 at03:05:39 Beijing
+/October8 at19:05:39 UTC. All72 formal pairs valid; screening passes, validation
+CI crosses zero. No frozen/retained or promotion. See the
+[October9 postrun](v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md).
+Launched once October8 at23:36:28 Beijing /15:36:28 UTC, PID652580,
+tmux `scion-r20-r19-final-b0-fixed-20261008`. Never resume or rerun this root;
+startup and planned-command wording below is historical.
 October8 user authorizes experiment inspection,
 analysis/optimization and another experiment. The [R19 postrun](v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md)
 finds valid12/12 stages,320 pairs, seven candidates and a final expanded-screening

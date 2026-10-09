@@ -8,7 +8,9 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R20 running since October8 23:36 Beijing: exact R19 A3 versus B0-fixed, counterbalanced fresh8/4-seed fixed funnel; source and resources verified](v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md)
+- [R21 running since October9 20:49 Beijing: autonomous continuation from complete R19 A3, source-grounded history and test claims, unchanged gates](v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md)
+- [R20 completed NOT_CONFIRMED:72 valid pairs, screening pass but validation CI crosses zero; no promotion or resource failure](v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
+- [R20 frozen counterbalanced design and startup](v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md)
 - [R19 completed12/12:320 valid pairs,105 successful calls, final screening pass but no validation; stronger probes and remaining grounding/coverage limits](v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md)
 - [R19 frozen design and startup](v04-cvrp-r19-reliable-probes-autonomous-preregistration-20261005.md)
 - [R19 import-feedback control completed valid2/2:42 successful calls, actual C8 corrections, two quality ties; source/metric audit passes](v04-r19-warehouse-import-feedback-control-20261005.md)
