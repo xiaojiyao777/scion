@@ -12,6 +12,23 @@ authority or authorize another run.
 
 ## Checkout and verification snapshot
 
+- October11 launch request: user requests commit first, then a fresh round
+  focused on completed real-path gain surviving to the final returned solution.
+  Prior seven-file set committed as693cd4a0; origin was3cf85afe at launch.
+  The subsequent user request explicitly authorizes committing and pushing the
+  frozen R22 set together with693cd4a0. Git records the resulting tip; this Git
+  handoff changes no running source/input and reruns no tests or experiments.
+  [R22 is running, startup audited](../experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-preregistration-20261011.md):
+  unchanged complete R21 starting champion/R19 A3; all twenty histories and
+  earlier complete question/observations retained, fresh seeds and unchanged
+  gates/resources. Optional public retention example and mutation tests added;
+  169 focused tests and selected-source public diagnostic pass. Whole-source,
+  data/closure,194-history/30-source exact projection and provider checks pass;
+  launched once October11 10:20:35 Beijing /02:20:35 UTC, PID756593. Saved100-file
+  baseline/input/resources and first actual H question/indexes match. At startup
+  three H calls succeed, zero errors and zero evaluated stages; carrier live.
+  No algorithm/core/adapter/gate change. Runtime/support/inputs frozen throughout;
+  only lifecycle docs edited after launch. No benefit/promotion claim yet.
 - [R21 is terminal](../experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md):
   completed October11 01:45:42 Beijing /October10 17:45:42 UTC, valid12/12
   screening stages, eight distinct candidates,352 valid pairs, zero failed
@@ -35,7 +52,7 @@ authority or authorize another run.
   cutoff/entry claims.118 focused tests pass (104+14), targeted Ruff and diff
   check pass. No full-suite rerun claimed. The two collected candidate checks,
   production solver/core, generic prompts and scientific gates are unchanged.
-  R22 is not prepared/launched; no new Git commit/push in this turn. Preserve
+  That analysis turn did not prepare/launch R22 or commit/push. Preserve
   terminal evidence and the prior interim docs, now superseded by the postrun.
 - [R20 completed NOT_CONFIRMED](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
   October9 at03:05:39 Beijing:72 valid pairs, screening5/0/1,+135.25 [1,6115.5];
@@ -604,15 +621,22 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    All12 screening medians0, no promotion. Source-grounded implementations and
    stronger isolated tests do not establish stable retained improvement. The
    public observer repair preserves function identity; no host algorithm edit.
-5. A future fresh preregistration may expose all public R21 history and corrected
-   optional examples, with explicit cumulative source/comparator attribution.
-   Leave algorithm/test selection to H/C; distinguish entry, completion,
-   acceptance and retention. No R22 inputs or launch in the October11 turn.
+5. The subsequent October11 request authorizes commit first (693cd4a0, done)
+   and fresh [R22](../experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-preregistration-20261011.md).
+   Verification and one launch are complete: October11 10:20:35 Beijing,
+   PID756593; startup source/input/H projection matches and provider calls
+   succeed. Keep runtime/support/inputs frozen while it runs; lifecycle docs
+   only. Leave algorithm/test selection to H/C. At terminal distinguish entry,
+   completion, acceptance and retention from complete-matrix quality; no new
+   hard gate or required mechanism. The subsequent user request authorizes
+   commit/push of the already frozen change set, not a new experiment or edit.
    Keep R4–R21 evidence unchanged; never resume a terminal. Any fixed confirmation
    must freeze a complete source/comparator and prospective seeds/order. Do not
    pool R21's local-A3 comparison with B0-fixed/original-B0 claims or expose private
-   later-stage evidence to H/C. Frozen/retained remain gated. HEAD/origin3cf85afe;
-   the current postrun/support changes are uncommitted, no new Git action.
+   later-stage evidence to H/C. Frozen/retained remain gated. Launch provenance
+   remains HEAD693cd4a0/origin3cf85afe plus uncommitted R22 inputs/support/tests
+   and lifecycle docs, frozen before dispatch. Later Git publication does not
+   rewrite that provenance; consult Git for the current tip.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

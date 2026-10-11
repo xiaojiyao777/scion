@@ -782,12 +782,45 @@ changing the running R15 runtime or scientific inputs.
   provider/Contract/public solver); targeted Ruff and diff check pass. Full
   optional sandbox example passes. Five new regressions; no full-suite claim.
   Two collected public checks and production solver/core/prompts/gates unchanged.
-- [ ] Next authorized fresh run: preregister complete source/comparator and safe
+- [x] Next authorized fresh run: preregister complete source/comparator and safe
   public R21 history, offer corrected optional examples, leave mechanisms/tests
   to H/C, and assess the full case/seed pattern. A separate fixed confirmation
   requires frozen source and prospective fresh seeds/order. Do not select the
   X513-only signal, merge siblings, leak private evidence or extend terminal
-  samples. No R22 inputs/preparation/launch yet.
+  samples. Subsequent October11 request authorizes commit first, then this rung;
+  prior seven-file set was committed as693cd4a0, not yet pushed at launch.
+  Continue under P20.
+
+### P20 — Real completed change through final solver return
+
+- [x] Preregister [R22](docs/experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-preregistration-20261011.md)
+  from the unchanged complete R21 starting champion/R19 A3, not a selected R21
+  branch. All twenty histories whole, five observations and complete historical
+  question preserved. New current frame emphasizes completion/feasibility/final
+  retention without prescribing a mechanism, test style or new gate.
+- [x] Add an optional independently rescored real-entry-to-return example, plus
+  counter-only, expired-return and lost-gain mutations. Existing collected
+  candidate checks, algorithm/core/adapter/prompts/scientific gates unchanged.
+- [x]169 focused regressions pass (122 support/boundary +47 inputs); full public
+  example passes on the selected source.100-file/48-Python source check,25 cases,
+  closure,20 whole histories/194 safe history indexes/30 source indexes, exact
+  H question and C public-example projection pass. Provider health succeeds
+  October11 10:19:42 Beijing; no concurrent run/test/solver, fresh output/session.
+- [x] Freeze all runtime/support/scientific inputs and launch once with fresh
+  seeds/output, same gpt-6.1-sol high,12 stages/600 calls/48-hour guard. Verify
+  actual startup source, input projection and first successful H; no live edits
+  or overlapping tests/solvers/maintenance. October11 10:20:35 Beijing launch,
+  PID756593;100-file saved baseline, exact saved input/resources and first H's
+  194-history/30-source projection match. Three successful H traces at startup,
+  zero evaluated stages at startup. Lifecycle docs only afterward.
+- [x] Subsequent October11 user request authorizes commit/push of the frozen R22
+  inputs/support/tests and handoff, including preceding693cd4a0. Entry Git/tmux
+  checks match the handoff; R22 carrier remains live. Documentation Maintenance
+  profile, diff inspection/check only; no running source/input edit or test/
+  solver/provider rerun. Git records the publication result.
+- [ ] After terminal, distinguish actual path completion/accepted/retained
+  observations from whole-matrix comparative quality. Keep missing coverage and
+  adverse results explicit; independent retained confirmation remains separate.
 
 ### v0.4 closeout
 

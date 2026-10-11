@@ -243,6 +243,51 @@ def test_real_entry_across_public_route_shapes(monkeypatch):
     # More public seeds/shapes do not prove timed improvement or generalization;
     # complete paired Protocol evidence remains the quality comparison.
 
+def test_completed_improvement_survives_real_return(monkeypatch):
+    # Optional, small end-to-end retention example, NOT a new candidate gate.
+    # Observe the real current VNS boundary, leaving operators/guards unchanged.
+    # If YOUR changed mechanism is inside it, observe that actual transition too;
+    # a VNS improvement does not attribute benefit to a particular inner kernel.
+    count = 40
+    nodes = (CvrpNode(0, 0., 0., 0),) + tuple(
+        CvrpNode(i, float((i * 37) % 97), float((i * 101) % 89), 1)
+        for i in range(1, count + 1)
+    )
+    matrix = tuple(tuple(float(math.floor(math.hypot(a.x-b.x, a.y-b.y) + .5))
+                         for b in nodes) for a in nodes)
+    instance = CvrpInstance(name='public_retained_transition', capacity=10,
+                            depot=0, allowed_routes=4, nodes=nodes, edge_weights=matrix)
+    real_vns = scheduler._vns
+    completed_gains = []
+    def observe(solution, operators, max_no_improve, context, reserve, *args, **kwargs):
+        before = exact_solution_cost(instance, solution.routes_as_tuples())
+        changed = real_vns(solution, operators, max_no_improve, context, reserve,
+                           *args, **kwargs)
+        # Capture the real deadline immediately after return, before assertions.
+        # Live return is NOT a claim of exhaustive closure of all neighborhoods.
+        live_return = context.remaining_time() > reserve
+        routes = solution.routes_as_tuples()
+        assert_feasible(instance, routes)
+        after = exact_solution_cost(instance, routes)
+        assert after <= before + 1e-6
+        if live_return and after < before - 1e-6:
+            completed_gains.append(after)
+        return changed
+    monkeypatch.setattr(scheduler, '_vns', observe)
+    for seed in (1703, 1709):
+        completed_gains.clear()
+        result = baseline_algorithm.solve(instance, random.Random(seed), .6,
+                                          PublicContext(.6))
+        assert_feasible(instance, result.routes)
+        assert completed_gains  # Calls/counters or expired returns are not enough.
+        final_cost = exact_solution_cost(instance, result.routes)
+        assert final_cost <= min(completed_gains) + 1e-6
+    # Retaining at least the independently scored objective does not require the
+    # same routes to survive; later valid improvements may replace them. This
+    # checks no loss on this fixture, not improvement versus another algorithm,
+    # production-scale completion, elapsed-time performance, or generalization.
+    # Instrumentation costs time. Comparative quality still needs paired runs.
+
 def reference_two_opt(instance, start):
     # Tiny fixed-start first-improvement reference, deliberately rescoring every
     # full route. No candidate delta helpers, cached values or telemetry.

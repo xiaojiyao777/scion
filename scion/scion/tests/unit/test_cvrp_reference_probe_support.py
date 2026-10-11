@@ -196,6 +196,48 @@ def test_independent_known_transition_anchor(tmp_path):
     assert result.outcome == "passed", result
 
 
+def test_retention_example_runs_real_entry_and_independent_final_scoring(tmp_path):
+    result = _run(tmp_path, _example("test_completed_improvement_survives_real_return"))
+    assert result.outcome == "passed", result
+
+
+@pytest.mark.parametrize("fault", ["no_transition", "expired_return", "lost_gain"])
+def test_retention_example_rejects_incomplete_or_lost_improvement(tmp_path, fault):
+    source = _example("test_completed_improvement_survives_real_return") + f"""
+import pytest
+@pytest.fixture(autouse=True)
+def inject_fault(monkeypatch):
+    real_vns = scheduler._vns
+    real_solve = baseline_algorithm.solve
+    initial = []
+    def vns(solution, operators, max_no_improve, context, reserve, *args, **kwargs):
+        if not initial:
+            initial.append(solution.routes_as_tuples())
+        if {fault!r} == 'no_transition':
+            context.record_move('vns', attempted=100, accepted=100, delta=100.)
+            return True  # A claimed gain with no actual route transition.
+        result = real_vns(solution, operators, max_no_improve, context, reserve,
+                          *args, **kwargs)
+        if {fault!r} == 'expired_return':
+            # The entry passes its real nested deadline context, not PublicContext.
+            monkeypatch.setattr(context, 'remaining_time', lambda: 0.)
+        return result
+    def solve(*args, **kwargs):
+        initial.clear()
+        result = real_solve(*args, **kwargs)
+        if {fault!r} == 'lost_gain':
+            assert initial
+            return CvrpSolution(initial[0])  # Feasible, but discards observed gain.
+        return result
+    monkeypatch.setattr(scheduler, '_vns', vns)
+    monkeypatch.setattr(baseline_algorithm, 'solve', solve)
+"""
+    result = _run(tmp_path, source)
+    assert result.outcome == "failed", result
+    assert result.diagnostic["phase"] == "call"
+    assert result.diagnostic["exception_kind"] == "assertion_error"
+
+
 def test_reference_is_independent_of_candidate_cache_and_cost_helpers(tmp_path):
     source = (
         _example()

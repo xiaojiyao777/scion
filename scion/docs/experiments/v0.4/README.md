@@ -8,6 +8,7 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
+- [R22 running: real completed improvement through final solver return;169 focused checks and exact startup audit pass, no quality result yet](v04-cvrp-r22-retained-path-autonomous-preregistration-20261011.md)
 - [R21 completed12/12:352 valid pairs, quota delay recovered, no promotion; unstable gains and optional observer/reference repair](v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md)
 - [R21 frozen design, startup and superseded October10 interim audit](v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md)
 - [R20 completed NOT_CONFIRMED:72 valid pairs, screening pass but validation CI crosses zero; no promotion or resource failure](v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
