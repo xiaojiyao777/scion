@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-09*
+*Current as of: 2026-10-11*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -745,12 +745,49 @@ changing the running R15 runtime or scientific inputs.
   initial files, stored question/C limits/resources and first successful H with
   exact182 history/30 source indexes match. No evaluated stage at startup audit.
   Freeze runtime/scientific inputs; only lifecycle docs may change during the run.
-- [ ] After R21 terminal, audit actual H/C/source, complete paired patterns and
-  real-path/test claims before proposing independent confirmation or more work.
-  Never resume R19/R20/R21 terminals or infer original-B0 success. Preserve all
-  existing evidence. Subsequent October9 user request authorizes committing and
-  pushing this frozen analysis/input/test/doc set, with no live-runtime or
-  scientific-input changes and no overlapping test run.
+- [x] October9 frozen set committed/pushed as3cf85afe. October10 user requests
+  inspection, optimization and further experiments. Read-only interim audit at
+  19:58 Beijing finds R21 still running:8/12 screening stages, five evaluated
+  candidates,244 valid pairs, no promotion or held-out execution. All eight
+  aggregate medians0; gains remain sparse/unstable.46 local-proxy synthetic401
+  calls cause15 bounded operational rejections; first recovery19:51:08 Beijing,
+  followed by successful H/C and Verification; ninth screening now running
+  (attempt24).106/600 calls used.
+  Six actual C probes report passed, but test passing is not gain/retention
+  evidence. No source/input/test execution change, restart, R22 or new Git action.
+- [x] [October11 terminal audit](docs/experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md):
+  completed12/12 screening stages, eight candidates,352 valid pairs; all aggregate
+  medians0, no validation/frozen/promotion.131/600 calls used;46 synthetic401
+  errors during the user-confirmed quota interruption caused15 operational
+  rejections, but108 post-recovery pairs completed the schedule. No hardwall/cap
+  exhaustion.814 visible C sources,74 host public-test values, ten final-H source
+  views and three final100-file heads agree. Two faulty self-tests were corrected;
+  stronger real small-path probes still do not prove large-path retained benefit.
+  Never resume R19/R20/R21 terminals, relax gates or infer original-B0 success.
+
+### P19 — Identity-preserving optional probes and independent reference sanity
+
+- [x] October11 latest user request authorizes completed-run analysis and
+  optimization. Preserve all original evidence and the earlier uncommitted
+  interim docs. No new Git commit/push or measurement invocation in this turn.
+- [x] Repair the optional public example's operator wrappers: they change
+  callable identity and bypass A1/A3's identity-sensitive cache dispatch. Scoped
+  call observation now keeps registry/functions/arguments intact, restores the
+  prior Python hook and claims entry only, not speed/completion/retention.
+  Add independently solved22→4 reference transition and wrong-reference mutation;
+  clarify identical-frontier cutoff controls and large-entry deadline limits.
+  R21's actual cache probes assert non-null maps; do not invalidate them merely
+  because the separate public example had this defect.
+- [x]118 focused regressions pass (104 support/diagnostic/dependency +14
+  provider/Contract/public solver); targeted Ruff and diff check pass. Full
+  optional sandbox example passes. Five new regressions; no full-suite claim.
+  Two collected public checks and production solver/core/prompts/gates unchanged.
+- [ ] Next authorized fresh run: preregister complete source/comparator and safe
+  public R21 history, offer corrected optional examples, leave mechanisms/tests
+  to H/C, and assess the full case/seed pattern. A separate fixed confirmation
+  requires frozen source and prospective fresh seeds/order. Do not select the
+  X513-only signal, merge siblings, leak private evidence or extend terminal
+  samples. No R22 inputs/preparation/launch yet.
 
 ### v0.4 closeout
 

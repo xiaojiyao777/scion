@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-10-09*
+*Current as of: 2026-10-11*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -12,24 +12,42 @@ authority or authorize another run.
 
 ## Checkout and verification snapshot
 
-- Latest October9: [R20 completed NOT_CONFIRMED](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
-  at03:05:39 Beijing /October8 19:05:39 UTC. All72 formal pairs valid, no
-  service/quota/construction failure. Screening5/0/1,+135.25 [1,6115.5];
-  operator-only validation4/1/1,+1389.75 [-20.5,6526], insufficient evidence.
-  No promotion/frozen/retained. Both complete100-file snapshots and all pair
-  orders/limits/deltas/medians/CIs audited. Never resume R19 or R20.
-  [Fresh R21](../experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md)
-  launched once October9 at20:49:38 Beijing /12:49:38 UTC, PID696534,
-  from exact complete R20 candidate/R19 A3. All100 initial files, stored inputs/
-  resources and first successful H's exact question/182 history/30 source indexes
-  match. Running first-round research, no new formal result at startup audit.
-  Optimize current-source grounding, whole safe history and test interpretation;
-  no host solver patch or shared-runtime change. Private validation stays out of
-  H/C. New seeds, R20 sampling and unchanged gates/caps; gpt-6.1-sol high.
-  Launch preparation entered at clean3d2123e3; production runtime unchanged6380a59e.
-  Subsequent October9 user request authorizes committing/pushing the frozen
-  R20 analysis and R21 inputs/tests/docs, without changing live runtime or inputs.
-  Earlier launch-status wording below is historical, superseded by this snapshot.
+- [R21 is terminal](../experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md):
+  completed October11 01:45:42 Beijing /October10 17:45:42 UTC, valid12/12
+  screening stages, eight distinct candidates,352 valid pairs, zero failed
+  pairs. No validation/frozen/promotion; championv1 unchanged. Carrier dead exit0.
+  All twelve cross-case medians are0. C2 expanded has2/0/4 case W/L/T,0 [0,11.5];
+  final B3 improves X513+25 in all four seeds but loses tai100a median-25.5,
+  overall1/1/3 and0 [-25.5,25]. Neither establishes stable incremental benefit.
+  All raw cells/objectives/limits/validity and aggregate medians/CIs checked.
+  The user-confirmed quota outage caused46 synthetic-proxy401 H errors and15
+  operational rejections, not algorithm failures. First error October10 09:30:31
+  Beijing, recovery19:51:08; no subsequent provider failure.244 earlier+108 later
+  pairs complete the formal schedule.131/600 calls used,469 remain; neither call
+  cap nor48-hour guard was exhausted. No proxy restart or terminal resume.
+- October11 user authorizes completed-run analysis and optimization. All814 C
+  visible source values,74 host public-test values, ten final-H source views
+  (one renderer newline) and three complete100-file final heads match. Ten
+  submitted probes contain two corrected assertion failures and eight final
+  passes; real large-path completion/retention and gain stability remain limits.
+  Problem-owned optional public examples now preserve operator identity during
+  observation, add an independently solved reference anchor, and clarify matched
+  cutoff/entry claims.118 focused tests pass (104+14), targeted Ruff and diff
+  check pass. No full-suite rerun claimed. The two collected candidate checks,
+  production solver/core, generic prompts and scientific gates are unchanged.
+  R22 is not prepared/launched; no new Git commit/push in this turn. Preserve
+  terminal evidence and the prior interim docs, now superseded by the postrun.
+- [R20 completed NOT_CONFIRMED](../experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
+  October9 at03:05:39 Beijing:72 valid pairs, screening5/0/1,+135.25 [1,6115.5];
+  operator-only validation4/1/1,+1389.75 [-20.5,6526]. No promotion or later stage.
+  R21 launched once October9 at20:49:38 Beijing from exact complete100-file
+  R20 candidate/R19 A3, with unchanged gates/caps and gpt-6.1-sol high. Startup
+  source/input/182-history/30-source checks passed; private validation stays out
+  of H/C. Launch preparation entered at clean3d2123e3; production runtime remains
+  6380a59e. Frozen R20/R21 analysis/inputs/tests/docs were subsequently committed
+  and pushed as3cf85afe. October10 entry checkout was clean there; its interim
+  update was docs-only. October11 adds the separate optional-support repair
+  above. Earlier launch-status wording below is historical.
 - Working branch: `v0.4-dev`.
 - P1 and the R4/R5 documentation handoff were committed as `a112e60c`.
   P1b observation cleanup and R6 preparation were committed as `e405bfd2`.
@@ -349,8 +367,9 @@ small real-entry completed computations; large-path/retained-effect coverage
 and sibling-inheritance reasoning remain limitations. No core execution repair
 is indicated. R20 froze A3 and completed independent measurement against the
 existing B0-fixed baseline: valid screening pass, validation uncertainty, no
-promotion. October9 prepares fresh R21 from that complete source; no terminal
-resume, shared-runtime change or new Git action.
+promotion. R21 then completes12/12 screening stages and352 valid pairs without
+promotion. October11's postrun and optional observer/reference support repair
+are summarized above; no terminal resume or shared-runtime change.
 
 ## Current runtime truth
 
@@ -580,22 +599,20 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    This is valid uncertainty, not resource exhaustion or invalid execution.
    Keep all evidence, no adaptive extra seeds or gate relaxation. R19 and R20
    have different comparators; do not pool their effects.
-4. October9 authorizes [R21 autonomous continuation](../experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md).
-   Started once October9 at20:49:38 Beijing, PID696534, after171 focused tests,
-   source/data/closure/context checks and one successful bounded health inference.
-   Starts from exact R20 candidate;
-   preserve nineteen whole histories and five observations, distinguish current
-   source from complete historical question, expose public screening only.
-   No sibling merge, host algorithm patch, private later-stage input or new gate.
-   Same runtime/model/caps; denser R20 sampling and fresh seeds. Actual100-file
-   source, stored inputs/resources and first H context are verified. Freeze during
-   measurement: no tests, maintenance, competing solvers or runtime/input edits.
-5. Existing R4–R20 evidence and source roots remain unchanged. Validation is
-   already exposed; frozen/retained open only after earlier passes. Any promising
-   R21 result needs independent exact-source confirmation; its A3 comparison
-   cannot establish B0-fixed or unchanged-original-B0 retained superiority.
-   October8 work is pushed as3d2123e3. The subsequent October9 request authorizes
-   commit/push of the frozen R20/R21 set; launch provenance remains unchanged.
+4. [R21 terminal audit](../experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md)
+   is complete: quota interruption delayed but did not truncate352 valid pairs.
+   All12 screening medians0, no promotion. Source-grounded implementations and
+   stronger isolated tests do not establish stable retained improvement. The
+   public observer repair preserves function identity; no host algorithm edit.
+5. A future fresh preregistration may expose all public R21 history and corrected
+   optional examples, with explicit cumulative source/comparator attribution.
+   Leave algorithm/test selection to H/C; distinguish entry, completion,
+   acceptance and retention. No R22 inputs or launch in the October11 turn.
+   Keep R4–R21 evidence unchanged; never resume a terminal. Any fixed confirmation
+   must freeze a complete source/comparator and prospective seeds/order. Do not
+   pool R21's local-A3 comparison with B0-fixed/original-B0 claims or expose private
+   later-stage evidence to H/C. Frozen/retained remain gated. HEAD/origin3cf85afe;
+   the current postrun/support changes are uncommitted, no new Git action.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

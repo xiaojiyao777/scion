@@ -91,6 +91,11 @@ def _run(tmp_path: Path, source: str):
             "test_real_entry_across_public_route_shapes",
             'monkeypatch.setattr(baseline_algorithm, "solve", lambda *a: CvrpSolution(()))',
         ),
+        (
+            "test_reference_known_transition",
+            "monkeypatch.setitem(globals(), 'reference_two_opt', "
+            "lambda instance, start: (tuple(start), []))",
+        ),
     ],
     ids=[
         "skipped-improvements",
@@ -99,6 +104,7 @@ def _run(tmp_path: Path, source: str):
         "wrong-cost",
         "shape-empty-registry",
         "shape-entry-bypass",
+        "reference-skips-known-move",
     ],
 )
 def test_public_example_falsifies_concrete_mutations(tmp_path, test_name, mutation):
@@ -126,6 +132,67 @@ def test_reference_worksheet_rejects_wrong_expected_arithmetic(tmp_path):
 
 def test_public_multishape_example_runs_without_disabling_real_paths(tmp_path):
     result = _run(tmp_path, _example("test_real_entry_across_public_route_shapes"))
+    assert result.outcome == "passed", result
+
+
+@pytest.mark.parametrize(
+    "test_name",
+    ["test_real_entry_and_construction", "test_real_entry_across_public_route_shapes"],
+)
+def test_entry_observer_preserves_identity_sensitive_dispatch(tmp_path, test_name):
+    source = _example(test_name) + """
+import pytest
+@pytest.fixture(autouse=True)
+def check_identity(monkeypatch):
+    original = scheduler._vns
+    expected = tuple(local_search._default_vns_operators())
+    def check(solution, operators, *args, **kwargs):
+        assert len(operators) == len(expected)
+        assert all(actual is real for actual, real in zip(operators, expected))
+        return original(solution, operators, *args, **kwargs)
+    monkeypatch.setattr(scheduler, '_vns', check)
+"""
+    result = _run(tmp_path, source)
+    assert result.outcome == "passed", result
+
+
+def test_call_observer_restores_hook_and_preserves_optional_arguments(tmp_path):
+    source = _example() + """
+def test_observer_lifecycle():
+    token = object()
+    observed = []
+    def operation(*, certificate=None):
+        assert certificate is token
+        return certificate
+    def previous(frame, event, arg):
+        if event == 'call' and frame.f_code is operation.__code__:
+            observed.append(event)
+    def dispatch(candidate):
+        assert candidate is operation
+        return candidate(certificate=token)
+    old = sys.getprofile()
+    try:
+        sys.setprofile(previous)
+        try:
+            with observe_python_calls([operation]) as calls:
+                assert dispatch(operation) is token
+                raise ValueError('exercise cleanup')
+        except ValueError:
+            pass
+        assert sys.getprofile() is previous
+        assert calls == {operation.__code__: 1}
+        assert observed == ['call']
+        assert dispatch(operation) is token
+        assert calls == {operation.__code__: 1}  # No leaked observer.
+    finally:
+        sys.setprofile(old)
+"""
+    result = _run(tmp_path, source)
+    assert result.outcome == "passed", result
+
+
+def test_independent_known_transition_anchor(tmp_path):
+    result = _run(tmp_path, _example("test_reference_known_transition"))
     assert result.outcome == "passed", result
 
 

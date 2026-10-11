@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-10-08*
+*Last updated: 2026-10-11*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,8 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R21 running since October9 20:49 Beijing: autonomous continuation from complete R19 A3, source-grounded history and test claims, unchanged gates](v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md)
+- [R21 completed12/12:352 valid pairs, quota delay recovered, no promotion; unstable gains and optional observer/reference repair](v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md)
+- [R21 frozen design, startup and superseded October10 interim audit](v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md)
 - [R20 completed NOT_CONFIRMED:72 valid pairs, screening pass but validation CI crosses zero; no promotion or resource failure](v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
 - [R20 frozen counterbalanced design and startup](v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md)
 - [R19 completed12/12:320 valid pairs,105 successful calls, final screening pass but no validation; stronger probes and remaining grounding/coverage limits](v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md)

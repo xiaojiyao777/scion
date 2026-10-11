@@ -30,7 +30,9 @@ PUBLIC_PROBE_EXAMPLE = """
 import itertools
 import math
 import random
+import sys
 import time
+from contextlib import contextmanager
 from fractions import Fraction
 from policies import baseline_algorithm
 from policies.baseline_modules import local_search, scheduler
@@ -124,22 +126,32 @@ class PublicContext:
     record_solution_progress = record_objective_probe = _record
     record_telemetry_event = record_best_update = record_alns_iteration = _record
 
+@contextmanager
+def observe_python_calls(functions):
+    # Observe ordinary Python calls without replacing the registry or functions.
+    # Wrapping an operator changes `operator is _swap` / `_two_opt_intra` and can
+    # silently bypass identity-sensitive cache/argument dispatch in real VNS.
+    # Counts prove ENTRY only, not completion, acceptance or retained benefit.
+    # Profiling has overhead: never use this diagnostic to claim timed speedup.
+    counts = {operation.__code__: 0 for operation in functions}
+    previous = sys.getprofile()
+    def observe(frame, event, arg):
+        if event == 'call' and frame.f_code in counts:
+            counts[frame.f_code] += 1
+        if previous is not None:
+            previous(frame, event, arg)
+    sys.setprofile(observe)
+    try:
+        yield counts
+    finally:
+        sys.setprofile(previous)
+
 def test_real_entry_and_construction(monkeypatch):
     instance = public_instance()
     original = scheduler._ALNSVNSSolver._initial_solution
     real_vns = scheduler._vns
-    real_registry = scheduler._default_vns_operators
     observations = []
     vns_observations = []
-    operator_observations = []
-    def wrap_operator(operation):
-        def observe_operator(*args, **kwargs):
-            result = operation(*args, **kwargs)
-            operator_observations.append(operation.__name__)
-            return result
-        return observe_operator
-    def observe_registry():
-        return [wrap_operator(operation) for operation in real_registry()]
     def observe(self, instance, reserve):
         result = original(self, instance, reserve)
         assert_internal_consistent(result)
@@ -157,16 +169,17 @@ def test_real_entry_and_construction(monkeypatch):
         return result
     monkeypatch.setattr(scheduler._ALNSVNSSolver, "_initial_solution", observe)
     monkeypatch.setattr(scheduler, "_vns", observe_vns)
-    monkeypatch.setattr(scheduler, "_default_vns_operators", observe_registry)
-    result = baseline_algorithm.solve(
-        instance, random.Random(1703), .3, PublicContext(.3)
-    )
+    with observe_python_calls(scheduler._default_vns_operators()) as calls:
+        result = baseline_algorithm.solve(
+            instance, random.Random(1703), .3, PublicContext(.3)
+        )
     assert observations == [(12, True)]
     assert vns_observations and all(count > 0 for count, _, _ in vns_observations)
-    assert operator_observations
+    assert sum(calls.values()) > 0
     assert_feasible(instance, result.routes)
     # This proves real entry-to-VNS wiring, not that YOUR new search path is.
-    # For your claim, wrap its real method and assert its functional consequence.
+    # For your claim, observe its actual transition without changing dispatch
+    # identity, and assert the functional consequence rather than just a call.
     # Do not turn off guards just to make an inactive path appear exercised.
     # If the current design intentionally no longer uses VNS, adapt this optional
     # example to its actual collaborators instead of reinstalling a mechanism.
@@ -182,28 +195,24 @@ def test_real_operator_collaborators():
         assert_internal_consistent(current)
     # If adding a new collaborator/oracle, instantiate its REAL class here.
     # A fake class with invented methods cannot establish integration correctness.
+    # For poll-cutoff/atomicity tests, count the unrestricted control and replay
+    # EACH cutoff with identical start state, active frontier and instrumentation.
+    # Changing eligible routes changes the work/poll count: a completed accepted
+    # move is then not evidence of an interrupted commit. Poll clocks establish
+    # only that isolated boundary property, not real wall-clock responsiveness.
 
 def test_real_entry_across_public_route_shapes(monkeypatch):
     # Multiple synthetic sizes/capacities and seeds; none is a Protocol case.
-    # Keep real construction, budget, registry and operators. Wrappers OBSERVE
-    # calls and return the real result; they do not force a guard or route shape.
+    # Keep real construction, budget, registry and operator identities. The call
+    # observer does not force a guard, route shape or optional cache argument.
     real_initial = scheduler._ALNSVNSSolver._initial_solution
-    real_registry = scheduler._default_vns_operators
-    constructions, operations = [], []
+    constructions = []
     def initial(self, instance, reserve):
         result = real_initial(self, instance, reserve)
         assert_internal_consistent(result)
         constructions.append(tuple(len(route.customers) for route in result.routes))
         return result
-    def wrap(operation):
-        def observe(*args, **kwargs):
-            result = operation(*args, **kwargs)
-            operations.append(operation.__name__)
-            return result
-        return observe
     monkeypatch.setattr(scheduler._ALNSVNSSolver, '_initial_solution', initial)
-    monkeypatch.setattr(scheduler, '_default_vns_operators',
-                        lambda: [wrap(operation) for operation in real_registry()])
     for count, capacity in ((40, 10), (320, 10), (320, 40)):
         nodes = (CvrpNode(0, 0., 0., 0),) + tuple(
             CvrpNode(i, float(i // 8), float(i % 8), 1)
@@ -215,15 +224,16 @@ def test_real_entry_across_public_route_shapes(monkeypatch):
                                 depot=0, allowed_routes=count // capacity,
                                 nodes=nodes, edge_weights=matrix)
         for seed in (1703, 1709):
-            constructions.clear(); operations.clear()
+            constructions.clear()
             # Allow actual construction time at the larger size. This is a
             # public fixture budget, not a patched clock/guard or Protocol limit.
             seconds = .35 if count == 40 else 1.4
-            result = baseline_algorithm.solve(
-                instance, random.Random(seed), seconds, PublicContext(seconds)
-            )
+            with observe_python_calls(scheduler._default_vns_operators()) as calls:
+                result = baseline_algorithm.solve(
+                    instance, random.Random(seed), seconds, PublicContext(seconds)
+                )
             assert len(constructions) == 1
-            assert operations  # An empty or bypassed registry is not coverage.
+            assert sum(calls.values()) > 0  # Empty/bypassed registry is not coverage.
             assert_feasible(instance, result.routes)
             assert math.isfinite(exact_solution_cost(instance, result.routes))
     # This establishes only the observed real entry/construction/operator paths.
@@ -255,6 +265,22 @@ def reference_two_opt(instance, start):
             return route, transitions
         transitions.append(accepted)
         route = accepted
+
+def test_reference_known_transition():
+    # Independently solved sanity anchor BEFORE comparing a candidate. Every
+    # off-diagonal arc is >=1; this four-arc tour attains the lower bound 4.
+    # The known first move is derived from the matrix, not candidate output.
+    matrix = ((0., 1., 10., 1.), (1., 0., 1., 10.),
+              (10., 1., 0., 1.), (1., 10., 1., 0.))
+    instance = CvrpInstance(
+        name='public_known_transition', capacity=3, depot=0, allowed_routes=1,
+        nodes=tuple(CvrpNode(i, 0., 0., int(i > 0)) for i in range(4)),
+        edge_weights=matrix,
+    )
+    assert exact_route_cost(instance, (1, 3, 2)) == 22.
+    assert exact_route_cost(instance, (1, 2, 3)) == 4.
+    assert reference_two_opt(instance, (1, 3, 2)) == ((1, 2, 3), [(1, 2, 3)])
+    assert reference_two_opt(instance, (1, 2, 3)) == ((1, 2, 3), [])
 
 def test_tiny_fixed_start_reference(monkeypatch):
     # Public synthetic symmetric matrix, unrelated to any Protocol population.
@@ -312,6 +338,7 @@ def test_public_large_entry_deadline():
     result = baseline_algorithm.solve(instance, random.Random(1709), .20, context)
     assert_feasible(instance, result.routes)
     assert math.isfinite(exact_solution_cost(instance, result.routes))
+    # This asserts return/feasibility, NOT a .20-second elapsed-time bound.
     # The existing outer sandbox hardwall bounds this probe; no speed threshold
     # or throughput claim. This budget can expire before a new path is reached.
     # For that claim, also test the actual path with its real deadline context.

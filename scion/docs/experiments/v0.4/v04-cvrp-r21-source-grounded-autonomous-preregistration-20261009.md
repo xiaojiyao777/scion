@@ -1,8 +1,13 @@
 # CVRP R21: source-grounded autonomous continuation
 
-State: **running**, launched once October9 at20:49:38 Beijing /12:49:38 UTC,
-PID696534, tmux `scion-r21-source-grounded-autonomous-20261009`. Planned-command
-wording below is now historical; do not launch again. October9 authorizes experiment inspection,
+State: **completed**, terminal October11 01:45:42 Beijing /October10 17:45:42 UTC:
+valid12/12 screening stages, eight candidates,352 valid pairs, no promotion.
+[October11 postrun](v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md)
+supersedes the interim snapshots below; quota interruption delayed but did not
+truncate formal evaluation. Launched once October9 at20:49:38 Beijing /12:49:38 UTC,
+PID696534, tmux `scion-r21-source-grounded-autonomous-20261009` (now dead exit0).
+Planned-command wording below is historical; never launch again or resume.
+October9 authorizes experiment inspection,
 analysis/optimization and a fresh run. [R20 postrun](v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md)
 records valid72/72 pairs, screening pass but incomplete validation stability
 evidence, no promotion. R20 and R19 remain terminal, never resumed.
@@ -202,3 +207,143 @@ case/result sentinels are absent. At startup audit four H calls are recorded and
 no formal stage is complete. Carrier remains live PID696534. No tests or runtime/
 input edits follow launch; only lifecycle documentation. Successful startup is
 not evidence of new research quality, gain stability or promotion.
+
+## October10 read-only interim audit (not terminal)
+
+Audit through19:58 Beijing /11:58 UTC, using the11:58:24 UTC status snapshot.
+October9 frozen documentation/inputs/tests were committed and pushed as3cf85afe;
+October10 entry checkout is clean there. Production runtime remains6380a59e.
+R21 carrier PID696534 is alive, status is running, and no campaign summary yet
+exists. Eight of twelve evaluated stages are complete, all screening: five
+distinct candidates, three of them with expanded screening. Current attempt24
+has passed C-branch Or-opt Verification and started the ninth formal screening,
+not the24th evaluated stage. Champion remainsv1;
+no validation, frozen or independent retained stage has run.
+
+Evidence is confined to the existing
+[R21 status](/home/clawd/research/scion-experiments/v04-cvrp-r21-source-grounded-autonomous-20261009/status.json),
+[eight-row history](/home/clawd/research/scion-experiments/v04-cvrp-r21-source-grounded-autonomous-20261009/research_history.jsonl),
+its eight complete metric files and bounded H/C traces. No original SQLite is
+opened, no solver/test/provider diagnostic is launched, and no live scientific
+input or source is edited. This is not a terminal H/C/source audit or a new
+preregistration; frozen design above is unchanged.
+
+### Completed screening evidence
+
+Distance delta is local champion minus candidate: positive is better. W/L/T
+below is case-level, not pooled seed-level. The labels A1/A2/B1/B2/C1 denote
+within-R21 successive evaluated research heads, not promoted versions.
+
+| Stage | Candidate mechanism | Valid pairs | Case W/L/T | Median distance delta [CI] | Decision |
+|---|---|---:|---|---|---|
+|1|A1 exact unchanged-route 2-opt closure reuse|20|1/0/4|0 [0,23]|expand|
+|2|same A1, expanded|48|2/0/4|0 [0,2.25]|uncertain, continue research|
+|3|B1 capacity-feasible two-opt-star cut intervals|20|1/0/4|0 [0,31.5]|expand|
+|4|same B1, expanded|48|1/0/5|0 [0,0.75]|case-quality fail|
+|5|C1 bounded2-for-2 SWAP* block fallback|20|0/1/4|0 [-41,0]|case-quality fail|
+|6|A2 closure reuse plus exact directed reversal pricing|20|0/1/4|0 [-27,0]|case-quality fail|
+|7|B2 intervals plus exact directed segment pricing|20|1/0/4|0 [0,5.5]|expand|
+|8|same B2, expanded|48|1/1/4|0 [-0.75,6]|case-quality fail|
+
+In stage order, exact files under the existing root's `metrics/` are:
+`2cad9cdd-549c-45d0-9fa2-81b389bd5202.json`,
+`580c7edf-ac83-4270-84b0-194cebfd3ad2.json`,
+`2a310248-9c8a-423b-a4a9-138e2fe64e36.json`,
+`4ad6080d-c7d1-47ac-9136-bfaa543d8c7c.json`,
+`badebd41-af01-4d97-8aae-6888a23b30c2.json`,
+`03038d26-6ab2-4188-89b7-0d8371a77638.json`,
+`48d425a8-a690-4121-89a6-049d66d3064c.json`,
+`0fbade9e-599c-4586-84e4-b71ad9b1583d.json`.
+
+All244 paired observations are valid: both arms active and feasible, no solver
+errors, missing pairs, recorded failures or protected-objective regressions.
+Read-only assertions check each configured case×seed matrix, exact objective
+differences and equal per-pair limits.244 is execution evidence, not one
+independent pooled benefit sample: candidates differ and expanded stages repeat
+initial cells. All eight aggregate medians are0; no candidate has qualified for
+validation. Most changes affect only tai100a and occasionally A54/X351. B34,
+X190 and X513 are ties throughout these completed stages.
+
+B2 expanded gives tai100a median+12 (seed W/L/T5/0/3), A54 median-1.5 (3/4/1),
+and one X351 seed+579 with seven ties, leaving its case median0. More search
+does not itself prove better final solutions: B2's median search iterations rise
+from342 to419 on A54 while its case outcome is worse, and from0 to1 on X513
+while all eight final distances tie at26764. These are telemetry associations,
+not causal mechanism ablations. Stable final quality remains the open issue.
+
+### Local-proxy interruption and recovery
+
+All46 failed dispatches have the same typed local-proxy synthetic401:
+`Not authenticated. Please login first at /`. First observed October10 at
+09:30:31 Beijing, last19:31:08; first successful recovery starts19:51:08
+(11:51:08 UTC), attempt_index1 on the existing bounded retry. Exact traces:
+`llm_traces/20261010T013031073131_hypothesis_research_turn_5b3fe775.json`,
+`llm_traces/20261010T113108010961_hypothesis_research_turn_a30e7079.json`,
+`llm_traces/20261010T115111276238_hypothesis_research_turn_eddd631f.json`.
+There are15 operational `PROVIDER_TRANSIENT_RETRIES_EXHAUSTED` rejections,
+not15 evaluated algorithm failures. The observed error is neither429 quota
+exhaustion nor evidence of official upstream overload; proxy root cause was
+not independently diagnosed. Completed formal pairs remain valid.
+
+By this snapshot106/600 calls are admitted,494 remain: H38 successes/46 failures,
+C22 successes/zero failures. No balance exhaustion. Successful H/C after recovery
+have produced the next Or-opt candidate, passed Verification and started its
+formal screening. No restart,
+retry-budget change, model switch or R21 resume is performed. The original
+48-hour hardwall remains October11 20:49:38 Beijing; outage time is not refunded.
+
+### Research/test interpretation and next action
+
+All six completed Code sessions so far expose passed preflight checks and a
+passed self-authored probe before `ready`, including the currently unevaluated
+Or-opt candidate. This is observed feedback, not six proven solver improvements.
+Its latest H explicitly distinguishes inherited C-branch block fallback from
+absent sibling2-opt/two-opt-star changes and targets reachable ordinary Or-opt.
+The latest probe (`llm_traces/20261010T115506997394_code_research_turn_01330d4a.json`)
+contains an independent tuple/full-rescoring reference with a hand-checkable
+40-to21 cost sanity case, exhaustive five-customer permutation comparisons,
+directed fixtures, state/index checks, verification-time expiry atomicity and
+an unforced real `solve` observer reaching lengths1/2/3 before reserve expiry.
+These are stronger bounded correctness claims, not production-scale retention.
+Its719-customer short-budget solve checks feasibility/finite distance, but does
+not assert elapsed overshoot, completion of Or-opt, or an accepted Or-opt move;
+the test's deadline name must not be treated as proof of those missing claims.
+The full terminal probe/source audit remains pending; no probe is rerun now.
+
+Continue this already-running campaign within frozen gates/resources. Do not
+launch R22 or overlap tests/solvers while it is live. After terminal, audit every
+actual source transition and H/C test claim, then target any demonstrated gap in
+precise reference tests, unforced real-entry reach/completion, explicit timing
+assertions and per-case gain stability. Keep algorithm choice agent-owned;
+do not insert operator-selected mechanisms or private evidence into live H/C.
+This interim update changes only lifecycle documentation, with no new Git
+commit/push, runtime/algorithm/input change or experiment launch.
+
+### Follow-up: user-confirmed quota interruption and bounded impact
+
+The user subsequently reports that account quota was actually unavailable during
+part of this interval and is now restored. This adds operator context to the
+earlier proxy401 observation; lack of a429 response or a Scion balance-exhausted
+flag must not be interpreted as proof that account quota remained available.
+The proxy/account internals were not independently inspected. Do not relabel
+the recorded401 as429 or infer official upstream overload.
+
+Read-only recheck around20:02 Beijing: status continues at8/12, with the ninth
+screening progressing through B34 seeds;106 calls used/494 remain. All15 rejected
+attempts9–23 have zero exported H, completed patches or ready candidates; their
+failures do not enter the eight-row scientific history or consume evaluated-stage
+slots. All244 complete pairs pass validity/active/error, equal-limit and raw
+objective-difference checks again. The last completed metric was written at
+09:30:18 Beijing, before the first observed failure at09:30:31. Therefore the
+existing sparse/negative results are not explained by this later quota outage.
+
+First observed failure to first successful recovery spans10h20m37s; this is an
+observed dispatch interval, not a precise account-outage duration.46 failed
+dispatches consume the configured physical-call allowance, not necessarily
+billable model tokens. Nine successive successful H/C calls follow recovery,
+and Verification/formal screening proceed. The48-hour guard still expires
+October11 20:49:38 Beijing, about24h47m after this audit; elapsed outage time is
+not refunded. The observed impact is delayed/discarded proposal work and less
+remaining wall-clock/call allowance, not corrupted completed solver comparisons.
+No rerun, restart, resource extension or runtime/input mutation is justified by
+this evidence. Only the interpretation in lifecycle documentation is clarified.
