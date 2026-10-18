@@ -146,6 +146,45 @@ def observe_python_calls(functions):
     finally:
         sys.setprofile(previous)
 
+@contextmanager
+def observe_boolean_kernel_returns(functions):
+    # Optional observer for this solver's synchronous, boolean-returning kernels
+    # with solution/context/reserve arguments. Adapt to YOUR real contract;
+    # do not change an algorithm to satisfy this example's instrumentation.
+    # Keep function identity, registry order, arguments and clocks unchanged.
+    codes = {operation.__code__ for operation in functions}
+    pending = {}
+    observations = []
+    previous = sys.getprofile()
+    def observe(frame, event, arg):
+        if frame.f_code in codes:
+            if event == 'call':
+                solution = frame.f_locals['solution']
+                pending[frame] = exact_solution_cost(
+                    solution.instance, solution.routes_as_tuples())
+            elif event == 'return' and frame in pending:
+                before = pending.pop(frame)
+                # Exception unwinding also emits a profile return with None.
+                # Neither an exception nor an entry count proves completion.
+                if type(arg) is bool:
+                    context = frame.f_locals['context']
+                    live = context.remaining_time() > frame.f_locals['reserve']
+                    solution = frame.f_locals['solution']
+                    routes = solution.routes_as_tuples()
+                    assert_feasible(solution.instance, routes)
+                    after = exact_solution_cost(solution.instance, routes)
+                    assert after <= before + 1e-6
+                    observations.append(dict(before=before, after=after,
+                                             live_return=live, changed=arg))
+        if previous is not None:
+            previous(frame, event, arg)
+    sys.setprofile(observe)
+    try:
+        yield observations
+    finally:
+        sys.setprofile(previous)
+        pending.clear()
+
 def test_real_entry_and_construction(monkeypatch):
     instance = public_instance()
     original = scheduler._ALNSVNSSolver._initial_solution
@@ -245,9 +284,9 @@ def test_real_entry_across_public_route_shapes(monkeypatch):
 
 def test_completed_improvement_survives_real_return(monkeypatch):
     # Optional, small end-to-end retention example, NOT a new candidate gate.
-    # Observe the real current VNS boundary, leaving operators/guards unchanged.
-    # If YOUR changed mechanism is inside it, observe that actual transition too;
-    # a VNS improvement does not attribute benefit to a particular inner kernel.
+    # Observe both the real VNS boundary and one real inner kernel. Two-opt is
+    # only an executable illustration: select YOUR actual changed transition.
+    # A different kernel's gain cannot establish activation of your mechanism.
     count = 40
     nodes = (CvrpNode(0, 0., 0., 0),) + tuple(
         CvrpNode(i, float((i * 37) % 97), float((i * 101) % 89), 1)
@@ -276,16 +315,29 @@ def test_completed_improvement_survives_real_return(monkeypatch):
     monkeypatch.setattr(scheduler, '_vns', observe)
     for seed in (1703, 1709):
         completed_gains.clear()
-        result = baseline_algorithm.solve(instance, random.Random(seed), .6,
-                                          PublicContext(.6))
+        with observe_boolean_kernel_returns([local_search._two_opt_intra]) as returns:
+            result = baseline_algorithm.solve(instance, random.Random(seed), .6,
+                                              PublicContext(.6))
         assert_feasible(instance, result.routes)
         assert completed_gains  # Calls/counters or expired returns are not enough.
+        kernel_gains = [row['after'] for row in returns
+                        if row['live_return'] and row['changed']
+                        and row['after'] < row['before'] - 1e-6]
+        # No gain means this fixture did NOT demonstrate retained kernel benefit.
+        # Do not silently count a no-gain/expired path as a successful witness.
+        assert kernel_gains
         final_cost = exact_solution_cost(instance, result.routes)
         assert final_cost <= min(completed_gains) + 1e-6
+        assert final_cost <= min(kernel_gains) + 1e-6
     # Retaining at least the independently scored objective does not require the
     # same routes to survive; later valid improvements may replace them. This
     # checks no loss on this fixture, not improvement versus another algorithm,
     # production-scale completion, elapsed-time performance, or generalization.
+    # Nor does a boolean live return prove exhaustive neighborhood closure.
+    # Mocks can test isolated ordering/wiring, but cannot supply a real-path gain.
+    # A trial worse than the existing best may correctly be rejected: compare
+    # objectives, not route identity or acceptance counters. Actually USE the
+    # collected gains in the final assertion; merely appending is not a check.
     # Instrumentation costs time. Comparative quality still needs paired runs.
 
 def reference_two_opt(instance, start):

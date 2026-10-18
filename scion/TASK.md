@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-11*
+*Current as of: 2026-10-18*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -818,9 +818,49 @@ changing the running R15 runtime or scientific inputs.
   checks match the handoff; R22 carrier remains live. Documentation Maintenance
   profile, diff inspection/check only; no running source/input edit or test/
   solver/provider rerun. Git records the publication result.
-- [ ] After terminal, distinguish actual path completion/accepted/retained
-  observations from whole-matrix comparative quality. Keep missing coverage and
-  adverse results explicit; independent retained confirmation remains separate.
+- [x] [R22 terminal audit](docs/experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-postrun-20261018.md):
+  completed October12 05:06:41 Beijing, valid12/12 screening stages,352 pairs,
+  no promotion.148/600 calls, one recovered504; no cap exhaustion. Final C3
+  +33.5 [-.5,145],3/2/1 cases: real final improvements but adverse distribution.
+  Source delivery/final heads/raw statistics checked.704 progress rows and914
+  best updates show no observed final loss; kernel-level attribution remains
+  incomplete. B3's unused gain list and C3's mocked positive/no-gain real probe
+  do not demonstrate the desired changed-path retention.
+
+### P21 — Assert changed-path benefit, then independently test stability
+
+- [x] October18 user authorizes analysis/optimization only. Extend the optional
+  public example with identity-preserving boolean-kernel return observation,
+  independent before/after/final scoring and an actual nonempty live-gain bound.
+  Add target-bypass, claim-only, deadline, exception and hook/identity regressions;
+  retain the prior lost-final-gain mutation.245 focused tests pass. No new
+  collected candidate gate, prescribed algorithm, core change or production fix.
+- [x] Subsequent October18 user approval authorizes fresh fixed complete C3
+  versus unchanged R22 champion confirmation. Preregister
+  [R23](docs/experiments/v0.4/v04-cvrp-r23-r22-final-local-fixed-preregistration-20261018.md):
+  fresh prospective seeds, balanced AB/BA, all six screening cases, unchanged
+  gates/limits and conditional later stages. Existing provider-free fixed driver;
+  no algorithm edit, H/C, private-outcome injection, Git action or R22 resume.
+- [x]67 focused input/fixed-driver/paired-execution tests pass; complete100-file/
+  48-Python sources, actual C3 edit,37 data cases and both-arm/both-split closure
+  checks pass. Read-only --check returns PREPARED without creating output;
+  338-process/40580-nominal/50720-guarded-second envelope and24h guard match.
+  Fresh output/session, no overlap, disk and Ruff/diff checks pass. Freeze
+  runtime/support/inputs before measurement; preserve the seven preceding edits.
+- [x] Launch once October18 11:12:54 Beijing /03:12:54 UTC, PID1015424.
+  Both100-file private snapshots and stored resources match; actual canary
+  seed290183/time-limit10, then screening seed290011/time-limit60. Driver alive,
+  no terminal or quality result at startup. Only lifecycle docs afterward;
+  no concurrent tests, timed solvers, cleanup or runtime/support/input edits.
+- [x] Subsequent October18 user request authorizes commit/push of the frozen
+  R22 analysis/support and R23 inputs/tests/handoff. Documentation Maintenance
+  profile and read-only Git/diff/carrier checks match the handoff; R23 remains
+  live without a terminal. No tests, provider/solver rerun or running source/
+  input edits. Git records the publication result; launch provenance is unchanged.
+- [ ] At R23 terminal, assess every case/seed, actual order, safety and final
+  quality. Distinguish local confirmation from original-B0 and exact-kernel
+  attribution. Preserve adverse/incomplete results; never adaptively extend or
+  resume a terminal. CVRP retained-B0 objective stays open.
 
 ### v0.4 closeout
 
@@ -831,6 +871,14 @@ changing the running R15 runtime or scientific inputs.
 
 ## Verification snapshot
 
+- R23:67 input/fixed-driver/paired-execution regressions pass in1.24seconds;
+  source scope/AST/data/closure/read-only prep/Ruff/diff pass. One fresh fixed
+  run launched October18 11:12:54 Beijing; exact startup source/resource/real
+  canary-to-screening checks pass. No model/provider or full-suite run.
+- P21:245 focused tests pass in41.40 seconds, including27 optional-support
+  regressions. Full optional example passes on repository and unchanged R22
+  starting source within the existing10-second sandbox. Targeted Ruff/diff pass;
+  no full-suite, provider or formal-candidate rerun. Production source unchanged.
 - P16: full suite2678 passed / one skip in451.05 seconds;197 focused plus42
   context/import checks overlap.24 R16–R19 input regressions pass; Ruff/diff,
   source/data/public-formal closure and exact safe question/history checks pass.

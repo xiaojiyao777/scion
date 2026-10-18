@@ -1,6 +1,11 @@
 # CVRP R22: completed real-path improvement retained at solver return
 
-State: **running; startup audited October11**. October11 user explicitly requests committing
+State: **completed, valid12/12; no promotion**. Terminal October12 05:06:41
+Beijing /October11 21:06:41 UTC. The
+[October18 postrun](v04-cvrp-r22-retained-path-autonomous-postrun-20261018.md)
+supersedes the startup status below; scientific design/inputs remain unchanged.
+
+Original launch context: October11 user explicitly requests committing
 the prior work first, then the next round focused on whether improvement survives
 a completed real path into the final returned solution. Prior R21 analysis and
 optional observer repair were committed as **693cd4a0**, not yet pushed at launch. R21 is terminal

@@ -137,7 +137,11 @@ def test_public_multishape_example_runs_without_disabling_real_paths(tmp_path):
 
 @pytest.mark.parametrize(
     "test_name",
-    ["test_real_entry_and_construction", "test_real_entry_across_public_route_shapes"],
+    [
+        "test_real_entry_and_construction",
+        "test_real_entry_across_public_route_shapes",
+        "test_completed_improvement_survives_real_return",
+    ],
 )
 def test_entry_observer_preserves_identity_sensitive_dispatch(tmp_path, test_name):
     source = _example(test_name) + """
@@ -198,6 +202,90 @@ def test_independent_known_transition_anchor(tmp_path):
 
 def test_retention_example_runs_real_entry_and_independent_final_scoring(tmp_path):
     result = _run(tmp_path, _example("test_completed_improvement_survives_real_return"))
+    assert result.outcome == "passed", result
+
+
+def test_retention_example_rejects_other_kernel_gain_as_target_coverage(tmp_path):
+    source = _example("test_completed_improvement_survives_real_return") + """
+import pytest
+@pytest.fixture(autouse=True)
+def bypass_observed_kernel(monkeypatch):
+    original = scheduler._default_vns_operators
+    def operators():
+        return [op for op in original() if op is not local_search._two_opt_intra]
+    monkeypatch.setattr(scheduler, '_default_vns_operators', operators)
+"""
+    result = _run(tmp_path, source)
+    assert result.outcome == "failed", result
+    assert result.diagnostic["phase"] == "call"
+    assert result.diagnostic["exception_kind"] == "assertion_error"
+    expected_line = next(
+        index for index, line in enumerate(source.splitlines(), 1)
+        if line.strip() == "assert kernel_gains"
+    )
+    assert result.diagnostic["probe_line"] == expected_line, result
+
+
+@pytest.mark.parametrize("mode", ["gain", "claim_only", "expired", "exception"])
+def test_kernel_observer_distinguishes_return_from_live_gain_and_restores_hook(
+    tmp_path, mode
+):
+    source = _example() + f"""
+def test_kernel_observer():
+    matrix = ((0., 1., 10., 1.), (1., 0., 1., 10.),
+              (10., 1., 0., 1.), (1., 10., 1., 0.))
+    instance = CvrpInstance(name='public_observer_control', capacity=3, depot=0,
+        allowed_routes=1,
+        nodes=tuple(CvrpNode(i, 0., 0., int(i > 0)) for i in range(4)),
+        edge_weights=matrix)
+    solution = _Solution(instance, [_Route(instance, (1, 3, 2))])
+    context = PublicContext(2.)
+    token = object()
+    # Isolated observer control only, not evidence of real algorithm coverage.
+    def operation(solution, context, reserve, *, certificate=None):
+        assert certificate is token
+        if {mode!r} == 'exception':
+            raise ValueError('not a normal return')
+        if {mode!r} != 'claim_only':
+            solution.routes[0].customers = [1, 2, 3]
+            solution.routes[0].recalculate()
+            solution.rebuild_index()
+        if {mode!r} == 'expired':
+            context.start -= 10.
+        return True
+    def dispatch(candidate):
+        assert candidate is operation
+        return candidate(solution, context, 0., certificate=token)
+    seen = []
+    def previous(frame, event, arg):
+        if frame.f_code is operation.__code__:
+            seen.append(event)
+    old = sys.getprofile()
+    try:
+        sys.setprofile(previous)
+        try:
+            with observe_boolean_kernel_returns([operation]) as rows:
+                dispatch(operation)
+        except ValueError:
+            assert {mode!r} == 'exception'
+        assert sys.getprofile() is previous
+        assert seen == ['call', 'return']
+        if {mode!r} == 'exception':
+            assert rows == []
+        else:
+            assert len(rows) == 1
+            assert rows[0]['before'] == 22.
+            assert rows[0]['after'] == (22. if {mode!r} == 'claim_only' else 4.)
+            assert rows[0]['live_return'] == ({mode!r} != 'expired')
+            gains = [r for r in rows if r['live_return'] and r['changed']
+                     and r['after'] < r['before'] - 1e-6]
+            assert bool(gains) == ({mode!r} == 'gain')
+            dispatch(operation)
+            assert len(rows) == 1  # Observer must not leak beyond the context.
+    finally:
+        sys.setprofile(old)
+"""
+    result = _run(tmp_path, source)
     assert result.outcome == "passed", result
 
 

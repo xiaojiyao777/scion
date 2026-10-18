@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-10-11*
+*Current as of: 2026-10-18*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -12,23 +12,53 @@ authority or authorize another run.
 
 ## Checkout and verification snapshot
 
-- October11 launch request: user requests commit first, then a fresh round
-  focused on completed real-path gain surviving to the final returned solution.
-  Prior seven-file set committed as693cd4a0; origin was3cf85afe at launch.
-  The subsequent user request explicitly authorizes committing and pushing the
-  frozen R22 set together with693cd4a0. Git records the resulting tip; this Git
-  handoff changes no running source/input and reruns no tests or experiments.
-  [R22 is running, startup audited](../experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-preregistration-20261011.md):
-  unchanged complete R21 starting champion/R19 A3; all twenty histories and
-  earlier complete question/observations retained, fresh seeds and unchanged
-  gates/resources. Optional public retention example and mutation tests added;
-  169 focused tests and selected-source public diagnostic pass. Whole-source,
-  data/closure,194-history/30-source exact projection and provider checks pass;
-  launched once October11 10:20:35 Beijing /02:20:35 UTC, PID756593. Saved100-file
-  baseline/input/resources and first actual H question/indexes match. At startup
-  three H calls succeed, zero errors and zero evaluated stages; carrier live.
-  No algorithm/core/adapter/gate change. Runtime/support/inputs frozen throughout;
-  only lifecycle docs edited after launch. No benefit/promotion claim yet.
+- October18 follow-up approves [R23 fixed-source confirmation](../experiments/v0.4/v04-cvrp-r23-r22-final-local-fixed-preregistration-20261018.md):
+  complete R22 C3 versus unchanged R22 champion, eight fresh screening seeds,
+  balanced AB/BA, all cases and unchanged gates/limits. Running, launched once
+  October18 11:12:54 Beijing /03:12:54 UTC, PID1015424. Both100-file read-only
+  private snapshots and resources match; paired canary completes and actual
+  screening starts at seed290011/time-limit60. No formal quality result yet.
+  67 focused tests, full source/data/closure and read-only preparation pass,
+  with fresh output/session and no competing campaign/solver/tests at dispatch.
+  Freeze runtime/source/support/inputs; no tests or maintenance while live.
+  Launch made no model calls, new algorithm/core change, Git action or terminal resume. Entry is
+  09e928e8=origin plus the seven preceding analysis/optional-support edits;
+  all prior carriers dead, exact selected100-file sources differ only in
+  local_search.py. Full conditional fixed-funnel guard24h, not the H/C envelope.
+  The subsequent October18 user request authorizes commit/push of this frozen
+  set. Git publication changes no running source/support/input, reruns no tests
+  or experiments, and does not rewrite the launch provenance; Git records the tip.
+- [R22 is terminal](../experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-postrun-20261018.md):
+  completed October12 05:06:41 Beijing /October11 21:06:41 UTC, valid12/12
+  screening stages, eight evaluated candidates,352 valid pairs/704 sides, no
+  failures or fleet violations. No validation/frozen/promotion; championv1
+  unchanged.148/600 calls used, one recovered504, no recorded quota outage;
+  neither call cap nor48-hour guard exhausted. Carrier dead; terminal JSON,
+  not its blank pane-dead status, establishes completion. Entry checkout clean
+  09e928e8=origin. The earlier R22 source/inputs/support were committed/pushed
+  after launch; frozen launch provenance remains in the preregistration.
+- Initial October18 request authorized completed-run analysis and optimization;
+  the subsequent approval above authorized the fixed run; Git publication was
+  separately requested afterward as recorded above.
+  Final C3 expanded has3/2/1 case W/L/T and+33.5
+  [-.5,145]; X351 improves180 in all eight seeds, X513 improves95–110 in all
+  eight. tai100a/A54 median−.5 and X190 mixed signs prevent stable-gain claims;
+  unchanged case-quality gates correctly fail. All raw cells/medians/CIs checked.
+  No observed loss at recorded best/final boundaries: all704 progress rows and
+  914 best updates retained. This does not identify the specific kernel's effect.
+- Actual H/C source delivery and three complete100-file heads match. Twelve
+  submitted probes include four corrected assertion failures and eight final
+  passes. B3 collects but never asserts its kernel gains; C3's accepted late
+  transition uses mocked ordinary operators, while its real-entry probe is a
+  no-gain control. Problem-owned optional support now demonstrates live completed
+  inner-kernel gain with independent before/after/final scores, preserving
+  function identity and real dispatch.245 focused tests pass; full optional
+  example passes on repository and unchanged R22 starting source in the existing
+  sandbox. Targeted Ruff/diff checks pass, no full-suite rerun claimed. Existing two
+  candidate checks, production algorithm/core/prompts and scientific gates stay
+  unchanged. That analysis made no production retention repair, host-selected
+  merge, terminal resume or new launch. Preserve R22 raw evidence and frozen
+  inputs unchanged; the subsequent R23 approval is recorded above.
 - [R21 is terminal](../experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md):
   completed October11 01:45:42 Beijing /October10 17:45:42 UTC, valid12/12
   screening stages, eight distinct candidates,352 valid pairs, zero failed
@@ -621,22 +651,22 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    All12 screening medians0, no promotion. Source-grounded implementations and
    stronger isolated tests do not establish stable retained improvement. The
    public observer repair preserves function identity; no host algorithm edit.
-5. The subsequent October11 request authorizes commit first (693cd4a0, done)
-   and fresh [R22](../experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-preregistration-20261011.md).
-   Verification and one launch are complete: October11 10:20:35 Beijing,
-   PID756593; startup source/input/H projection matches and provider calls
-   succeed. Keep runtime/support/inputs frozen while it runs; lifecycle docs
-   only. Leave algorithm/test selection to H/C. At terminal distinguish entry,
-   completion, acceptance and retention from complete-matrix quality; no new
-   hard gate or required mechanism. The subsequent user request authorizes
-   commit/push of the already frozen change set, not a new experiment or edit.
-   Keep R4–R21 evidence unchanged; never resume a terminal. Any fixed confirmation
-   must freeze a complete source/comparator and prospective seeds/order. Do not
-   pool R21's local-A3 comparison with B0-fixed/original-B0 claims or expose private
-   later-stage evidence to H/C. Frozen/retained remain gated. Launch provenance
-   remains HEAD693cd4a0/origin3cf85afe plus uncommitted R22 inputs/support/tests
-   and lifecycle docs, frozen before dispatch. Later Git publication does not
-   rewrite that provenance; consult Git for the current tip.
+5. [R22 terminal audit](../experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-postrun-20261018.md)
+   is complete. Stronger C3 final-quality signals still fail case-quality/CI
+   requirements; source-grounded H and passing probes do not establish real
+   changed-kernel retained benefit. Optional support now makes that distinction
+   executable. No production algorithm or core repair is supported by this audit.
+   Keep R4–R22 evidence unchanged and never resume a terminal. October18 follow-up
+   now approves [R23](../experiments/v0.4/v04-cvrp-r23-r22-final-local-fixed-preregistration-20261018.md)
+   fixed complete C3 versus unchanged R22 champion confirmation: prospective
+   seeds/counterbalanced order, unchanged full populations/limits/gates and
+   explicit mechanism-coverage limits. Checks and one launch complete; actual
+   startup source/resources/canary-to-screening match. Keep all runtime/support/
+   inputs frozen and use low-frequency read-only checks until terminal. Then
+   audit every pair, actual order and final quality. Do not pool local-A3 comparisons with
+   B0-fixed/original-B0 claims or expose private later-stage evidence to H/C.
+   Frozen/retained remain gated. The subsequent user request authorizes commit/
+   push of the already frozen set only, without tests or running-input edits.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,
