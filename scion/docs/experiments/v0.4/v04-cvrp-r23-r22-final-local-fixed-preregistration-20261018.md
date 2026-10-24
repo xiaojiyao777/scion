@@ -1,6 +1,12 @@
 # CVRP R23: independently measure the exact R22 C3 against its local champion
 
-State: **running; startup audited October18**. Launched once at11:12:54 Beijing
+State: **completed / NOT_CONFIRMED at expanded screening**. Terminal written by
+October18 13:30:25 Beijing /05:30:25 UTC;48 valid pairs,3/2/1 cases,+33.5
+[-3.25,145], no later stages or promotion. The
+[October24 postrun](v04-cvrp-r23-r22-final-local-fixed-postrun-20261024.md)
+supersedes the startup snapshot below; frozen design and inputs are unchanged.
+
+Original startup context: launched once at11:12:54 Beijing
 /03:12:54 UTC, driver PID1015424. Complete source snapshots/resources match;
 the driver has passed paired canary and entered expanded screening. No quality
 result yet. Keep runtime/source/support/inputs frozen throughout measurement.

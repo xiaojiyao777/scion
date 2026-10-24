@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-18*
+*Current as of: 2026-10-24*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -857,10 +857,46 @@ changing the running R15 runtime or scientific inputs.
   profile and read-only Git/diff/carrier checks match the handoff; R23 remains
   live without a terminal. No tests, provider/solver rerun or running source/
   input edits. Git records the publication result; launch provenance is unchanged.
-- [ ] At R23 terminal, assess every case/seed, actual order, safety and final
-  quality. Distinguish local confirmation from original-B0 and exact-kernel
-  attribution. Preserve adverse/incomplete results; never adaptively extend or
-  resume a terminal. CVRP retained-B0 objective stays open.
+- [x] [October24 R23 terminal audit](docs/experiments/v0.4/v04-cvrp-r23-r22-final-local-fixed-postrun-20261024.md):
+  completed NOT_CONFIRMED,48 valid pairs, balanced actual order,3/2/1 cases,
+  +33.5 [-3.25,145]. No safety failure, provider/resource stop or later stage.
+  Both100-file sources match;96 progress rows/138 best updates retained.
+  Seven initial relative leads reverse because the comparator improves more;
+  no observed best-return defect. Preserve full adverse evidence and all gates.
+
+### P22 — Separate self-retention from stable comparative advantage
+
+- [x] October24 user authorizes analysis and optimization, not another launch
+  or Git action. Update optional problem-owned probe guidance with a synthetic
+  counterexample, paired effect decomposition and precise initial-checkpoint
+  semantics. Executable AST/collected candidate checks unchanged; no algorithm,
+  core, formal-input or gate edit. Preserve exact R22/R23 source/artifacts.
+- [x] Refine next research design: whole C3 continuation, all safe history and
+  complete public screening evidence, stable whole-solver final benefit under
+  equal limits. H/C choose mechanisms/tests; no case exceptions, sibling merge,
+  budget expansion or forced-path quality gate. That analysis prepared no new
+  scientific inputs; the subsequent request below authorizes them.
+- [x] Subsequent October24 request authorizes next optimization/design/launch.
+  Prepare [R24](docs/experiments/v0.4/v04-cvrp-r24-stable-advantage-autonomous-preregistration-20261024.md)
+  with21 whole histories, unchanged five observations/R22 question, complete
+  R22-final/R23 screening matrices and prospective seeds above300000. Same
+  gates/populations/limits/model/caps; no host algorithm edit or sibling merge.
+- [x] Launch R24 after source/context/data/input/support checks at October24
+  13:06:25 Beijing, tmux PID1252392. Initial100-file champion and saved inputs/
+  resources match; first H success13:06:34, exact206-history/30-source indexes
+  and current question match. Nine completed H requests succeed at startup,
+  zero errors/zero evaluated stages. Runtime/support/scientific inputs remain
+  frozen; no tests/maintenance/competing solver after launch. No Git action.
+- [x] Subsequent October24 user request authorizes commit/push of the frozen
+  R23 analysis/support and R24 inputs/tests/handoff. Documentation Maintenance
+  profile and read-only Git/diff/carrier checks match; R24 remains live at first
+  Code research/zero evaluated stages. No tests, provider/solver rerun or running
+  source/input edit. Git records the publication result; preserve launch provenance.
+- [ ] Analyze R24 after terminal evidence, separating research fidelity,
+  real-path benefit and complete-solver stability. Existing source-tree
+  selection makes C3 its local champion, not R23 A; later fixed comparison
+  against preserved R23 A must remain separate. Original-B0 retained improvement
+  is still open. Never resume terminals or pool incomparable contrasts.
 
 ### v0.4 closeout
 
@@ -871,6 +907,19 @@ changing the running R15 runtime or scientific inputs.
 
 ## Verification snapshot
 
+- R24 prelaunch:148 focused input/support/diagnostic/dependency/Contract tests
+  pass in37.86seconds; targeted Ruff/diff and CLI help pass. Full optional
+  example passes on an isolated complete-C3 copy in the existing10-second
+  sandbox. All100 source files equal R22 C3;48 Python files parse. All25 cases
+  parse, public/formal closure and21 whole histories pass. H projection keeps
+  the exact32,048-character question,201 safe records and five observations
+  (206 history/30 source indexes); C has19 read-only and11 matching editable
+  source bodies, with no overlap/private-case leakage. No full-suite claim.
+- P22:129 focused support/diagnostic/public-dependency/Contract/R23-input tests
+  pass in36.31seconds after R23 terminal. Optional example and collected suite
+  executable AST unchanged; synthetic arithmetic, targeted Ruff/diff pass.
+  All48 R23 cells/96 sides/order/limits/statistics and both100-file sources pass
+  read-only audit. No provider call, formal solver rerun or new full-suite claim.
 - R23:67 input/fixed-driver/paired-execution regressions pass in1.24seconds;
   source scope/AST/data/closure/read-only prep/Ruff/diff pass. One fresh fixed
   run launched October18 11:12:54 Beijing; exact startup source/resource/real

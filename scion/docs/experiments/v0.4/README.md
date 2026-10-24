@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-10-18*
+*Last updated: 2026-10-24*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,9 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R23 running: exact R22 C3 versus its unchanged local champion, fresh counterbalanced seeds;67 tests and startup audit pass, no quality result yet](v04-cvrp-r23-r22-final-local-fixed-preregistration-20261018.md)
+- [R24 fresh whole-C3 autonomous stable-advantage research: unchanged gates/budgets, complete public history and prospective seeds](v04-cvrp-r24-stable-advantage-autonomous-preregistration-20261024.md)
+- [R23 completed NOT_CONFIRMED:48 valid balanced pairs,+33.5 [-3.25,145],3/2/1 cases; own gains retained but seven relative leads reverse, research-support clarification](v04-cvrp-r23-r22-final-local-fixed-postrun-20261024.md)
+- [R23 frozen design and superseded startup snapshot](v04-cvrp-r23-r22-final-local-fixed-preregistration-20261018.md)
 - [R22 completed12/12:352 valid pairs, final C3 +33.5 [-.5,145] but adverse case distribution; no observed best-return loss, incomplete kernel attribution and optional probe repair](v04-cvrp-r22-retained-path-autonomous-postrun-20261018.md)
 - [R22 frozen design and superseded startup snapshot](v04-cvrp-r22-retained-path-autonomous-preregistration-20261011.md)
 - [R21 completed12/12:352 valid pairs, quota delay recovered, no promotion; unstable gains and optional observer/reference repair](v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md)

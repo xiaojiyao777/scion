@@ -339,6 +339,18 @@ def test_completed_improvement_survives_real_return(monkeypatch):
     # objectives, not route identity or acceptance counters. Actually USE the
     # collected gains in the final assertion; merely appending is not a check.
     # Instrumentation costs time. Comparative quality still needs paired runs.
+    # Own-trajectory retention is different from retaining a lead over a control.
+    # Synthetic distance example: A goes 120 -> 100 and B goes 110 -> 105.
+    # Both keep their own gains, yet B's initial lead +10 becomes final loss -5.
+    # For each matched pair: final(A-B) = initial(A-B) + gain_B - gain_A.
+    # Derive that identity per pair before aggregating; medians are not additive.
+    # The initial checkpoint must mean the same phase in both arms (this solver's
+    # recorded initial distance is AFTER initial local search, not raw construction).
+    # Passing this probe cannot establish comparative gain or its exact cause.
+    # Use separately frozen complete sources, equal declared limits, fresh seeds
+    # and balanced execution order for that question; retain adverse cases too.
+    # Iteration throughput and phase timings motivate hypotheses, not promotion
+    # or a rule that requires a particular time allocation or search mechanism.
 
 def reference_two_opt(instance, start):
     # Tiny fixed-start first-improvement reference, deliberately rescoring every
