@@ -130,6 +130,44 @@ def test_reference_worksheet_rejects_wrong_expected_arithmetic(tmp_path):
     assert result.diagnostic["exception_kind"] == "assertion_error"
 
 
+def test_comparative_reference_distinguishes_additions_from_extra_gain(tmp_path):
+    result = _run(tmp_path, _example("test_reference_trial_comparison"))
+    assert result.outcome == "passed", result
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    [
+        "start_cost - proposed_best",
+        "float(len(proposed_trials) > len(inherited_trials))",
+        "max(0., inherited_best - proposed_best)",
+    ],
+    ids=["own-gain-is-not-extra-gain", "more-trials-is-not-extra-gain", "keep-losses"],
+)
+def test_comparative_reference_falsifies_weakened_claims(tmp_path, replacement):
+    source = _example("test_reference_trial_comparison")
+    assert source.count("inherited_best - proposed_best") == 1
+    source = source.replace("inherited_best - proposed_best", replacement)
+    result = _run(tmp_path, source)
+    assert result.outcome == "failed", result
+    assert result.diagnostic["exception_kind"] == "assertion_error"
+
+
+def test_comparative_reference_rejects_incomplete_solution(tmp_path):
+    source = _example() + """
+import pytest
+def test_missing_customer_cannot_supply_a_comparative_gain():
+    instance = public_instance()
+    start = (tuple(range(1, 7)), tuple(range(7, 13)))
+    incomplete = (tuple(range(1, 7)), tuple(range(7, 12)))
+    for inherited, proposed in (([incomplete], []), ([], [incomplete])):
+        with pytest.raises(AssertionError):
+            reference_trial_comparison(instance, start, inherited, proposed)
+"""
+    result = _run(tmp_path, source)
+    assert result.outcome == "passed", result
+
+
 def test_public_multishape_example_runs_without_disabling_real_paths(tmp_path):
     result = _run(tmp_path, _example("test_real_entry_across_public_route_shapes"))
     assert result.outcome == "passed", result

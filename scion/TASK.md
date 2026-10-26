@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-24*
+*Current as of: 2026-10-26*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -892,11 +892,33 @@ changing the running R15 runtime or scientific inputs.
   profile and read-only Git/diff/carrier checks match; R24 remains live at first
   Code research/zero evaluated stages. No tests, provider/solver rerun or running
   source/input edit. Git records the publication result; preserve launch provenance.
-- [ ] Analyze R24 after terminal evidence, separating research fidelity,
-  real-path benefit and complete-solver stability. Existing source-tree
-  selection makes C3 its local champion, not R23 A; later fixed comparison
-  against preserved R23 A must remain separate. Original-B0 retained improvement
-  is still open. Never resume terminals or pool incomparable contrasts.
+- [x] [October26 R24 terminal audit](docs/experiments/v0.4/v04-cvrp-r24-stable-advantage-autonomous-postrun-20261026.md):
+  valid12/12 stages,384 pair rows/768 sides, six H/C candidates,86 successful
+  provider calls, no infrastructure/safety failure or promotion. A2 expanded
+  +12.75 [0,83.25] passes; validation+40 [-35.25,606.25] is insufficient.
+  Final B2 remains0 [-1.25,.25]. All1350 best updates are retained; no production
+  best-return repair. Preserve missing original heads as patch-fallback status,
+  not invented complete snapshots. Keep private validation evidence out of H/C.
+- [x] Address D1's weakened counterfactual claim with optional independently
+  rescored trial-set comparisons, positive/redundant/negative controls and five
+  mutation/feasibility regressions. No positive-gain requirement for exact caches,
+  no formal gate or production/core change.132 focused tests and full optional
+  example on repository/isolated C3 pass; collected candidate tests unchanged.
+- [x] Subsequent October26 request authorizes next optimization/design/launch and
+  Git publication. Prepare [R25](docs/experiments/v0.4/v04-cvrp-r25-counterfactual-evidence-autonomous-preregistration-20261026.md):
+  same complete C3,22 whole histories, all360 R24 screening cells, unchanged
+  observations/whole R24 question, no private results. Same scientific/resource
+  bounds, prospective seeds above310000; H/C choose algorithms and tests.
+- [x] Launch R25 after preflight at October26 16:03:24 UTC /October27 00:03:24
+  Beijing, tmux PID1361573. Actual100-file champion, saved input/resources and
+  first successful H question/217-history/30-source indexes match. Runtime,
+  support and science frozen; only read-only startup checks/lifecycle docs and
+  requested Git publication afterward. Git records the publication result.
+- [ ] Analyze R25 after terminal evidence, separating research fidelity,
+  exact-evaluator versus added-capability claims, real-path gain and stable
+  complete-solver advantage. C3 remains the local comparator, not R23 A or B0.
+  Original-B0 retained improvement stays open; never resume terminals or pool
+  incomparable or overlapping contrasts.
 
 ### v0.4 closeout
 
@@ -907,6 +929,10 @@ changing the running R15 runtime or scientific inputs.
 
 ## Verification snapshot
 
+- R25 prelaunch:139 focused input/support/diagnostic/public-dependency/Contract
+  tests pass in39.08seconds. Full updated optional example passes on repository
+  and isolated C3 in the existing10-second sandbox; collected candidate checks
+  AST-unchanged. Targeted Ruff F/E9 and CLI help pass. No full-suite claim.
 - R24 prelaunch:148 focused input/support/diagnostic/dependency/Contract tests
   pass in37.86seconds; targeted Ruff/diff and CLI help pass. Full optional
   example passes on an isolated complete-C3 copy in the existing10-second

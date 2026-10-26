@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-10-24*
+*Current as of: 2026-10-26*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -12,32 +12,41 @@ authority or authorize another run.
 
 ## Checkout and verification snapshot
 
-- October24 subsequent user request authorizes optimization, next experiment
-  design and launch. [R24](../experiments/v0.4/v04-cvrp-r24-stable-advantage-autonomous-preregistration-20261024.md)
-  launched October24 13:06:25 Beijing /05:06:25 UTC from exact complete R22 C3
-  preserved as R23's candidate; tmux `scion-r24-stable-advantage-autonomous-20261024`,
-  PID1252392 live at startup audit. Exact output:
-  `/home/clawd/research/scion-experiments/v04-cvrp-r24-stable-advantage-autonomous-20261024`.
-  No algorithm edit or sibling merge. C3 becomes its local champion, not R23 A.
-  All21 whole histories, five observations, the unchanged R22 question and full
-  R22-final/R23 public screening matrices are preserved. Unchanged gates,
-  populations, solver limits, gpt-6.1-sol high,12 stages/600 calls/48-hour guard;
-  prospective fresh seeds above300000. Entry a4476ecc with the preceding six
-  R23 analysis/support files uncommitted; R24 adds inputs/tests/docs. No Git
-  action was requested at launch.148 focused regressions, isolated optional example and
-  source/data/closure checks pass. Actual100-file initial champion, saved
-  input/resources, exact32,048-character H question and206-history/30-source
-  indexes match. Nine completed H traces succeed, no errors; running first
-  hypothesis/zero evaluated stages at startup audit. No quality claim yet.
-  Runtime/support/scientific inputs frozen; no tests or competing solver after
-  launch. Only read-only checks and lifecycle docs; full evidence in R24.
-- Subsequent October24 request authorizes commit/push of the frozen11-file
-  R23 analysis/support and R24 input/test/handoff set. Documentation Maintenance
-  profile and read-only Git/diff/carrier checks match the handoff; R24 remains
-  live, with status at first Code research/zero evaluated stages. Only lifecycle
-  prose changes for this Git handoff, no tests/provider/solver rerun or running
-  source/support/input edit. Git records the publication result; launch-time
-  uncommitted provenance remains historical fact.
+- [R24 terminal audit](../experiments/v0.4/v04-cvrp-r24-stable-advantage-autonomous-postrun-20261026.md):
+  completed valid12/12 October25 08:54:22 Beijing /00:54:22 UTC;11 screening,
+  one validation, six H/C candidates,384 valid pair rows/768 sides. Carrier dead
+  exit0; no failed pair, solver/fleet/provider error or resource exhaustion.
+  86/600 calls, championv1 unchanged, no frozen/promotion. Entry checkout clean
+  5a27803e=local origin; the earlier uncommitted-at-launch provenance remains
+  in the frozen R24 design. Comparator is complete R22 C3, not R23 A or B0.
+- A2 cumulative registry-plus-cache passes expanded screening +12.75 [0,83.25]
+  but fails validation uncertainty +40 [-35.25,606.25]; no extra sampling or
+  gate relaxation. Final B2 is0 [-1.25,.25], case1/1/4. All768 own-progress
+  rows and1350 recorded best updates are retained; no observed best-return bug.
+  Expanded stages rerun initial cells, with same-seed timed variation; do not pool
+  them. Three complete100-file heads survive; A1/A2/B1 need ordinary patch fallback.
+- D1's failed extra-gain witness was replaced by a passing added-trials assertion;
+  this does not repair the stronger claim. Optional problem-owned support now
+  independently scores inherited/proposed trial sets, with positive/redundant/
+  negative controls and five new regressions.132 focused tests pass in37.18s;
+  full optional example passes on repository and isolated C3 in10s sandbox.
+  Two collected candidate checks are AST-unchanged; production/core/gates unchanged.
+- Subsequent October26 user request authorizes optimization, design, fresh launch,
+  commit and push. [R25](../experiments/v0.4/v04-cvrp-r25-counterfactual-evidence-autonomous-preregistration-20261026.md)
+  uses the same complete C3 with22 whole histories, unchanged five
+  observations/whole R24 question and all360 public R24 screening cells. Private
+  later-stage evidence stays out of H/C. Same model/gates/solver limits and
+  12 stages/600 calls/48-hour guard; fresh seeds above310000. No host algorithm
+  choice or sibling merge.139 focused prelaunch regressions pass in39.08s.
+  Launched October26 16:03:24 UTC /October27 00:03:24 Beijing, tmux
+  `scion-r25-counterfactual-evidence-autonomous-20261026`, PID1361573.
+  Exact root: `/home/clawd/research/scion-experiments/v04-cvrp-r25-counterfactual-evidence-autonomous-20261026`.
+  Actual100-file champion and saved resources/input match; first H succeeds
+  00:03:35 Beijing, exact39,150-character question/217-history/30-source indexes
+  match. Nine completed H calls succeed at early startup, no errors/zero evaluated
+  stages. Source/support/science frozen; only read-only checks, lifecycle docs
+  and authorized Git after launch. Entry5a27803e plus this12-file change set;
+  Git records publication without rewriting uncommitted-at-launch provenance.
 - The initial October24 request was completed-run analysis and optimization, not a new
   launch or Git action. Entry clean a4476ecc=origin/v0.4-dev; all experiment
   carriers dead, R23 exit0, no active campaign/solver/test found before checks.
@@ -689,19 +698,20 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    requirements; source-grounded H and passing probes do not establish real
    changed-kernel retained benefit. Optional support now makes that distinction
    executable. No production algorithm or core repair is supported by this audit.
-   Keep R4–R23 evidence unchanged and never resume a terminal. The
+   Keep R4–R24 evidence unchanged and never resume a terminal. The
    [R23 terminal audit](../experiments/v0.4/v04-cvrp-r23-r22-final-local-fixed-postrun-20261024.md)
    now confirms repeatable positive case medians but adverse/unstable full-population
    effects, not promotion. Distinguish own-trajectory retention from retaining a
    lead over the comparator. Support guidance and the next research design are
    updated without a production algorithm or gate edit. October24 subsequent
-   approval authorizes R24 whole-C3 autonomous continuation with all safe
-   history and complete public R23 evidence; the existing CLI compares with
-   C3, not R23 A. Use R24's preregistration and exact linked root for checks.
+   approval authorized R24 whole-C3 autonomous continuation; its terminal
+   analysis is now complete. R25 is the next authorized fresh campaign using
+   all22 whole histories and all public R24 screening evidence; the existing
+   CLI compares with C3, not R23 A. Use R25's preregistration and exact root.
    Independently test a future frozen candidate against preserved
    R23 A if warranted. Do not pool these contrasts with original-B0 claims or
    expose private later-stage evidence to H/C. The subsequent Git request covers
-   the already frozen set only; no new experiment or running-input changes.
+   the frozen analysis/support/R25 set only; no running-input changes.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

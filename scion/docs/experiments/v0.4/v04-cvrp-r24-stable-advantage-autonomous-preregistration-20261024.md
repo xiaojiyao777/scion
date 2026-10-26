@@ -1,6 +1,8 @@
 # CVRP R24: stable final advantage from complete C3
 
-State: **running; startup verified, no quality claim**. October24 user explicitly authorizes
+State: **completed valid12/12; no promotion**. See the
+[October26 terminal analysis](v04-cvrp-r24-stable-advantage-autonomous-postrun-20261026.md).
+The startup record below is historical. October24 user explicitly authorizes
 next optimization, experiment design and launch based on the
 [R23 terminal analysis](v04-cvrp-r23-r22-final-local-fixed-postrun-20261024.md).
 R22/R23 are terminal and never resumed. This is fresh autonomous H/C research,

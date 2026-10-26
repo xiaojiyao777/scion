@@ -97,6 +97,58 @@ def assert_internal_consistent(solution):
     assert math.isclose(solution.total_cost, exact_solution_cost(instance, routes),
                         rel_tol=1e-12, abs_tol=1e-6)
 
+def reference_trial_comparison(instance, start, inherited_trials, proposed_trials):
+    # Optional independent worksheet for a claimed change in search capability.
+    # Supply COMPLETE feasible solutions from independently enumerated tiny
+    # trial sets at the SAME start, including unchanged inherited alternatives
+    # when the proposal is an extension. Never substitute a candidate's cached
+    # cost, accepted flag, entry count or number of nominations for these scores.
+    # This rescoring does not prove that your enumeration is complete/correct.
+    def checked_cost(routes):
+        assert_feasible(instance, routes)
+        value = exact_solution_cost(instance, routes)
+        assert math.isfinite(value)
+        return value
+    start_cost = checked_cost(start)
+    inherited_best = min([start_cost] + [checked_cost(r) for r in inherited_trials])
+    proposed_best = min([start_cost] + [checked_cost(r) for r in proposed_trials])
+    return dict(start=start_cost, inherited_best=inherited_best,
+                proposed_best=proposed_best, own_gain=start_cost - proposed_best,
+                additional_gain=inherited_best - proposed_best)
+
+def test_reference_trial_comparison():
+    # Four-arc tours: cheap cycle costs 1+1+1+1=4; crossed tour costs
+    # 1+10+1+10=22. Reverse order is a DISTINCT trial with the SAME cheap cost.
+    # This public symmetric fixture selects no production search mechanism.
+    instance = CvrpInstance(
+        name='public_comparative_witness', capacity=3, depot=0, allowed_routes=1,
+        nodes=tuple(CvrpNode(i, 0., 0., int(i > 0)) for i in range(4)),
+        edge_weights=((0., 1., 10., 1.), (1., 0., 1., 10.),
+                      (10., 1., 0., 1.), (1., 10., 1., 0.)),
+    )
+    start, cheap, reverse = ((1, 3, 2),), ((1, 2, 3),), ((3, 2, 1),)
+    assert exact_solution_cost(instance, start) == 22.
+    assert exact_solution_cost(instance, cheap) == 4.
+    assert exact_solution_cost(instance, reverse) == 4.
+    redundant = reference_trial_comparison(instance, start, [cheap], [cheap, reverse])
+    assert redundant == dict(start=22., inherited_best=4., proposed_best=4.,
+                             own_gain=18., additional_gain=0.)
+    stronger = reference_trial_comparison(instance, start, [], [cheap])
+    assert stronger['own_gain'] == stronger['additional_gain'] == 18.
+    weaker = reference_trial_comparison(instance, start, [cheap], [])
+    assert weaker['own_gain'] == 0. and weaker['additional_gain'] == -18.
+    empty = reference_trial_comparison(instance, start, [], [])
+    assert empty['own_gain'] == empty['additional_gain'] == 0.
+    # If a proposed extra-gain witness fails, record that missing evidence.
+    # More trials or a cheaper result than START cannot replace beating the
+    # inherited best. A corrected/weaker probe may still establish correctness,
+    # but does not repair the original stronger claim. Keep negative controls.
+    # Exact evaluator/cache changes may intentionally preserve every result;
+    # zero additional local gain is then EXPECTED, not a reason to reject them.
+    # A real-entry changed-path witness and paired final-quality evidence remain
+    # separate questions. Do not force a guard, reroll until a pass, or infer
+    # equal-budget speed/quality from this exhaustive untimed tiny worksheet.
+
 def public_instance():
     return CvrpInstance(
         name="public_probe_shape", capacity=6, depot=0, allowed_routes=2,
