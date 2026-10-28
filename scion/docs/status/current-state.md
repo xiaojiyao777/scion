@@ -1,6 +1,6 @@
 # Scion v0.4 Current State
 
-*Current as of: 2026-10-26*
+*Current as of: 2026-10-28*
 
 Enter through [`../../../AGENTS.md`](../../../AGENTS.md), then read
 [`../AGENT_ONBOARDING.md`](../AGENT_ONBOARDING.md) before this snapshot and
@@ -12,6 +12,42 @@ authority or authorize another run.
 
 ## Checkout and verification snapshot
 
+- [R25 terminal audit](../experiments/v0.4/v04-cvrp-r25-counterfactual-evidence-autonomous-postrun-20261028.md):
+  completed October27 16:25:49 Beijing /08:25:49 UTC, valid12/12 screening
+  stages, ten candidates,296 valid pairs/592 sides, no promotion or held-out.
+  All137 provider calls succeed; no quota/resource/solver/feasibility failure.
+  Entry clean1d9845db=local origin/v0.4-dev; all carriers dead, R25 exit0.
+  All stage effects0; C2 expanded0[-2.75,.25], A4 expanded0[-.75,0]. R25 C3
+  gains tai100a but loses X513 at every initial seed. All815 best updates retained.
+  Source delivery and three full100-file heads match; seven superseded heads
+  have ordinary in-memory patch fallback only. No original evidence was changed.
+- The initial October28 request authorizes optimization and a fresh experiment,
+  not Git action.
+  Optional problem-owned scope-reference worksheet plus three regressions address
+  C2's mismatched active-frontier reference; guidance distinguishes nonempty
+  actual-path reuse from C3's unused publication list and net cost from helper
+  savings.35 focused support tests pass; two collected candidate tests and
+  production/core/gates unchanged. [R26 design](../experiments/v0.4/v04-cvrp-r26-scope-and-net-benefit-autonomous-preregistration-20261028.md)
+  keeps complete R22 C3, all23 whole histories and296 R25 screening cells,
+  unchanged gates/model/resources, fresh seeds above320000.142 focused tests
+  pass in39.38seconds; full optional example passes on repository/isolated C3.
+  All100 sources/25 data cases, exact46,995-character question and229-history/
+  30-source indexes pass. No sibling merge or resume.
+- R26 launched once October28 20:33:40 Beijing /12:33:40 UTC, PID1451899,
+  tmux `scion-r26-scope-and-net-benefit-autonomous-20261028`.
+  Exact root: `/home/clawd/research/scion-experiments/v04-cvrp-r26-scope-and-net-benefit-autonomous-20261028`.
+  Initial100-file snapshot, saved input/resources and first successful H's exact
+  question/229-history/30-source indexes match. Three H traces succeed at startup,
+  no errors/zero evaluated stages; no quality claim. Runtime/source/support/
+  science frozen at1d9845db plus this12-file uncommitted set. Only read-only
+  checks/lifecycle docs afterward; no Git action in that launch turn.
+- Subsequent October28 user request authorizes commit/push of this frozen
+  12-file R25 analysis/support/R26 set. Documentation Maintenance profile and
+  read-only Git/diff/carrier/status checks match the handoff; R26 is live at
+  first Code research/zero evaluated stages. No tests, provider/solver rerun or
+  runtime/support/input edit. Git records publication; launch provenance stays
+  unchanged. The executed Protocol retains R25's descriptive version label;
+  its sole difference from R25 is the declared R26 canary seed, not the gates.
 - [R24 terminal audit](../experiments/v0.4/v04-cvrp-r24-stable-advantage-autonomous-postrun-20261026.md):
   completed valid12/12 October25 08:54:22 Beijing /00:54:22 UTC;11 screening,
   one validation, six H/C candidates,384 valid pair rows/768 sides. Carrier dead
@@ -705,13 +741,15 @@ and [operator-only validation](/home/clawd/research/scion-experiments/v04-cvrp-r
    lead over the comparator. Support guidance and the next research design are
    updated without a production algorithm or gate edit. October24 subsequent
    approval authorized R24 whole-C3 autonomous continuation; its terminal
-   analysis is now complete. R25 is the next authorized fresh campaign using
-   all22 whole histories and all public R24 screening evidence; the existing
-   CLI compares with C3, not R23 A. Use R25's preregistration and exact root.
+  analysis is now complete. R25 is also terminal; its October28 audit above
+  records no stable benefit. R26 is the next authorized fresh campaign using
+  all23 whole histories and all public R25 screening evidence; the existing
+  CLI compares with complete R22 C3, not R23 A or a selected R25 branch.
+  Use R26's preregistration and exact root; never resume R25.
    Independently test a future frozen candidate against preserved
    R23 A if warranted. Do not pool these contrasts with original-B0 claims or
    expose private later-stage evidence to H/C. The subsequent Git request covers
-   the frozen analysis/support/R25 set only; no running-input changes.
+   the frozen R25 analysis/support/R26 set only; no running-input changes.
 
 Current work excludes distribution, deployment, installation, packaging, build,
 root/systemd, Trust/Hash authority, object identity, leases, signing, registration,

@@ -2,7 +2,7 @@
 
 *Working branch: `v0.4-dev`*
 
-*Current as of: 2026-10-26*
+*Current as of: 2026-10-28*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
 
@@ -914,11 +914,50 @@ changing the running R15 runtime or scientific inputs.
   first successful H question/217-history/30-source indexes match. Runtime,
   support and science frozen; only read-only startup checks/lifecycle docs and
   requested Git publication afterward. Git records the publication result.
-- [ ] Analyze R25 after terminal evidence, separating research fidelity,
+- [x] Analyze R25 after terminal evidence, separating research fidelity,
   exact-evaluator versus added-capability claims, real-path gain and stable
   complete-solver advantage. C3 remains the local comparator, not R23 A or B0.
   Original-B0 retained improvement stays open; never resume terminals or pool
   incomparable or overlapping contrasts.
+
+### P23 — Matched diagnostic scope and net whole-solver benefit
+
+- [x] October28 user authorizes analysis, optimization and a fresh experiment,
+  not Git publication. [R25 terminal audit](docs/experiments/v0.4/v04-cvrp-r25-counterfactual-evidence-autonomous-postrun-20261028.md):
+  valid12/12 screening stages, ten candidates,296 pairs,137 successful calls;
+  all aggregate medians0, no held-out/promotion. All592 progress rows/815 best
+  updates retained. Source/metric/gate audit passes; no production return repair.
+- [x] Preserve stronger real reference tests while addressing scope and claim gaps:
+  C2's multi-route oracle omits active eligibility; C3's final caller test collects
+  but does not assert cache publication/hits. Optional synthetic same-scope
+  worksheet, three regressions and non-vacuous/net-cost guidance; no gate or
+  production/core change.35 focused support tests pass in23.43seconds.
+- [x] Preregister [R26](docs/experiments/v0.4/v04-cvrp-r26-scope-and-net-benefit-autonomous-preregistration-20261028.md)
+  from unchanged complete R22 C3, all23 whole histories and all296 public R25
+  cells. Preserve whole R25 question/five observations, unchanged gates/model/
+  caps, fresh seeds above320000. H/C choose algorithms/tests, no sibling merge.
+- [x] Finish focused regression, full optional sandbox example, source/data/closure,
+  exact H/C projection and provider/fresh-output/no-overlap checks; freeze before
+  launch. Record provenance as1d9845db plus this uncommitted change set.
+  142 regressions pass in39.38seconds; full example passes repository/isolated C3,
+  collected tests unchanged.100 sources/25 cases/229 history/30 source indexes
+  and exact46,995-character question match; provider health succeeds20:32:36 Beijing.
+- [x] Launch once into fresh R26 output and verify actual source/input/resources
+  and first H. Only read-only checks/lifecycle docs after launch, no competing
+  solver/tests/maintenance or edits to scientific/runtime/support files.
+  Started October28 20:33:40 Beijing /12:33:40 UTC, PID1451899. Actual100-file
+  baseline, saved resources/input and successful first H's exact229-history/
+  30-source indexes and46,995-character question match; three H successes at
+  startup, no errors/zero evaluated stages. No Git action in that launch turn.
+- [x] Subsequent October28 user request authorizes commit/push of the frozen
+  12-file R25 analysis/support/R26 set. Documentation Maintenance profile and
+  read-only Git/diff/carrier/status checks match; R26 remains live at first
+  Code research/zero evaluated stages. No tests, provider/solver rerun or
+  runtime/support/input edit. Git records publication without changing the
+  uncommitted-at-launch provenance or the executed Protocol's older label.
+- [ ] After terminal, audit all cases/seeds and actual same-scope references,
+  real reuse/completed transitions and net final quality. No posthoc extension,
+  terminal resume, relaxed gate or original-B0 superiority claim.
 
 ### v0.4 closeout
 
@@ -929,6 +968,12 @@ changing the running R15 runtime or scientific inputs.
 
 ## Verification snapshot
 
+- R26 prelaunch:142 focused input/support/diagnostic/dependency/Contract tests
+  pass in39.38seconds; full28,780-character optional example passes repository
+  and isolated C3, collected checks AST-unchanged. Ruff F/E9/diff/CLI help pass.
+  100 sources/48 Python/25 cases,23 whole histories/229 safe history indexes,
+  30 source indexes and all296 appended cells match. One health inference and
+  actual first-H/source/resources checks pass. No full-suite rerun claim.
 - R25 prelaunch:139 focused input/support/diagnostic/public-dependency/Contract
   tests pass in39.08seconds. Full updated optional example passes on repository
   and isolated C3 in the existing10-second sandbox; collected candidate checks

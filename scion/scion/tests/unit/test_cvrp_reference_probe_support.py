@@ -168,6 +168,25 @@ def test_missing_customer_cannot_supply_a_comparative_gain():
     assert result.outcome == "passed", result
 
 
+def test_reference_frontier_keeps_full_empty_and_partial_scope_distinct(tmp_path):
+    result = _run(tmp_path, _example("test_reference_matches_eligible_frontier"))
+    assert result.outcome == "passed", result
+
+
+@pytest.mark.parametrize(
+    "replacement",
+    ["True", "not active or bool(touched & active)"],
+    ids=["ignore-frontier", "empty-frontier-is-not-full"],
+)
+def test_reference_frontier_falsifies_mismatched_eligibility(tmp_path, replacement):
+    source = _example("test_reference_matches_eligible_frontier")
+    original = "active is None or bool(touched & active)"
+    assert source.count(original) == 1
+    result = _run(tmp_path, source.replace(original, replacement))
+    assert result.outcome == "failed", result
+    assert result.diagnostic["exception_kind"] == "assertion_error"
+
+
 def test_public_multishape_example_runs_without_disabling_real_paths(tmp_path):
     result = _run(tmp_path, _example("test_real_entry_across_public_route_shapes"))
     assert result.outcome == "passed", result

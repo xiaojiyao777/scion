@@ -1,6 +1,9 @@
 # CVRP R25: counterfactual evidence and stable whole-solver advantage
 
-State: **running; startup verified, no quality claim**. The subsequent October26 request explicitly
+State: **completed/valid12/12; no promotion**. See the
+[October28 terminal analysis](v04-cvrp-r25-counterfactual-evidence-autonomous-postrun-20261028.md).
+Startup observations below are historical, not current process state.
+The subsequent October26 request explicitly
 authorizes next optimization, experiment design, launch, Git commit and push.
 The [R24 terminal analysis](v04-cvrp-r24-stable-advantage-autonomous-postrun-20261026.md)
 and its optional test-support repair precede this fresh campaign. Never resume

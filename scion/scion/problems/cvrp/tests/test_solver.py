@@ -149,6 +149,35 @@ def test_reference_trial_comparison():
     # separate questions. Do not force a guard, reroll until a pass, or infer
     # equal-budget speed/quality from this exhaustive untimed tiny worksheet.
 
+def test_reference_matches_eligible_frontier():
+    # Fixed-start reference worksheet, NOT an algorithm or scheduler override.
+    # Route slots here are stable fixture labels. A real mutable solver may use
+    # route objects instead: carry its actual eligibility into the reference.
+    # Capacity alone does not define an active-frontier candidate population.
+    instance = CvrpInstance(
+        name='public_frontier_reference', capacity=3, depot=0, allowed_routes=2,
+        nodes=tuple(CvrpNode(i, 0., 0., int(i > 0)) for i in range(5)),
+        edge_weights=((0., 1., 10., 1., 1.), (1., 0., 1., 10., 10.),
+                      (10., 1., 0., 1., 10.), (1., 10., 1., 0., 10.),
+                      (1., 10., 10., 10., 0.)),
+    )
+    start, trial = ((1, 3, 2), (4,)), ((1, 2, 3), (4,))
+    assert exact_solution_cost(instance, start) == 24.
+    assert exact_solution_cost(instance, trial) == 6.
+    touched = {i for i, (before, after) in enumerate(zip(start, trial))
+               if before != after}
+    assert touched == {0}
+    for active, expected_gain in ((None, 18.), (set(), 0.), ({0}, 18.),
+                                  ({1}, 0.), ({0, 1}, 18.)):
+        eligible = active is None or bool(touched & active)
+        trials = [trial] if eligible else []
+        result = reference_trial_comparison(instance, start, [], trials)
+        assert result['additional_gain'] == expected_gain
+    # An inactive-route improvement is NOT a counterexample to a restricted
+    # search. Conversely, reducing a failing many-route test to three routes
+    # can remove the eligibility distinction without fixing its reference.
+    # Retain distinct full/empty/partly-active controls and the original claim.
+
 def public_instance():
     return CvrpInstance(
         name="public_probe_shape", capacity=6, depot=0, allowed_routes=2,
@@ -185,6 +214,15 @@ def observe_python_calls(functions):
     # silently bypass identity-sensitive cache/argument dispatch in real VNS.
     # Counts prove ENTRY only, not completion, acceptance or retained benefit.
     # Profiling has overhead: never use this diagnostic to claim timed speedup.
+    # Assert observations for the SPECIFIC claimed path outside the callback.
+    # Merely appending records, or all(check(row) for row in []), is vacuous.
+    # For cache reuse, separately observe a completed publication and a later
+    # hit in the actual caller, checking its value against an independent
+    # reference at the same state. Publication alone does not prove reuse;
+    # supplying a warm cache manually does not establish caller integration.
+    # No qualifying event means coverage is missing, not algorithm rejection.
+    # A useful negative control bypasses only the claimed path, preserving other
+    # real work, and verifies that the claimed-witness assertion then fails.
     counts = {operation.__code__: 0 for operation in functions}
     previous = sys.getprofile()
     def observe(frame, event, arg):
@@ -291,6 +329,10 @@ def test_real_operator_collaborators():
     # Changing eligible routes changes the work/poll count: a completed accepted
     # move is then not evidence of an interrupted commit. Poll clocks establish
     # only that isolated boundary property, not real wall-clock responsiveness.
+    # Fewer scored trials alone do not establish lower whole-call cost: include
+    # key construction, snapshots, lookup, misses, eviction, sorting and polling
+    # when interpreting performance. Cold and warm helper work, ordinary caller
+    # reuse and uninstrumented equal-budget final quality are different claims.
 
 def test_real_entry_across_public_route_shapes(monkeypatch):
     # Multiple synthetic sizes/capacities and seeds; none is a Protocol case.
