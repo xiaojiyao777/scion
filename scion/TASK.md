@@ -1,6 +1,6 @@
 # Scion v0.5 Continuous Algorithm Research Design
 
-*Working branch: `v0.4-dev` · Current as of: 2026-11-15*
+*Working branch: `codex/v0.5-dev` · Current as of: 2026-11-15*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and
 [`current-state.md`](docs/status/current-state.md) before acting.
@@ -29,9 +29,12 @@ The November 15 requests accept the stage-closeout standard, retain the CVRP
 scientific objective and begin detailed v0.5 mechanism/acceptance design. The
 latest request explicitly authorizes committing the documentation, tagging
 `v0.4`, integrating into the default branch and pushing, then entering v0.5.
-The remote default is `master` (there is no `main` or `mian`); the next development
-branch is `codex/v0.5-dev`. The specific interfaces remain a design draft.
-This Git handoff does not launch R27 or change runtime/scientific inputs.
+The closeout commit `eb339d32`, annotated tag `v0.4` and `master` merge `6befa390`
+are now published to origin. The remote default is `master` (there is no `main`
+or `mian`). Active development has moved to `codex/v0.5-dev`, created from that
+merge. v0.5 is formally the active design/development stage; its specific new
+interfaces remain a design draft. This handoff does not launch R27 or change
+runtime/scientific inputs.
 
 Keep two statuses separate:
 
@@ -96,6 +99,9 @@ not themselves change the existing v0.4 direct-v3 runtime.
   benefit; A/B/C contrasts and all parameters to freeze before launch.
 - [x] Route active design to v0.5 and mark the June Evidence Uplift roadmap
   superseded; do not restore its old closeout prerequisites or governance plans.
+- [x] Commit the stage review/R26 audit/v0.5 design, publish annotated `v0.4`,
+  merge `v0.4-dev` into remote-default `master`, and establish `codex/v0.5-dev`.
+  The tag marks stage closure with the original CVRP scientific goal still open.
 
 ## Next falsifiable framework question
 
@@ -181,11 +187,14 @@ No fresh autonomous run or fixed confirmation is prepared by this task.
 ## Verification and handoff
 
 November 14 entry: clean `c82b77ef`, equal to local `origin/v0.4-dev`.
-November 15 publication entry: same HEAD, with the preceding sixteen documentation
-files modified/untracked; all are preserved. Publication adds current README and
-handoff updates. The user explicitly authorizes commit, tag, merge and push.
+November 15 publication: `eb339d32` commits the preceding documentation plus
+README/handoff updates and is the annotated `v0.4` target. `6befa390` merges it
+into `master`; its tree exactly equals the tag tree. Both branches and the tag
+were pushed atomically to origin. `codex/v0.5-dev` starts from this merge; its
+initial changes only update the active development handoff. No history was rewritten.
 November 14 artifact/source calculations, November 15 source/design reviews and
-document-link/diff checks support the review and design. No new runtime suite,
+document-link/diff checks support the review and design (405 local links checked
+before tagging). No new runtime suite,
 provider call, solver run or scientific experiment is claimed. Git publication
 is a subsequent handoff action, separate from the earlier read-only review.
 R26 audit limits include no fresh bootstrap rerun or full public/private context

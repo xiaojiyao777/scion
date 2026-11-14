@@ -32,19 +32,22 @@ Its companion acceptance design separates engineering, real research process,
 controlled mechanism effect and independent algorithm benefit. A/B/C distinguish
 observation from cross-attempt material continuity. These are reviewable design
 drafts, not implemented capabilities, empirical acceptance or launch instructions.
-The latest user request authorizes publishing the `v0.4` stage tag, integrating
-into the default branch and entering `codex/v0.5-dev`. The verified remote default
-is `master`, not `main`/`mian`. The runtime remains v0.4 direct-v3; detailed contract
-adoption and V3/addendum alignment precede implementation. The old June Evidence
-Uplift roadmap is explicitly superseded by this direction.
+**v0.5 is now the active design/development stage on `codex/v0.5-dev`.** The
+`v0.4` stage tag and integration into the remote default `master` have been
+published as explicitly requested. The runtime remains v0.4 direct-v3; detailed
+contract adoption and V3/addendum alignment precede implementation. The old June
+Evidence Uplift roadmap is explicitly superseded by this direction.
 
 ## Checkout and R26 terminal
 
-- Publication entry: branch `v0.4-dev`, `c82b77ef`, equal to freshly fetched
-  `origin/v0.4-dev`, with sixteen preceding documentation edits preserved.
-  Remote `master` is `bafb74a0`, an ancestor of the development line; no divergent
-  mainline changes or existing `v0.4` tag were found. Commit/tag/merge/push are
-  explicitly authorized by the latest request. Recheck Git/tmux at the next entry.
+- Published closeout: annotated `v0.4` points to `eb339d32`; `v0.4-dev` stops at
+  that documentation closeout. `master` merge `6befa390` has the exact tag tree.
+  The two branches and tag were pushed atomically to origin. The actual remote
+  default is `master`; no `main`/`mian` branch was created or renamed.
+- Active branch: `codex/v0.5-dev`, created from `6befa390`; its initial change
+  records the v0.5 development handoff. Runtime source is unchanged from the
+  audited `c82b77ef`; O/M capabilities are not implemented. Recheck live Git/tmux
+  at the next entry rather than treating this document as live process state.
 - All listed experiment tmux panes are dead. R26's pane has a blank exit-status
   field; JSON/metrics establish scientific completion independently.
 - [R26 terminal audit](../experiments/v0.4/v04-cvrp-r26-scope-and-net-benefit-autonomous-postrun-20261114.md):
@@ -150,7 +153,10 @@ fresh seeds with unseen cases. Private later-stage results stay out of H/C.
 November 14 ran read-only artifact/source calculations and documentation checks;
 November 15 adds accepted stage closure, detailed v0.5 design/acceptance,
 source/boundary review and link/diff validation.
-Neither ran a provider, solver, regression suite or new scientific experiment.
+The subsequent Git handoff committed/tagged/merged/pushed these documents and
+established the v0.5 development branch. It checked 405 local links before
+tagging and exact equality of the tag and merge trees. These tasks ran no
+provider, solver, regression suite or new scientific experiment.
 Last recorded shared-runtime full suite: P16, **2678 passed / 1 skipped**,
 runtime `6380a59e`. R26 prelaunch recorded 142 focused regressions and optional
 example checks. These are historical validation, not new results.

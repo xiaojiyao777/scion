@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Stage: v0.4 closed](https://img.shields.io/badge/stage-v0.4%20closed-blue.svg)](#)
+[![Stage: v0.5 design](https://img.shields.io/badge/stage-v0.5%20design-blue.svg)](#)
 
 **Scion**（分支/嫁接）是一个面向组合优化问题的 **LLM 驱动算法自动改进框架**。
 它让 agent 在 problem-owned 边界内持续研究一棵完整、可运行的算法源码树，并用
@@ -20,7 +20,8 @@ Contract、Verification、Protocol 与 deterministic Decision 分离创造性提
 > **历史资料提示**：下文的 v0.2/v0.3 结果、两层搜索和 weight optimization 是历史记录，不是当前 v0.4 的运行入口、架构语义或验收依据。
 
 **v0.4 机制阶段已收官，原科学成功验收部分达成。** Warehouse 独立保留收益已接受；
-CVRP 独立保留收益继续作为未完成目标跟踪。阶段标签为 `v0.4`，下一阶段的
+CVRP 独立保留收益继续作为未完成目标跟踪。`v0.4` tag 已发布并合入 `master`，
+项目正式进入 `codex/v0.5-dev` 的设计研发阶段。
 [v0.5 详细机制与验收](design/v0.5/README.md)围绕持续算法问题、自主观察实验和
 研究材料延续展开。当前 runtime 仍是 v0.4 direct-v3，新能力尚未实施。
 
