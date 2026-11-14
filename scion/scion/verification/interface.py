@@ -6,75 +6,49 @@ inspect a method signature.
 """
 from __future__ import annotations
 
-import ast
-import time
+from typing import Any
 
-from scion.core.operator_interface import parse_execute_signature
-from scion.core.paths import normalize_relative_patch_path
 from scion.core.models import CheckResult, PatchProposal
+from scion.contract.surface_interface import check_surface_interface
 
 
 def check_interface(
     patch: PatchProposal,
     candidate_workspace: str,
     *,
+    problem_spec: Any | None = None,
+    selected_surface: str | None = None,
+    hypothesis: object | None = None,
     operator_execute_signature: str | None = None,
 ) -> CheckResult:
     """V2_interface: operator module has the configured execute signature."""
-    t0 = time.monotonic_ns()
-    expected = parse_execute_signature(operator_execute_signature)
-
-    if patch.action == "delete":
-        return _cr(True, "light", "delete action — no interface check", t0)
-
-    try:
-        normalize_relative_patch_path(patch.file_path)
-    except ValueError as exc:
-        return _cr(False, "light", str(exc), t0)
-
-    return _ast_check(patch, t0, expected.args, expected.expected_args_detail)
-
-
-# ---------------------------------------------------------------------------
-# AST check (same signature rule as ContractGate C7)
-# ---------------------------------------------------------------------------
-
-def _ast_check(
-    patch: PatchProposal,
-    t0: int,
-    expected_args: tuple[str, ...],
-    expected_detail: str,
-) -> CheckResult:
-    try:
-        tree = ast.parse(patch.code_content)
-    except SyntaxError:
-        return _cr(False, "light", "unparseable code", t0)
-
-    classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
-    if not classes:
-        return _cr(True, "light", "no class found — skipped (AST)", t0)
-
-    for cls in classes:
-        for node in ast.walk(cls):
-            if isinstance(node, ast.FunctionDef) and node.name == "execute":
-                args = [a.arg for a in node.args.args]
-                if tuple(args) == expected_args:
-                    return _cr(True, "light", "execute signature ok (AST)", t0)
-                return _cr(
-                    False, "light",
-                    f"execute signature wrong: {args}, expected {expected_detail} (AST)",
-                    t0,
-                )
-
-    return _cr(False, "light", "class found but no execute method (AST)", t0)
-
-
-def _cr(passed: bool, severity: str, detail: str, t0: int) -> CheckResult:
-    elapsed = int((time.monotonic_ns() - t0) / 1_000_000)
-    return CheckResult(
-        name="V2_interface",
-        passed=passed,
-        severity=severity,  # type: ignore[arg-type]
-        detail=detail,
-        elapsed_ms=elapsed,
+    surface_name = _selected_surface_name(
+        selected_surface=selected_surface,
+        hypothesis=hypothesis,
     )
+    return check_surface_interface(
+        patch,
+        problem_spec=problem_spec,
+        selected_surface=surface_name,
+        operator_execute_signature=operator_execute_signature,
+        check_name="V2_interface",
+        severity="light",
+        detail_suffix=" (AST)",
+    )
+
+
+def _selected_surface_name(
+    *,
+    selected_surface: str | None,
+    hypothesis: object | None,
+) -> str | None:
+    if selected_surface is not None:
+        surface = selected_surface.strip()
+        return surface or None
+    if hypothesis is None:
+        return None
+    surface = getattr(hypothesis, "change_locus", None)
+    if not isinstance(surface, str):
+        return None
+    surface = surface.strip()
+    return surface or None

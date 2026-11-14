@@ -1,0 +1,13 @@
+version: "warehouse-direct-outer-smoke"
+
+screening:
+  - 42
+
+validation:
+  - 7
+
+frozen:
+  - 256
+
+canary:
+  - 999

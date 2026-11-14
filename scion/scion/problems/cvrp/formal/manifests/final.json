@@ -1,0 +1,158 @@
+{
+  "cases": [
+    {
+      "bks": 1401.0,
+      "bks_routes": 9,
+      "case_id": "A-n64-k9",
+      "dimension": 64,
+      "source_path": "cvrplib/A/A-n64-k9.vrp",
+      "subset": "A"
+    },
+    {
+      "bks": 13590.0,
+      "bks_routes": 10,
+      "case_id": "X-n139-k10",
+      "dimension": 139,
+      "source_path": "cvrplib/X/X-n139-k10.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 42717.0,
+      "bks_routes": 42,
+      "case_id": "X-n561-k42",
+      "dimension": 561,
+      "source_path": "cvrplib/X/X-n561-k42.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 1496.0,
+      "bks_routes": 10,
+      "case_id": "B-n63-k10",
+      "dimension": 63,
+      "source_path": "cvrplib/B/B-n63-k10.vrp",
+      "subset": "B"
+    },
+    {
+      "bks": 26558.0,
+      "bks_routes": 13,
+      "case_id": "X-n261-k13",
+      "dimension": 261,
+      "source_path": "cvrplib/X/X-n261-k13.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 81923.0,
+      "bks_routes": 44,
+      "case_id": "X-n701-k44",
+      "dimension": 701,
+      "source_path": "cvrplib/X/X-n701-k44.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 827.0,
+      "bks_routes": 10,
+      "case_id": "P-n70-k10",
+      "dimension": 70,
+      "source_path": "cvrplib/P/P-n70-k10.vrp",
+      "subset": "P"
+    },
+    {
+      "bks": 2727.03,
+      "bks_routes": 14,
+      "case_id": "Tai150b",
+      "dimension": 151,
+      "source_path": "cvrplib/tai/tai150b.vrp",
+      "subset": "tai"
+    },
+    {
+      "bks": 72355.0,
+      "bks_routes": 43,
+      "case_id": "X-n1001-k43",
+      "dimension": 1001,
+      "source_path": "cvrplib/X/X-n1001-k43.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 1291.01,
+      "bks_routes": 9,
+      "case_id": "Tai75c",
+      "dimension": 76,
+      "source_path": "cvrplib/tai/tai75c.vrp",
+      "subset": "tai"
+    },
+    {
+      "bks": 25859.0,
+      "bks_routes": 13,
+      "case_id": "X-n308-k13",
+      "dimension": 308,
+      "source_path": "cvrplib/X/X-n308-k13.vrp",
+      "subset": "X"
+    },
+    {
+      "bks": 88965.0,
+      "bks_routes": 95,
+      "case_id": "X-n856-k95",
+      "dimension": 856,
+      "source_path": "cvrplib/X/X-n856-k95.vrp",
+      "subset": "X"
+    }
+  ],
+  "config": {
+    "require_benchmark_feasible": true,
+    "require_bks": true,
+    "require_bks_routes": true,
+    "seeds": [
+      157,
+      163,
+      167,
+      173,
+      179,
+      181,
+      191,
+      193
+    ],
+    "source_label": "vrp_results_full_experiment_seed0_final",
+    "subsets": [
+      "A",
+      "X",
+      "B",
+      "P",
+      "tai"
+    ]
+  },
+  "metadata": {
+    "baseline_gap_pct_summary": {
+      "max": 9.880505820023975,
+      "median": 4.639692902803075,
+      "min": 2.0556227327690446,
+      "n_ge_2_pct": 12,
+      "n_le_1_pct": 0
+    },
+    "n_input_rows": 220,
+    "n_selected_cases": 12,
+    "seed_list": [
+      157,
+      163,
+      167,
+      173,
+      179,
+      181,
+      191,
+      193
+    ],
+    "selection_policy": "outcome-blind final retention replay fixed before R3; post-campaign manual only and disjoint from every protocol split",
+    "source_label": "vrp_results_full_experiment_seed0_final",
+    "source_path": "vrp/results/full_experiment_seed0_final.csv",
+    "stage": "final",
+    "subset_filters": [
+      "A",
+      "X",
+      "B",
+      "P",
+      "tai"
+    ],
+    "time_limit_policy": "post_campaign_manual.dimension_only"
+  },
+  "problem_id": "cvrp",
+  "schema": "scion.cvrp_case_manifest.v1"
+}

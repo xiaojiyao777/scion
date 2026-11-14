@@ -1,176 +1,205 @@
-# Sprint N1 — Objective / Benchmark Layer (W15 迁移 + W1 + W4)
+# Scion v0.5 Continuous Algorithm Research Design
 
-*Branch: `v0.3-dev`*  
-*Scope: W15 warehouse 真迁移, W1 scoring decouple, W4 MILP integration*  
-*前置: Sprint N0 完成*
+*Working branch: `v0.4-dev` · Current as of: 2026-11-15*
 
----
+Follow [`../AGENTS.md`](../AGENTS.md) and
+[`current-state.md`](docs/status/current-state.md) before acting.
+[Architecture V3](design/scion-architecture-v3.md) is the sole architecture
+source; the [direct-runtime addendum](design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)
+describes current implementation. The
+[stage review](docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md)
+records the accepted v0.4 stage closeout and its evidence. The
+[v0.5 design](design/v0.5/README.md) specifies the next mechanism and acceptance
+draft; it is not an implemented runtime or second architecture authority.
 
-## 0. 开发约束
+## Objective and priority
 
-- **新建** `scion/scion/problem/` 模块（contracts, spec, objectives, loader）
-- **新建** `scion/problems/toy_tsp/` MWE
-- **新建** `scion/scion/tests/test_problem_adapter.py`
-- **不动** `core/campaign.py`（N0 不改 core 调用方式，N1 再切）
-- **不动** `protocol/evaluation.py`（现有 lexicographic_compare 保留）
-- **不动** `problems/warehouse_delivery/`（N1 再做 adapter 封装）
-- 所有现有 tests 必须继续 pass
-- 使用 `/home/clawd/miniconda3/envs/claw/bin/python -m pytest`
+Scion should enable its own agent to conduct sustained combinatorial algorithm
+research and produce independently retained complete-solver improvements.
+This includes acquiring evidence, testing explanations, revising conclusions and
+continuing research; formal acceptance remains deterministic and independent.
 
----
+The November 14 user request prioritizes a stage retrospective and deep mechanism
+review over continuing the support-patch / experiment / analysis cycle. On
+November 15 the user explicitly accepts this direction:
 
-## 1. T1 — ProblemAdapter Protocol + 数据类型
+> 让 agent 围绕一个持续的算法问题，自主观察、实验、修正解释，再提交正式 H/C。
 
-### 新建 `scion/scion/problem/contracts.py`
+The November 15 requests accept the stage-closeout standard, retain the CVRP
+scientific objective and begin detailed v0.5 mechanism/acceptance design. The
+latest request explicitly authorizes committing the documentation, tagging
+`v0.4`, integrating into the default branch and pushing, then entering v0.5.
+The remote default is `master` (there is no `main` or `mian`); the next development
+branch is `codex/v0.5-dev`. The specific interfaces remain a design draft.
+This Git handoff does not launch R27 or change runtime/scientific inputs.
 
-核心类型：
-- `CheckReport(frozen dataclass)`: passed: bool, reasons: tuple[str, ...]
-- `LowerBoundEstimate(frozen dataclass)`: metric_name, value, kind ("hard"|"instance"|"heuristic"), note
-- `SolverArtifact(frozen dataclass)`: raw_output, objective, feasible, normalized_solution
-- `ProblemAdapter(Protocol, runtime_checkable)`: 9 个方法
+Keep two statuses separate:
 
-ProblemAdapter 方法清单：
-1. `render_problem_summary() -> str`
-2. `render_operator_interface() -> str`
-3. `load_instance(instance_path: str) -> Any`
-4. `deserialize_solver_output(raw_output, instance) -> SolverArtifact`
-5. `check_solution_consistency(artifact, instance) -> CheckReport`
-6. `check_feasibility(artifact, instance) -> CheckReport`
-7. `recompute_objective(artifact, instance) -> Mapping[str, int|float]`
-8. `estimate_lower_bound(metric_name, instance_paths) -> LowerBoundEstimate | None`
-9. `compare_objectives(candidate, champion) -> ObjectiveComparison`
+- **Scientific objective:** Warehouse retained improvement is accepted; CVRP
+  retained improvement remains unconfirmed. Original v0.4 scientific acceptance
+  is not complete or relabeled as passed.
+- **Framework evolution:** assess the current mechanism and design the next
+  version without waiting indefinitely for a positive CVRP result. v0.5 must
+  represent a reviewable capability change and evaluation, not a claim that
+  the old unmet target has been satisfied.
 
-接口参考：`reviews/v0.3-design-detail-plan.md` §3.4
+## Accepted v0.4 stage closeout
 
-### 验收
-- [x] import 成功
-- [x] `isinstance(adapter, ProblemAdapter)` 可用
+The milestone accepted from section 8 of the
+[stage review](docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md)
+is a cross-problem research foundation demonstrated through substantive algorithm
+work, continuous verified source, trustworthy scientific decisions and an explicit
+account of its effectiveness and limits. It has five evidence conditions:
+generic trusted execution; real sustained algorithm work; resolved scientific
+outcome reporting; usable source/input/evidence handoff; and a distinct testable
+next-version question. The evidence mapping is kept in that report.
 
----
+**v0.4 mechanism stage is closed; original scientific success acceptance is
+partially met.** Warehouse retained improvement is accepted; CVRP retained
+improvement is unconfirmed and carried forward. The user explicitly accepted
+this stage decision; the original scientific criterion has not been rewritten.
+No further R27 is required for closure. v0.5 is in detailed design, not implemented
+or empirically accepted. The annotated `v0.4` tag records the mechanism-stage
+closeout and the unmet CVRP goal. Integration and the new development branch do
+not themselves change the existing v0.4 direct-v3 runtime.
 
-## 2. T2 — ProblemSpecV1 Strict Schema
+## Completed stage review
 
-### 新建 `scion/scion/problem/spec.py`
+- [x] Read canonical entry, V3/addendum and relevant design/source evidence;
+  verify live checkout and carrier state.
+- [x] Audit [R26 terminal evidence](docs/experiments/v0.4/v04-cvrp-r26-scope-and-net-benefit-autonomous-postrun-20261114.md):
+  completed October 29 14:30:25 Beijing, 12 screening stages, nine evaluated
+  candidates, 324 valid pairs, 162 successful calls, no held-out/promotion.
+  All aggregate stage medians are zero; preserve one additional Code abandonment.
+- [x] Preserve positive research findings: nonempty real cache reuse and real
+  changed-path gain/retention witnesses now exist; these do not prove net gain.
+  No observed source-delivery/provider/best-return defect explains R26.
+- [x] Publish the cross-problem stage review separating execution correctness,
+  research capability/efficiency and retained algorithm improvement. Warehouse
+  status is inherited from accepted reports, not reaudited historical raw runs.
+- [x] Identify source-supported gaps: H cannot acquire new runtime observations;
+  C execution mainly yields pass/fail; research materials have weaker continuity
+  than source; cumulative formal comparisons do not isolate each patch's cause.
+- [x] Define a minimal v0.5 proposal and falsifiable assessment without changing
+  production code or scientific gates.
+- [x] Replace accumulated status/task chronology with current facts and priorities.
+  Historical P0–P23 work remains in Git at `c82b77ef` and dated experiment docs.
+- [x] Record the November 15 accepted research direction and finite milestones,
+  then the user's explicit v0.4 stage-closeout decision, preserving the unmet
+  original scientific success criterion.
+- [x] Write the [detailed mechanism](design/v0.5/v0.5-continuous-algorithm-research-design.md):
+  question/branch/attempt/campaign roles, isolated subject/analysis observations,
+  current-attempt H→C handoff, persistent ordinary materials, source retention,
+  limits/failures and prospective architecture changes.
+- [x] Write [acceptance and comparison design](design/v0.5/v0.5-research-mechanism-acceptance.md):
+  engineering, real research process, mechanism effect and independent algorithm
+  benefit; A/B/C contrasts and all parameters to freeze before launch.
+- [x] Route active design to v0.5 and mark the June Evidence Uplift roadmap
+  superseded; do not restore its old closeout prerequisites or governance plans.
 
-- Pydantic BaseModel with `model_config = ConfigDict(extra="forbid")`
-- 辅助 spec：ObjectiveMetricSpec, OperatorInterfaceSpec, OperatorCategorySpec, LLMHintsSpec, FamilyTaxonomySpec, ProblemAdapterRef
-- ProblemSpecV1 字段：id, display_name, root_dir, description, search_space, solver, parameter_search, operator_interface, objectives, llm_hints, family_taxonomy, adapter
-- `@model_validator`: objectives 唯一性, priority 连续性, adapter import_path 前缀校验
+## Next falsifiable framework question
 
-接口参考：`reviews/v0.3-design-detail-plan.md` §3.3
+**Does safe public measurement before submission improve the agent's ability to
+diagnose an algorithm, reject incorrect explanations and choose useful research
+actions under comparable resources?**
 
-### 验收
-- [x] 合法 YAML 加载成功
-- [x] 非法字段被拒绝（extra="forbid"）
-- [x] priority 不连续时报错
+The research direction and v0.4 closeout are accepted. Detailed contracts are
+now written for review; they are not yet accepted architecture changes or an
+instruction to spend provider/solver budget. The next work is:
 
----
+1. Review/adopt the concrete capability and exposure changes in the v0.5 design,
+   then synchronize V3/addendum before implementation. The draft keeps one H/C,
+   C's bounded handoff and the exact failed-falsifier rule; it adds no question
+   controller, history authority or research-quality gate.
+2. Implement the smallest observation slice O: fixed subject execution separated
+   from agent analysis, public source/input boundaries, current-attempt materials,
+   H→C handoff, actual source/input/script audit copies, charged resources and
+   explicit incomplete/error outcomes.
+3. Add slice M separately: cross-attempt ordinary materials, actual source copies
+   for longer-lived verified parents before cleanup, correction without erasure
+   and explicit fresh-campaign import.
+   Materials never select an executable head or resume a terminal campaign.
+4. Pass boundary checks and obtain real autonomous investigation/correction/reuse
+   traces. These prove capability existence, not mechanism superiority.
+5. Use public pilots and stated budgets to freeze the full preregistration:
+   task population, repeats, effect/precision requirements, resource limits,
+   candidate nomination, held-out use and stopping rules.
+6. Compare A/B/C (existing capability / observation / observation + continuity),
+   separately estimating B−A and C−B. Complete the declared matrix and independent
+   algorithm assessment; report supported, unsupported and inconclusive results.
 
-## 3. T3 — Generic Objective Comparator
+Slice E and scientific success are separate. A valid completed negative or
+uncertain matrix can support stage closure; it cannot satisfy a positive
+mechanism-effect or retained-improvement claim. Missing launch parameter values
+are explicitly tracked in the acceptance design, not silently defaulted.
 
-### 新建 `scion/scion/problem/objectives.py`
+Do not bundle a new model, more branches, larger budgets, multiple agents and
+new tools into one comparison and attribute success to a single mechanism.
+Research-quality assessment is framework-development evaluation, not a new
+production candidate gate. Useful negative research does not by itself satisfy
+the retained-improvement objective.
 
-- `MetricComparison(frozen)`: name, candidate_value, champion_value, signed_delta, relation, decisive
-- `ObjectiveComparison(frozen)`: outcome ("win"|"loss"|"tie"), decisive_metric, scalar_delta, metrics
-- `compare_lexicographic(metric_specs, candidate, champion) -> ObjectiveComparison`
+## Scientific work remaining open
 
-### 验收
-- [x] win/loss/tie 各种组合覆盖
-- [x] 与现有 `protocol/evaluation.py` 的 `lexicographic_compare` 行为一致（property-based 对比）
+- [ ] Establish CVRP complete-solver advantage under its declared Protocol,
+  including independent retention against the explicitly named baseline.
+  Distinguish unchanged B0, constructor-repaired B0-fixed and local C3 contrasts.
+- [ ] Assess framework research effectiveness with repeated campaigns and
+  resource/uncertainty reporting. One promotion, better self-tests or a long
+  transcript does not prove a general mechanism's superiority.
 
----
+R24–R26 compare against complete R22 C3. Known screening cases are adaptive;
+expanded stages rerun initial cells; ordinary evaluation is champion-first.
+Do not pool repeats, remove losses, extend after seeing outcomes or turn private
+later-stage evidence into public input. All prior terminals stay terminal.
+No fresh autonomous run or fixed confirmation is prepared by this task.
 
-## 4. T4 — Adapter Loader
+## Boundaries for subsequent work
 
-### 新建 `scion/scion/problem/loader.py`
+- Core remains problem-neutral. Algorithms, objective/feasibility semantics,
+  public development inputs, surfaces and telemetry stay problem-owned.
+  Do not extend generic `OperatorConfig`/operator-pool schema debt.
+- LLM observations, plans, notes, H/C remain tainted; they cannot write Protocol
+  results, Safe Features, branch/champion state or promotion decisions.
+- Preserve Contract, Verification, paired Protocol, held-out isolation,
+  feasibility/objective checks and deterministic Decision. Novelty, preferred
+  mechanisms, prose quality and telemetry completeness are not extra gates.
+- Preserve complete verified source continuation and exact candidate reuse.
+  Parent/ablation comparisons require actual saved complete source copies;
+  no executable reconstruction from historical patches or automatic sibling merge.
+- Public observations need safety preflight and isolation. Negative measurement
+  does not affect Decision and cannot clear an exact-patch failed-falsifier veto.
+  Exported H/C cannot be repaired, replayed or silently rebound.
+- Ordinary completed materials can carry research across fresh attempts;
+  they do not resume old mutable branch/provider/stage state. Complete safe
+  evidence stays retrievable, without silent truncation, top-k or summary replacement.
+- Explicit operational limits and charged typed transient redispatch remain
+  separate from scientific quality. Usage-quota exhaustion remains terminal.
+- No Trust/Hash authority, identity, leases, signing, registration, receipts,
+  duplicate closure, distribution, deployment, packaging, build or service work.
 
-- `load_problem_adapter(spec: ProblemSpecV1) -> ProblemAdapter`
-- 路径校验：pinned to `scion.problems.*`
-- 动态 import (`importlib.import_module` + `getattr`)
-- Protocol isinstance 检查
-- `ProblemAdapterLoadError(RuntimeError)` 异常
+## Verification and handoff
 
-### 验收
-- [x] 能加载 toy_tsp adapter
-- [x] 路径不合法（不以 `scion.problems.` 开头）时抛 ProblemAdapterLoadError
-- [x] 加载的类不满足 Protocol 时抛错
+November 14 entry: clean `c82b77ef`, equal to local `origin/v0.4-dev`.
+November 15 publication entry: same HEAD, with the preceding sixteen documentation
+files modified/untracked; all are preserved. Publication adds current README and
+handoff updates. The user explicitly authorizes commit, tag, merge and push.
+November 14 artifact/source calculations, November 15 source/design reviews and
+document-link/diff checks support the review and design. No new runtime suite,
+provider call, solver run or scientific experiment is claimed. Git publication
+is a subsequent handoff action, separate from the earlier read-only review.
+R26 audit limits include no fresh bootstrap rerun or full public/private context
+projection audit; consult its postrun before extending any claim.
 
----
+Last recorded shared-runtime full suite: P16 at `6380a59e`, 2678 passed /
+1 skipped. R26 prelaunch: 142 focused regressions plus optional-example checks.
+For later tests use `env PYTHONPATH=scion:. /home/clawd/miniconda3/envs/claw/bin/python`
+from the repository root. Shared-boundary changes need suitable focused/full
+regression and a prospective independent problem control; ordinary CVRP-only
+research does not make Warehouse a permanent prerequisite.
 
-## 5. T5 — toy_tsp MWE
-
-### 新建 `scion/problems/toy_tsp/`
-
-```
-problems/toy_tsp/
-├── __init__.py
-├── adapter.py          # ToyTspAdapter(ProblemAdapter)
-├── models.py           # TspInstance, TspSolution
-├── oracle.py           # tour 有效性 + 距离计算
-├── solver.py           # nearest-neighbor + 2-opt
-├── operators/
-│   ├── __init__.py
-│   └── two_opt.py      # 2-opt 算子
-├── data/
-│   ├── tsp_10.json     # 10 点实例
-│   └── tsp_20.json     # 20 点实例
-├── problem.yaml        # ProblemSpecV1 格式
-└── tests/
-    └── test_tsp.py     # 基本冒烟
-```
-
-要求：
-- ToyTspAdapter 实现 ProblemAdapter 的全部 9 个方法
-- 极简实现，不追求质量
-- `estimate_lower_bound` 可返回 None（或用简单的 MST lower bound）
-
-### 验收
-- [x] `load_problem_adapter` 可加载
-- [x] 所有 Protocol 方法可调用且返回正确类型
-- [x] solver 能在 toy instance 上跑出合法 tour
-
----
-
-## 6. T6 — problem 模块入口 + 测试
-
-### 新建 `scion/scion/problem/__init__.py`
-
-导出公共 API：
-- ProblemAdapter, ProblemSpecV1, ProblemAdapterRef
-- ObjectiveMetricSpec, ObjectiveComparison, MetricComparison
-- CheckReport, LowerBoundEstimate, SolverArtifact
-- load_problem_adapter, compare_lexicographic
-
-### 新建 `scion/scion/tests/test_problem_adapter.py`
-
-测试清单：
-1. ProblemSpecV1 schema 验证（合法 / extra field / priority 不连续 / adapter 路径非法）
-2. adapter loader（正常加载 / 路径非法 / Protocol 不满足）
-3. generic comparator 单元测试（win / loss / tie / multi-metric / tie-tolerance）
-4. toy_tsp adapter 集成测试（load_instance + deserialize + check_feasibility + recompute_objective + compare）
-
-### 验收
-- [x] `pytest scion/scion/tests/test_problem_adapter.py` 全绿
-- [x] `pytest` 全量不回退
-
----
-
-## 7. 任务依赖
-
-```
-T1 (contracts) ──→ T2 (spec) ──→ T4 (loader)
-       │                              │
-       └──→ T3 (objectives) ──→ T5 (toy_tsp) ──→ T6 (entry + tests)
-```
-
-T1 和 T3 可并行。T2 依赖 T1（spec 引用 Protocol 类型）。T4 依赖 T2。T5 依赖 T1+T3+T4。T6 最后做。
-
----
-
-## 8. N0 完成标志
-
-- [ ] `scion/scion/problem/` 模块存在且可 import
-- [ ] `scion/problems/toy_tsp/` MWE 通过 adapter 全部方法
-- [ ] 所有现有 warehouse 测试不回退
-- [ ] `pytest` 全绿
-- [ ] 本文档 checklist 全部打勾
+Evidence: [current state](docs/status/current-state.md),
+[stage review](docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md),
+[v0.5 design and acceptance](design/v0.5/README.md),
+[R26 audit](docs/experiments/v0.4/v04-cvrp-r26-scope-and-net-benefit-autonomous-postrun-20261114.md),
+[experiment index](docs/experiments/v0.4/README.md).

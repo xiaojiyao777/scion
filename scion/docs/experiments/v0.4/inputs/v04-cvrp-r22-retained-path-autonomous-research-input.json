@@ -1,0 +1,677 @@
+{
+  "current_question": "R22 CURRENT SOURCE AND RESEARCH QUESTION (supersedes historical present-tense descriptions below). Continue autonomous CVRP research from the unchanged complete R21 starting champion, the same final R19 A3 source tested as the R20 candidate. No R21 candidate is promoted, selected or merged into this baseline. This is a fresh campaign, not restoration of terminal branch state. Actual complete source determines inheritance; old hypotheses and sibling history do not. Improve complete-solver final quality and stability at the same budgets while preserving feasibility and declared objectives. H/C retain algorithm and test choice; no target file, required mechanism, mandatory probe, prescribed phase schedule or new quality gate is selected by the host.\n\nR22 RESEARCH EMPHASIS: distinguish real entry, completed computation, an accepted feasible change, and objective improvement retained in the final returned solution. For a claim about a changed path, investigate its actual unforced caller and collaborators; a helper call or counter alone does not show completion. An expired return is not evidence of a completed search pass. Independently recompute feasibility and objective from actual routes at the relevant transition and at the real solver return. A later better solution may legitimately replace the earlier routes: objective retention does not require identical route structure. If a local improvement is worse than the incumbent best, its rejection does not prove a retention bug. If completion or gain is not observed, say so rather than force guards, replace ordinary operators, or weaken assertions to manufacture coverage. A no-loss assertion on one synthetic run does not demonstrate improvement against the comparator, causal attribution to the latest edit, production-size coverage, or independent retained superiority. More iterations are not the research outcome.\n\nOptional public examples now preserve operator identity during call observation and include an independently rescored real-entry-to-return retention example. They are adaptable research support, not an algorithm prescription or a required testing style. Observe the actual changed mechanism when making a mechanism-specific claim; observing the enclosing search cannot isolate an inner change. Instrumentation perturbs timing, so diagnostic probes are not throughput benchmarks. Check reference arithmetic independently and match initial state, active frontier and instrumentation when comparing interruption cutoffs.\n\nR22 DESIGN AND HISTORY. Initial screening remains five cases at four seeds each; required expansion remains all six cases at eight seeds each. Scientific gates, per-solve limits and total resource bounds are unchanged, with prospectively fresh seeds. All twenty supplied history files are loaded whole in chronological order, including all twelve R21 screening records, not a favorable subset. All five prior observations and the complete preceding R21 question are preserved below as historical context; old current-source, population and seed statements apply only to their original runs. This run compares each cumulative branch to the R19 A3 local baseline (or an actual later promoted champion), not original B0 or B0-fixed.\n\nBEGIN COMPLETE HISTORICAL R21 QUESTION\nR21 CURRENT SOURCE AND QUESTION (supersedes historical present-tense descriptions below). Continue autonomous solver research from the exact complete final R19 A3 source also preserved as the R20 candidate snapshot, not from R12-A-fixed, original B0 or B0-fixed. This is a fresh campaign with that source as its local comparison baseline, not a promotion claim, state restore or sibling merge. The supplied source, not a hypothesis's inheritance prose, determines what is implemented. It includes the A-branch exact SWAP* insertion cache, removal-saving supplemental exchanges and ordinary-swap demand-feasible enumeration, plus earlier inherited research and the common constructor repair. It does not include the B-branch Or-opt/singleton-relocate caches or C-branch directed two-opt-star prefix/interval edits merely because their experiments appear in history. Current source remains an ordinary editable research head. Improve reliable complete-solver quality across seeds and cases while preserving feasibility and declared objectives. H/C retain algorithm and test choice; no target file, mandatory read, required mechanism, fixed phase schedule or extra quality gate is selected by the host.\n\nR21 CURRENT DESIGN. Initial screening uses five cases at four seeds each; mandatory expansion uses all six cases at eight seeds each. Case populations, scientific thresholds, practical margins, per-solve limits and algorithm budget fractions are unchanged. The following older question is retained whole as historical context; every 'current', 'prospective', initial-source and seed-count description inside it refers to its own earlier run, not R21. Earlier contrasts remain distinct and must not be pooled as independent confirmation. All nineteen supplied history files are loaded whole in chronological order; the twelve R19 screening records are not a favorable subset.\n\nBEGIN COMPLETE HISTORICAL R19 QUESTION\nContinue autonomous CVRP research from the complete R12-A-fixed source tested as R13's candidate. This ordinary local starting tree includes the independently engineered common constructor repair; that operator-assisted repair is not an autonomous H/C discovery. It is not a promoted or retained-confirmed champion. R13 SCREENING ONLY was a provider-free, counterbalanced whole-bundle comparison against B0-fixed, not original B0. All 24 pairs were valid with no runtime, feasibility or fleet failures; 12 AB and 12 BA orders, equal dimension-based limits 60/90/120/180/240 seconds and canary 10 seconds. Case W/L/T 4/1/1, case-median distance improvement 91.5, bootstrap CI [-36,296.75], SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN / continue_explore, terminal NOT_CONFIRMED. This is not promotion. In seed order 120011/120017/120041/120047, B0-fixed minus candidate distances were: B-n34-k5 [0,0,0,0]; tai100a [163,301,200,156]; X-n351-k40 [648,368,367,328]; A-n54-k7 [0,3,2,1]; X-n190-k8 [0,-274,-144,134]; X-n513-k21 [226,226,226,226]. Corresponding case medians: 0,181.5,367.5,1.5,-72,226. Do not pool this contrast with R12's comparison to R11 B or historical original-B0 comparisons. R13 phase observations: tai100a candidate ALNS iterations [70,66,77,71] versus B0-fixed [25,26,30,37]. X-n351-k40 has zero ALNS in both arms for all four seeds; candidate initial VNS takes 138.476-138.556 seconds. X-n513-k21 candidate has zero ALNS and initial VNS 136.846-137.011 seconds; B0-fixed has one ALNS iteration per seed after 93.960-96.333 seconds of initial VNS. On X-n513 both arms' post-initial objectives equal their final objectives. The large-case effects therefore cannot be attributed to lazy worst removal or later ALNS learning. X-n190-k8 candidate iterations [2,4,3,2] versus B0-fixed [4,5,3,2]; candidate embedded VNS consumes 57.786-64.337 seconds of the approximately 69.84-second algorithm-local search allowance. Both arms start post-initial search at distance 17876; candidate subsequent gains [0,0,31,134] versus B0-fixed [0,274,175,0]. Candidate source has 15 destroy-repair pairs with randomized without-replacement first trials before learned selection, and segment_length=100: these 2-4 iterations never complete first trials or reach an in-loop segment update. This is an execution/source fact, not proof that any pair causes harm, not a required schedule or an activity gate. The inherited early phase handoff remains guarded by alns_threshold=2000 while screening has at most 512 customers, so it is inactive here. Best-improvement SWAP* still ranks all eligible route pairs before examining up to 10 pairs and 24 customer links per pair; a post-ranking cap does not itself bound ranking cost. These facts support source-grounded research, not a prescribed fix. Distinct R12 screening context: final A passed six-case expanded screening against R11 B, W/L/T 3/0/3, median +2.25, CI [0,11.25], 24 valid pairs; seed deltas 110017/110023/110039/110051 were B-n34-k5 [0,0,0,0], tai100a [17,53,19,-6], X-n351-k40 [-109,-75,84,99], A-n54-k7 [0,0,2,0], X-n190-k8 [0,-44,0,3], X-n513-k21 [28,8,8,8]. Both large cases had zero ALNS in both arms. A combined best-improvement SWAP* with lazy marginal-saving worst removal; the latter cannot explain the large-case effects. R12 final B failed its initial screen (1/1/1, median 0, CI [-45.5,10.5]); C's expanded 3/1/2, median 1.25, CI [-3.25,50.5] remained uncertain. Its two-pair cap followed exhaustive opportunity ranking, not the cheap bound initially proposed. All ten R12 ordinary history rows are appended in order, including the primary-target Contract rejection, rather than selecting only favorable results. Older R11 negative/uncertain candidates and R10's original-B0 screening pass remain separate historical contexts, not confirmations of this starting source. The four R4/R5/R6/R8 observations remain unchanged and R13 is a fifth distinct observation; complete ordered R3-R3i/R7/R9/R11/R12 scientific history is available to H. Can autonomous H/C improve this complete algorithm's distance quality and stability at the same budgets while preserving feasibility and fleet protection? Select the mechanism and implementation autonomously: no target file, mechanism, phase schedule, patch, required history action, novelty requirement or telemetry activity gate is prescribed. Current comparisons are against the fresh local R12-A-fixed champion (or a later local champion), not original B0 and not B0-fixed. Respect complete paired evidence and exact-candidate later-stage reuse. Private later-stage cases, outcomes and engineering regression diagnostics are deliberately absent from this input. R14 SCREENING ONLY, a separate autonomous campaign against the same complete R12-A-fixed local champion, completed twelve stages over ten evaluated cumulative candidates with 108 valid pairs and no promotion. All twelve ordinary R14 screening records are appended in order, including negative and uncertain results. Its first pair-weight candidate expanded to 2/0/4, median 0, CI [0,27.25]; its nearest-neighbor shortlist candidate expanded to 2/1/3, median 0, CI [-0.25,12.25]. Later initial screens had medians 0,0,0,0,-3.5,-60.5,0,-10 across the successive evaluated candidates, not isolated incremental effects. All 28 X-n351-k40 paired observations had zero ALNS in both arms. Several later proposals discussed X-n190-k8, but their three-case initial screens did not include X-n190-k8 or X-n513-k21; those claims were not tested on the named population. The last B proposal added a frozen-root one-hop frontier while the inherited per-call time quantum remained in the scheduler: its negative result describes that cumulative bundle, not an isolated replacement. None of the R14 final branch trees is selected or merged into this fresh starting source; the complete initial tree is still R12-A-fixed. This is an explicit fresh-source selection, not restoration or rollback of a live branch. For this prospective R19 run, initial screening includes B-n34-k5, tai100a, X-n351-k40, X-n190-k8 and X-n513-k21 at four seeds each; expansion adds A-n54-k7 and uses six seeds for all six cases. Scientific thresholds and equal solver budgets are unchanged. This outcome-informed development design changes the initial population, so do not pool it with R14. Use the actual source and comparator to distinguish retained, replaced and removed behavior; measurements of a cumulative candidate against the champion do not isolate its latest change. Execution-path observations and measured case coverage bound causal claims, but do not prescribe an algorithm, mandatory ablation, read action, rollback or activity gate. R15 SCREENING AND VERIFICATION ONLY: all twelve ordinary safe records (eleven screening stages and one Verification rejection) are appended in order, without selecting favorable candidates. The pair-bound and fused-oracle candidates showed large localized X-n351-k40 gains (case medians +11869 and +11810) and reached 2-3 ALNS iterations there, but their overall initial case medians were zero and other cases regressed. These are uncertain bundle-level discovery leads, not proven semantics-preserving accelerators or a required research direction. Three other cumulative candidates modified an initial-search helper connected only to a greater-than-2000-customer path, inactive on the screened 33-512 customers. Their measured deltas do not test that helper. A subsequent real-collaborator implementation was rejected by Verification despite a passing mock-based probe; consult the ordinary record and actual source rather than inventing methods. A separate branch expanded to +11.5 [0,43.25] across six screening cases; its later-stage details are deliberately not supplied. The last fresh sampled-SWAP candidate had initial case median +9 [-140,16], with mixed seed signs and X-n351-k40 losses; it is not automatically preferred. Repeated unchanged-champion results at identical screening seeds varied, so small deltas need fresh independent counterbalanced confirmation before superiority claims. No R15 candidate is copied or merged into the initial source. This fresh campaign still uses the unchanged complete R12-A-fixed starting tree, unchanged five-case initial/six-case expanded population, solver budgets and scientific thresholds. H/C choose the algorithm and tests; safe development failure hints and public examples are non-evidentiary support, not prescribed mechanisms or extra acceptance gates. R16 SCREENING AND PUBLIC DEVELOPMENT ONLY: all six ordinary safe screening records are appended in order, including negative and uncertain outcomes. There are five distinct screened cumulative candidates and 74 valid screening pairs; an expansion evaluates the exact same candidate again, not a sixth new algorithm. Initial workload-adaptive SWAP*, sweep-DP, capacity-filtered SWAP*, density refinement, and optional positive-saving Clarke-Wright merging have initial case medians of zero. Density refinement expands to 3/0/3, median +4.75, CI [0,16.75], with X-n513-k21 +16 at all four seeds and X-n351-k40 mixed seed signs with median +9.5; both large cases still have zero ALNS in both arms. These are small adaptive-screening bundle signals, not independent confirmation or an isolated latest-change effect. The sweep-DP source is reachable only above 1500 customers under its production threshold, outside the 33-512 customer screening range. Its forced-zero-threshold self-test also bypasses initial VNS: passing that helper/forced-path probe is not production-path activation evidence. The density-refinement probe substitutes empty-returning helpers and therefore checks dispatch, not real collaborator compatibility or route quality. The optional-merge probe wraps real construction through the real solve entry, but its initial quality screen still fails; integration correctness does not establish improvement. These public source/probe facts bound claims without requiring a particular test, file, algorithm or activity gate. No R16 candidate is selected or merged into the fresh starting source. Private later-stage outcomes and provider operational failures are absent from the scientific history. The complete starting source, case populations, solver limits and scientific gates remain unchanged; H/C choose what to investigate. R17 SCREENING AND PUBLIC DEVELOPMENT ONLY: all eleven ordinary screening records are appended in order, covering seven cumulative candidates and 166 valid screening pairs. They include negative, uncertain and positive screening results without selecting a preferred branch or mechanism. No R17 candidate is selected or merged; the complete starting algorithm remains R12-A-fixed. Public read-only dependency source, bounded query correction feedback, and optional real-entry/exact-reference development examples are research support, not new scientific evidence or acceptance gates. Distinguish cached implementation values from independently recomputed reference answers, local mock dispatch from real-entry execution, and a cumulative candidate's measured result from an isolated effect of its newest edit. H/C remain free to choose hypotheses, source reads, algorithms and probes; no mandatory testing style or specific optimization is prescribed. Private later-stage outcomes are not supplied. R18 SCREENING AND PUBLIC DEVELOPMENT ONLY: all twelve ordinary screening records are appended in order, covering eight cumulative candidates and 176 valid paired observations. No candidate is promoted, selected or merged into the unchanged complete R12-A-fixed starting source. The final route-shape-guarded scheduler initially showed X-n351-k40 median +1712.5 over two seeds, but expanded screening had median -501.5 there: in expanded seed order the differences were +3791,+1537,-2714,-2540. Its complete expanded case W/L/T was 1/2/3, aggregate median zero and CI [-255.5,0.25]. This contradicts a stable improvement claim on those observed seeds; it does not isolate one component's effect. The last displacement-chain candidate has only an initial screen, W/L/T 2/1/2, median zero and CI [-12.5,25]; its requested expansion was not performed before the planned terminal stop. Its source removes an ejected customer and then requires that same carried customer to remain in the previous route at the next step, so genuine multi-step displacement returns no materialized candidate. Three attempted corrections selected newly drafted text against the original session source and were rejected; passing host checks did not prove the proposed mechanism. Generic test names, helper calls and counters are not evidence of an accepted transition. Self-authored expected values also need independent arithmetic checks before use. These findings motivate optional reference worksheets, collected tests, observing wrappers that preserve real callers and collaborators, and clear draft-replacement semantics, not a prescribed algorithm or extra acceptance gate. For prospective R19 only, increase initial sampling from two to four seeds and expanded sampling from four to six seeds, with fresh predeclared seeds, unchanged case populations, thresholds, per-solve limits, twelve-stage target and global caps. Historical population statements above describe their own runs. Inspect all paired seed effects, losses and case coverage separately by stage; increased sampling is not evidence of stability, a fresh held-out set, or confirmation. H/C retain algorithm and test choice; private later-stage outcomes are absent.\nEND COMPLETE HISTORICAL R19 QUESTION\n\nR21 PUBLIC R19 FOLLOW-UP. R19 contains seven evaluated candidate bundles and twelve screening stages, with 320 valid pairs against R12-A-fixed. Final A3 expanded screening has case W/L/T 4/0/2, median of case medians +17.75 and CI [0,5841.5]; pair W/L/T 17/5/14. All six X-n351-k40 pairs improve, but the complete final matrix includes five pair losses elsewhere. R19 A3 includes the cumulative A1/A2 changes; it is not the latest edit in isolation, and no sibling mechanism was merged. One earlier H incorrectly claimed sibling inheritance, while C actually received the correct source. Eight submitted probes pass, including independent exhaustive transition references and small real-entry completed computations. Some real-entry probes establish completed pricing or indexing, not acceptance or retention in the returned best. The 719-customer, 0.2-second probe establishes feasibility/deadline behavior only; it can spend its useful budget in construction. A direct expiring operator call is not large-instance solve-to-operator coverage. Independent expected values, actual execution and final quality are separate claims, not interchangeable test labels. Choose tests appropriate to the proposed claim; all optional public examples and ordinary source remain available.\n\nR21 PUBLIC R20 SCREENING ONLY. R20 fixes the exact same final A3 tree against B0-fixed with the common constructor repair in both arms. This is a different comparator from R19 and from the new R21 local baseline. All 48 screening pairs are valid: six cases by eight prospectively chosen seeds, per-case four AB and four BA executions with equal per-solve limits. Case W/L/T 5/0/1, median of case medians +135.25 and CI [1,6115.5]; pair W/L/T 36/1/11. Complete delta vectors below use baseline distance minus candidate distance, in seed order 260003,260009,260011,260017,260023,260047,260081,260089:\nB-n34-k5: [0,0,0,0,0,0,0,0], median 0.\ntai100a: [97,216,280,325,50,137,228,173], median 194.5.\nX-n351-k40: [12618,11977,12031,12243,11977,11923,11979,12357], median 12005.\nA-n54-k7: [4,2,3,0,5,0,0,-2], median 1.\nX-n190-k8: [3,124,76,76,76,129,76,76], median 76.\nX-n513-k21: [226,226,226,226,198,226,226,226], median 226.\nMedian candidate/baseline elapsed-time ratio is about 1.00007: these are fixed-budget quality effects, not a measured wall-clock speedup. X-n351-k40 candidate post-initial distance is 31776 for all seeds, with further final reductions of 421/434 in two seeds; 1-3 candidate ALNS iterations versus zero baseline iterations. X-n190-k8 candidate starts post-initial at 17800, with final reductions of 48/53 in two seeds; other final distances stay 17800. X-n513-k21 final candidate distance is 26764 for every seed, equal to its post-initial distance; only one seed reaches one ALNS iteration and the rest reach zero. Its candidate initial VNS takes about 134.9-137.0 seconds versus baseline 96.8-103.8. These family/phase observations neither isolate a helper's contribution nor select a mechanism for you. The full paired pattern includes the small negative A-n54-k7 seed, rather than hiding it behind a positive aggregate. More sampled seeds do not prove stability across different cases. No private later-stage outcome, case, seed, raw path or control result is included in this update. Prospective R21 should test further improvement of the delivered complete source; historical screening success is not a guarantee of a stable new gain.\n\nEND COMPLETE HISTORICAL R21 QUESTION\n\nR22 PUBLIC R21 SCREENING AND PROBE OBSERVATIONS ONLY. R21 evaluated eight candidate bundles in twelve screening stages with 352 valid pairs against this same local baseline. Every cross-case distance median is zero. All twelve ordinary screening records, including losses and uncertain results, are supplied whole. Expanded A1 has case W/L/T 2/0/4 and CI [0,2.25]; B1 1/0/5 and [0,0.75]; B2 1/1/4 and [-0.75,6]; C2 2/0/4 and [0,11.5]. The final A3 initial result is 0/1/4 and [-1.5,0]; final B3 is 1/1/3 and [-25.5,25]. R21 labels refer to cumulative within-run heads, not historical R19 A3 or isolated latest-edit effects. C2's X513 search-iteration counter changes from zero to one at every expanded seed while all eight final distance deltas are zero. B3's X513 deltas are +25 at all four initial seeds, but tai100a deltas are +25,+43,-76,-80: selecting only its favorable case would conceal the instability. B3 has zero recorded search iterations on X513; initial-phase telemetry alone does not isolate a particular mechanism.\n\nR21's eight final probes pass after two earlier assertion failures were corrected. One hand-written reference endpoint had incorrect arithmetic; one cutoff control changed its active frontier and therefore its work count. Real cache probes do assert non-null maps and published exact proofs. Other small probes show completed calculations without demonstrating gain retained at the final solver return. A separate second-pass controller test deliberately replaces ordinary operators and labels itself isolated; the real-registry companion checks feasibility/monotonicity without establishing the new pass's completed retained effect. Short large-instance probes establish return and feasibility, not an explicit elapsed bound, completed new transition, or retention. These public observations motivate better evidence interpretation, not a prescribed repair or mandatory neighborhood. Read the actual full source/history and choose the next hypothesis and tests autonomously. Private later-stage facts, provider operational failures and cross-problem control outcomes are not added to H/C.",
+  "observations": [
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 0,
+            "ties": 5,
+            "median_delta": 0,
+            "ci_low": 0,
+            "ci_high": 130.5
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R4"
+            },
+            {
+              "name": "contrast",
+              "value": "full_v2_against_original_B0"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_FAIL_CASE_QUALITY"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_candidate_screening",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "diagnostic_inclusion_comparison_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "not_applicable",
+          "case_outcomes": {
+            "wins": 0,
+            "losses": 2,
+            "ties": 4,
+            "median_delta": 0,
+            "ci_low": -281.75,
+            "ci_high": 0
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "DIAGNOSTIC_COMPLETE",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "diagnostic_terminal_observation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R5"
+            },
+            {
+              "name": "contrast",
+              "value": "full_v2_against_v2_minus_2for1"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_FAIL_CASE_QUALITY"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "diagnostic_only_no_promotion"
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "case_conditioned_diagnostic_only",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": true,
+        "population_selection_outcome_blind_relative_to_exact_estimand": false,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 2,
+            "losses": 1,
+            "ties": 3,
+            "median_delta": 0,
+            "ci_low": -258,
+            "ci_high": 97.75
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R6"
+            },
+            {
+              "name": "contrast",
+              "value": "v2_minus_2for1_against_original_B0"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_FAIL_CASE_QUALITY"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            },
+            {
+              "name": "operator_cleanup_overlapped",
+              "value": true
+            },
+            {
+              "name": "performance_claim_scope",
+              "value": "exploratory_possible_resource_contention"
+            },
+            {
+              "name": "B-n34-k5_median_delta",
+              "value": 0
+            },
+            {
+              "name": "B-n34-k5_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "tai100a_median_delta",
+              "value": 179
+            },
+            {
+              "name": "tai100a_seed_pattern",
+              "value": "win_win_win_loss"
+            },
+            {
+              "name": "X-n351-k40_median_delta",
+              "value": -516
+            },
+            {
+              "name": "X-n351-k40_seed_pattern",
+              "value": "loss_loss_loss_loss"
+            },
+            {
+              "name": "A-n54-k7_median_delta",
+              "value": 0
+            },
+            {
+              "name": "A-n54-k7_seed_pattern",
+              "value": "tie_tie_win_tie"
+            },
+            {
+              "name": "X-n190-k8_median_delta",
+              "value": 16.5
+            },
+            {
+              "name": "X-n190-k8_seed_pattern",
+              "value": "win_tie_win_tie"
+            },
+            {
+              "name": "X-n513-k21_median_delta",
+              "value": 0
+            },
+            {
+              "name": "X-n513-k21_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "X-n351-k40_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "X-n513-k21_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "large_cases_initial_vns_ms_min",
+              "value": 65889
+            },
+            {
+              "name": "large_cases_initial_vns_ms_max",
+              "value": 68750
+            },
+            {
+              "name": "large_cases_nominal_limit_seconds",
+              "value": 90
+            },
+            {
+              "name": "common_algorithm_time_fraction",
+              "value": 0.8
+            },
+            {
+              "name": "large_cases_post_initial_objective_equals_final",
+              "value": true
+            },
+            {
+              "name": "phase_behavior_is_not_component_causality",
+              "value": true
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "screening_with_possible_operator_contention",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 1,
+            "ties": 4,
+            "median_delta": 0,
+            "ci_low": -159.5,
+            "ci_high": 71.75
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R8"
+            },
+            {
+              "name": "contrast",
+              "value": "R7_final_complete_candidate_against_original_B0"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_FAIL_CASE_QUALITY"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            },
+            {
+              "name": "execution_order_counterbalanced",
+              "value": true
+            },
+            {
+              "name": "screening_cases_outcome_known",
+              "value": true
+            },
+            {
+              "name": "B-n34-k5_median_delta",
+              "value": 0
+            },
+            {
+              "name": "B-n34-k5_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "tai100a_median_delta",
+              "value": 143.5
+            },
+            {
+              "name": "tai100a_seed_pattern",
+              "value": "win_win_win_win"
+            },
+            {
+              "name": "X-n351-k40_median_delta",
+              "value": -319
+            },
+            {
+              "name": "X-n351-k40_seed_pattern",
+              "value": "loss_win_loss_loss"
+            },
+            {
+              "name": "A-n54-k7_median_delta",
+              "value": 0
+            },
+            {
+              "name": "A-n54-k7_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "X-n190-k8_median_delta",
+              "value": 0
+            },
+            {
+              "name": "X-n190-k8_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "X-n513-k21_median_delta",
+              "value": 0
+            },
+            {
+              "name": "X-n513-k21_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "X-n351-k40_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "X-n513-k21_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "large_cases_initial_vns_ms_min",
+              "value": 66585
+            },
+            {
+              "name": "large_cases_initial_vns_ms_max",
+              "value": 68782
+            },
+            {
+              "name": "large_cases_post_initial_objective_equals_final",
+              "value": true
+            },
+            {
+              "name": "large_cases_nominal_limit_seconds",
+              "value": 90
+            },
+            {
+              "name": "common_algorithm_time_fraction",
+              "value": 0.8
+            },
+            {
+              "name": "X-n190-k8_candidate_alns_iterations_min",
+              "value": 1
+            },
+            {
+              "name": "X-n190-k8_candidate_alns_iterations_max",
+              "value": 3
+            },
+            {
+              "name": "X-n190-k8_B0_alns_iterations_min",
+              "value": 2
+            },
+            {
+              "name": "X-n190-k8_B0_alns_iterations_max",
+              "value": 3
+            },
+            {
+              "name": "X-n190-k8_candidate_embedded_vns_ms_min",
+              "value": 28113
+            },
+            {
+              "name": "X-n190-k8_candidate_embedded_vns_ms_max",
+              "value": 30169
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "adaptive_screening_exact_candidate_B0_comparison",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": false,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "unclear",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 4,
+            "losses": 1,
+            "ties": 1,
+            "median_delta": 91.5,
+            "ci_low": -36,
+            "ci_high": 296.75
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R13"
+            },
+            {
+              "name": "contrast",
+              "value": "R12_A_fixed_against_B0_fixed"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            },
+            {
+              "name": "execution_order_counterbalanced",
+              "value": true
+            },
+            {
+              "name": "screening_cases_outcome_known",
+              "value": true
+            },
+            {
+              "name": "common_constructor_repair_operator_assisted",
+              "value": true
+            },
+            {
+              "name": "X-n351-k40_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "X-n513-k21_candidate_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "X-n513-k21_B0_fixed_alns_iterations_per_seed",
+              "value": 1
+            },
+            {
+              "name": "X-n190-k8_candidate_alns_iterations_min",
+              "value": 2
+            },
+            {
+              "name": "X-n190-k8_candidate_alns_iterations_max",
+              "value": 4
+            },
+            {
+              "name": "X-n190-k8_candidate_embedded_vns_ms_min",
+              "value": 57786
+            },
+            {
+              "name": "X-n190-k8_candidate_embedded_vns_ms_max",
+              "value": 64337
+            },
+            {
+              "name": "common_algorithm_time_fraction",
+              "value": 0.8
+            },
+            {
+              "name": "phase_behavior_is_not_component_causality",
+              "value": true
+            },
+            {
+              "name": "B-n34-k5_median_delta",
+              "value": 0
+            },
+            {
+              "name": "B-n34-k5_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "tai100a_median_delta",
+              "value": 181.5
+            },
+            {
+              "name": "tai100a_seed_pattern",
+              "value": "win_win_win_win"
+            },
+            {
+              "name": "X-n351-k40_median_delta",
+              "value": 367.5
+            },
+            {
+              "name": "X-n351-k40_seed_pattern",
+              "value": "win_win_win_win"
+            },
+            {
+              "name": "A-n54-k7_median_delta",
+              "value": 1.5
+            },
+            {
+              "name": "A-n54-k7_seed_pattern",
+              "value": "tie_win_win_win"
+            },
+            {
+              "name": "X-n190-k8_median_delta",
+              "value": -72
+            },
+            {
+              "name": "X-n190-k8_seed_pattern",
+              "value": "tie_loss_loss_win"
+            },
+            {
+              "name": "X-n513-k21_median_delta",
+              "value": 226
+            },
+            {
+              "name": "X-n513-k21_seed_pattern",
+              "value": "win_win_win_win"
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "adaptive_screening_exact_candidate_B0_fixed_comparison",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": false,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    }
+  ]
+}

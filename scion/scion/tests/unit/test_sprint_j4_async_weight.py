@@ -25,7 +25,6 @@ def _make_branch(
         branch_id=branch_id,
         state=state,
         base_champion_id=1,
-        base_champion_hash="abc",
     )
 
 
@@ -33,9 +32,7 @@ def _make_champion(version: int = 1) -> ChampionState:
     return ChampionState(
         version=version,
         operator_pool={"op1": OperatorConfig("op1", "op1.py", "vehicle_level", 1.0, "Op1")},
-        solver_config_hash="hash",
         code_snapshot_path="/tmp/v1",
-        code_snapshot_hash="snap_hash",
     )
 
 
@@ -106,13 +103,6 @@ class TestSchedulerIncludesStaleWeight:
         stale_tier = [tier for tier in _PRIORITY_TIERS if BranchState.STALE in tier]
         assert len(stale_tier) == 1
         assert BranchState.STALE_WEIGHT_UPDATE in stale_tier[0]
-
-
-class TestTerminationIncludesStaleWeight:
-    def test_stale_weight_update_is_active_for_termination(self):
-        """STALE_WEIGHT_UPDATE is counted as active for termination check."""
-        from scion.core.termination import _ACTIVE_STATES
-        assert BranchState.STALE_WEIGHT_UPDATE in _ACTIVE_STATES
 
 
 class TestWeightOptResult:

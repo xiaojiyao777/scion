@@ -1,20 +1,23 @@
 from __future__ import annotations
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from typing import List, Dict, Optional, Literal, Set, Tuple
-import yaml
+
 import os
+from typing import Any, List, Literal, Optional, Tuple
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field
 
 # Re-export authoritative schema — these are the ONLY authoritative implementations.
 # Old code that imported simplified versions from this module will get the real ones.
-from scion.config.protocol_config import ProtocolConfig
-from scion.config.split_manifest import SplitManifest
+from scion.config.protocol_config import ProtocolConfig, RuntimeGovernanceConfig
 from scion.config.seed_ledger import SeedLedger
+from scion.config.split_manifest import SplitManifest
 
 # Backward-compatible alias: old code used SeedLedgerConfig, now it maps to SeedLedger
 SeedLedgerConfig = SeedLedger
 
 __all__ = [
     "ProtocolConfig",
+    "RuntimeGovernanceConfig",
     "SplitManifest",
     "SeedLedger",
     "SeedLedgerConfig",
@@ -34,7 +37,7 @@ class _StrictBase(BaseModel):
 
 
 class ParameterSearchConfig(_StrictBase):
-    enabled: bool = True
+    enabled: bool = False
     trigger: Literal["on_promote"] = "on_promote"
     target: Literal["operator_weights"] = "operator_weights"
     strategy: Literal["random_local", "bayesian"] = "random_local"
@@ -57,9 +60,12 @@ class SearchSpace(_StrictBase):
     import_whitelist: List[str]
 
 class ProblemSpec(_StrictBase):
+    spec_version: str = "legacy"
     name: str
     root_dir: str
     description: str = ""
+    adapter_import_path: str = ""
+    requires_adapter_for_runtime: bool = False
     operators_dir: str = "operators"
     data_dir: str = "data"
     oracle_path: str = "oracle.py"
@@ -67,7 +73,19 @@ class ProblemSpec(_StrictBase):
     canary_case_path: str = ""  # absolute path to a small instance for verification canary runs
     unit_test_path: str = ""   # path (relative to root_dir or absolute) to unit test file
     regression_test_path: str = ""  # path (relative to root_dir or absolute) to regression test file
+    development_unit_test_path: str = ""
+    development_regression_test_path: str = ""
+    development_unit_test_support_paths: List[str] = Field(default_factory=list)
+    development_regression_test_support_paths: List[str] = Field(
+        default_factory=list
+    )
+    development_workspace_paths: List[str] = Field(default_factory=list)
+    development_problem_package_paths: List[str] = Field(default_factory=list)
     operator_categories: List[str]
+    research_surfaces: List[Any] = Field(default_factory=list)
+    runtime_failure_guidance: List[Any] = Field(default_factory=list)
+    complexity_scale_terms: List[str] = Field(default_factory=list)
+    legacy_complexity_scale_terms: List[str] = Field(default_factory=list)
     search_space: SearchSpace
     solver: SolverConfig = Field(default_factory=SolverConfig)
     parameter_search: ParameterSearchConfig = Field(default_factory=ParameterSearchConfig)

@@ -5,11 +5,12 @@ import os
 import yaml
 import pytest
 
-from scion.problem.contracts import CheckReport, LowerBoundEstimate, ProblemAdapter, SolverArtifact
+from scion.problem.contracts import LowerBoundEstimate, ProblemAdapter
 from scion.problem.loader import load_problem_adapter
-from scion.problem.objectives import compare_lexicographic, ObjectiveComparison
+from scion.problem.objectives import compare_lexicographic
 from scion.problem.spec import ProblemSpecV1, ObjectiveMetricSpec
 from scion.problem.milp_bounds import compute_optimum_gap, OptimumGapReport
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 WAREHOUSE_YAML = os.path.join(
     os.path.dirname(__file__), os.pardir, "problems", "warehouse_delivery", "problem-v1.yaml"
@@ -155,7 +156,17 @@ class TestExperimentGenericPath:
                 SeedLedger(ledger),
                 MagicMock(),
                 metrics_dir=str(tmp_path / "metrics"),
-                require_metric_specs=True,
+                adapter=protocol_test_adapter(None),
+            )
+
+        with pytest.raises(ValueError, match="metric_specs"):
+            ExperimentProtocol(
+                ProtocolConfig(),
+                SplitManager(manifest),
+                SeedLedger(ledger),
+                MagicMock(),
+                metrics_dir=str(tmp_path / "metrics-empty"),
+                adapter=protocol_test_adapter(()),
             )
 
     def test_warehouse_production_stack_loads_strict_adapter_and_metrics(
@@ -164,7 +175,6 @@ class TestExperimentGenericPath:
         """Smoke the production wiring without LLM/solver execution."""
         from unittest.mock import MagicMock
         from scion.config.problem import (
-            ProblemSpec,
             ProtocolConfig,
             SplitManifest,
             SeedLedgerConfig,
@@ -175,7 +185,6 @@ class TestExperimentGenericPath:
         problem_dir = os.path.abspath(
             os.path.join(os.path.dirname(__file__), os.pardir, os.pardir, "problems", "warehouse_delivery")
         )
-        spec = ProblemSpec.from_yaml(os.path.join(problem_dir, "problem.yaml"))
         with open(os.path.join(problem_dir, "problem-v1.yaml"), encoding="utf-8") as fh:
             adapter_spec = ProblemSpecV1(**yaml.safe_load(fh))
         adapter = load_problem_adapter(adapter_spec)
@@ -186,20 +195,15 @@ class TestExperimentGenericPath:
             SeedLedger(SeedLedgerConfig(screening=[], validation=[], frozen=[])),
             MagicMock(),
             metrics_dir=str(tmp_path / "metrics"),
-            metric_specs=adapter_spec.objectives,
-            require_metric_specs=True,
+            adapter=adapter,
         )
         gate = VerificationGate(
-            problem_spec=spec,
             runner=MagicMock(),
             adapter=adapter,
             strict_runtime_checks=True,
-            require_adapter_for_runtime=True,
-            operator_execute_signature=adapter_spec.operator_interface.execute_signature,
         )
 
-        assert proto._metric_specs == adapter_spec.objectives
-        assert proto._require_metric_specs is True
+        assert tuple(proto._metric_specs) == tuple(adapter_spec.objectives)
         assert gate._adapter is adapter
         assert gate._require_adapter_for_runtime is True
 

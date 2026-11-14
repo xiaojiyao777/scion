@@ -1,0 +1,65 @@
+{
+  "schema": "scion.cvrp_history_matched_study.v1",
+  "problem": "../../scion/problems/cvrp/problem-v1.yaml",
+  "data_root": "../../../vrp",
+  "protocol": "protocol.yaml",
+  "research_input": "research_input.json",
+  "code_research_limits": "../../docs/experiments/v0.4/inputs/v04-cvrp-m11-code-research-limits.json",
+  "history": [
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m10-m9-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m11-m10-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m12-m11-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m13-m12-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m14-m13-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m15-m14-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m16-m15-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m19-m16-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m20-m19-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m21-m20-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m22-m21-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m24-m22-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m26-m25-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m27-m26-research-history.jsonl",
+    "../../docs/experiments/v0.4/inputs/v04-cvrp-m28-m27-research-history.jsonl",
+    "history-m28-m30.jsonl"
+  ],
+  "model": "gpt-5.6-sol",
+  "base_url": "http://127.0.0.1:8080",
+  "reasoning_effort": "high",
+  "rounds": 2,
+  "provider_call_cap": 34,
+  "outer_hardwall_sec": 15000,
+  "time_limit_sec": 30,
+  "blocks": [
+    {
+      "id": "block-01",
+      "order": ["on", "off"],
+      "split": "block-01-split.yaml",
+      "seeds": "block-01-seeds.yaml"
+    },
+    {
+      "id": "block-02",
+      "order": ["off", "on"],
+      "split": "block-02-split.yaml",
+      "seeds": "block-02-seeds.yaml"
+    },
+    {
+      "id": "block-03",
+      "order": ["on", "off"],
+      "split": "block-03-split.yaml",
+      "seeds": "block-03-seeds.yaml"
+    },
+    {
+      "id": "block-04",
+      "order": ["off", "on"],
+      "split": "block-04-split.yaml",
+      "seeds": "block-04-seeds.yaml"
+    },
+    {
+      "id": "block-05",
+      "order": ["on", "off"],
+      "split": "block-05-split.yaml",
+      "seeds": "block-05-seeds.yaml"
+    }
+  ]
+}

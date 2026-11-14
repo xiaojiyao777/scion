@@ -1,0 +1,54 @@
+# Postrun Rebuild Stale Output Cleanup
+
+Date: 2026-06-19
+
+## Purpose
+
+`rebuild_postrun_acceptance.py` now removes stale generated `.json` and `.md`
+files from standard postrun family directories before writing a fresh bundle.
+This keeps regenerated analysis briefs and inventories from aggregating old
+`research_efficiency`, trajectory-manifest, analysis-brief, or inventory files
+that happen to remain in `postrun_acceptance/`.
+
+`check_postrun_acceptance.py` also rejects undeclared generated `.json` and
+`.md` files in ok family directories. This catches stale files introduced after
+rebuild, even when every manifest-declared output still exists.
+
+This is report-bundle hygiene only. It does not change Decision,
+`DecisionFeatures`, Protocol gates, promotion, scheduler state, or solver
+behavior.
+
+## Acceptance Evidence
+
+- Added a regression fixture that pre-creates stale generated postrun files
+  before rebuild, then asserts the stale files are removed and the rebuilt
+  inventory counts only the current bundle outputs.
+- Added a readiness regression that leaves manifest-declared outputs intact but
+  injects an undeclared stale generated file; postrun acceptance now fails with
+  `unexpected_outputs`.
+- Local:
+  - `python -m py_compile scion/tools/rebuild_postrun_acceptance.py scion/tools/check_postrun_acceptance.py scion/scion/tests/test_rebuild_postrun_acceptance.py scion/scion/tests/test_check_postrun_acceptance.py`
+  - `PYTHONPATH=scion pytest -q scion/scion/tests/test_rebuild_postrun_acceptance.py scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_check_postrun_acceptance.py`
+  - `PYTHONPATH=scion pytest -q scion/scion/tests/test_launch_readiness.py scion/scion/tests/test_postrun_analysis_brief.py scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_check_postrun_acceptance.py scion/scion/tests/test_rebuild_postrun_acceptance.py`
+- WSL:
+  - `/home/xjy-ubuntu/miniconda3/envs/scion/bin/python -m py_compile scion/tools/rebuild_postrun_acceptance.py scion/tools/check_postrun_acceptance.py scion/scion/tests/test_rebuild_postrun_acceptance.py scion/scion/tests/test_check_postrun_acceptance.py`
+  - `PYTHONPATH=scion /home/xjy-ubuntu/miniconda3/envs/scion/bin/pytest -q scion/scion/tests/test_rebuild_postrun_acceptance.py scion/scion/tests/test_postrun_artifact_inventory.py scion/scion/tests/test_check_postrun_acceptance.py`
+
+## Result
+
+Accepted as a postrun acceptance hardening repair. After launch, warehouse and
+CVRP delegated review should consume the freshly rebuilt postrun bundle rather
+than stale generated files left by earlier rebuild attempts.
+
+Because this repair touched `scion/tools`, prepared roots were regenerated from
+WSL runtime commit `8e7cd5c`:
+
+- Warehouse:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-warehouse-v2-followup-declaredonly-8e7cd5c-6r-gpt55-6r-gpt55-20260619T144059Z-claw`
+- CVRP:
+  `/home/xjy-ubuntu/research/scion-experiments/v04-cvrp-large-twoopt-declaredonly-8e7cd5c-1r-gpt55-1r-gpt55-20260619T144100Z-claw`
+
+Those roots were later superseded by the prepared-handoff output-cleanup roots
+from WSL runtime commit `a5d2d5e`; see
+`scion/docs/experiments/v0.4/v04-prepared-handoff-output-cleanup-20260619.md`
+and `scion/docs/status/current-state.md` for the current launch pointers.

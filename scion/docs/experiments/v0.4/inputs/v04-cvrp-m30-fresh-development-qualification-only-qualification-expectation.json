@@ -1,0 +1,76 @@
+{
+  "schema_version": "scion.qualification_audit_expectation.v1",
+  "base_revision": "5d282ea8e9133e0146c47588f2310c9bd2493e50",
+  "source": {
+    "prefix": "scion/scion/problems/cvrp",
+    "file_count": 99,
+    "hash_spec_path": "problem.yaml",
+    "ignored_directory_names": [
+      "__pycache__",
+      ".pytest_cache"
+    ],
+    "ignored_suffixes": [
+      ".pyc"
+    ]
+  },
+  "qualification": {
+    "limits": {
+      "max_proposal_attempts": 6,
+      "max_verified_candidate_chains": 2,
+      "max_formal_screening_stages": 4
+    },
+    "formal_stage": "screening",
+    "required_action": "modify",
+    "stop_reason": "qualification_boundary_reached",
+    "ready_disposition": "ready_for_postrun_qualification_audit",
+    "protocol_stages": [
+      "screening",
+      "validation",
+      "frozen"
+    ],
+    "forbidden_stages": [
+      "validation",
+      "frozen"
+    ],
+    "zero_metrics": [
+      "fleet_violation"
+    ]
+  },
+  "screening": [
+    {
+      "case_ids": [
+        "cvrplib/A/A-n48-k7.vrp",
+        "cvrplib/P/P-n55-k8.vrp",
+        "cvrplib/X/X-n204-k19.vrp"
+      ],
+      "seed_set": [
+        54396,
+        58420
+      ],
+      "valid_pairs": 6,
+      "gate_outcome": "expand",
+      "decision": "expand_screening",
+      "require_contract_verification": true
+    },
+    {
+      "case_ids": [
+        "cvrplib/A/A-n48-k7.vrp",
+        "cvrplib/P/P-n55-k8.vrp",
+        "cvrplib/X/X-n204-k19.vrp",
+        "cvrplib/A/A-n45-k7.vrp",
+        "cvrplib/X/X-n162-k11.vrp",
+        "cvrplib/X/X-n685-k75.vrp"
+      ],
+      "seed_set": [
+        54396,
+        58420,
+        52200,
+        45616
+      ],
+      "valid_pairs": 24,
+      "gate_outcome": "pass",
+      "decision": "queue_validate",
+      "require_contract_verification": false
+    }
+  ]
+}

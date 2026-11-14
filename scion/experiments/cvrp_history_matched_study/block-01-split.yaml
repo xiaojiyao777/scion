@@ -1,0 +1,19 @@
+version: 0.4-cvrp-history-matched-block-01
+# Outcome-blind freeze: fixed synthetic generator inputs only. The generator
+# has no historical result/source input. Positions 0/2/5 are
+# small/medium/large; all six inputs are ordinary adapter-loaded CVRP JSON.
+safe_data_roots:
+  - ../../../vrp
+screening:
+  - scion_generated/cvrp_history_matched_v1/block_01_pos_0_uniform_n0061_s41001.json
+  - scion_generated/cvrp_history_matched_v1/block_01_pos_1_clustered_n0126_s41002.json
+  - scion_generated/cvrp_history_matched_v1/block_01_pos_2_radial_n0241_s41003.json
+  - scion_generated/cvrp_history_matched_v1/block_01_pos_3_uniform_n0361_s41004.json
+  - scion_generated/cvrp_history_matched_v1/block_01_pos_4_clustered_n0481_s41005.json
+  - scion_generated/cvrp_history_matched_v1/block_01_pos_5_radial_n0721_s41006.json
+validation:
+  - cvrplib/A/A-n44-k6.vrp
+frozen:
+  - cvrplib/X/X-n367-k17.vrp
+canary:
+  - data/tiny_canary.json

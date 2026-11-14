@@ -1,0 +1,18 @@
+version: 0.4-cvrp-m23-m20-swap-full-funnel
+
+screening:
+  - 6858
+  - 9488
+  - 8155
+  - 5774
+
+validation:
+  - 6241
+  - 8615
+
+frozen:
+  - 8498
+  - 7903
+
+canary:
+  - 6419

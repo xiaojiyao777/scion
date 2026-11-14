@@ -1,0 +1,201 @@
+"""Direct CVRP solver-design source and interface guidance."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from typing import Any
+
+
+class CvrpSolverDesignProvider:
+    """Problem-owned guidance for the direct hypothesis-to-code runtime."""
+
+    def solver_design_target_api_guidance(self, target_file: str) -> str:
+        normalized = str(target_file or "").replace("\\", "/").lstrip("/")
+        guidance = {
+            "policies/baseline_algorithm.py": (
+                "Keep `solve(instance, rng, time_limit_sec, context)` as the "
+                "stable entrypoint. It instantiates `_ALNSVNSSolver` and returns "
+                "the public solution; algorithm internals belong in the focused "
+                "baseline_modules owner."
+            ),
+            "policies/baseline_modules/construction.py": (
+                "Construction helpers return internal `_Solution` objects. "
+                "Import an exact new symbol in scheduler.py only when needed to "
+                "execute the new construction path."
+            ),
+            "policies/baseline_modules/destroy_repair.py": (
+                "This module owns destroy and repair operators. Scheduler wiring "
+                "may import exact symbols defined by the same patch and register "
+                "them in the existing destroy or repair collection. Every registered "
+                "operator keeps required keyword-only `context` and `reserve` inputs. "
+                "Pass the existing monotonic deadline context and reserve into any "
+                "potentially long-running destroy or repair; poll remaining_time inside "
+                "nested customer, route, position, and recursive searches, and "
+                "let the scheduler discard the partial candidate when time expires."
+            ),
+            "policies/baseline_modules/local_search.py": (
+                "The `_default_vns_operators()` registry is shared by initial and "
+                "embedded VNS. Add a mechanism there only when it is intended for "
+                "both phases. For a phase-specific approved hypothesis, keep the "
+                "mechanism in its local-search owner and use the smallest complete "
+                "scheduler wiring that activates it in the target phase only."
+            ),
+            "policies/baseline_modules/acceptance.py": (
+                "Keep acceptance and adaptive-weight logic in this module. "
+                "Scheduler should pass state and consume the decision without "
+                "crediting ordinary ALNS improvement to the acceptance policy."
+            ),
+            "policies/baseline_modules/scheduler.py": (
+                "Scheduler owns `_ALNSVNSSolver` orchestration. Put a new "
+                "construction, destroy/repair, local-search, or acceptance "
+                "mechanism in its owner module and use scheduler only to execute it. "
+                "Do not start optional second-candidate or tournament work near "
+                "the exit reserve unless every potentially long called path receives "
+                "the monotonic context and reserve and polls them internally; a "
+                "deadline check only at the ALNS loop boundary is insufficient."
+            ),
+            "policies/baseline_modules/state.py": (
+                "`_Solution` and `_Route` are the internal slotted state model. "
+                "Change it only when the hypothesis actually owns a state-model "
+                "intervention, never as an adapter for an unrelated mechanism."
+            ),
+        }
+        target_guidance = guidance.get(normalized, "")
+        development_guidance = (
+            " For a performance-mechanism change, use a self-authored "
+            "development falsifier to exercise the exact proposed path and assert "
+            "a direct functional consequence of activation. Also falsify deadline "
+            "behavior at the largest public synthetic shape in the declared "
+            "regression tests. Do not treat emitted telemetry alone as activation "
+            "proof, and do not infer any formal Protocol case, seed, or outcome. "
+            "The public tests/test_solver.py includes PUBLIC_PROBE_EXAMPLE, an "
+            "optional copyable falsifier scaffold: it calls the real solve entry "
+            "with unchanged configuration, wraps rather than replaces a real "
+            "scheduler method, and exercises real route/state/operator objects. "
+            "Its small synthetic shape and lightweight context are not the "
+            "production runtime or proof of your mechanism. Adapt the fixture "
+            "and functional assertions to your claim; check the imported "
+            "configuration guards and real collaborator methods. It also "
+            "demonstrates independent objective recomputation from public "
+            "geometry or matrix arcs, a tiny exhaustive fixed-start reference, "
+            "and a bounded large public entry fixture. For an equivalence claim, "
+            "compare the claimed transitions and outcomes for every affected "
+            "kernel, not just feasibility or cached candidate costs. The one "
+            "reference neighborhood is an illustration, not an algorithm "
+            "prescription or a new check. If a probe fails, independently check "
+            "the test's expected value before attributing the failure to the "
+            "algorithm; a handwritten expected scalar can itself be wrong. "
+            "That diagnosis does not clear a failed exact draft: existing "
+            "falsifier readiness rules still apply. A real-entry call shows "
+            "only the paths actually reached with unchanged guards; tiny "
+            "correctness, activation, and timed performance are separate claims. "
+            "The optional example also contains a rational arithmetic worksheet "
+            "and a multi-size/capacity/seed real-entry probe. Sanity-check the "
+            "reference before submitting assertions; a test named brute-force "
+            "must actually enumerate its claimed space to support that claim. "
+            "Observe real calls without replacing construction, the budget or "
+            "the operators when claiming integration. Distinguish path entry, "
+            "completed work, acceptance and best improvement with functional "
+            "observations. These are optional testing aids, not prescribed "
+            "mechanisms or new acceptance requirements."
+        )
+        return f"{target_guidance}{development_guidance}".strip()
+
+    def solver_design_hypothesis_guidance(self, context: Any) -> Sequence[str]:
+        del context
+        return (
+            (
+                "Choose one CVRP-owned causal path from the current algorithm "
+                "source and measurement evidence. No prepared file or mechanism "
+                "is mandatory."
+            ),
+            (
+                "State the mechanism owner, the generated or selected route-state "
+                "change, and the expected causal effect on objective quality or "
+                "feasibility."
+            ),
+            (
+                "Use paired and case-level total_distance, feasibility, route "
+                "count, and confidence intervals together. Use MDE only when a "
+                "matched calibration exists for the active estimator and "
+                "population. A same-seed A/A check can expose an obvious "
+                "false-pass path but does not establish MDE or power. Runtime "
+                "errors may explain failed outcomes but do not replace objective "
+                "evidence. Inspect the complete seed pattern within each case: "
+                "a favorable median can hide large opposite-sign effects. "
+                "An initial subset, a changed seed population and an expanded "
+                "screen are different estimands, not an improvement trajectory. "
+                "Public-data-fitted guards remain hypotheses about generalization."
+            ),
+            (
+                "Do not propose generic Scion core, metadata, contract, gate, "
+                "helper-only, or telemetry-only work as a solver optimization."
+            ),
+            (
+                "Do not hardcode case ids, reference objectives, seeds, split "
+                "membership, Decision rules, or Protocol rules."
+            ),
+        )
+
+    def active_subject_code_constraints(
+        self,
+        context: Any = None,
+        *,
+        surface: str | None = None,
+        subject_id: str | None = None,
+    ) -> Mapping[str, Any] | None:
+        del context, subject_id
+        selected = str(surface or "").strip()
+        if selected not in {"", "solver_design", "solver_algorithm"}:
+            return None
+        return {
+            "object_model_hints": (
+                {
+                    "id": "objective_value_mapping",
+                    "constraint": (
+                        "`context.objective(solution)` is mapping-like. Use "
+                        "`context.objective_key(solution)` for ordering and "
+                        "`context.is_better(candidate, incumbent)` for comparisons."
+                    ),
+                },
+                {
+                    "id": "internal_solution_route_model",
+                    "constraint": (
+                        "`_Solution.routes` contains `_Route` objects. `_Route` "
+                        "owns customers/load/cost and insert/remove/recalculate; "
+                        "`_Solution` owns copy/rebuild_index/remove_empty_routes/"
+                        "is_feasible/routes_as_tuples."
+                    ),
+                },
+                {
+                    "id": "slotted_state_objects",
+                    "constraint": (
+                        "`_Solution` and `_Route` are slotted; keep temporary "
+                        "search state in local variables or explicit parameters."
+                    ),
+                },
+            ),
+            "api_contracts": (
+                {
+                    "id": "public_internal_solution_bridge",
+                    "constraint": (
+                        "`context.nearest_neighbor()` takes no arguments and "
+                        "returns public `CvrpSolution`. Return internal state with "
+                        "`context.make_solution(solution.routes_as_tuples())`."
+                    ),
+                },
+                {
+                    "id": "solver_time_limit",
+                    "constraint": (
+                        "Long-running search must obey the solver-provided time "
+                        "limit through the available monotonic remaining-time API."
+                    ),
+                },
+            ),
+            "forbidden_patterns": (
+                "ObjectiveValue arithmetic",
+                "dynamic attributes on slotted `_Solution` or `_Route` objects",
+                "invented public/internal bridge methods",
+                "case ids, reference objectives, seeds, or split membership in solver code",
+            ),
+        }

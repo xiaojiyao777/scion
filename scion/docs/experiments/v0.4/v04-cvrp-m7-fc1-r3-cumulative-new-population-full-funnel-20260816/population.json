@@ -1,0 +1,178 @@
+{
+  "schema_version": "scion.cvrp_fixed_candidate_confirmation.v1",
+  "label": "v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816",
+  "selection_salt": "v04-cvrp-m7-fc1-r3-cumulative-new-population-full-funnel-20260816|population-v1",
+  "source_digest_framing": "relative_path + literal_backslash_zero + sha256 + literal_backslash_zero + decimal_size + literal_backslash_n",
+  "sources": {
+    "b0": {
+      "path": "subjects/b0",
+      "sha256": "f2436c23b6c169f0cb9a167b4fd0bab45b87ec761aa9c5e5e401b9abae22ebf5",
+      "file_count": 104,
+      "total_bytes": 686519
+    },
+    "candidate": {
+      "path": "subjects/candidate06",
+      "sha256": "cf223be81b45d04164f0b7dd88c9d78a49b4419d115b1413405d9dcf2832cf53",
+      "file_count": 104,
+      "total_bytes": 693394
+    }
+  },
+  "data_root": "data",
+  "protocol_config": "subjects/b0/formal/protocol.yaml",
+  "problem_spec": "subjects/b0/problem-v1.yaml",
+  "selected_surface": "solver_design",
+  "historical_validation": {
+    "contract": true,
+    "verification": true,
+    "source_relation": "same_exact_source",
+    "current_contract_calls": 0,
+    "current_verification_calls": 0
+  },
+  "population": {
+    "screening": {
+      "cases": [
+        {"path": "cvrplib/A/A-n38-k5.vrp", "time_limit_sec": 30, "bytes": 826, "sha256": "59a822563b0c59b86f0652e9249e6073cb1f22f19b30da45554ca47055e91051", "solution_bytes": 161, "solution_sha256": "cbf89b9edd2fe4ca544e894c15424a0fa058e6add0bfb316c611a0cbe4518100"},
+        {"path": "cvrplib/E/E-n76-k14.vrp", "time_limit_sec": 30, "bytes": 1326, "sha256": "a744483647ec1628d75734ffa8c3d9d545d575fe0f2873ddf4db6c3177532198", "solution_bytes": 385, "solution_sha256": "abe9b4fd182aa99f6b71045a4ee8979accd5b2705a5035450513c6622bb1269b"},
+        {"path": "cvrplib/CMT/CMT5.vrp", "time_limit_sec": 45, "bytes": 5665, "sha256": "d528b1b077eeb3568f22558e357f6fba3134d7978f93ac8ef21ef78a9dbf0903", "solution_bytes": 872, "solution_sha256": "5e190af75f1e5310628f96cbefcf9886cda1583a22ae2bc521aebb797ff85db8"},
+        {"path": "cvrplib/X/X-n110-k13.vrp", "time_limit_sec": 45, "bytes": 2368, "sha256": "d449de04a65d4803f059bc9cfc7b997df11892ebf6085ab23082b884d879e229", "solution_bytes": 473, "solution_sha256": "a85e4900e81b57afc1f83c1ef03790bc1d020460dfb39a0f1b356bb575dc5097"},
+        {"path": "cvrplib/X/X-n294-k50.vrp", "time_limit_sec": 60, "bytes": 6415, "sha256": "49aa7365653be5efea48e963322356a3198e50b1d15c18f02c71d241a854fb49", "solution_bytes": 1627, "solution_sha256": "29fe6ed89f9a6d789e1f78f12bbbe599aef039f3b2ebbcf64add448395adb848"},
+        {"path": "cvrplib/X/X-n524-k153.vrp", "time_limit_sec": 90, "bytes": 9609, "sha256": "c7ac96fa3b801f9751ac5a8ffd2cbd6e098d82142d5d7005aaa2b01a8cf001b5", "solution_bytes": 3747, "solution_sha256": "7ae30329b0cfde099a22b91297152bc1057b00cf1371a9188fbee52af707b6ab"},
+        {"path": "cvrplib/B/B-n41-k6.vrp", "time_limit_sec": 30, "bytes": 893, "sha256": "4cfd58b86fdb61fecf6a946b3256323016383ea25f9856bd18b4b2cd0b6abce2", "solution_bytes": 180, "solution_sha256": "70e199fa32dcf98343c92d3ac56a714365daebf99ad2e8f30751b32a32562856"},
+        {"path": "cvrplib/P/P-n55-k10.vrp", "time_limit_sec": 30, "bytes": 1009, "sha256": "3cc1d1a42da6b897fd0584373647dbf54afe6d67cb7185cbda60b402b6a86f8c", "solution_bytes": 272, "solution_sha256": "06238ce50e568263a15169ddde93534f9765b195d3ce01dabb952406c768f9bc"},
+        {"path": "cvrplib/CMT/CMT7.vrp", "time_limit_sec": 30, "bytes": 2210, "sha256": "c72d01a14450be6639459eb5f2fdd290e4167c7589cd12189622652735852cef", "solution_bytes": 341, "solution_sha256": "7d01be2f3a5b4f2dc2803bfbc7a7b824371c1092ab3b543664069516cd30bed1"},
+        {"path": "cvrplib/X/X-n344-k43.vrp", "time_limit_sec": 60, "bytes": 6868, "sha256": "a19635dd1184d4510746e144e61fa5fa3310647c85c7de83ed83c72b14dd48f6", "solution_bytes": 1782, "solution_sha256": "f2f33acaf32aedd300687aee5c898cb9153b9f03cba84029cd33a2a7aa0f39c0"},
+        {"path": "cvrplib/X/X-n670-k130.vrp", "time_limit_sec": 90, "bytes": 12170, "sha256": "5a46eb86b856e49766b5e1fa2dc727bc1ee2457da6f875af39b267a7c1110b12", "solution_bytes": 4201, "solution_sha256": "953e38a76c1d66a769cd7e0b951056d35e7c3de66ddf81e1f2359c0557e97625"},
+        {"path": "cvrplib/X/X-n979-k58.vrp", "time_limit_sec": 120, "bytes": 20409, "sha256": "1304fb25427f08cf9e5e35039890dc46486db3c54681794b75a1258c79f38981", "solution_bytes": 4503, "solution_sha256": "4d7016a32dd21c5d72973647ed66e44c12c2d6bf261683d7e482b528e8a3cbaf"}
+      ],
+      "seeds": [2003, 2011, 2017, 2027, 2029, 2039, 2053, 2063]
+    },
+    "validation": {
+      "cases": [
+        {"path": "cvrplib/B/B-n78-k10.vrp", "time_limit_sec": 30, "bytes": 1476, "sha256": "eb45a07763a5fdf05417d5d55254e68ce88ec5b905c5b001d4c50ed203395ff2", "solution_bytes": 333, "solution_sha256": "bb94bf4d6ae81eb18192510687b665f27bf5c3c09944eedaf7715dce80a4b891"},
+        {"path": "cvrplib/A/A-n33-k6.vrp", "time_limit_sec": 30, "bytes": 742, "sha256": "4d01ebe9842743ee0c66f14ecb86ab9c84d3198b3280d0dbcc8a8d9a69f1592f", "solution_bytes": 156, "solution_sha256": "a5395d65af5807fb05606f0abfd6a2a7ad6d98ef52e1fa4d9780667a09e2c649"},
+        {"path": "cvrplib/CMT/CMT12.vrp", "time_limit_sec": 45, "bytes": 2857, "sha256": "1ba1acf39e1c0d77d1667fed7ad88b13028285f8640fd063a1bd07d5b5cab891", "solution_bytes": 406, "solution_sha256": "3371877cd6b4385227792f4f208bfb358e60d8198673a1b0f991e47dc7022280"},
+        {"path": "cvrplib/X/X-n200-k36.vrp", "time_limit_sec": 45, "bytes": 4367, "sha256": "c9524bedaf4b9aac542538ca56fffd33ae935f667f3580fbd1d61f1c2c5988f9", "solution_bytes": 1086, "solution_sha256": "3f8afac8b869caffed19cbc3309e6667665d8ee82b59b7606602cd56bd2556b1"},
+        {"path": "cvrplib/X/X-n327-k20.vrp", "time_limit_sec": 60, "bytes": 6922, "sha256": "fd4550e0511cd159e1a1ea39b61be8db51ffc8e4ba605274a3b8e72e4340cf6a", "solution_bytes": 1418, "solution_sha256": "8a3888500f44eb95237179504a5aa6bbb955cd137c27c69901790a49b3a8e691"},
+        {"path": "cvrplib/X/X-n459-k26.vrp", "time_limit_sec": 90, "bytes": 9677, "sha256": "007f46036f6b52d92fbec99c9771649b6bb2a87c6bb88a56303ba08cc0805208", "solution_bytes": 2038, "solution_sha256": "16f4e9312ff1b0be0548a6688f1bbf0337717b251fa24d46cc84f146a818c709"},
+        {"path": "cvrplib/P/P-n45-k5.vrp", "time_limit_sec": 30, "bytes": 844, "sha256": "35a678e55fc5a0b9371a76d77a59d698da4df2c625ef6928ac0eac96912b15ca", "solution_bytes": 187, "solution_sha256": "68cb1a6de37fc312e1b4ab0c2a704ce0b5331ef2aea9d1e72c8deab11400b804"},
+        {"path": "cvrplib/E/E-n51-k5.vrp", "time_limit_sec": 30, "bytes": 947, "sha256": "e47343ac4259f0b752793be02087e2ffdbcbb62ef65b808d03a6488fec1422bc", "solution_bytes": 200, "solution_sha256": "61f076693230586439253b1cd45f0e8799f18e5ae53251af50248a726857842e"},
+        {"path": "cvrplib/CMT/CMT1.vrp", "time_limit_sec": 30, "bytes": 1493, "sha256": "80ba74909877a3fb9aa4f44b65d4dd9f64061385668f78e7881f7459b5ff19c6", "solution_bytes": 204, "solution_sha256": "03c9db16432d34c7e9f6ea26b8394f68f7fe200a49a4c871d071e25d7349c76d"},
+        {"path": "cvrplib/X/X-n228-k23.vrp", "time_limit_sec": 60, "bytes": 4812, "sha256": "b3d33f7d6f7a59e36aff4147ff979479e1767426aa2fe2f3ee26a0476d05bcd8", "solution_bytes": 1055, "solution_sha256": "f02c80e489495d0e46ab592a13853a6b3df30358b6403f30ea3efe52ea4babad"},
+        {"path": "cvrplib/X/X-n599-k92.vrp", "time_limit_sec": 90, "bytes": 12491, "sha256": "586dcc98e0274d490e89d5473eb87b67d7de8c0c33a48aba1f5ceeeb4bf39834", "solution_bytes": 3403, "solution_sha256": "c4e1f1c979347116d7a2b279df9dcebc259c096c1f677ea4f72177fed342a0c6"},
+        {"path": "cvrplib/X/X-n783-k48.vrp", "time_limit_sec": 120, "bytes": 16274, "sha256": "2411b9408542042c1e0b5a6ffaeb66d95aa23494985651c94afad62ce207d66f", "solution_bytes": 3598, "solution_sha256": "0c877d10dcc6d2f899722b6d17f6ce24cbdaeee78711df988c17819feaf35eb3"}
+      ],
+      "seeds": [2069, 2081, 2083, 2087, 2089, 2099, 2111, 2113]
+    },
+    "frozen": {
+      "cases": [
+        {"path": "cvrplib/B/B-n43-k6.vrp", "time_limit_sec": 30, "bytes": 905, "sha256": "233cb752cbe018e44e45160631e020be7c76dd8f4173cceecb1521d39ff70154", "solution_bytes": 186, "solution_sha256": "6a2d257948f798ff211a673151cd90ee9d7734c96142eeec2fd9251c956a1bfe"},
+        {"path": "cvrplib/P/P-n51-k10.vrp", "time_limit_sec": 30, "bytes": 931, "sha256": "79984f78057bad09655c1c5c32ab146231714c2d99bfcdfdafe3203ed70165e9", "solution_bytes": 251, "solution_sha256": "c84e6d0547606508e9253c45960a2aa6c8f3f797b1405d4bc4130de090f1b0f9"},
+        {"path": "cvrplib/CMT/CMT8.vrp", "time_limit_sec": 45, "bytes": 2858, "sha256": "cc208803d227b960a6497ca493f067d2c155b9577bc610996b7bdce5d435b72d", "solution_bytes": 395, "solution_sha256": "f979b1f751eb7734856c5ace4ee0a367122059fd914c3fb016f1e278e99cdc32"},
+        {"path": "cvrplib/X/X-n101-k25.vrp", "time_limit_sec": 45, "bytes": 2244, "sha256": "38ba943084fc5ef2e7e681bfad2c926ec93c5870dbe2d180cc02b08f748113cb", "solution_bytes": 580, "solution_sha256": "fe64a62947aa1c8379bb5a119ccdb774bb963ec50d13e5e00bee878d067e4f1c"},
+        {"path": "cvrplib/X/X-n336-k84.vrp", "time_limit_sec": 60, "bytes": 7002, "sha256": "8e957a8e540162b7491f116f8fe0023c73d2d121ce4777f4e930464cf1a8d970", "solution_bytes": 2267, "solution_sha256": "c1ab72cbd4d2e9cfb732d7af1de032fc8c226f93c274534d5c3a9f2f9131677e"},
+        {"path": "cvrplib/X/X-n586-k159.vrp", "time_limit_sec": 90, "bytes": 11749, "sha256": "6dc2154531666069b55fc6315d880678b6b22c7ad5dfede0de0e7f6f367b2ee7", "solution_bytes": 4203, "solution_sha256": "24720a3c2500b45a8fe39a5adaa8d1b55b6ef7bfcf5f2cc4d54d7d8bf4ad348a"},
+        {"path": "cvrplib/A/A-n55-k9.vrp", "time_limit_sec": 30, "bytes": 1114, "sha256": "0ec4706e6efb69217bc11ea4942edd12626f4c41bd6e6b0227aff1035c8f6eda", "solution_bytes": 262, "solution_sha256": "4a07706e98cb8ac0a9335775a119f9ac613ab17d4479b709a1584fa3a2c45cf0"},
+        {"path": "cvrplib/tai/tai75b.vrp", "time_limit_sec": 30, "bytes": 1323, "sha256": "cd442234989522ea0009f2d555d27f213b332c5bf96843d9ced064e9312838e0", "solution_bytes": 330, "solution_sha256": "b144f509f123bd03a94382f8660646c96ec300dd9b1040d07d95c60c223be045"},
+        {"path": "cvrplib/E/E-n76-k10.vrp", "time_limit_sec": 30, "bytes": 1325, "sha256": "74db31fa339dfee6b342def4d8664730cc62164ffb8b2f6f7db04ba837c900bb", "solution_bytes": 336, "solution_sha256": "5467ad36a44d2434bcc1bd43b85e26d7fb8b4e926c8695b8484f429297b9c2f3"},
+        {"path": "cvrplib/X/X-n247-k50.vrp", "time_limit_sec": 60, "bytes": 4796, "sha256": "3a060ca546c1dc6b2beb090faf273b0604462db748d6d5a27c921b31e499d682", "solution_bytes": 1439, "solution_sha256": "a06a0c15d64b9e01117d62c0203f3ce65cf75f985144f0bedd99d7b69d24d167"},
+        {"path": "cvrplib/X/X-n491-k59.vrp", "time_limit_sec": 90, "bytes": 10199, "sha256": "e2ad38bb8d6cf7f3bcb2a7f866944c4fb6ba12587ba09b42cfaf0c63ec003d03", "solution_bytes": 2562, "solution_sha256": "e957960cc017f63e15f5f15c96cf4321790f9f0934e745ec542bcec511602b07"},
+        {"path": "cvrplib/X/X-n936-k151.vrp", "time_limit_sec": 120, "bytes": 18870, "sha256": "5e020bc1e4c3152c57ca7bcb589a19acf2fb7b5b6af1be76774293b2a7c5e6c6", "solution_bytes": 5577, "solution_sha256": "6712fe4119d342cc065b11eeefb8d74e6210d8324f0c929750716886affa97e4"}
+      ],
+      "seeds": [2129, 2131, 2137, 2141, 2143, 2153, 2161, 2179]
+    },
+    "retained": {
+      "cases": [
+        {"path": "cvrplib/B/B-n31-k5.vrp", "time_limit_sec": 30, "bytes": 705, "sha256": "4c21caba6dd9c2e62d9e51defe45b9b318a931456e4d6e714c0ebd910447fad9", "solution_bytes": 140, "solution_sha256": "508df4497a714d7627f32f6993ff637a79ea6452235b318539757ff848a077e5"},
+        {"path": "cvrplib/A/A-n34-k5.vrp", "time_limit_sec": 30, "bytes": 759, "sha256": "393117f10a26d0e803a8206e7dd1157a67de2429d6b9fd2d60c070a98b7c73bb", "solution_bytes": 149, "solution_sha256": "f1e5feaeff4a28ebb04a20f56beacaa9ce0926bc90be070069dbb4f5f16939c4"},
+        {"path": "cvrplib/CMT/CMT13.vrp", "time_limit_sec": 45, "bytes": 3411, "sha256": "015e9c09f49f90c44a3f1a122b0a0e8f2a6b5422c7ad7b5811a87bc7e0fd7863", "solution_bytes": 497, "solution_sha256": "396ba960dc16c625cd7d3cffd6b208bc103d6c7e064413cdf3605a7404e7d5c7"},
+        {"path": "cvrplib/X/X-n143-k7.vrp", "time_limit_sec": 45, "bytes": 3143, "sha256": "f333e621612eb8e6e75d6a49d347a757bb14794d32879a9e19269d751d626f7c", "solution_bytes": 541, "solution_sha256": "4dfbecf31f5c1dd19b68a77f6b33d1ad452e845085fa9024cea532f7047d3dc7"},
+        {"path": "cvrplib/X/X-n223-k34.vrp", "time_limit_sec": 60, "bytes": 4672, "sha256": "279877f821a1fc20e3baa0e12fd006eb898622e69b475762306b00b71e77565c", "solution_bytes": 1156, "solution_sha256": "cdaf1bdacca24517de347aded8e6d27267807aaa9f52ccb6d788343f9f309baf"},
+        {"path": "cvrplib/X/X-n536-k96.vrp", "time_limit_sec": 90, "bytes": 11098, "sha256": "358bcc85f4a4cb1e8a437c069336719ffdd247766cf0e1689fd26b770f974172", "solution_bytes": 3186, "solution_sha256": "f52257781def570414ad77312d32fef16a77eeb8efcbde77c998896b88dd37aa"},
+        {"path": "cvrplib/E/E-n76-k7.vrp", "time_limit_sec": 30, "bytes": 1323, "sha256": "9daf17f43fc8a05315fcb157bc9aa8b73a38e72ff62bd468d169db74dc8a5f42", "solution_bytes": 302, "solution_sha256": "28b70a47de29face1e97bec65844ec8f36bce5778022c19d0c152f85e4713836"},
+        {"path": "cvrplib/P/P-n21-k2.vrp", "time_limit_sec": 30, "bytes": 496, "sha256": "1e7b84d0baad8993033ecf3df233b5297fb0dfe43c60ec49bd4f384b2955d774", "solution_bytes": 82, "solution_sha256": "bf58ace7ca3a64616b4bad471ca36475166ded9f15679672ba60588626951bd9"},
+        {"path": "cvrplib/CMT/CMT6.vrp", "time_limit_sec": 30, "bytes": 1534, "sha256": "3b9e0eae9e5825111c093d51366aebe591f3fd1ed5d69f0d2f9c0d2e92500779", "solution_bytes": 213, "solution_sha256": "3fcb5e550452a816050b0a8f7ca3eb15c667c22216bb377d0eeb5d7a99abf61c"},
+        {"path": "cvrplib/X/X-n322-k28.vrp", "time_limit_sec": 60, "bytes": 7078, "sha256": "d6c46cbb59e71a944585c804c00b8cf0309f94ff891689873587114914734625", "solution_bytes": 1486, "solution_sha256": "c69355d95a55c5dcddf8f3f13f126dd00ba4d5bf5370b66c39abbba00dfa3dfb"},
+        {"path": "cvrplib/X/X-n449-k29.vrp", "time_limit_sec": 90, "bytes": 9354, "sha256": "1f77d49652605084b40a8babdf3c50f5527e2b450f1b113224693ae484f5b71c", "solution_bytes": 2034, "solution_sha256": "d067a6123698e1fee2716b020dbaff374cbe4b6dca02260ec19551e094f828f1"},
+        {"path": "cvrplib/X/X-n916-k207.vrp", "time_limit_sec": 120, "bytes": 18323, "sha256": "73bbb5243cb1255ecabc19372d803603647cdd4449b456e83a542559e8309d6e", "solution_bytes": 6147, "solution_sha256": "bcaa4f43e3f750781f4500aaddcae182dadeecb200c5c0159594a557e6897564"}
+      ],
+      "seeds": [2203, 2207, 2213, 2221, 2237, 2239, 2243, 2251]
+    },
+    "canary": {
+      "cases": [
+        {
+          "path": "controlled/data/synthetic_controlled_canary_5.vrp",
+          "bytes": 261,
+          "sha256": "2c97574634df42b935b7ce380bfb7b8ede13720fa1004dcb1efb00ed99a7bcb4"
+        }
+      ],
+      "seeds": [2267],
+      "time_limit_sec": 10
+    }
+  },
+  "order": {
+    "arms": {"A": "b0", "B": "candidate"},
+    "rule": "AB when (block_ordinal0 + case_ordinal0 + seed_ordinal0) % 2 == 0, otherwise BA",
+    "block_ordinals": {
+      "initial_screening": 0,
+      "expanded_screening": 1,
+      "validation": 2,
+      "frozen": 3,
+      "retained": 4
+    },
+    "canary": "b0_then_candidate"
+  },
+  "budgets": {
+    "initial_screening_cases": 8,
+    "initial_screening_seeds": 4,
+    "full_stage_cases": 12,
+    "full_stage_seeds": 8,
+    "formal_pairs": 416,
+    "formal_subprocesses": 832,
+    "canary_pairs": 4,
+    "canary_subprocesses": 8,
+    "max_solver_subprocesses": 840,
+    "nominal_subject_seconds": 45200,
+    "fail_closed_nominal_ceiling": 50000,
+    "positive_hard_timeout_seconds": 57800,
+    "outer_hardwall_seconds": 64800,
+    "protocol_calls": 5,
+    "safe_feature_calls": 4,
+    "decision_calls": 4,
+    "snapshots": 1,
+    "concurrency": 1,
+    "provider_calls": 0,
+    "hypothesis_calls": 0,
+    "code_calls": 0,
+    "patch_generation_calls": 0,
+    "current_contract_calls": 0,
+    "current_verification_calls": 0,
+    "current_v3_calls": 0,
+    "current_v4_calls": 0,
+    "retry": 0,
+    "resume": 0,
+    "repair": 0,
+    "replacement": 0,
+    "substitution": 0,
+    "automatic_next_round": 0
+  },
+  "claim_boundary": {
+    "candidate_selection_outcome_known": true,
+    "candidate_discovery_independent": false,
+    "incremental_effect_isolated": false,
+    "population_selection_outcome_blind_relative_to_exact_estimand": true,
+    "exact_candidate06_outcome_overlap_count": 0,
+    "globally_case_unseen": false,
+    "mde_at_power_80": null,
+    "execution_replication_independent": null,
+    "positive_claim": "The outcome-known cumulative R3 candidate-06 retained a Protocol-qualified total-distance improvement over exact R3 B0 on the complete preregistered M7-FC1 population under the frozen V3 carrier.",
+    "forbidden_claims": [
+      "independent candidate discovery",
+      "an isolated causal effect of the final route-removal edit",
+      "an isolated component-level causal effect",
+      "global CVRP generalization",
+      "provider improvement",
+      "production readiness",
+      "a new mechanism"
+    ]
+  }
+}

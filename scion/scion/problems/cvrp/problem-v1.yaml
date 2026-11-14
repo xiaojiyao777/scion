@@ -1,0 +1,381 @@
+spec_version: "problem-v1"
+
+id: cvrp
+display_name: "Capacitated Vehicle Routing Problem"
+root_dir: PLACEHOLDER
+description: >-
+  CVRP problem package for route-native verification and solver-design
+  research. The only active research object is the branch-owned algorithm
+  package under policies/baseline_algorithm.py and policies/baseline_modules/.
+
+search_space:
+  editable:
+    - "policies/baseline_algorithm.py"
+    - "policies/baseline_modules/*.py"
+  frozen:
+    - "adapter.py"
+    - "cvrplib.py"
+    - "models.py"
+    - "solver.py"
+    - "solver_runtime/*.py"
+    - "policies/__init__.py"
+    - "policies/baseline_modules/__init__.py"
+  import_whitelist:
+    - __future__
+    - bisect
+    - collections
+    - copy
+    - dataclasses
+    - heapq
+    - itertools
+    - math
+    - baseline_modules
+    - config
+    - construction
+    - destroy_repair
+    - local_search
+    - scheduler
+    - state
+    - acceptance
+    - random
+    - time
+    - typing
+
+solver:
+  time_limit_sec: 30
+  max_iter: 1000
+
+parameter_search:
+  enabled: false
+
+measurement:
+  runtime_model: budget_exhausting
+  pairing_validity: trajectory_divergent
+  protected_objectives:
+    - fleet_violation
+  effect_scale:
+    metric: total_distance
+    unit: raw_delta
+    practical_delta_screen: 2.0
+    practical_delta_validate: 1.0
+  # Historical MDE artifacts used incompatible pair-level estimators. The R3
+  # same-seed A/A check accepted its exact false-pass diagnostic, but it is not
+  # a matched MDE/power artifact and remains descriptive proposal context only.
+  calibration_ref: ""
+  calibration_max_age_days: 90
+
+runtime_dependencies:
+  required_python_modules:
+    - numpy
+
+runtime_failure_guidance:
+  - failure_categories:
+      - no_accepted_moves
+      - solver_algorithm_errors
+    applies_to_surfaces:
+      - solver_design
+    min_category_fraction: 0.5
+    min_count: 2
+    recommended_surfaces:
+      - solver_design
+    discouraged_surfaces: []
+    guidance: >-
+      Address the failure inside the active CVRP algorithm package. Choose the module by
+      mechanism ownership: construction.py for initial solution changes,
+      destroy_repair.py for ALNS destroy/repair, local_search.py for VNS move
+      operators, acceptance.py for adaptive weights or simulated annealing, and
+      scheduler.py only for lifecycle/solver-time-limit wiring.
+
+canary_case_path: "data/tiny_canary.json"
+unit_test_path: "tests/test_operators.py"
+regression_test_path: "tests/test_solver.py"
+development_unit_test_path: "tests/test_operators.py"
+development_regression_test_path: "tests/test_solver.py"
+development_regression_test_support_paths:
+  - "data/tiny_development.json"
+development_workspace_paths:
+  - "policies/__init__.py"
+  - "policies/baseline_modules/__init__.py"
+development_problem_package_paths:
+  - "__init__.py"
+  - "adapter.py"
+  - "cvrplib.py"
+  - "models.py"
+  - "solution_checks.py"
+  - "surface_policy.py"
+  - "surface_rendering.py"
+  - "surface_schema.py"
+  - "solver_runtime/__init__.py"
+  - "solver_runtime/algorithm_runtime.py"
+  - "solver_runtime/constants.py"
+  - "solver_runtime/failure_diagnostics.py"
+  - "solver_runtime/policy_modules.py"
+  - "solver_runtime/solution_ops.py"
+  - "solver_runtime/timing.py"
+
+operator_interface:
+  base_class_import: "scion.problems.cvrp.policies.baseline_algorithm:solve"
+  execute_signature: "execute(self, solution, instance, rng) -> CvrpSolution"
+  categories:
+    - name: solver_design
+      description: "Active branch-owned CVRP algorithm package."
+
+research_surfaces:
+  - name: solver_design
+    kind: solver_design
+    description: "Active CVRP research boundary: edit the branch-owned algorithm modules under a fixed problem contract."
+    algorithm:
+      role: problem_object_solver_algorithm
+      invocation_point: full_solver_runtime
+      description: >-
+        The stable entrypoint is policies/baseline_algorithm.py::solve(instance,
+        rng, time_limit_sec, context). Algorithm internals live under
+        policies/baseline_modules/ and own construction, ALNS scheduling,
+        destroy/repair, adaptive weights, simulated annealing acceptance, VNS
+        local search, state, solver-time-limit polling, and telemetry calls.
+    targets:
+      files:
+        - "policies/baseline_algorithm.py"
+        - "policies/baseline_modules/*.py"
+      create_new_allowed: true
+      modify_allowed: true
+      remove_allowed: false
+      singleton: false
+    target_files:
+      - "policies/baseline_algorithm.py"
+      - "policies/baseline_modules/*.py"
+    interface:
+      entrypoint_files:
+        - "policies/baseline_algorithm.py"
+      support_files:
+        - "policies/baseline_modules/*.py"
+      required_functions:
+        - "solve"
+      function_signatures:
+        solve:
+          - instance
+          - rng
+          - time_limit_sec
+          - context
+      return_contract: >-
+        solve returns a CvrpSolution, a structurally equivalent object with a
+        routes attribute, or a mapping {'routes': [[customer_id, ...], ...]}.
+        Routes are implicit-depot customer sequences. The adapter recomputes
+        objective and rejects malformed, infeasible, duplicate/missing-customer,
+        or capacity-violating outputs. Exceeding the declared route limit is
+        measured as the lexicographic fleet_violation objective, not treated as
+        structural infeasibility.
+    bounds:
+      allowed_components:
+        - construction
+        - alns_scheduler
+        - destroy_repair
+        - adaptive_weights
+        - simulated_annealing_acceptance
+        - vns_local_search
+        - state_model
+        - runtime_budget
+        - telemetry
+      complexity_scale_terms:
+        - time_limit_sec
+        - customer_count
+        - route_count
+        - route_length
+        - removed_customer_count
+        - candidate_count
+        - local_search_passes
+    evidence:
+      required_runtime_fields:
+        - solver_algorithm_loaded
+        - solver_algorithm_active
+        - solver_algorithm_errors
+        - solver_algorithm_elapsed_ms
+        - solver_algorithm_phase_runtime_ms
+        - solver_algorithm_solution_valid
+        - solver_algorithm_solution_routes
+        - solver_algorithm_objective
+        - solver_algorithm_total_distance
+        - solver_algorithm_fleet_violation
+        - solver_algorithm_search_iterations
+        - solver_algorithm_move_attempts
+        - solver_algorithm_accepted_moves
+        - solver_algorithm_improving_moves
+        - solver_algorithm_neutral_accepted_moves
+        - solver_algorithm_best_improving_moves
+        - solver_algorithm_best_delta
+        - solver_algorithm_phase_delta_sum
+        - solver_algorithm_phase_best_delta
+        - solver_algorithm_phase_improvement_counts
+        - solver_algorithm_actionability_summary
+        - solver_algorithm_stop_reason
+      optional_runtime_fields:
+        - solver_algorithm_path
+        - solver_algorithm_events
+        - solver_algorithm_best_update_trace
+        - solver_algorithm_best_update_summary
+        - solver_algorithm_alns_iteration_trace
+        - solver_algorithm_phase_move_attempts
+        - solver_algorithm_phase_accepted_moves
+        - solver_algorithm_runtime_budget_hit
+        - solver_algorithm_solution_progress
+      activation_runtime_fields:
+        "{mechanism}":
+          - solver_algorithm_context_records.{mechanism}_iterations
+          - solver_algorithm_phase_runtime_ms.{mechanism}
+      effect_probe_runtime_fields:
+        - solver_algorithm_phase_improvement_counts.{mechanism}
+        - solver_algorithm_phase_best_delta.{mechanism}
+      runtime_field_roles:
+        mechanism_activation:
+          - solver_algorithm_context_records.{mechanism}_iterations
+          - solver_algorithm_phase_runtime_ms.{mechanism}
+        budget:
+          - solver_algorithm_elapsed_ms
+          - solver_algorithm_phase_runtime_ms
+          - solver_algorithm_phase_runtime_ms.{mechanism}
+        activity:
+          - solver_algorithm_search_iterations
+          - solver_algorithm_move_attempts
+          - solver_algorithm_accepted_moves
+          - solver_algorithm_neutral_accepted_moves
+          - solver_algorithm_phase_move_attempts
+          - solver_algorithm_phase_accepted_moves
+        aggregate_effect:
+          - solver_algorithm_improving_moves
+          - solver_algorithm_best_improving_moves
+          - solver_algorithm_best_delta
+          - solver_algorithm_best_update_summary
+          - solver_algorithm_phase_delta_sum
+          - solver_algorithm_phase_best_delta
+          - solver_algorithm_phase_improvement_counts
+        mechanism_effect:
+          - solver_algorithm_phase_improvement_counts.{mechanism}
+          - solver_algorithm_phase_best_delta.{mechanism}
+        outcome:
+          - solver_algorithm_solution_valid
+          - solver_algorithm_solution_routes
+          - solver_algorithm_objective
+        objective_outcome:
+          - solver_algorithm_total_distance
+        protected_outcome:
+          - solver_algorithm_fleet_violation
+        diagnostic:
+          - solver_algorithm_path
+          - solver_algorithm_loaded
+          - solver_algorithm_active
+          - solver_algorithm_errors
+          - solver_algorithm_events
+          - solver_algorithm_best_update_trace
+          - solver_algorithm_best_update_summary
+          - solver_algorithm_stop_reason
+          - solver_algorithm_runtime_budget_hit
+          - solver_algorithm_solution_progress
+          - solver_algorithm_actionability_summary
+    novelty:
+      strategy: semantic_signature
+      signature_fields:
+        - predicted_direction
+        - target_objectives
+        - algorithm_family
+        - construction_strategy
+        - improvement_strategy
+        - acceptance_strategy
+        - runtime_budget_strategy
+    prompt:
+      hypothesis_guidance: >-
+        Treat the CVRP solver as the research object. State the complete
+        algorithm idea and target the module that owns the mechanism. Do not
+        propose legacy component-policy files, registry operators, or
+        lifecycle-config tables. target_objectives and protected_objectives may
+        contain only declared objectives: fleet_violation and total_distance.
+        Capacity feasibility is a hard constraint and belongs in risk/no-op
+        text, not objective arrays.
+      implementation_guidance: >-
+        Preserve policies/baseline_algorithm.py as the stable solve(...)
+        entrypoint unless the entrypoint itself is the approved target. Use
+        policies/baseline_modules/ for concrete algorithm behavior. You may use
+        instance.depot, instance.customer_ids, instance.customer_count,
+        instance.demands[customer_id], instance.capacity,
+        instance.allowed_routes, instance.bks_routes, instance.distance(i, j),
+        instance.route_load(route), and instance.route_distance(route).
+        fleet_violation is max(0, len(routes) - route_limit), where
+        route_limit is allowed_routes or bks_routes. Capacity overload is a
+        hard infeasibility, not a fleet_violation state.
+        Context helpers are context.make_solution(routes),
+        context.nearest_neighbor(), context.objective(solution),
+        context.objective_key(solution), context.is_better(candidate,
+        incumbent), context.is_valid(solution), context.remaining_time(),
+        context.remaining_time_ms(), context.elapsed_ms(),
+        context.record_phase(name, elapsed_ms),
+        context.record_iteration(phase='search', count=1),
+        context.record_move(phase='search', attempted=1, accepted=0,
+        delta=None, best_improved=0), and context.set_stop_reason(reason).
+      anti_patterns: >-
+        Do not edit objective, feasibility, parser, protocol, split, seed,
+        Decision, benchmark data, adapter.py, models.py, cvrplib.py, or
+        solver.py. Do not use instance.customers, case-name-specific behavior,
+        filesystem reads, network access, sleeps, or hidden benchmark answers.
+        Do not return a plan dictionary or call deleted legacy hooks,
+        context.baseline, component-policy files, or operators/*.py.
+    prompt_hint: >-
+      Implement or revise the active CVRP algorithm package; do not express the
+      research idea as a legacy component-policy or operator surface.
+    required_functions:
+      - "solve"
+    create_new_allowed: true
+    modify_allowed: true
+    remove_allowed: false
+
+objective_policy:
+  mode: lexicographic
+  expose_weights_to_llm: false
+
+objectives:
+  - name: fleet_violation
+    direction: minimize
+    priority: 1
+    tie_tolerance: 0.0
+  - name: total_distance
+    direction: minimize
+    priority: 2
+    tie_tolerance: 0.001
+
+llm_hints:
+  problem_summary: >-
+    Build ordered capacity-feasible routes from the depot. Every customer must
+    appear exactly once. The first objective is fleet_violation =
+    max(0, len(routes) - route_limit), where route_limit is allowed_routes or
+    bks_routes; total distance matters only after route-count comparability is
+    protected. Capacity overload is infeasible and is not a soft
+    fleet_violation state.
+  operator_interface: >-
+    There is no active operator surface. The active research target is
+    solver_design: policies/baseline_algorithm.py plus
+    policies/baseline_modules/*.py. Routes use implicit-depot customer
+    sequences; CvrpInstance exposes capacity, depot, customer_ids,
+    customer_count, node_ids, demands, demand(customer_id), distance(i, j),
+    route_load(route), and route_distance(route).
+
+family_taxonomy:
+  version: "cvrp-solver-design-v1"
+  families:
+    - solver_design
+  aliases:
+    solver_design:
+      - solver design
+      - problem object
+      - problem-level solver
+      - solver-level design
+      - baseline algorithm
+      - baseline modules
+      - alns
+      - vns
+      - destroy repair
+      - local search
+      - acceptance
+      - scheduler
+      - construction
+
+adapter:
+  import_path: "scion.problems.cvrp.adapter:CvrpAdapter"
+  api_version: "v1"

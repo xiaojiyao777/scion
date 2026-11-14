@@ -1,0 +1,232 @@
+"""`scion optimize-weights` command registration."""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Optional
+
+import typer
+
+
+def register_weight_commands(app: typer.Typer) -> None:
+    @app.command("optimize-weights")
+    def optimize_weights(
+        campaign_dir: str = typer.Option(
+            "campaign_out",
+            "--campaign-dir",
+            help="Campaign directory",
+        ),
+        problem: str = typer.Option(
+            ...,
+            "--problem",
+            help="Path to problem.yaml",
+        ),
+        snapshot: str = typer.Option(
+            ...,
+            "--snapshot",
+            help="Exact champion source directory to evaluate",
+        ),
+        champion_version: int = typer.Option(
+            0,
+            "--champion-version",
+            help="Ordinary label used in output only",
+        ),
+        protocol: Optional[str] = typer.Option(
+            None,
+            "--protocol",
+            help="Path to protocol.yaml",
+        ),
+        split: Optional[str] = typer.Option(
+            None,
+            "--split",
+            help="Path to split_manifest.yaml",
+        ),
+        seeds: Optional[str] = typer.Option(
+            None,
+            "--seeds",
+            help="Path to seed_ledger.yaml",
+        ),
+    ) -> None:
+        """Manually trigger weight optimisation on the latest champion snapshot."""
+        campaign_path = Path(campaign_dir).resolve()
+        problem_yaml = Path(problem).resolve()
+
+        if not problem_yaml.exists():
+            typer.echo(f"ERROR: problem.yaml not found: {problem_yaml}", err=True)
+            raise typer.Exit(code=1)
+
+        from scion.config.problem import (
+            ProtocolConfig,
+            SeedLedgerConfig,
+            SplitManifest,
+        )
+        from scion.parameter.evaluator import collect_baseline, evaluate_weights
+        from scion.parameter.optimizer import RandomLocalWeightOptimizer
+        from scion.parameter.search_space import ParameterSearchSpace
+        from scion.runtime.pool_manager import read_weights
+        from scion.runtime.subprocess_runner import LocalSubprocessRunner
+
+        problem_dir = problem_yaml.parent
+        try:
+            from scion.cli.commands.init_run import _load_cli_problem_adapter
+
+            adapter = _load_cli_problem_adapter(problem_yaml)
+        except Exception as exc:
+            typer.echo(
+                f"ERROR: failed to load problem-v1 adapter: {exc}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        spec = adapter.spec
+        metric_specs = tuple(spec.objectives)
+
+        if protocol:
+            proto_cfg = ProtocolConfig.from_yaml(protocol)
+        else:
+            proto_path = problem_dir / "protocol.yaml"
+            proto_cfg = (
+                ProtocolConfig.from_yaml(str(proto_path))
+                if proto_path.exists()
+                else ProtocolConfig()
+            )
+        proto_cfg = proto_cfg.with_problem_measurement(spec)
+
+        if split:
+            split_manifest = SplitManifest.from_yaml(split)
+        else:
+            split_path = problem_dir / "split_manifest.yaml"
+            split_manifest = (
+                SplitManifest.from_yaml(str(split_path))
+                if split_path.exists()
+                else SplitManifest(screening=[], validation=[], frozen=[])
+            )
+
+        if seeds:
+            seed_ledger = SeedLedgerConfig.from_yaml(seeds)
+        else:
+            seed_path = problem_dir / "seed_ledger.yaml"
+            seed_ledger = (
+                SeedLedgerConfig.from_yaml(str(seed_path))
+                if seed_path.exists()
+                else SeedLedgerConfig(screening=[42], validation=[1, 2], frozen=[10])
+            )
+
+        snapshot_path = Path(snapshot).resolve()
+        if not snapshot_path.is_dir():
+            typer.echo(f"ERROR: snapshot directory not found: {snapshot_path}", err=True)
+            raise typer.Exit(code=1)
+
+        registry_path = snapshot_path / "registry.yaml"
+        if not registry_path.exists():
+            typer.echo(f"ERROR: registry.yaml not found at {registry_path}", err=True)
+            raise typer.Exit(code=1)
+
+        try:
+            current_weights = read_weights(str(registry_path))
+        except Exception as exc:
+            typer.echo(f"ERROR: failed to read weights: {exc}", err=True)
+            raise typer.Exit(code=1)
+
+        if not current_weights:
+            typer.echo(
+                "ERROR: no operators in registry - nothing to optimise",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        typer.echo(f"Optimising weights for champion v{champion_version} at {snapshot_path}")
+        typer.echo(f"  Operators: {list(current_weights.keys())}")
+
+        param_cfg = spec.parameter_search
+        runner = LocalSubprocessRunner()
+
+        eval_cases = list(param_cfg.eval_cases)
+        if not eval_cases:
+            eval_cases = list(split_manifest.screening)
+        resolved_cases = [
+            os.path.join(spec.root_dir, c) if not os.path.isabs(c) else c
+            for c in eval_cases
+        ]
+        if not resolved_cases:
+            typer.echo(
+                "WARNING: no eval cases configured; using registry-only optimisation skipped",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+        eval_seeds = list(seed_ledger.screening)[: param_cfg.n_eval_seeds]
+        time_limit = getattr(getattr(spec, "solver", None), "time_limit_sec", 300)
+        artifacts_dir = str(campaign_path / "artifacts")
+        os.makedirs(artifacts_dir, exist_ok=True)
+
+        import shutil
+
+        eval_ws = str(campaign_path / f"weight_opt_manual_v{champion_version}")
+        if os.path.exists(eval_ws):
+            shutil.rmtree(eval_ws)
+        shutil.copytree(str(snapshot_path), eval_ws)
+        for root, dirs, files in os.walk(eval_ws):
+            for d in dirs:
+                os.chmod(os.path.join(root, d), 0o755)
+            for f in files:
+                os.chmod(os.path.join(root, f), 0o644)
+
+        typer.echo(f"  Eval cases: {resolved_cases}")
+        typer.echo(f"  Eval seeds: {eval_seeds}")
+
+        baseline = collect_baseline(eval_ws, resolved_cases, eval_seeds, runner, time_limit)
+        operator_names = tuple(current_weights.keys())
+
+        search_space = ParameterSearchSpace(
+            operator_names=operator_names,
+            weight_bounds=param_cfg.weight_bounds,
+            n_initial_random=param_cfg.n_initial_random,
+            n_iterations=param_cfg.n_iterations,
+            n_eval_seeds=param_cfg.n_eval_seeds,
+            eval_cases=tuple(resolved_cases),
+        )
+
+        def _eval_fn(weights):
+            return evaluate_weights(
+                weights=weights,
+                workspace=eval_ws,
+                cases=resolved_cases,
+                seeds=eval_seeds,
+                runner=runner,
+                time_limit_sec=time_limit,
+                baseline_objectives=baseline,
+                metric_specs=metric_specs,
+            )
+
+        optimizer = RandomLocalWeightOptimizer(
+            search_space,
+            _eval_fn,
+            seed=champion_version,
+        )
+        result = optimizer.optimize(current_weights, artifacts_dir=artifacts_dir)
+
+        typer.echo("\nOptimisation complete:")
+        typer.echo(f"  baseline_score : {result.baseline_score:.6f}")
+        typer.echo(f"  best_score     : {result.best_score:.6f}")
+        typer.echo(f"  improved       : {result.improved}")
+        typer.echo(f"  n_evaluations  : {result.n_evaluations}")
+
+        if result.improved:
+            typer.echo("\nBest weights:")
+            for name, w in result.best_weights.items():
+                typer.echo(f"  {name}: {w:.6f}")
+            typer.echo(
+                "\nTo apply: manually update registry.yaml in the champion "
+                "snapshot with the above weights."
+            )
+        else:
+            typer.echo("\nNo improvement found over baseline - champion weights unchanged.")
+
+        try:
+            shutil.rmtree(eval_ws)
+        except Exception:
+            pass
+
+
+__all__ = ["register_weight_commands"]

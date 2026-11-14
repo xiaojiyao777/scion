@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools==80.10.2", "wheel==0.46.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -25,9 +25,15 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["scion*"]
+exclude = ["scion.tests*"]
 
 [tool.pytest.ini_options]
 testpaths = ["scion/tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+addopts = "-m 'not slow'"
+markers = [
+    "slow: long-running solver/MILP/integration tests excluded from the default suite",
+    "integration: tests that exercise real subprocess solvers or full campaign wiring",
+]

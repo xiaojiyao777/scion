@@ -26,7 +26,8 @@ class Operator(ABC):
 
     子类必须实现 execute 方法，要求：
     1. 先 deep_copy solution 再操作，不修改原解
-    2. 只操作未锁定订单（locked_vehicle_id is None）
+    2. locked_vehicle_id 非 None 的订单属于不可拆分但可整体移动的来源组；
+       现有保守算子可以继续跳过这些组
     3. 如果产出不可行解，返回原解（由调用方验证后决定是否保留）
     4. 生成新车辆 ID 必须使用 generate_vehicle_id(rng)，禁止使用 uuid
     """

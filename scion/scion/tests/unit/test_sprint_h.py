@@ -1,9 +1,6 @@
 """Sprint H unit tests: H3 registry class_name sync, H4 V5 stderr propagation."""
 from __future__ import annotations
 
-import json
-import os
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -15,6 +12,7 @@ from scion.core.models import (
     OperatorConfig,
     PatchProposal,
     RunResult,
+    SolverOutput,
 )
 from scion.runtime.pool_manager import PoolManager
 from scion.verification.state_mutation import check_state_mutation
@@ -196,7 +194,6 @@ class TestV5IncludesStderrOnFailure:
             stderr="AttributeError: module 'operators.foo' has no attribute 'FooOld'",
             elapsed_ms=100,
             output=None,
-            output_path=None,
             error_category="crash",
         )
 
@@ -214,8 +211,6 @@ class TestV5IncludesStderrOnFailure:
         Path(canary).write_text("{}")
         spec = _make_spec(canary=canary)
 
-        # Write a minimal valid solver output
-        output_path = str(tmp_path / "out.json")
         output_data = {
             "vehicles": {"V1": {"vehicle_id": "V1", "vehicle_type": "HQ40",
                                 "region": "Dongguan", "order_ids": ["O1"]}},
@@ -223,7 +218,6 @@ class TestV5IncludesStderrOnFailure:
             "objective": {"subcategory_splits": 0, "total_cost": 3300, "solve_time_ms": 50},
             "feasible": True,
         }
-        Path(output_path).write_text(json.dumps(output_data))
 
         runner = MagicMock()
         runner.run_solver.return_value = RunResult(
@@ -232,8 +226,15 @@ class TestV5IncludesStderrOnFailure:
             stdout="",
             stderr="",
             elapsed_ms=100,
-            output=None,
-            output_path=output_path,
+            output=SolverOutput(
+                objective=output_data["objective"],
+                feasible=True,
+                solution_payload={
+                    key: value
+                    for key, value in output_data.items()
+                    if key not in {"objective", "feasible", "runtime"}
+                },
+            ),
             error_category=None,
         )
 

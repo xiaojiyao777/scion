@@ -1,0 +1,28 @@
+version: "warehouse-measurement-reanalysis-synthetic-v1"
+
+screening: []
+validation: []
+
+frozen:
+  - data/instance_v3_scr_m01.json
+  - data/instance_v3_scr_m02.json
+  - data/instance_v3_scr_m03.json
+  - data/instance_v3_scr_m04.json
+  - data/instance_v3_scr_m05.json
+  - data/instance_v3_scr_m06.json
+  - data/instance_v3_scr_l01.json
+  - data/instance_v3_scr_l02.json
+  - data/instance_v3_scr_l03.json
+  - data/instance_v3_scr_l04.json
+  - data/instance_v4_scr_s01.json
+  - data/instance_v4_scr_s02.json
+  - data/instance_v4_scr_s03.json
+  - data/instance_v4_scr_ml01.json
+  - data/instance_v4_scr_ml02.json
+  - data/instance_v4_scr_ml03.json
+  - data/instance_v4_scr_ml04.json
+
+canary:
+  - data/instance_v3_can_m01.json
+  - data/instance_v3_can_m02.json
+  - data/instance_v4_can_s01.json

@@ -1,0 +1,19 @@
+version: r17-warehouse-quota-control
+screening:
+  n_cases_modify: 1
+  n_cases_create: 1
+  n_seeds: 1
+  expand_n_seeds: 2
+  expand_to_modify: 2
+  expand_to_create: 2
+  require_expanded_for_pass: true
+validation:
+  n_cases: 1
+  n_seeds: 1
+  expand_to: 1
+frozen:
+  n_cases: 1
+  n_seeds: 1
+canary:
+  cases: [data/instance_small_5.json]
+  seeds: [190093]

@@ -1,0 +1,5 @@
+version: 0.4-cvrp-r24-stable-advantage-autonomous
+screening: [300007, 300017, 300023, 300043, 300073, 300089, 300109, 300119]
+validation: [300137, 300149, 300151, 300163]
+frozen: [300187, 300191, 300193, 300221]
+canary: [300229]

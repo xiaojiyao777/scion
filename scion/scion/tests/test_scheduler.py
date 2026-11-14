@@ -1,82 +1,123 @@
-"""Tests for scion/core/scheduler.py — Scheduler."""
+"""State, FIFO, and active-slot tests for the V3 scheduler."""
 from __future__ import annotations
-import uuid
+
 from datetime import datetime, timedelta
-import pytest
 
 from scion.core.models import Branch, BranchState
-from scion.core.scheduler import Scheduler, SchedulerAction
+from scion.core.scheduler import (
+    Scheduler,
+    active_slot_inventory,
+)
 
 
-def _branch(state: BranchState, created_offset_s: float = 0) -> Branch:
+def _branch(state: BranchState, name: str, offset: int = 0) -> Branch:
+    timestamp = datetime(2026, 1, 1) + timedelta(seconds=offset)
     return Branch(
-        branch_id=str(uuid.uuid4()),
+        branch_id=name,
         state=state,
         base_champion_id=0,
-        base_champion_hash="h",
-        created_at=datetime(2026, 1, 1) + timedelta(seconds=created_offset_s),
+        created_at=timestamp,
+        updated_at=timestamp,
     )
 
 
-sched = Scheduler()
+def test_empty_portfolio_creates_branch_when_slot_available() -> None:
+    action = Scheduler(max_active_branches=3).select_next([])
+    assert action.action == "create_new"
+    assert action.slot == "explore_new"
+    assert action.reason == "active_slot_available"
 
 
-def test_no_branches_creates_new():
-    action = sched.select_next([])
+def test_default_v3_portfolio_admits_three_natural_directions() -> None:
+    scheduler = Scheduler()
+    branch = _branch(BranchState.EXPLORE, "scientific-direction")
+
+    assert scheduler.max_active_branches == 3
+    assert scheduler.select_next([]).action == "create_new"
+
+    action = scheduler.select_next([branch])
+
+    assert action.action == "create_new"
+    assert action.branch is None
+    assert action.reason == "active_slot_available"
+
+
+def test_state_priority_is_frozen_validate_stale_then_running() -> None:
+    branches = [
+        _branch(BranchState.FROZEN_TESTING, "running", 0),
+        _branch(BranchState.STALE, "stale", 1),
+        _branch(BranchState.READY_VALIDATE, "validate", 2),
+        _branch(BranchState.READY_FROZEN, "frozen", 3),
+    ]
+    action = Scheduler(max_active_branches=4).select_next(branches)
+    assert action.action == "run_existing"
+    assert action.branch is branches[3]
+    assert action.reason == "state_priority_1:ready_frozen"
+
+
+def test_same_state_uses_created_at_then_branch_id_fifo() -> None:
+    branches = [
+        _branch(BranchState.READY_VALIDATE, "z", 0),
+        _branch(BranchState.READY_VALIDATE, "a", 0),
+        _branch(BranchState.READY_VALIDATE, "older", -1),
+    ]
+    first = Scheduler(max_active_branches=3).select_next(branches)
+    assert first.branch is branches[2]
+    second = Scheduler(max_active_branches=3).select_next(branches[:2])
+    assert second.branch is branches[1]
+
+
+def test_free_slot_admission_depends_only_on_branch_state() -> None:
+    branch = _branch(BranchState.EXPLORE, "existing")
+    branch.direction = "ignored"
+    action = Scheduler(max_active_branches=2).select_next([branch])
     assert action.action == "create_new"
     assert action.branch is None
 
 
-def test_ready_frozen_has_highest_priority():
+def test_full_portfolio_runs_least_recently_served_explore_branch() -> None:
     branches = [
-        _branch(BranchState.READY_VALIDATE),
-        _branch(BranchState.EXPLORE),
-        _branch(BranchState.READY_FROZEN),
-        _branch(BranchState.STALE),
+        _branch(BranchState.EXPLORE, "newer", 2),
+        _branch(BranchState.EXPLORE, "older", 1),
     ]
-    action = sched.select_next(branches)
+    action = Scheduler(max_active_branches=2).select_next(branches)
     assert action.action == "run_existing"
-    assert action.branch.state == BranchState.READY_FROZEN
+    assert action.branch is branches[1]
+    assert action.reason == "state_priority_explore_least_recently_served"
 
 
-def test_ready_validate_over_stale():
+def test_explore_service_time_moves_branch_behind_older_waiting_sibling() -> None:
     branches = [
-        _branch(BranchState.STALE),
-        _branch(BranchState.READY_VALIDATE),
-        _branch(BranchState.EXPLORE),
+        _branch(BranchState.EXPLORE, "created-first", 0),
+        _branch(BranchState.EXPLORE, "created-second", 1),
+        _branch(BranchState.EXPLORE, "created-third", 2),
     ]
-    action = sched.select_next(branches)
-    assert action.branch.state == BranchState.READY_VALIDATE
+    branches[0].updated_at += timedelta(seconds=10)
+
+    action = Scheduler(max_active_branches=3).select_next(branches)
+
+    assert action.branch is branches[1]
 
 
-def test_stale_over_explore():
-    branches = [
-        _branch(BranchState.EXPLORE),
-        _branch(BranchState.STALE),
-    ]
-    action = sched.select_next(branches)
-    assert action.branch.state == BranchState.STALE
-
-
-def test_explore_over_create_new():
-    branches = [_branch(BranchState.EXPLORE)]
-    action = sched.select_next(branches)
-    assert action.action == "run_existing"
-    assert action.branch.state == BranchState.EXPLORE
-
-
-def test_fifo_within_same_tier():
-    b_old = _branch(BranchState.EXPLORE, created_offset_s=0)
-    b_new = _branch(BranchState.EXPLORE, created_offset_s=10)
-    action = sched.select_next([b_new, b_old])
-    assert action.branch.branch_id == b_old.branch_id
-
-
-def test_only_terminal_branches_creates_new():
-    from scion.core.models import BranchState
-    branches = [
-        _branch(BranchState.PROMOTED),
-        _branch(BranchState.ABANDONED),
-    ]
-    action = sched.select_next(branches)
+def test_blocked_branches_do_not_use_active_slots() -> None:
+    blocked = _branch(BranchState.BLOCKED_INFRA, "blocked")
+    held = _branch(BranchState.BLOCKED_INFRA, "held")
+    action = Scheduler(max_active_branches=2).select_next([blocked, held])
     assert action.action == "create_new"
+    assert action.slot == "explore_new"
+
+
+def test_terminal_states_release_slots() -> None:
+    branches = [
+        _branch(BranchState.PROMOTED, "promoted"),
+        _branch(BranchState.ABANDONED, "abandoned"),
+    ]
+    inventory = active_slot_inventory(branches, max_active_branches=1)
+    assert inventory == {"used": 0, "max": 1, "available": 1, "branch_ids": []}
+
+
+def test_scheduler_selection_is_pure() -> None:
+    branch = _branch(BranchState.READY_VALIDATE, "candidate")
+    before = (branch.state, branch.updated_at)
+    Scheduler(max_active_branches=1).select_next([branch])
+    assert (branch.state, branch.updated_at) == before

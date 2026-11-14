@@ -1,7 +1,7 @@
 """Generic lexicographic objective comparator.
 
 Problem-agnostic: works with any set of named metrics with priority and direction.
-Replaces the hardcoded warehouse-specific compare in protocol/evaluation.py.
+Replaces the historical fixed-metric comparator in protocol/evaluation.py.
 """
 from __future__ import annotations
 

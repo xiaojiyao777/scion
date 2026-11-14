@@ -144,7 +144,7 @@ def run_one(split: str, path: str, family: str, out_dir: Path) -> dict[str, Any]
         obj = recompute_objective(result.solution, inst)
         rec.update({
             'oracle_feasible': bool(feas.is_feasible),
-            'oracle_violations': list(feas.violations)[:5],
+            'oracle_violations': list(feas.violations),
             'oracle_f1': obj.subcategory_splits,
             'oracle_f2': obj.total_cost,
             'oracle_consistent': bool(obj.subcategory_splits == result.objective_f1 and obj.total_cost == result.objective_f2),

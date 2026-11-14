@@ -1,0 +1,25 @@
+version: 0.4-cvrp-m30-fresh-development-qualification-only
+
+safe_data_roots:
+  - ../../../../../vrp
+
+screening:
+  - cvrplib/A/A-n48-k7.vrp
+  - cvrplib/P/P-n55-k8.vrp
+  - cvrplib/X/X-n204-k19.vrp
+  - cvrplib/A/A-n45-k7.vrp
+  - cvrplib/X/X-n162-k11.vrp
+  - cvrplib/X/X-n685-k75.vrp
+
+validation:
+  - cvrplib/P/P-n55-k7.vrp
+  - cvrplib/X/X-n308-k13.vrp
+  - cvrplib/X/X-n548-k50.vrp
+
+frozen:
+  - cvrplib/X/X-n275-k28.vrp
+  - cvrplib/X/X-n480-k70.vrp
+  - cvrplib/X/X-n876-k59.vrp
+
+canary:
+  - data/tiny_canary.json

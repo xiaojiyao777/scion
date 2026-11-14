@@ -2,35 +2,70 @@
 
 Public API for Scion core to interact with problem-specific implementations.
 """
-from scion.problem.contracts import (
+from .contracts import (
     CheckReport,
     LowerBoundEstimate,
     ProblemAdapter,
     SolverArtifact,
 )
-from scion.problem.loader import ProblemAdapterLoadError, load_problem_adapter
-from scion.problem.objectives import (
+from .loader import (
+    ProblemAdapterLoadError,
+    load_problem_adapter,
+    load_problem_spec_v1_from_yaml,
+)
+from .objectives import (
     MetricComparison,
     ObjectiveComparison,
     compare_lexicographic,
 )
-from scion.problem.spec import (
+from .providers import (
+    ProblemProviderError,
+    SolverDesignPromptProvider,
+    resolve_solver_design_prompt_provider,
+)
+from .spec import (
+    SUPPORTED_RESEARCH_SURFACE_KINDS,
     ObjectiveMetricSpec,
     ProblemAdapterRef,
     ProblemSpecV1,
+    ResearchSurfaceAlgorithmSpec,
+    ResearchSurfaceBoundsSpec,
+    ResearchSurfaceEvidenceSpec,
+    ResearchSurfaceInterfaceSpec,
+    ResearchSurfaceMechanismTelemetrySpec,
+    ResearchSurfaceNoveltySpec,
+    ResearchSurfacePromptSpec,
+    ResearchSurfaceReturnValueSpec,
+    ResearchSurfaceSpec,
+    ResearchSurfaceTargetsSpec,
 )
 
 __all__ = [
+    "SUPPORTED_RESEARCH_SURFACE_KINDS",
     "CheckReport",
     "LowerBoundEstimate",
     "MetricComparison",
     "ObjectiveComparison",
+    "ObjectiveMetricSpec",
     "ProblemAdapter",
     "ProblemAdapterLoadError",
     "ProblemAdapterRef",
+    "ProblemProviderError",
     "ProblemSpecV1",
-    "ObjectiveMetricSpec",
+    "ResearchSurfaceAlgorithmSpec",
+    "ResearchSurfaceBoundsSpec",
+    "ResearchSurfaceEvidenceSpec",
+    "ResearchSurfaceInterfaceSpec",
+    "ResearchSurfaceMechanismTelemetrySpec",
+    "ResearchSurfaceNoveltySpec",
+    "ResearchSurfacePromptSpec",
+    "ResearchSurfaceReturnValueSpec",
+    "ResearchSurfaceSpec",
+    "ResearchSurfaceTargetsSpec",
     "SolverArtifact",
+    "SolverDesignPromptProvider",
     "compare_lexicographic",
     "load_problem_adapter",
+    "load_problem_spec_v1_from_yaml",
+    "resolve_solver_design_prompt_provider",
 ]

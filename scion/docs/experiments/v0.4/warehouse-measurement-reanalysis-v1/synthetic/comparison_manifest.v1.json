@@ -1,0 +1,20 @@
+{
+  "schema_version": "scion.champion_heldout_comparison_manifest.v1",
+  "problem_yaml": "/home/clawd/research/or-autoresearch-agent-v3-hotpath/scion/problems/warehouse_delivery/problem-v1.yaml",
+  "protocol": "/home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/warehouse-measurement-reanalysis-v1/synthetic/protocol.yaml",
+  "split_manifest": "/home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/warehouse-measurement-reanalysis-v1/synthetic/split.yaml",
+  "seed_ledger": "/home/clawd/research/or-autoresearch-agent/scion/docs/experiments/v0.4/warehouse-measurement-reanalysis-v1/synthetic/seed_ledger.yaml",
+  "time_limit_sec": 30,
+  "groups": [
+    {
+      "comparison_id": "synthetic-v2-v1",
+      "candidate_workspace": "/home/clawd/research/scion-experiments/v04-warehouse-v3-continuity-synth-36r-r8-gpt56terra-20260808T201033Z-claw/campaign/champions/champion_v2",
+      "champion_workspace": "/home/clawd/research/scion-experiments/v04-warehouse-v3-continuity-synth-36r-r8-gpt56terra-20260808T201033Z-claw/campaign/champions/champion_v1"
+    },
+    {
+      "comparison_id": "synthetic-v3-v2",
+      "candidate_workspace": "/home/clawd/research/scion-experiments/v04-warehouse-v3-continuity-synth-36r-r8-gpt56terra-20260808T201033Z-claw/campaign/champions/champion_v3",
+      "champion_workspace": "/home/clawd/research/scion-experiments/v04-warehouse-v3-continuity-synth-36r-r8-gpt56terra-20260808T201033Z-claw/campaign/champions/champion_v2"
+    }
+  ]
+}

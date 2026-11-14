@@ -4,17 +4,81 @@ Wraps surrogate/oracle.py and surrogate/models.py. All warehouse-specific logic
 (Vehicle/Solution/Instance reconstruction, feasibility checks, objective
 recomputation) is encapsulated here so Scion core never imports surrogate directly.
 """
+
 from __future__ import annotations
 
 import importlib.util
 import json
+import math
 import os
 import sys
-from collections import defaultdict
 from typing import Any, Mapping, Sequence
 
 from scion.problem.contracts import CheckReport, LowerBoundEstimate, SolverArtifact
 from scion.problem.spec import ProblemSpecV1
+from scion.runtime.telemetry_events import TypedTelemetryEvent
+
+
+def typed_events_from_warehouse_operator_diagnostics(
+    mechanism_id: str,
+    diagnostics: Mapping[str, Any],
+) -> tuple[TypedTelemetryEvent, ...]:
+    """Map legacy warehouse aggregates without upgrading them to direct effects."""
+
+    mechanism = str(mechanism_id or "").strip()
+    if not mechanism:
+        raise ValueError("warehouse telemetry mechanism_id must be non-empty")
+    invocations = _nonnegative_int(diagnostics.get("operator_invocations"))
+    accepted_moves = _nonnegative_int(diagnostics.get("accepted_moves"))
+    improving_moves = _nonnegative_int(diagnostics.get("improving_move_count"))
+    split_delta = _number_or_zero(diagnostics.get("split_delta_sum"))
+    cost_delta = _number_or_zero(diagnostics.get("cost_delta_sum"))
+    events: list[TypedTelemetryEvent] = []
+    if invocations > 0:
+        events.append(
+            TypedTelemetryEvent(
+                lane="attempt",
+                mechanism_id=mechanism,
+                attribution_scope="warehouse_operator_invocation",
+                attribution_confidence=1.0,
+                before_ref=None,
+                after_ref=None,
+                missing_refs=("before_ref", "after_ref"),
+                occurrences=invocations,
+                evidence_ref=f"runtime.operator_diagnostics.{mechanism}",
+            )
+        )
+    if accepted_moves > 0 or improving_moves > 0 or split_delta or cost_delta:
+        events.append(
+            TypedTelemetryEvent(
+                lane="associated_outcome",
+                mechanism_id=mechanism,
+                attribution_scope="legacy_warehouse_operator_aggregate",
+                attribution_confidence=0.0,
+                before_ref=None,
+                after_ref=None,
+                missing_refs=("before_ref", "after_ref"),
+                occurrences=max(accepted_moves, improving_moves, 1),
+                evidence_ref=f"runtime.operator_diagnostics.{mechanism}",
+            )
+        )
+    return tuple(events)
+
+
+def _nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _number_or_zero(value: Any) -> int | float:
+    if isinstance(value, bool):
+        return 0
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0
 
 
 class WarehouseDeliveryAdapter:
@@ -42,17 +106,18 @@ class WarehouseDeliveryAdapter:
     # --- Prompt / context ---
 
     def render_problem_summary(self) -> str:
-        cats = ", ".join(
-            c.name for c in self._spec.operator_interface.categories
-        ) if self._spec.operator_interface else "vehicle_level, order_level"
+        cats = (
+            ", ".join(c.name for c in self._spec.operator_interface.categories)
+            if self._spec.operator_interface
+            else "vehicle_level, order_level"
+        )
         editable = ", ".join(self._spec.search_space.editable)
-        frozen = ", ".join(self._spec.search_space.frozen)
         objective_policy = _render_objective_policy(self._spec)
         objective_implication = _render_objective_implication(self._spec)
 
         return f"""\
 Name: {self._spec.display_name}
-Description: {self._spec.description or 'Warehouse Delivery Assignment'}
+Description: {self._spec.description or "Warehouse Delivery Assignment"}
 
 ### Objective Function
 {objective_policy}
@@ -72,40 +137,59 @@ Within each group, orders are packed sequentially into vehicles using first-fit.
 When a vehicle reaches capacity (pallet limit), a new vehicle is opened for the same group.
 Subcategory splits occur when a subcategory group's total pallets exceed one vehicle's capacity.
 Example: if subcategory 3 has 50 pallets and HQ40 capacity is 40, it needs 2 vehicles -> 1 split.
-
-To reduce splits, an operator typically consolidates orders so a subcategory fits in
-fewer vehicles: merging partially-filled vehicles of the SAME vehicle_subcategory,
-or moving orders between vehicles to free up space for same-subcategory consolidation.
-To reduce cost while preserving splits, an operator typically downsizes, merges
-under-filled compatible vehicles, or removes vehicles without spreading a subcategory
-across more vehicles. Random order moves between arbitrary vehicles are unlikely to
-improve either metric reliably.
-
-### Worked Example (Small Instance)
-Instance: 6 orders, 2 subcategories, all Shenzhen region
-  Orders: A1(subcat=1,8plt), A2(subcat=1,6plt), A3(subcat=1,10plt),
-          A4(subcat=1,12plt), B1(subcat=2,5plt), B2(subcat=2,4plt)
-  Vehicle types: T10(cap=14,cost=1800), HQ40(cap=40,cost=3300)
-
-Greedy init (groups by subcategory, first-fit):
-  V1[T10]: A1(8)+A2(6)=14plt -> full
-  V2[T10]: A3(10) -> 10plt (A4 won't fit: 10+12=22 > 14)
-  V3[T10]: A4(12) -> 12plt
-  V4[T10]: B1(5)+B2(4)=9plt
-  Objective: splits=2 (subcat 1 in V1,V2,V3 -> split=2; subcat 2 in V4 -> split=0)
-             cost=4*1800=7200
-
-Improved (merge subcat-1 vehicles into HQ40):
-  V1[HQ40]: A1+A2+A3+A4=36plt
-  V4[T10]: B1+B2=9plt
-  Objective: splits=0, cost=3300+1800=5100 -> BETTER on both objectives
-
-The key move: merging V2+V3 orders into V1 (upgrading to HQ40).
-This is what a good subcategory-consolidation operator should do.
+H6 amount-limit keys use `f"{{order.destination_country}},{{order.ship_method}}"`
+(country first, comma separator).
 
 Operator categories: {cats}
-Editable files: {editable}
-Frozen files (do not modify): {frozen}"""
+Editable operator source: {editable}
+
+Both order-level and vehicle-level research remain open. Inspect the current
+champion source and branch evidence before choosing which surface and algorithmic
+idea to investigate."""
+
+    def render_solver_mechanics(self) -> str:
+        """Render proposal-only search-loop and registry semantics."""
+
+        config = _load_warehouse_solver_config(self._root)
+        registry = _load_warehouse_registry(self._root)
+        pool_size = getattr(config, "pool_size", "unknown")
+        max_iterations = getattr(
+            config,
+            "max_iterations",
+            getattr(self._spec.solver, "max_iter", "unknown"),
+        )
+        no_improve_limit = getattr(config, "no_improve_limit", "unknown")
+        registry_summary = (
+            ", ".join(f"{entry['name']}={entry['weight']:g}" for entry in registry)
+            or "unavailable"
+        )
+
+        return f"""\
+### Active Warehouse Solver Mechanics
+- `greedy_init` constructs one starting solution. `run_vns` copies it to a
+  top-{pool_size} elitist solution pool ordered by the declared lexicographic
+  objective.
+- The search runs for at most {max_iterations} iterations and stops after
+  {no_improve_limit} consecutive iterations without a new pool-best objective.
+  The runner may also supply a wall-clock limit; the loop polls it between
+  iterations and pool members.
+- For every pool solution in an iteration, one registered operator is selected
+  from normalized cumulative registry weights, invoked with the shared seeded
+  `random.Random`, and checked by the fixed feasibility oracle. Feasible outputs
+  are merged with the old pool and only the best {pool_size} survive.
+- Current registry weights: {registry_summary}.
+- A `modify` candidate keeps the matched operator's weight. A `create_new`
+  candidate is automatically registered, receives `suggested_weight` when
+  supplied (otherwise 0.1), and then all candidate weights are normalized to
+  sum to 1. Creating an operator therefore also changes every existing
+  operator's selection share; no manual registry edit is required.
+- Same-seed runs are deterministic, but changed RNG consumption or pool state
+  can produce a divergent downstream trajectory. Interpret final paired
+  objectives rather than assuming step-by-step coupling.
+
+These mechanics are proposal context only. Solver, registry, feasibility,
+Protocol, and Decision behavior remain fixed outside the declared operator
+research surface."""
 
     def render_operator_interface(self) -> str:
         base_py_path = os.path.join(self._root, "operators", "base.py")
@@ -145,14 +229,15 @@ Frozen files (do not modify): {frozen}"""
   - `ship_method: str` — shipping method (H6 grouping key with destination_country)
   - `destination_country: str` — destination country (H6 grouping key with ship_method)
   - `spu_list: list[SPU]` — packing units; use `calc_pallets(order.spu_list)` from models.py
-  - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = MUST stay in that vehicle
+  - `locked_vehicle_id: Optional[str]` — None = freely assignable; non-None = an origin-group ID whose complete group may move as one unit
 - `Instance`: accessed via `self.instance` (set in __init__); contains `orders: dict[str, Order]`, `amount_limits: dict[str, float]`
+  - H6 amount-limit keys are exactly `f"{{order.destination_country}},{{order.ship_method}}"` (country first, comma separator)
 - Helper: `select_minimum_vehicle_type(total_pallets, total_hazard) -> str` from models.py
 - Helper: `get_max_pickups(region) -> int` from models.py (Dongguan=2, Shenzhen=3)
 
 ### Critical Constraints
 1. **Deep copy first**: always call `new_sol = solution.deep_copy()` before any modification
-2. **Locked orders**: never move orders where `order.locked_vehicle_id is not None`
+2. **Locked groups**: orders sharing any non-None `locked_vehicle_id` are one indivisible movable group; move all or none
 3. **rng**: use `rng` (a `random.Random` instance) for all randomness — do NOT import `random` directly
 4. **Determinism**: NEVER use `uuid.uuid4()` or any system entropy source. Generate vehicle IDs with `generate_vehicle_id(rng)` from `operators.base`. NEVER use `list(set(...))` or iterate over `set`/`dict` in an order-dependent way. Use `sorted()` when you need a stable order from sets or dict keys/values. The solver runs twice with the same seed to verify determinism — any non-deterministic output causes rejection.
 5. **Return value**: return the modified solution (or the original if no valid move was found)
@@ -167,6 +252,101 @@ Frozen files (do not modify): {frozen}"""
 12. **Same region**: all orders in a vehicle must have the same `pickup_city` region
 13. **Same category**: all orders in a vehicle must have the same `vehicle_category`
 14. **Pickup limit**: number of distinct `pickup_name` values in a vehicle must not exceed `get_max_pickups(region)`"""
+
+    def render_research_surface_interface(self, surface_name: str) -> str:
+        """Render the operator interface plus surface-local prompt guidance."""
+
+        interface = self.render_operator_interface()
+        guidance = _render_surface_prompt_guidance(self._spec, surface_name)
+        if not guidance:
+            return interface
+        return f"{interface}\n\n{guidance}"
+
+    def render_problem_measurement_diagnostics(self) -> Mapping[str, Any]:
+        """Return safe, proposal-visible warehouse research opportunities."""
+
+        from scion.measurement.consumer_view import measurement_consumer_view
+
+        measurement = measurement_consumer_view(self._spec)
+
+        return {
+            "schema_version": "warehouse_research_opportunity_diagnostic.v2",
+            "objective_model": {
+                "mode": "lexicographic",
+                "metrics": ["subcategory_splits", "total_cost"],
+                "interpretation": (
+                    "total_cost matters when subcategory_splits is preserved; "
+                    "feasibility is always required"
+                ),
+            },
+            "measurable_opportunity_classes": [
+                {
+                    "surface": "order_level",
+                    "research_question": (
+                        "Can order reassignment or exchange improve subcategory "
+                        "consolidation or reduce cost without worsening splits?"
+                    ),
+                },
+                {
+                    "surface": "vehicle_level",
+                    "research_question": (
+                        "Can vehicle merge, split, resize, or rebuild structure "
+                        "improve the lexicographic objective while preserving "
+                        "assignment feasibility?"
+                    ),
+                },
+            ],
+            "opportunity_diagnostics": [
+                {
+                    "diagnostic_type": "open_algorithm_research",
+                    "metric": "lexicographic_objective",
+                    "summary": (
+                        "The current source and complete branch evidence should "
+                        "determine the next algorithmic direction; neither "
+                        "warehouse research surface is preselected."
+                    ),
+                }
+            ],
+            "aggregate_objective_headroom": {
+                "schema_version": "warehouse_aggregate_objective_headroom.v1",
+                "availability": "structural_only",
+                "objective_mode": self._spec.objective_policy.mode,
+                "theoretical_lower_bounds": {"subcategory_splits": 0},
+                "current_champion_numeric_aggregate": (
+                    "not_available_from_source_only"
+                ),
+                "interpretation": (
+                    "Per-case primary headroom is the current champion's "
+                    "subcategory_splits down to the structural lower bound 0. "
+                    "A total_cost reduction is relevant only when every "
+                    "higher-priority metric ties. Numeric champion headroom "
+                    "must come from visible canonical experiment evidence; it "
+                    "is not inferred from source or hidden evaluation cases."
+                ),
+            },
+            "aggregate_noise_context": {
+                "schema_version": "warehouse_aggregate_noise_context.v1",
+                "metric": measurement.effect_metric,
+                "unit": measurement.effect_unit,
+                "mde_at_power_80": measurement.mde_at_power_80,
+                "noise_band_p90_abs": measurement.noise_band_p90_abs,
+                "n_pairs": measurement.n_pairs,
+                "pairing_validity": measurement.pairing_validity,
+                "signal_to_noise_tier": measurement.signal_to_noise_tier,
+                "calibration_evidence_level": measurement.evidence_depth,
+                "interpretation": (
+                    "Use these aggregate calibration facts to size and explain "
+                    "an expected effect. They are not candidate thresholds, "
+                    "case outcomes, or Decision inputs."
+                ),
+            },
+            "policy": (
+                "These structural headroom and aggregate calibration facts "
+                "support hypothesis formation only. They contain no hidden "
+                "evaluation-case details and do not constrain which algorithmic "
+                "mechanism the agent may investigate."
+            ),
+        }
 
     # --- Instance / output ---
 
@@ -267,7 +447,7 @@ Frozen files (do not modify): {frozen}"""
 
         missing = all_order_ids - set(placed.keys())
         if missing:
-            reasons.append(f"{len(missing)} orders not assigned: {sorted(missing)[:5]}")
+            reasons.append(f"{len(missing)} orders not assigned: {sorted(missing)}")
 
         return CheckReport(passed=len(reasons) == 0, reasons=tuple(reasons))
 
@@ -284,7 +464,7 @@ Frozen files (do not modify): {frozen}"""
         feas = self._oracle_mod.check_feasibility(solution, instance, phase=1)
         return CheckReport(
             passed=feas.is_feasible,
-            reasons=tuple(feas.violations[:10]),
+            reasons=tuple(feas.violations),
         )
 
     def recompute_objective(
@@ -403,9 +583,77 @@ def _render_objective_implication(spec: ProblemSpecV1) -> str:
     )
 
 
+def _load_warehouse_solver_config(root: str) -> Any | None:
+    """Load current solver settings for proposal rendering."""
+
+    try:
+        module = _import_module(root, "config.py", "_scion_warehouse_prompt_config")
+        config_class = getattr(module, "Config", None)
+        return config_class() if callable(config_class) else None
+    except (OSError, ImportError, AttributeError, TypeError, RuntimeError):
+        return None
+
+
+def _load_warehouse_registry(root: str) -> list[dict[str, str | float]]:
+    """Read safe operator names and weights from the current registry."""
+
+    import yaml  # noqa: PLC0415
+
+    registry_path = os.path.join(root, "registry.yaml")
+    try:
+        with open(registry_path, encoding="utf-8") as fh:
+            payload = yaml.safe_load(fh)
+    except (OSError, yaml.YAMLError):
+        return []
+    if not isinstance(payload, Mapping):
+        return []
+    operators = payload.get("operators")
+    if not isinstance(operators, list):
+        return []
+
+    registry: list[dict[str, str | float]] = []
+    for entry in operators:
+        if not isinstance(entry, Mapping):
+            continue
+        name = str(entry.get("name") or "").strip()
+        try:
+            weight = float(entry.get("weight"))
+        except (TypeError, ValueError):
+            continue
+        if not name or not math.isfinite(weight) or weight < 0:
+            continue
+        registry.append({"name": name, "weight": weight})
+    return registry
+
+
+def _render_surface_prompt_guidance(spec: ProblemSpecV1, surface_name: str) -> str:
+    surface = None
+    for candidate in spec.research_surfaces or []:
+        if getattr(candidate, "name", "") == surface_name:
+            surface = candidate
+            break
+    if surface is None:
+        return ""
+    prompt = getattr(surface, "prompt", None)
+    if prompt is None:
+        return ""
+    lines = [f"### Active Surface Prompt Guidance: {surface_name}"]
+    hypothesis = str(getattr(prompt, "hypothesis_guidance", "") or "").strip()
+    implementation = str(getattr(prompt, "implementation_guidance", "") or "").strip()
+    anti_patterns = str(getattr(prompt, "anti_patterns", "") or "").strip()
+    if hypothesis:
+        lines.append(f"- hypothesis_guidance: {hypothesis}")
+    if implementation:
+        lines.append(f"- implementation_guidance: {implementation}")
+    if anti_patterns:
+        lines.append(f"- anti_patterns: {anti_patterns}")
+    return "\n".join(lines) if len(lines) > 1 else ""
+
+
 # ---------------------------------------------------------------------------
 # Module import helper (extracted from verification/feasibility.py)
 # ---------------------------------------------------------------------------
+
 
 def _import_module(directory: str, filename: str, sys_key: str) -> Any:
     path = os.path.join(directory, filename)

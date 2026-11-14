@@ -12,8 +12,8 @@ Verifies:
 """
 from __future__ import annotations
 
-import os
-from typing import List
+import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -21,14 +21,19 @@ import pytest
 from scion.config.problem import ProtocolConfig, SplitManifest, SeedLedgerConfig
 from scion.config.protocol_config import ScreeningConfig, ValidationConfig, FrozenConfig
 from scion.core.models import (
-    ExperimentStage, EvalStats, RunResult, SolverOutput,
+    ExperimentStage, RunResult, SolverOutput,
     PairwiseCaseFeedback,
 )
 from scion.protocol.stats import compute_eval_stats, bootstrap_ci
-from scion.protocol.experiment import (
-    ExperimentProtocol, SplitManager, SeedLedger, _aggregate_pairs_to_case_level,
-    _select_evenly_spaced_cases,
-)
+from scion.protocol.experiment import ExperimentProtocol, SplitManager, SeedLedger
+from scion.protocol.experiment.feedback import _aggregate_pairs_to_case_level
+from scion.protocol.experiment.selection import _select_evenly_spaced_cases
+from scion.protocol.experiment.selection import select_cases
+from scion.protocol.experiment.selection import validate_requested_screening_expansion
+from scion.protocol.experiment.feedback import _protected_objective_regressions
+from scion.problem.loader import load_problem_adapter, load_problem_spec_v1_from_yaml
+from scion.problem.spec import ObjectiveMetricSpec
+from scion.tests.protocol_adapter_test_support import protocol_test_adapter
 
 
 # ---------------------------------------------------------------------------
@@ -48,7 +53,7 @@ def minimal_config():
             expand_to_create=8,
         ),
         validation=ValidationConfig(n_cases=4, n_seeds=2, expand_to=7),
-        frozen=FrozenConfig(n_cases=3, n_seeds=2, max_uses_per_campaign=3),
+        frozen=FrozenConfig(n_cases=3, n_seeds=2),
     )
 
 
@@ -76,12 +81,50 @@ def minimal_ledger():
     )
 
 
+def test_multi_round_screening_preflight_rejects_non_expanding_cases(
+    minimal_config, minimal_manifest
+):
+    minimal_config.screening.expand_to_modify = minimal_config.screening.n_cases_modify
+
+    with pytest.raises(ValueError, match="expand_to_modify > n_cases_modify"):
+        validate_requested_screening_expansion(
+            config=minimal_config,
+            split_manifest=minimal_manifest,
+            requested_rounds=2,
+        )
+
+
+def test_multi_round_screening_preflight_checks_declared_population(
+    minimal_config, minimal_manifest
+):
+    minimal_config.screening.expand_to_create = 9
+
+    with pytest.raises(ValueError, match="requests 9 cases.*declares 8"):
+        validate_requested_screening_expansion(
+            config=minimal_config,
+            split_manifest=minimal_manifest,
+            requested_rounds=2,
+        )
+
+
+def test_single_round_does_not_require_an_expansion_population(
+    minimal_config, minimal_manifest
+):
+    minimal_config.screening.expand_to_modify = minimal_config.screening.n_cases_modify
+    minimal_config.screening.expand_to_create = minimal_config.screening.n_cases_create
+
+    validate_requested_screening_expansion(
+        config=minimal_config,
+        split_manifest=minimal_manifest,
+        requested_rounds=1,
+    )
+
+
 def _win_result(splits=1, cost=900, feasible=True) -> RunResult:
     """Runner result for 'candidate is better' (fewer splits, lower cost)."""
     return RunResult(
         success=True, exit_code=0, stdout="", stderr="", elapsed_ms=10,
         output=SolverOutput(
-            vehicles={}, assignment={},
             objective={"subcategory_splits": splits, "total_cost": cost},
             feasible=feasible,
         ),
@@ -93,7 +136,6 @@ def _loss_result(splits=3, cost=1500, feasible=True) -> RunResult:
     return RunResult(
         success=True, exit_code=0, stdout="", stderr="", elapsed_ms=10,
         output=SolverOutput(
-            vehicles={}, assignment={},
             objective={"subcategory_splits": splits, "total_cost": cost},
             feasible=feasible,
         ),
@@ -105,9 +147,48 @@ def _champ_result() -> RunResult:
     return RunResult(
         success=True, exit_code=0, stdout="", stderr="", elapsed_ms=10,
         output=SolverOutput(
-            vehicles={}, assignment={},
             objective={"subcategory_splits": 2, "total_cost": 1000},
             feasible=True,
+        ),
+    )
+
+
+def _solver_design_result(*, distance: float, elapsed_ms: int) -> RunResult:
+    return RunResult(
+        success=True,
+        exit_code=0,
+        stdout="",
+        stderr="",
+        elapsed_ms=elapsed_ms,
+        output=SolverOutput(
+            objective={"fleet_violation": 0, "total_distance": distance},
+            feasible=True,
+            runtime={
+                "solver_algorithm_loaded": True,
+                "solver_algorithm_active": True,
+                "solver_algorithm_errors": 0,
+                "solver_algorithm_elapsed_ms": elapsed_ms,
+                "solver_algorithm_phase_runtime_ms": {"main": elapsed_ms},
+                "solver_algorithm_solution_valid": True,
+                "solver_algorithm_solution_routes": 3,
+                "solver_algorithm_objective": {
+                    "fleet_violation": 0,
+                    "total_distance": distance,
+                },
+                "solver_algorithm_total_distance": distance,
+                "solver_algorithm_fleet_violation": 0,
+                "solver_algorithm_search_iterations": 4,
+                "solver_algorithm_move_attempts": 8,
+                "solver_algorithm_accepted_moves": 1,
+                "solver_algorithm_improving_moves": 1,
+                "solver_algorithm_neutral_accepted_moves": 0,
+                "solver_algorithm_best_improving_moves": 1,
+                "solver_algorithm_best_delta": 2.0,
+                "solver_algorithm_phase_delta_sum": {"main": 2.0},
+                "solver_algorithm_phase_best_delta": {"main": 2.0},
+                "solver_algorithm_phase_improvement_counts": {"main": 1},
+                "solver_algorithm_stop_reason": "done",
+            },
         ),
     )
 
@@ -132,15 +213,70 @@ def _make_pair_fb(case_id: str, seed: int, comparison: str, delta: float) -> Pai
     )
 
 
+def _strict_manifest(manifest, tmp_path) -> SplitManifest:
+    data_root = tmp_path / "cases"
+    for case in (
+        *manifest.screening,
+        *manifest.validation,
+        *manifest.frozen,
+        *manifest.canary,
+    ):
+        path = data_root / case
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("{}\n", encoding="utf-8")
+    return manifest.model_copy(update={"safe_data_roots": [str(data_root)]})
+
+
 def _make_proto(runner, config, manifest, ledger, tmp_path) -> ExperimentProtocol:
     return ExperimentProtocol(
         protocol_config=config,
-        split_manager=SplitManager(manifest),
+        split_manager=SplitManager(_strict_manifest(manifest, tmp_path)),
         seed_ledger=SeedLedger(ledger),
         runner=runner,
         time_limit_sec=10,
         metrics_dir=str(tmp_path / "metrics"),
+        adapter=protocol_test_adapter(
+            (
+                ObjectiveMetricSpec(
+                    name="subcategory_splits", direction="minimize", priority=1
+                ),
+                ObjectiveMetricSpec(
+                    name="total_cost", direction="minimize", priority=2
+                ),
+            ),
+        ),
     )
+
+
+def test_protocol_progress_callback_forwards_runner_child_process_updates(
+    minimal_config,
+    minimal_manifest,
+    minimal_ledger,
+    tmp_path,
+):
+    runner = MagicMock()
+    proto = _make_proto(runner, minimal_config, minimal_manifest, minimal_ledger, tmp_path)
+    events: list[dict] = []
+
+    proto.set_progress_callback(lambda **payload: events.append(dict(payload)))
+
+    runner.set_progress_callback.assert_called_once()
+    runner_callback = runner.set_progress_callback.call_args.args[0]
+    runner_callback(
+        stage="screening",
+        child_pid=12345,
+        child_phase="solver_subprocess",
+        case="s1",
+        seed=10,
+    )
+
+    assert events[-1]["child_pid"] == 12345
+    assert events[-1]["child_phase"] == "solver_subprocess"
+    assert events[-1]["case"] == "s1"
+    assert events[-1]["seed"] == 10
+
+    proto.set_progress_callback(None)
+    assert runner.set_progress_callback.call_args.args[0] is None
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +319,46 @@ def test_case_level_majority_vote_aggregation():
     assert by_case["c2"].comparison == "loss"
     # c3: wins=1, losses=1, ties=1 — no majority, should be "tie"
     assert by_case["c3"].comparison == "tie"
+
+
+def test_protected_regression_is_derived_from_pair_metric_relations():
+    from scion.problem.objectives import MetricComparison, ObjectiveComparison
+
+    comparison = ObjectiveComparison(
+        outcome="win",
+        decisive_metric="total_distance",
+        scalar_delta=20.0,
+        metrics=(
+            MetricComparison(
+                name="fleet_violation",
+                candidate_value=1,
+                champion_value=0,
+                signed_delta=-1.0,
+                relation="champion",
+            ),
+            MetricComparison(
+                name="total_distance",
+                candidate_value=980.0,
+                champion_value=1000.0,
+                signed_delta=20.0,
+                relation="candidate",
+                decisive=True,
+            ),
+        ),
+    )
+    pair = PairwiseCaseFeedback(
+        case_id="c1",
+        seed=10,
+        comparison="win",
+        delta=20.0,
+        objective_comparison=comparison,
+    )
+
+    assert _protected_objective_regressions(
+        [pair],
+        ("fleet_violation",),
+    ) == ("fleet_violation",)
+    assert _protected_objective_regressions([pair], ()) == ()
 
 
 def test_case_selection_uses_manifest_spread_not_prefix():
@@ -238,8 +414,9 @@ def test_canary_uses_canary_split_and_canary_seeds(
         call.kwargs["instance_path"] for call in runner.run_solver.call_args_list
     }
     # Canary cases are c1, c2
-    assert "c1" in called_instances
-    assert "c2" in called_instances
+    called_names = {Path(value).name for value in called_instances}
+    assert "c1" in called_names
+    assert "c2" in called_names
     # Screening cases (s1..s8) must NOT be used
     screening_cases = set(minimal_manifest.screening)
     assert called_instances.isdisjoint(screening_cases), (
@@ -328,9 +505,68 @@ def test_expand_increases_cases_not_seeds(
     assert len(expand_instances) > len(no_expand_instances), (
         "expand must increase case count"
     )
+    assert no_expand_instances < expand_instances, (
+        "expanded population must strictly contain the initial population"
+    )
     assert expand_seeds == no_expand_seeds, (
         f"expand must NOT change seed set: {expand_seeds} != {no_expand_seeds}"
     )
+
+
+@pytest.mark.parametrize(
+    "stage",
+    [ExperimentStage.VALIDATION, ExperimentStage.FROZEN],
+)
+def test_confirmatory_experiment_uses_declared_bootstrap_count(
+    minimal_config,
+    minimal_manifest,
+    minimal_ledger,
+    tmp_path,
+    monkeypatch,
+    stage,
+):
+    import scion.protocol.experiment.stages as stages_module
+
+    configured = minimal_config.model_copy(deep=True)
+    configured.gates.validation.bootstrap_n = 37
+    runner = MagicMock()
+    runner.run_solver.return_value = _win_result()
+    proto = _make_proto(runner, configured, minimal_manifest, minimal_ledger, tmp_path)
+    observed: list[int] = []
+    real_compute = stages_module.compute_eval_stats
+
+    def recording_compute(*args, **kwargs):
+        observed.append(kwargs["n_boot"])
+        return real_compute(*args, **kwargs)
+
+    monkeypatch.setattr(stages_module, "compute_eval_stats", recording_compute)
+
+    proto.run_experiment(
+        stage,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert observed == [37]
+
+
+def test_expand_rejects_a_population_without_new_cases(
+    minimal_config,
+    minimal_manifest,
+):
+    configured = minimal_config.model_copy(deep=True)
+    configured.validation.expand_to = configured.validation.n_cases
+    manager = SplitManager(minimal_manifest)
+
+    with pytest.raises(ValueError, match="must be larger"):
+        select_cases(
+            config=configured,
+            split_manager=manager,
+            stage=ExperimentStage.VALIDATION,
+            hypothesis_action="modify",
+            expand_round=1,
+        )
 
 
 def test_screening_expand_respects_action_specific_limits(
@@ -371,6 +607,117 @@ def test_screening_expand_respects_action_specific_limits(
     assert n_create > minimal_config.screening.n_cases_create  # 8 > 5
 
 
+def test_configured_priority_cases_are_retained_by_unique_basename(minimal_config):
+    config = minimal_config.model_copy(
+        update={
+            "screening": minimal_config.screening.model_copy(
+                update={"priority_case_ids": ("CMT2.vrp",)}
+            )
+        }
+    )
+    manifest = SplitManifest(
+        version="test",
+        screening=[
+            "cvrplib/A/A1.vrp",
+            "cvrplib/CMT/CMT1.vrp",
+            "cvrplib/CMT/CMT2.vrp",
+            "cvrplib/CMT/CMT3.vrp",
+            "cvrplib/CMT/CMT4.vrp",
+            "cvrplib/P/P1.vrp",
+            "cvrplib/P/P2.vrp",
+            "cvrplib/X/X1.vrp",
+        ],
+        validation=[],
+        frozen=[],
+        canary=["c1"],
+    )
+
+    selected = select_cases(
+        config=config,
+        split_manager=SplitManager(manifest),
+        stage=ExperimentStage.SCREENING,
+        hypothesis_action="modify",
+        expand_round=0,
+    )
+
+    assert len(selected) == minimal_config.screening.n_cases_modify
+    assert "cvrplib/CMT/CMT2.vrp" in selected
+
+
+def test_configured_screening_priority_cases_are_retained_for_create_new(
+    tmp_path,
+):
+    config = ProtocolConfig(
+        version="test",
+        screening=ScreeningConfig(
+            n_cases_modify=8,
+            n_cases_create=12,
+            n_seeds=2,
+            expand_to_modify=12,
+            expand_to_create=16,
+            priority_case_ids=("CMT2.vrp", "CMT4.vrp"),
+        ),
+    )
+    manifest = SplitManifest(
+        version="test",
+        screening=[
+            "cvrplib/A/A-n64-k9.vrp",
+            "cvrplib/A/A-n80-k10.vrp",
+            "cvrplib/B/B-n63-k10.vrp",
+            "cvrplib/B/B-n67-k10.vrp",
+            "cvrplib/E/E-n101-k14.vrp",
+            "cvrplib/E/E-n101-k8.vrp",
+            "cvrplib/P/P-n65-k10.vrp",
+            "cvrplib/P/P-n76-k4.vrp",
+            "cvrplib/P/P-n101-k4.vrp",
+            "cvrplib/CMT/CMT2.vrp",
+            "cvrplib/CMT/CMT3.vrp",
+            "cvrplib/CMT/CMT4.vrp",
+            "cvrplib/M/M-n151-k12.vrp",
+            "cvrplib/M/M-n200-k17.vrp",
+            "cvrplib/tai/tai150c.vrp",
+            "cvrplib/X/X-n110-k13.vrp",
+        ],
+    )
+
+    selected = select_cases(
+        config=config,
+        split_manager=SplitManager(manifest),
+        stage=ExperimentStage.SCREENING,
+        hypothesis_action="create_new",
+        expand_round=0,
+    )
+
+    assert len(selected) == 12
+    assert "cvrplib/CMT/CMT2.vrp" in selected
+    assert "cvrplib/CMT/CMT4.vrp" in selected
+
+    runner = MagicMock()
+    runner.run_solver.return_value = _win_result()
+    ledger = SeedLedgerConfig(
+        version="test",
+        screening=[10, 20],
+        validation=[],
+        frozen=[],
+    )
+    proto = _make_proto(runner, config, manifest, ledger, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "create_new",
+    )
+    metrics = json.loads(Path(result.raw_metrics_ref).read_text(encoding="utf-8"))
+
+    assert metrics["configured_priority_case_ids"] == ["CMT2.vrp", "CMT4.vrp"]
+    assert "requested_priority_case_ids" not in metrics
+    assert metrics["effective_priority_case_ids"] == [
+        "cvrplib/CMT/CMT2.vrp",
+        "cvrplib/CMT/CMT4.vrp",
+    ]
+
+
 # ---------------------------------------------------------------------------
 # T5: screening/validation/frozen select case counts from config
 # ---------------------------------------------------------------------------
@@ -392,6 +739,52 @@ def test_screening_selects_modify_case_count(
     assert result.stats.n_cases == expected, (
         f"screening modify: expected n_cases={expected}, got {result.stats.n_cases}"
     )
+
+
+def test_screening_pair_ledger_persists_candidate_and_champion_runtime(
+    minimal_config, minimal_manifest, minimal_ledger, tmp_path
+):
+    runner = MagicMock()
+
+    def run_solver(**kwargs):
+        if kwargs["workdir"] == "/champ":
+            return _solver_design_result(distance=1000.0, elapsed_ms=10)
+        return _solver_design_result(distance=990.0, elapsed_ms=12)
+
+    runner.run_solver.side_effect = run_solver
+    spec_path = (
+        Path(__file__).resolve().parents[3]
+        / "problems"
+        / "cvrp"
+        / "problem-v1.yaml"
+    )
+    adapter = load_problem_adapter(load_problem_spec_v1_from_yaml(spec_path))
+    proto = ExperimentProtocol(
+        protocol_config=minimal_config,
+        split_manager=SplitManager(_strict_manifest(minimal_manifest, tmp_path)),
+        seed_ledger=SeedLedger(minimal_ledger),
+        runner=runner,
+        time_limit_sec=10,
+        metrics_dir=str(tmp_path / "metrics"),
+        adapter=adapter,
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="solver_design",
+    )
+    metrics = json.loads(Path(result.raw_metrics_ref).read_text(encoding="utf-8"))
+    pair = metrics["pairs"][0]
+
+    assert pair["candidate_runtime"]["solver_algorithm_loaded"] is True
+    assert pair["candidate_runtime"]["solver_algorithm_elapsed_ms"] == 12
+    assert pair["candidate_runtime"]["solver_algorithm_total_distance"] == 990.0
+    assert pair["champion_runtime"]["solver_algorithm_loaded"] is True
+    assert pair["champion_runtime"]["solver_algorithm_elapsed_ms"] == 10
+    assert pair["champion_runtime"]["solver_algorithm_total_distance"] == 1000.0
 
 
 def test_screening_selects_create_case_count(

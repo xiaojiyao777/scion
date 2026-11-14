@@ -1,4 +1,4 @@
-"""Dynamic loader for ProblemAdapter implementations.
+"""Dynamic loaders for ProblemSpecV1 definitions and their adapters.
 
 Loads a ProblemAdapter from the import_path specified in ProblemSpecV1.
 All adapters must live under ``scion.problems.<id>.*`` — this is enforced
@@ -7,7 +7,10 @@ both by ProblemSpecV1 validation and by the loader itself.
 from __future__ import annotations
 
 import importlib
+from pathlib import Path
 from typing import cast
+
+import yaml
 
 from scion.problem.contracts import ProblemAdapter
 from scion.problem.spec import ProblemSpecV1
@@ -15,6 +18,42 @@ from scion.problem.spec import ProblemSpecV1
 
 class ProblemAdapterLoadError(RuntimeError):
     pass
+
+
+def load_problem_spec_v1_from_yaml(path: str | Path) -> ProblemSpecV1:
+    """Load ProblemSpecV1, resolving root_dir relative to the YAML file."""
+
+    spec_path = Path(path).expanduser().resolve()
+    with open(spec_path, encoding="utf-8") as fh:
+        payload = yaml.safe_load(fh) or {}
+    root_dir = str(payload.get("root_dir") or "").strip()
+    if not root_dir or root_dir == "PLACEHOLDER":
+        payload["root_dir"] = str(spec_path.parent)
+    else:
+        root_path = Path(root_dir).expanduser()
+        if not root_path.is_absolute():
+            payload["root_dir"] = str((spec_path.parent / root_path).resolve())
+    return ProblemSpecV1(**payload)
+
+
+def adapter_package_prefixes(spec: object) -> tuple[str, ...]:
+    """Return the package containing the adapter declared by *spec*.
+
+    Source-research code uses this ordinary declaration to follow adjacent
+    imports without assuming where problem packages live in the repository.
+    """
+
+    adapter_ref = getattr(spec, "adapter", None)
+    import_path = str(
+        getattr(adapter_ref, "import_path", None)
+        or getattr(spec, "adapter_import_path", None)
+        or ""
+    ).strip()
+    module_path = import_path.split(":", 1)[0].strip()
+    if not module_path or "." not in module_path:
+        return ()
+    package = module_path.rsplit(".", 1)[0].strip(".")
+    return (f"{package}.",) if package else ()
 
 
 def load_problem_adapter(spec: ProblemSpecV1) -> ProblemAdapter:

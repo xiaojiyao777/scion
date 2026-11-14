@@ -1,0 +1,5 @@
+version: 0.4-cvrp-r26-scope-and-net-benefit-autonomous
+screening: [320009, 320011, 320027, 320039, 320041, 320053, 320057, 320063]
+validation: [320081, 320083, 320101, 320107]
+frozen: [320113, 320119, 320141, 320143]
+canary: [320149]

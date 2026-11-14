@@ -1,0 +1,91 @@
+{
+  "current_question": "Scion 能否在不给人工指定 patch、target file 或算法修复方案的情况下，利用 M7 的结构化失败证据，自主提出、实现、验证并评估下一代 VRP solver candidate？",
+  "observations": [
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "candidate_evaluation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "initial",
+          "valid_pairs": 32,
+          "planned_pairs": 32,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "expand",
+          "decision": "expand_screening",
+          "case_outcomes": {
+            "wins": 6,
+            "losses": 0,
+            "ties": 2,
+            "median_delta": 6.25,
+            "ci_low": 0.0,
+            "ci_high": 74.0
+          }
+        },
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 96,
+          "planned_pairs": 96,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "pass",
+          "decision": "queue_validate",
+          "case_outcomes": {
+            "wins": 7,
+            "losses": 2,
+            "ties": 3,
+            "median_delta": 2.0,
+            "ci_low": 0.0,
+            "ci_high": 27.25
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "validation",
+        "terminal_code": "CANDIDATE_SUBJECT_VETO",
+        "arm": "candidate",
+        "case_id": "X-n200-k36",
+        "seed": 2069,
+        "failure": {
+          "category": "solver_algorithm_error",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "failure_kind",
+              "value": "route_packing_failure"
+            },
+            {
+              "name": "unpacked_customer_id",
+              "value": 106
+            },
+            {
+              "name": "route_limit",
+              "value": 36
+            }
+          ]
+        },
+        "stage_metrics_produced": false
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_candidate_on_reached_population",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    }
+  ]
+}

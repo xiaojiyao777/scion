@@ -102,7 +102,7 @@ def run_one(short, path, time_limit, note=""):
         "status": r.status,
         "solution_verified": r.solution_verified,
         "verification_issues_count": len(r.verification_issues) if r.verification_issues else 0,
-        "verification_issues_sample": r.verification_issues[:3] if r.verification_issues else [],
+        "verification_issues": list(r.verification_issues or ()),
         "objective_f1": r.objective_f1,
         "objective_f2": r.objective_f2,
         "phase1_time_s": round(r.phase1_time, 1),
@@ -119,7 +119,7 @@ def run_one(short, path, time_limit, note=""):
     if r.solution is not None:
         feas = check_feasibility(r.solution, inst, 1)
         rec["oracle_feasible"] = bool(feas.is_feasible)
-        rec["oracle_violations"] = list(feas.violations)[:5]
+        rec["oracle_violations"] = list(feas.violations)
         obj = recompute_objective(r.solution, inst)
         rec["oracle_f1"] = obj.subcategory_splits
         rec["oracle_f2"] = obj.total_cost
@@ -198,4 +198,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

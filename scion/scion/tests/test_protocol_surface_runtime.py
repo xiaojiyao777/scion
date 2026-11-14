@@ -1,0 +1,540 @@
+"""Focused tests split from test_protocol.py."""
+
+from scion.core.runtime_budget_diagnostics import (
+    CANDIDATE_RUNTIME_BUDGET_SATURATION,
+    CHAMPION_RUNTIME_BUDGET_SATURATION,
+    TINY_RUNTIME_BUDGET_SATURATION,
+)
+
+from .protocol_test_support import *  # noqa: F401,F403
+
+
+def test_run_experiment_records_tiny_runtime_budget_saturation(tmp_path):
+    runner = MagicMock()
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=900, runtime={}),
+        _make_run_result(1, 900, elapsed_ms=8100, runtime={}),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert TINY_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    assert CANDIDATE_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    assert CHAMPION_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    diagnostic = result.candidate_surface_runtime_summary[
+        "runtime_budget_diagnostic"
+    ]
+    assert diagnostic["code"] == TINY_RUNTIME_BUDGET_SATURATION
+    assert diagnostic["repairable"] is True
+    assert diagnostic["saturated_side"] == "candidate"
+    assert "runtime_budget_diagnostic=TINY_RUNTIME_BUDGET_SATURATION" in (
+        result.exposed_summary
+    )
+    assert "saturated_side=candidate" in result.exposed_summary
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_surface_runtime_summary"][
+        "runtime_budget_diagnostic"
+    ] == diagnostic
+
+
+def test_run_experiment_records_champion_only_runtime_budget_saturation(tmp_path):
+    runner = MagicMock()
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=8100, runtime={}),
+        _make_run_result(1, 900, elapsed_ms=900, runtime={}),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(runner, tmp_path)
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert TINY_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    assert CANDIDATE_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    assert CHAMPION_RUNTIME_BUDGET_SATURATION not in result.reason_codes
+    diagnostic = result.candidate_surface_runtime_summary[
+        "runtime_budget_diagnostic"
+    ]
+    assert diagnostic["code"] == TINY_RUNTIME_BUDGET_SATURATION
+    assert diagnostic["repairable"] is False
+    assert diagnostic["saturated_side"] == "champion"
+    assert "do not direct candidate repair" in diagnostic["guidance"]
+    assert "saturated_side=champion" in result.exposed_summary
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_surface_runtime_summary"][
+        "runtime_budget_diagnostic"
+    ] == diagnostic
+
+
+def test_budget_exhausting_runtime_model_is_recorded_as_a_raw_fact(
+    tmp_path,
+):
+    runner = MagicMock()
+    runner.run_solver.side_effect = [
+        _make_run_result(2, 1000),
+        _make_run_result(1, 900),
+    ] * 4
+    proto = _make_protocol(runner, tmp_path)
+    proto.config.runtime.runtime_model = "budget_exhausting"
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert result.gate_outcome == "pass"
+    assert result.reason_codes == ("SCREENING_PASS",)
+    assert result.runtime_model == "budget_exhausting"
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["runtime_model"] == "budget_exhausting"
+    assert raw["gate_outcome"] == "pass"
+    assert raw["reason_codes"] == ["SCREENING_PASS"]
+    assert raw["runtime_stats"]["runtime_pairs"] == 4
+
+
+def test_run_experiment_selected_surface_runtime_fields_are_diagnostic(tmp_path):
+    runner = MagicMock()
+    champ = _make_run_result(2, 1000, runtime={})
+    cand = _make_run_result(
+        1,
+        900,
+        runtime={"dispatch_loaded": True},
+    )
+    runner.run_solver.side_effect = [champ, cand] * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="dispatch_policy",
+    )
+
+    assert result.gate_outcome == "pass"
+    assert result.stats.failed_pairs == 0
+    assert result.stats.candidate_failed_pairs == 0
+    assert result.candidate_runtime_failure_categories == {}
+    assert result.candidate_first_runtime_failure is None
+    surface_summary = result.candidate_surface_runtime_summary
+    assert surface_summary["candidate_pairs"] == 4
+    assert surface_summary["fields"]["dispatch_loaded"]["present"] == 4
+    assert surface_summary["fields"]["dispatch_errors"]["missing"] == 4
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["selected_surface"] == "dispatch_policy"
+    assert raw["candidate_surface_runtime_summary"] == surface_summary
+
+
+def test_run_experiment_false_active_runtime_field_is_diagnostic(tmp_path):
+    runner = MagicMock()
+    champ = _make_run_result(2, 1000, runtime={})
+    cand = _make_run_result(
+        1,
+        900,
+        runtime={
+            "solver_algorithm_loaded": True,
+            "solver_algorithm_active": False,
+            "solver_algorithm_errors": 0,
+        },
+    )
+    runner.run_solver.side_effect = [champ, cand] * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="solver_design",
+            required_runtime_fields=(
+                "solver_algorithm_loaded",
+                "solver_algorithm_active",
+                "solver_algorithm_errors",
+            ),
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="solver_design",
+    )
+
+    assert result.gate_outcome == "pass"
+    assert result.stats.candidate_failed_pairs == 0
+    assert result.candidate_first_runtime_failure is None
+    surface_summary = result.candidate_surface_runtime_summary
+    assert surface_summary["fields"]["solver_algorithm_active"]["present"] == 4
+    assert surface_summary["fields"]["solver_algorithm_active"]["failed"] == 4
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_surface_runtime_summary"] == surface_summary
+
+
+def test_run_experiment_preserves_selected_surface_required_runtime_metrics(
+    tmp_path,
+):
+    runner = MagicMock()
+    required_fields = (
+        "algorithm_blueprint_loaded",
+        "algorithm_blueprint_active",
+        "algorithm_blueprint_errors",
+        "algorithm_plan",
+        "algorithm_phases_executed",
+        "algorithm_construction_methods",
+        "algorithm_baseline_time_fraction",
+        "algorithm_operator_round_limit",
+        "algorithm_post_baseline_operators_enabled",
+        "algorithm_local_search_components",
+        "algorithm_local_search_rounds",
+        "algorithm_local_search_attempts",
+        "algorithm_local_search_accepted",
+        "algorithm_restart_enabled",
+        "algorithm_restart_stagnation_rounds",
+        "algorithm_restart_count",
+        "algorithm_best_delta_by_phase",
+        "algorithm_phase_runtime_ms",
+        "algorithm_stop_reason",
+    )
+    candidate_runtime = {
+        "algorithm_blueprint_loaded": True,
+        "algorithm_blueprint_active": True,
+        "algorithm_blueprint_errors": 0,
+        "algorithm_plan": {
+            "enabled": True,
+            "baseline_time_fraction": 0.75,
+        },
+        "algorithm_phases_executed": [
+            "plan_loaded",
+            "construction_ensemble",
+            "baseline",
+            "local_search",
+        ],
+        "algorithm_construction_methods": ["nearest_neighbor", "demand_descending"],
+        "algorithm_baseline_time_fraction": 0.75,
+        "algorithm_operator_round_limit": 0,
+        "algorithm_post_baseline_operators_enabled": False,
+        "algorithm_local_search_components": [
+            "intra_route_2opt",
+            "inter_route_relocate",
+        ],
+        "algorithm_local_search_rounds": 2,
+        "algorithm_local_search_attempts": 12,
+        "algorithm_local_search_accepted": 1,
+        "algorithm_restart_enabled": True,
+        "algorithm_restart_stagnation_rounds": 8,
+        "algorithm_restart_count": 1,
+        "algorithm_best_delta_by_phase": {"local_search": 4.0},
+        "algorithm_phase_runtime_ms": {"local_search": 7},
+        "algorithm_stop_reason": "no_improvement_round",
+    }
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=100, runtime={}),
+        _make_run_result(1, 900, elapsed_ms=125, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="algorithm_blueprint",
+            required_runtime_fields=required_fields,
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="algorithm_blueprint",
+    )
+
+    assert result.selected_surface == "algorithm_blueprint"
+    summary = result.candidate_surface_runtime_summary
+    assert summary["selected_surface"] == "algorithm_blueprint"
+    assert summary["candidate_pairs"] == 4
+    assert summary["fields"]["algorithm_plan"]["present"] == 4
+    assert summary["fields"]["algorithm_phases_executed"]["present"] == 4
+    assert summary["fields"]["algorithm_blueprint_errors"]["failed"] == 0
+    accepted_numeric = summary["fields"]["algorithm_local_search_accepted"][
+        "numeric_summary"
+    ]["scalar"]
+    assert accepted_numeric["observed_count"] == 4
+    assert accepted_numeric["weighted_sum"] == 4.0
+    assert accepted_numeric["positive_count"] == 4
+    delta_numeric = summary["fields"]["algorithm_best_delta_by_phase"][
+        "numeric_summary"
+    ]["mapping"]["local_search"]
+    assert delta_numeric["observed_count"] == 4
+    assert delta_numeric["weighted_sum"] == 16.0
+    assert delta_numeric["positive_count"] == 4
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_surface_runtime_summary"] == summary
+    candidate_runtime_metrics = raw["pairs"][0]["candidate_runtime"]
+    assert candidate_runtime_metrics["algorithm_plan"] == {
+        "baseline_time_fraction": 0.75,
+        "enabled": True,
+    }
+    assert candidate_runtime_metrics["algorithm_phases_executed"] == [
+        "plan_loaded",
+        "construction_ensemble",
+        "baseline",
+        "local_search",
+    ]
+    assert candidate_runtime_metrics["algorithm_local_search_components"] == [
+        "intra_route_2opt",
+        "inter_route_relocate",
+    ]
+
+
+def test_run_experiment_normalizes_solver_algorithm_surface_alias(tmp_path):
+    runner = MagicMock()
+    candidate_runtime = {
+        "solver_algorithm_loaded": True,
+        "solver_algorithm_active": True,
+        "solver_algorithm_errors": 0,
+        "solver_algorithm_stop_reason": "completed",
+    }
+    pair = [
+        _make_run_result(2, 1000, runtime={}),
+        _make_run_result(1, 900, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="solver_design",
+            required_runtime_fields=(
+                "solver_algorithm_loaded",
+                "solver_algorithm_active",
+                "solver_algorithm_errors",
+                "solver_algorithm_stop_reason",
+            ),
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="solver_algorithm",
+    )
+
+    assert result.selected_surface == "solver_design"
+    assert result.candidate_surface_runtime_summary["selected_surface"] == "solver_design"
+    assert result.stats.failed_pairs == 0
+    assert {
+        call.kwargs["selected_surface"]
+        for call in runner.run_solver.call_args_list
+    } == {"solver_design"}
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["selected_surface"] == "solver_design"
+
+
+def test_solver_algorithm_surface_declaration_fails_closed(tmp_path):
+    runner = MagicMock()
+    pair = [
+        _make_run_result(2, 1000, runtime={}),
+        _make_run_result(
+            1,
+            900,
+            runtime={
+                "solver_algorithm_loaded": True,
+                "solver_algorithm_active": True,
+                "solver_algorithm_errors": 0,
+            },
+        ),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="solver_algorithm",
+            required_runtime_fields=("solver_algorithm_loaded",),
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="solver_algorithm",
+    )
+
+    assert result.selected_surface == "solver_design"
+    assert result.stats.candidate_failed_pairs == 4
+    assert result.candidate_runtime_failure_categories == {
+        "surface_contract_error": 4,
+    }
+    assert result.candidate_first_runtime_failure is not None
+    assert result.candidate_first_runtime_failure["surface"] == "solver_design"
+    assert "not declared" in result.candidate_first_runtime_failure["detail_summary"]
+
+
+def test_runtime_summary_includes_declared_surface_telemetry(
+    tmp_path,
+):
+    runner = MagicMock()
+    candidate_runtime = {
+        "dispatch_stop_reason": "no_improvement",
+        "dispatch_search_iterations": 7,
+        "dispatch_move_attempts": 42,
+        "dispatch_accepted_moves": 5,
+        "dispatch_improving_moves": 3,
+        "dispatch_neutral_accepted_moves": 2,
+        "dispatch_baseline_calls": 1,
+        "dispatch_errors": 0,
+    }
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=100, runtime={}),
+        _make_run_result(1, 900, elapsed_ms=110, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    runtime_fields = tuple(candidate_runtime)
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=_surface_problem_spec(
+            name="dispatch_policy",
+            required_runtime_fields=runtime_fields,
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="dispatch_policy",
+    )
+
+    assert result.candidate_runtime_stop_reasons == {"no_improvement": 4}
+    assert "candidate_runtime_counters=" in result.exposed_summary
+    assert "dispatch_search_iterations:28" in result.exposed_summary
+    assert "dispatch_move_attempts:168" in result.exposed_summary
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    candidate_runtime_summary = raw["pairs"][0]["candidate_runtime"]
+    assert candidate_runtime_summary["dispatch_stop_reason"] == "no_improvement"
+    assert candidate_runtime_summary["dispatch_search_iterations"] == 7
+    assert candidate_runtime_summary["dispatch_move_attempts"] == 42
+    assert candidate_runtime_summary["dispatch_accepted_moves"] == 5
+    assert candidate_runtime_summary["dispatch_improving_moves"] == 3
+    assert candidate_runtime_summary["dispatch_neutral_accepted_moves"] == 2
+    assert candidate_runtime_summary["dispatch_baseline_calls"] == 1
+
+
+def test_phase_telemetry_summary_projection_is_adapter_bucketed(tmp_path):
+    runner = MagicMock()
+    candidate_runtime = {
+        "generic_solver_phase_runtime_ms": {
+            "setup": 5,
+            "search": 11,
+            "adapter_extra": 3,
+        },
+    }
+    pair = [
+        _make_run_result(2, 1000, elapsed_ms=100, runtime={}),
+        _make_run_result(2, 1000, elapsed_ms=50, runtime=candidate_runtime),
+    ]
+    runner.run_solver.side_effect = pair * 4
+    proto = _make_protocol(
+        runner,
+        tmp_path,
+        problem_spec=SimpleNamespace(
+            research_surfaces=[
+                SimpleNamespace(
+                    name="generic_solver",
+                    evidence=SimpleNamespace(
+                        phase_runtime_fields=[
+                            "generic_solver_phase_runtime_ms",
+                        ],
+                        phase_telemetry_buckets=["setup", "search"],
+                    ),
+                )
+            ]
+        ),
+    )
+
+    result = proto.run_experiment(
+        ExperimentStage.SCREENING,
+        "/cand",
+        "/champ",
+        "modify",
+        selected_surface="generic_solver",
+    )
+
+    summary = result.candidate_phase_telemetry_summary
+    assert summary["selected_surface"] == "generic_solver"
+    assert summary["phase_runtime_fields"] == ["generic_solver_phase_runtime_ms"]
+    assert summary["declared_buckets"] == ["setup", "search"]
+    assert summary["candidate_pairs"] == 4
+    assert summary["runtime_observed_pairs"] == 4
+    assert summary["buckets"]["setup"]["declared"] is True
+    assert summary["buckets"]["setup"]["weighted_sum_ms"] == 20.0
+    assert summary["buckets"]["search"]["max_ms"] == 11.0
+    assert summary["buckets"]["adapter_extra"]["declared"] is False
+    assert "phase_telemetry=observed_pairs=4" in result.exposed_summary
+
+    raw = json.loads(open(result.raw_metrics_ref).read())
+    assert raw["candidate_phase_telemetry_summary"] == summary
+
+
+@pytest.mark.parametrize(
+    "champion_result",
+    [
+        _make_run_failure("crash"),
+        _make_run_result(
+            2,
+            1000,
+            runtime={
+                "operator_errors": 1,
+                "operator_events": [{"detail": "champion operator failed"}],
+            },
+        ),
+    ],
+)
+def test_champion_failure_branches_emit_progress_callback(
+    tmp_path,
+    champion_result,
+):
+    runner = MagicMock()
+    candidate = _make_run_result(1, 900)
+    runner.run_solver.side_effect = [champion_result, candidate] * 4
+    proto = _make_protocol(runner, tmp_path)
+    progress_events = []
+    proto.set_progress_callback(lambda **payload: progress_events.append(payload))
+
+    result = proto.run_experiment(
+        ExperimentStage.VALIDATION,
+        "/cand",
+        "/champ",
+        "modify",
+    )
+
+    assert result.stats.champion_failed_pairs == 4
+    assert len(progress_events) == 10
+    assert progress_events[-1]["attempted_pairs"] == 4
+    assert progress_events[-1]["completed_pairs"] == 0
+    assert progress_events[-1]["complete"] is True
+    assert "runtime_budget_diagnostic" in progress_events[-1]

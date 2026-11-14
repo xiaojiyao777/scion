@@ -1,97 +1,100 @@
 # Scion Documentation Index
 
-*Last updated: 2026-04-28*
+*Last updated: 2026-11-15*
 
-This directory is the active documentation surface for Scion. Historical sprint notes, validation drafts, and intermediate analysis are archived under `archive/`.
+The repository-level entry point is [`../../AGENTS.md`](../../AGENTS.md). This
+file is a subordinate index organized by document purpose; it does not define
+current work, experiment authority, or runtime state.
 
 ## Read First
 
-- [v0.3-current-state.md](v0.3-current-state.md) - current v0.3 status and formal experiment location.
-- [evidence-manifest.md](evidence-manifest.md) - active map from claims to experiment artifacts, including superseded outputs.
-- [v0.3-final-visual-report.md](v0.3-final-visual-report.md) - visual summary of final v0.3 results.
-- [v0.3-final-12campaign-analysis.md](v0.3-final-12campaign-analysis.md) - formal 12-campaign internal framework/search analysis.
-- [v0.3-production-timeout-fix-analysis.md](v0.3-production-timeout-fix-analysis.md) - production-only rerun after incomplete-evidence/runtime fixes.
-- [v0.3-final-validation-checklist.md](v0.3-final-validation-checklist.md) - final engineering and experiment gates.
-- [v0.4-performance-aware-plan.md](v0.4-performance-aware-plan.md) - performance-aware optimization plan from production timeout findings.
-- [v0.4-cvrp-plan.md](v0.4-cvrp-plan.md) - CVRP second-problem plan for v0.4 generalization.
-- [v0.4-evidence-harness.md](v0.4-evidence-harness.md) - common promotion/final-quality/runtime evidence schema for v0.4.
-- [v0.3-code-audit-dataflow.md](v0.3-code-audit-dataflow.md) - current code logic and dataflow audit.
-- [../design/scion-architecture-v3.md](../design/scion-architecture-v3.md) - project architecture blueprint.
-- [../design/scion-v0.3-design.md](../design/scion-v0.3-design.md) - v0.3 design.
-- [../reviews/v0.3-design-detail-plan.md](../reviews/v0.3-design-detail-plan.md) - v0.3 detailed implementation/review plan.
-- [../reviews/v0.3-design-review-report.md](../reviews/v0.3-design-review-report.md) - v0.3 design review findings.
+For a new agent session, use the exact order in
+[`../../AGENTS.md`](../../AGENTS.md):
 
-## Active Reference
+1. [Agent onboarding](AGENT_ONBOARDING.md) - stable model, boundaries, and source map.
+2. [Current state](status/current-state.md) - current implementation and experiment snapshot.
+3. [`TASK.md`](../TASK.md) - accepted objective, active work, and next falsifiable rung.
+4. [Reading profiles](READING_PROFILES.md) - choose the smallest task-specific context pack.
 
-- [experiment-quickref.md](experiment-quickref.md) - campaign and experiment operations.
-- [experiment-baseline-management.md](experiment-baseline-management.md) - git tag and baseline management.
-- [metrics-guide.md](metrics-guide.md) - metric definitions and gate interpretation.
-- [milp-model.md](milp-model.md) - warehouse-delivery MILP model reference.
-- [milp-usage-strategy.md](milp-usage-strategy.md) - MILP as report-only comparison source.
-- [glossary.md](glossary.md) - project terms.
-- [v0.2-final-state.md](v0.2-final-state.md) - v0.2 code archaeology used by v0.3.
-- [v1.0-roadmap.md](v1.0-roadmap.md) - post-v0.4 roadmap for warehouse + CVRP evidence and framework hardening.
+Do not automatically read all design docs, engineering docs, historical status
+logs, old experiments, raw run roots, or source trees. Load them through the
+relevant profile and verify live process state directly when the task requires
+it. A dated report never overrides the current handoff or current source.
 
-## Historical Documents
+## Directory Contract
 
-### `archive/v0.3/`
+- `../design/`: architecture and design-source documents. V3 stays at the root; active next-version drafts live under `../design/v0.5/`; v0.4 sources remain historical/problem context for the current runtime.
+- `status/`: current project state. Keep this small and current.
+- `engineering/`: code maps and agentic-proposal engineering references.
+- `planning/`: task manifests, worklogs, closeouts, and readiness plans.
+- `experiments/`: post-run analysis and campaign interpretation documents.
+- `audits/`: architecture, artifact, and evidence audits.
+- `evidence/`: claim-to-artifact maps and evidence manifests.
+- `operations/`: commands and operating procedures for campaigns.
+- `reference/`: stable terminology, metrics, and modeling references.
+- `roadmap/`: future-version planning.
+- `archive/`: historical documents that are not the current operating source.
 
-v0.3 development history and experiment analysis:
+## Active Sources
 
-- W16 experiment records: `w16-results.md`, `w16-campaign-log.md`, `sprint-w16-optimization.md`
-- F1/F2 analysis: `v0.3-f1-analysis-and-a1-reflection.md`, `v0.3-f2-analysis.md`
-- Closure validation analysis and preregistration:
-  - `v0.3-closure-validation-20260425-analysis.md`
-  - `v0.3-closure-validation-20260425-deep-analysis.md`
-  - `v0.3-closure-validation-20260425-deep-analysis.zh.md`
-  - `v0.3-closure-validation-prereg.md`
-  - `v0.3-production-closure-validation-prereg.md`
-- Two-model validation: `v0.3-two-model-validation-analysis.md`
-- Historical state snapshots: `v0.3-current-state.md.pre-*`
-- Earlier plans and assessments:
-  - `v0.3-implementation-plan.md`
-  - `v0.3-optimization-design.md`
-  - `v0.3-engineering-assessment.md`
+### Status
 
-### `../design/archive/`
+- [Repository agent entry](../../AGENTS.md)
+- [Current task and boundary](../TASK.md)
+- [Agent onboarding](AGENT_ONBOARDING.md)
+- [Reading profiles](READING_PROFILES.md)
+- [Current state: v0.4 stage closed, v0.5 design](status/current-state.md)
+- [v0.4 status history archive](status/v0.4-history.md)
 
-Historical architecture/design documents for v0.1 and v0.2.
+### Design Sources
 
-### `../reviews/archive/`
+- [Architecture v3](../design/scion-architecture-v3.md)
+- [Direct-runtime addendum](../design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)
+- [v0.5 detailed mechanism and acceptance](../design/v0.5/README.md)
+- [v0.4 design index](../design/v0.4/README.md)
+- [v0.4 design baseline](../design/v0.4/v0.4-design.md)
+- [Algorithm design-space upgrade](../design/v0.4/v0.4-algorithm-design-space-upgrade.md)
+- [Agentic proposal session design](../design/v0.4/v0.4-agentic-proposal-session-design.md)
+- [CVRP research-surface design](../design/v0.4/v0.4-cvrp-research-surface-design.md)
 
-Historical review reports and remediation plans, mainly from v0.2.
+### Engineering
 
-## Directory Shape
+- [Historical framework code map](engineering/framework-code-map/README.md) - use only as a locator and verify against current source.
+- [Agentic proposal reference](engineering/agentic-proposal-reference/README.md)
 
-```text
-scion/
-├── docs/
-│   ├── README.md
-│   ├── evidence-manifest.md
-│   ├── v0.3-current-state.md
-│   ├── v0.3-final-visual-report.md
-│   ├── v0.3-final-12campaign-analysis.md
-│   ├── v0.3-production-timeout-fix-analysis.md
-│   ├── v0.3-final-validation-checklist.md
-│   ├── v0.4-performance-aware-plan.md
-│   ├── v0.4-cvrp-plan.md
-│   ├── v0.4-evidence-harness.md
-│   ├── v0.3-code-audit-dataflow.md
-│   ├── experiment-quickref.md
-│   ├── metrics-guide.md
-│   ├── milp-model.md
-│   ├── milp-usage-strategy.md
-│   ├── v1.0-roadmap.md
-│   └── archive/
-│       └── v0.3/
-├── design/
-│   ├── scion-architecture-v3.md
-│   ├── scion-v0.3-design.md
-│   └── archive/
-└── reviews/
-    ├── v0.3-design-detail-plan.md
-    ├── v0.3-design-review-report.md
-    └── archive/
-```
+### Planning
 
-Maintenance rule: keep the active docs directory small. Move sprint logs, pre-registration drafts, interim experiment analysis, and superseded state snapshots into the matching `archive/vX.Y/` directory once they are no longer the current operating source.
+- [Stage review and accepted v0.4 closeout](planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md) - stage closure accepted November 15; original scientific acceptance partially met, CVRP retained improvement still open. New detailed mechanism remains a design draft.
+- [v0.4 planning index](planning/v0.4/README.md)
+
+Planning files are historical unless the current `TASK.md` explicitly adopts
+one. They are not a second work queue.
+
+### Experiments And Audits
+
+- [v0.4 experiments index](experiments/v0.4/README.md)
+- [v0.4 audits index](audits/v0.4/README.md)
+
+### Evidence, Operations, Reference
+
+- [Evidence manifest](evidence/manifest.md)
+- [Scion v0.4 本地实验运行、回溯与复现手册](operations/experiment-runbook.zh.md)
+- [Post-run analysis handoff](operations/postrun-analysis-handoff.md)
+- [Historical experiment quick reference](operations/experiment-quickref.md)
+- [Historical experiment baseline management](operations/experiment-baseline-management.md)
+- [Metrics guide](reference/metrics-guide.md)
+- [Glossary](reference/glossary.md)
+- [MILP model](reference/milp-model.md)
+- [MILP usage strategy](reference/milp-usage-strategy.md)
+- [v1.0 roadmap](roadmap/v1.0-roadmap.md)
+
+## Maintenance Rule
+
+Keep `docs/` root small. New current-state updates go under `status/`; new
+design sources go under `design/`; run interpretation goes under
+`experiments/`; audits go under `audits/`; task execution notes go under
+`planning/`. When a document stops being an operating source, move it into the
+matching `archive/vX.Y/` directory or leave it in the dated experiment/audit
+folder with a clear index entry. Do not copy live state into multiple entry
+documents and do not add hashes, signatures, receipts, registries, or other
+self-attestation machinery to documentation handoff.

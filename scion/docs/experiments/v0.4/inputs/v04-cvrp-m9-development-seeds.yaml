@@ -1,0 +1,16 @@
+version: 0.4-cvrp-m9-development-screen-r3
+
+screening:
+  - 3001
+  - 3011
+
+validation:
+  - 3019
+  - 3023
+
+frozen:
+  - 3037
+  - 3041
+
+canary:
+  - 3049

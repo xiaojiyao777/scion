@@ -1,0 +1,5 @@
+version: 0.4-cvrp-r19-reliable-probes-autonomous
+screening: [220009, 220013, 220019, 220021, 220057, 220063]
+validation: [220123, 220141]
+frozen: [220147, 220151]
+canary: [220163]

@@ -1,0 +1,461 @@
+# Proposal Context
+
+## Current direct-runtime research guidance (2026-10-05)
+
+`contract/checks/security.py::effective_import_whitelist` is the same C8 policy
+used by the checker and `context_manager/manager.py`'s target guidance. Exposing
+the complete allowed absolute roots there makes them visible in direct and
+bounded C projections, unlike the old discarded outer import_whitelist field.
+Read-only visibility grants neither candidate import nor edit permission.
+Development C8 feedback may include only the earliest rejected statement's
+one-based source_line alongside the submitted editable file; the session bounds
+it to that draft's line count. Raw checker messages are not projected, relative
+import and sensitive-API acceptance rules are unchanged, and no feedback enters
+Protocol/Decision. Optional prompts distinguish forced wiring and mere entry
+counts from ordinary activation and completed/accepted state transitions.
+
+P15 also explains pytest exit5 with optional pytest_no_tests_collected while
+preserving inconclusive and exact failed-patch semantics. Revise replaces the
+whole draft against the original session source; it does not edit the staged
+draft. Public reference/real-entry examples remain optional problem-owned support.
+
+`proposal/context_manager/public_sources.py` collects only the existing explicit
+`development_workspace_paths` and `development_problem_package_paths`. Workspace
+dependencies come from the selected current research workspace, with no champion
+fallback; package dependencies come from the frozen problem runtime. Canonical
+paths, symlinks, editable aliases and public/formal closure are checked before
+exposure. H receives `public_support_sources` (indexed as `public_dependency` in
+bounded research); C receives a separate `read_only_sources` inventory. Both
+direct and bounded generation can inspect these sources, but typed edits cannot
+modify, create or delete them. A missing body is not an empty readable file.
+No suite fixture, arbitrary file or held-out case is added to the corpus.
+
+`proposal/code_research_session.py` preserves query error reasons and charging,
+adding bounded `field`/`correction` enums for exact-file reads and searches.
+An all-corpus search omits `path`; an empty string is still invalid. Feedback
+does not echo arbitrary input, probe the filesystem, repair requests, retry or
+enlarge budgets. H's existing terminal handling of invalid actions is unchanged.
+
+CVRP's optional public example now supports real solve/scheduler/VNS activation,
+independent arc/objective and feasibility checks, and exhaustive tiny reference
+comparisons. The large synthetic shape uses a precomputed equivalent distance
+matrix and does not establish geometric-lookup throughput or production timing.
+The example remains a copyable string, not a new collected acceptance gate.
+
+The historical map below is a locator, not current runtime authority. Current
+direct H/C prompts live in `proposal/engine/hypothesis_prompts.py` and
+`code_prompts.py`. Their base system blocks also reach bounded H/K2/C sessions,
+which replace the base user prompt. They explain cumulative branch inheritance,
+the champion comparator and whole-candidate attribution. C still receives only
+approved H plus complete source, not H history. Interpretation guidance adds no
+required read, ablation, rollback, mechanism preference or scientific gate.
+
+Self-authored development probes now use `verification/development_probe.py`
+for a fixed isolated pytest runner and bounded structural diagnostics. The
+sandbox host and `proposal/code_research_session.py` each validate the exact
+phase/category/optional probe-line projection; arbitrary stdout, paths,
+exceptions and private suites never enter it. Hints are untrusted support,
+not readiness or Decision inputs. Exit-code outcomes, exact failed-patch
+rejection and shared test budgets are unchanged. Direct/bounded prompts also
+distinguish actual entry activation and real collaborator compatibility from
+helper/mock-only results. CVRP's public suite contains an optional copyable
+example string, not a new collected test or generic-core mechanism.
+
+## Scope / Sources
+
+Sources read: `scion/scion/core/proposal_pipeline.py`, `scion/scion/core/problem_runtime.py`, `scion/scion/proposal/context_manager.py`, `engine.py`, `schemas.py`, `search_memory.py`, `classifier.py`, `research_log.py`, `saturation.py`, `mechanism_labels.py`, plus `ProblemSpecV1` research surface/taxonomy fields in `scion/scion/problem/spec.py`.
+
+## ProposalPipeline Boundary
+
+`ProposalPipeline` owns LLM-facing lifecycle calls but not branch promotion/evaluation state. It exposes three operations:
+
+- `generate_hypothesis(branch) -> (HypothesisProposal | None, HypothesisRecord | None)`
+- `generate_code(branch, hypothesis, prior_failure=None) -> PatchProposal | None`
+- `attempt_fix(branch, patch, verification_result) -> PatchProposal | None`
+
+Inputs come from campaign services: current branch, champion snapshot, hypotheses, sibling branches, and step history. The pipeline delegates context construction to `ProblemRuntime`, which pre-fills the active `ProblemSpec` and optional adapter.
+
+LLM failures create one `ExecutionOutcomeRecord`; the outer attempt writes the typed event and applies any branch hold once. `LLMBalanceError` also marks balance exhausted. Successful hypothesis generation creates a `HypothesisRecord` with classifier-derived family metadata.
+
+The transient forced-locus path is used for one-shot governance
+diversification. The CLI diagnostic `--force-surface` hook uses a separate
+persistent proposal-pipeline constraint: CLI/campaign startup validates the
+requested surface against declared research surfaces, derives action/target
+only from generic surface metadata, and fails closed before campaign launch for
+unknown surfaces. Every subsequent hypothesis-generation proposal in that
+campaign receives the same forced surface/action/target context. For a
+singleton concrete target such as a config surface, the proposal context can
+therefore receive `action=modify` and the exact declared `target_file` without
+hardcoding CVRP or `algorithm_blueprint` in framework core. This is an
+experiment-control hook for smoke coverage, not a Decision input and not
+solver-quality evidence.
+
+The forced-surface hook is enforced inside the proposal side before any code
+phase starts. `ProposalPipeline` rejects normal and APS hypothesis outputs whose
+`change_locus`, forced `action`, or forced `target_file` differ from the active
+constraint. `ProposalToolContext` carries the same forced surface/action/target
+as tainted proposal context, so APS planner guidance, `context.list_surfaces`,
+`proposal.draft_hypothesis`, `proposal.schema_preview`, and
+`proposal.target_permission_preview` all state or validate the same rule.
+`CreativeLayer` also narrows the final hypothesis-generation task from the same
+forced values, including constraints handed back by APS as
+`agentic_hypothesis_constraints`, so the last model call no longer presents the
+full surface list during a forced campaign. Off-surface APS output becomes an
+explicit proposal failure; the code phase continues only from a
+ContractGate-approved hypothesis and does not try to repair surface selection.
+
+When a problem declares a `solver_design` research surface and no forced
+diagnostic surface is active, `ProposalPipeline` treats that surface as the
+active problem-object boundary. Normal and APS hypothesis outputs must keep
+`change_locus` within that boundary. Component policy surfaces remain visible
+as target implementation hooks or attribution evidence inside solver design,
+but they are not valid replacement research goals. The same active-boundary
+constraint is carried through hypothesis context, APS tool context,
+`context.list_surfaces`, `proposal.target_permission_preview`, and final
+CreativeLayer hypothesis prompts. For CVRP this means the default free
+diagnostic task targets `solver_design` and the branch-owned solver-design
+package (`policies/baseline_algorithm.py` plus `policies/baseline_modules/*.py`)
+instead of offering every component policy as a top-level choice.
+APS tool guidance distinguishes this active problem-object boundary from a
+diagnostic `--force-surface` run: forced campaigns render a forced-surface rule
+and exact forced target, while active-boundary campaigns render
+`active_problem_boundary_rule` and `allowed_surface_ids=["solver_design"]`.
+Active-boundary novelty requirements are also carried into
+`proposal.draft_hypothesis`, `proposal.schema_preview`, and final hypothesis
+generation so the model sees the same semantic identity contract before code
+generation.
+
+As of RS2-5, `ProposalPipeline` also has an explicit opt-in Agentic Proposal
+Session path (`use_agentic_proposal` or injected `agentic_session`). The default
+path above remains the normal behavior. The APS-1 skeleton wraps the current
+hypothesis/code generation flow. Hypothesis-phase sessions may return only an
+unapproved `HypothesisProposal`; any completed output containing a patch before
+external ContractGate approval is downgraded to a partial hypothesis and the
+patch is discarded. Downstream contract, workspace, verification, protocol, and
+decision services still see only the existing proposal dataclasses. Completed
+agentic sessions are recorded as compact `proposal_session_ref` metadata on
+step and campaign summaries, and `ProposalPipeline` emits tainted
+`agentic_proposal_session` lineage events. Transcript, rationale, observations,
+and patch content remain outside `DecisionFeatures`.
+
+## CreativeLayer and Schemas
+
+`CreativeLayer` in `scion/scion/proposal/engine.py` is the tainted LLM boundary. It uses tool schemas from `scion/scion/proposal/schemas.py` and parses tool outputs through Pydantic input models before producing core dataclasses:
+
+- `HypothesisProposalInput` -> `HypothesisProposal`
+- `PatchProposalInput` -> `PatchProposal`
+
+The schema requires hypothesis text, research surface/locus, action, target file where applicable, objective intent, protected objectives, no-op condition, runtime intent, complexity claim, and runtime budget strategy. Patch output is complete file content, not a diff.
+
+Trace writing under campaign `llm_traces` records prompt/tool/schema/response metadata for auditability. Trace writing is best-effort and does not define campaign semantics.
+
+`AgenticProposalSession` in `scion/scion/proposal/agentic_session.py` is the
+APS-1 tainted session shell. It defines session state, status and termination
+enums, `AgenticProposalOutput`, transcript events, a minimal artifact-store
+protocol, and `FileAgenticSessionArtifactStore`. The file store writes only
+below its configured artifact directory. Completed outputs expose
+`HypothesisProposal` and `PatchProposal`; failed or partial outputs stay typed
+proposal failures and do not materialize candidate workspaces.
+
+`ProposalToolRegistry` in `scion/scion/proposal/tools.py` is the APS-2/APS-3
+tool boundary. It owns tool input validation, permission checks, and mapping
+results to `ProposalObservation` objects. `ContextExposurePolicy` enforces
+exposure in code: default policy allows screening detail and screening-derived
+runtime guidance, hides validation/frozen holdout rows, does not expose raw
+metrics refs, restricts champion artifact reads to declared research-surface
+targets, and permits only side-effect-free drafting/static-preview tools.
+
+The MVP registry exposes context, memory, screening feedback, holdout-summary,
+runtime-feedback, `proposal.draft_hypothesis`, `proposal.draft_patch`,
+`proposal.schema_preview`, `proposal.target_permission_preview`,
+`proposal.interface_preview`, and `proposal.contract_preview`. Draft tools
+return tainted typed artifacts and do not materialize candidate workspaces.
+Preview tools validate in-memory hypothesis/patch content through schema checks
+and existing `ContractGate` static checks where practical. The registry still
+does not include Verification/Protocol/Decision execution or candidate-workspace
+write tools.
+
+Post-audit APS behavior keeps the planner generic but less shallow:
+planner-backed diagnosis is not considered complete after only
+`context.list_surfaces` and `context.read_problem` when compact memory,
+screening, or runtime-feedback data are available. Availability is determined
+generically from proposal-memory providers, research log providers, and
+screening-stage step history; no problem-specific surface names are hardcoded.
+If the planner stops there, APS falls back to the fixed read-only plan, which
+includes bounded `memory.query`, `feedback.query_screening`, and
+`feedback.query_runtime` calls when policy allows them. Planner context is not
+considered complete until all compact feedback tools with available data have
+returned useful observations. Feedback observations that merely succeed with an
+empty branch-scoped result do not satisfy the compact-feedback requirement when
+same-campaign screening history is available. The deterministic fallback
+therefore queries screening/runtime feedback at campaign scope, or at the
+forced-surface scope for forced diagnostics, instead of defaulting to the
+current branch id. After a hypothesis selects a surface, APS
+performs a deterministic `context.read_surface` before code generation or
+partial-session finalization, unless that exact surface was already read.
+Fallback now treats successful compact observations as reusable session facts:
+it only fills missing `context.list_surfaces`, `context.read_problem`,
+`memory.query`, `feedback.query_screening`, and `feedback.query_runtime`
+observations, but feedback observations are reusable only after they contain
+screening rows or screening-derived runtime/attribution content. It does not
+reread an already successful selected `context.read_surface`.
+Planner-selected duplicate reads of reusable observations switch to the same
+missing-only fallback instead of consuming another large observation.
+Surface tool observations are compact by default:
+`context.list_surfaces` exposes only selection-oriented metadata, generic
+diagnostic surface priorities, plus any active forced-surface or
+problem-boundary constraint.
+During forced-surface diagnostics,
+`context.list_surfaces` returns the forced surface's compact listing plus the
+total declared-surface count, avoiding repeated full design-space listings
+while preserving the constraint record. `context.read_surface` defaults to
+`detail="compact"` with a `surface-contract.v1` section view (`summary`,
+`interface`, `bounds`, `evidence`, `novelty`, `target_preview`) plus bounded
+interface text and champion-code preview. Compact surface reads omit full prompt
+guidance blocks and full target-file content; `detail="full"`, `section`, and
+`max_code_chars` are explicit opt-ins for debug, paging, or deeper inspection.
+Within `AgenticProposalSession`, surface reads are further normalized to compact
+`max_code_chars=800` observations before execution, and planner guidance
+recommends the same 800-character cap. If a returned observation would exceed
+the remaining session observation budget, APS stores a bounded
+`result_too_large` summary instead of the original payload before incrementing
+`tool_budget_used.observation_chars`. Optional planner-selected
+`context.read_surface` calls also fail closed when the remaining budget is
+below the reserved floor, which includes the terminal self-check observation
+reserve plus the minimum observation margin. This prevents exploratory surface
+reads from consuming preview headroom while persisted recovery artifacts stay
+within `AgenticToolLoopConfig.max_observation_chars` and the replay validator
+remains strict for genuinely invalid artifacts. The default APS tool loop
+allows 14 steps and 12 tool calls so the normal
+read-feedback-schema-target-contract path has room after evidence diagnosis is
+rendered. The default APS observation budget is 64,000 chars; compactness is
+still enforced first, and the larger cap only gives room for the normal
+list/problem/feedback/selected-surface sequence. APS also reserves terminal
+budget for self-check/static-preview tools:
+after required diagnosis context has been collected, bounded planner and fixed
+fallback reads stop before consuming the tool-call, step, or observation-char
+reserve needed for schema, target/action, interface, and Contract previews.
+When a `proposal.contract_preview` result itself would exceed the remaining
+observation budget, APS now keeps a compact deterministic pass/fail summary
+instead of replacing the preview with `result_too_large`; this preserves the
+self-check gate while still omitting bulky preview details from the prompt.
+Screening and runtime feedback tools also bound their compact JSON payloads before the
+registry size guard, so available compact feedback can still succeed without
+exposing raw metric refs when runtime summaries are unusually large. Screening
+feedback returns recent rows first and includes the query scope plus a bounded
+selected-surface runtime attribution highlight derived from problem-declared
+runtime summary field names, representative values, and generic numeric
+summaries. Runtime feedback exposes the same bounded attribution highlights
+across recent screening steps so the proposal agent can connect component
+attempts/accepted moves, nonzero/positive counts, phase deltas, recovery-only
+deltas, and case-level screening stats without reading raw metrics.
+Attribution rendering now prioritizes objective trace, objective-delta-by-phase,
+component phase-delta, recovery-only delta, and accepted-delta fields ahead of
+low-value loaded/active fields in both structured tool payloads and compact
+`selected_surface_runtime[...]` text, so modal runtime values do not hide the
+accepted-move-to-phase-benefit chain. During forced-surface diagnostics,
+proposal context and APS runtime guidance keep exploration/action/runtime
+failure hints aligned with the forced surface/action/target: generic strategy
+guidance suppresses suggestions to switch to unexplored surfaces or alternate
+actions, and runtime-failure guidance omits recommended/discouraged surface
+hints when they conflict with the forced surface while preserving the
+fail-closed forced-surface guard.
+Runtime feedback now also returns a generic `research_diagnosis` payload. It
+summarizes only screening-stage history, reason-code counts, gate outcomes,
+surface counts, generic failure-mode tags, and runtime-highlight fields with
+numeric signal or evidence-contract issues. When a problem declares a
+`solver_design` surface, diagnosis prioritizes that problem-object boundary
+before component policies; otherwise it can fall back to mechanism-surface
+coverage from declared metadata. If a solver-design candidate failed before
+screening, diagnosis tags `solver_design_pre_protocol_failure` and recommends
+retrying that boundary with a different lifecycle implementation. If a
+solver-design candidate reaches screening and still has no win-rate or median
+delta movement, diagnosis tags `solver_design_screening_failure` and still
+keeps the next proposal on the problem-object boundary. Component policies
+remain implementation/attribution hooks, not fallback research goals.
+It also tags all-zero phase/objective delta fields and accepted/recovery
+movement that lacks phase-level benefit. It
+deliberately avoids reading validation/frozen detail or raw metric refs.
+
+APS stores a compact diagnosis derived from successful feedback observations
+on both hypothesis and code contexts. `CreativeLayer` renders this diagnosis
+and the bounded tool observations into the final hypothesis/code generation
+prompts. The diagnosis keeps the latest non-empty runtime signal and an
+aggregate of recent reason codes, gate outcomes, surfaces, failure tags, and
+runtime-signal rows, so a later empty runtime-feedback wrapper does not mask
+useful prior evidence. This closes the gap where the planner and tool loop had
+read screening/runtime feedback but the final LLM generation call did not
+actually see the resulting observations. The rendered block is still tainted
+proposal context: it can shape the next hypothesis or patch, but it is not a
+`DecisionFeatures` input and cannot expose validation/frozen detail or raw
+metric refs.
+Static preview observations are compact: target-permission previews return only
+surface name/kind/actions/targets and permission issues, while schema previews
+return a compact hypothesis identity summary instead of the full hypothesis
+text. Schema/contract patch previews omit `code_content` and expose path,
+action, char count, digest, discovered functions/classes, checks, and compact
+problem-preview issues. Contract previews also avoid duplicating the full
+ContractGate result inside patch/hypothesis payloads: they expose a short
+contract summary plus bounded check details so the normal APS self-check path
+fits inside the reserved observation budget.
+Contract previews pass the hypothesis-selected surface into ContractGate patch
+checks, so C7 interface, C9d instance-identity, and C9c complexity previews use
+the same authoritative surface as the formal patch gate; standalone interface
+previews may also carry an explicit selected surface. A selected surface whose
+targets do not contain the patch path fails closed instead of silently falling
+back to a path-resolved surface.
+APS also wraps `proposal.contract_preview` in a short wall-time guard before
+workspace materialization. A hung problem-owned preview becomes a controlled
+tool error in the transcript instead of blocking the campaign process.
+Problem-owned preview hooks run only after the full ContractGate patch result
+passes, not merely after interface-shape checks, so tainted policy/config code
+with forbidden APIs is not imported or executed during preview.
+APS self-check results also fail closed now: schema/target preview errors,
+observation-budget preview failures, skipped Contract previews, or failed
+Contract previews stop the session before a completed patch is accepted for
+evaluation. Legacy injected test outputs without any self-check transcript are
+still tolerated, but real APS sessions with preview evidence must pass their
+self-check boundary.
+For active `solver_design` boundaries, schema preview also checks declared
+semantic identity quality before code generation. Required structured fields
+must be present, and fields declared as non-empty sequences, currently
+`selected_components` and `deep_components_selected`, must be non-empty arrays
+of non-empty strings. Missing, false, empty-string, empty-object, and
+empty-sequence values fail closed instead of being treated as usable semantic
+novelty.
+
+## ContextManager Inputs
+
+`ContextManager` in `scion/scion/proposal/context_manager.py` builds three context types:
+
+- Hypothesis context: broad research context and campaign memory.
+- Code context: approved hypothesis, target file, interface, imports, current champion code.
+- Fix context: failed patch, verification details, interface/import constraints.
+
+Hypothesis context includes:
+
+- problem summary, preferably from `ProblemAdapter.render_problem_summary()`;
+- problem object, when the adapter implements `render_problem_object()`, with
+  instance/solution/objective/lifecycle/move/evidence semantics kept behind
+  the problem boundary;
+- solver mechanics, preferably from adapter `render_solver_mechanics()`;
+- declared research surfaces from `ProblemSpec.research_surfaces` or `ProblemSpecV1.research_surfaces`;
+- champion research-surface code and policy surface code;
+- branch-specific history from `StepRecord`;
+- blacklist and active hypothesis summaries;
+- solver-design boundary-control guidance when a top-level solver-design
+  candidate failed before screening;
+- active problem-boundary surfaces and target files when a top-level
+  solver-design surface is declared;
+- sibling branch summary;
+- exploration coverage and strategy guidance;
+- recent screening objective feedback and objective opportunity profile;
+- runtime feedback from verification/screening facts;
+- search memory and research log;
+- saturation/weight optimization feedback;
+- forced locus constraint when governance requests one-shot diversification or
+  a diagnostic `--force-surface` run steers every hypothesis-generation
+  proposal to a declared research surface.
+
+Code and fix contexts include the problem summary, optional problem object,
+solver mechanics, active surface interface, import whitelist, and target code.
+They deliberately exclude experiment history and protocol stats. They are
+implementation contexts, not research decision contexts.
+
+`_format_hypothesis()` renders structured novelty as
+`hypothesis_metadata_novelty_signature` plus an implementation rule explaining
+that the value is proposal identity, not policy/config return data. This keeps
+code-generation prompts from copying solver-design semantic identity such as
+`novelty_signature.selected_components` into `main_search_plan()` return
+dictionaries unless a problem surface explicitly declares that key.
+
+## Exposure Control
+
+The context manager enforces a data exposure matrix:
+
+- Hypothesis context excludes validation/frozen per-case detail, raw metrics,
+  and aggregate holdout stats by default.
+- Hypothesis context includes screening aggregates from step history. It does
+  not render validation/frozen aggregate stats such as win rate, median delta,
+  or gate outcome from `ProtocolResult`; holdout exposure must stay at a
+  separately documented safe summary level.
+- Code context excludes experiment stats and branch history.
+- Fix context excludes experiment stats and branch history.
+- `EvaluationPipeline` separately sanitizes validation/frozen `ProtocolResult`
+  objects by clearing pair/case feedback. Those sanitized holdout aggregates
+  are still not proposal-context identity or history inputs by default.
+
+This is central to preserving holdout integrity. Any future prompt feature should state whether it is screening-only, aggregate-only, or forbidden in proposal context.
+
+## Research Surfaces
+
+Research surfaces come from `ProblemSpecV1.research_surfaces` and are bridged into legacy `ProblemSpec` in `scion/scion/problem/bridge.py`. `ContextManager` renders them with name, kind, target files, required functions, and prompt hints. As of RS2-2 it also renders v2 metadata as problem-provided context: algorithm role/invocation point/description, target action permissions and singleton flag, interface return contract, bounds, required runtime evidence fields, novelty metadata, and prompt guidance. Core prompt text does not interpret problem-specific component names, scale terms, or runtime field names.
+
+`ContractGate` also uses research surfaces:
+
+- `C2` checks `change_locus` against problem-defined categories.
+- `C3` enforces action/target-file compatibility and surface-level allow flags.
+- `C7` validates operator class `execute` signatures and declared
+  module-function surface interfaces, including policy, config, portfolio,
+  construction, and acceptance/restart surfaces.
+- Surface kind typos fail closed; supported generic kinds are `operator`,
+  `policy`, `config`, `portfolio`, `construction`, `acceptance_restart`, and
+  `solver_design`.
+- `semantic_signature` novelty uses declared direct fields and optional
+  `novelty_signature` mapping values persisted on proposals/records. Forced
+  diagnostic context for such surfaces renders the declared
+  `novelty.signature_fields`, already occupied structured signatures on that
+  surface from active/blacklisted/rejected hypotheses, and the requirement to
+  provide a distinct structured identity.
+  Proposal draft/schema/contract preview tools report missing structured
+  identity early for singleton semantic surfaces. C10 never uses hypothesis
+  prose as semantic identity: a candidate on a semantic-signature `modify`
+  surface must provide all declared usable structured identity fields, or it
+  fails C10 before code generation. Historical active/blacklisted/rejected
+  records that lack usable structured identity do not poison later candidates
+  that provide valid structured identities; duplicate structured identities
+  still fail closed.
+  Some semantic fields can be declared or carried as non-empty sequence
+  identity. For CVRP `solver_design`, `selected_components` and
+  `deep_components_selected` must be non-empty sequences of component names;
+  empty arrays, false, null, empty objects, or empty strings are not usable
+  identity. Nested false values inside otherwise non-empty pattern objects
+  remain valid when they describe a real pattern, for example a restart flag.
+
+This means algorithm design space expansion should start in problem package `problem-v1.yaml` and adapter rendering, not by hardcoding new loci in core.
+
+`--force-surface` is intentionally limited to this declared-surface model. It
+does not create new loci, does not bypass `ContractGate`, and does not feed
+`DecisionFeatures`; it constrains each hypothesis-generation prompt in the
+campaign for diagnostic and forced surface smoke runs.
+
+## Search Memory and Taxonomy
+
+`CampaignSearchMemory` is updated from every `StepRecord` by `EvidenceRecorder.record_step()`. It tracks family attempts, best screening win rate, exhausted families, promising families, coverage counts, recent hypothesis texts, and champion evolution. Branch-local follow-up policy is a separate generic proposal guidance block: weak-positive follow-ups remain allowed, but the prompt requires a research-process plan for preserving prior signal, testing losses/tie patterns or missing effect, and deciding when another same-branch follow-up versus a clean branch is justified. This guidance is not `DecisionFeatures` and does not relax gates.
+
+Family labels are problem-taxonomy aware. `HypothesisFamilyClassifier` accepts `ProblemSpecV1.family_taxonomy` and falls back to keyword classification when LLM classification fails. The framework default taxonomy is intentionally domain-neutral; problem packages provide meaningful families and aliases.
+
+`CampaignResearchLog` reads the lineage SQLite DB and renders campaign-level research journal sections. Its exposure rules are explicit: screening is detailed, validation aggregate, frozen pass/fail only.
+
+## Prompt Assembly
+
+`CreativeLayer` splits context into cacheable system blocks and dynamic user prompts:
+
+- Hypothesis prompt: static role/problem/research surfaces/objective policy/solver mechanics, champion code/state, dynamic branch/search/history/task.
+- Code prompt: static role/problem/problem-object/interface/import rules, champion code, dynamic hypothesis/target/current file/reference files.
+- Fix prompt: static problem/problem-object/interface/import rules, dynamic failed code and verification details.
+- Agentic prompt extensions: when APS has gathered tool observations,
+  hypothesis and code prompts include a bounded generic research-diagnosis
+  block plus bounded tool-observation JSON. These blocks are screening-only
+  proposal evidence and must remain problem-agnostic.
+
+The split is an engineering optimization for prompt caching, but it also encodes stable separation between problem specification, champion state, and per-branch facts.
+
+## Proposal Outputs
+
+The proposal side produces only `HypothesisProposal`, `HypothesisRecord`, and `PatchProposal` for the normal candidate path. Agentic session artifacts, rationale, transcript, and rejected alternatives are tainted audit/proposal-memory material and are not inputs to `SafeFeatureExtractor` or `DecisionEngine`. The first framework gate after hypothesis creation is `ContractGate`; the first framework gate after code generation is also `ContractGate`, followed by workspace materialization and `VerificationGate`.
+
+Current APS evidence integration stores compact session refs in step and
+campaign summaries and may render bounded screening-derived observations back
+into future proposal prompts. Session refs, diagnoses, transcripts, and tool
+observations are audit/proposal-memory handles, not decision inputs.

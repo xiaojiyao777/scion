@@ -1,114 +1,146 @@
 """Tests for T19: ProposalEngine Pydantic validation layer."""
+
 from __future__ import annotations
 
 import pytest
 
-from scion.proposal.engine import ProposalValidationError, _parse_hypothesis, _parse_patch
+from scion.proposal.engine import (
+    ProposalValidationError,
+    _parse_hypothesis,
+    _parse_patch,
+)
+from scion.proposal.schemas import (
+    HYPOTHESIS_PROPOSAL_SCHEMA,
+    HypothesisProposalInput,
+)
+
+def _minimal_hypothesis(**overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "hypothesis_text": "Try a focused local-search change.",
+        "change_locus": "local_search",
+        "action": "create_new",
+        "target_file": "operators/new_local_search.py",
+        "predicted_direction": "improve",
+        "target_weakness": "slow convergence",
+        "expected_effect": "faster convergence",
+    }
+    payload.update(overrides)
+    return payload
 
 
 # ---------------------------------------------------------------------------
 # HypothesisProposalInput validation tests
 # ---------------------------------------------------------------------------
 
-def test_hypothesis_validation_missing_fields():
-    """Empty hypothesis_text should raise ProposalValidationError."""
-    raw = {
-        "hypothesis_text": "",
-        "change_locus": "order_level",
-        "action": "modify",
-        "target_file": "operators/foo.py",
-    }
-    with pytest.raises(ProposalValidationError):
-        _parse_hypothesis(raw)
 
-
-def test_hypothesis_validation_whitespace_only():
-    """Whitespace-only hypothesis_text should raise ProposalValidationError."""
-    raw = {
-        "hypothesis_text": "   ",
-        "change_locus": "order_level",
-        "action": "create_new",
-    }
-    with pytest.raises(ProposalValidationError):
-        _parse_hypothesis(raw)
-
-
-def test_hypothesis_validation_empty_change_locus():
-    """Empty change_locus should raise ProposalValidationError."""
-    raw = {
-        "hypothesis_text": "Some hypothesis text.",
-        "change_locus": "",
-        "action": "create_new",
-    }
-    with pytest.raises(ProposalValidationError):
-        _parse_hypothesis(raw)
-
-
-def test_hypothesis_validation_bad_action():
-    """Invalid action value should raise ProposalValidationError."""
-    raw = {
-        "hypothesis_text": "Some hypothesis text.",
-        "change_locus": "order_level",
-        "action": "invalid",
-    }
-    with pytest.raises(ProposalValidationError):
-        _parse_hypothesis(raw)
-
-
-def test_valid_hypothesis_passes_validation():
-    """Valid hypothesis dict should return a HypothesisProposal."""
-    raw = {
-        "hypothesis_text": "A valid hypothesis exploring 2-opt moves.",
-        "change_locus": "local_search",
-        "action": "create_new",
-        "target_file": None,
-        "predicted_direction": "improve",
-        "target_weakness": "slow convergence",
-        "expected_effect": "faster convergence",
-        "suggested_weight": 0.5,
-    }
+def test_minimal_hypothesis_uses_the_single_parser_path():
+    raw = _minimal_hypothesis(suggested_weight=0.5)
     result = _parse_hypothesis(raw)
     assert result.hypothesis_text == raw["hypothesis_text"]
-    assert result.change_locus == "local_search"
-    assert result.action == "create_new"
+    assert result.predicted_direction == "improve"
     assert result.suggested_weight == 0.5
 
 
-def test_valid_hypothesis_modify_action():
-    """modify action with target_file should pass validation."""
-    raw = {
-        "hypothesis_text": "Improve the existing move operator.",
-        "change_locus": "vehicle_level",
-        "action": "modify",
-        "target_file": "operators/move.py",
-    }
-    result = _parse_hypothesis(raw)
-    assert result.action == "modify"
-    assert result.target_file == "operators/move.py"
+def test_hypothesis_parser_rejects_descriptive_change_locus_suffix() -> None:
+    with pytest.raises(
+        ProposalValidationError,
+        match="must exactly match one provider-visible research surface",
+    ):
+        _parse_hypothesis(
+            _minimal_hypothesis(
+                change_locus="solver_design local-search/VNS neighborhood set",
+            ),
+            allowed_change_loci=("solver_design",),
+        )
 
 
-def test_valid_hypothesis_remove_action():
-    """remove action should pass validation."""
-    raw = {
-        "hypothesis_text": "Remove the underperforming swap operator.",
-        "change_locus": "order_level",
-        "action": "remove",
-        "target_file": "operators/swap.py",
-    }
+@pytest.mark.parametrize(
+    "missing_field",
+    ["hypothesis_text", "change_locus", "action", "target_weakness"],
+)
+def test_hypothesis_rejects_each_missing_required_field(missing_field: str):
+    raw = _minimal_hypothesis()
+    del raw[missing_field]
+    with pytest.raises(ProposalValidationError):
+        _parse_hypothesis(raw)
+
+
+def test_hypothesis_defaults_missing_expected_effect_to_empty_tainted_record():
+    raw = _minimal_hypothesis()
+    del raw["expected_effect"]
+
     result = _parse_hypothesis(raw)
-    assert result.action == "remove"
+
+    expected_effect_schema = HYPOTHESIS_PROPOSAL_SCHEMA["properties"][
+        "expected_effect"
+    ]
+    assert result.expected_effect == ""
+    assert "expected_effect" not in HYPOTHESIS_PROPOSAL_SCHEMA["required"]
+    assert expected_effect_schema["default"] == ""
+
+
+def test_hypothesis_defaults_missing_predicted_direction_to_exploratory():
+    raw = _minimal_hypothesis()
+    del raw["predicted_direction"]
+
+    result = _parse_hypothesis(raw)
+
+    direction_schema = HYPOTHESIS_PROPOSAL_SCHEMA["properties"][
+        "predicted_direction"
+    ]
+    assert result.predicted_direction == "exploratory"
+    assert "predicted_direction" not in HYPOTHESIS_PROPOSAL_SCHEMA["required"]
+    assert direction_schema["default"] == "exploratory"
+    assert direction_schema["enum"] == ["improve", "tradeoff", "exploratory"]
+
+
+def test_hypothesis_rejects_invalid_predicted_direction():
+    with pytest.raises(ProposalValidationError):
+        _parse_hypothesis(_minimal_hypothesis(predicted_direction="certain"))
+
+
+@pytest.mark.parametrize(
+    "removed_field",
+    [
+        "novelty_signature", "material_difference", "branch_lesson_usage",
+        "mechanism_changes", "structural_fingerprint", "target_objectives",
+        "expected_telemetry", "mechanism_summary", "failure_modes",
+        "risk_flags", "target_runtime_effect", "invariants", "resource_strategy",
+    ],
+)
+def test_hypothesis_rejects_removed_provider_fields(removed_field: str):
+    raw = _minimal_hypothesis(**{removed_field: {"legacy": True}})
+    with pytest.raises(ProposalValidationError):
+        _parse_hypothesis(raw)
+
+
+@pytest.mark.parametrize("action", ["modify", "create_new", "remove"])
+def test_hypothesis_file_actions_require_target_file(action: str):
+    with pytest.raises(ProposalValidationError):
+        raw = _minimal_hypothesis(action=action)
+        del raw["target_file"]
+        _parse_hypothesis(raw)
+
+
+def test_hypothesis_schema_is_exactly_the_model_schema():
+    assert HYPOTHESIS_PROPOSAL_SCHEMA == HypothesisProposalInput.model_json_schema()
+    assert HYPOTHESIS_PROPOSAL_SCHEMA["additionalProperties"] is False
 
 
 # ---------------------------------------------------------------------------
 # PatchProposalInput validation tests
 # ---------------------------------------------------------------------------
 
+
 def test_patch_validation_missing_code():
-    """Empty code_content should raise ProposalValidationError."""
+    """Empty full-file content should raise ProposalValidationError."""
     raw = {
         "file_path": "operators/new_op.py",
         "action": "create",
-        "code_content": "",
+        "edit_intent": "full_file",
+        "content_after": "",
+        "full_file_reason": "Create the approved operator.",
+        "evidence_refs": [],
     }
     with pytest.raises(ProposalValidationError):
         _parse_patch(raw)
@@ -118,19 +150,25 @@ def test_patch_validation_missing_file_path():
     """Empty file_path should raise ProposalValidationError."""
     raw = {
         "file_path": "",
-        "action": "modify",
-        "code_content": "class Foo:\n    pass\n",
+        "action": "create",
+        "edit_intent": "full_file",
+        "content_after": "class Foo:\n    pass\n",
+        "full_file_reason": "Create the approved operator.",
+        "evidence_refs": [],
     }
     with pytest.raises(ProposalValidationError):
         _parse_patch(raw)
 
 
 def test_patch_validation_whitespace_code():
-    """Whitespace-only code_content should raise ProposalValidationError."""
+    """Whitespace-only full-file content should raise ProposalValidationError."""
     raw = {
         "file_path": "operators/new_op.py",
         "action": "create",
-        "code_content": "   \n  ",
+        "edit_intent": "full_file",
+        "content_after": "   \n  ",
+        "full_file_reason": "Create the approved operator.",
+        "evidence_refs": [],
     }
     with pytest.raises(ProposalValidationError):
         _parse_patch(raw)
@@ -139,14 +177,17 @@ def test_patch_validation_whitespace_code():
 def test_valid_patch_passes_validation():
     """Valid patch dict should return a PatchProposal."""
     raw = {
-        "file_path": "operators/local_search.py",
-        "action": "modify",
-        "code_content": "class LocalSearch:\n    def execute(self, solution, rng):\n        return solution\n",
+        "file_path": "operators/new_local_search.py",
+        "action": "create",
+        "edit_intent": "full_file",
+        "content_after": "class LocalSearch:\n    def execute(self, solution, rng):\n        return solution\n",
+        "full_file_reason": "Create the approved local-search operator.",
+        "evidence_refs": [],
         "test_hint": None,
     }
     result = _parse_patch(raw)
-    assert result.file_path == "operators/local_search.py"
-    assert result.action == "modify"
+    assert result.file_path == "operators/new_local_search.py"
+    assert result.action == "create"
     assert "LocalSearch" in result.code_content
 
 
@@ -155,8 +196,73 @@ def test_valid_patch_with_test_hint():
     raw = {
         "file_path": "operators/new_op.py",
         "action": "create",
-        "code_content": "class NewOp:\n    def execute(self, solution, rng):\n        return solution\n",
+        "edit_intent": "full_file",
+        "content_after": "class NewOp:\n    def execute(self, solution, rng):\n        return solution\n",
+        "full_file_reason": "Create the approved operator.",
+        "evidence_refs": [],
         "test_hint": "Check feasibility",
     }
     result = _parse_patch(raw)
     assert result.test_hint == "Check feasibility"
+
+
+def test_patch_rejects_additional_changes_json_string_for_shape_retry():
+    """Model responses must repair additional_changes shape instead of host parsing."""
+    raw = {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "edit_intent": "full_file",
+        "content_after": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
+        "full_file_reason": "Implement the approved solver change.",
+        "evidence_refs": [],
+        "additional_changes": (
+            '[{"file_path": "policies/baseline_modules/helper.py", '
+            '"action": "create", '
+            '"edit_intent": "full_file", '
+            '"content_after": "def helper():\\n    return 1\\n"}]'
+        ),
+    }
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(raw)
+
+    message = str(excinfo.value)
+    assert "additional_changes must be a JSON array" in message
+    assert "typed edit objects" in message
+
+
+def test_patch_rejects_unparseable_additional_changes_string():
+    raw = {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "edit_intent": "full_file",
+        "content_after": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
+        "full_file_reason": "Implement the approved solver change.",
+        "evidence_refs": [],
+        "additional_changes": "not-json",
+    }
+    with pytest.raises(ProposalValidationError, match="additional_changes"):
+        _parse_patch(raw)
+
+
+def test_patch_rejects_unknown_edit_fields_with_additional_changes_guidance():
+    raw = {
+        "file_path": "policies/baseline_algorithm.py",
+        "action": "modify",
+        "edit_intent": "full_file",
+        "content_after": "def solve(instance, rng, time_limit_sec, context):\n    return None\n",
+        "full_file_reason": "Implement the approved solver change.",
+        "evidence_refs": [],
+        "old_string2": "return None",
+        "new_string2": "return context.nearest_neighbor()",
+    }
+
+    with pytest.raises(ProposalValidationError) as excinfo:
+        _parse_patch(raw)
+
+    message = str(excinfo.value)
+    assert "Unsupported patch field" in message
+    assert "old_string2" in message
+    assert "new_string2" in message
+    assert "additional_changes[]" in message
+    assert "Each file_path may appear once" in message
+    assert "one explicit typed edit" in message

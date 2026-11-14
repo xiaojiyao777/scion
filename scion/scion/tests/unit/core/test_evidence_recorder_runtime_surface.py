@@ -1,0 +1,391 @@
+"""Focused tests split from test_evidence_recorder.py."""
+
+from dataclasses import replace
+
+import pytest
+
+from .evidence_recorder_test_support import *  # noqa: F401,F403
+
+
+def test_campaign_summary_file_is_single_top_level_json_object(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[_step()],
+    )
+
+    content = (tmp_path / "campaign_summary.json").read_text(encoding="utf-8")
+    loaded = json.loads(content)
+    decoded, end = json.JSONDecoder().raw_decode(content)
+    assert isinstance(loaded, dict)
+    assert isinstance(decoded, dict)
+    assert content[end:].strip() == ""
+    assert loaded == summary
+    assert loaded["campaign_id"] == "camp-1"
+    assert isinstance(loaded["steps"], list)
+
+
+def test_campaign_summary_distinguishes_pair_and_case_screening_rates(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    pair_results = (
+        ["win"] * 2
+        + ["tie"] * 12
+        + ["loss"] * 2
+    )
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=EvalStats(
+            n_cases=4,
+            wins=0,
+            losses=0,
+            ties=4,
+            win_rate=0.0,
+            median_delta=0.0,
+            ci_low=-0.01,
+            ci_high=0.01,
+        ),
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="case-level gate failed",
+        raw_metrics_ref="/tmp/r2-like-screening.json",
+        pair_feedback=tuple(
+            PairwiseCaseFeedback(
+                case_id=f"case-{idx // 4}",
+                seed=idx,
+                comparison=result,
+                delta=1.0 if result == "win" else -1.0 if result == "loss" else 0.0,
+            )
+            for idx, result in enumerate(pair_results)
+        ),
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["screening_case_win_rate"] == 0.0
+    assert "win_rate" not in protocol
+    assert protocol["screening_pair_wins"] == 2
+    assert protocol["screening_pair_losses"] == 2
+    assert protocol["screening_pair_ties"] == 12
+    assert protocol["screening_pair_total"] == 16
+    assert protocol["screening_pair_win_rate"] == 0.125
+
+
+def test_campaign_summary_exposes_complete_runtime_failure_summary(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="/tmp/private-runtime.json",
+        candidate_runtime_failure_categories={
+            "operator_error": 2,
+            "invalid_output": 1,
+        },
+        candidate_first_runtime_failure={
+            "category": "operator_error",
+            "code": "operator_errors",
+            "surface": "local_search",
+            "component": "operator",
+            "detail_summary": "solver runtime reported operator_errors=2",
+        },
+        candidate_runtime_counters={
+            "operator_attempts": 8,
+            "operator_accepted": 0,
+            "operator_errors": 2,
+            "operator_invalid_outputs": 1,
+            "policy_errors": 3,
+            "construction_errors": 4,
+            "portfolio_errors": 5,
+            "problem_defined.calls": 6,
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["candidate_runtime_failure_categories"] == {
+        "operator_error": 2,
+        "invalid_output": 1,
+    }
+    assert protocol["candidate_first_runtime_failure"]["category"] == "operator_error"
+    assert protocol["candidate_runtime_counters"] == step.protocol_result.candidate_runtime_counters
+    assert "candidate_operator_attempts" not in protocol
+
+
+def test_campaign_summary_exposes_selected_surface_runtime_summary(
+    tmp_path: Path,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    step.protocol_result = ProtocolResult(
+        stage=ExperimentStage.SCREENING,
+        stats=step.protocol_result.stats,
+        gate_outcome="fail",
+        reason_codes=("SCREENING_FAIL_WIN_RATE",),
+        exposed_summary="screening failed",
+        raw_metrics_ref="/tmp/algorithm-blueprint-runtime.json",
+        selected_surface="algorithm_blueprint",
+        candidate_surface_runtime_summary={
+            "selected_surface": "algorithm_blueprint",
+            "required_runtime_fields": [
+                "algorithm_blueprint_loaded",
+                "algorithm_plan",
+            ],
+            "candidate_pairs": 4,
+            "runtime_observed_pairs": 4,
+            "runtime_missing_pairs": 0,
+            "fields": {
+                "algorithm_blueprint_loaded": {
+                    "present": 4,
+                    "missing": 0,
+                    "empty": 0,
+                    "failed": 0,
+                    "values": [{"value": "true", "count": 4}],
+                },
+                "algorithm_plan": {
+                    "present": 4,
+                    "missing": 0,
+                    "empty": 0,
+                    "failed": 0,
+                    "values": [
+                        {
+                            "value": "{\"baseline_time_fraction\":0.75,\"enabled\":true}",
+                            "count": 4,
+                        }
+                    ],
+                },
+            },
+        },
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    protocol = summary["steps"][0]["protocol_result"]
+    assert protocol["selected_surface"] == "algorithm_blueprint"
+    surface_summary = protocol["candidate_surface_runtime_summary"]
+    assert surface_summary["candidate_pairs"] == 4
+    assert "algorithm_plan" in surface_summary["required_runtime_fields"]
+    assert surface_summary["fields"]["algorithm_plan"]["present"] == 4
+
+
+@pytest.mark.parametrize(
+    ("passed", "count", "expected"),
+    (
+        (False, 0, 0),
+        (False, 1, 1),
+        (True, 0, 0),
+        (True, 1, None),
+        (False, True, None),
+        (False, -1, None),
+        (False, 2, None),
+        (False, None, None),
+    ),
+)
+def test_campaign_summary_projects_only_canonical_canary_infeasibility_count(
+    tmp_path: Path,
+    passed,
+    count,
+    expected,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    step.canary_result = CanaryResult(
+        passed=passed,
+        details={
+            "candidate_attributable_infeasible_pairs": 1,
+            "failure_kind": "candidate_infeasible_champion_feasible",
+            "failed_case_id": "private-case",
+        },
+        failure_category="candidate_failure" if not passed else "",
+        candidate_attributable_infeasible_pairs=count,
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    payload = summary["steps"][0]["canary_result"]
+    if expected is None:
+        assert "candidate_attributable_infeasible_pairs" not in payload
+    else:
+        assert payload["candidate_attributable_infeasible_pairs"] == expected
+    assert "failure_kind" not in payload
+    assert "failed_case_id" not in payload
+    assert "details" not in payload
+
+
+@pytest.mark.parametrize(
+    ("count", "attempted", "total", "expected"),
+    (
+        (0, 0, 0, 0),
+        (2, 2, 3, 2),
+        (True, 2, 3, None),
+        (-1, 2, 3, None),
+        (3, 2, 3, None),
+        (2, 3, 2, None),
+        (None, 2, 3, None),
+    ),
+)
+def test_campaign_summary_projects_only_bounded_protocol_infeasibility_count(
+    tmp_path: Path,
+    count,
+    attempted,
+    total,
+    expected,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    assert step.protocol_result is not None
+    step.protocol_result = replace(
+        step.protocol_result,
+        stats=replace(
+            step.protocol_result.stats,
+            attempted_pairs=attempted,
+            total_pairs=total,
+        ),
+        candidate_attributable_infeasible_pairs=count,
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    payload = summary["steps"][0]["protocol_result"]
+    if expected is None:
+        assert "candidate_attributable_infeasible_pairs" not in payload
+    else:
+        assert payload["candidate_attributable_infeasible_pairs"] == expected
+
+
+@pytest.mark.parametrize(
+    ("field_name", "count", "attempted", "total", "expected"),
+    (
+        ("candidate_only_timeout_pairs", 0, 0, 0, 0),
+        ("candidate_only_timeout_pairs", 2, 2, 3, 2),
+        ("candidate_only_timeout_pairs", 3, 2, 3, None),
+        ("candidate_only_timeout_pairs", True, 2, 3, None),
+        ("candidate_only_invalid_output_pairs", 1, 2, 3, 1),
+        ("candidate_only_invalid_output_pairs", -1, 2, 3, None),
+        ("candidate_only_invalid_output_pairs", None, 2, 3, None),
+    ),
+)
+def test_campaign_summary_projects_only_bounded_candidate_only_pair_counts(
+    tmp_path: Path,
+    field_name,
+    count,
+    attempted,
+    total,
+    expected,
+) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+    step = _step()
+    assert step.protocol_result is not None
+    step.protocol_result = replace(
+        step.protocol_result,
+        stats=replace(
+            step.protocol_result.stats,
+            attempted_pairs=attempted,
+            total_pairs=total,
+        ),
+        **{field_name: count},
+    )
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=1),
+        run_result=_run_projection(),
+        step_history=[step],
+    )
+
+    payload = summary["steps"][0]["protocol_result"]
+    if expected is None:
+        assert field_name not in payload
+    else:
+        assert payload[field_name] == expected
+
+
+def test_campaign_summary_family_coverage_uses_step_locus_for_ambiguous_text(
+    tmp_path: Path,
+) -> None:
+    taxonomy = FamilyTaxonomySpec(
+        families=["alpha", "beta"],
+        aliases={
+            "alpha": ["alpha move", "previous alpha"],
+            "beta": ["beta move", "cross move"],
+        },
+    )
+    recorder = EvidenceRecorder(
+        campaign_id="camp-1",
+        campaign_dir=tmp_path,
+        family_taxonomy=taxonomy,
+    )
+    alpha = _step()
+    alpha.hypothesis.hypothesis_text = "Implement alpha move."
+    alpha.hypothesis.change_locus = "alpha"
+    beta = _step()
+    beta.hypothesis.hypothesis_text = (
+        "Implement cross move. Unlike the previous alpha move, this changes "
+        "the active mechanism."
+    )
+    beta.hypothesis.change_locus = "beta"
+
+    summary = recorder.write_campaign_summary(
+        state=_operator_state(n_steps=2),
+        run_result=_run_projection(2),
+        step_history=[alpha, beta],
+    )
+
+    assert summary["family_coverage"] == {"alpha": 1, "beta": 1}
+
+
+def test_protocol_progress_status_uses_public_raw_metrics_ref(tmp_path: Path) -> None:
+    recorder = EvidenceRecorder(campaign_id="camp-1", campaign_dir=tmp_path)
+
+    progress = recorder.record_protocol_progress(
+        branch_id="branch-1",
+        stage="screening",
+        raw_metrics_ref="/tmp/progress-metrics.json",
+        completed_cases=2,
+    )
+
+    state = _operator_state()
+    state["current_progress"] = progress
+    status = recorder.write_status(
+        state=state,
+        run_result=_run_projection(),
+    )
+    assert progress["raw_metrics_ref"] != "/tmp/progress-metrics.json"
+    assert not progress["raw_metrics_ref"].startswith("/")
+    assert "progress-metrics.json" in progress["raw_metrics_ref"]
+    assert status["current_progress"]["raw_metrics_ref"] == progress["raw_metrics_ref"]
+    assert not status["current_progress"]["raw_metrics_ref"].startswith("/")
+    assert status["current_progress"]["completed_cases"] == 2
+    assert "last_progress_at" in status["current_progress"]

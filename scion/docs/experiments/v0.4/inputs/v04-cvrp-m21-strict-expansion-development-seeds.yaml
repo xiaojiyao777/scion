@@ -1,0 +1,16 @@
+version: 0.4-cvrp-m21-strict-expansion-development
+
+screening:
+  - 1135
+  - 8396
+
+validation:
+  - 6858
+  - 9488
+
+frozen:
+  - 8155
+  - 5774
+
+canary:
+  - 6419

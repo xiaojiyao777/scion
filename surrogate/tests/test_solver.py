@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
+import importlib
 import sys
+import time
 from pathlib import Path
 from random import Random
 
@@ -15,8 +17,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pytest
 from config import Config
 from models import Solution
+from operators.base import Operator
 from oracle import check_feasibility, recompute_objective
 from solver import load_instance, solve, solution_to_dict
+from vns import run_vns
 
 
 DATA_DIR = Path(__file__).parent.parent / "data"
@@ -99,6 +103,34 @@ class TestSmallInstance:
         assert "subcategory_splits" in d["objective"]
         assert "total_cost" in d["objective"]
 
+    def test_default_operator_registry_emits_state_transition_only(self):
+        """默认 operator set 只证明 registry 激活，不声称尝试或效果。"""
+        inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
+        cfg = Config(max_iterations=0, no_improve_limit=1, random_seed=42)
+
+        sol = solve(inst, cfg)
+        raw = solution_to_dict(sol, inst)
+
+        runtime = raw["runtime"]
+        assert runtime["operator_registry"] == [
+            "swap_orders",
+            "move_order",
+            "destroy_rebuild",
+            "merge_vehicles",
+            "change_vehicle_type",
+            "split_vehicle",
+        ]
+        assert "operator_diagnostics" not in runtime
+        events = runtime["typed_telemetry_events"]
+        assert len(events) == 1
+        assert events[0]["lane"] == "state_transition"
+        assert events[0]["mechanism_id"] == "warehouse_operator_registry"
+        assert events[0]["occurrences"] == 1
+        assert all(
+            event["lane"] not in {"attempt", "direct_effect"}
+            for event in events
+        )
+
     def test_small3_assignment_consistent_with_vehicles(self):
         """small_3：assignment 与 vehicles 内 order_ids 一致。"""
         inst = load_instance(get_instance_path("instance_small_3.json"), phase=1)
@@ -108,6 +140,81 @@ class TestSmallInstance:
         for oid, vid in sol.assignment.items():
             assert oid in sol.vehicles[vid].order_ids, \
                 f"订单 {oid} 在 assignment 中归属 {vid}，但不在该车 order_ids 中"
+
+    def test_dynamic_operator_diagnostics_serialized(self, tmp_path, monkeypatch):
+        """动态 registry 算子的实例 diagnostics 必须进入 solver runtime JSON。"""
+        import operators as operators_pkg
+
+        operator_dir = tmp_path / "operators"
+        operator_dir.mkdir()
+        operator_file = operator_dir / "diagnostic_operator.py"
+        operator_file.write_text(
+            """
+from operators.base import Operator
+
+
+class DiagnosticOperator(Operator):
+    def __init__(self, instance, phase=1):
+        self.instance = instance
+        self.phase = phase
+        self.validation_transfer_diagnostics = {
+            "operator_invocations": 0,
+            "eligible_vehicle_or_order_groups_seen": 0,
+            "accepted_moves": 0,
+            "split_delta_sum": 0,
+            "cost_delta_sum": 0,
+            "improving_move_count": 0,
+        }
+
+    def execute(self, solution, rng):
+        diagnostics = self.validation_transfer_diagnostics
+        diagnostics["operator_invocations"] += 1
+        diagnostics["eligible_vehicle_or_order_groups_seen"] += 1
+        diagnostics["accepted_moves"] += 1
+        diagnostics["split_delta_sum"] += 1
+        diagnostics["cost_delta_sum"] += 2
+        diagnostics["improving_move_count"] += 1
+        return solution.deep_copy()
+""",
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(
+            operators_pkg,
+            "__path__",
+            [str(operator_dir), *list(operators_pkg.__path__)],
+        )
+        importlib.invalidate_caches()
+
+        registry = tmp_path / "registry.yaml"
+        registry.write_text(
+            """
+operators:
+  - name: diagnostic_probe
+    file_path: operators/diagnostic_operator.py
+    class_name: DiagnosticOperator
+    weight: 1.0
+""",
+            encoding="utf-8",
+        )
+        inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
+        cfg = Config(
+            max_iterations=1,
+            no_improve_limit=1,
+            pool_size=1,
+            random_seed=42,
+        )
+
+        sol = solve(inst, cfg, registry_path=registry)
+        raw = solution_to_dict(sol, inst)
+
+        diagnostics = raw["runtime"]["operator_diagnostics"]["diagnostic_probe"]
+        assert diagnostics["operator_invocations"] > 0
+        assert diagnostics["accepted_moves"] > 0
+        assert diagnostics["split_delta_sum"] > 0
+        assert (
+            raw["runtime"]["validation_transfer_diagnostics"]
+            == raw["runtime"]["operator_diagnostics"]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -152,6 +259,48 @@ class TestMediumInstance:
         assert final_obj is not None
         assert final_obj.as_tuple() <= init_obj.as_tuple(), \
             f"VNS 结果 {final_obj} 差于初始解 {init_obj}"
+
+
+class SlowNoopOperator(Operator):
+    """测试专用算子：制造可观测的 wall-clock 消耗。"""
+
+    def execute(self, solution: Solution, rng: Random) -> Solution:
+        time.sleep(0.01)
+        return solution.deep_copy()
+
+
+class TestTimeLimit:
+    def test_vns_respects_wall_clock_time_limit(self):
+        """极小时间预算应截断高迭代上限，并返回当前可行最优解。"""
+        from greedy_init import greedy_init
+
+        inst = load_instance(get_instance_path("instance_small_1.json"), phase=1)
+        init_sol = greedy_init(inst, Random(42))
+        init_sol.objective = recompute_objective(init_sol, inst)
+        cfg = Config(
+            pool_size=5,
+            max_iterations=1000,
+            no_improve_limit=1000,
+            random_seed=42,
+            time_limit_seconds=0.03,
+        )
+        iterations: list[int] = []
+
+        t0 = time.monotonic()
+        sol = run_vns(
+            instance=inst,
+            initial_solutions=[init_sol],
+            operators=[SlowNoopOperator()],
+            operator_weights=[1.0],
+            cfg=cfg,
+            on_iteration=lambda iteration, best: iterations.append(iteration),
+        )
+        elapsed = time.monotonic() - t0
+
+        assert len(iterations) < cfg.max_iterations
+        assert elapsed < 0.25
+        result = check_feasibility(sol, inst, phase=1)
+        assert result.is_feasible, f"超时返回解不可行: {result.violations}"
 
 
 # ---------------------------------------------------------------------------

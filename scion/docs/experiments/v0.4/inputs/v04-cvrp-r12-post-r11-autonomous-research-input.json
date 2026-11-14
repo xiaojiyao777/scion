@@ -1,0 +1,505 @@
+{
+  "current_question": "Continue autonomous CVRP algorithm research from the ordinary complete final R11 branch-B source, without merging other branches or resuming campaign state. R11 completed 12 screening stages for ten distinct candidates, all 108 pairs valid with no fleet regression or runtime failure, but no promotion. The selected final B bundle combines the inherited algorithm, an incremental swap screen and a one-shot post-sweep free-reinsertion exchange; its expanded comparison against the R11 initial champion (the R10 candidate, NOT original B0) had W/L/T 3/1/2, median distance improvement 10, CI [-1,216.75], SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN. In seed order 100003/100019/100043/100049, effects were B-n34-k5 [0,0,0,0], tai100a [47,14,62,3], X-n351-k40 [246,604,560,246], A-n54-k7 [0,0,-5,-4], X-n190-k8 [-53,0,0,178], X-n513-k21 [20,20,20,20]. The corresponding case medians are 0/30.5/403/-2/0/20. The final candidate and champion both ran zero ALNS iterations on both large screening cases. The earlier swap-only expanded candidate ran one ALNS iteration on X-n513-k21 but tied all four objectives; more iterations did not guarantee better solutions. R11's first two phase-handoff proposals were implemented only for customer_count above alns_threshold. The unchanged configuration and entrypoint pass alns_threshold=2000; every screening instance has at most 512 customers. Those handoffs therefore did not activate on this population: zero ALNS there must not be attributed to the above-threshold early return. This is a source/activation fact, not a required repair or a prescribed direction. Final branch A's one-move-per-neighborhood VNS restart lost 8557 at the large-case median; final C's accumulated exact-delta speedups ended at case W/L/T 0/2/1 and median -8.5. Preserve these adverse results as well as B's uncertain signal. All 12 R11 history records are available in order alongside prior scientific history; select mechanisms and implementations autonomously, with no target file or mandatory read action. The following historical screening evidence remains distinct from the current local contrast. The initial local champion is an ordinary research baseline, not a confirmed retained improvement over original B0. Historical R10 expanded SCREENING ONLY compared its then-fixed R9 branch-C bundle against original B0 under equal dimension-based limits of 60/90/120/180/240 seconds (safety canary 10 seconds). All 24 screening pairs were valid, feasible and fleet-protected, with no runtime errors: case W/L/T 3/0/3, case-median distance improvement 19.75, bootstrap CI [0,179], SCREENING_PASS / queue_validate. Screening used 12 AB and 12 BA pairs. Case-median distance improvements (B0 minus candidate) were B-n34-k5 0, tai100a 160, X-n351-k40 39.5, A-n54-k7 0, X-n190-k8 0, X-n513-k21 198. In seed order 90001/90007/90011/90017 the screening deltas were respectively [0,0,0,0], [204,100,116,216], [166,158,-187,-79], [0,0,5,0], [0,0,0,0], [198,198,198,198]. The R10 candidate ran zero ALNS iterations on both large screening cases; original B0 ran zero on X-n351-k40 and one on X-n513-k21. On X-n513-k21 the candidate's construction used 2.65-2.86 seconds and initial VNS 136.82-137.02 seconds; B0's initial VNS used 97.23-100.36 seconds followed by one 36.24-39.46-second ALNS iteration. Both arms' post-initial objectives equaled their final objectives on that case. Candidate ALNS iteration counts on tai100a were 69/51/64/59 versus B0 25/31/33/27; on X-n190-k8 they were 2/3/3/3 versus 2/2/2/3 with tied objectives. These are whole-bundle, wall-clock-budgeted screening observations, not evidence of component causality or a causal budget-dose effect across R8/R9/R10. Passing screening alone is not promotion or independent retained confirmation; later-stage information is deliberately excluded from this research input. The four earlier R4/R5/R6/R8 observations remain available unchanged, and the complete ordered scientific R3-R3i/R7/R9/R11 history remains available to H through ordinary history research. R9's H/C implementations and negative or uncertain expanded outcomes remain evidence, not instructions to reproduce their proposals. Can you improve this complete algorithm under the same wider budgets while preserving feasibility and fleet protection? Select the research mechanism and implementation autonomously: no target file, mechanism, phase schedule, patch, required history action, novelty requirement or activity gate is prescribed. Current comparisons are against the fresh local champion, not original B0; do not pool these contrasts or infer retained superiority.",
+  "observations": [
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 0,
+            "ties": 5,
+            "median_delta": 0,
+            "ci_low": 0,
+            "ci_high": 130.5
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R4"
+            },
+            {
+              "name": "contrast",
+              "value": "full_v2_against_original_B0"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_FAIL_CASE_QUALITY"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_candidate_screening",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "diagnostic_inclusion_comparison_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "not_applicable",
+          "case_outcomes": {
+            "wins": 0,
+            "losses": 2,
+            "ties": 4,
+            "median_delta": 0,
+            "ci_low": -281.75,
+            "ci_high": 0
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "DIAGNOSTIC_COMPLETE",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "diagnostic_terminal_observation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R5"
+            },
+            {
+              "name": "contrast",
+              "value": "full_v2_against_v2_minus_2for1"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_FAIL_CASE_QUALITY"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "diagnostic_only_no_promotion"
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "case_conditioned_diagnostic_only",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": true,
+        "population_selection_outcome_blind_relative_to_exact_estimand": false,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 2,
+            "losses": 1,
+            "ties": 3,
+            "median_delta": 0,
+            "ci_low": -258,
+            "ci_high": 97.75
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R6"
+            },
+            {
+              "name": "contrast",
+              "value": "v2_minus_2for1_against_original_B0"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_FAIL_CASE_QUALITY"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            },
+            {
+              "name": "operator_cleanup_overlapped",
+              "value": true
+            },
+            {
+              "name": "performance_claim_scope",
+              "value": "exploratory_possible_resource_contention"
+            },
+            {
+              "name": "B-n34-k5_median_delta",
+              "value": 0
+            },
+            {
+              "name": "B-n34-k5_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "tai100a_median_delta",
+              "value": 179
+            },
+            {
+              "name": "tai100a_seed_pattern",
+              "value": "win_win_win_loss"
+            },
+            {
+              "name": "X-n351-k40_median_delta",
+              "value": -516
+            },
+            {
+              "name": "X-n351-k40_seed_pattern",
+              "value": "loss_loss_loss_loss"
+            },
+            {
+              "name": "A-n54-k7_median_delta",
+              "value": 0
+            },
+            {
+              "name": "A-n54-k7_seed_pattern",
+              "value": "tie_tie_win_tie"
+            },
+            {
+              "name": "X-n190-k8_median_delta",
+              "value": 16.5
+            },
+            {
+              "name": "X-n190-k8_seed_pattern",
+              "value": "win_tie_win_tie"
+            },
+            {
+              "name": "X-n513-k21_median_delta",
+              "value": 0
+            },
+            {
+              "name": "X-n513-k21_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "X-n351-k40_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "X-n513-k21_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "large_cases_initial_vns_ms_min",
+              "value": 65889
+            },
+            {
+              "name": "large_cases_initial_vns_ms_max",
+              "value": 68750
+            },
+            {
+              "name": "large_cases_nominal_limit_seconds",
+              "value": 90
+            },
+            {
+              "name": "common_algorithm_time_fraction",
+              "value": 0.8
+            },
+            {
+              "name": "large_cases_post_initial_objective_equals_final",
+              "value": true
+            },
+            {
+              "name": "phase_behavior_is_not_component_causality",
+              "value": true
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "screening_with_possible_operator_contention",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 1,
+            "ties": 4,
+            "median_delta": 0,
+            "ci_low": -159.5,
+            "ci_high": 71.75
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "run",
+              "value": "R8"
+            },
+            {
+              "name": "contrast",
+              "value": "R7_final_complete_candidate_against_original_B0"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "reason_code",
+              "value": "SCREENING_FAIL_CASE_QUALITY"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            },
+            {
+              "name": "execution_order_counterbalanced",
+              "value": true
+            },
+            {
+              "name": "screening_cases_outcome_known",
+              "value": true
+            },
+            {
+              "name": "B-n34-k5_median_delta",
+              "value": 0
+            },
+            {
+              "name": "B-n34-k5_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "tai100a_median_delta",
+              "value": 143.5
+            },
+            {
+              "name": "tai100a_seed_pattern",
+              "value": "win_win_win_win"
+            },
+            {
+              "name": "X-n351-k40_median_delta",
+              "value": -319
+            },
+            {
+              "name": "X-n351-k40_seed_pattern",
+              "value": "loss_win_loss_loss"
+            },
+            {
+              "name": "A-n54-k7_median_delta",
+              "value": 0
+            },
+            {
+              "name": "A-n54-k7_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "X-n190-k8_median_delta",
+              "value": 0
+            },
+            {
+              "name": "X-n190-k8_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "X-n513-k21_median_delta",
+              "value": 0
+            },
+            {
+              "name": "X-n513-k21_seed_pattern",
+              "value": "tie_tie_tie_tie"
+            },
+            {
+              "name": "X-n351-k40_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "X-n513-k21_both_arms_zero_alns_iterations_pairs",
+              "value": 4
+            },
+            {
+              "name": "large_cases_initial_vns_ms_min",
+              "value": 66585
+            },
+            {
+              "name": "large_cases_initial_vns_ms_max",
+              "value": 68782
+            },
+            {
+              "name": "large_cases_post_initial_objective_equals_final",
+              "value": true
+            },
+            {
+              "name": "large_cases_nominal_limit_seconds",
+              "value": 90
+            },
+            {
+              "name": "common_algorithm_time_fraction",
+              "value": 0.8
+            },
+            {
+              "name": "X-n190-k8_candidate_alns_iterations_min",
+              "value": 1
+            },
+            {
+              "name": "X-n190-k8_candidate_alns_iterations_max",
+              "value": 3
+            },
+            {
+              "name": "X-n190-k8_B0_alns_iterations_min",
+              "value": 2
+            },
+            {
+              "name": "X-n190-k8_B0_alns_iterations_max",
+              "value": 3
+            },
+            {
+              "name": "X-n190-k8_candidate_embedded_vns_ms_min",
+              "value": 28113
+            },
+            {
+              "name": "X-n190-k8_candidate_embedded_vns_ms_max",
+              "value": 30169
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "adaptive_screening_exact_candidate_B0_comparison",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": false,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    }
+  ]
+}

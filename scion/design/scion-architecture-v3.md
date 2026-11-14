@@ -19,6 +19,21 @@
 
 > **面向组合优化算法的自动研究框架——让"提假设 → 改算子 → 验证 → 统计判断 → 晋升/淘汰"的过程可信、可控、可追溯。**
 
+### v0.4 实现解释
+
+本文档的职责边界、tainted-data 原则、两轮 Proposal、实验隔离和
+Decision Input Guard 仍是基石不变量。正文中的 retry、budget、novelty、
+blacklist 和 context compression 是早期实现示例，不是必须恢复的框架
+机制。v0.4 在实验审计后采用的冲突解释与取代关系见
+[`scion-architecture-v3-v0.4-direct-runtime-addendum.md`](scion-architecture-v3-v0.4-direct-runtime-addendum.md)。
+该 addendum 只收窄运行机制，不改变本文件的权威边界。
+
+“边界做硬”指组件职责和信息流不变量必须真实成立，不指静态 gate、
+identity、hash 或 receipt 的数量。凡是可以由隔离执行和问题 Protocol
+直接测量的性质，不得用 host 偏好的代码形状提前替代；凡是不保护上述
+边界的自签发、自登记、自校验，也不构成可信性。摘要 digest 只可用于
+同一实验对象的确定性等价比较，不能自行成为 authority 或 lifecycle。
+
 ---
 
 ## 1. 设计原则
@@ -303,7 +318,8 @@ class Operator:
 
 ### 6.2 候选池管理
 
-- **新增算子**：LLM 提供代码 + 建议权重 → 框架自动注册进池
+- **新增算子**：LLM 提供代码 + 建议权重 → 框架更新问题内
+  operator-pool configuration
 - **修改算子**：LLM 提供新实现 → 框架替换
 - **删除算子**：LLM 提议 → 框架从池中移除，概率重新归一化
 - 动态自适应权重更新机制本身**冻结不动**（v0.1）
@@ -591,12 +607,22 @@ FROZEN_TESTING
 
 ### 11.4 Stale Branch 语义
 
-每个分支记录 `base_champion_id` 和 `base_solver_hash`。
+每个分支记录普通的 `base_champion_version` 与它实际使用的
+base source 引用。实现可以为同一份 source 保留内容 digest，但它
+只用于确定性内容等价比较，不得变成 branch/champion 的身份、
+签发、登记或 lifecycle authority。
 
 当 champion 变化时：
 1. 所有活跃分支标记为 STALE
-2. Stale 分支执行 reconcile：重新应用 patch → Contract → Verification → re-Screening
-3. 仍有正信号则恢复到 READY_VALIDATE，否则 ABANDONED
+2. Stale 分支保留已经通过 Contract 的完整源码树；在隔离副本上执行
+   Verification，并与新 champion 重新进行 screening。不得通过重放历史 patch
+   重建分支，也不自动合并新 champion 的算法改动。
+3. Protocol → Safe Features → Decision 决定继续研究、扩大样本、进入 validation
+   或淘汰。重新比较重置该比较的 expansion 计数；后续 held-out 复用同一候选。
+
+完整源码树也是 fresh campaign 可显式选择的普通输入。新进程隔离复制该树作为
+初始 baseline，可另行接收允许的 H-only history，但不恢复旧 campaign 的 branch、
+champion、provider session 或阶段状态。源码路径不构成身份或权限。
 
 ### 11.5 预算规则
 
@@ -658,25 +684,31 @@ def should_continue():
 
 ---
 
-## 14. Artifact & Lineage
+## 14. Artifact & Scientific Lineage
 
 ### 14.1 存储方式
 
-- MVP: SQLite + append-only 事件表
-- 概念保留 hash-chain，MVP 不强制实现（P1）
+- MVP: SQLite + append-only 科学事件表
+- Lineage 用来回答“哪个 H/C 在哪个 base 上经历了什么检查、
+  Protocol 和 Decision”，不是另一套对象身份或权限系统。
+- 不要求 hash-chain、自签发 receipt、登记机构或重复闭包。
+  实现可选保存单个内容 digest，仅用于对同一 source/artifact
+  做内容等价比较；digest 不会创建 authority 或 lifecycle。
 
 ### 14.2 最低记录字段
 
 每次实验必须记录：
 - campaign_id, branch_id, hypothesis_id, parent_hypothesis_id
-- base_champion_id
-- code_hash, patch_hash
-- prompt_hash, model_version
-- problem_spec_hash, split_version, seed_version, protocol_version
+- base_champion_version 与实际使用的 source 引用
+- patch action 与 changed files
+- model_version
+- problem/split/seed/protocol 的声明版本
 - verification_result
 - raw_metrics_ref（指向具体数据）
 - decision_features
 - decision_reason_codes
+
+内容 digest 是可选字段，不是科学 lineage 完整性的前置条件。
 
 ### 14.3 结构化 HypothesisRecord
 
@@ -917,7 +949,7 @@ Agent + 参数搜索两层嵌套——外层 LLM 探索算子结构，内层贝�
 | 1 | 主体蓝图 | v2.1 为主，整合为 Architecture v3 | 2026-04-02 |
 | 2 | 开发周期 | 放宽，不卡硬限 | 2026-04-02 |
 | 3 | Scheduler | MVP 词典序硬优先级 | 2026-04-02 |
-| 4 | Lineage | 概念保留 hash-chain，MVP 用 SQLite + append | 2026-04-02 |
+| 4 | Lineage | SQLite + append 保留普通科学系谱；不需要 hash-chain 或身份 authority，内容 digest 仅可选用于等价比较 | 2026-04-02 / 2026-08-08 收窄 |
 | 5 | Patch/Commit 限制 | 放宽，不设硬限 | 2026-04-02 |
 | 6 | 算子操作 | 新增 + 删减 + 修改 | 2026-04-02 |
 | 7 | Oracle | 人写 spec → agent 写代码 → 人审核 → 冻结 | 2026-04-02 |
@@ -931,7 +963,7 @@ Agent + 参数搜索两层嵌套——外层 LLM 探索算子结构，内层贝�
 | 15 | Champion 定义 | 池级别 | 2026-04-02 |
 | 16 | 分支多样性 | 不强制约束，LLM 自然发散 | 2026-04-02 |
 | 17 | 代码输出 | 完整文件（框架自行 diff） | 2026-04-02 |
-| 18 | 算子注册 | 框架自动完成 | 2026-04-02 |
+| 18 | 算子入池 | 框架更新问题内 operator-pool configuration，不创建登记 authority | 2026-04-02 / 2026-08-08 收窄 |
 | 19 | Screening N | modify/remove: 6, create_new: 10 | 2026-04-02 |
 | 20 | 多目标 | 字典序（业务聚合 > 成本 > 效率） | 2026-04-02 |
 | 21 | Pool 评估结果 | 取 pool 最优解作为单次实验结果 | 2026-04-02 |

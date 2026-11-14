@@ -1,9 +1,18 @@
 from __future__ import annotations
+
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Optional, Literal, Union, Any, Dict, List, Tuple
-import uuid
+from typing import Any, Dict, List, Literal, Optional, Tuple
+
+from scion.core.execution_outcome import (
+    ExecutionOutcome,
+    ExecutionOutcomeRecord,
+)
+from scion.core.selected_hypothesis_basis import (
+    normalize_selected_hypothesis_research_basis,
+)
 
 # --- Branch & Campaign Enums ---
 
@@ -43,6 +52,7 @@ class Decision(Enum):
     PROMOTE = "promote"
     ABANDON = "abandon"
 
+
 # --- Proposals (Tainted from LLM) ---
 
 @dataclass
@@ -55,11 +65,14 @@ class HypothesisProposal:
     target_weakness: str = ""
     expected_effect: str = ""
     suggested_weight: Optional[float] = None
-    target_objectives: Tuple[str, ...] = ()
-    protected_objectives: Tuple[str, ...] = ()
-    objective_tradeoff_policy: str = ""
-    no_op_condition: str = ""
-    risk_to_higher_priority: str = ""
+
+@dataclass
+class PatchFileChange:
+    file_path: str
+    action: Literal["modify", "create", "delete"]
+    code_content: str
+    test_hint: Optional[str] = None
+
 
 @dataclass
 class PatchProposal:
@@ -67,6 +80,123 @@ class PatchProposal:
     action: Literal["modify", "create", "delete"]
     code_content: str
     test_hint: Optional[str] = None
+    additional_changes: Tuple[PatchFileChange, ...] = ()
+
+    def iter_file_changes(self) -> Tuple[PatchFileChange, ...]:
+        return patch_file_changes(self)
+
+
+@dataclass
+class ExecutablePatchFileChange:
+    """One materialized filesystem change, without authoring-only metadata."""
+
+    file_path: str
+    action: Literal["modify", "create", "delete"]
+    source_before: str | None
+    source_after: str
+
+
+@dataclass
+class ExecutablePatchValue:
+    """Plain value consumed by workspace execution for one patch proposal."""
+
+    changes: tuple[ExecutablePatchFileChange, ...]
+
+
+@dataclass(frozen=True)
+class AcceptedFileBeforeSource:
+    """Plain source observed immediately before one accepted file change."""
+
+    file_path: str
+    source: str | None
+
+
+@dataclass(frozen=True)
+class AcceptedBranchChange:
+    """One ordinary accepted H/C increment in a branch research head."""
+
+    hypothesis: HypothesisProposal
+    patch: PatchProposal
+    before_sources: tuple[AcceptedFileBeforeSource, ...]
+    changed_files: tuple[str, ...] = ()
+    selected_hypothesis_research_basis: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        changed_files = self.changed_files or tuple(
+            dict.fromkeys(
+                change.file_path for change in patch_file_changes(self.patch)
+            )
+        )
+        if (
+            any(not isinstance(path, str) or not path.strip() for path in changed_files)
+            or len(set(changed_files)) != len(changed_files)
+        ):
+            raise ValueError(
+                "accepted change changed_files must be unique non-empty paths"
+            )
+        patch_paths = {
+            change.file_path for change in patch_file_changes(self.patch)
+        }
+        if not patch_paths.issubset(changed_files):
+            raise ValueError(
+                "accepted change changed_files must include every patch file"
+            )
+        object.__setattr__(self, "changed_files", changed_files)
+
+
+def patch_file_changes(patch: PatchProposal) -> Tuple[PatchFileChange, ...]:
+    """Return primary plus additional file changes for a patch proposal."""
+    changes = [
+        PatchFileChange(
+            file_path=patch.file_path,
+            action=patch.action,
+            code_content=patch.code_content,
+            test_hint=patch.test_hint,
+        )
+    ]
+    for change in patch.additional_changes or ():
+        if isinstance(change, PatchFileChange):
+            changes.append(change)
+        elif isinstance(change, dict):
+            changes.append(PatchFileChange(**change))
+        else:
+            changes.append(
+                PatchFileChange(
+                    file_path=getattr(change, "file_path"),
+                    action=getattr(change, "action"),
+                    code_content=getattr(change, "code_content"),
+                    test_hint=getattr(change, "test_hint", None),
+                )
+            )
+    return tuple(changes)
+
+
+def executable_patch_value(
+    patch: PatchProposal,
+    *,
+    source_before_by_path: Mapping[str, str],
+) -> ExecutablePatchValue:
+    """Return the complete execution value, excluding non-executable test hints.
+
+    Typed-edit selectors have already been materialized into full-file source by
+    the time a ``PatchProposal`` exists.  Unique file changes are sorted by path
+    because choosing one of them as the proposal's primary change does not alter
+    the resulting filesystem state.
+    """
+
+    changes = sorted(patch_file_changes(patch), key=lambda change: change.file_path)
+    return ExecutablePatchValue(
+        changes=tuple(
+            ExecutablePatchFileChange(
+                file_path=change.file_path,
+                action=change.action,
+                source_before=source_before_by_path.get(change.file_path),
+                source_after=change.code_content,
+            )
+            for change in changes
+        )
+    )
+
 
 # --- Results & Stats ---
 
@@ -77,6 +207,7 @@ class CheckResult:
     severity: Literal["light", "heavy"]
     detail: str
     elapsed_ms: int
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass(frozen=True)
 class ContractResult:
@@ -95,6 +226,10 @@ class VerificationResult:
 class CanaryResult:
     passed: bool
     reason: Optional[str] = None
+    details: Dict[str, Any] = field(default_factory=dict)
+    failure_category: str = ""
+    reason_codes: Tuple[str, ...] = ()
+    candidate_attributable_infeasible_pairs: Optional[int] = None
 
 @dataclass(frozen=True)
 class MetricEvalStats:
@@ -115,26 +250,71 @@ class EvalStats:
     median_delta: float
     ci_low: float
     ci_high: float
-    # v0.3 F3: priority-aware statistical decision summary.
-    # Backward-compatible callers may leave these unset and rely on ci_low/ci_high.
+    # The selected statistical metric is the problem-owned measurement effect
+    # metric. All objective rows remain available in metric_stats for analysis.
     statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
     statistical_metric: Optional[str] = None
     metric_stats: Tuple[MetricEvalStats, ...] = ()
+    protected_objective_regressions: Tuple[str, ...] = ()
+    runtime_ratio_median: Optional[float] = None
+    runtime_delta_median_ms: Optional[float] = None
+    runtime_regression_rate: Optional[float] = None
+    runtime_pairs: int = 0
+    total_pairs: int = 0
+    attempted_pairs: int = 0
+    valid_pairs: int = 0
+    failed_pairs: int = 0
+    candidate_failed_pairs: int = 0
+    champion_failed_pairs: int = 0
+    # Pair-local attribution prevents a dual-side execution incident from
+    # being flattened into a candidate-only hard failure.  Shared failures
+    # have equivalent evidence on both sides; bilateral failures have
+    # distinct evidence on both sides.
+    shared_failed_pairs: int = 0
+    bilateral_failed_pairs: int = 0
+    pair_wins: int = 0
+    pair_losses: int = 0
+    pair_ties: int = 0
+    runtime_evidence_status: Literal[
+        "sufficient",
+        "insufficient",
+    ] = "sufficient"
 
 @dataclass(frozen=True)
 class ProtocolResult:
     stage: ExperimentStage
     stats: EvalStats
-    gate_outcome: Literal["pass", "fail", "unclear", "expand"]
+    gate_outcome: Literal["pass", "fail", "unclear", "expand", "continue"]
     reason_codes: Tuple[str, ...]
     exposed_summary: str  # Filtered summary for LLM context
-    raw_metrics_ref: str  # Path to full JSON metrics
+    raw_metrics_ref: str  # Internal path to full JSON metrics; public payloads redact it.
+    objective_semantics: str = "unknown"
     case_ids: Tuple[str, ...] = ()
     seed_set: Tuple[int, ...] = ()
     # Case-level feedback (screening only; empty for validation/frozen)
     pair_feedback: Tuple["PairwiseCaseFeedback", ...] = ()
     case_feedback: Tuple["CaseAggregateFeedback", ...] = ()
     pattern_summary: Optional["ScreeningPatternSummary"] = None
+    selected_surface: Optional[str] = None
+    candidate_surface_runtime_summary: Dict[str, Any] = field(default_factory=dict)
+    candidate_phase_telemetry_summary: Dict[str, Any] = field(default_factory=dict)
+    candidate_runtime_failure_categories: Dict[str, int] = field(default_factory=dict)
+    candidate_first_runtime_failure: Optional[Dict[str, Any]] = None
+    # Problem-declared diagnostic counters, never Safe Features or a gate.
+    candidate_runtime_counters: Dict[str, int] = field(default_factory=dict)
+    candidate_runtime_stop_reasons: Dict[str, int] = field(default_factory=dict)
+    runtime_confidence: str = "high"
+    runtime_model: Optional[Literal["comparative", "budget_exhausting"]] = None
+    opportunity_status: str = "unknown"
+    opportunity_diagnostics: Tuple[str, ...] = ()
+    mechanism_evidence: Dict[str, Any] = field(default_factory=dict)
+    # Appended to preserve the historical positional constructor prefix.
+    case_aggregation_method: str = "seed_vote_majority"
+    case_effect_metric: str = ""
+    case_equivalence_band: float = 0.0
+    candidate_attributable_infeasible_pairs: Optional[int] = None
+    candidate_only_timeout_pairs: Optional[int] = None
+    candidate_only_invalid_output_pairs: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -150,7 +330,7 @@ class PairwiseCaseFeedback:
 
 @dataclass(frozen=True)
 class CaseAggregateFeedback:
-    """Aggregated feedback for one instance across all seeds."""
+    """Formal case direction plus descriptive seed-pattern evidence."""
     case_id: str
     n_pairs: int
     wins: int
@@ -158,14 +338,13 @@ class CaseAggregateFeedback:
     ties: int
     win_rate: float
     dominant_result: Literal["win", "loss", "tie", "mixed"]
-    decisive_metric: str = "tie"  # generic metric name that decided majority of pairs
-    median_deltas: Dict[str, float] = field(default_factory=dict)  # {metric_name: median_delta}
-    seed_consistency: float = 0.0  # max(win,loss,tie) / n_pairs
+    # Declared effect metric for paired aggregation, or the legacy pair-vote metric.
+    decisive_metric: str = "tie"
+    median_deltas: Dict[str, float] = field(default_factory=dict)
+    # Descriptive seed agreement only; it never enters the formal case direction.
+    seed_consistency: float = 0.0
+    seed_pattern: Literal["uniform", "heterogeneous"] = "uniform"
     case_features: Dict[str, Any] = field(default_factory=dict)
-    # DEPRECATED aliases for backward compat
-    dominant_decisive_objective: str = ""
-    median_delta_total_cost: Optional[float] = None
-    median_delta_subcategory_splits: Optional[float] = None
 
 
 @dataclass(frozen=True)
@@ -183,15 +362,30 @@ class ScreeningPatternSummary:
     consistent_loss_cases: Tuple[str, ...] = ()
     key_observations: Tuple[str, ...] = ()
 
+
 # --- Decision Features (The "Safe" Boundary) ---
+
+DecisionRuntimeEvidenceConfidence = Literal[
+    "high",
+    "sufficient",
+    "low",
+    "low_sample_diagnostic",
+    "missing",
+]
+DecisionRuntimeEvidenceStatus = Literal[
+    "sufficient",
+    "insufficient",
+]
+
 
 @dataclass(frozen=True)
 class DecisionFeatures:
-    branch_id: str
     hypothesis_action: Literal["modify", "create_new", "remove"]
     stage: Literal["screening", "validation", "frozen"]
-    contract_passed: bool
-    verification_passed: bool
+    # None means the gate was not run for this invocation (for example a
+    # validation/frozen Protocol call over an already accepted source).
+    contract_passed: Optional[bool]
+    verification_passed: Optional[bool]
     canary_passed: bool
     n_cases: int
     win_rate: Optional[float]
@@ -199,14 +393,36 @@ class DecisionFeatures:
     ci_low: Optional[float]
     ci_high: Optional[float]
     stale: bool
-    recent_retry_count: int
     recent_failure_codes: Tuple[str, ...]
-    budget_remaining_ratio: float
+    wins: int = 0
+    losses: int = 0
+    ties: int = 0
+    runtime_guard_passed: Optional[bool] = None
+    runtime_guard_ratio: Optional[float] = None
+    runtime_guard_timeout: bool = False
+    runtime_ratio_median: Optional[float] = None
+    runtime_delta_median_ms: Optional[float] = None
+    runtime_regression_rate: Optional[float] = None
+    runtime_pairs: int = 0
+    runtime_evidence_confidence: DecisionRuntimeEvidenceConfidence = "high"
+    runtime_evidence_status: DecisionRuntimeEvidenceStatus = "sufficient"
+    protocol_gate_outcome: Optional[Literal["pass", "fail", "unclear", "expand", "continue"]] = None
+    protocol_reason_codes: Tuple[str, ...] = ()
+    total_pairs: int = 0
+    attempted_pairs: int = 0
+    valid_pairs: int = 0
+    failed_pairs: int = 0
+    candidate_failed_pairs: int = 0
+    champion_failed_pairs: int = 0
+    shared_failed_pairs: int = 0
+    bilateral_failed_pairs: int = 0
+    pair_wins: int = 0
+    pair_losses: int = 0
+    pair_ties: int = 0
     statistical_status: Optional[Literal["positive", "negative", "uncertain", "tie"]] = None
     statistical_metric: Optional[str] = None
-    # Stage-specific expand counters (per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
-    # are per-candidate budgets, not per-branch). Reset by campaign._run_explore_step when a new
-    # hypothesis is generated for this branch.
+    # Stage-specific counts for preregistered Protocol sample expansion. These
+    # are scientific stage facts, not provider-call or campaign budgets.
     screening_expand_count: int = 0
     validation_expand_count: int = 0
 
@@ -214,7 +430,6 @@ class DecisionFeatures:
 class DecisionOutcome:
     decision: Decision
     reason_codes: Tuple[str, ...]
-    features_snapshot: DecisionFeatures
 
 # --- Campaign & Branch State ---
 
@@ -230,10 +445,7 @@ class OperatorConfig:
 class ChampionState:
     version: int
     operator_pool: Dict[str, OperatorConfig]
-    solver_config_hash: str
     code_snapshot_path: str
-    code_snapshot_hash: str
-    promotion_experiment_id: Optional[str] = None
     promoted_at: Optional[str] = None
     weight_revision: int = 0
 
@@ -242,64 +454,74 @@ class Branch:
     branch_id: str
     state: BranchState
     base_champion_id: int
-    base_champion_hash: str
+    # Content digest of the accepted read-only branch workspace.
     current_code_hash: Optional[str] = None
-    last_clean_code_hash: Optional[str] = None
-    retry_count: int = 0
-    # Stage-specific expand counters. Per v3 §11.5 "screening expand: 1 次 / validation expand: 1 次"
-    # are per-candidate budgets, not per-branch. campaign._run_explore_step resets both when a new
-    # hypothesis is generated on this branch. campaign._run_eval_step increments the corresponding
-    # counter based on branch.state (EXPLORE_EXPAND → screening; VALIDATING_EXPAND → validation).
+    # Current ordinary H value for in-process validation/frozen/stale work.
+    hypothesis: Optional[HypothesisProposal] = None
+    # Tainted research evidence for the current accepted H. It is copied only
+    # into StepRecord artifacts and is never a Protocol or Decision input.
+    selected_hypothesis_research_basis: dict[str, Any] | None = None
+    # Ordinary accepted H/C evidence for history and proposal observations.
+    # Executable continuation always uses the complete workspace, never replay.
+    accepted_changes: List[AcceptedBranchChange] = field(default_factory=list)
+    # Stage-specific counts for preregistered Protocol sample expansion. A new
+    # hypothesis resets them; evaluation increments the active stage count.
     screening_expand_count: int = 0
     validation_expand_count: int = 0
     failure_codes: List[str] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
     updated_at: datetime = field(default_factory=datetime.now)
-    direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text[:100]}'
+    direction: Optional[str] = None  # Branch direction: '{change_locus}: {hypothesis_text}'
     weight_revision: int = 0  # weight revision this branch was last evaluated against
-    # FailureRouter recovery fields
-    pending_retry: bool = False          # True when retry_llm is in effect; scheduler prioritises
-    blocked_rounds: int = 0              # Rounds spent in BLOCKED_INFRA; auto-unblock at 3
-    consecutive_llm_retries: int = 0    # Consecutive retry_llm actions; downgrade to discard at 3
-    infra_block_count: int = 0          # How many times this branch has been BLOCKED_INFRA
-
-@dataclass
-class HypothesisFamily:
-    """Tracks a mechanism-level family of hypotheses for diversity detection (T07)."""
-    family_id: str
-    mechanism_label: str      # e.g. "subcategory_consolidation", "destroy_rebuild"
-    action_pattern: str       # "create_new" / "modify" / "remove"
-    locus_pattern: str        # "vehicle_level" / "order_level"
-    evidence_count: int
-    statuses: List[str]       # ["rejected", "promoted", ...]
 
 
-@dataclass
-class HypothesisRecord:
-    hypothesis_id: str
-    branch_id: str
-    change_locus: str
-    action: str
-    status: str
-    target_file: Optional[str] = None
-    parent_hypothesis_id: Optional[str] = None
-    suggested_weight: Optional[float] = None
-    hypothesis_text: Optional[str] = None
-    family_id: Optional[str] = None
-    family_source: Optional[str] = None  # "classifier" | "keyword" | "manual"
-    taxonomy_version: Optional[str] = None  # e.g. "v1"
-    created_at: datetime = field(default_factory=datetime.now)
-    base_champion_version: int = 0      # champion version at hypothesis creation time
+def branch_base_source_ref(branch: Branch) -> str:
+    """Return a plain, human-readable label for the branch's current code base."""
+
+    if branch.current_code_hash is not None or branch.accepted_changes:
+        return (
+            f"branch:{branch.branch_id}:accepted-head:"
+            f"{len(branch.accepted_changes)}"
+        )
+    return f"champion:v{branch.base_champion_id}"
+
+
+def branch_changed_files(
+    branch: Branch,
+    patch: PatchProposal | None = None,
+) -> Tuple[str, ...]:
+    """Return the branch's accepted file-change history plus the current patch."""
+
+    ordered: Dict[str, None] = {}
+    for accepted in branch.accepted_changes:
+        for file_path in accepted.changed_files:
+            ordered.setdefault(file_path, None)
+    if patch is not None:
+        for change in patch_file_changes(patch):
+            ordered.setdefault(change.file_path, None)
+    return tuple(ordered)
 
 # --- Solver Output ---
 
 @dataclass(frozen=True)
 class SolverOutput:
     """Parsed JSON output from a solver run."""
-    vehicles: Dict[str, Any]
-    assignment: Dict[str, str]
     objective: Dict[str, Any]
     feasible: bool
+    runtime: Dict[str, Any] = field(default_factory=dict)
+    solution_payload: Dict[str, Any] = field(default_factory=dict)
+
+    def to_raw_mapping(self) -> Dict[str, Any]:
+        """Reconstruct the complete solver mapping with stable key ownership."""
+        raw: Dict[str, Any] = {
+            "objective": dict(self.objective),
+            "feasible": bool(self.feasible),
+            "runtime": dict(self.runtime),
+        }
+        for key in sorted(self.solution_payload):
+            if key not in raw:
+                raw[key] = self.solution_payload[key]
+        return raw
 
 # --- Infrastructure ---
 
@@ -311,16 +533,7 @@ class RunResult:
     stderr: str
     elapsed_ms: int
     output: Optional[SolverOutput] = None
-    output_path: Optional[str] = None
     error_category: Optional[Literal["timeout", "oom", "crash"]] = None
-
-@dataclass(frozen=True)
-class FailureEvent:
-    category: Literal["proposal", "contract", "verification_light", "verification_heavy", "infra", "evaluation"]
-    detail: str
-    timestamp: datetime = field(default_factory=datetime.now)
-    retryable: bool = True
-
 
 @dataclass(frozen=True)
 class WeightConfig:
@@ -343,37 +556,173 @@ class WeightOptimizationResult:
 
 @dataclass
 class StepRecord:
-    """Record of one completed proposal+evaluation cycle (explore step).
+    """Record of one completed proposal or evaluation attempt.
 
     Stored in CampaignManager._step_history and passed to ContextManager
     so the LLM receives a rich history of prior attempts on each branch.
 
     failure_stage values:
+        'proposal_hypothesis' — no hypothesis was produced
         'hypothesis_contract' — hypothesis failed ContractGate
         'code_generation'     — LLM failed to produce a patch
         'patch_contract'      — patch failed ContractGate
         'workspace'           — workspace setup / apply_patch failed
         'verification'        — VerificationGate failed (light or heavy)
+        'evaluation'          — Protocol/evaluation failed before DecisionEngine
         'screening'           — experiment returned a non-promote result
         None                  — no failure (reached _apply_decision_and_finalize)
 
     decision: None means the step did not reach the Decision Engine (early failure).
               Only set to a real Decision value when the Decision Engine actually ran.
-    hypothesis_id: the original HypothesisRecord.hypothesis_id for lifecycle tracking.
-    decision_reason_codes: reason codes from the Decision Engine outcome.
+    decision_reason_codes: formal Decision outcome reason codes.
+    candidate_parent_scope: host-owned source fact captured before applying the
+                            current patch; None preserves conservative legacy output.
     """
     round_num: int
     branch_id: str
-    hypothesis: HypothesisProposal
+    hypothesis: HypothesisProposal | None
     patch: Optional[PatchProposal]
-    contract_passed: bool
-    verification_passed: bool
+    contract_passed: Optional[bool]
+    verification_passed: Optional[bool]
     protocol_result: Optional[ProtocolResult]
     decision: Optional[Decision]
     failure_stage: Optional[str]
     failure_detail: Optional[str]
-    verification_detail: Optional[str] = None  # Full verification failure detail for LLM diagnosis
-    code_archive_ref: Optional[str] = None  # 归档目录路径
-    cache_stats: Optional[Dict[str, int]] = None  # {"total": N, "cache_read": M, "cache_create": K}
-    hypothesis_id: Optional[str] = None  # Original HypothesisRecord.hypothesis_id (T04)
-    decision_reason_codes: Optional[Tuple[str, ...]] = None  # DecisionEngine reason codes (T04/T05)
+    base_champion_version: int
+    base_source_ref: str
+    changed_files: Tuple[str, ...]
+    decision_reason_codes: Optional[Tuple[str, ...]] = None
+    decision_engine_reason_codes: Tuple[str, ...] = ()
+    diagnostic_reason_codes: Tuple[str, ...] = ()
+    bypass_reason_codes: Tuple[str, ...] = ()
+    contract_diagnostics: Tuple[Dict[str, Any], ...] = ()
+    canary_result: Optional[CanaryResult] = None
+    candidate_parent_scope: Optional[
+        Literal["declared_champion", "retained_branch_head"]
+    ] = None
+    execution_outcome: ExecutionOutcomeRecord | None = None
+    selected_hypothesis_research_basis: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            type(self.base_champion_version) is not int
+            or self.base_champion_version < 0
+        ):
+            raise ValueError("base_champion_version must be a non-negative integer")
+        if (
+            not isinstance(self.base_source_ref, str)
+            or not self.base_source_ref.strip()
+            or "\n" in self.base_source_ref
+        ):
+            raise ValueError("base_source_ref must be one non-empty text line")
+        if self.hypothesis is None and self.patch is not None:
+            raise ValueError("a hypothesis-free step cannot carry a patch")
+        if self.patch is not None and not isinstance(self.patch, PatchProposal):
+            raise TypeError("patch must be a PatchProposal")
+        current_patch_files = (
+            tuple(change.file_path for change in patch_file_changes(self.patch))
+            if self.patch is not None
+            else ()
+        )
+        if (
+            not isinstance(self.changed_files, tuple)
+            or any(
+                not isinstance(path, str) or not path.strip()
+                for path in self.changed_files
+            )
+            or len(set(self.changed_files)) != len(self.changed_files)
+        ):
+            raise ValueError("changed_files must be an ordered tuple of unique paths")
+        if not set(current_patch_files).issubset(self.changed_files):
+            raise ValueError("changed_files must include every current patch file")
+        self.selected_hypothesis_research_basis = (
+            normalize_selected_hypothesis_research_basis(
+                self.selected_hypothesis_research_basis
+            )
+        )
+        record = self.execution_outcome
+        if record is not None and not isinstance(record, ExecutionOutcomeRecord):
+            raise TypeError("execution_outcome must be an ExecutionOutcomeRecord")
+        if self.hypothesis is None:
+            if self.selected_hypothesis_research_basis is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry a selected hypothesis "
+                    "research basis"
+                )
+            if record is None:
+                raise ValueError(
+                    "a hypothesis-free step requires an execution outcome"
+                )
+            if record.outcome is ExecutionOutcome.EVALUATED:
+                raise ValueError(
+                    "a hypothesis-free step cannot be evaluated"
+                )
+            if self.failure_stage != "proposal_hypothesis":
+                raise ValueError(
+                    "a hypothesis-free step must fail at proposal_hypothesis"
+                )
+            if self.patch is not None:
+                raise ValueError("a hypothesis-free step cannot carry a patch")
+            if self.contract_passed is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry a Contract result"
+                )
+            if self.verification_passed is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry a verification result"
+                )
+            if self.protocol_result is not None or self.decision is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry Protocol or Decision data"
+                )
+            if self.canary_result is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry a canary result"
+                )
+            if self.candidate_parent_scope is not None:
+                raise ValueError(
+                    "a hypothesis-free step cannot carry candidate parent scope"
+                )
+            if (
+                self.decision_reason_codes is not None
+                or self.decision_engine_reason_codes
+                or self.diagnostic_reason_codes
+                or self.bypass_reason_codes
+                or self.contract_diagnostics
+            ):
+                raise ValueError(
+                    "a hypothesis-free step cannot carry decision or "
+                    "Contract diagnostics"
+                )
+            if self.failure_detail != record.reason_code:
+                raise ValueError(
+                    "a hypothesis-free step failure detail must be its reason code"
+                )
+            if record.detail:
+                raise ValueError(
+                    "a hypothesis-free step execution detail must be redacted"
+                )
+            if record.provenance != {"stage": "proposal_hypothesis"}:
+                raise ValueError(
+                    "a hypothesis-free step provenance must contain only its stage"
+                )
+        if record is not None and record.outcome is not ExecutionOutcome.EVALUATED:
+            committed_promotion_event_failure = (
+                record.reason_code
+                in {
+                    "PROMOTION_EVENT_WRITE_FAILED",
+                    "PROMOTION_COMMITTED_BOOKKEEPING_FAILED",
+                }
+                and self.decision is Decision.PROMOTE
+            )
+            if self.decision is not None and not committed_promotion_event_failure:
+                raise ValueError(
+                    "non-evaluated execution outcome cannot carry a Decision"
+                )
+            if (
+                self.protocol_result is not None
+                and not committed_promotion_event_failure
+            ):
+                raise ValueError(
+                    "non-evaluated execution outcome cannot carry a ProtocolResult"
+                )

@@ -1,0 +1,3 @@
+absolute_path	allocated_bytes	classification	retained_owner	validation_conclusion
+/home/clawd/research/scion-experiments/cvrp-mechanism-matrix-20260617T144052Z	40960	dry_run_planned_exact_subset	cvrp-mechanism-matrix-224ca7f-20260617T140531Z-wsl	PASS:dry_run_only,all_jobs_planned,no_scientific_metrics,no_repo_reference,no_git,no_active_owner,retained_owner_exists,size_revalidated
+/home/clawd/research/scion-experiments/v04-post-boundary-4r-gpt55-20260606T223338Z-claw	36864	pre_campaign_wrong_cwd	v04-audit-identity-accounting-verify2-4r-gpt55-20260607T193539Z-claw	PASS:pre_protocol_failure,no_scientific_evidence,no_repo_reference,no_git,no_active_owner,retained_owner_exists,size_revalidated

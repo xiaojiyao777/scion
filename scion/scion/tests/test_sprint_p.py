@@ -1,96 +1,13 @@
 """Tests for Sprint P: campaign journal, weight-opt feedback, solution consistency, canary."""
 from __future__ import annotations
 
-import sqlite3
-import pytest
+from pathlib import Path
+from types import SimpleNamespace
 
+from scion.config.problem import ProblemSpec, SearchSpace
 from scion.core.canary import CanarySetVersion
-from scion.core.models import WeightOptimizationResult
-from scion.lineage.registry import LineageRegistry
-from scion.proposal.journal import CampaignJournal, JournalSnapshot
-from scion.proposal.weight_feedback import extract_weight_signals, render_weight_feedback
-from scion.verification.state_mutation import _classify_consistency_failure, _check_solution_consistency
-
-
-# ---------------------------------------------------------------------------
-# W9: Campaign journal
-# ---------------------------------------------------------------------------
-
-class TestCampaignJournal:
-    def test_empty_db(self, tmp_path) -> None:
-        registry = LineageRegistry(str(tmp_path / "test.db"))
-        journal = CampaignJournal(registry)
-        snap = journal.build_snapshot()
-        assert snap.total_experiments == 0
-        assert snap.champion_epochs == ()
-
-    def test_render_empty(self, tmp_path) -> None:
-        registry = LineageRegistry(str(tmp_path / "test.db"))
-        journal = CampaignJournal(registry)
-        text = journal.render_for_llm()
-        assert "Campaign Journal" in text
-
-    def test_snapshot_with_data(self, tmp_path) -> None:
-        registry = LineageRegistry(str(tmp_path / "test.db"))
-        with sqlite3.connect(registry.db_path) as conn:
-            conn.execute("""
-                INSERT INTO champions (version, operator_pool_json, solver_config_hash,
-                    code_snapshot_path, code_snapshot_hash, promoted_at)
-                VALUES (1, '{}', 'h', '/p', 'hash1', datetime('now'))
-            """)
-            conn.execute("""
-                INSERT INTO hypotheses (hypothesis_id, branch_id, change_locus, action,
-                    status, created_at, base_champion_version, family_id)
-                VALUES ('h1', 'b1', 'x', 'modify', 'active', datetime('now'), 1, 'fam_a')
-            """)
-        journal = CampaignJournal(registry)
-        snap = journal.build_snapshot()
-        assert len(snap.champion_epochs) == 1
-        assert snap.champion_epochs[0].n_hypotheses == 1
-        assert snap.family_distribution.get("fam_a") == 1
-
-
-# ---------------------------------------------------------------------------
-# W10: Weight-opt feedback
-# ---------------------------------------------------------------------------
-
-class TestWeightFeedback:
-    def test_no_result(self) -> None:
-        assert extract_weight_signals(None) == []
-        assert render_weight_feedback(None) == ""
-
-    def test_not_improved(self) -> None:
-        r = WeightOptimizationResult(
-            baseline_weights={"a": 1.0}, best_weights={"a": 1.0},
-            baseline_score=0.5, best_score=0.4, improved=False,
-            n_evaluations=10, elapsed_seconds=5.0, observations_ref="",
-        )
-        assert extract_weight_signals(r) == []
-
-    def test_improved_signals(self) -> None:
-        r = WeightOptimizationResult(
-            baseline_weights={"op_a": 1.0, "op_b": 1.0, "op_c": 1.0},
-            best_weights={"op_a": 2.0, "op_b": 0.5, "op_c": 1.1},
-            baseline_score=0.3, best_score=0.6, improved=True,
-            n_evaluations=20, elapsed_seconds=10.0, observations_ref="",
-        )
-        signals = extract_weight_signals(r)
-        assert len(signals) == 3
-        dirs = {s.operator_name: s.direction for s in signals}
-        assert dirs["op_a"] == "increased"
-        assert dirs["op_b"] == "decreased"
-        assert dirs["op_c"] == "stable"
-
-    def test_render(self) -> None:
-        r = WeightOptimizationResult(
-            baseline_weights={"op_a": 1.0},
-            best_weights={"op_a": 2.0},
-            baseline_score=0.3, best_score=0.6, improved=True,
-            n_evaluations=10, elapsed_seconds=5.0, observations_ref="",
-        )
-        text = render_weight_feedback(r)
-        assert "Parameter Search Feedback" in text
-        assert "op_a" in text
+from scion.core.models import RunResult, SolverOutput
+from scion.verification.state_mutation import check_state_mutation
 
 
 # ---------------------------------------------------------------------------
@@ -98,29 +15,12 @@ class TestWeightFeedback:
 # ---------------------------------------------------------------------------
 
 class TestSolutionConsistencyDiagnosis:
-    def test_candidate_classification(self) -> None:
-        issues = ["order o1 in multiple vehicles: v1 and v2"]
-        assert _classify_consistency_failure(issues) == "CANDIDATE"
-
-    def test_env_classification(self) -> None:
-        issues = ["empty vehicle v3 in output"]
-        assert _classify_consistency_failure(issues) == "ENV"
-
-    def test_unknown_classification(self) -> None:
-        issues = ["some weird issue"]
-        assert _classify_consistency_failure(issues) == "UNKNOWN"
-
-    def test_consistency_check_clean(self) -> None:
-        raw = {
-            "solution": {
-                "assignment": {"o1": "v1", "o2": "v1"},
-                "vehicles": {"v1": {"order_ids": ["o1", "o2"]}},
-            }
-        }
-        assert _check_solution_consistency(raw) == []
-
-    def test_consistency_check_duplicate(self) -> None:
-        raw = {
+    def test_legacy_oracle_consistency_hook_can_reject(self, tmp_path) -> None:
+        _write_warehouse_oracle(tmp_path)
+        canary = tmp_path / "small.json"
+        canary.write_text("{}", encoding="utf-8")
+        spec = _make_spec(tmp_path, str(canary))
+        output = {
             "solution": {
                 "assignment": {"o1": "v1"},
                 "vehicles": {
@@ -129,9 +29,39 @@ class TestSolutionConsistencyDiagnosis:
                 },
             }
         }
-        issues = _check_solution_consistency(raw)
-        assert len(issues) > 0
-        assert "multiple vehicles" in issues[0]
+
+        result = check_state_mutation(spec, _runner_for_output(tmp_path, output), str(tmp_path))
+
+        assert result.passed is False
+        assert "[CANDIDATE]" in result.detail
+        assert "multiple vehicles" in result.detail
+
+    def test_legacy_oracle_consistency_hook_can_pass(self, tmp_path) -> None:
+        _write_warehouse_oracle(tmp_path)
+        canary = tmp_path / "small.json"
+        canary.write_text("{}", encoding="utf-8")
+        spec = _make_spec(tmp_path, str(canary))
+        output = {
+            "solution": {
+                "assignment": {"o1": "v1", "o2": "v1"},
+                "vehicles": {"v1": {"order_ids": ["o1", "o2"]}},
+            }
+        }
+
+        result = check_state_mutation(spec, _runner_for_output(tmp_path, output), str(tmp_path))
+
+        assert result.passed is True
+        assert "oracle solution consistency ok" in result.detail
+
+    def test_missing_legacy_oracle_hook_is_skipped(self, tmp_path) -> None:
+        canary = tmp_path / "small.json"
+        canary.write_text("{}", encoding="utf-8")
+        spec = _make_spec(tmp_path, str(canary))
+
+        result = check_state_mutation(spec, _runner_for_output(tmp_path, {}), str(tmp_path))
+
+        assert result.passed is True
+        assert "skipped" in result.detail
 
 
 # ---------------------------------------------------------------------------
@@ -170,3 +100,74 @@ class TestCanaryVersioning:
         v.add_candidate("/data/c1.json", "already_exists")
         v2 = v.export_next_version("v2")
         assert v2.cases.count("/data/c1.json") == 1
+
+
+def _make_spec(root: Path, canary: str) -> ProblemSpec:
+    return ProblemSpec(
+        name="test",
+        root_dir=str(root),
+        canary_case_path=canary,
+        operator_categories=["local_search"],
+        search_space=SearchSpace(
+            editable=["operators/*.py"],
+            frozen=["solver.py"],
+            import_whitelist=["random", "math"],
+        ),
+    )
+
+
+def _runner_for_output(root: Path, output: dict) -> SimpleNamespace:
+    def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+        return RunResult(
+            success=True,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            elapsed_ms=100,
+            output=SolverOutput(
+                objective=dict(output.get("objective") or {}),
+                feasible=bool(output.get("feasible", False)),
+                runtime=dict(output.get("runtime") or {}),
+                solution_payload={
+                    key: value
+                    for key, value in output.items()
+                    if key not in {"objective", "feasible", "runtime"}
+                },
+            ),
+            error_category=None,
+        )
+
+    return SimpleNamespace(run_solver=run_solver)
+
+
+def _write_warehouse_oracle(root: Path) -> None:
+    (root / "oracle.py").write_text(
+        """
+def check_solver_output_consistency(raw, canary):
+    solution = raw.get("solution", raw)
+    assignment = solution.get("assignment", {})
+    vehicles = solution.get("vehicles", {})
+    seen = {}
+    for vehicle_id, vehicle in vehicles.items():
+        for order_id in vehicle.get("order_ids", []):
+            if order_id in seen:
+                return {
+                    "passed": False,
+                    "diagnosis": "CANDIDATE",
+                    "reasons": [
+                        f"order {order_id} in multiple vehicles: "
+                        f"{seen[order_id]} and {vehicle_id}"
+                    ],
+                }
+            seen[order_id] = vehicle_id
+    for order_id, vehicle_id in assignment.items():
+        if seen.get(order_id) != vehicle_id:
+            return {
+                "passed": False,
+                "diagnosis": "CANDIDATE",
+                "reasons": [f"order {order_id} assignment mismatch"],
+            }
+    return {"passed": True}
+""".lstrip(),
+        encoding="utf-8",
+    )

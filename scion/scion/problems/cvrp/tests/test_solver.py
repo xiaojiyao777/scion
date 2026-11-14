@@ -1,0 +1,637 @@
+"""Problem-owned smoke coverage for the public CVRP algorithm entrypoint."""
+
+from __future__ import annotations
+
+import importlib
+import random
+import time
+from pathlib import Path
+
+from scion.problems.cvrp.adapter import CvrpAdapter
+from scion.problems.cvrp.models import CvrpInstance, CvrpNode
+from scion.problems.cvrp.solver_runtime.algorithm_runtime import (
+    load_baseline_algorithm,
+)
+
+
+class _Spec:
+    pass
+
+
+PUBLIC_DEVELOPMENT_SEEDS = (1703, 1709)
+
+# Optional copyable falsifier, not an additional collected test or formal gate.
+# The probe sandbox deliberately does not mount this host suite or Scion core.
+# Paste/adapt the string as falsifier_source; do not import this test module.
+# This demonstrates entry wiring and real collaborators, not mechanism quality.
+# The context is an explicit lightweight fixture, NOT SolverAlgorithmContext;
+# recording callbacks are no-ops, so their existence is not activation evidence.
+PUBLIC_PROBE_EXAMPLE = """
+import itertools
+import math
+import random
+import sys
+import time
+from contextlib import contextmanager
+from fractions import Fraction
+from policies import baseline_algorithm
+from policies.baseline_modules import local_search, scheduler
+from policies.baseline_modules.state import _Route, _Solution
+from scion.problems.cvrp.models import CvrpInstance, CvrpNode, CvrpSolution
+
+# Assertions belong in collected test_* functions, not just module-level code.
+# An arithmetic worksheet, not a proposed scheduling policy. Derive the formula
+# for YOUR claim independently before testing a candidate. Exact decimal inputs
+# and rational sanity checks avoid accidental handwritten float expectations.
+def reference_reserved_seconds(total, minimum, exit_fraction, retained_fraction):
+    total, minimum, exit_fraction, retained_fraction = (
+        Fraction(str(value))
+        for value in (total, minimum, exit_fraction, retained_fraction)
+    )
+    reserve = max(minimum, total * exit_fraction)
+    return float(reserve + max(Fraction(0), total - reserve) * retained_fraction)
+
+def test_reference_arithmetic_before_candidate_assertions():
+    assert reference_reserved_seconds(1, .05, .03, .30) == float(Fraction(67, 200))
+    assert reference_reserved_seconds(10, .05, .03, .30) == float(Fraction(321, 100))
+    for total in (.2, 1, 10):
+        reserve = max(.05, total * .03)
+        assert math.isclose(reference_reserved_seconds(total, .05, .03, 0), reserve)
+        assert math.isclose(reference_reserved_seconds(total, .05, .03, 1), total)
+# For an observed float, compare to an independently derived reference using
+# math.isclose; never fix a failing probe by copying the candidate's output.
+
+# Independent of candidate _Route.cost, _Solution.total_cost, and cost helpers.
+# This is the declared CVRP objective, NOT a claimed optimum for a solver.
+def exact_route_cost(instance, route):
+    nodes = {node.id: node for node in instance.nodes}
+    def edge(left, right):
+        if instance.edge_weights is not None:
+            return instance.edge_weights[left][right]
+        a, b = nodes[left], nodes[right]
+        distance = math.hypot(a.x - b.x, a.y - b.y)
+        return math.floor(distance + .5) if instance.use_integer_cost else distance
+    path = (instance.depot, *route, instance.depot)
+    return math.fsum(edge(left, right) for left, right in zip(path, path[1:]))
+
+def exact_solution_cost(instance, routes):
+    return math.fsum(exact_route_cost(instance, route) for route in routes)
+
+def assert_feasible(instance, routes):
+    demands = {node.id: node.demand for node in instance.nodes}
+    customers = [customer for route in routes for customer in route]
+    expected = sorted(node.id for node in instance.nodes if node.id != instance.depot)
+    assert sorted(customers) == expected  # Detect duplicates as well as omissions.
+    assert all(sum(demands[c] for c in route) <= instance.capacity for route in routes)
+    if instance.allowed_routes is not None:
+        assert sum(bool(route) for route in routes) <= instance.allowed_routes
+
+def assert_internal_consistent(solution):
+    instance = solution.instance
+    routes = solution.routes_as_tuples()
+    assert_feasible(instance, routes)
+    for route in solution.routes:
+        assert math.isclose(route.cost, exact_route_cost(instance, route.customers),
+                            rel_tol=1e-12, abs_tol=1e-6)
+        assert route.load == sum(instance.demand(c) for c in route.customers)
+    assert math.isclose(solution.total_cost, exact_solution_cost(instance, routes),
+                        rel_tol=1e-12, abs_tol=1e-6)
+
+def reference_trial_comparison(instance, start, inherited_trials, proposed_trials):
+    # Optional independent worksheet for a claimed change in search capability.
+    # Supply COMPLETE feasible solutions from independently enumerated tiny
+    # trial sets at the SAME start, including unchanged inherited alternatives
+    # when the proposal is an extension. Never substitute a candidate's cached
+    # cost, accepted flag, entry count or number of nominations for these scores.
+    # This rescoring does not prove that your enumeration is complete/correct.
+    def checked_cost(routes):
+        assert_feasible(instance, routes)
+        value = exact_solution_cost(instance, routes)
+        assert math.isfinite(value)
+        return value
+    start_cost = checked_cost(start)
+    inherited_best = min([start_cost] + [checked_cost(r) for r in inherited_trials])
+    proposed_best = min([start_cost] + [checked_cost(r) for r in proposed_trials])
+    return dict(start=start_cost, inherited_best=inherited_best,
+                proposed_best=proposed_best, own_gain=start_cost - proposed_best,
+                additional_gain=inherited_best - proposed_best)
+
+def test_reference_trial_comparison():
+    # Four-arc tours: cheap cycle costs 1+1+1+1=4; crossed tour costs
+    # 1+10+1+10=22. Reverse order is a DISTINCT trial with the SAME cheap cost.
+    # This public symmetric fixture selects no production search mechanism.
+    instance = CvrpInstance(
+        name='public_comparative_witness', capacity=3, depot=0, allowed_routes=1,
+        nodes=tuple(CvrpNode(i, 0., 0., int(i > 0)) for i in range(4)),
+        edge_weights=((0., 1., 10., 1.), (1., 0., 1., 10.),
+                      (10., 1., 0., 1.), (1., 10., 1., 0.)),
+    )
+    start, cheap, reverse = ((1, 3, 2),), ((1, 2, 3),), ((3, 2, 1),)
+    assert exact_solution_cost(instance, start) == 22.
+    assert exact_solution_cost(instance, cheap) == 4.
+    assert exact_solution_cost(instance, reverse) == 4.
+    redundant = reference_trial_comparison(instance, start, [cheap], [cheap, reverse])
+    assert redundant == dict(start=22., inherited_best=4., proposed_best=4.,
+                             own_gain=18., additional_gain=0.)
+    stronger = reference_trial_comparison(instance, start, [], [cheap])
+    assert stronger['own_gain'] == stronger['additional_gain'] == 18.
+    weaker = reference_trial_comparison(instance, start, [cheap], [])
+    assert weaker['own_gain'] == 0. and weaker['additional_gain'] == -18.
+    empty = reference_trial_comparison(instance, start, [], [])
+    assert empty['own_gain'] == empty['additional_gain'] == 0.
+    # If a proposed extra-gain witness fails, record that missing evidence.
+    # More trials or a cheaper result than START cannot replace beating the
+    # inherited best. A corrected/weaker probe may still establish correctness,
+    # but does not repair the original stronger claim. Keep negative controls.
+    # Exact evaluator/cache changes may intentionally preserve every result;
+    # zero additional local gain is then EXPECTED, not a reason to reject them.
+    # A real-entry changed-path witness and paired final-quality evidence remain
+    # separate questions. Do not force a guard, reroll until a pass, or infer
+    # equal-budget speed/quality from this exhaustive untimed tiny worksheet.
+
+def test_reference_matches_eligible_frontier():
+    # Fixed-start reference worksheet, NOT an algorithm or scheduler override.
+    # Route slots here are stable fixture labels. A real mutable solver may use
+    # route objects instead: carry its actual eligibility into the reference.
+    # Capacity alone does not define an active-frontier candidate population.
+    instance = CvrpInstance(
+        name='public_frontier_reference', capacity=3, depot=0, allowed_routes=2,
+        nodes=tuple(CvrpNode(i, 0., 0., int(i > 0)) for i in range(5)),
+        edge_weights=((0., 1., 10., 1., 1.), (1., 0., 1., 10., 10.),
+                      (10., 1., 0., 1., 10.), (1., 10., 1., 0., 10.),
+                      (1., 10., 10., 10., 0.)),
+    )
+    start, trial = ((1, 3, 2), (4,)), ((1, 2, 3), (4,))
+    assert exact_solution_cost(instance, start) == 24.
+    assert exact_solution_cost(instance, trial) == 6.
+    touched = {i for i, (before, after) in enumerate(zip(start, trial))
+               if before != after}
+    assert touched == {0}
+    for active, expected_gain in ((None, 18.), (set(), 0.), ({0}, 18.),
+                                  ({1}, 0.), ({0, 1}, 18.)):
+        eligible = active is None or bool(touched & active)
+        trials = [trial] if eligible else []
+        result = reference_trial_comparison(instance, start, [], trials)
+        assert result['additional_gain'] == expected_gain
+    # An inactive-route improvement is NOT a counterexample to a restricted
+    # search. Conversely, reducing a failing many-route test to three routes
+    # can remove the eligibility distinction without fixing its reference.
+    # Retain distinct full/empty/partly-active controls and the original claim.
+
+def public_instance():
+    return CvrpInstance(
+        name="public_probe_shape", capacity=6, depot=0, allowed_routes=2,
+        nodes=(CvrpNode(0, 0., 0., 0),) + tuple(
+            CvrpNode(i, float(i % 4), float(i // 4), 1)
+            for i in range(1, 13)
+        ),
+    )
+
+class PublicContext:
+    def __init__(self, seconds):
+        self.start = time.perf_counter()
+        self.seconds = seconds
+    def remaining_time(self):
+        return max(0., self.seconds - (time.perf_counter() - self.start))
+    def remaining_time_ms(self):
+        return int(self.remaining_time() * 1000)
+    def elapsed_ms(self):
+        return int((time.perf_counter() - self.start) * 1000)
+    def make_solution(self, routes):
+        return CvrpSolution(tuple(tuple(route) for route in routes))
+    def set_stop_reason(self, reason):
+        self.stop_reason = reason
+    def _record(self, *args, **kwargs):
+        pass
+    record_phase = record_iteration = record_move = _record
+    record_solution_progress = record_objective_probe = _record
+    record_telemetry_event = record_best_update = record_alns_iteration = _record
+
+@contextmanager
+def observe_python_calls(functions):
+    # Observe ordinary Python calls without replacing the registry or functions.
+    # Wrapping an operator changes `operator is _swap` / `_two_opt_intra` and can
+    # silently bypass identity-sensitive cache/argument dispatch in real VNS.
+    # Counts prove ENTRY only, not completion, acceptance or retained benefit.
+    # Profiling has overhead: never use this diagnostic to claim timed speedup.
+    # Assert observations for the SPECIFIC claimed path outside the callback.
+    # Merely appending records, or all(check(row) for row in []), is vacuous.
+    # For cache reuse, separately observe a completed publication and a later
+    # hit in the actual caller, checking its value against an independent
+    # reference at the same state. Publication alone does not prove reuse;
+    # supplying a warm cache manually does not establish caller integration.
+    # No qualifying event means coverage is missing, not algorithm rejection.
+    # A useful negative control bypasses only the claimed path, preserving other
+    # real work, and verifies that the claimed-witness assertion then fails.
+    counts = {operation.__code__: 0 for operation in functions}
+    previous = sys.getprofile()
+    def observe(frame, event, arg):
+        if event == 'call' and frame.f_code in counts:
+            counts[frame.f_code] += 1
+        if previous is not None:
+            previous(frame, event, arg)
+    sys.setprofile(observe)
+    try:
+        yield counts
+    finally:
+        sys.setprofile(previous)
+
+@contextmanager
+def observe_boolean_kernel_returns(functions):
+    # Optional observer for this solver's synchronous, boolean-returning kernels
+    # with solution/context/reserve arguments. Adapt to YOUR real contract;
+    # do not change an algorithm to satisfy this example's instrumentation.
+    # Keep function identity, registry order, arguments and clocks unchanged.
+    codes = {operation.__code__ for operation in functions}
+    pending = {}
+    observations = []
+    previous = sys.getprofile()
+    def observe(frame, event, arg):
+        if frame.f_code in codes:
+            if event == 'call':
+                solution = frame.f_locals['solution']
+                pending[frame] = exact_solution_cost(
+                    solution.instance, solution.routes_as_tuples())
+            elif event == 'return' and frame in pending:
+                before = pending.pop(frame)
+                # Exception unwinding also emits a profile return with None.
+                # Neither an exception nor an entry count proves completion.
+                if type(arg) is bool:
+                    context = frame.f_locals['context']
+                    live = context.remaining_time() > frame.f_locals['reserve']
+                    solution = frame.f_locals['solution']
+                    routes = solution.routes_as_tuples()
+                    assert_feasible(solution.instance, routes)
+                    after = exact_solution_cost(solution.instance, routes)
+                    assert after <= before + 1e-6
+                    observations.append(dict(before=before, after=after,
+                                             live_return=live, changed=arg))
+        if previous is not None:
+            previous(frame, event, arg)
+    sys.setprofile(observe)
+    try:
+        yield observations
+    finally:
+        sys.setprofile(previous)
+        pending.clear()
+
+def test_real_entry_and_construction(monkeypatch):
+    instance = public_instance()
+    original = scheduler._ALNSVNSSolver._initial_solution
+    real_vns = scheduler._vns
+    observations = []
+    vns_observations = []
+    def observe(self, instance, reserve):
+        result = original(self, instance, reserve)
+        assert_internal_consistent(result)
+        observations.append((instance.customer_count, result.is_feasible()))
+        return result
+    def observe_vns(solution, operators, *args, **kwargs):
+        # Preserve the actual scheduler, registry, state and collaborators.
+        # An empty/mocked registry cannot establish this integration claim.
+        before = exact_solution_cost(solution.instance, solution.routes_as_tuples())
+        result = real_vns(solution, operators, *args, **kwargs)
+        assert_internal_consistent(solution)
+        after = exact_solution_cost(solution.instance, solution.routes_as_tuples())
+        assert after <= before + 1e-6
+        vns_observations.append((len(operators), before, after))
+        return result
+    monkeypatch.setattr(scheduler._ALNSVNSSolver, "_initial_solution", observe)
+    monkeypatch.setattr(scheduler, "_vns", observe_vns)
+    with observe_python_calls(scheduler._default_vns_operators()) as calls:
+        result = baseline_algorithm.solve(
+            instance, random.Random(1703), .3, PublicContext(.3)
+        )
+    assert observations == [(12, True)]
+    assert vns_observations and all(count > 0 for count, _, _ in vns_observations)
+    assert sum(calls.values()) > 0
+    assert_feasible(instance, result.routes)
+    # This proves real entry-to-VNS wiring, not that YOUR new search path is.
+    # For your claim, observe its actual transition without changing dispatch
+    # identity, and assert the functional consequence rather than just a call.
+    # Do not turn off guards just to make an inactive path appear exercised.
+    # If the current design intentionally no longer uses VNS, adapt this optional
+    # example to its actual collaborators instead of reinstalling a mechanism.
+
+def test_real_operator_collaborators():
+    instance = public_instance()
+    solution = _Solution(instance, [
+        _Route(instance, range(1, 7)), _Route(instance, range(7, 13))
+    ])
+    for operation in local_search._default_vns_operators():
+        current = solution.copy()
+        operation(current, PublicContext(.3), 0.)
+        assert_internal_consistent(current)
+    # If adding a new collaborator/oracle, instantiate its REAL class here.
+    # A fake class with invented methods cannot establish integration correctness.
+    # For poll-cutoff/atomicity tests, count the unrestricted control and replay
+    # EACH cutoff with identical start state, active frontier and instrumentation.
+    # Changing eligible routes changes the work/poll count: a completed accepted
+    # move is then not evidence of an interrupted commit. Poll clocks establish
+    # only that isolated boundary property, not real wall-clock responsiveness.
+    # Fewer scored trials alone do not establish lower whole-call cost: include
+    # key construction, snapshots, lookup, misses, eviction, sorting and polling
+    # when interpreting performance. Cold and warm helper work, ordinary caller
+    # reuse and uninstrumented equal-budget final quality are different claims.
+
+def test_real_entry_across_public_route_shapes(monkeypatch):
+    # Multiple synthetic sizes/capacities and seeds; none is a Protocol case.
+    # Keep real construction, budget, registry and operator identities. The call
+    # observer does not force a guard, route shape or optional cache argument.
+    real_initial = scheduler._ALNSVNSSolver._initial_solution
+    constructions = []
+    def initial(self, instance, reserve):
+        result = real_initial(self, instance, reserve)
+        assert_internal_consistent(result)
+        constructions.append(tuple(len(route.customers) for route in result.routes))
+        return result
+    monkeypatch.setattr(scheduler._ALNSVNSSolver, '_initial_solution', initial)
+    for count, capacity in ((40, 10), (320, 10), (320, 40)):
+        nodes = (CvrpNode(0, 0., 0., 0),) + tuple(
+            CvrpNode(i, float(i // 8), float(i % 8), 1)
+            for i in range(1, count + 1)
+        )
+        matrix = tuple(tuple(float(math.floor(math.hypot(a.x-b.x, a.y-b.y) + .5))
+                             for b in nodes) for a in nodes)
+        instance = CvrpInstance(name='public_entry_shapes', capacity=capacity,
+                                depot=0, allowed_routes=count // capacity,
+                                nodes=nodes, edge_weights=matrix)
+        for seed in (1703, 1709):
+            constructions.clear()
+            # Allow actual construction time at the larger size. This is a
+            # public fixture budget, not a patched clock/guard or Protocol limit.
+            seconds = .35 if count == 40 else 1.4
+            with observe_python_calls(scheduler._default_vns_operators()) as calls:
+                result = baseline_algorithm.solve(
+                    instance, random.Random(seed), seconds, PublicContext(seconds)
+                )
+            assert len(constructions) == 1
+            assert sum(calls.values()) > 0  # Empty/bypassed registry is not coverage.
+            assert_feasible(instance, result.routes)
+            assert math.isfinite(exact_solution_cost(instance, result.routes))
+    # This establishes only the observed real entry/construction/operator paths.
+    # Add functional assertions at YOUR actual accepted transition to distinguish
+    # entering a method, completing a trial, accepting it, and improving best.
+    # Do not infer those events from method names or an iteration counter alone.
+    # More public seeds/shapes do not prove timed improvement or generalization;
+    # complete paired Protocol evidence remains the quality comparison.
+
+def test_completed_improvement_survives_real_return(monkeypatch):
+    # Optional, small end-to-end retention example, NOT a new candidate gate.
+    # Observe both the real VNS boundary and one real inner kernel. Two-opt is
+    # only an executable illustration: select YOUR actual changed transition.
+    # A different kernel's gain cannot establish activation of your mechanism.
+    count = 40
+    nodes = (CvrpNode(0, 0., 0., 0),) + tuple(
+        CvrpNode(i, float((i * 37) % 97), float((i * 101) % 89), 1)
+        for i in range(1, count + 1)
+    )
+    matrix = tuple(tuple(float(math.floor(math.hypot(a.x-b.x, a.y-b.y) + .5))
+                         for b in nodes) for a in nodes)
+    instance = CvrpInstance(name='public_retained_transition', capacity=10,
+                            depot=0, allowed_routes=4, nodes=nodes, edge_weights=matrix)
+    real_vns = scheduler._vns
+    completed_gains = []
+    def observe(solution, operators, max_no_improve, context, reserve, *args, **kwargs):
+        before = exact_solution_cost(instance, solution.routes_as_tuples())
+        changed = real_vns(solution, operators, max_no_improve, context, reserve,
+                           *args, **kwargs)
+        # Capture the real deadline immediately after return, before assertions.
+        # Live return is NOT a claim of exhaustive closure of all neighborhoods.
+        live_return = context.remaining_time() > reserve
+        routes = solution.routes_as_tuples()
+        assert_feasible(instance, routes)
+        after = exact_solution_cost(instance, routes)
+        assert after <= before + 1e-6
+        if live_return and after < before - 1e-6:
+            completed_gains.append(after)
+        return changed
+    monkeypatch.setattr(scheduler, '_vns', observe)
+    for seed in (1703, 1709):
+        completed_gains.clear()
+        with observe_boolean_kernel_returns([local_search._two_opt_intra]) as returns:
+            result = baseline_algorithm.solve(instance, random.Random(seed), .6,
+                                              PublicContext(.6))
+        assert_feasible(instance, result.routes)
+        assert completed_gains  # Calls/counters or expired returns are not enough.
+        kernel_gains = [row['after'] for row in returns
+                        if row['live_return'] and row['changed']
+                        and row['after'] < row['before'] - 1e-6]
+        # No gain means this fixture did NOT demonstrate retained kernel benefit.
+        # Do not silently count a no-gain/expired path as a successful witness.
+        assert kernel_gains
+        final_cost = exact_solution_cost(instance, result.routes)
+        assert final_cost <= min(completed_gains) + 1e-6
+        assert final_cost <= min(kernel_gains) + 1e-6
+    # Retaining at least the independently scored objective does not require the
+    # same routes to survive; later valid improvements may replace them. This
+    # checks no loss on this fixture, not improvement versus another algorithm,
+    # production-scale completion, elapsed-time performance, or generalization.
+    # Nor does a boolean live return prove exhaustive neighborhood closure.
+    # Mocks can test isolated ordering/wiring, but cannot supply a real-path gain.
+    # A trial worse than the existing best may correctly be rejected: compare
+    # objectives, not route identity or acceptance counters. Actually USE the
+    # collected gains in the final assertion; merely appending is not a check.
+    # Instrumentation costs time. Comparative quality still needs paired runs.
+    # Own-trajectory retention is different from retaining a lead over a control.
+    # Synthetic distance example: A goes 120 -> 100 and B goes 110 -> 105.
+    # Both keep their own gains, yet B's initial lead +10 becomes final loss -5.
+    # For each matched pair: final(A-B) = initial(A-B) + gain_B - gain_A.
+    # Derive that identity per pair before aggregating; medians are not additive.
+    # The initial checkpoint must mean the same phase in both arms (this solver's
+    # recorded initial distance is AFTER initial local search, not raw construction).
+    # Passing this probe cannot establish comparative gain or its exact cause.
+    # Use separately frozen complete sources, equal declared limits, fresh seeds
+    # and balanced execution order for that question; retain adverse cases too.
+    # Iteration throughput and phase timings motivate hypotheses, not promotion
+    # or a rule that requires a particular time allocation or search mechanism.
+
+def reference_two_opt(instance, start):
+    # Tiny fixed-start first-improvement reference, deliberately rescoring every
+    # full route. No candidate delta helpers, cached values or telemetry.
+    # This is ONE example of checking an equivalence claim, not a requirement
+    # that a new algorithm preserve this neighborhood or selection policy.
+    route = tuple(start)
+    transitions = []
+    while True:
+        before = exact_route_cost(instance, route)
+        accepted = None
+        for left in range(len(route) - 1):
+            for right in range(left + 1, len(route)):
+                trial = route[:left] + tuple(reversed(route[left:right + 1])) + route[right + 1:]
+                if exact_route_cost(instance, trial) < before - 1e-9:
+                    accepted = trial
+                    break
+            if accepted is not None:
+                break
+        if accepted is None:
+            return route, transitions
+        transitions.append(accepted)
+        route = accepted
+
+def test_reference_known_transition():
+    # Independently solved sanity anchor BEFORE comparing a candidate. Every
+    # off-diagonal arc is >=1; this four-arc tour attains the lower bound 4.
+    # The known first move is derived from the matrix, not candidate output.
+    matrix = ((0., 1., 10., 1.), (1., 0., 1., 10.),
+              (10., 1., 0., 1.), (1., 10., 1., 0.))
+    instance = CvrpInstance(
+        name='public_known_transition', capacity=3, depot=0, allowed_routes=1,
+        nodes=tuple(CvrpNode(i, 0., 0., int(i > 0)) for i in range(4)),
+        edge_weights=matrix,
+    )
+    assert exact_route_cost(instance, (1, 3, 2)) == 22.
+    assert exact_route_cost(instance, (1, 2, 3)) == 4.
+    assert reference_two_opt(instance, (1, 3, 2)) == ((1, 2, 3), [(1, 2, 3)])
+    assert reference_two_opt(instance, (1, 2, 3)) == ((1, 2, 3), [])
+
+def test_tiny_fixed_start_reference(monkeypatch):
+    # Public synthetic symmetric matrix, unrelated to any Protocol population.
+    # CvrpInstance rejects asymmetric matrices; do not claim directed coverage.
+    count = 5
+    matrix = tuple(tuple(0. if i == j else float(1 + (i + j + 3*i*j) % 23)
+                         for j in range(count + 1)) for i in range(count + 1))
+    instance = CvrpInstance(
+        name="public_exact_reference", capacity=count, depot=0, allowed_routes=1,
+        nodes=tuple(CvrpNode(i, 0., 0., int(i > 0)) for i in range(count + 1)),
+        edge_weights=matrix,
+    )
+    # Only 5! starts. Exhaustive tiny checks are bounded correctness diagnostics,
+    # not a benchmark or evidence of throughput on a larger timed instance.
+    real_rebuild = _Solution.rebuild_index
+    observed_transitions = []
+    def observe_rebuild(self):
+        result = real_rebuild(self)
+        observed_transitions.append(tuple(self.routes[0].customers))
+        return result
+    monkeypatch.setattr(_Solution, "rebuild_index", observe_rebuild)
+    for start in itertools.permutations(range(1, count + 1)):
+        expected, transitions = reference_two_opt(instance, start)
+        solution = _Solution(instance, [_Route(instance, start)])
+        observed_transitions.clear()
+        context = PublicContext(2.)
+        changed = local_search._two_opt_intra(solution, context, 0.)
+        assert context.remaining_time() > 0.  # Expired probe is not equivalence.
+        assert solution.routes_as_tuples() == (expected,)
+        assert changed == bool(transitions)
+        assert observed_transitions == transitions
+        assert_internal_consistent(solution)
+    # Rebuild observations fit this implementation only. If a changed design
+    # batches index updates, instrument its real accepted-transition point instead;
+    # do not claim move-sequence equality from final objective equality alone.
+    # Extend independent references to EVERY kernel covered by your own claim.
+
+def test_public_large_entry_deadline():
+    count = 719
+    nodes = (CvrpNode(0, 0., 0., 0),) + tuple(
+        CvrpNode(i, float((i * 37) % 997), float((i * 101) % 991), 1)
+        for i in range(1, count + 1)
+    )
+    # Same rounded geometric objective, explicitly materialized for this public
+    # fixture. Raw CvrpInstance geometry performs linear node lookups that can
+    # dominate a short probe. This matrix fixture does not establish geometric
+    # lookup throughput or represent every production instance implementation.
+    matrix = tuple(tuple(float(math.floor(math.hypot(a.x-b.x, a.y-b.y) + .5))
+                         for b in nodes) for a in nodes)
+    instance = CvrpInstance(
+        name="public_probe_large_deadline", capacity=25, depot=0, allowed_routes=29,
+        nodes=nodes, edge_weights=matrix,
+    )
+    context = PublicContext(.20)
+    result = baseline_algorithm.solve(instance, random.Random(1709), .20, context)
+    assert_feasible(instance, result.routes)
+    assert math.isfinite(exact_solution_cost(instance, result.routes))
+    # This asserts return/feasibility, NOT a .20-second elapsed-time bound.
+    # The existing outer sandbox hardwall bounds this probe; no speed threshold
+    # or throughput claim. This budget can expire before a new path is reached.
+    # For that claim, also test the actual path with its real deadline context.
+"""
+
+
+def _candidate_workspace() -> Path:
+    """Return the policy workspace selected by Verification's PYTHONPATH."""
+
+    try:
+        policies = importlib.import_module("policies")
+    except ModuleNotFoundError:
+        policies = importlib.import_module("scion.problems.cvrp.policies")
+    return Path(policies.__file__).resolve().parent.parent
+
+
+def test_public_algorithm_entrypoint_returns_valid_solution() -> None:
+    problem_root = Path(__file__).resolve().parents[1]
+    instance_path = problem_root / "data" / "tiny_development.json"
+    instance = CvrpInstance.from_json(str(instance_path))
+    solution, audit = load_baseline_algorithm(
+        workspace_root=_candidate_workspace(),
+        instance=instance,
+        instance_path=str(instance_path),
+        seed=PUBLIC_DEVELOPMENT_SEEDS[0],
+        rng=random.Random(PUBLIC_DEVELOPMENT_SEEDS[0]),
+        time_limit_sec=0.01,
+        start_time=time.perf_counter(),
+        adapter=CvrpAdapter(_Spec()),  # type: ignore[arg-type]
+    )
+
+    assert solution is not None
+    assert audit["solver_algorithm_active"] is True
+    assert audit["solver_algorithm_solution_valid"] is True
+    assert audit["solver_algorithm_errors"] == 0
+    assert {customer for route in solution.routes for customer in route} == set(
+        instance.customer_ids
+    )
+    assert all(
+        instance.route_load(route) <= instance.capacity for route in solution.routes
+    )
+
+
+def test_public_large_shape_returns_before_development_hardwall() -> None:
+    """Catch catastrophic deadline overruns on an independent public shape.
+
+    The instance is public, synthetic, and generated independently of every
+    Protocol population.  The surrounding D4 sandbox owns the generous hard
+    wall-clock bound; this test deliberately avoids a machine-speed assertion.
+    Candidate code still has to return a valid large-instance solution under a
+    much smaller solver-provided budget.
+    """
+
+    customer_count = 719
+    instance = CvrpInstance(
+        name="public_large_shape_deadline",
+        capacity=25,
+        depot=0,
+        allowed_routes=29,
+        nodes=(
+            CvrpNode(id=0, x=0.0, y=0.0, demand=0),
+            *(
+                CvrpNode(
+                    id=customer_id,
+                    x=float((customer_id * 37) % 997),
+                    y=float((customer_id * 101) % 991),
+                    demand=1,
+                )
+                for customer_id in range(1, customer_count + 1)
+            ),
+        ),
+    )
+    solution, audit = load_baseline_algorithm(
+        workspace_root=_candidate_workspace(),
+        instance=instance,
+        instance_path="public://large-shape-deadline",
+        seed=PUBLIC_DEVELOPMENT_SEEDS[1],
+        rng=random.Random(PUBLIC_DEVELOPMENT_SEEDS[1]),
+        time_limit_sec=0.20,
+        start_time=time.perf_counter(),
+        adapter=CvrpAdapter(_Spec()),  # type: ignore[arg-type]
+    )
+
+    assert solution is not None
+    assert audit["solver_algorithm_active"] is True
+    assert audit["solver_algorithm_solution_valid"] is True
+    assert audit["solver_algorithm_errors"] == 0
+    customers = [customer for route in solution.routes for customer in route]
+    assert sorted(customers) == list(range(1, customer_count + 1))
+    assert len(customers) == len(set(customers))
+    assert all(
+        instance.route_load(route) <= instance.capacity for route in solution.routes
+    )

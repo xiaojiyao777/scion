@@ -1,0 +1,12 @@
+version: 0.4-cvrp-m23-m20-swap-full-funnel
+
+safe_data_roots:
+  - /home/clawd/research/scion-experiment-inputs/v04-cvrp-m23-m20-swap-provider-free-full-funnel-20260821/data
+
+screening: []
+validation: []
+frozen:
+  - cvrplib/X/X-n162-k11.vrp
+  - cvrplib/X/X-n204-k19.vrp
+  - cvrplib/X/X-n561-k42.vrp
+canary: []

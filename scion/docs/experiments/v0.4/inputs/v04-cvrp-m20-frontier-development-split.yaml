@@ -1,0 +1,25 @@
+version: 0.4-cvrp-m20-frontier-development
+
+safe_data_roots:
+  - ../../../../../vrp
+
+screening:
+  - cvrplib/A/A-n33-k5.vrp
+  - cvrplib/B/B-n35-k5.vrp
+  - cvrplib/P/P-n76-k5.vrp
+  - cvrplib/A/A-n39-k6.vrp
+  - cvrplib/X/X-n266-k58.vrp
+  - cvrplib/X/X-n376-k94.vrp
+
+validation:
+  - cvrplib/A/A-n48-k7.vrp
+  - cvrplib/P/P-n55-k15.vrp
+  - cvrplib/X/X-n313-k71.vrp
+
+frozen:
+  - cvrplib/A/A-n62-k8.vrp
+  - cvrplib/P/P-n55-k8.vrp
+  - cvrplib/X/X-n393-k38.vrp
+
+canary:
+  - data/tiny_canary.json

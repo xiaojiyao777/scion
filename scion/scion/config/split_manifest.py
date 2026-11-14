@@ -37,6 +37,9 @@ class SplitManifest(BaseModel):
     canary: list[str] = Field(default_factory=list)
     """Canary regression check 的 case 文件路径列表。"""
 
+    safe_data_roots: list[str] = Field(default_factory=list)
+    """Optional data roots for resolving read-only case paths outside workspaces."""
+
     @model_validator(mode="after")
     def validate_disjoint(self) -> "SplitManifest":
         """校验 frozen/canary 与其他集合互不相交。
@@ -84,4 +87,12 @@ class SplitManifest(BaseModel):
         """
         content = Path(path).read_text(encoding="utf-8")
         data = yaml.safe_load(content)
-        return cls.model_validate(data)
+        manifest = cls.model_validate(data)
+        base_dir = Path(path).parent
+        roots = []
+        for root in manifest.safe_data_roots:
+            root_path = Path(root).expanduser()
+            if not root_path.is_absolute():
+                root_path = base_dir / root_path
+            roots.append(str(root_path.resolve(strict=False)))
+        return manifest.model_copy(update={"safe_data_roots": roots})

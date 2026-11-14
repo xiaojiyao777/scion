@@ -1,0 +1,291 @@
+{
+  "current_question": "Scion 能否综合与当前 M24 population 零重叠的 M7 candidate-evaluation、M18 fixed-candidate confirmation 已完成 problem-owned historical evidence，M23 对上述普通历史中 M20 exact candidate 的 provider-free fixed-candidate 聚合观察，以及截至 M22 的完整普通 H、patch、Protocol、Decision 历史，自主选择下一项 CVRP solver 研究方向，并提出、实现、验证和评估新的 candidate？",
+  "observations": [
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "candidate_evaluation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "initial",
+          "valid_pairs": 32,
+          "planned_pairs": 32,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "expand",
+          "decision": "expand_screening",
+          "case_outcomes": {
+            "wins": 6,
+            "losses": 0,
+            "ties": 2,
+            "median_delta": 6.25,
+            "ci_low": 0.0,
+            "ci_high": 74.0
+          }
+        },
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 96,
+          "planned_pairs": 96,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "pass",
+          "decision": "queue_validate",
+          "case_outcomes": {
+            "wins": 7,
+            "losses": 2,
+            "ties": 3,
+            "median_delta": 2.0,
+            "ci_low": 0.0,
+            "ci_high": 27.25
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "validation",
+        "terminal_code": "CANDIDATE_SUBJECT_VETO",
+        "arm": "candidate",
+        "case_id": "X-n200-k36",
+        "seed": 2069,
+        "failure": {
+          "category": "solver_algorithm_error",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "failure_kind",
+              "value": "route_packing_failure"
+            },
+            {
+              "name": "unpacked_customer_id",
+              "value": 106
+            },
+            {
+              "name": "route_limit",
+              "value": 36
+            }
+          ]
+        },
+        "stage_metrics_produced": false
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_candidate_on_reached_population",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 20,
+          "planned_pairs": 24,
+          "subject_failures": 4,
+          "fleet_regressions": 0,
+          "gate_outcome": "fail",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 1,
+            "losses": 0,
+            "ties": 4,
+            "median_delta": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 26.5
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "CONFIRMATION_NOT_SUPPORTED",
+        "arm": "both",
+        "case_id": "X-n627-k43",
+        "seed": "multiple",
+        "failure": {
+          "category": "shared_construction_failure",
+          "count": 4,
+          "diagnostics": [
+            {
+              "name": "failure_kind",
+              "value": "route_packing_failure"
+            },
+            {
+              "name": "unpacked_customer_id",
+              "value": 624
+            },
+            {
+              "name": "route_limit",
+              "value": 43
+            },
+            {
+              "name": "candidate_only_failures",
+              "value": 0
+            },
+            {
+              "name": "runtime_ratio_median",
+              "value": 0.9998438773735676
+            },
+            {
+              "name": "runtime_delta_median_ms",
+              "value": -6.5
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": false,
+        "validation_safe_features": false,
+        "validation_decision": false,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_outcome_known_candidate_confirmation",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    },
+    {
+      "schema_version": "scion.cvrp.prior_research_observation.input.v1",
+      "observation_kind": "fixed_candidate_confirmation_terminal",
+      "completed_stages": [
+        {
+          "stage": "screening",
+          "block": "expanded",
+          "valid_pairs": 24,
+          "planned_pairs": 24,
+          "subject_failures": 0,
+          "fleet_regressions": 0,
+          "gate_outcome": "unclear",
+          "decision": "continue_explore",
+          "case_outcomes": {
+            "wins": 2,
+            "losses": 0,
+            "ties": 4,
+            "median_delta": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 66.75
+          }
+        }
+      ],
+      "terminal": {
+        "stage": "screening",
+        "terminal_code": "NOT_CONFIRMED",
+        "arm": "neither",
+        "case_id": "aggregate",
+        "seed": "multiple",
+        "failure": {
+          "category": "scientific_nonconfirmation",
+          "count": 1,
+          "diagnostics": [
+            {
+              "name": "reason_code",
+              "value": "SCREENING_EXPAND_EXHAUSTED_CASE_LEVEL_UNCERTAIN"
+            },
+            {
+              "name": "event_semantics",
+              "value": "terminal_event_not_subject_failure"
+            },
+            {
+              "name": "evaluation_mode",
+              "value": "provider_free_fixed_candidate"
+            },
+            {
+              "name": "candidate_source_relation",
+              "value": "m20_exact_candidate_from_native_history"
+            },
+            {
+              "name": "canary_passed",
+              "value": true
+            },
+            {
+              "name": "candidate_failed_pairs",
+              "value": 0
+            },
+            {
+              "name": "champion_failed_pairs",
+              "value": 0
+            },
+            {
+              "name": "shared_failed_pairs",
+              "value": 0
+            },
+            {
+              "name": "bilateral_failed_pairs",
+              "value": 0
+            },
+            {
+              "name": "runtime_ratio_median",
+              "value": 1.0002065761465642
+            },
+            {
+              "name": "runtime_delta_median_ms",
+              "value": 8.5
+            },
+            {
+              "name": "runtime_confidence",
+              "value": "high"
+            },
+            {
+              "name": "protected_regressions",
+              "value": 0
+            },
+            {
+              "name": "positive_unit_delta_min",
+              "value": 27.0
+            },
+            {
+              "name": "positive_unit_delta_max",
+              "value": 106.5
+            },
+            {
+              "name": "zero_effect_unit_count",
+              "value": 4
+            }
+          ]
+        },
+        "stage_metrics_produced": true
+      },
+      "observed_outputs": {
+        "validation_stage_metrics": true,
+        "validation_safe_features": true,
+        "validation_decision": true,
+        "frozen_stage_metrics": false,
+        "promotion": false,
+        "retained_baseline_comparison": false
+      },
+      "claim_context": {
+        "evidence_scope": "exact_candidate_on_adaptive_declared_population",
+        "candidate_selection_outcome_known": true,
+        "candidate_discovery_independent": false,
+        "incremental_effect_isolated": false,
+        "population_selection_outcome_blind_relative_to_exact_estimand": true,
+        "exact_candidate_outcome_overlap_count": 0,
+        "globally_case_unseen": false,
+        "mde_at_power_80": null
+      }
+    }
+  ]
+}

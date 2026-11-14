@@ -1,0 +1,23 @@
+{
+  "budgets": "budgets.json",
+  "final_manifest": "manifests/final.json",
+  "models": [
+    "gpt-5.6-sol"
+  ],
+  "policy": {
+    "bks_gap_usage": "final_report_only",
+    "final_evaluation": "post_campaign_manual",
+    "final_replay_visibility": "hidden_from_proposal_and_search_context",
+    "promotion_objective": [
+      "fleet_violation",
+      "total_distance"
+    ]
+  },
+  "problem_id": "cvrp",
+  "protocol": "protocol.yaml",
+  "rounds_per_campaign": 20,
+  "schema": "scion.cvrp_formal_matrix.v1",
+  "seed_ledger": "seed_ledger.yaml",
+  "split_manifest": "split_manifest.yaml",
+  "total_campaigns": 1
+}

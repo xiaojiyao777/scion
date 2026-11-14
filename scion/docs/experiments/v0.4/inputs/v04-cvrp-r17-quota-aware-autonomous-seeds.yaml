@@ -1,0 +1,5 @@
+version: 0.4-cvrp-r17-quota-aware-autonomous
+screening: [180001, 180007, 180023, 180043]
+validation: [180053, 180071]
+frozen: [180073, 180077]
+canary: [180097]

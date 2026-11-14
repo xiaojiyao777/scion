@@ -2,9 +2,27 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Version: v0.3](https://img.shields.io/badge/version-v0.3-blue.svg)](#)
+[![Stage: v0.4 closed](https://img.shields.io/badge/stage-v0.4%20closed-blue.svg)](#)
 
-**Scion**（分支/嫁接）是一个面向组合优化问题的 **LLM 驱动算法自动改进框架**。它通过 LLM 的先验知识与推理能力，在人类定义的"算法沙盒"内自主探索、验证并迭代启发式算子，并通过参数层搜索优化算子配比。
+**Scion**（分支/嫁接）是一个面向组合优化问题的 **LLM 驱动算法自动改进框架**。
+它让 agent 在 problem-owned 边界内持续研究一棵完整、可运行的算法源码树，并用
+Contract、Verification、Protocol 与 deterministic Decision 分离创造性提案、安全
+正确性和科学晋升。算子级与参数级搜索是历史上使用过的研究形态，不是 generic core
+必须假定的算法对象结构。
+
+> **Agent / maintainer entry**：先读仓库根目录
+> [`AGENTS.md`](../AGENTS.md)，再按其顺序读取当前交接。当前任务和
+> 状态分别位于 [`TASK.md`](TASK.md) 与
+> [`docs/status/current-state.md`](docs/status/current-state.md)。正式实验入口与当前
+> carrier 必须从交接和
+> [实验运行手册](docs/operations/experiment-runbook.zh.md) 确认，不从下文历史示例推断。
+
+> **历史资料提示**：下文的 v0.2/v0.3 结果、两层搜索和 weight optimization 是历史记录，不是当前 v0.4 的运行入口、架构语义或验收依据。
+
+**v0.4 机制阶段已收官，原科学成功验收部分达成。** Warehouse 独立保留收益已接受；
+CVRP 独立保留收益继续作为未完成目标跟踪。阶段标签为 `v0.4`，下一阶段的
+[v0.5 详细机制与验收](design/v0.5/README.md)围绕持续算法问题、自主观察实验和
+研究材料延续展开。当前 runtime 仍是 v0.4 direct-v3，新能力尚未实施。
 
 ## 核心理念
 
@@ -43,13 +61,14 @@ median Δf1 = -17
 
 完整报告：
 
-- [evidence-manifest.md](docs/evidence-manifest.md)
-- [v0.3-final-visual-report.md](docs/v0.3-final-visual-report.md)
-- [v0.3-final-12campaign-analysis.md](docs/v0.3-final-12campaign-analysis.md)
-- [v0.3-production-timeout-fix-analysis.md](docs/v0.3-production-timeout-fix-analysis.md)
-- [v0.4-performance-aware-plan.md](docs/v0.4-performance-aware-plan.md)
-- [v0.4-cvrp-plan.md](docs/v0.4-cvrp-plan.md)
-- [v0.4-evidence-harness.md](docs/v0.4-evidence-harness.md)
+- [Agent onboarding](docs/AGENT_ONBOARDING.md)
+- [evidence manifest](docs/evidence/manifest.md)
+- [v0.3-final-visual-report.md](docs/archive/v0.3/v0.3-final-visual-report.md)
+- [v0.3-final-12campaign-analysis.md](docs/archive/v0.3/v0.3-final-12campaign-analysis.md)
+- [v0.3-production-timeout-fix-analysis.md](docs/archive/v0.3/v0.3-production-timeout-fix-analysis.md)
+- [v0.4-performance-aware-plan.md](design/v0.4/v0.4-performance-aware-plan.md)
+- [v0.4-cvrp-plan.md](design/v0.4/v0.4-cvrp-plan.md)
+- [v0.4-evidence-harness.md](design/v0.4/v0.4-evidence-harness.md)
 
 ## v0.2 实验结果
 
@@ -114,94 +133,81 @@ chain_consolidate        0.07  ← v3 晋升算子，被 v4 部分取代
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Campaign Manager                         │
-│  (Branch lifecycle, round scheduling, budget control)       │
+│  (direct values, round scheduling, budget control)          │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│  ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌─────────┐│
-│  │ Creative │   │ Contract │   │  Verify  │   │Decision ││
-│  │  Layer   │──>│   Gate   │──>│   Gate   │──>│  Layer  ││
-│  │  (LLM)   │   │ (Static) │   │(Dynamic) │   │(Oracle) ││
-│  └──────────┘   └──────────┘   └──────────┘   └─────────┘│
-│       │                                            │       │
-│       │         ┌──────────────────┐               │       │
-│       └────────>│  Experiment      │<──────────────┘       │
-│                 │  Protocol        │                        │
-│                 │  (3-stage eval)  │                        │
-│                 └──────────────────┘                        │
-│                         │                                   │
-│                 ┌───────┴────────┐                          │
-│                 │  Weight Opt    │  ← v0.2 新增             │
-│                 │  (on promote)  │                          │
-│                 └────────────────┘                          │
+│  Hypothesis → H Contract → Code → Patch Contract          │
+│       → CandidateWorkspace → Verification                    │
+│       → Experiment Protocol → Safe Features → Decision    │
 ├─────────────────────────────────────────────────────────────┤
-│  Lineage (SQLite) │ Runtime (subprocess) │ Config (Pydantic)│
+│ Scientific events │ Local subprocesses │ Problem runtime │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 ### 分层控制
 
-1. **Creative Layer (LLM, Tainted)**：Hypothesis 提出 + Code 生成 + Saturation Signal + Search Memory
-2. **Gate Layer (Static & Dynamic)**：Contract Gate (C1-C10) + Verification Gate (V3-V8) + FailureRouter (四层分类)
-3. **Protocol Layer (Statistical)**：三级实验协议 + Case-level 统计 + Bootstrap CI
-4. **Decision Layer (Oracle)**：DecisionFeatures（纯数值） + 字典序多目标
-5. **Parameter Layer (v0.2)**：Weight Optimization（promote 后触发，25 次 random search 评估）
+1. **Proposal**：同一调用链中产生 Hypothesis，通过 Contract 后直接用于 Code
+2. **Workspace / Verification**：普通 `CandidateWorkspace` 经动态校验后才进入协议
+3. **Protocol**：三级实验协议 + Case-level 统计 + Bootstrap CI
+4. **Decision**：`SafeFeatures` 的纯数值确定性决策
+5. **Evidence**：只保留普通科学事件、typed outcome 和必要 artifact 引用
 
 ### 关键设计决策
 
 - **Decision Input Guard**：Decision Layer 仅接收数值化的 DecisionFeatures，屏蔽 LLM 文本干扰
 - **两轮 Proposal**：Round 1 Hypothesis（假设） → Round 2 Code（实现）
 - **分支内迭代演化**：方案在分支内迭代，不是每次从 champion 重新分叉
-- **Champion 是池级别**：不是单个算子，而是整个 operator pool + weights 的快照
-- **字典序多目标**：业务聚合（subcategory splits）> 成本（total cost）> 效率（solve time）
-- **两层嵌套搜索**：外层 LLM 搜结构（发现算子），内层算法搜参数（优化权重）
+- **算法对象是完整源码树**：分支保留可运行的完整算法 head，不用对象身份、Trust/Hash 链或重复闭包证明它
+- **问题语义归 problem package**：objective、feasibility、solver、case、surface 与
+  telemetry 含义经 adapter 提供，generic core 不选择问题机制
+- **直接值语义**：H、CandidateWorkspace、ProtocolResult 和 Decision 沿同一调用链传递，不构建自证生命周期
 
 ## 快速开始
 
 ### 安装
 
 ```bash
-git clone https://github.com/xiaojiyao777/or-autoresearch-agent.git
-cd or-autoresearch-agent/scion
+git clone https://github.com/xiaojiyao777/scion.git
+cd scion/scion
 pip install -e .
 ```
 
 ### 运行 Campaign
 
 ```bash
-# Full campaign (需要 LLM API key)
-export SCION_API_KEY="your-api-key"
-export SCION_MODEL="claude-opus-4-6"
-cd scion && python run_v3_campaign.py 30
-
-# 指定生产数据协议
-export SCION_PROTOCOL="problems/warehouse_delivery/protocol_prod.yaml"
-export SCION_SPLIT_MANIFEST="problems/warehouse_delivery/split_manifest_prod.yaml"
-python run_v3_campaign.py 100
+# 先查看当前 CLI。模型、provider、科学输入、资源边界与输出根
+# 均以 AGENTS.md 指向的当前交接和 runbook 为准。
+cd "$(git rev-parse --show-toplevel)/scion"
+SCION_PYTHON="${SCION_PYTHON:-python}"
+PYTHONPATH=. "$SCION_PYTHON" \
+  -m scion.cli.main run --help
 ```
+
+Historical v0.2/v0.3 launcher scripts are archived under
+`archive/run-scripts/`; they are not the current v0.4 entry point.
 
 ### 运行测试
 
 ```bash
-cd scion
-python -m pytest tests/unit/ -q
+cd "$(git rev-parse --show-toplevel)/scion"
+SCION_PYTHON="${SCION_PYTHON:-python}"
+PYTHONPATH=. "$SCION_PYTHON" -m pytest -q
 ```
 
 ## 项目结构
 
 ```
 scion/
-├── scion/                    # 核心框架（57 个 Python 文件，~11,400 行）
+├── scion/                    # problem-neutral 核心框架与 problem packages
 │   ├── core/                 # Campaign, Branch, Decision, Scheduler, Termination, Features
 │   ├── config/               # ProblemSpec, ProtocolConfig, SplitManifest, SeedLedger (Pydantic v2)
 │   ├── contract/             # ContractGate (C1-C10 静态检查)
 │   ├── verification/         # VerificationGate (V3-V8: feasibility, objective, state, nondeterminism, perf)
 │   ├── protocol/             # ExperimentProtocol (三级实验), Evaluation (字典序), Stats (bootstrap CI)
-│   ├── proposal/             # LLMClient, CreativeLayer, ContextManager, SearchMemory, Saturation
-│   ├── parameter/            # WeightOptimizer, Evaluator (v0.2 新增)
+│   ├── proposal/             # LLMClient, CreativeLayer, ContextManager, ordinary H/C values
 │   ├── runtime/              # SubprocessRunner, WorkspaceMaterializer, PoolManager
-│   ├── failure/              # FailureRouter (四层分类 + escalation + infra detection)
-│   ├── lineage/              # SQLite Registry, BranchStore, ChampionStore, HypothesisStore
-│   ├── cli/                  # Typer CLI (init/run/inspect/report)
+│   ├── lineage/              # minimal append-only scientific events
+│   ├── cli/                  # Typer CLI (run/inspect/report)
 │   └── tests/                # unit / integration tests
 ├── problems/                 # 问题配置 (YAML)
 │   └── warehouse_delivery/   # 仓配协同 VNS：protocol + split_manifest + instances
@@ -224,9 +230,9 @@ Scion 在**仓配协同 VNS + Solution Pool** 场景下完成验证：
 - **目标函数**：字典序——业务聚合 > 物流总成本 > 求解效率
 - **生产数据**：引入真实生产统计特征生成的实例 + 真实日数据
 
-## v0.4：CVRP 第二问题
+## v0.4：CVRP 第二问题（历史接入背景）
 
-v0.4 将把 **CVRP** 接入 Scion，作为第二个真实组合优化问题。这个选择替代了早期路线图中“优先接 FCMCNF + Benders”的安排；FCMCNF 会保留为后续 v1.x 的 lower-bound/decomposition track。
+v0.4 已把 **CVRP** 接入 Scion，作为第二个真实组合优化问题。下面保留的是早期接入背景与 baseline；package 接入已经完成，但 retained-B0 改进证据仍未完成。当前实验结论和下一条研究阶梯只从 [`../AGENTS.md`](../AGENTS.md) 指向的[当前状态](docs/status/current-state.md)读取。
 
 CVRP 的价值在于它是标准 routing 问题，具有成熟 benchmark 和经典局部搜索算子族，而且它的 route-sequence 语义与当前 warehouse assignment/bin-packing 问题明显不同。它会直接检验 `ProblemAdapter`、operator interface、verification gate、quality/runtime harness 是否真的泛化。
 
@@ -244,18 +250,20 @@ benchmark_feasible = 10249
 Baseline 报告：
 
 - [../vrp/docs/experiment_results_seed0.md](../vrp/docs/experiment_results_seed0.md)
-- [docs/evidence-manifest.md](docs/evidence-manifest.md)
-- [docs/v0.4-evidence-harness.md](docs/v0.4-evidence-harness.md)
+- [docs/evidence/manifest.md](docs/evidence/manifest.md)
+- [design/v0.4/v0.4-evidence-harness.md](design/v0.4/v0.4-evidence-harness.md)
 
-接入 Scion 后，v0.4 不只记录 promotion 次数，还会对每个 campaign final champion 做固定评估集上的 baseline quality/runtime 对比。
+早期计划不只记录 promotion 次数，还要求在固定评估集上比较 baseline quality/runtime；它不是当前实验授权或验收状态。
 
-## 开发路线
+## 历史开发路线快照
 
 - [x] **v0.1 MVP**：核心循环、Contract Gate、三级实验协议、SQLite Lineage ✅
 - [x] **v0.1.1 调优**：ContextManager 重写、prompt caching、subprocess timeout ✅
 - [x] **v0.2 参数层**：Weight Optimization、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
 - [x] **v0.3 工程化框架**：adapter/objective 泛化、production protocol、sync weight opt、完整证据 gate ✅
-- [ ] **v0.4 性能感知优化 + CVRP 接入**：runtime/complexity 作为公共优化维度，并用 CVRP 检验第二问题泛化
+- [x] **v0.4 机制阶段收官**：direct runtime 与跨问题研究基座；原科学成功验收部分达成
+- [ ] **CVRP 独立 retained-B0 收益**：跨版本保留的未完成科学目标
+- [ ] **v0.5 持续算法研究**：自主观察实验、解释修正、研究材料延续及机制对照
 - [ ] **v1.0 多问题证据固化**：warehouse + CVRP 跨问题验证、机制研究、工程化收敛
 
 ## 实验历史
@@ -282,13 +290,10 @@ Baseline 报告：
 
 ## 当前状态
 
-**v0.3 完成** (2026-04-28)
-
-- 框架闭环完成：hypothesis -> code -> verification -> protocol -> promote -> sync weight opt -> lineage。
-- Synthetic 优化能力明确成立。
-- Production 在 Sonnet 下可产生完整证据的改进；GPT-mini 仍受代码生成质量限制。
-- 生产 timeout / incomplete evidence 问题已修复并记录到 v0.4 performance-aware plan。
-- v0.4 已确定引入 CVRP 作为第二真实问题，详见 [v0.4-cvrp-plan.md](docs/v0.4-cvrp-plan.md)。
+本文中的 v0.2/v0.3 数据是历史证据，不是当前工作树或实验状态。
+请从 [`../AGENTS.md`](../AGENTS.md) 进入，并以它指向的
+[`TASK.md`](TASK.md) 和
+[`docs/status/current-state.md`](docs/status/current-state.md) 为当前交接。
 
 ## 开源协议
 
@@ -296,4 +301,4 @@ Baseline 报告：
 
 ---
 
-*Built with precision — Scion Framework v0.3*
+*Historical results retained; current work follows the repository handoff.*

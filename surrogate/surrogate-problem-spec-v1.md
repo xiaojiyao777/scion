@@ -35,7 +35,7 @@
 | ship_method | str | 运输方式（海运/空运/铁路/陆运） |
 | destination_country | str | 目的国 |
 | spu_list | list[SPU] | SPU列表 |
-| locked_vehicle_id | str \| None | 已锁定的逻辑车ID（None=新订单，可自由分配） |
+| locked_vehicle_id | str \| None | 来源组ID；同一非 None 值（包括空串）的订单是可整体移动、不可拆分的原子组。None=新订单，可自由分配 |
 
 #### SPU
 
@@ -129,7 +129,7 @@ class ObjectiveValue:
 | H4 | 分车大类隔离 | 同车订单的 vehicle_category 相同（Phase 1）|
 | H5 | 危险品基线 | sum(hazard_quantity) > 1800 → vehicle_type == HQ40_DG |
 | H6 | 装车基线 | sum(declaration_amount) ≤ amount_limit[(country, ship_method)] |
-| H7 | 锁定不动 | locked_vehicle_id != None → 订单不可移动到其他车 |
+| H7 | 来源组完整性 | 同一非 None locked_vehicle_id 的全部订单必须位于同一辆车；整组可移动或与其他完整组/自由订单合并，不得拆分、丢失或复制 |
 | H8 | 非专车危险品上限 | 非危险品专车：sum(hazard_quantity) ≤ 1800pcs（危险品专车可混装普货，无限制）|
 
 **注意**：H4 在 Phase 2 中由算法标识替代——不同大类但相同算法标识的一次逻辑车可以合并。
@@ -266,7 +266,7 @@ class Operator:
 检查顺序（fail-fast）：
 
 ```
-1. H7: 锁定订单未被移动
+1. H7: 来源组完整（同组订单位于同一辆车）
 2. H4: 分车大类隔离（Phase 1）/ 算法标识合并合规（Phase 2）
 3. H2: 片区一致
 4. H3: 提货点数 ≤ 上限
@@ -285,10 +285,12 @@ def check_feasibility(solution: Solution, instance: Instance, phase: int) -> Fea
     for vid, vehicle in solution.vehicles.items():
         orders = [instance.orders[oid] for oid in vehicle.order_ids]
         
-        # H7: 锁定检查
-        for o in orders:
-            if o.locked_vehicle_id is not None and o.locked_vehicle_id != vid:
-                violations.append(f"H7: order {o.order_id} locked to {o.locked_vehicle_id}, assigned to {vid}")
+        # H7 在逐车约束前检查：同一非 None 来源组必须完整落在一辆车。
+        # vehicle_id 无需等于 locked_vehicle_id；该字段不是永久目标车辆。
+        for group_id, group_orders in locked_groups(instance).items():
+            assigned = {solution.assignment[o.order_id] for o in group_orders}
+            if len(assigned) != 1:
+                violations.append(f"H7: locked group {group_id!r} is split across {sorted(assigned)}")
                 return FeasibilityResult(False, violations)  # fail-fast
         
         # H4: 大类隔离 (Phase 1)

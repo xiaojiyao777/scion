@@ -14,6 +14,7 @@ Variable Neighborhood Search：
 from __future__ import annotations
 
 import itertools
+import time
 from random import Random
 from typing import Callable
 
@@ -67,6 +68,12 @@ def run_vns(
     """
     rng = Random(cfg.random_seed)
     cumulative = build_cumulative_weights(operators, operator_weights)
+    deadline: float | None = None
+    if cfg.time_limit_seconds is not None and cfg.time_limit_seconds > 0:
+        deadline = time.monotonic() + cfg.time_limit_seconds
+
+    def time_exhausted() -> bool:
+        return deadline is not None and time.monotonic() >= deadline
 
     # 初始化 pool
     pool = SolutionPool(pool_size=cfg.pool_size)
@@ -80,10 +87,16 @@ def run_vns(
     no_improve_count = 0
 
     for iteration in range(cfg.max_iterations):
+        if time_exhausted():
+            break
+
         current_pool = pool.all()
         new_solutions: list[Solution] = []
 
         for sol in current_pool:
+            if time_exhausted():
+                break
+
             # 按累积概率选算子
             op = select_operator(operators, cumulative, rng)
             candidate = op.execute(sol, rng)
@@ -98,7 +111,8 @@ def run_vns(
                 # 保留原解以维持 pool 大小
                 new_solutions.append(sol.deep_copy())
 
-        pool.update(new_solutions, instance)
+        if new_solutions:
+            pool.update(new_solutions, instance)
 
         current_best = pool.best()
         current_obj = current_best.objective if current_best else None

@@ -5,18 +5,33 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from types import SimpleNamespace
+from typing import Any, List
 
 import pytest
 
-from scion.config.problem import ProblemSpec, ProtocolConfig, SplitManifest, SeedLedgerConfig, SearchSpace
-from scion.core.campaign import CampaignManager, VerificationGate
-from scion.core.models import (
-    Branch, BranchState, CanaryResult, ChampionState, Decision,
-    EvalStats, ExperimentStage, ProtocolResult, VerificationResult, CheckResult,
+from scion.config.problem import (
+    ProblemSpec,
+    ProtocolConfig,
+    SearchSpace,
+    SeedLedgerConfig,
+    SplitManifest,
 )
-from scion.core.termination import TerminationConfig
+from scion.core.campaign import CampaignManager
+from scion.core.models import (
+    CanaryResult,
+    ChampionState,
+    CheckResult,
+    EvalStats,
+    ExperimentStage,
+    ProtocolResult,
+    VerificationResult,
+)
+from scion.problem.spec import ObjectiveMetricSpec
 from scion.proposal.mock_client import MockLLMClient
+from scion.verification.gate import VerificationGate
+
+from .campaign_test_support import _bounded_campaign
 
 # ---------------------------------------------------------------------------
 # Shared helpers (mirroring test_campaign.py conventions)
@@ -42,9 +57,17 @@ _VALID_HYPOTHESIS = {
 _VALID_PATCH = {
     "file_path": "operators/local_search.py",
     "action": "modify",
-    "code_content": _VALID_CODE,
+    "edit_intent": "exact_replace",
+    "old_string": "        return solution\n",
+    "new_string": "        candidate = solution\n        return candidate\n",
+    "replace_all": False,
     "test_hint": None,
 }
+
+_VALID_CODE_AFTER_PATCH = _VALID_CODE.replace(
+    "        return solution\n",
+    "        candidate = solution\n        return candidate\n",
+)
 
 
 def _make_problem_spec(root_dir: str) -> ProblemSpec:
@@ -74,13 +97,20 @@ def _make_protocol_result(
         stage=stage,
         stats=stats,
         gate_outcome=gate_outcome,
-        reason_codes=("E2E_TEST",),
+        reason_codes=(
+            "SCREENING_FAIL_WIN_RATE"
+            if stage is ExperimentStage.SCREENING and gate_outcome == "fail"
+            else f"{stage.value.upper()}_{gate_outcome.upper()}",
+        ),
         exposed_summary=f"stage={stage.value}",
         raw_metrics_ref="/tmp/e2e.json",
     )
 
 
-class _AlwaysPassVerificationGate:
+class _AlwaysPassVerificationGate(VerificationGate):
+    def __init__(self) -> None:
+        super().__init__()
+
     def run(self, workspace: str, champion_workspace: str, patch: Any) -> VerificationResult:
         check = CheckResult(
             name="SYNTAX", passed=True, severity="light",
@@ -97,6 +127,18 @@ class _MockExperimentProtocol:
         self._canary_pass = canary_pass
         self.canary_call_count = 0
         self.experiment_call_count = 0
+        self.runner = object()
+        self.config = ProtocolConfig()
+        self._metric_specs = (
+            ObjectiveMetricSpec(name="cost", direction="minimize", priority=1),
+        )
+        self._problem_spec = None
+
+    def set_problem_adapter(self, adapter: Any) -> None:
+        self._problem_spec = adapter.spec
+        objectives = getattr(adapter.spec, "objectives", None)
+        if objectives:
+            self._metric_specs = tuple(objectives)
 
     def run_canary(self, candidate_ws: str, champion_ws: str) -> CanaryResult:
         self.canary_call_count += 1
@@ -109,7 +151,10 @@ class _MockExperimentProtocol:
         champion_ws: str,
         hypothesis_action: str,
         expand: bool = False,
+        expand_round: int = 1,
+        proposal_subject: dict[str, Any] | None = None,
     ) -> ProtocolResult:
+        del expand_round, proposal_subject
         self.experiment_call_count += 1
         if self._results:
             return self._results.pop(0)
@@ -122,7 +167,6 @@ def _build_campaign(
     llm_client: Any = None,
     experiment_protocol: Any = None,
     verification_gate: Any = None,
-    max_experiments: int = 100,
 ) -> CampaignManager:
     code_dir = tmp_path / "champion_code"
     (code_dir / "operators").mkdir(parents=True)
@@ -132,13 +176,12 @@ def _build_campaign(
     champion = ChampionState(
         version=1,
         operator_pool={},
-        solver_config_hash="e2e_hash",
         code_snapshot_path=str(code_dir),
-        code_snapshot_hash="e2e_code_hash",
     )
+    protocol = experiment_protocol or _MockExperimentProtocol(results=[])
+    protocol._problem_spec = spec
 
     return CampaignManager(
-        problem_spec=spec,
         protocol_config=ProtocolConfig(
             screening_n=6,
             screening_win_rate_threshold=0.66,
@@ -151,11 +194,13 @@ def _build_campaign(
             screening=["case1", "case2", "case3"],
             validation=["case4", "case5", "case6"],
             frozen=["case7", "case8", "case9"],
+            canary=["case10"],
         ),
         seed_ledger=SeedLedgerConfig(
             screening=[42, 137],
             validation=[7, 19, 83],
             frozen=[256, 512, 1024],
+            canary=[2048],
         ),
         llm_client=llm_client or MockLLMClient(
             hypothesis_response=_VALID_HYPOTHESIS,
@@ -164,11 +209,8 @@ def _build_campaign(
         champion=champion,
         campaign_dir=str(tmp_path / "campaign"),
         verification_gate=verification_gate or _AlwaysPassVerificationGate(),
-        experiment_protocol=experiment_protocol,
-        termination_config=TerminationConfig(
-            max_experiments=max_experiments,
-            stagnation_limit=50,
-        ),
+        experiment_protocol=protocol,
+        adapter=SimpleNamespace(spec=spec),
     )
 
 
@@ -181,7 +223,17 @@ class TestFullMockCampaign:
 
     def test_runs_at_least_5_rounds_without_crash(self, tmp_path):
         """Campaign runs 5 steps without raising an exception."""
-        cm = _build_campaign(tmp_path, max_experiments=20)
+        protocol = _MockExperimentProtocol(
+            results=[
+                _make_protocol_result(
+                    ExperimentStage.SCREENING,
+                    gate_outcome="fail",
+                    win_rate=0.0,
+                )
+            ]
+            * 5
+        )
+        cm = _build_campaign(tmp_path, experiment_protocol=protocol)
 
         for _ in range(5):
             if cm.should_stop():
@@ -195,7 +247,26 @@ class TestFullMockCampaign:
 
     def test_at_least_one_explore_step(self, tmp_path):
         """At least one step must be of action type 'explore' or 'create_branch'."""
-        cm = _build_campaign(tmp_path, max_experiments=20)
+        client = MockLLMClient(
+            hypothesis_response=_VALID_HYPOTHESIS,
+            patch_response=_VALID_PATCH,
+        )
+        protocol = _MockExperimentProtocol(
+            results=[
+                _make_protocol_result(
+                    ExperimentStage.SCREENING,
+                    gate_outcome="fail",
+                    win_rate=0.0,
+                )
+            ]
+            * 5
+        )
+        cm, bounded_client = _bounded_campaign(
+            tmp_path,
+            llm_client=client,
+            experiment_protocol=protocol,
+            failure_frontier_disposition="used",
+        )
 
         results = []
         for _ in range(5):
@@ -207,10 +278,43 @@ class TestFullMockCampaign:
         assert any(r.action in explore_actions for r in results), (
             f"Expected at least one explore step; got: {[r.action for r in results]}"
         )
+        assert protocol.experiment_call_count >= 2
+        assert client.call_count >= 4
+        assert "hypothesis_research_turn" in bounded_client.request_kinds
+        assert "code_research_turn" in bounded_client.request_kinds
+        research_actions = [
+            response.get("action", response.get("outcome"))
+            for response in bounded_client.responses
+        ]
+        review_index = research_actions.index("review_history_frontier")
+        assert "read_source" in research_actions[:review_index]
+        assert "read_history" in research_actions[:review_index]
+        assert "finalize_hypothesis" in research_actions[review_index + 1 :]
+        assert all(
+            item["disposition"] == "used"
+            for item in bounded_client.responses[review_index]["dispositions"]
+        )
+        code_actions = [
+            action
+            for action in research_actions
+            if action in {"revise", "test_patch", "ready", "finalize_patch"}
+        ]
+        assert code_actions[:3] == [
+            "revise",
+            "test_patch",
+            "ready",
+        ]
+        assert "finalize_patch" not in code_actions
+        branch = cm._branch_ctrl.get_branch(results[-1].branch_id)
+        workspace = Path(cm._branch_workspaces[branch.branch_id])
+        assert branch.current_code_hash is not None
+        assert (workspace / "operators" / "local_search.py").read_text() == (
+            _VALID_CODE_AFTER_PATCH
+        )
 
     def test_lineage_queryable_via_get_state(self, tmp_path):
         """get_state() returns branch lineage (branch list) after exploration."""
-        cm = _build_campaign(tmp_path, max_experiments=20)
+        cm = _build_campaign(tmp_path)
 
         cm.run_one_step()  # creates branch + explore
 
@@ -222,9 +326,18 @@ class TestFullMockCampaign:
             assert "state" in entry
 
     def test_campaign_run_method_terminates(self, tmp_path):
-        """cm.run(max_rounds=5) terminates without hanging."""
-        cm = _build_campaign(tmp_path, max_experiments=20)
-        cm.run(max_rounds=5)
+        """cm.run(requested_rounds=5) terminates without hanging."""
+        protocol = _MockExperimentProtocol(
+            results=[
+                _make_protocol_result(ExperimentStage.SCREENING),
+                _make_protocol_result(ExperimentStage.VALIDATION),
+                _make_protocol_result(ExperimentStage.FROZEN, gate_outcome="fail"),
+                _make_protocol_result(ExperimentStage.SCREENING),
+                _make_protocol_result(ExperimentStage.VALIDATION),
+            ]
+        )
+        cm = _build_campaign(tmp_path, experiment_protocol=protocol)
+        cm.run(requested_rounds=5)
         # No exception = pass
 
     def test_experiments_counter_increments(self, tmp_path):
@@ -233,7 +346,7 @@ class TestFullMockCampaign:
         proto = _MockExperimentProtocol(
             results=[_make_protocol_result(ExperimentStage.SCREENING)] * 10
         )
-        cm = _build_campaign(tmp_path, experiment_protocol=proto, max_experiments=20)
+        cm = _build_campaign(tmp_path, experiment_protocol=proto)
 
         initial = cm.get_state()["n_experiments"]
         cm.run_one_step()
@@ -262,22 +375,6 @@ class TestContractFailureRouting:
         result = cm.run_one_step()
         assert result is not None
 
-    def test_contract_fail_increments_retry(self, tmp_path):
-        """Failed contract increments retry_count on the branch (tracked internally)."""
-        bad_patch = {
-            **_VALID_PATCH,
-            "action": "INVALID",  # patch contract will reject this
-        }
-        llm_client = MockLLMClient(patch_response=bad_patch)
-        cm = _build_campaign(tmp_path, llm_client=llm_client)
-
-        cm.run_one_step()
-        # Branch exists and retry_count > 0 after a failure
-        active = cm._branch_ctrl.get_active_branches()
-        if active:
-            branch = active[0]
-            # retry_count is incremented by _handle_failure
-            assert branch.retry_count >= 0  # may be 0 if contract passed somehow
 
     def test_format_error_does_not_crash(self, tmp_path):
         """LLMFormatError in hypothesis generation is handled gracefully."""
@@ -387,8 +484,8 @@ class TestCLISmoke:
             timeout=60,
         )
 
-        # Acceptable exit codes: 0 (success) or 1 (init error — campaign_dir not initted)
-        # The key is it must not segfault or hang
+        # Some minimal fixture combinations may be research-rejected, but the
+        # fresh-only command must terminate without hanging.
         assert result.returncode in (0, 1), (
             f"CLI exited with code {result.returncode}\n"
             f"stdout: {result.stdout}\n"
@@ -397,76 +494,6 @@ class TestCLISmoke:
         # If exit 0, it should report starting the campaign
         if result.returncode == 0:
             assert "Starting campaign" in result.stdout or "Campaign" in result.stdout
-
-    def test_cli_init_then_run(self, tmp_path, problem_dir):
-        """scion init followed by scion run --mock-llm --rounds 3."""
-        campaign_dir = tmp_path / "cli_init_campaign"
-        problem_yaml = problem_dir / "problem.yaml"
-
-        env = os.environ.copy()
-        scion_root = str(Path(__file__).parent.parent.parent)
-        env["PYTHONPATH"] = scion_root
-
-        base_cmd = [sys.executable, "-m", "scion.cli.main"]
-
-        # Step 1: init
-        init_result = subprocess.run(
-            base_cmd + [
-                "init",
-                "--problem", str(problem_yaml),
-                "--campaign-dir", str(campaign_dir),
-            ],
-            capture_output=True, text=True, env=env, timeout=30,
-        )
-        assert init_result.returncode == 0, (
-            f"scion init failed:\n{init_result.stderr}"
-        )
-
-        # Step 2: run
-        run_result = subprocess.run(
-            base_cmd + [
-                "run",
-                "--mock-llm",
-                "--rounds", "3",
-                "--campaign-dir", str(campaign_dir),
-            ],
-            capture_output=True, text=True, env=env, timeout=60,
-        )
-        assert run_result.returncode == 0, (
-            f"scion run failed:\n{run_result.stdout}\n{run_result.stderr}"
-        )
-        assert "Starting campaign" in run_result.stdout
-
-    def test_cli_report_after_init(self, tmp_path, problem_dir):
-        """scion report after scion init returns JSON output."""
-        campaign_dir = tmp_path / "report_campaign"
-        problem_yaml = problem_dir / "problem.yaml"
-
-        env = os.environ.copy()
-        scion_root = str(Path(__file__).parent.parent.parent)
-        env["PYTHONPATH"] = scion_root
-
-        base_cmd = [sys.executable, "-m", "scion.cli.main"]
-
-        # init first
-        subprocess.run(
-            base_cmd + ["init", "--problem", str(problem_yaml), "--campaign-dir", str(campaign_dir)],
-            env=env, timeout=30, capture_output=True,
-        )
-
-        # report summary (new sub-command interface; works even without scion.db)
-        report_result = subprocess.run(
-            base_cmd + ["report", "summary", "--campaign-dir", str(campaign_dir)],
-            capture_output=True, text=True, env=env, timeout=30,
-        )
-        assert report_result.returncode == 0, (
-            f"scion report summary failed:\n{report_result.stderr}"
-        )
-        import json
-        data = json.loads(report_result.stdout)
-        assert "problem_name" in data
-        assert data["problem_name"] == "smoke_test"
-
 
 # ---------------------------------------------------------------------------
 # Test 4: Warehouse Delivery problem config validation

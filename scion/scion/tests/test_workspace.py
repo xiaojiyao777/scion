@@ -1,4 +1,5 @@
 """Tests for WorkspaceMaterializer (T07)."""
+
 from __future__ import annotations
 
 import os
@@ -8,8 +9,7 @@ from pathlib import Path
 import pytest
 
 from scion.runtime.workspace import FrozenFileError, WorkspaceMaterializer
-from scion.core.models import ChampionState, PatchProposal
-
+from scion.core.models import ChampionState, PatchFileChange, PatchProposal
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -68,12 +68,68 @@ class TestCreateBranchWorkspace:
         assert not (Path(ws2) / "extra.txt").exists()
 
 
+class TestCandidateWorkspace:
+    def test_candidate_is_an_independent_direct_value(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+    ) -> None:
+        durable = mat.create_branch_workspace("candidate-source", str(code_base))
+        candidate = mat.create_candidate_workspace(durable)
+        candidate_source = Path(candidate) / "operators" / "swap.py"
+        candidate_source.write_text("accepted = True\n")
+
+        assert Path(candidate).is_dir()
+        assert (Path(candidate) / "operators" / "swap.py").read_text() == (
+            "accepted = True\n"
+        )
+        assert "SwapOperator" in (Path(durable) / "operators" / "swap.py").read_text()
+
+    def test_candidate_cleanup_preserves_durable_workspace(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+    ) -> None:
+        durable = mat.create_branch_workspace("rejected-branch", str(code_base))
+        candidate = mat.create_candidate_workspace(durable)
+        (Path(candidate) / "operators" / "swap.py").write_text("broken = True\n")
+
+        mat.cleanup_candidate_workspace(candidate)
+
+        assert not Path(candidate).exists()
+        assert "SwapOperator" in (Path(durable) / "operators" / "swap.py").read_text()
+
+
 # ---------------------------------------------------------------------------
 # apply_patch
 # ---------------------------------------------------------------------------
 
 
 class TestApplyPatch:
+    def test_ephemeral_apply_skips_post_apply_digest(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        ws = mat.create_branch_workspace("ephemeral", str(code_base))
+        patch = PatchProposal(
+            file_path="operators/swap.py",
+            action="modify",
+            code_content="changed = True\n",
+        )
+        monkeypatch.setattr(
+            mat,
+            "compute_code_hash",
+            lambda *_args: (_ for _ in ()).throw(AssertionError("digest requested")),
+        )
+
+        mat.apply_ephemeral_patch(ws, patch)
+
+        assert (Path(ws) / "operators" / "swap.py").read_text() == (
+            "changed = True\n"
+        )
+
     def test_modify_creates_file(self, mat: WorkspaceMaterializer, code_base: Path):
         ws = mat.create_branch_workspace("b1", str(code_base))
         patch = PatchProposal(
@@ -95,6 +151,103 @@ class TestApplyPatch:
         mat.apply_patch(ws, patch)
         assert (Path(ws) / "operators" / "sub" / "deep_op.py").exists()
 
+    def test_multi_file_patch_applies_all_changes(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+    ):
+        ws = mat.create_branch_workspace("b2multi", str(code_base))
+        patch = PatchProposal(
+            file_path="operators/new_op.py",
+            action="create",
+            code_content="class NewOp:\n    pass\n",
+            additional_changes=(
+                PatchFileChange(
+                    file_path="policies/helper.py",
+                    action="create",
+                    code_content="VALUE = 1\n",
+                ),
+            ),
+        )
+
+        mat.apply_patch(ws, patch)
+
+        assert (Path(ws) / "operators" / "new_op.py").read_text(
+            encoding="utf-8"
+        ) == "class NewOp:\n    pass\n"
+        assert (Path(ws) / "policies" / "helper.py").read_text(
+            encoding="utf-8"
+        ) == "VALUE = 1\n"
+
+    def test_multi_file_preflight_failure_leaves_workspace_unchanged(
+        self,
+        campaign_dir: Path,
+        code_base: Path,
+    ):
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            frozen_patterns=frozenset({"solver.py"}),
+        )
+        ws = mat.create_branch_workspace("b2-preflight", str(code_base))
+        patch = PatchProposal(
+            file_path="operators/swap.py",
+            action="modify",
+            code_content="changed = True\n",
+            additional_changes=(
+                PatchFileChange(
+                    file_path="solver.py",
+                    action="modify",
+                    code_content="# forbidden\n",
+                ),
+            ),
+        )
+
+        with pytest.raises(FrozenFileError):
+            mat.apply_patch(ws, patch)
+
+        assert (Path(ws) / "operators" / "swap.py").read_text() == (
+            "class SwapOperator:\n    pass\n"
+        )
+        assert (Path(ws) / "solver.py").read_text() == "# solver\n"
+
+    def test_multi_file_failure_needs_no_nested_patch_transaction(
+        self,
+        mat: WorkspaceMaterializer,
+        code_base: Path,
+        monkeypatch,
+    ):
+        ws = mat.create_branch_workspace("b2-direct", str(code_base))
+        original_apply = mat._apply_file_change
+        calls = 0
+
+        def fail_second(staged_ws, change):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("simulated second write failure")
+            return original_apply(staged_ws, change)
+
+        monkeypatch.setattr(mat, "_apply_file_change", fail_second)
+        patch = PatchProposal(
+            file_path="operators/swap.py",
+            action="modify",
+            code_content="changed = True\n",
+            additional_changes=(
+                PatchFileChange(
+                    file_path="policies/helper.py",
+                    action="create",
+                    code_content="VALUE = 1\n",
+                ),
+            ),
+        )
+
+        with pytest.raises(OSError, match="second write failure"):
+            mat.apply_patch(ws, patch)
+
+        assert (Path(ws) / "operators" / "swap.py").read_text() == "changed = True\n"
+        assert not (Path(ws) / "policies" / "helper.py").exists()
+        assert not list(Path(ws).parent.glob(".b2-direct.patch-*"))
+
     def test_delete_removes_file(self, mat: WorkspaceMaterializer, code_base: Path):
         ws = mat.create_branch_workspace("b3", str(code_base))
         target = Path(ws) / "operators" / "swap.py"
@@ -107,7 +260,11 @@ class TestApplyPatch:
         mat.apply_patch(ws, patch)
         assert not target.exists()
 
-    def test_frozen_file_rejected(self, mat: WorkspaceMaterializer, code_base: Path):
+    def test_frozen_file_rejected(self, campaign_dir: Path, code_base: Path):
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            frozen_patterns=frozenset({"solver.py"}),
+        )
         ws = mat.create_branch_workspace("b4", str(code_base))
         patch = PatchProposal(
             file_path="solver.py",
@@ -117,7 +274,11 @@ class TestApplyPatch:
         with pytest.raises(FrozenFileError):
             mat.apply_patch(ws, patch)
 
-    def test_frozen_oracle_rejected(self, mat: WorkspaceMaterializer, code_base: Path):
+    def test_frozen_oracle_rejected(self, campaign_dir: Path, code_base: Path):
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            frozen_patterns=frozenset({"oracle.py"}),
+        )
         ws = mat.create_branch_workspace("b5", str(code_base))
         patch = PatchProposal(
             file_path="oracle.py",
@@ -167,9 +328,11 @@ class TestApplyPatch:
             mat.apply_patch(ws, patch)
         assert not outside.exists()
 
-    def test_hash_changes_on_new_content(
-        self, mat: WorkspaceMaterializer, code_base: Path
-    ):
+    def test_hash_changes_on_new_content(self, campaign_dir: Path, code_base: Path):
+        mat = WorkspaceMaterializer(
+            str(campaign_dir),
+            editable_patterns=("operators",),
+        )
         ws = mat.create_branch_workspace("b6", str(code_base))
         patch1 = PatchProposal(
             file_path="operators/op_a.py", action="create", code_content="x = 1\n"
@@ -230,9 +393,7 @@ class TestCreateChampionSnapshot:
         champion = ChampionState(
             version=1,
             operator_pool={},
-            solver_config_hash="abc",
             code_snapshot_path=ws,
-            code_snapshot_hash="xyz",
         )
         snap_dir = str(tmp_path / "snaps")
         os.makedirs(snap_dir)
@@ -252,9 +413,7 @@ class TestCreateChampionSnapshot:
         champion = ChampionState(
             version=3,
             operator_pool={},
-            solver_config_hash="abc",
             code_snapshot_path=ws,
-            code_snapshot_hash="xyz",
         )
         snap = mat.create_champion_snapshot(champion, str(tmp_path / "s"))
         assert "champion_v3" in snap
@@ -274,5 +433,7 @@ class TestCleanup:
         mat.cleanup(ws)
         assert not Path(ws).exists()
 
-    def test_cleanup_nonexistent_is_noop(self, mat: WorkspaceMaterializer, tmp_path: Path):
+    def test_cleanup_nonexistent_is_noop(
+        self, mat: WorkspaceMaterializer, tmp_path: Path
+    ):
         mat.cleanup(str(tmp_path / "does_not_exist"))  # should not raise

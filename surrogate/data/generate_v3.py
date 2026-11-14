@@ -572,7 +572,7 @@ def validate_instance(
     }
 
     if not feas.is_feasible:
-        print(f"  FAIL: greedy init not feasible: {feas.violations[:2]}")
+        print(f"  FAIL: greedy init not feasible: {feas.violations}")
         return report
 
     results = []

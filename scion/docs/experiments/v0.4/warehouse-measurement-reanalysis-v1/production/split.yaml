@@ -1,0 +1,29 @@
+version: "warehouse-measurement-reanalysis-production-v1"
+
+safe_data_roots:
+  - /home/clawd/research/scion-data
+
+screening: []
+validation: []
+
+frozen:
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_micro01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_micro02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_micro03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_micro04.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_s01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_s02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_s03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_s04.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ms01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ms02.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ms03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m03.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_m04.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ml01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_scr_ml02.json
+
+canary:
+  - /home/clawd/research/scion-data/production/generated/instance_prod_can_s01.json
+  - /home/clawd/research/scion-data/production/generated/instance_prod_can_s02.json

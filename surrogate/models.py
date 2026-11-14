@@ -121,6 +121,7 @@ class Order:
     ship_method: str             # 运输方式
     destination_country: str     # 目的国
     spu_list: list[SPU]
+    # 非 None 值是可整体移动、不可拆分的来源组标识，不是永久目标车辆。
     locked_vehicle_id: Optional[str] = None  # None = 可自由分配
 
 

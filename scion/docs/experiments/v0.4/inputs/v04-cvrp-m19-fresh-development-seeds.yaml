@@ -1,0 +1,16 @@
+version: 0.4-cvrp-m19-fresh-development
+
+screening:
+  - 6847
+  - 7169
+
+validation:
+  - 6162
+  - 8372
+
+frozen:
+  - 8716
+  - 7565
+
+canary:
+  - 5069

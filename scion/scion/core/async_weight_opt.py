@@ -1,24 +1,15 @@
-"""AsyncWeightOptCoordinator — background weight optimization lifecycle.
-
-Extracted from CampaignManager (v0.3 §B2 per optimization-design doc).
-Owns thread lifecycle + the optimization loop body that was previously part
-of the CampaignManager god-object:
+"""Coordinate optional background weight optimization.
 
   - ``_pending_threads`` — background thread registry
   - ``_latest_result`` — last drained optimization result (for LLM feedback)
-  - ``_completed_events`` — worker results awaiting CampaignManager commit
-  - ``spawn_for_promoted_champion`` — entry point from ``_on_promote`` tail
-  - ``run_optimization`` — the optimization loop body (formerly
-    ``CampaignManager._run_weight_optimization``)
+  - ``_completed_events`` — worker results awaiting main-thread application
+  - ``spawn_for_promoted_champion`` — entry point after promotion
+  - ``run_optimization`` — the optimization loop body
   - ``wait_all`` — shutdown join
 
-The coordinator holds a reference to ``CampaignManager`` (v0.3 minimum
-extraction — dependency injection is for v1.0) and reads manager services via
-``self._mgr._xxx``. It intentionally does NOT own champion or branch state.
-The bg thread delegates the optimization call through
-``self._mgr._run_weight_optimization(...)`` so that existing tests which
-monkey-patch that method continue to work, then enqueues a completion event
-for CampaignManager to commit on the main loop boundary.
+The coordinator reads the campaign services it needs but does not own champion
+or branch state. A worker enqueues its result for application on the campaign
+thread.
 """
 from __future__ import annotations
 
@@ -34,10 +25,52 @@ if TYPE_CHECKING:  # pragma: no cover - import only for type checking
 
 logger = logging.getLogger(__name__)
 
+TERMINAL_WAIT_CAP_SEC = 5.0
+POST_CANCEL_JOIN_GRACE_SEC = 1.0
+
+
+class WeightOptShutdownRequested(RuntimeError):
+    """Raised inside weight optimization when terminal shutdown starts."""
+
+
+class _CancellableWeightOptRunner:
+    """Runner wrapper that stops weight opt between solver subprocess calls."""
+
+    def __init__(self, runner: Any, should_stop) -> None:
+        self._runner = runner
+        self._should_stop = should_stop
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._runner, name)
+
+    def run_solver(self, *args, **kwargs):
+        if self._should_stop():
+            raise WeightOptShutdownRequested("weight optimization shutdown requested")
+        try:
+            return self._runner.run_solver(*args, **kwargs)
+        finally:
+            if self._should_stop():
+                raise WeightOptShutdownRequested(
+                    "weight optimization shutdown requested"
+                )
+
+
+def bounded_terminal_wait_timeout(timeout: Optional[float]) -> float:
+    """Return the terminal drain budget for async weight optimization."""
+    if timeout is None:
+        return 0.0
+    try:
+        value = float(timeout)
+    except (TypeError, ValueError):
+        return 0.0
+    if value <= 0:
+        return 0.0
+    return min(value, TERMINAL_WAIT_CAP_SEC)
+
 
 @dataclass(frozen=True)
 class WeightOptCompletionEvent:
-    """Completed weight optimization work ready for main-thread commit."""
+    """Completed weight optimization work ready for the campaign thread."""
 
     version: int
     base_weight_revision: int
@@ -46,12 +79,21 @@ class WeightOptCompletionEvent:
     improved: bool
     new_revision: Optional[int] = None
     snapshot_path: Optional[str] = None
-    snapshot_hash: Optional[str] = None
     operator_pool: Optional[dict[str, "OperatorConfig"]] = None
 
 
+def _thread_weight_opt_version(name: str) -> int | None:
+    marker = "weight-opt-v"
+    if not name.startswith(marker):
+        return None
+    try:
+        return int(name[len(marker):])
+    except ValueError:
+        return None
+
+
 class AsyncWeightOptCoordinator:
-    """Owns async weight-optimization thread lifecycle and the opt loop body."""
+    """Run optional weight optimization and report completed work."""
 
     def __init__(self, manager: "CampaignManager") -> None:
         self._mgr = manager
@@ -61,6 +103,7 @@ class AsyncWeightOptCoordinator:
         self._status_lock = threading.Lock()
         self._active_status: dict[int, dict] = {}
         self._latest_result: Optional[Any] = None
+        self._shutdown_requested = threading.Event()
 
     # ------------------------------------------------------------------
     # Public API
@@ -75,13 +118,12 @@ class AsyncWeightOptCoordinator:
         self._latest_result = value
 
     @property
-    def pending_threads(self) -> List[threading.Thread]:
-        """Direct access to the pending thread list (for backward-compat)."""
-        return self._pending_threads
-
-    @property
     def pending_count(self) -> int:
         return len(self._pending_threads)
+
+    @property
+    def shutdown_requested(self) -> bool:
+        return self._shutdown_requested.is_set()
 
     def status_snapshot(self) -> dict:
         """Return lightweight weight-optimization status for status.json."""
@@ -130,11 +172,14 @@ class AsyncWeightOptCoordinator:
     ) -> None:
         """Launch bg weight optimization for a freshly promoted champion.
 
-        Called from ``CampaignManager._on_promote`` tail. No-op if weight opt
+        Called after promotion. No-op if weight opt
         is disabled or no experiment_protocol is available.
         """
-        param_cfg = self._mgr._spec.parameter_search
-        if not (param_cfg.enabled and self._mgr._experiment_protocol is not None):
+        param_cfg = self._mgr._problem_runtime.spec.parameter_search
+        if (
+            self.shutdown_requested
+            or not (param_cfg.enabled and self._mgr._experiment_protocol is not None)
+        ):
             return
         self._set_status(
             version,
@@ -153,26 +198,132 @@ class AsyncWeightOptCoordinator:
         self._pending_threads.append(t)
         t.start()
 
-    def wait_all(self, timeout: Optional[float] = 600) -> None:
-        """Join all pending bg threads (called from campaign shutdown).
-
-        Preserves the previous semantics: log once when any are still alive,
-        then join each with the given timeout.
-        """
+    def wait_all(self, timeout: Optional[float] = None) -> None:
+        """Drain pending bg threads briefly, then detach/cancel terminal work."""
+        timeout = bounded_terminal_wait_timeout(timeout)
         pending = [t for t in self._pending_threads if t.is_alive()]
         if pending:
             logger.info(
-                "Waiting for %d background weight opt thread(s) to complete...",
+                "Draining %d background weight opt thread(s) before terminal shutdown "
+                "(timeout=%.2fs)...",
                 len(pending),
+                timeout,
             )
-        for t in self._pending_threads:
-            t.join(timeout=timeout)
+        deadline = time.monotonic() + timeout
+        for t in list(self._pending_threads):
+            if not t.is_alive():
+                continue
+            remaining = max(0.0, deadline - time.monotonic())
+            if remaining <= 0:
+                break
+            t.join(timeout=remaining)
         still_alive = [t for t in self._pending_threads if t.is_alive()]
         if still_alive:
             logger.warning(
-                "%d background weight opt thread(s) still running after wait timeout",
+                "%d background weight opt thread(s) still running after terminal "
+                "drain timeout; requesting cancellation",
                 len(still_alive),
             )
+            self.request_shutdown(reason="final_wait_timeout", timeout=timeout)
+            for t in still_alive:
+                t.join(timeout=POST_CANCEL_JOIN_GRACE_SEC)
+            remaining_alive = [t for t in self._pending_threads if t.is_alive()]
+            if remaining_alive:
+                self._mark_final_wait_timeout(remaining_alive, timeout=timeout)
+
+    def request_shutdown(
+        self,
+        *,
+        reason: str = "campaign_terminal_shutdown",
+        timeout: Optional[float] = None,
+    ) -> None:
+        """Request cancellation and terminate active runner subprocesses if possible."""
+        self._shutdown_requested.set()
+        self._mark_shutdown_requested(reason=reason, timeout=timeout)
+        terminated = self._terminate_active_runner_processes(reason=reason)
+        if terminated:
+            logger.warning(
+                "Terminated %d active weight opt runner subprocess(es) during %s",
+                terminated,
+                reason,
+            )
+
+    def _mark_shutdown_requested(
+        self,
+        *,
+        reason: str,
+        timeout: Optional[float],
+    ) -> None:
+        now = time.time()
+        with self._status_lock:
+            for version, run in list(self._active_status.items()):
+                if not run.get("active"):
+                    continue
+                current = dict(run)
+                current.update(
+                    {
+                        "active": True,
+                        "phase": "shutdown_requested",
+                        "shutdown_requested": True,
+                        "shutdown_reason": reason,
+                        "final_wait_timeout_sec": timeout,
+                        "last_progress_at": now,
+                    }
+                )
+                self._active_status[version] = current
+        self._publish_status()
+
+    def _terminate_active_runner_processes(self, *, reason: str) -> int:
+        protocol = getattr(self._mgr, "_experiment_protocol", None)
+        runner = getattr(protocol, "runner", None) or getattr(protocol, "_runner", None)
+        terminate = getattr(runner, "terminate_active_processes", None)
+        if not callable(terminate):
+            return 0
+        try:
+            result = terminate(reason=reason)
+        except TypeError:
+            result = terminate()
+        except Exception as exc:  # pragma: no cover - defensive shutdown path
+            logger.warning("Failed to terminate weight opt runner subprocesses: %s", exc)
+            return 0
+        try:
+            return max(0, int(result or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def _mark_final_wait_timeout(
+        self,
+        still_alive: list[threading.Thread],
+        *,
+        timeout: Optional[float],
+    ) -> None:
+        alive_versions = {
+            version
+            for version in (
+                _thread_weight_opt_version(thread.name) for thread in still_alive
+            )
+            if version is not None
+        }
+        now = time.time()
+        with self._status_lock:
+            for version, run in list(self._active_status.items()):
+                if alive_versions and version not in alive_versions:
+                    continue
+                if not run.get("active"):
+                    continue
+                current = dict(run)
+                current.update(
+                    {
+                        "active": True,
+                        "phase": "final_wait_timeout",
+                        "detached": True,
+                        "final_wait_timeout": True,
+                        "final_wait_timeout_sec": timeout,
+                        "last_progress_at": now,
+                    }
+                )
+                self._active_status[version] = current
+        self._publish_status()
 
     def run_for_promoted_champion_sync(
         self,
@@ -182,7 +333,7 @@ class AsyncWeightOptCoordinator:
         base_weight_revision: int = 0,
     ) -> None:
         """Run weight optimization inline for resource-constrained campaigns."""
-        param_cfg = self._mgr._spec.parameter_search
+        param_cfg = self._mgr._problem_runtime.spec.parameter_search
         if not (param_cfg.enabled and self._mgr._experiment_protocol is not None):
             return
         self._set_status(
@@ -226,7 +377,7 @@ class AsyncWeightOptCoordinator:
         """Background thread: run weight opt and prepare an event on success.
 
         The worker may create immutable snapshot artifacts, but campaign state
-        changes are committed later by CampaignManager on the main loop boundary.
+        changes are applied later on the campaign thread.
         """
         self._run_weight_opt_task(
             staging_path,
@@ -244,7 +395,7 @@ class AsyncWeightOptCoordinator:
         base_weight_revision: int = 0,
         mode: str = "async",
     ) -> None:
-        """Run optimization and enqueue a main-thread commit event."""
+        """Run optimization and enqueue a result for the campaign thread."""
         import os as _os
         import shutil as _shutil
         import time as _time
@@ -262,17 +413,38 @@ class AsyncWeightOptCoordinator:
         )
         t0 = _time.monotonic()
         try:
-            # Call through the manager so that test monkey-patches of
-            # ``cm._run_weight_optimization`` still take effect.
-            opt_result = self._mgr._run_weight_optimization(
+            opt_result = self.run_optimization(
                 staging_path, version, current_weights
             )
+        except WeightOptShutdownRequested:
+            logger.info("%s weight opt cancelled for champion v%d", label, version)
+            self._finish_status(version, phase="cancelled", cancelled=True)
+            return
         except Exception as exc:
-            logger.error("%s weight opt failed for champion v%d: %s", label, version, exc)
+            logger.error(
+                "%s weight opt failed for champion v%d: %s",
+                label,
+                version,
+                exc,
+            )
             self._finish_status(version, phase="failed", error=str(exc))
             return
 
         elapsed_min = (_time.monotonic() - t0) / 60.0
+
+        if self.shutdown_requested:
+            logger.info(
+                "%s weight opt discarded for champion v%d during shutdown",
+                label,
+                version,
+            )
+            self._finish_status(
+                version,
+                phase="cancelled",
+                cancelled=True,
+                elapsed_minutes=elapsed_min,
+            )
+            return
 
         if opt_result is None:
             self._finish_status(version, phase="skipped", elapsed_minutes=elapsed_min)
@@ -325,14 +497,13 @@ class AsyncWeightOptCoordinator:
             self._finish_status(version, phase="failed", error=str(exc))
             return
 
-        # Recompute hash and read updated pool
+        # Read the updated scientific operator pool.
         try:
             registry_path = _os.path.join(new_snapshot_path, "registry.yaml")
             new_pool = read_registry(registry_path)
-            new_hash = self._mgr._materializer.compute_snapshot_hash(new_snapshot_path)
         except Exception as exc:
             logger.error(
-                "%s weight opt: failed to recompute hash for champion v%d_r%d: %s",
+                "%s weight opt: failed to read registry for champion v%d_r%d: %s",
                 label, version, new_revision, exc,
             )
             self._finish_status(version, phase="failed", error=str(exc))
@@ -350,7 +521,6 @@ class AsyncWeightOptCoordinator:
             improved=True,
             new_revision=new_revision,
             snapshot_path=new_snapshot_path,
-            snapshot_hash=new_hash,
             operator_pool=new_pool,
         ))
         self._finish_status(
@@ -367,7 +537,7 @@ class AsyncWeightOptCoordinator:
             self._completed_events.append(event)
 
     # ------------------------------------------------------------------
-    # Optimization loop body (formerly CampaignManager._run_weight_optimization)
+    # Optimization loop body
     # ------------------------------------------------------------------
 
     def run_optimization(
@@ -389,7 +559,8 @@ class AsyncWeightOptCoordinator:
         from scion.parameter.evaluator import collect_baseline, evaluate_weights
         from scion.parameter.search_space import ParameterSearchSpace
 
-        param_cfg = self._mgr._spec.parameter_search
+        problem_spec = self._mgr._problem_runtime.spec
+        param_cfg = problem_spec.parameter_search
         self._set_status(version, phase="preparing_workspace")
 
         # Locate runner
@@ -399,6 +570,7 @@ class AsyncWeightOptCoordinator:
             logger.warning("No runner available for weight optimization")
             self._finish_status(version, phase="skipped", reason="missing_runner")
             return None
+        runner = _CancellableWeightOptRunner(runner, lambda: self.shutdown_requested)
 
         # Require a registry.yaml in the snapshot
         registry_path = _os.path.join(champion_snapshot, "registry.yaml")
@@ -424,12 +596,14 @@ class AsyncWeightOptCoordinator:
         if not eval_cases:
             eval_cases = list(self._mgr._split_manifest.screening)
         resolved_cases = [
-            _os.path.join(self._mgr._spec.root_dir, c) if not _os.path.isabs(c) else c
+            _os.path.join(problem_spec.root_dir, c) if not _os.path.isabs(c) else c
             for c in eval_cases
         ]
 
         seeds = list(self._mgr._seed_ledger.screening)[:param_cfg.n_eval_seeds]
-        time_limit = getattr(getattr(self._mgr._spec, 'solver', None), 'time_limit_sec', 300)
+        time_limit = getattr(
+            getattr(problem_spec, "solver", None), "time_limit_sec", 300
+        )
 
         operator_names = tuple(current_weights.keys())
         total_evaluations = 1 + param_cfg.n_initial_random + param_cfg.n_iterations

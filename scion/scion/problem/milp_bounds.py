@@ -19,7 +19,7 @@ This module provides gap computation for reporting.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping, Optional
+from typing import Mapping
 
 from scion.problem.contracts import LowerBoundEstimate
 

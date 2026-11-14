@@ -1,0 +1,41 @@
+version: "0.4-cvrp-controlled-smoke"
+
+screening:
+  n_cases_modify: 12
+  n_cases_create: 12
+  n_seeds: 1
+  expand_to_modify: 12
+  expand_to_create: 12
+
+validation:
+  n_cases: 8
+  n_seeds: 2
+  expand_to: 8
+
+frozen:
+  n_cases: 8
+  n_seeds: 2
+
+canary:
+  cases:
+    - controlled/data/synthetic_controlled_canary_5.vrp
+  seeds:
+    - 0
+
+runtime:
+  max_runtime_ratio: 2.0
+  tie_speedup_ratio: 0.75
+  tie_min_runtime_pairs: 4
+
+gates:
+  screening:
+    win_rate_min: 0.60
+    median_delta_min: "practical_delta_screen"
+  validation:
+    win_rate_min: 0.66
+    median_delta_min: "practical_delta_validate"
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 1000
+  frozen:
+    bootstrap_ci_low_min: 0.0
+    canary_required: true

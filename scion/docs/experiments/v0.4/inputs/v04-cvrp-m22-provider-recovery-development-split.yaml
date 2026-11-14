@@ -1,0 +1,25 @@
+version: 0.4-cvrp-m22-provider-recovery-development
+
+safe_data_roots:
+  - ../../../../../vrp
+
+screening:
+  - cvrplib/B/B-n57-k9.vrp
+  - cvrplib/P/P-n19-k2.vrp
+  - cvrplib/X/X-n303-k21.vrp
+  - cvrplib/A/A-n69-k9.vrp
+  - cvrplib/X/X-n139-k10.vrp
+  - cvrplib/X/X-n331-k15.vrp
+
+validation:
+  - cvrplib/X/X-n162-k11.vrp
+  - cvrplib/X/X-n204-k19.vrp
+  - cvrplib/X/X-n561-k42.vrp
+
+frozen:
+  - cvrplib/X/X-n181-k23.vrp
+  - cvrplib/X/X-n280-k17.vrp
+  - cvrplib/X/X-n701-k44.vrp
+
+canary:
+  - data/tiny_canary.json

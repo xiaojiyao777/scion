@@ -1,0 +1,16 @@
+version: 0.4-cvrp-m24-autonomous-direction-research-development
+
+screening:
+  - 4358
+  - 1868
+
+validation:
+  - 5405
+  - 4354
+
+frozen:
+  - 2959
+  - 6748
+
+canary:
+  - 6746

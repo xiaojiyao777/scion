@@ -1,0 +1,18 @@
+version: 0.4-cvrp-r11-wide-budget-autonomous
+
+screening:
+  - 100003
+  - 100019
+  - 100043
+  - 100049
+
+validation:
+  - 100057
+  - 100069
+
+frozen:
+  - 100103
+  - 100109
+
+canary:
+  - 100129

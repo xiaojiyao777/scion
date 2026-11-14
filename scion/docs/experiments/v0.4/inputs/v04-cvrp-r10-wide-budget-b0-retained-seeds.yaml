@@ -1,0 +1,11 @@
+version: 0.4-cvrp-r10-wide-budget-b0
+
+screening: []
+
+validation: []
+
+frozen:
+  - 90059
+  - 90067
+
+canary: []

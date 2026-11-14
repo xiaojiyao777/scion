@@ -1,0 +1,11 @@
+version: "warehouse-measurement-reanalysis-synthetic-v1"
+
+screening: []
+validation: []
+frozen:
+  - 42
+  - 137
+  - 271
+  - 811
+canary:
+  - 999

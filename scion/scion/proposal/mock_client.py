@@ -6,7 +6,6 @@ from typing import Any, Dict, Literal, Optional
 from scion.proposal.llm_client import (
     LLMFormatError,
     LLMTimeoutError,
-    LLMRetryExhaustedError,
 )
 
 # ---------------------------------------------------------------------------
@@ -24,14 +23,18 @@ _DEFAULT_HYPOTHESIS_RESPONSE: Dict[str, Any] = {
     "suggested_weight": 0.3,
 }
 
+_DEFAULT_LOCAL_SEARCH_SOURCE = (
+    "class LocalSearch:\n"
+    "    def execute(self, solution, rng):\n"
+    "        return solution\n\n"
+)
+
 _DEFAULT_PATCH_RESPONSE: Dict[str, Any] = {
     "file_path": "operators/local_search.py",
     "action": "modify",
-    "code_content": (
-        "class LocalSearch:\n"
-        "    def execute(self, solution, rng):\n"
-        "        return solution\n"
-    ),
+    "edit_intent": "exact_replace",
+    "old_string": "        return solution\n",
+    "new_string": "        return solution\n",
     "test_hint": "Test with small instances.",
 }
 
@@ -48,7 +51,6 @@ class MockLLMClient:
               ``"success"``       — always return a valid response.
               ``"format_error"``  — always raise :class:`LLMFormatError`.
               ``"timeout"``       — always raise :class:`LLMTimeoutError`.
-              ``"exhausted"``     — always raise :class:`LLMRetryExhaustedError`.
         hypothesis_response: Override the default hypothesis proposal JSON.
         patch_response: Override the default patch proposal JSON.
         mode_sequence: If given, cycle through modes in this order (one per call).
@@ -56,45 +58,18 @@ class MockLLMClient:
 
     def __init__(
         self,
-        mode: Literal["success", "format_error", "timeout", "exhausted"] = "success",
+        mode: Literal["success", "format_error", "timeout"] = "success",
         hypothesis_response: Optional[Dict[str, Any]] = None,
         patch_response: Optional[Dict[str, Any]] = None,
         mode_sequence: Optional[list] = None,
     ) -> None:
         self.mode = mode
         self._hypothesis_response = hypothesis_response or dict(_DEFAULT_HYPOTHESIS_RESPONSE)
-        self._patch_response = patch_response or dict(_DEFAULT_PATCH_RESPONSE)
+        self._patch_response = _normalise_patch_response_for_edit_protocol(
+            patch_response or dict(_DEFAULT_PATCH_RESPONSE)
+        )
         self._mode_sequence = list(mode_sequence) if mode_sequence else None
         self._call_count = 0
-
-    # ------------------------------------------------------------------
-    # Public API (same signature as LLMClient.call)
-    # ------------------------------------------------------------------
-
-    def call(
-        self,
-        prompt: str,
-        response_schema: Dict[str, Any],
-        model: Optional[str] = None,
-        system_blocks: "list[dict] | None" = None,
-    ) -> Dict[str, Any]:
-        """Return a canned response or raise a configured error."""
-        current_mode = self._current_mode()
-        self._call_count += 1
-
-        if current_mode == "timeout":
-            raise LLMTimeoutError("MockLLMClient: simulated timeout")
-        if current_mode == "format_error":
-            raise LLMFormatError("MockLLMClient: simulated format error")
-        if current_mode == "exhausted":
-            raise LLMRetryExhaustedError("MockLLMClient: simulated retry exhausted")
-
-        # "success" — pick response based on required fields in schema
-        return self._pick_response(response_schema)
-
-    # ------------------------------------------------------------------
-    # Tool-use variant (same behavior as call for mocks)
-    # ------------------------------------------------------------------
 
     def call_with_tool(
         self,
@@ -102,10 +77,23 @@ class MockLLMClient:
         tool: Dict[str, Any],
         model: Optional[str] = None,
         system_blocks: "list[dict] | None" = None,
+        request_kind: str | None = None,
     ) -> Dict[str, Any]:
-        """Mock version: delegates to call() using tool's input_schema."""
+        """Return one canned typed tool response or configured leaf fault."""
+        del prompt, model, system_blocks, request_kind
+        current_mode = self._current_mode()
+        self._call_count += 1
+        if current_mode == "timeout":
+            raise LLMTimeoutError("MockLLMClient: simulated timeout")
+        if current_mode == "format_error":
+            raise LLMFormatError("MockLLMClient: simulated format error")
+        tool_name = str(tool.get("name") or "")
+        if tool_name == "code_research_turn":
+            return {"action": "ready", "patch": dict(self._patch_response)}
+        if tool_name == "finalize_code_research":
+            return {"outcome": "finalize_patch"}
         schema = tool.get("input_schema", {})
-        return self.call(prompt, schema, model, system_blocks)
+        return self._pick_response(schema)
 
     # ------------------------------------------------------------------
     # Helpers
@@ -128,3 +116,22 @@ class MockLLMClient:
     @property
     def call_count(self) -> int:
         return self._call_count
+
+
+def _normalise_patch_response_for_edit_protocol(
+    patch_response: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Keep older unit fixtures compatible with the typed edit protocol."""
+
+    patch = dict(patch_response)
+    if (
+        patch.get("file_path") == "operators/local_search.py"
+        and patch.get("action") == "modify"
+        and "edit_intent" not in patch
+        and isinstance(patch.get("code_content"), str)
+    ):
+        patch.pop("code_content", None)
+        patch.setdefault("edit_intent", "exact_replace")
+        patch.setdefault("old_string", "        return solution\n")
+        patch.setdefault("new_string", "        return solution\n")
+    return patch

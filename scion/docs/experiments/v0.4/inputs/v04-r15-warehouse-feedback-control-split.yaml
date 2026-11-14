@@ -1,0 +1,10 @@
+version: r15-warehouse-feedback-control
+screening:
+  - data/instance_small_1.json
+  - data/instance_development.json
+validation:
+  - data/instance_small_3.json
+frozen:
+  - data/instance_small_4.json
+canary:
+  - data/instance_small_5.json

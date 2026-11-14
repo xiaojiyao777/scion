@@ -1,31 +1,41 @@
 """WorkspaceMaterializer: create and manage branch workspaces."""
+
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import shutil
 import stat
+import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Optional
+from typing import Iterable, Optional
 
-from scion.core.models import ChampionState, PatchProposal
-from scion.core.paths import normalize_relative_patch_path
-
-
-# Frozen file patterns that can never be written via apply_patch
-_DEFAULT_FROZEN_PATTERNS = frozenset(
-    {
-        "solver.py",
-        "vns.py",
-        "pool.py",
-        "models.py",
-        "config.py",
-        "oracle.py",
-        "greedy_init.py",
-        "operators/base.py",
-        "operators/__init__.py",
-    }
+from scion.core.models import (
+    ChampionState,
+    PatchFileChange,
+    PatchProposal,
+    patch_file_changes,
 )
+from scion.core.path_match import segment_glob_match
+from scion.core.paths import normalize_relative_patch_path
+from scion.core.research_surface_index import normalize_editable_patterns
+
+# Generic runtime has no problem-specific frozen files by default.
+_DEFAULT_FROZEN_PATTERNS = frozenset()
+logger = logging.getLogger(__name__)
+
+
+def validate_source_tree(source_tree: str, campaign_dir: str) -> Path:
+    """Resolve an ordinary source directory without copying campaign state."""
+
+    source = Path(source_tree).resolve()
+    if not source.is_dir():
+        raise ValueError(f"source tree is not a directory: {source}")
+    if Path(campaign_dir).resolve().is_relative_to(source):
+        raise ValueError("campaign output must be outside the source tree")
+    return source
 
 
 class FrozenFileError(Exception):
@@ -48,13 +58,23 @@ class WorkspaceMaterializer:
         self,
         campaign_dir: str,
         frozen_patterns: Optional[frozenset[str]] = None,
+        editable_patterns: Optional[Iterable[str]] = None,
     ) -> None:
         self._campaign_dir = Path(campaign_dir)
         self._workspaces_dir = self._campaign_dir / "workspaces"
+        self._candidate_workspaces_dir = self._campaign_dir / "candidate_workspaces"
         self._champions_dir = self._campaign_dir / "champions"
-        self._frozen_patterns = frozen_patterns or _DEFAULT_FROZEN_PATTERNS
+        self._frozen_patterns = (
+            _DEFAULT_FROZEN_PATTERNS if frozen_patterns is None else frozen_patterns
+        )
+        self._editable_patterns = (
+            None
+            if editable_patterns is None
+            else normalize_editable_patterns(editable_patterns)
+        )
 
         self._workspaces_dir.mkdir(parents=True, exist_ok=True)
+        self._candidate_workspaces_dir.mkdir(parents=True, exist_ok=True)
         self._champions_dir.mkdir(parents=True, exist_ok=True)
         self._archive_dir = self._campaign_dir / "archive"
         self._archive_dir.mkdir(parents=True, exist_ok=True)
@@ -81,16 +101,102 @@ class WorkspaceMaterializer:
             raise FileNotFoundError(f"code_base does not exist: {code_base}")
 
         dest = self._workspaces_dir / branch_id
-        if dest.exists():
-            shutil.rmtree(dest)
+        absolute_dest = Path(os.path.abspath(dest))
+        workspace_root = Path(os.path.abspath(self._workspaces_dir))
+        if absolute_dest.parent != workspace_root:
+            raise ValueError("refusing to create an invalid branch workspace")
+        if dest.is_symlink():
+            raise ValueError("refusing to replace a symlinked branch workspace")
+        complete = False
+        try:
+            if dest.exists():
+                shutil.rmtree(dest)
+            shutil.copytree(src, dest, symlinks=False)
+            # Ensure workspace is writable even if copied from a read-only champion
+            # snapshot.
+            _make_tree_writable(dest)
+            complete = True
+            return str(dest)
+        finally:
+            if not complete:
+                self._cleanup_tree_best_effort(
+                    absolute_dest,
+                    context="interrupted branch workspace",
+                )
 
-        shutil.copytree(src, dest, symlinks=False)
-        # Ensure workspace is writable even if copied from a read-only champion snapshot
-        _make_tree_writable(dest)
-        return str(dest)
+    def create_candidate_workspace(
+        self,
+        source_workspace: str,
+    ) -> str:
+        """Copy a clean branch base into an isolated candidate workspace."""
+
+        src = Path(source_workspace).resolve()
+        if not src.is_dir():
+            raise FileNotFoundError(
+                f"candidate source workspace does not exist: {source_workspace}"
+            )
+        candidate = self._fresh_candidate_workspace(prefix="candidate-")
+        complete = False
+        try:
+            shutil.copytree(src, candidate, symlinks=False, dirs_exist_ok=True)
+            _make_tree_writable(candidate)
+            complete = True
+            return str(candidate)
+        finally:
+            if not complete:
+                self._cleanup_tree_best_effort(
+                    candidate,
+                    context="interrupted candidate workspace",
+                )
+
+    def cleanup_branch_workspace(self, branch_id: str) -> None:
+        """Remove one deterministic branch destination after interrupted setup."""
+
+        dest = Path(os.path.abspath(self._workspaces_dir / branch_id))
+        workspace_root = Path(os.path.abspath(self._workspaces_dir))
+        if dest.parent != workspace_root:
+            raise ValueError("refusing to clean an invalid branch workspace")
+        self._cleanup_tree(dest)
+
+    def create_empty_candidate_workspace(self) -> str:
+        """Create an empty isolated candidate for an explicit public closure."""
+
+        return str(self._fresh_candidate_workspace(prefix="candidate-development-"))
+
+    def cleanup_candidate_workspace(self, candidate_workspace: str) -> None:
+        """Delete an isolated candidate without touching its durable base."""
+
+        candidate = self._validated_candidate_path(candidate_workspace)
+        self._cleanup_tree(candidate)
+
+    def _validated_candidate_path(self, candidate_workspace: str) -> Path:
+        candidate = Path(os.path.abspath(candidate_workspace))
+        candidate_root = Path(os.path.abspath(self._candidate_workspaces_dir))
+        if candidate.parent != candidate_root:
+            raise ValueError("refusing to clean a non-candidate workspace")
+        return candidate
+
+    def _fresh_candidate_workspace(self, *, prefix: str) -> Path:
+        candidate_root = Path(os.path.abspath(self._candidate_workspaces_dir))
+        return Path(tempfile.mkdtemp(prefix=prefix, dir=candidate_root))
+
+    @staticmethod
+    def _cleanup_tree(path: Path) -> None:
+        if path.is_symlink():
+            path.unlink()
+        elif path.exists():
+            _make_tree_writable(path)
+            shutil.rmtree(path)
+
+    @classmethod
+    def _cleanup_tree_best_effort(cls, path: Path, *, context: str) -> None:
+        try:
+            cls._cleanup_tree(path)
+        except Exception:
+            logger.exception("Failed to clean %s", context)
 
     def apply_patch(self, workspace: str, patch: PatchProposal) -> str:
-        """Write patch content into the workspace, return updated code hash.
+        """Materialize every preflighted change in an isolated workspace.
 
         The file_path in patch is treated as relative to workspace root.
 
@@ -99,42 +205,75 @@ class WorkspaceMaterializer:
             patch: PatchProposal to apply.
 
         Returns:
-            SHA-256 hex string of operators/ directory after patch.
+            SHA-256 content digest of the declared editable files after patch.
 
         Raises:
             FrozenFileError: If the patch targets a frozen file.
-            ValueError: If patch.action is 'delete' (not yet supported here).
         """
+        self.apply_ephemeral_patch(workspace, patch)
         ws = Path(workspace).resolve()
+        return self.compute_code_hash(str(ws))
 
+    def apply_ephemeral_patch(self, workspace: str, patch: PatchProposal) -> None:
+        """Apply a patch to disposable scratch without a post-apply digest."""
+
+        ws = Path(workspace).resolve()
+        if not ws.is_dir():
+            raise FileNotFoundError(f"workspace does not exist: {workspace}")
+        changes = patch_file_changes(patch)
+        self._preflight_file_changes(ws, changes)
+        for change in changes:
+            self._apply_file_change(ws, change)
+
+    def _preflight_file_changes(
+        self,
+        ws: Path,
+        changes: Iterable[PatchFileChange],
+    ) -> None:
+        seen: set[str] = set()
+        for change in changes:
+            file_rel = normalize_relative_patch_path(change.file_path)
+            if file_rel in seen:
+                raise ValueError(f"patch repeats file_path: {file_rel}")
+            seen.add(file_rel)
+            if self._is_frozen(file_rel):
+                raise FrozenFileError(
+                    f"apply_patch refused: '{change.file_path}' matches frozen patterns"
+                )
+            target = (ws / file_rel).resolve()
+            if not _is_relative_to(target, ws):
+                raise ValueError(
+                    f"patch file_path escapes workspace: {change.file_path}"
+                )
+            if change.action not in {"modify", "create", "delete"}:
+                raise ValueError(f"unsupported patch action: {change.action}")
+            if change.action != "delete" and not isinstance(
+                change.code_content,
+                str,
+            ):
+                raise TypeError(
+                    f"patch code_content must be a string: {change.file_path}"
+                )
+
+    def _apply_file_change(self, ws: Path, change: PatchFileChange) -> None:
         # Second-level frozen-file check (Contract Gate is the first)
-        file_rel = normalize_relative_patch_path(patch.file_path)
+        file_rel = normalize_relative_patch_path(change.file_path)
         if self._is_frozen(file_rel):
             raise FrozenFileError(
-                f"apply_patch refused: '{patch.file_path}' matches frozen patterns"
+                f"apply_patch refused: '{change.file_path}' matches frozen patterns"
             )
 
         target = (ws / file_rel).resolve()
         if not _is_relative_to(target, ws):
-            raise ValueError(f"patch file_path escapes workspace: {patch.file_path}")
+            raise ValueError(f"patch file_path escapes workspace: {change.file_path}")
 
-        if patch.action == "delete":
+        if change.action == "delete":
             if target.exists():
                 target.unlink()
         else:
             # "modify" or "create"
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(patch.code_content, encoding="utf-8")
-
-        # For new operator files, register them in registry.yaml so the solver picks them up
-        if (
-            patch.action == "create"
-            and file_rel.startswith("operators/")
-            and file_rel.endswith(".py")
-        ):
-            _update_registry(ws, file_rel, patch.code_content)
-
-        return self.compute_code_hash(workspace)
+            target.write_text(change.code_content, encoding="utf-8")
 
     def create_champion_snapshot(
         self,
@@ -150,20 +289,21 @@ class WorkspaceMaterializer:
         Returns:
             Absolute path to the snapshot directory.
         """
-        src = Path(champion.code_snapshot_path)
+        src = Path(champion.code_snapshot_path).resolve()
         dest = Path(target_dir) / f"champion_v{champion.version}"
-
-        if dest.exists():
-            # Make writable first so we can remove it
-            _make_tree_writable(dest)
-            shutil.rmtree(dest)
-
-        shutil.copytree(src, dest, symlinks=False)
-
-        # Make the whole tree read-only
-        _make_tree_readonly(dest)
-
-        return str(dest)
+        if dest.resolve().is_relative_to(src):
+            raise ValueError("champion snapshot must be outside the source tree")
+        if dest.exists() or dest.is_symlink():
+            raise FileExistsError(f"champion snapshot already exists: {dest}")
+        complete = False
+        try:
+            shutil.copytree(src, dest, symlinks=False)
+            _make_tree_readonly(dest)
+            complete = True
+            return str(dest.resolve())
+        finally:
+            if not complete:
+                self._cleanup_tree_best_effort(dest, context="initial champion snapshot")
 
     def cleanup(self, workspace: str) -> None:
         """Remove the workspace directory (best-effort).
@@ -178,21 +318,22 @@ class WorkspaceMaterializer:
             shutil.rmtree(ws)
 
     def archive_workspace(self, workspace: str, branch_id: str) -> str | None:
-        """Copy the operators/ directory from workspace into archive/<branch_id_short>/.
+        """Copy editable files into archive/<branch_id_short>/.
 
-        Called before cleanup on ABANDON so generated .py files are preserved
-        for post-campaign analysis.
+        Called before cleanup on ABANDON so generated research-surface files are
+        preserved for post-campaign analysis.
 
         Args:
             workspace: Absolute path to the branch workspace.
             branch_id: Branch ID used to name the archive sub-directory.
 
         Returns:
-            Absolute path to the archive directory, or None if operators/ absent.
+            Absolute path to the archive directory, or None if no editable
+            research-surface directories are present.
         """
         ws = Path(workspace)
-        ops_src = ws / "operators"
-        if not ops_src.exists():
+        files = self._editable_files(ws)
+        if not files:
             return None
 
         # Use first 8 chars of branch_id for readability
@@ -205,37 +346,21 @@ class WorkspaceMaterializer:
                 suffix += 1
             archive_dest = self._archive_dir / f"{short_id}_{suffix}"
 
-        shutil.copytree(ops_src, archive_dest, symlinks=False)
+        archive_dest.mkdir(parents=True)
+        for source in files:
+            rel = source.relative_to(ws)
+            dest = archive_dest / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, dest, follow_symlinks=False)
         import logging as _logging
+
         _logging.getLogger(__name__).info(
-            "Archived operators from branch %s → %s", branch_id, archive_dest
+            "Archived research surfaces from branch %s → %s", branch_id, archive_dest
         )
         return str(archive_dest)
 
     def compute_code_hash(self, workspace: str) -> str:
-        """Compute SHA-256 of operators/ .py files (sorted by relative path).
-
-        Args:
-            workspace: Absolute path to the workspace.
-
-        Returns:
-            Hex-encoded SHA-256 string.
-        """
-        ops_dir = Path(workspace) / "operators"
-        h = hashlib.sha256()
-
-        if ops_dir.exists():
-            py_files = sorted(ops_dir.rglob("*.py"), key=lambda p: str(p.relative_to(ops_dir)))
-            for py_file in py_files:
-                h.update(str(py_file.relative_to(ops_dir)).encode())
-                h.update(py_file.read_bytes())
-
-        return h.hexdigest()
-
-    def compute_snapshot_hash(self, workspace: str) -> str:
-        """Compute SHA-256 of operators/**/*.py + registry.yaml.
-
-        Includes registry.yaml so weight changes affect the champion hash.
+        """Compute one content digest over runnable candidate files.
 
         Args:
             workspace: Absolute path to the workspace.
@@ -244,21 +369,11 @@ class WorkspaceMaterializer:
             Hex-encoded SHA-256 string.
         """
         ws = Path(workspace)
-        h = hashlib.sha256()
-
-        ops_dir = ws / "operators"
-        if ops_dir.exists():
-            py_files = sorted(ops_dir.rglob("*.py"), key=lambda p: str(p.relative_to(ops_dir)))
-            for py_file in py_files:
-                h.update(str(py_file.relative_to(ops_dir)).encode())
-                h.update(py_file.read_bytes())
-
+        files = self._editable_files(ws)
         registry_path = ws / "registry.yaml"
-        if registry_path.exists():
-            h.update(b"registry.yaml")
-            h.update(registry_path.read_bytes())
-
-        return h.hexdigest()
+        if registry_path.is_file():
+            files.append(registry_path)
+        return _hash_files(ws, files)
 
     def create_mutable_staging(self, source_workspace: str) -> str:
         """Create a writable staging copy of source_workspace.
@@ -311,6 +426,15 @@ class WorkspaceMaterializer:
                 return True
         return False
 
+    def _editable_files(self, ws: Path) -> list[Path]:
+        if self._editable_patterns is None:
+            return []
+        return _explicit_editable_files(
+            ws,
+            patterns=self._editable_patterns,
+            is_frozen=self._is_frozen,
+        )
+
 
 # ---------------------------------------------------------------------------
 # Filesystem helpers
@@ -325,47 +449,119 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
         return False
 
 
-def _update_registry(ws: Path, file_rel: str, code_content: str) -> None:
-    """Append a new operator entry to registry.yaml in the workspace.
+def _hash_files(ws: Path, files: Iterable[Path]) -> str:
+    h = hashlib.sha256()
+    for file_path in _dedupe_sorted_paths(files, ws):
+        rel = file_path.relative_to(ws)
+        h.update(rel.as_posix().encode())
+        h.update(file_path.read_bytes())
+    return h.hexdigest()
 
-    Called by apply_patch when a new operator file is created. Skips silently
-    if registry.yaml is absent, the class cannot be detected, or the operator
-    name is already registered.
-    """
-    import re
 
-    import yaml
+def _explicit_editable_files(
+    ws: Path,
+    *,
+    patterns: Iterable[str],
+    is_frozen: Callable[[str], bool],
+) -> list[Path]:
+    files: list[Path] = []
+    resolved_ws = ws.resolve()
+    for pattern in patterns:
+        files.extend(
+            _files_for_editable_pattern(
+                ws=ws,
+                resolved_ws=resolved_ws,
+                pattern=pattern,
+                is_frozen=is_frozen,
+            )
+        )
+    return _dedupe_sorted_paths(files, ws)
 
-    registry_path = ws / "registry.yaml"
-    if not registry_path.exists():
-        return
 
-    # Extract the first class definition from the generated code
-    m = re.search(r"^class\s+(\w+)", code_content, re.MULTILINE)
-    if not m:
-        return
-    class_name = m.group(1)
+def _files_for_editable_pattern(
+    *,
+    ws: Path,
+    resolved_ws: Path,
+    pattern: str,
+    is_frozen: Callable[[str], bool],
+) -> list[Path]:
+    target = ws / pattern
+    if not _contains_glob(pattern):
+        if target.is_file():
+            return _allowed_editable_files(
+                (target,),
+                ws=ws,
+                resolved_ws=resolved_ws,
+                is_frozen=is_frozen,
+            )
+        if target.is_dir():
+            return _allowed_editable_files(
+                target.rglob("*"),
+                ws=ws,
+                resolved_ws=resolved_ws,
+                is_frozen=is_frozen,
+            )
+        return []
 
-    op_name = Path(file_rel).stem  # e.g. "smart_move_order"
+    files: list[Path] = []
+    for match in ws.glob(pattern):
+        if match.is_dir():
+            files.extend(
+                _allowed_editable_files(
+                    match.rglob("*"),
+                    ws=ws,
+                    resolved_ws=resolved_ws,
+                    is_frozen=is_frozen,
+                )
+            )
+        else:
+            files.extend(
+                _allowed_editable_files(
+                    (match,),
+                    ws=ws,
+                    resolved_ws=resolved_ws,
+                    is_frozen=is_frozen,
+                    pattern=pattern,
+                )
+            )
+    return files
 
-    with open(registry_path, encoding="utf-8") as f:
-        registry = yaml.safe_load(f) or {}
 
-    existing = {entry["name"] for entry in registry.get("operators", [])}
-    if op_name in existing:
-        return
+def _allowed_editable_files(
+    candidates: Iterable[Path],
+    *,
+    ws: Path,
+    resolved_ws: Path,
+    is_frozen: Callable[[str], bool],
+    pattern: str | None = None,
+) -> list[Path]:
+    files: list[Path] = []
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        if not _is_relative_to(candidate.resolve(), resolved_ws):
+            continue
+        rel = candidate.relative_to(ws).as_posix()
+        if pattern is not None and not segment_glob_match(rel, pattern):
+            continue
+        if is_frozen(rel):
+            continue
+        files.append(candidate)
+    return files
 
-    registry.setdefault("operators", []).append(
-        {
-            "name": op_name,
-            "file_path": file_rel,
-            "class_name": class_name,
-            "weight": 0.10,
-        }
-    )
 
-    with open(registry_path, "w", encoding="utf-8") as f:
-        yaml.dump(registry, f, default_flow_style=False, allow_unicode=True)
+def _dedupe_sorted_paths(paths: Iterable[Path], ws: Path) -> list[Path]:
+    by_rel: dict[str, Path] = {}
+    for path in paths:
+        if not path.is_file():
+            continue
+        rel = path.relative_to(ws).as_posix()
+        by_rel.setdefault(rel, path)
+    return [by_rel[rel] for rel in sorted(by_rel)]
+
+
+def _contains_glob(path: str) -> bool:
+    return any(char in path for char in "*?[")
 
 
 def _make_tree_readonly(path: Path) -> None:
@@ -373,31 +569,18 @@ def _make_tree_readonly(path: Path) -> None:
     for root, dirs, files in os.walk(path):
         for name in files + dirs:
             fp = Path(root) / name
-            try:
-                current = fp.stat().st_mode
-                fp.chmod(current & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
-            except OSError:
-                pass
-    # Also the root itself
-    try:
-        current = path.stat().st_mode
-        path.chmod(current & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
-    except OSError:
-        pass
+            current = fp.stat().st_mode
+            fp.chmod(current & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    current = path.stat().st_mode
+    path.chmod(current & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
 
 
 def _make_tree_writable(path: Path) -> None:
-    """Recursively restore write permissions so the tree can be deleted."""
+    """Add owner write permission so a tree can be changed or deleted."""
     for root, dirs, files in os.walk(path):
         for name in files + dirs:
             fp = Path(root) / name
-            try:
-                current = fp.stat().st_mode
-                fp.chmod(current | stat.S_IWUSR)
-            except OSError:
-                pass
-    try:
-        current = path.stat().st_mode
-        path.chmod(current | stat.S_IWUSR)
-    except OSError:
-        pass
+            current = fp.stat().st_mode
+            fp.chmod(current | stat.S_IWUSR)
+    current = path.stat().st_mode
+    path.chmod(current | stat.S_IWUSR)

@@ -1,4 +1,5 @@
 """Small JSON status snapshots for long-running campaigns."""
+
 from __future__ import annotations
 
 import json
@@ -6,6 +7,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
+
+from scion.core.public_refs import redact_public_refs
 
 
 class StatusReporter:
@@ -22,7 +25,10 @@ class StatusReporter:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         data = {
             "updated_at": datetime.now(timezone.utc).isoformat(),
-            **dict(payload),
+            **redact_public_refs(
+                payload,
+                base_dir=self._path.parent,
+            ),
         }
         tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
         tmp_path.write_text(

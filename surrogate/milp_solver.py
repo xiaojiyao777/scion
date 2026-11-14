@@ -390,7 +390,7 @@ def solve_exact(
         verified_solution = solution1
         verification_issues = [
             f"phase2 solution rejected ({len(issues2)} issues)",
-            *issues2[:3],
+            *issues2,
         ]
         verified_f1 = solution1.objective.subcategory_splits
         verified_f2 = solution1.objective.total_cost
@@ -400,8 +400,10 @@ def solve_exact(
         # but we still have a proven lower bound on f1 if phase 1 was optimal.
         verified_solution = None
         verification_issues = [
-            f"phase1 issues ({len(issues1)}): {issues1[:2]}",
-            f"phase2 issues ({len(issues2)}): {issues2[:2]}",
+            f"phase1 issues ({len(issues1)}):",
+            *issues1,
+            f"phase2 issues ({len(issues2)}):",
+            *issues2,
         ]
         verified_f1 = f1_star if phase1_optimal else None
         verified_f2 = None

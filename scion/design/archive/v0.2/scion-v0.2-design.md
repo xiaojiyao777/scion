@@ -21,7 +21,7 @@
 - `docs/operator-quality-analysis.md`
 - `docs/prompt-improvement-plan.md`
 - `docs/cc-prompt-engineering-analysis.md`
-- `docs/metrics-guide.md`
+- `docs/reference/metrics-guide.md`
 - `docs/campaign_summary.json`
 - `~/.openclaw/workspace/scion-v01-analysis/analysis_data.json`
 - 现有 `scion/` 源码实现

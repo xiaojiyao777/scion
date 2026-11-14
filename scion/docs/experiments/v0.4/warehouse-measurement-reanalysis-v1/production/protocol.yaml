@@ -1,0 +1,34 @@
+version: "warehouse-measurement-reanalysis-production-v1"
+
+screening:
+  n_cases_modify: 6
+  n_cases_create: 10
+  n_seeds: 2
+  expand_to_modify: 14
+  expand_to_create: 16
+
+validation:
+  n_cases: 5
+  n_seeds: 3
+  expand_to: 10
+
+frozen:
+  n_cases: 16
+  n_seeds: 4
+
+canary:
+  cases: []
+  seeds: []
+
+gates:
+  screening:
+    win_rate_min: 0.55
+    median_delta_min: "practical_delta_screen"
+  validation:
+    win_rate_min: 0.55
+    median_delta_min: "practical_delta_validate"
+    bootstrap_ci_low_min: 0.0
+    bootstrap_n: 10000
+  frozen:
+    bootstrap_ci_low_min: 0.0
+    canary_required: true

@@ -1,0 +1,541 @@
+"""Focused tests split from test_verification.py."""
+
+from .verification_test_support import *  # noqa: F401,F403
+
+class TestVerificationGateIntegration:
+    def test_no_runner_runs_static_checks_only(self):
+        gate = VerificationGate()
+        patch = _make_patch(_VALID_CODE)
+        result = gate.run("/tmp", "", patch)
+        assert result.passed is True
+        # Only V1+V2 checks (no runner, no spec)
+        check_names = [c.name for c in result.checks]
+        assert "V1_syntax" in check_names
+        assert "V2_interface" in check_names
+        # No runtime checks
+        assert "V6_feasibility" not in check_names
+
+    def test_syntax_fail_stops_early(self):
+        gate = VerificationGate()
+        patch = _make_patch(_BAD_SYNTAX)
+        result = gate.run("/tmp", "", patch)
+        assert result.passed is False
+        assert result.failure_severity == "light"
+        assert result.first_failure == "V1_syntax"
+
+    def test_interface_fail_stops_early(self, tmp_path):
+        gate = VerificationGate()
+        patch = _make_patch(_NO_EXECUTE)
+        result = gate.run(str(tmp_path), "", patch)
+        assert result.passed is False
+        assert result.failure_severity == "light"
+        assert result.first_failure == "V2_interface"
+
+    def test_with_spec_no_canary_skips_runtime(self):
+        spec = _make_spec(canary="")
+        runner = _mock_runner()
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
+        patch = _make_patch(_VALID_CODE)
+        result = gate.run("/tmp", "", patch)
+        assert result.passed is True
+        # All runtime checks should be present (but skipped/passed)
+        check_names = [c.name for c in result.checks]
+        assert "V6_feasibility" in check_names
+        assert "V7_objective" in check_names
+        assert "V8_nondeterminism" in check_names
+        assert "V9_perf_guard" not in check_names
+
+    def test_strict_runtime_checks_require_adapter_at_construction(self):
+        with pytest.raises(TypeError, match="problem adapter"):
+            VerificationGate(strict_runtime_checks=True)
+
+    def test_strict_runtime_checks_fail_without_canary(self, tmp_path):
+        spec = _make_spec(canary="")
+        runner = _mock_runner()
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+            strict_runtime_checks=True,
+        )
+        patch = _make_patch(_VALID_CODE)
+        result = gate.run(str(tmp_path), str(tmp_path), patch)
+        assert result.passed is False
+        assert result.first_failure == "V_runtime_config"
+        assert "canary_case_path" in result.checks[-1].detail
+
+    def test_strict_runtime_config_does_not_require_champion_workspace(self, tmp_path):
+        from scion.verification.gate import _validate_runtime_config
+
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_spec(canary=str(canary))
+
+        result = _validate_runtime_config(spec)
+
+        assert result is None
+
+    def test_strict_runtime_config_resolves_problem_relative_canary(self, tmp_path):
+        from scion.verification.gate import _validate_runtime_config
+
+        data_dir = tmp_path / "data"
+        data_dir.mkdir()
+        (data_dir / "small.json").write_text("{}")
+        spec = _make_spec(canary="data/small.json").model_copy(
+            update={"root_dir": str(tmp_path)}
+        )
+
+        result = _validate_runtime_config(spec)
+
+        assert result is None
+
+    def test_runner_requires_adapter_at_construction(self):
+        with pytest.raises(TypeError, match="problem adapter"):
+            VerificationGate(runner=_mock_runner())
+
+    def test_verification_does_not_run_comparative_champion_guard(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        import scion.verification.gate as gate_module
+
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        champion_ws = tmp_path / "champion"
+        champion_ws.mkdir()
+        spec = _make_spec(canary=str(canary))
+
+        def _passed_check(name: str) -> CheckResult:
+            return CheckResult(
+                name=name,
+                passed=True,
+                severity="heavy",
+                detail="ok",
+                elapsed_ms=0,
+            )
+
+        monkeypatch.setattr(
+            gate_module,
+            "check_state_mutation",
+            lambda *args, **kwargs: _passed_check("V5_solution_consistency"),
+        )
+        monkeypatch.setattr(
+            gate_module,
+            "check_feasibility",
+            lambda *args, **kwargs: _passed_check("V6_feasibility"),
+        )
+        monkeypatch.setattr(
+            gate_module,
+            "check_objective",
+            lambda *args, **kwargs: _passed_check("V7_objective"),
+        )
+        monkeypatch.setattr(
+            gate_module,
+            "check_nondeterminism",
+            lambda *args, **kwargs: _passed_check("V8_nondeterminism"),
+        )
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            if workdir == str(champion_ws):
+                return RunResult(
+                    success=False, exit_code=1, stdout="", stderr="boom",
+                    elapsed_ms=50, output=None,
+                    error_category="crash",
+                )
+            data = _solver_output_dict()
+            return RunResult(
+                success=True, exit_code=0, stdout="", stderr="",
+                elapsed_ms=100,
+                output=SolverOutput(
+                    objective=data["objective"],
+                    feasible=data["feasible"],
+                    solution_payload={
+                        key: value
+                        for key, value in data.items()
+                        if key not in {"objective", "feasible", "runtime"}
+                    },
+                ),
+                error_category=None,
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+            strict_runtime_checks=True,
+            runtime_time_limit_sec=17,
+        )
+
+        result = gate.run(str(tmp_path), str(champion_ws), _make_patch(_VALID_CODE))
+
+        assert result.passed is True
+        assert result.first_failure is None
+        assert all(
+            call.kwargs["workdir"] != str(champion_ws)
+            for call in runner.run_solver.call_args_list
+        )
+        assert "V9_perf_guard" not in [check.name for check in result.checks]
+        runtime_checks = [
+            check for check in result.checks if check.name.startswith("V")
+        ][-4:]
+        assert [
+            check.metadata["verification_time_limit_sec"]
+            for check in runtime_checks
+        ] == [17, 17, 17, 17]
+
+    def test_v9_budget_exhausting_checks_candidate_budget_not_champion_ratio(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        champion_ws = tmp_path / "champion"
+        champion_ws.mkdir()
+        spec = _make_spec(canary=str(canary))
+        object.__setattr__(
+            spec,
+            "measurement",
+            SimpleNamespace(runtime_model="budget_exhausting"),
+        )
+
+        calls = []
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            calls.append(workdir)
+            if workdir == str(champion_ws):
+                raise AssertionError("budget-exhausting V9 must not run champion")
+            return RunResult(
+                success=True,
+                exit_code=0,
+                stdout="",
+                stderr="",
+                elapsed_ms=250,
+                output=SolverOutput(
+                    objective={"total_cost": 10},
+                    feasible=True,
+                    runtime={},
+                ),
+                error_category=None,
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+
+        result = check_perf(
+            spec,
+            runner,
+            str(tmp_path),
+            str(champion_ws),
+            timeout_sec=3,
+            strict_runtime_checks=True,
+        )
+
+        assert result.passed is True
+        assert result.metadata["runtime_model"] == "budget_exhausting"
+        assert result.metadata["comparison_valid"] is False
+        assert result.metadata["budget_compliance_valid"] is True
+        assert calls == [str(tmp_path)]
+
+    def test_v9_budget_exhausting_candidate_timeout_still_fails_closed(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        champion_ws = tmp_path / "champion"
+        champion_ws.mkdir()
+        spec = _make_spec(canary=str(canary))
+        object.__setattr__(
+            spec,
+            "measurement",
+            SimpleNamespace(runtime_model="budget_exhausting"),
+        )
+
+        def run_solver(workdir, instance_path, seed, time_limit_sec, registry_path):
+            return RunResult(
+                success=False,
+                exit_code=-9,
+                stdout="",
+                stderr="timeout",
+                elapsed_ms=3000,
+                output=None,
+                error_category="timeout",
+            )
+
+        runner = MagicMock()
+        runner.run_solver.side_effect = run_solver
+
+        result = check_perf(
+            spec,
+            runner,
+            str(tmp_path),
+            str(champion_ws),
+            timeout_sec=3,
+            strict_runtime_checks=True,
+        )
+
+        assert result.passed is False
+        assert result.metadata["candidate_timeout"] is True
+        assert result.metadata["candidate_error_category"] == "timeout"
+
+    def test_public_gate_has_no_problem_spec_compatibility_input(self, tmp_path):
+        spec = _make_adapter_required_spec(str(tmp_path / "small.json"))
+
+        with pytest.raises(TypeError, match="problem_spec"):
+            VerificationGate(problem_spec=spec)
+
+    def test_selected_surface_runtime_fields_remain_diagnostics_in_adapter_mode(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_adapter_required_spec(str(canary)).model_copy(
+            update={
+                "operator_categories": ["search_policy"],
+                "research_surfaces": [
+                    {
+                        "name": "search_policy",
+                        "kind": "operator",
+                        "target_files": ["operators/*.py"],
+                        "evidence": {
+                            "required_runtime_fields": [
+                                "policy_loaded",
+                                "policy_errors",
+                            ],
+                        },
+                    }
+                ],
+            }
+        )
+        output = _solver_output_dict()
+        output["runtime"] = {
+            "policy_loaded": True,
+            "policy_errors": 0,
+        }
+        runner = _mock_runner(output_dict=output)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
+
+        result = gate.run(
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            selected_surface="search_policy",
+        )
+
+        assert result.passed is True
+        assert result.first_failure is None
+
+    def test_strict_adapter_backed_runtime_passes_toy_tsp(self, tmp_path):
+        _, adapter = _load_toy_tsp_adapter()
+        runner = _mock_runner(output_dict={"tour": list(range(10))}, elapsed_ms=100)
+        gate = VerificationGate(
+            runner=runner,
+            adapter=adapter,
+            strict_runtime_checks=True,
+        )
+
+        result = gate.run(str(tmp_path), str(tmp_path), _make_toy_tsp_patch())
+
+        assert result.passed is True
+        check_names = [c.name for c in result.checks]
+        assert "V6_feasibility" in check_names
+        assert "V7_objective" in check_names
+
+    def test_gate_uses_problem_defined_interface_signature(self, tmp_path):
+        _, adapter = _load_toy_tsp_adapter()
+        gate = VerificationGate(adapter=adapter)
+        patch = _make_patch(_VALID_CODE)
+        result = gate.run(str(tmp_path), "", patch)
+        assert result.passed is False
+        assert result.first_failure == "V2_interface"
+
+    def test_gate_forwards_hypothesis_surface_to_v2_interface(self, tmp_path):
+        gate = VerificationGate(
+            adapter=_verification_test_adapter(_make_policy_interface_spec())
+        )
+        patch = _make_patch(_VALID_CODE)
+
+        result = gate.run(
+            str(tmp_path),
+            "",
+            patch,
+            hypothesis=_make_hypothesis("search_policy"),
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V2_interface"
+        assert "is not in target files" in result.checks[-1].detail
+
+    def test_delete_patch_passes_all(self):
+        gate = VerificationGate()
+        patch = _make_patch(action="delete")
+        result = gate.run("/tmp", "", patch)
+        assert result.passed is True
+
+    def test_selected_surface_missing_runtime_field_is_not_v5_gate(self, tmp_path):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_surface_spec(
+            str(canary),
+            [
+                {
+                    "name": "search_policy",
+                    "evidence": {
+                        "required_runtime_fields": [
+                            "policy_loaded",
+                            "policy_errors",
+                        ],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(
+            output_dict={
+                **_solver_output_dict(),
+                "runtime": {"policy_loaded": True},
+            }
+        )
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
+
+        result = gate.run(
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            selected_surface="search_policy",
+        )
+
+        assert result.passed is True
+        assert result.first_failure is None
+
+    def test_unknown_selected_surface_fails_at_v2_interface(self, tmp_path):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_surface_spec(
+            str(canary),
+            [
+                {
+                    "name": "search_policy",
+                    "evidence": {
+                        "required_runtime_fields": ["policy_loaded"],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(
+            output_dict={
+                **_solver_output_dict(),
+                "runtime": {"policy_loaded": True},
+            }
+        )
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
+
+        result = gate.run(
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            selected_surface="not_declared",
+        )
+
+        assert result.passed is False
+        assert result.first_failure == "V2_interface"
+        assert "is not declared" in result.checks[-1].detail
+
+    def test_hypothesis_change_locus_selects_surface_for_runtime_contract(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_surface_spec(
+            str(canary),
+            [
+                {
+                    "name": "search_policy",
+                    "evidence": {
+                        "required_runtime_fields": [
+                            "policy_loaded",
+                            "policy_errors",
+                        ],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(
+            output_dict={
+                **_solver_output_dict(),
+                "runtime": {"policy_loaded": True},
+            }
+        )
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
+
+        result = gate.run(
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            hypothesis=_make_hypothesis("search_policy"),
+        )
+
+        assert result.passed is True
+        assert result.first_failure is None
+
+    def test_run_verification_gate_helper_forwards_hypothesis_surface(
+        self,
+        tmp_path,
+    ):
+        canary = tmp_path / "small.json"
+        canary.write_text("{}")
+        spec = _make_surface_spec(
+            str(canary),
+            [
+                {
+                    "name": "dispatch_policy",
+                    "evidence": {
+                        "required_runtime_fields": [
+                            "dispatch_executed",
+                            "dispatch_errors",
+                        ],
+                    },
+                },
+            ],
+        )
+        runner = _mock_runner(
+            output_dict={
+                **_solver_output_dict(),
+                "runtime": {
+                    "dispatch_executed": False,
+                    "dispatch_errors": 0,
+                },
+            }
+        )
+        gate = VerificationGate(
+            runner=runner,
+            adapter=_verification_test_adapter(spec),
+        )
+
+        result = run_verification_gate(
+            gate,
+            str(tmp_path),
+            str(tmp_path),
+            _make_patch(_VALID_CODE),
+            hypothesis=_make_hypothesis("dispatch_policy"),
+        )
+
+        assert result.passed is True
+        assert result.first_failure is None

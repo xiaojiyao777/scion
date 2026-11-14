@@ -1,0 +1,5 @@
+version: 0.4-cvrp-r16-probe-diagnostics-autonomous
+screening: [160001, 160009, 160019, 160031]
+validation: [160033, 160049]
+frozen: [160073, 160079]
+canary: [160081]

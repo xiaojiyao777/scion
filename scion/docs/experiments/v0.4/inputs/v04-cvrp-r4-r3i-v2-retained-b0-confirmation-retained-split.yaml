@@ -1,0 +1,21 @@
+version: 0.4-cvrp-r4-r3i-v2-retained-b0-confirmation
+
+safe_data_roots:
+  - /home/clawd/research/scion-experiment-inputs/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-20260904/data
+
+screening: []
+validation: []
+frozen:
+  - cvrplib/A/A-n64-k9.vrp
+  - cvrplib/X/X-n139-k10.vrp
+  - cvrplib/X/X-n561-k42.vrp
+  - cvrplib/B/B-n63-k10.vrp
+  - cvrplib/X/X-n261-k13.vrp
+  - cvrplib/X/X-n701-k44.vrp
+  - cvrplib/P/P-n70-k10.vrp
+  - cvrplib/tai/tai150b.vrp
+  - cvrplib/X/X-n1001-k43.vrp
+  - cvrplib/tai/tai75c.vrp
+  - cvrplib/X/X-n308-k13.vrp
+  - cvrplib/X/X-n856-k95.vrp
+canary: []

@@ -7,8 +7,6 @@ Verifies:
 - improved=False when best_score < true_baseline_score
 - improved=True only when best_score > true_baseline_score
 - observations saved to JSON file (observations_ref is valid path)
-- compute_snapshot_hash changes when registry.yaml changes
-- compute_snapshot_hash stable when nothing changes
 - mutable staging is writable
 - freeze_snapshot makes files read-only
 """
@@ -19,8 +17,7 @@ import os
 import stat
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Tuple
-from unittest.mock import MagicMock
+from typing import Dict, List
 
 import pytest
 
@@ -205,72 +202,6 @@ def test_observations_written_to_file():
         assert len(data) > 0, "observations list must not be empty"
         # First entry must be the baseline evaluation
         assert data[0]["weights"] == current
-
-
-# ---------------------------------------------------------------------------
-# T4 tests — snapshot hash
-# ---------------------------------------------------------------------------
-
-def test_snapshot_hash_changes_when_registry_changes(tmp_path):
-    """registry.yaml 权重变化后 snapshot hash 变化"""
-    campaign_dir = tmp_path / "campaign"
-    campaign_dir.mkdir()
-    materializer = WorkspaceMaterializer(str(campaign_dir))
-
-    registry_v1 = (
-        "operators:\n"
-        "  - name: op_a\n"
-        "    file_path: operators/op_a.py\n"
-        "    class_name: OpA\n"
-        "    weight: 1.0\n"
-    )
-    registry_v2 = (
-        "operators:\n"
-        "  - name: op_a\n"
-        "    file_path: operators/op_a.py\n"
-        "    class_name: OpA\n"
-        "    weight: 2.5\n"
-    )
-
-    ws1_parent = tmp_path / "ws1_parent"
-    ws1_parent.mkdir()
-    ws2_parent = tmp_path / "ws2_parent"
-    ws2_parent.mkdir()
-    ws1 = _make_workspace_with_registry(ws1_parent, registry_v1)
-    ws2 = _make_workspace_with_registry(ws2_parent, registry_v2)
-
-    hash1 = materializer.compute_snapshot_hash(ws1)
-    hash2 = materializer.compute_snapshot_hash(ws2)
-
-    assert hash1 != hash2, "snapshot hash must change when registry weights change"
-
-
-def test_snapshot_hash_stable_when_code_unchanged(tmp_path):
-    """相同代码 + 相同 registry → 相同 hash"""
-    campaign_dir = tmp_path / "campaign"
-    campaign_dir.mkdir()
-    materializer = WorkspaceMaterializer(str(campaign_dir))
-
-    registry_content = (
-        "operators:\n"
-        "  - name: op_a\n"
-        "    file_path: operators/op_a.py\n"
-        "    class_name: OpA\n"
-        "    weight: 1.0\n"
-    )
-
-    ws_a = str(tmp_path / "ws_a")
-    ws_b = str(tmp_path / "ws_b")
-    for ws in (ws_a, ws_b):
-        Path(ws).mkdir()
-        (Path(ws) / "operators").mkdir()
-        (Path(ws) / "operators" / "op_a.py").write_text("class OpA:\n    pass\n")
-        (Path(ws) / "registry.yaml").write_text(registry_content)
-
-    hash_a = materializer.compute_snapshot_hash(ws_a)
-    hash_b = materializer.compute_snapshot_hash(ws_b)
-
-    assert hash_a == hash_b, "identical code + registry must produce identical hash"
 
 
 # ---------------------------------------------------------------------------
