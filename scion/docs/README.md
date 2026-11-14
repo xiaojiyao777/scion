@@ -1,6 +1,6 @@
 # Scion Documentation Index
 
-*Last updated: 2026-09-05*
+*Last updated: 2026-11-15*
 
 The repository-level entry point is [`../../AGENTS.md`](../../AGENTS.md). This
 file is a subordinate index organized by document purpose; it does not define
@@ -23,7 +23,7 @@ it. A dated report never overrides the current handoff or current source.
 
 ## Directory Contract
 
-- `../design/`: architecture and design-source documents. v3 stays at the design root; active v0.4 design sources live under `../design/v0.4/`.
+- `../design/`: architecture and design-source documents. V3 stays at the root; active next-version drafts live under `../design/v0.5/`; v0.4 sources remain historical/problem context for the current runtime.
 - `status/`: current project state. Keep this small and current.
 - `engineering/`: code maps and agentic-proposal engineering references.
 - `planning/`: task manifests, worklogs, closeouts, and readiness plans.
@@ -43,12 +43,14 @@ it. A dated report never overrides the current handoff or current source.
 - [Current task and boundary](../TASK.md)
 - [Agent onboarding](AGENT_ONBOARDING.md)
 - [Reading profiles](READING_PROFILES.md)
-- [v0.4 current state](status/current-state.md)
+- [Current state: v0.4 stage closed, v0.5 design](status/current-state.md)
 - [v0.4 status history archive](status/v0.4-history.md)
 
 ### Design Sources
 
 - [Architecture v3](../design/scion-architecture-v3.md)
+- [Direct-runtime addendum](../design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)
+- [v0.5 detailed mechanism and acceptance](../design/v0.5/README.md)
 - [v0.4 design index](../design/v0.4/README.md)
 - [v0.4 design baseline](../design/v0.4/v0.4-design.md)
 - [Algorithm design-space upgrade](../design/v0.4/v0.4-algorithm-design-space-upgrade.md)
@@ -62,6 +64,7 @@ it. A dated report never overrides the current handoff or current source.
 
 ### Planning
 
+- [Stage review and accepted v0.4 closeout](planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md) - stage closure accepted November 15; original scientific acceptance partially met, CVRP retained improvement still open. New detailed mechanism remains a design draft.
 - [v0.4 planning index](planning/v0.4/README.md)
 
 Planning files are historical unless the current `TASK.md` explicitly adopts

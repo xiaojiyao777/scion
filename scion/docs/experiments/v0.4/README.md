@@ -1,6 +1,6 @@
 # Scion v0.4 Experiments Index
 
-*Last updated: 2026-10-28*
+*Last updated: 2026-11-15*
 
 This directory contains post-run analysis and experiment interpretation docs.
 Raw experiment outputs remain outside this documentation tree and should be
@@ -8,7 +8,10 @@ referenced, not copied into development prompts.
 
 ## Current CVRP interpretation
 
-- [R26 running, startup verified: matching diagnostic scope, non-vacuous reuse and net benefit;23 whole histories and all296 R25 cells](v04-cvrp-r26-scope-and-net-benefit-autonomous-preregistration-20261028.md)
+- [R26 terminal:324 valid pairs, nine candidates, all stage medians0; real reuse and gain-retention witnesses, no stable final advantage](v04-cvrp-r26-scope-and-net-benefit-autonomous-postrun-20261114.md)
+- [R26 frozen design and superseded startup record](v04-cvrp-r26-scope-and-net-benefit-autonomous-preregistration-20261028.md)
+- [Stage review and accepted v0.4 closeout: original scientific acceptance partially met; CVRP retained improvement remains open](../../planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md)
+- [v0.5 detailed research mechanism and acceptance design; no new experiment launched](../../../design/v0.5/README.md)
 - [R25 terminal:296 valid pairs, ten candidates, all stage medians0; stronger tests but scope/caller-witness gaps and no stable benefit](v04-cvrp-r25-counterfactual-evidence-autonomous-postrun-20261028.md)
 - [R25 frozen whole-C3 design and superseded startup](v04-cvrp-r25-counterfactual-evidence-autonomous-preregistration-20261026.md)
 - [R24 completed12/12:384 valid pairs, A2 screening pass but validation uncertainty; weakened extra-gain witness and optional reference repair](v04-cvrp-r24-stable-advantage-autonomous-postrun-20261026.md)

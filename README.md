@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Version: v0.4](https://img.shields.io/badge/version-v0.4-blue.svg)](#)
+[![Stage: v0.4 closed](https://img.shields.io/badge/stage-v0.4%20closed-blue.svg)](#)
 
 **Scion**（嫁接/分支）是一个研究项目，探索如何利用 LLM 的推理能力持续改进
 problem-owned、完整且可运行的组合优化算法对象。与传统的 LLM+进化算法方法不同，
@@ -13,6 +13,12 @@ deterministic Decision 保留必要的安全和科学边界。
 > **Agent / maintainer entry:** start with [`AGENTS.md`](AGENTS.md), then read
 > the current handoff it names. Do not infer current experiment state or
 > authority from the historical results below.
+
+**v0.4 机制阶段已收官，原科学成功验收部分达成。** Warehouse 独立保留收益已接受，
+CVRP 独立保留收益仍未确认，继续跨版本跟踪。阶段标签为 `v0.4`；下一阶段围绕
+持续算法问题、自主公开观察实验和研究材料延续展开。详见
+[收官依据](scion/docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md)与
+[v0.5 机制及验收设计](scion/design/v0.5/README.md)。v0.5 观察/材料能力尚未实施。
 
 ## 项目结构
 
@@ -253,7 +259,9 @@ PYTHONPATH=. "$SCION_PYTHON" -m scion.cli.main run --help
 - [x] **v0.1.1** — 调优：ContextManager 重写、prompt caching、subprocess 修复 ✅
 - [x] **v0.2** — 参数层搜索、FailureRouter 升级、Pro 审查整改、生产数据支持 ✅
 - [x] **v0.3** — 框架工程化、adapter/objective 泛化、production protocol、sync weight opt、完整证据 gate ✅
-- [ ] **v0.4** — direct runtime 与 CVRP package 已接入；retained-B0 改进证据仍开放
+- [x] **v0.4 机制阶段收官** — direct runtime 与跨问题研究基座；原科学成功验收部分达成
+- [ ] **CVRP 独立 retained-B0 收益** — 跨版本保留的未完成科学目标
+- [ ] **v0.5 持续算法研究** — 自主观察实验、解释修正、研究材料延续及机制对照
 - [ ] **v1.0** — warehouse + CVRP 跨问题验证、机制研究、工程化收敛
 
 ## 致谢

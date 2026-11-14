@@ -1,6 +1,6 @@
 # Scion Reading Profiles
 
-*Last updated: 2026-09-05*
+*Last updated: 2026-11-15*
 
 This is a subordinate context router. Start with the canonical repository entry
 [`../../AGENTS.md`](../../AGENTS.md), complete the current handoff it names,
@@ -73,9 +73,12 @@ Read:
    touches governance boundaries or the user asks about Scion logic.
 3. [Direct-runtime addendum](../design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)
    for the smaller current implementation.
-4. [v0.4 design index](../design/v0.4/README.md), then only a source explicitly
-   relevant to the task. The index is historical/problem-design context, not a
-   second authority.
+4. The active version design named by TASK: currently the
+   [v0.5 design index](../design/v0.5/README.md), then its mechanism and acceptance
+   drafts for continuous algorithm research. These are prospective contracts,
+   not an implemented runtime or second authority. For historical/problem
+   questions use the [v0.4 index](../design/v0.4/README.md) and only the relevant
+   source below.
 
 Task-specific historical/problem design sources:
 
@@ -88,8 +91,10 @@ Task-specific historical/problem design sources:
 - CVRP research surfaces:
   [`v0.4-cvrp-research-surface-design.md`](../design/v0.4/v0.4-cvrp-research-surface-design.md)
 
-Update design docs only when an accepted architecture contract changes. Put
-status movement in `status/current-state.md`, not in design sources.
+Write requested prospective designs with explicit draft status and authority
+differences; update accepted architecture contracts only when their changes are
+adopted. Put operating status movement in `status/current-state.md`, not in design
+sources. An accepted research direction does not itself adopt every interface.
 
 ## Profile: Code Repair Or Feature Work
 

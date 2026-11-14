@@ -1,6 +1,10 @@
 # CVRP R26: matched diagnostic scope and whole-solver net benefit
 
-State: **running; startup verified, no quality claim**.
+State: **completed / valid; no promotion**. The
+[November 14 terminal audit](v04-cvrp-r26-scope-and-net-benefit-autonomous-postrun-20261114.md)
+supersedes the startup status: completed October 29 14:30:25 Beijing,
+12 screening stages, 324 valid pairs, all stage aggregate medians zero.
+The prospective design and launch record below are preserved unchanged.
 The initial October28 request authorizes analysis, optimization and a fresh
 experiment, not Git publication or terminal resume. The subsequent Git request
 is recorded below; it does not alter the frozen launch inputs.

@@ -1,6 +1,6 @@
 # Scion v0.4 Planning Index
 
-*Last updated: 2026-08-16*
+*Last updated: 2026-11-15*
 
 [`../../../design/scion-architecture-v3.md`](../../../design/scion-architecture-v3.md)
 is the sole architecture authority. Current work lives only in
@@ -14,6 +14,13 @@ supersession.
 
 ## Current planning guidance
 
+- [November 14 stage review and v0.5 research mechanism proposal](v04-stage-review-and-v05-research-mechanism-proposal-20261114.md)
+  supports the current TASK. The sustained algorithm-question research direction
+  and section 8's v0.4 stage-closeout conditions were explicitly accepted
+  November 15. The mechanism stage is closed; original scientific acceptance is
+  partially met, and CVRP retained improvement remains unconfirmed. Concrete
+  mechanisms are now expanded in the [v0.5 design](../../../design/v0.5/README.md);
+  these drafts are not an implemented architecture or launch authorization.
 - [CVRP mechanism continuation criteria](v0.4-cvrp-mechanism-reopen-criteria-20260815.md)
   is human research-planning guidance only. It is non-production and non-gating;
   it cannot reject an H, allocate a budget, authorize a run or become a

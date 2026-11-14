@@ -1,1128 +1,205 @@
-# Scion v0.4 Continuous Solver Research
-
-*Working branch: `v0.4-dev`*
-
-*Current as of: 2026-10-28*
-
-Follow [`../AGENTS.md`](../AGENTS.md) and [`current-state.md`](docs/status/current-state.md) before acting on this board.
-
-## Goal and authority
-
-[`design/scion-architecture-v3.md`](design/scion-architecture-v3.md) is the sole
-architecture authority. The
-[`direct-runtime addendum`](design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)
-narrows the current implementation but adds no second authority lifecycle.
-Historical plans, completed checklist chronology, and experiment reports are
-evidence, not current work queues; Git preserves the superseded long task log.
-
-The project goal is retained solver improvement produced by Scion itself:
-
-- Warehouse is accepted. Synthetic Scion promoted and independently retained
-  `v1 -> v2 -> v3`; production-style Scion promoted and independently retained
-  `v1 -> v2`.
-- CVRP remains open. R3i produced a promoted development bundle, but R4 did not
-  confirm it against B0, R5 is diagnostic only, and R6 did not confirm the
-  minus-2-for-1 bundle. R7 completed autonomous development without promotion;
-  R8 did not confirm its final candidate against B0. R9 completed autonomous
-  research without promotion. R10 passed wider-budget screening against B0,
-  then stopped on incomplete shared validation evidence. R11 completed without
-  promotion, leaving a modest uncertain B-branch signal. R12 passed a narrow
-  local screen but stopped on the same shared validation construction failure.
-  R13's common-repair comparison completed valid but uncertain screening
-  (+91.5 [-36,296.75]) against B0-fixed, not unchanged B0. R14 and R15 are now
-  terminal without promotion. R15 completes the repaired validation matrix but
-  fails quality; its final fresh candidate remains an unexpanded initial signal.
-  The September 28 follow-up authorizes the proposed bounded self-test feedback
-  and real-entry/integration research support, then a fresh experiment, commit
-  and push. Scientific gates and all terminal evidence remain unchanged.
-  R16 subsequently stops at its 48-hour guard after persistent account-quota
-  failure: 7/12 stages, 86 valid pairs, completed negative validation and no
-  promotion. The October 3 follow-up now approves explicit quota-stop repair
-  and fresh R17 after verification, not resuming R16 or Git commit/push.
-  The October 4 request separately authorizes committing/pushing the preceding
-  work (`7e1fd7dc`, done), then inspection. R17 completes 12/12 stages and 178
-  valid pairs with no quota event or promotion: expanded +15.25 [1.5,82], then
-  validation -1.5 [-2933.75,824], 2/3/1. The subsequent October 4 approval
-  authorizes coordinated subagents to repair public read-only access/query
-  feedback, strengthen optional real-entry/exact-reference research support,
-  then commit/push and run fresh experiments after verification (P14 below).
-  That work is pushed; R18 completes12/12 screening stages and176 valid pairs
-  without promotion. October5 authorizes analysis, optimization and a fresh run,
-  emphasizing test reliability, real paths and stable gains (P15). No new Git
-  commit/push, host algorithm selection or terminal resume is requested.
-
-A valid negative run improves the research record but does not complete CVRP.
-v0.4 closes only when both problem packages have retained improvement under
-their declared independent evidence.
-
-## Scion boundary
-
-Scion core is problem-neutral. A problem enters through one adapter; its
-algorithm, objective, feasibility rules, research surfaces, checks, Protocol
-inputs, and telemetry meanings remain problem-owned.
-
-```text
-problem adapter + complete safe current source + optional ordered H-only history
-  -> agent-controlled bounded source/history research
-  -> one tainted structured H -> Hypothesis Contract
-  -> agent-controlled bounded code research bound to that H
-  -> one tainted structured C -> Patch Contract
-  -> isolated complete candidate workspace -> Verification
-  -> problem-owned paired Protocol -> Safe Features
-  -> deterministic Decision
-  -> exact stage reuse, deeper branch research, or promotion
-```
-
-### Creative space and deterministic boundaries
-
-- H/C are tainted and cannot author Protocol, Safe Features, Decision, scheduling,
-  branch state, or promotion. H may inspect complete safe ordinary source/history;
-  C receives its approved H and a complete path/content source map. The host does
-  not rank history or select a mechanism.
-- A live branch keeps a complete verified tree as its research head. Screening
-  `CONTINUE_EXPLORE` may deepen it; Contract/Verification failure cannot enter it.
-  Held-out stages reuse the exact candidate, and a provisional head is not champion.
-- Contract protects structure/source boundaries; Verification protects executable
-  correctness; Protocol owns paired comparative science; Safe Features are the
-  only deterministic Decision input. Telemetry prose is never another gate.
-
-### Provider/session boundary
-
-- Every deliberate turn consumes the shared cap; provider SDK retries are zero.
-  An explicit ResourceEnvelope may allow up to two charged/traced redispatches of
-  one frozen request after typed transient/rate-limit/proxy-unavailable failures.
-  Exhaustion rejects only that attempt and does not enter algorithm history.
-- Explicit usage-quota exhaustion uses the existing balance/resource terminal
-  lane, not transient retry or fresh H; ordinary rate limits remain transient.
-- Real authentication, balance, global call cap, missing terminal/typed outcome,
-  invalid initial context, and interruption remain terminal or hold outcomes.
-- Transcript total characters are unbounded by default. A started explicit local
-  limit is attempt-local; an oversized pre-dispatch H context stays resource-
-  exhausted rather than being truncated, ranked, or summarized.
-- Open-session invalid actions may be revised before export. Successful Code
-  `ready` exports the latest passing patch immediately with no second closure.
-  A terminal H/C is never repaired or partially resumed.
-
-### Explicit exclusion boundary
-
-Do not add problem mechanisms to generic core; Trust/Hash authority, identity,
-registries, leases, signing, receipts, or duplicate closure; host ranking,
-novelty/telemetry gates, response repair, hidden retry, compression, or partial
-resume; or distribution, deployment, packaging, build, root/systemd, native-spawn,
-or service work. Fresh directories, local limits, cleanup, held-out inputs, exact
-candidate reuse, and one necessary local equality check remain ordinary scientific
-or operational facts, not authority objects.
-
-## Current implementation facts
-
-- Direct V3 supports K=1/K=2 inside at most three continuous branches; K=2 is an
-  H drafting strategy, not qualification. Parking, reconstruction, S2c capsules,
-  forced routing, novelty scorers, leases, and old prepare/resume paths are absent.
-- Screening and explicit cross-campaign history are complete ordered H-only facts;
-  held-out facts never enter proposals. Workspaces are ordinary isolated trees.
-- Typed outcomes, H basis, StepRecord, history, raw metrics, and minimal lineage are
-  the evidence path. Reports, traces, and tmux carrier state are diagnostic only.
-
-- Stale reconciliation now copies the complete accepted branch tree for isolated
-  Verification and fresh screening against the new champion. It does not replay
-  patches or merge champion edits. Decision resets the comparison's expansion
-  counts; held-out stages retain exact candidate reuse.
-- CLI `--source-tree` selects the complete source value for a fresh campaign.
-  Initial source is copied into the campaign's read-only champion snapshot;
-  optional ordered H-only history remains separate from branch/stage/provider
-  state. Status reports ordinary paths for initial, champion and branch source.
-
-P1b observation cleanup is implemented:
-
-- Protocol results and summaries carry problem-declared `candidate_runtime_counters`
-  instead of seven fixed algorithm-shaped fields. Raw scalar/event observations
-  are opaque; generic no-accepted-moves inference is removed. Actual execution
-  audits and scientific gates are unchanged; held-out exposure remains filtered.
-- `OperatorConfig`, `ChampionState.operator_pool` and the legacy configuration
-  management path remain separate debt. Do not extend their assumed algorithm shape.
-
-## Scientific checkpoint
-
-### Warehouse
-
-- [synthetic continuous campaign](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-synthetic-36stage-r8-postrun-20260808.md)
-- [synthetic independent replay](docs/experiments/v0.4/v0.4-warehouse-v3-continuity-r8-heldout-replay-postrun-20260809.md)
-- [production-style campaign](docs/experiments/v0.4/v0.4-warehouse-v3-production-transfer-prod12-24stage-r1-postrun-20260809.md)
-- [production-style independent replay](docs/experiments/v0.4/v0.4-warehouse-prod12-independent-heldout-v1-postrun-20260809.md)
-
-### CVRP R3i
-
-[`R3i`](docs/experiments/v0.4/v04-cvrp-r3i-long-run-adaptive-history-postrun-20260904.md)
-completed 16 formal stages before a provider/proxy infrastructure stop. Its
-cumulative v2 passed expanded screening `+2.5 [0,10.5]`, validation
-`+1 [0,14.5]`, and frozen `+1.25 [0,6.5]`, then promoted. The bundle combines
-four changes, including inter-route 2-for-1; this is bundle-level development
-evidence, not isolated causality or retained-B0 superiority. R3i is terminal and
-must not be resumed.
-
-### CVRP R4
-
-The [R4 fixed-candidate confirmation](docs/experiments/v0.4/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-postrun-20260905.md)
-completed normally as `NOT_CONFIRMED` at expanded screening. It produced 24/24
-valid pairs, no feasibility/fleet/runtime failure, case W/L/T `1/0/5`, median
-distance delta `0`, and CI `[0,130.5]`. Protocol returned
-`SCREENING_FAIL_CASE_QUALITY`; validation, frozen, and retained evidence remained
-unexposed. Exact v2 is therefore not independently confirmed better than B0.
-
-### CVRP R5
-
-The [R5 diagnostic](docs/experiments/v0.4/v04-cvrp-r5-v2-2for1-ablation-postrun-20260905.md)
-compared exact full v2 with an ordinary complete v2 copy that differed only
-by removing `_exchange_2_for_1` from the default operator registry. It completed
-normally as `DIAGNOSTIC_COMPLETE`: 24/24 valid pairs, no safety/runtime failure,
-case W/L/T `0/2/4`, median `0`, CI `[-281.75,0]`, and essentially equal runtime.
-On this already outcome-known R4 population, inclusion was unsupported and
-compatible with harm. R5 cannot promote either arm; v2-minus-2-for-1 is only the
-next evidence-supported candidate.
-
-### CVRP R6
-
-The [R6 postrun](docs/experiments/v0.4/v04-cvrp-r6-minus-2for1-b0-postrun-20260921.md)
-records normal `NOT_CONFIRMED`: 24/24 valid pairs, no failure/fleet regression,
-case W/L/T `2/1/3`, median `0`, CI `[-258,97.75]` and unchanged
-`SCREENING_FAIL_CASE_QUALITY`. X-n351-k40 lost at every seed. Both large cases
-used their algorithm-local budget in initial VNS with zero subsequent ALNS
-iterations in both arms. This is development evidence, not mechanism causality.
-Cleanup overlapped the wall-clock-budgeted run, so performance interpretation
-is exploratory; the original negative Decision remains unchanged. Later stages
-and the final retained block stayed unopened.
-
-Exact R4–R6 artifacts are linked by
-[`current-state.md`](docs/status/current-state.md).
-
-### CVRP R7
-
-The [R7 postrun](docs/experiments/v0.4/v04-cvrp-r7-autonomous-source-continuation-postrun-20260922.md)
-records normal completion after 12 screening stages / 11 distinct evaluated
-candidates, 139 provider calls and one pre-evaluation Contract rejection.
-All 90 formal pairs were valid with no fleet regression; no promotion or
-held-out stage occurred. A positive initial screen turned negative on expansion.
-The final candidate instead ends at W/L/T 2/0/1, median +40, CI [0,608.5],
-with expansion pending at the requested-round stop. Its large-case gains occur
-with zero ALNS iterations and a highly variable unchanged comparator; only
-limited active-path medium-case evidence supports further checking. Complete
-branch source continuity is verified. R7 is terminal, not resumable.
-
-### CVRP R8
-
-The [R8 postrun](docs/experiments/v0.4/v04-cvrp-r8-r7-final-b0-postrun-20260922.md)
-records normal `NOT_CONFIRMED`: 24/24 valid, counterbalanced pairs, no failures
-or fleet regression; case W/L/T 1/1/4, median 0, CI [-159.5,71.75]. tai100a
-wins four seeds, X-n351-k40 loses three; both large cases run zero ALNS
-iterations, and X-n190-k8 only 1–3 candidate iterations. All later populations
-remain unopened. These are whole-bundle facts, not component-causal findings.
-
-### CVRP R9
-
-The [R9 postrun](docs/experiments/v0.4/v04-cvrp-r9-post-b0-autonomous-postrun-20260923.md)
-records normal completion: eight H/C candidates, 12 screening stages, 144 valid
-pairs, 92 physical calls with two recovered timeouts, no promotion/held-out
-stage. Three positive initial screens failed to establish expanded benefit.
-Final C: 2/0/4, median 0, CI [0,170.25], uncertain. Final B: 1/2/3, median 0,
-CI [-154,22.75], failed case quality. All 48 large-case pairs have zero ALNS
-iterations in both arms. Source review distinguishes ineffective count-based
-depth allocation and an unimplemented yield-controller hypothesis from actual
-algorithm changes. All final complete trees are identified; R9 is terminal.
-
-### CVRP R10
-
-The [R10 postrun](docs/experiments/v0.4/v04-cvrp-r10-wide-budget-b0-postrun-20260923.md)
-records 24 valid screening pairs, W/L/T 3/0/3, median 19.75, CI [0,179],
-SCREENING_PASS. Both large cases still have zero candidate ALNS iterations;
-one wins all four seeds by 198. Validation attempted 12 pairs but two failed
-in both arms at shared construction: `INCOMPLETE_COMPARATOR_EVIDENCE`, no
-promotion, frozen or retained execution. Validation is now operator-exposed.
-Do not remove failed pairs or feed held-out outcomes to research proposals.
-
-### CVRP R11
-
-The [R11 postrun](docs/experiments/v0.4/v04-cvrp-r11-wide-budget-autonomous-postrun-20260924.md)
-records 12 screening stages / ten candidates, 108 valid pairs, 101 provider
-calls with one recovered 502 and no promotion or held-out stage. Final B's
-expanded +10 [-1,216.75] is modest and uncertain; A's final large-case median
-is -8557, C ends negative. Both early phase handoffs are guarded above 2000
-customers and never activate on this screening population. All three final
-complete source trees are identified; throughput alone did not ensure quality.
-
-## Ordered active work
-
-### P0 — Close the completed evidence
-
-- [x] Add compact [R4](docs/experiments/v0.4/v04-cvrp-r4-r3i-v2-retained-b0-confirmation-postrun-20260905.md)
-  and [R5](docs/experiments/v0.4/v04-cvrp-r5-v2-2for1-ablation-postrun-20260905.md)
-  postrun analyses that link to exact raw artifacts.
-- [x] Preserve both external roots unchanged. Do not backfill stages, relabel R5
-  as confirmation, or turn either postrun into another closure authority.
-
-### P1 — Give the agent a durable complete algorithm workspace
-
-- [x] Design and implement the smallest problem-neutral representation of an
-  ordinary complete algorithm workspace that survives as the research value.
-- [x] Replace stale-branch accepted-patch replay with direct use of an already
-  materialized complete source tree; preserve rollback and exact held-out reuse.
-- [x] Allow an operator to select a complete source tree explicitly as the base
-  of a fresh campaign, optionally with ordinary H-only history. Do not restore
-  branch/champion/provider mutable state from a terminal campaign.
-- [x] Keep this path source-value based. Add no identity, digest authority,
-  registration, lease, receipt, signing, replay closure, or problem-specific
-  mechanism to generic core.
-- [x] Do not extend generic operator/policy/construction/portfolio taxonomy while
-  implementing continuation.
-- [x] Verify focused branch/reconcile/workspace/context tests first, then the full
-  test suite without a live provider or campaign because this touches shared
-  campaign flow.
-
-Acceptance: a live branch can deepen one complete executable algorithm for an
-arbitrarily long campaign, and a later fresh process can explicitly start from a
-selected complete tree without replaying a patch chain or pretending to resume a
-partial campaign.
-
-### P1b — Separate vocabulary cleanup
-
-- [x] In a focused slice, move existing generic operator/policy/construction/
-  portfolio meanings behind problem-owned declarations or opaque observations,
-  with focused tests and no new Decision/Protocol gate. Configuration/pool
-  interfaces are explicitly outside this observation slice.
-
-### P2 — Next CVRP evidence rung
-
-- [x] After P0 and the required P1 boundary work, preregister a direct comparison
-  of the complete v2-minus-2-for-1 candidate against original B0 on unseen cases
-  and seeds: [R6](docs/experiments/v0.4/v04-cvrp-r6-minus-2for1-b0-preregistration-20260921.md).
-- [x] Keep complete pairs, feasibility, fleet protection, practical-effect and
-  uncertainty gates. Do not weaken `SCREENING_FAIL_CASE_QUALITY` merely because
-  R4 or R5 was negative.
-- [x] Under the user's explicit continuation request, freeze code and scientific
-  inputs, complete regression/control, verify no experiment is active, and launch
-  once into a fresh root. R6 started from clean `e405bfd2`; runtime is frozen.
-- [x] Read R6's terminal and exact metric artifacts after completion, publish
-  its bounded postrun, and leave CVRP open unless retained evidence supports it.
-
-### P3 — Autonomous optimization after R6
-
-- [x] Preregister [R7](docs/experiments/v0.4/v04-cvrp-r7-autonomous-source-continuation-preregistration-20260921.md)
-  from the complete minus-2-for-1 source, with fresh campaign state, all ordered
-  H-only scientific history and the distinct R4/R5/R6 screening observations.
-- [x] Preserve existing gates and held-out isolation; declare R6 screening as
-  adaptive development. Validate the new input projection and source/history
-  continuation without prescribing a mechanism or changing generic core.
-- [x] Freeze inputs and launch R7 once under the user's analysis/optimization
-  request, with no overlapping cleanup, tests or solver job. Started at
-  `2026-09-21T23:21:02Z` from clean `ffde7f66`; runtime/inputs are frozen.
-- [x] Analyze actual H/C, verified source continuation and terminal paired
-  evidence. R7 did not promote; the final active-path tai100a signal warrants
-  one bounded prospective check, not an improvement claim or a solver rewrite.
-
-### P4 — Test the exact R7 discovery candidate against B0
-
-- [x] Preregister [R8](docs/experiments/v0.4/v04-cvrp-r8-r7-final-b0-preregistration-20260922.md)
-  using the existing counterbalanced provider-free fixed funnel, unchanged
-  complete source and scientific gates, fresh seeds, known screening cases
-  and conditionally unopened validation/frozen/retained populations.
-- [x] Verify source/scope, prospective inputs, full conditional resource matrix
-  and read-only preparation; finish focused tests before measurement.
-- [x] Launch once into a fresh output under the user's optimization request,
-  with no overlapping solver, cleanup or tests. R8 started at
-  `2026-09-22T14:45:38.550230+00:00`, driver PID 117138; R7 stays terminal.
-- [x] Analyze R8's terminal, 24 raw pairs, complete source snapshots, AB/BA
-  order and phase behavior. Preserve the negative Decision and keep CVRP open.
-
-### P5 — Autonomous research after the R8 B0 check
-
-- [x] Preregister [R9](docs/experiments/v0.4/v04-cvrp-r9-post-b0-autonomous-preregistration-20260922.md)
-  from R8's complete candidate, adding R8's distinct observation and explicit
-  unconfirmed-B0 question, with all ordered R3–R3i/R7 history and unchanged gates.
-- [x] Verify source/input/CLI/history projection and focused regressions before
-  provider or solver execution. No host-authored algorithm or generic-core change.
-- [x] Launch once into the fresh R9 root with no overlapping maintenance,
-  tests or solver. Started `2026-09-22T23:22:20.486583+00:00`, driver PID 126943.
-  Initial source snapshot and actual H input/call success are verified without
-  forcing reads; subsequent H/C and scientific outcomes remain to be analyzed.
-- [x] Analyze R9 terminal H/C, source fidelity and paired evidence. Preserve
-  negative/uncertain Decisions and all original artifacts. No local promotion
-  or B0 improvement was established.
-
-### P6 — Equal wider-budget comparison with original B0
-
-- [x] Under the user's explicit budget-widening approval, preregister
-  [R10](docs/experiments/v0.4/v04-cvrp-r10-wide-budget-b0-preregistration-20260923.md)
-  using R9's ordinary complete C candidate and original B0. Double formal
-  dimension-band solver limits for both arms; retain all science/safety gates,
-  AB/BA order, fresh seeds and held-out isolation. No host solver patch.
-- [x] Verify prospective inputs, source scope and the complete conditional
-  resource matrix; focused regressions and provider-free read-only `--check`.
-- [x] Launch once into fresh R10 output with no competing solver/tests/cleanup.
-  Started `2026-09-23T15:02:15Z`, tmux `scion-r10-wide-budget-b0-20260923`,
-  driver PID 154657. Both 100-file snapshots equal their originals; a real
-  screening arm uses 60 s on B-n34-k5 / seed 90001. Runtime, scientific inputs
-  and source values remained frozen during measurement.
-- [x] Read exact terminal and paired evidence, including whether extra time
-  actually allows ALNS on large cases. Do not infer that more time guarantees
-  useful search or pool the new contrast with R8/R9. Any retained result is
-  specific to the wider-budget regime.
-
-### P7 — Autonomous research in the wider-budget regime
-
-- [x] Preregister [R11](docs/experiments/v0.4/v04-cvrp-r11-wide-budget-autonomous-preregistration-20260923.md)
-  from R10's ordinary complete candidate, with unchanged wide budgets/gates,
-  fresh seeds, four prior observations, R10 screening-only question context
-  and all ordered R3–R3i/R7/R9 scientific history. No host-selected mechanism.
-- [x] Validate new input/projection and focused regressions: 208 passed in
-  2.75 seconds. Preserve the known unresolved validation comparator limitation;
-  neither drop the case nor leak its failure to H/C.
-- [x] Finish source/history/data/provider/no-overlap checks and launch once
-  into fresh R11 output at `2026-09-23T23:47:06Z`, driver PID 166821.
-  Initial champion equals all 100 source files; first two real H calls succeed
-  with the exact question and four-observation / 90-history index. No formal
-  result yet. Freeze runtime/inputs throughout measurement.
-- [x] Analyze actual H/C and terminal paired evidence: 108 valid pairs, no
-  promotion, final B +10 [-1,216.75], uncertain. Two phase handoffs never
-  activated because the imported threshold is 2000; no host repair/gate added.
-  Local development is not B0 retained confirmation.
-
-### P8 — Autonomous research after the R11 source/activation audit
-
-- [x] Preregister [R12](docs/experiments/v0.4/v04-cvrp-r12-post-r11-autonomous-preregistration-20260924.md)
-  from complete final B, with all R11 history, screening-only observations and
-  source-grounded threshold facts, fresh seeds and unchanged budgets/gates.
-  Do not merge siblings, prescribe an algorithm or leak held-out failure details.
-- [x] Verify inputs/projection, complete source, all 25 case inputs, ordered
-  125 raw / 102 scientific history records and focused regressions (211 passed).
-- [x] Check provider and no-overlap/fresh-output state; launch once at
-  `2026-09-24T11:48:32Z`, driver PID 195869. All 100 initial champion files
-  match; first two actual H calls succeed with the exact question and
-  four-observation / 102-history index. Freeze runtime/inputs during measurement.
-  The known validation comparator issue remains; no formal R12 result yet.
-- [x] Analyze actual H/C, terminal decisions, source fidelity and paired outcomes:
-  [R12 postrun](docs/experiments/v0.4/v04-cvrp-r12-post-r11-autonomous-postrun-20260926.md).
-  108 valid screening pairs; final A +2.25 [0,11.25] passes, then shared
-  construction blocks validation (10/12 valid). No promotion. Preserve all evidence.
-
-### P9 — Independent constructor repair and common-repair comparison
-
-- [x] User explicitly authorizes a GPT-6-Astra repair subagent and concurrent
-  remaining design, with a new experiment only after all checks pass.
-- [x] Implement minimal problem-owned bounded packing recovery and remaining-
-  time passthrough. Preserve successful greedy behavior, explicit failures,
-  original B0/candidates and all historical incomplete/negative results.
-- [x] Preregister [R13](docs/experiments/v0.4/v04-cvrp-r13-constructor-fixed-b0-preregistration-20260926.md):
-  complete R12 A plus the same repair applied to new B0-fixed; equal budgets,
-  counterbalancing, fresh seeds, unchanged gates, no sibling merge or additional
-  host performance patch. This is not autonomous discovery or unchanged-B0 proof.
-- [x] Finish independent repair review, full-solver correctness diagnostics,
-  focused regressions, complete-source comparison and read-only preparation:
-  [diagnostic](docs/experiments/v0.4/v04-cvrp-constructor-repair-diagnostic-20260926.md).
-  136 tests pass; four complete solver checks pass; both 100-file trees have
-  identical minimal repair; `--check` returns PREPARED without execution.
-- [x] Freeze runtime/sources/inputs and launch once into fresh output, without
-  overlapping tests/maintenance/solvers. Exposed validation is development;
-  unopened frozen/retained evidence remains conditional. Do not resume R12.
-  R13 started `2026-09-26T01:13:23Z`, PID 242261. Both 100-file snapshots
-  equal the declared repaired sources; actual screening uses the correct 60 s.
-  No formal result yet; only launch-status docs change after startup.
-- [x] Analyze [R13 terminal paired evidence](docs/experiments/v0.4/v04-cvrp-r13-constructor-fixed-b0-postrun-20260927.md):
-  24 valid pairs, 4/1/1, +91.5 [-36,296.75], uncertain; no later stages.
-  Preserve original evidence and the distinction between engineering repair,
-  B0-fixed comparisons and unchanged-original-B0 retained improvement.
-
-The September 26 commit/push request completed as `964a9622`; no running
-algorithm or scientific input changed. A subsequent September 27 request
-authorizes committing and pushing the frozen R13–R15 change set without
-changing the running R15 runtime or scientific inputs.
-
-### P10 — Autonomous optimization after the repaired-comparator screen
-
-- [x] Preregister [R14](docs/experiments/v0.4/v04-cvrp-r14-post-r13-autonomous-preregistration-20260927.md)
-  from R13's complete candidate snapshot, all ordered R12 history and safe
-  screening evidence, with fresh seeds and unchanged budgets/gates. H/C choose
-  algorithms; preserve adverse results and exclude private regression details.
-- [x] Verify prospective inputs, complete source/history projection and all 25
-  data cases: 225 tests pass in 3.07 seconds, 100 source files parse, 135 raw /
-  112 H-visible records and five observations project correctly. Ruff and diff
-  checks pass. Final provider/fresh-output checks precede launch.
-- [x] Freeze runtime/sources/inputs, verify provider/fresh output/no overlap and
-  launch once at `2026-09-27T02:19:53Z`, PID 267274. All 100 initial files
-  match; first actual H call succeeds with exact question and five-observation /
-  112-history indexes. No formal result yet; do not resume R13 or claim B0 proof.
-- [x] Analyze [R14 H/C, source continuity and paired evidence](docs/experiments/v0.4/v04-cvrp-r14-post-r13-autonomous-postrun-20260927.md):
-  completed 08:44:52 UTC, 108 valid pairs, ten candidates, no promotion.
-  120 successful calls, no global exhaustion; one Code abandonment. All 302
-  visible C source values and three final trees match. Opaque preflight reasons,
-  cumulative-source reasoning and hypothesis/population coverage need attention.
-  The subsequent diagnosis preserved all evidence without a runtime edit.
-
-### P11 — Repair research feedback, then a fresh autonomous experiment
-
-- [x] September 27 user explicitly authorizes coordinated subagents to repair
-  the diagnosed research-support gaps and then start another experiment.
-- [x] Add safe typed development preflight feedback and cumulative-source /
-  comparator interpretation guidance. Keep import/API rejection, test counts,
-  complete source/history, held-out isolation and all scientific gates.
-- [x] Preregister [R15](docs/experiments/v0.4/v04-cvrp-r15-feedback-repair-autonomous-preregistration-20260927.md)
-  from the same complete R12-A-fixed tree, all ordered R14 history and fresh
-  seeds. Initial five-case screening covers X190/X513; expansion still adds
-  the sixth case and requires four seeds. No host algorithm change or merge.
-- [x] Complete focused/full regressions and the independent
-  [Warehouse control](docs/experiments/v0.4/v04-r15-warehouse-feedback-control-20260927.md)
-  on the same frozen runtime, since shared research code changed. Full suite:
-  2471 passed / 1 skipped; focused repair/context/input tests and independent
-  review pass. The first control input correctly failed startup overlap checks;
-  [r2](docs/experiments/v0.4/v04-r15-warehouse-feedback-control-r2-20260927.md)
-  completes two valid negative stages, 48 successful calls, no framework blocker.
-- [x] Freeze inputs/runtime, verify no overlapping work and launch R15 once
-  at `2026-09-27T13:54:37Z`, PID 289227. All 100 source files match; first
-  actual H calls succeed with exact question, five observations, 124 history
-  entries and repaired guidance. Startup is not improved-reasoning/quality proof.
-- [x] Analyze terminal H/C, preflight feedback use, source and paired evidence:
-  [R15 postrun](docs/experiments/v0.4/v04-cvrp-r15-feedback-repair-autonomous-postrun-20260928.md).
-  136 valid pairs, 125 successful calls, no promotion; expanded +11.5 passes,
-  complete validation -39.75 fails. Final fresh initial +9 is unexpanded.
-  Source fidelity holds; three candidates target an inactive path, one real
-  implementation is incomplete behind a passing mock probe, and self-test
-  diagnostics remain opaque. No live C8/C9 event tests the new preflight hint.
-- [x] Obtain fresh authorization before implementing proposed research-support
-  improvements or launching another run. Preserve scientific gates, private
-  validation isolation and all original evidence; never resume terminal R15.
-
-### P12 — Safe self-test hints and real-entry research support
-
-- [x] September 28 user approves the proposed direction, a fresh experiment,
-  and Git commit/push. No algorithm selection or budget expansion is implied.
-- [x] Add bounded phase/exception-category/probe-line feedback without raw
-  exceptions, paths, readiness changes or private-suite exposure.
-- [x] Add optional problem-owned real-entry/real-collaborator examples and
-  interpretation guidance; no mandatory style, mock ban or new quality gate.
-- [x] Finish focused/adversarial tests and full suite (2514 passed / 1 skipped),
-  then terminal-audit the independent Warehouse control. It is valid_incomplete:
-  1/2 requested stages at the unchanged 80-call cap, one valid tie, actual safe
-  failed-probe feedback and complete generic evaluation path; no framework
-  blocker. Preserve its 35 source/schema tool errors and incomplete coverage.
-- [x] Preregister and launch fresh R16 from unchanged complete R12-A-fixed
-  algorithm source, fresh seeds and complete ordered safe H-only history.
-  Launched once 2026-09-28 15:48:59 UTC, PID 331499, runtime/inputs d67f9800.
-- [x] Verify real startup/source/context and update handoff: 100 source files,
-  exact question, 136 ordinary-history plus five observation indexes, successful
-  actual H calls. Startup is not scientific success. Implementation was
-  committed before launch; following docs-only commit/push completes the
-  user-authorized Git handoff (consult Git for the resulting tip).
-- [x] October 3 read-only [R16 postrun](docs/experiments/v0.4/v04-cvrp-r16-probe-diagnostics-autonomous-postrun-20261003.md):
-  seven complete stages / 86 valid pairs before quota outage, expanded +4.75
-  passes and complete validation fails. Fifty successful calls then 196 failed
-  dispatches; 246/600 used, no call-cap exhaustion. Outer guard stops September
-  30 at 15:49:01 UTC. Safe hints reach C; inactive sweep and mock-only probes
-  remain research limitations. Preserve original evidence; never resume R16.
-- [x] October 3 follow-up authorizes the proposed explicit-quota handling fix
-  and fresh experiment after verification. No terminal resume or Git action.
-
-### P13 — Stop explicit quota exhaustion, then fresh R17
-
-- [x] Classify explicit quota 429 as existing balance/resource exhaustion.
-  Preserve ordinary rate-limit/timeout/proxy retry, real auth, charged traces,
-  clean algorithm history and all scientific gates. No outage/recovery system.
-- [x] Focused quota/provider/client tests: 163 pass, including actual SDK error
-  shape and both H/C-to-campaign one-dispatch terminal behavior.
-- [x] Preregister [R17](docs/experiments/v0.4/v04-cvrp-r17-quota-aware-autonomous-preregistration-20261003.md)
-  from unchanged R12-A-fixed with all six R16 safe rows and fresh seeds.
-  Ten R16/R17 input/seed/closure tests pass; no private later-stage injection.
-- [x] Full suite: 2554 passed, 1 skipped in 434.47 s; read-only source/data/
-  closure/production/exact H projection pass. Real provider inference recovers.
-  Run the independent
-  [Warehouse control](docs/experiments/v0.4/v04-r17-warehouse-quota-control-20261003.md)
-  on the same frozen runtime: completed 2/2 at 13:35:48 UTC, 70 successful
-  calls, two valid negative screens, exact source continuation, no framework
-  blocker. Preserve query inefficiency and two research-rejected attempts.
-- [x] Launch fresh R17 once at 13:40:12 UTC, PID 460131. All 100 champion
-  files match, actual first H succeeds at attempt0 with the exact 10,347-character
-  question, 142 safe history rows plus five observations (147 index entries).
-  Keep source/runtime/inputs frozen; no overlapping tests/solvers/maintenance.
-- [x] October 4 [R17 terminal audit](docs/experiments/v0.4/v04-cvrp-r17-quota-aware-autonomous-postrun-20261004.md):
-  12/12 stages, 178 valid pairs, seven candidates, 69/600 successful calls,
-  zero research rejections, no promotion. Expanded screening passes 5/0/1;
-  complete validation fails 2/3/1. All 146 visible C sources and surviving
-  complete B/C heads match; full abandoned A source is unavailable. Preserve
-  operator-only validation and exact-reference/integration/oracle-test limits.
-- [x] Commit and push prior completed work before analysis: `7e1fd7dc`.
-- [x] Diagnose query inefficiency: Warehouse 28 query errors plus two editing
-  errors / 43 C turns; frozen public dependency absent from C corpus, repeated
-  invalid queries and coarse correction feedback. CVRP has only one query
-  error plus one duplicate-file edit error; not its scientific bottleneck.
-- [x] Follow-up authorized and transferred to P14: separate public dependencies from
-  editable source and improve bounded field/path feedback; test frozen-edit,
-  held-out, source-continuation boundaries and a fresh Warehouse control.
-  Strengthen optional real-entry/exact-reference probe support without a
-  prescribed algorithm, private validation hints or a new quality gate.
-  No repair or new experiment is executed in this inspection. Never resume
-  R16, R17 or their terminal controls; retained CVRP confirmation stays open.
-
-### P14 — Public research sources, actionable query feedback and exact probes
-
-- [x] October 4 user authorizes team implementation, Git commit/push and a
-  fresh experiment following the R17 report. Entry selects Code Repair profile;
-  V3/addendum and the runbook are read, Git/tmux/terminal state checked. Preserve
-  the six uncommitted R17 analysis documents and all original experiment roots.
-- [x] Expose explicitly declared public dependencies as read-only ordinary
-  source, separate from editable files, on the exact current branch base.
-  Preserve private-suite/data exclusion, frozen edits and source completeness.
-- [x] Return bounded, problem-neutral query correction feedback without raw
-  error/path leakage, command repair, new retries or increased local limits.
-- [x] Strengthen optional public real-entry and independent exact-reference
-  examples; test real collaborators and reference arithmetic without selecting
-  an algorithm, replacing the model's mechanism or adding a quality gate.
-- [x] Complete focused/adversarial checks, independent cross-review, full suite
-  and prospective input/source/history projection. Freeze runtime and inputs,
-  commit and push before new measurement.
-  Frozen runtime/inputs: `1596347c`, pushed to origin before provider dispatch.
-- [x] Run a fresh two-stage Warehouse control on that runtime; inspect actual
-  source access/feedback and complete science before CVRP. Preserve any negative
-  or incomplete result rather than resuming or silently widening its envelope.
-  Completed valid2/2,48 calls all successful; both pairs tie. Exact sources and
-  readonly protection pass; three query errors, three readonly-edit refusals and
-  three import preflight failures preserve remaining research support limits.
-- [x] Launch fresh CVRP R18 from unchanged complete R12-A-fixed source with all
-  safe R17 history, fresh seeds and unchanged Protocol/budgets. Verify actual
-  startup source/context. No private validation hints or R17 candidate merge.
-  Started once at October4 12:04:15 Beijing /04:04:15 UTC, PID480652; all100
-  source files and actual H's153 histories+five observations match.
-- [x] Latest analysis-only request: inspect ten completed R18 stages / seven
-  candidates at October4 21:05 Beijing. All142 pairs valid; no completed expanded
-  screen passes, no validation/promotion. A3 initial X351 +1712.5 with four ties;
-  round11 expansion running,21/24 pairs complete. Of77 calls,76 succeed and one
-  bounded C timeout recovers; no quota exhaustion. Source delivery/current full
-  trees and raw objective aggregation checks pass. Independent tiny exact probes
-  improve, but mistaken expectations, mocked/uncollected scheduler probes and
-  activation/generalization gaps remain. Detailed evidence is appended to the
-  existing R18 design; only analysis/status docs changed, no tests or rerun.
-- [x] Inspect R18 terminal/metrics and final H/C:12 stages,176 valid pairs,
-  no promotion. A3 expanded X351 reverses to -501.5; B3 has a materializer defect
-  and three unsuccessful draft-relative corrections. All current source/context
-  comparisons pass. Preserve terminal evidence and the five missing historical
-  full-stage source limits; do not resume or claim retained improvement.
-
-### P15 — Reliable tests real paths and stable gains
-
-- [x] October5 authorization: implement scoped research support after terminal
-  analysis, verify and start a fresh experiment. No new commit/push requested.
-- [x] Explain pytest exit5 as no tests collected with bounded optional feedback;
-  preserve inconclusive/readiness and failed exact-patch semantics. Guide collected
-  assertions and independent reference checks without new candidate gates.
-- [x] Explain revise as complete-draft replacement against the original session
-  source, not an edit over the staged draft. Regression checks rejected selectors,
-  base reads and successful complete corrected replacement; no automatic repair.
-- [x] Extend optional problem-owned rational arithmetic and multishape/seed real
-  entry examples; preserve real constructors/operators/guards and independently
-  recompute feasibility/cost. Mutation tests falsify actual stated faults.
-- [x] Preregister [R19](docs/experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-preregistration-20261005.md)
-  with four initial and six expanded seeds, unchanged gates/solver limits/caps,
-  complete R12-A-fixed source and all safe R18 history. No candidate merge or
-  private validation hints. Five new input regressions pass.
-- [x] Full regression2659 passed / one skip in453.27 seconds; Ruff/diff checks
-  pass.100 CVRP source files/25 cases, five Warehouse cases, public/formal closure
-  and exact H question/history projection pass (188 raw/165 safe rows +five
-  observations,170 entries). No output/provider/solver created by preflight.
-- [x] Freeze runtime/inputs; attempt and audit the fresh two-stage/80-call
-  [Warehouse control](docs/experiments/v0.4/v04-r19-warehouse-reliable-probes-control-20261005.md).
-  Stops October5 14:37:22 Beijing at80 calls with43 upstream overloaded-server502
-  failures; **0/2 evaluated stages**, invalid_no_evaluated_outcome.37 calls succeed,
-  no completed C candidate or scientific history/metrics. All recorded source
-  payloads and34 frozen-request retries match. No overlapping tests/solvers or
-  runtime/input edits; no extension/resume or completeness relabeling.
-- [x] After service recovery, preregister a fresh complete Warehouse control with
-  new output/seeds; inspect actual H/C/gates/science. R19 control is terminal and
-  cannot serve as completed live validation. No larger budget is authorized here.
-  October5 follow-up approves gpt-6.1-sol high after two successful bounded
-  tool probes. [Fresh Sol control](docs/experiments/v0.4/v04-r19-warehouse-reliable-probes-sol61-control-20261005.md)
-  starts once at15:42:59 Beijing, PID537412, new root and primes above240000,
-  unchanged2 stages/80 calls;22 input regressions, preflight and bounded inference
-  pass. Runtime/inputs stay frozen. CVRP's still-unexecuted invocation selects
-  the same model, pending the complete terminal audit. No proxy
-  restart, runtime/prompt change, budget expansion or new commit/push. Model
-  and P15 effects are not separately identifiable; existing evidence is preserved.
-  Interim15:59: first18 calls all succeed, but one C attempt is abandoned after
-  four prohibited-oracle-import preflight failures. No public/self-test executes;
-  control still0/2, fresh H active. Preserve this remaining research-efficiency
-  limit. Successful transport is not a completed control or authority for CVRP.
-  Terminal audit supersedes that interim: completed/valid16:36:07 Beijing,
-  2/2 negative screens,78 calls (77 successes/one recovered502), two C8-related
-  abandonments, no promotion. All48 editable/432 readonly/96 public-test C values
-  and surviving complete source trees match. Preserve import-guidance omission
-  and missing production-activation evidence; P16 addresses shared support next.
-- [x] Launch CVRP R19 once after the fresh P16 control; verify actual source, safe history,
-  successful H and resource envelope. Later inspect accepted transitions and all
-  seed patterns; startup and more samples do not demonstrate stable improvement.
-  CVRP launched October6 at17:31:21 Beijing, PID578803, after the complete
-  P16 audit below. After the first Warehouse terminal, only its unexecuted CVRP version
-  labels and a label assertion are corrected; five input tests pass. Executed
-  Warehouse inputs and runtime stay unchanged. No new Git commit/push.
-
-### P16 — Visible import rules and precise draft feedback
-
-- [x] Latest October5 approval permits scoped optimization and a fresh experiment;
-  keep gpt-6.1-sol high. No Git action, terminal resume or proxy changes.
-- [x] Expose actual effective C8 absolute roots through final direct/bounded C
-  target guidance; distinguish read-only visibility from import permission.
-  Reuse one checker policy, without extending its acceptance set.
-- [x] Add optional one-based rejected-import source_line bound to submitted
-  editable draft content. Keep raw checker/exception/private data out, failed
-  exact-patch semantics and formal Contract/Verification rules unchanged.
-- [x] Clarify optional testing interpretation: forced wiring is not ordinary
-  activation; entry counts are not completed transitions/acceptance/improvement.
-  Preserve P15 reference/real-entry support and four-/six-seed CVRP design.
-- [x] Complete full regression, fresh input/source/context and provider checks;
-  freeze runtime/inputs and launch the
-  [import-feedback control](docs/experiments/v0.4/v04-r19-warehouse-import-feedback-control-20261005.md)
-  once with fresh seeds/output and unchanged2 stages/80 calls.
-  Started once18:26:58 Beijing /10:26:58 UTC, PID543472. All406 initial source
-  files match; first two actual H calls succeed at attempt0; stored resource/C
-  limits and frozen runtime diff match. Control running0/2; startup is not science.
-- [x] Audit its terminal H/C, source, tests/corrections and paired science before
-  launching still-prospective CVRP R19 on the same runtime. Never send Warehouse
-  outcomes/recipes to CVRP or relabel regression-only paths as live coverage.
-  Completed October5 at18:41:23 Beijing, valid2/2;42 successful calls, no research
-  rejection, two quality ties. C8 lines9/17 reach C; both draft2 corrections and
-  collected probes pass. Source/full-tree and paired-metric checks pass. H2's
-  mistaken sibling-inheritance description and narrow activation evidence remain
-  research limitations, not execution/boundary blockers.
-- [x] Subsequent October5 request authorizes committing/pushing the frozen
-  P15/P16 set. Read-only launch-readiness inspection at18:31 Beijing still finds
-  the fresh control running0/2, first Code research in progress. Keep CVRP
-  unlaunched pending the complete audit; no overlapping solver or runtime edit.
-- [x] Frozen set pushed as6380a59e; October6 user asks to recheck and proceed.
-  24 input tests and final read-only preflight pass; bounded inference succeeds.
-  Launch unchanged CVRP R19 once at17:31:21 Beijing /09:31:21 UTC, PID578803.
-  All100 initial files, exact question/170 history/30 source indexes, first
-  successful actual H, model/effort and stored resource/C limits match.
-- [x] Inspect R19 terminal H/C, accepted transitions, reference reliability and
-  complete seed patterns. Valid12/12,320 pairs,105 successful calls; final
-  expanded4/0/2,+17.75 [0,5841.5], pending validation at the stage cap.
-  Eight probes pass; small real-entry and independent transition evidence is
-  stronger, but large-path acceptance/retention and sibling-grounding limits
-  remain. [Postrun](docs/experiments/v0.4/v04-cvrp-r19-reliable-probes-autonomous-postrun-20261008.md).
-
-### P17 — Independently test the exact R19 discovery
-
-- [x] October8 user authorizes inspection, analysis/optimization and another run.
-  No shared-runtime defect justifies a new implementation intervention. Preserve
-  A3 unchanged and improve measurement design: existing provider-free fixed funnel,
-  AB/BA order, fresh eight-seed expanded screening and four-seed later stages.
-- [x] Preregister [R20](docs/experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-preregistration-20261008.md)
-  against the existing B0-fixed100-file source. Candidate is the exact R19 A3
-  tree, no sibling merge; the three-file difference includes inherited research.
-  This is not R19's R12-A-fixed contrast or unchanged-original-B0 superiority.
-- [x]61 input/fixed-funnel/paired-execution tests pass; full-source Python parsing,
-  scientific data/closure and read-only fixed-driver preparation pass. No runtime,
-  algorithm, gate or per-solve limit change; no model or extra Warehouse control.
-- [x] Launch fresh R20 once after final no-overlap/output checks: October8
-  23:36:28 Beijing /15:36:28 UTC, PID652580. Both100-file snapshots equal
-  declared sources; stored resources and real seed260209/10-second canary match.
-- [x] Freeze during measurement and audit R20 terminal/every pair before research.
-  Completed October9 at03:05:39 Beijing:72 valid pairs; screening5/0/1,
-  +135.25 [1,6115.5], validation4/1/1,+1389.75 [-20.5,6526]. NOT_CONFIRMED,
-  no promotion or later stages. No resource/service/construction failure. Sources,
-  AB/BA, limits, deltas, case medians and CIs match. See the
-  [postrun](docs/experiments/v0.4/v04-cvrp-r20-r19-final-b0-fixed-postrun-20261009.md).
-  No adaptive extension; private results stay operator-only. October8 frozen work
-  was committed/pushed as3d2123e3 without changing launch runtime6380a59e.
-
-### P18 — Whole-source continuation and reliable evidence interpretation
-
-- [x] October9 user authorizes inspection, optimization and a fresh run. No new
-  shared execution defect is evidenced. Select the complete existing R19 A3/R20
-  candidate as local development baseline, not promotion or a sibling merge.
-- [x] Preregister [R21](docs/experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-preregistration-20261009.md):
-  explicit current-source frame, unchanged complete historical question and five
-  observations, all nineteen whole histories, all public R20 screening cells.
-  Distinguish independent references/real entry/completion/acceptance/retention;
-  H/C choose algorithms/tests. No private validation facts or host mechanism.
-  R20 sample counts, fresh seeds, unchanged gates/resources/model/runtime.
-- [x]171 focused regressions pass;100-file/48-Python source,25 cases, public/formal
-  closure and exact H/C projection pass. One bounded model inference succeeds.
-  Launch once October9 at20:49:38 Beijing /12:49:38 UTC, PID696534. All100
-  initial files, stored question/C limits/resources and first successful H with
-  exact182 history/30 source indexes match. No evaluated stage at startup audit.
-  Freeze runtime/scientific inputs; only lifecycle docs may change during the run.
-- [x] October9 frozen set committed/pushed as3cf85afe. October10 user requests
-  inspection, optimization and further experiments. Read-only interim audit at
-  19:58 Beijing finds R21 still running:8/12 screening stages, five evaluated
-  candidates,244 valid pairs, no promotion or held-out execution. All eight
-  aggregate medians0; gains remain sparse/unstable.46 local-proxy synthetic401
-  calls cause15 bounded operational rejections; first recovery19:51:08 Beijing,
-  followed by successful H/C and Verification; ninth screening now running
-  (attempt24).106/600 calls used.
-  Six actual C probes report passed, but test passing is not gain/retention
-  evidence. No source/input/test execution change, restart, R22 or new Git action.
-- [x] [October11 terminal audit](docs/experiments/v0.4/v04-cvrp-r21-source-grounded-autonomous-postrun-20261011.md):
-  completed12/12 screening stages, eight candidates,352 valid pairs; all aggregate
-  medians0, no validation/frozen/promotion.131/600 calls used;46 synthetic401
-  errors during the user-confirmed quota interruption caused15 operational
-  rejections, but108 post-recovery pairs completed the schedule. No hardwall/cap
-  exhaustion.814 visible C sources,74 host public-test values, ten final-H source
-  views and three final100-file heads agree. Two faulty self-tests were corrected;
-  stronger real small-path probes still do not prove large-path retained benefit.
-  Never resume R19/R20/R21 terminals, relax gates or infer original-B0 success.
-
-### P19 — Identity-preserving optional probes and independent reference sanity
-
-- [x] October11 latest user request authorizes completed-run analysis and
-  optimization. Preserve all original evidence and the earlier uncommitted
-  interim docs. No new Git commit/push or measurement invocation in this turn.
-- [x] Repair the optional public example's operator wrappers: they change
-  callable identity and bypass A1/A3's identity-sensitive cache dispatch. Scoped
-  call observation now keeps registry/functions/arguments intact, restores the
-  prior Python hook and claims entry only, not speed/completion/retention.
-  Add independently solved22→4 reference transition and wrong-reference mutation;
-  clarify identical-frontier cutoff controls and large-entry deadline limits.
-  R21's actual cache probes assert non-null maps; do not invalidate them merely
-  because the separate public example had this defect.
-- [x]118 focused regressions pass (104 support/diagnostic/dependency +14
-  provider/Contract/public solver); targeted Ruff and diff check pass. Full
-  optional sandbox example passes. Five new regressions; no full-suite claim.
-  Two collected public checks and production solver/core/prompts/gates unchanged.
-- [x] Next authorized fresh run: preregister complete source/comparator and safe
-  public R21 history, offer corrected optional examples, leave mechanisms/tests
-  to H/C, and assess the full case/seed pattern. A separate fixed confirmation
-  requires frozen source and prospective fresh seeds/order. Do not select the
-  X513-only signal, merge siblings, leak private evidence or extend terminal
-  samples. Subsequent October11 request authorizes commit first, then this rung;
-  prior seven-file set was committed as693cd4a0, not yet pushed at launch.
-  Continue under P20.
-
-### P20 — Real completed change through final solver return
-
-- [x] Preregister [R22](docs/experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-preregistration-20261011.md)
-  from the unchanged complete R21 starting champion/R19 A3, not a selected R21
-  branch. All twenty histories whole, five observations and complete historical
-  question preserved. New current frame emphasizes completion/feasibility/final
-  retention without prescribing a mechanism, test style or new gate.
-- [x] Add an optional independently rescored real-entry-to-return example, plus
-  counter-only, expired-return and lost-gain mutations. Existing collected
-  candidate checks, algorithm/core/adapter/prompts/scientific gates unchanged.
-- [x]169 focused regressions pass (122 support/boundary +47 inputs); full public
-  example passes on the selected source.100-file/48-Python source check,25 cases,
-  closure,20 whole histories/194 safe history indexes/30 source indexes, exact
-  H question and C public-example projection pass. Provider health succeeds
-  October11 10:19:42 Beijing; no concurrent run/test/solver, fresh output/session.
-- [x] Freeze all runtime/support/scientific inputs and launch once with fresh
-  seeds/output, same gpt-6.1-sol high,12 stages/600 calls/48-hour guard. Verify
-  actual startup source, input projection and first successful H; no live edits
-  or overlapping tests/solvers/maintenance. October11 10:20:35 Beijing launch,
-  PID756593;100-file saved baseline, exact saved input/resources and first H's
-  194-history/30-source projection match. Three successful H traces at startup,
-  zero evaluated stages at startup. Lifecycle docs only afterward.
-- [x] Subsequent October11 user request authorizes commit/push of the frozen R22
-  inputs/support/tests and handoff, including preceding693cd4a0. Entry Git/tmux
-  checks match the handoff; R22 carrier remains live. Documentation Maintenance
-  profile, diff inspection/check only; no running source/input edit or test/
-  solver/provider rerun. Git records the publication result.
-- [x] [R22 terminal audit](docs/experiments/v0.4/v04-cvrp-r22-retained-path-autonomous-postrun-20261018.md):
-  completed October12 05:06:41 Beijing, valid12/12 screening stages,352 pairs,
-  no promotion.148/600 calls, one recovered504; no cap exhaustion. Final C3
-  +33.5 [-.5,145],3/2/1 cases: real final improvements but adverse distribution.
-  Source delivery/final heads/raw statistics checked.704 progress rows and914
-  best updates show no observed final loss; kernel-level attribution remains
-  incomplete. B3's unused gain list and C3's mocked positive/no-gain real probe
-  do not demonstrate the desired changed-path retention.
-
-### P21 — Assert changed-path benefit, then independently test stability
-
-- [x] October18 user authorizes analysis/optimization only. Extend the optional
-  public example with identity-preserving boolean-kernel return observation,
-  independent before/after/final scoring and an actual nonempty live-gain bound.
-  Add target-bypass, claim-only, deadline, exception and hook/identity regressions;
-  retain the prior lost-final-gain mutation.245 focused tests pass. No new
-  collected candidate gate, prescribed algorithm, core change or production fix.
-- [x] Subsequent October18 user approval authorizes fresh fixed complete C3
-  versus unchanged R22 champion confirmation. Preregister
-  [R23](docs/experiments/v0.4/v04-cvrp-r23-r22-final-local-fixed-preregistration-20261018.md):
-  fresh prospective seeds, balanced AB/BA, all six screening cases, unchanged
-  gates/limits and conditional later stages. Existing provider-free fixed driver;
-  no algorithm edit, H/C, private-outcome injection, Git action or R22 resume.
-- [x]67 focused input/fixed-driver/paired-execution tests pass; complete100-file/
-  48-Python sources, actual C3 edit,37 data cases and both-arm/both-split closure
-  checks pass. Read-only --check returns PREPARED without creating output;
-  338-process/40580-nominal/50720-guarded-second envelope and24h guard match.
-  Fresh output/session, no overlap, disk and Ruff/diff checks pass. Freeze
-  runtime/support/inputs before measurement; preserve the seven preceding edits.
-- [x] Launch once October18 11:12:54 Beijing /03:12:54 UTC, PID1015424.
-  Both100-file private snapshots and stored resources match; actual canary
-  seed290183/time-limit10, then screening seed290011/time-limit60. Driver alive,
-  no terminal or quality result at startup. Only lifecycle docs afterward;
-  no concurrent tests, timed solvers, cleanup or runtime/support/input edits.
-- [x] Subsequent October18 user request authorizes commit/push of the frozen
-  R22 analysis/support and R23 inputs/tests/handoff. Documentation Maintenance
-  profile and read-only Git/diff/carrier checks match the handoff; R23 remains
-  live without a terminal. No tests, provider/solver rerun or running source/
-  input edits. Git records the publication result; launch provenance is unchanged.
-- [x] [October24 R23 terminal audit](docs/experiments/v0.4/v04-cvrp-r23-r22-final-local-fixed-postrun-20261024.md):
-  completed NOT_CONFIRMED,48 valid pairs, balanced actual order,3/2/1 cases,
-  +33.5 [-3.25,145]. No safety failure, provider/resource stop or later stage.
-  Both100-file sources match;96 progress rows/138 best updates retained.
-  Seven initial relative leads reverse because the comparator improves more;
-  no observed best-return defect. Preserve full adverse evidence and all gates.
-
-### P22 — Separate self-retention from stable comparative advantage
-
-- [x] October24 user authorizes analysis and optimization, not another launch
-  or Git action. Update optional problem-owned probe guidance with a synthetic
-  counterexample, paired effect decomposition and precise initial-checkpoint
-  semantics. Executable AST/collected candidate checks unchanged; no algorithm,
-  core, formal-input or gate edit. Preserve exact R22/R23 source/artifacts.
-- [x] Refine next research design: whole C3 continuation, all safe history and
-  complete public screening evidence, stable whole-solver final benefit under
-  equal limits. H/C choose mechanisms/tests; no case exceptions, sibling merge,
-  budget expansion or forced-path quality gate. That analysis prepared no new
-  scientific inputs; the subsequent request below authorizes them.
-- [x] Subsequent October24 request authorizes next optimization/design/launch.
-  Prepare [R24](docs/experiments/v0.4/v04-cvrp-r24-stable-advantage-autonomous-preregistration-20261024.md)
-  with21 whole histories, unchanged five observations/R22 question, complete
-  R22-final/R23 screening matrices and prospective seeds above300000. Same
-  gates/populations/limits/model/caps; no host algorithm edit or sibling merge.
-- [x] Launch R24 after source/context/data/input/support checks at October24
-  13:06:25 Beijing, tmux PID1252392. Initial100-file champion and saved inputs/
-  resources match; first H success13:06:34, exact206-history/30-source indexes
-  and current question match. Nine completed H requests succeed at startup,
-  zero errors/zero evaluated stages. Runtime/support/scientific inputs remain
-  frozen; no tests/maintenance/competing solver after launch. No Git action.
-- [x] Subsequent October24 user request authorizes commit/push of the frozen
-  R23 analysis/support and R24 inputs/tests/handoff. Documentation Maintenance
-  profile and read-only Git/diff/carrier checks match; R24 remains live at first
-  Code research/zero evaluated stages. No tests, provider/solver rerun or running
-  source/input edit. Git records the publication result; preserve launch provenance.
-- [x] [October26 R24 terminal audit](docs/experiments/v0.4/v04-cvrp-r24-stable-advantage-autonomous-postrun-20261026.md):
-  valid12/12 stages,384 pair rows/768 sides, six H/C candidates,86 successful
-  provider calls, no infrastructure/safety failure or promotion. A2 expanded
-  +12.75 [0,83.25] passes; validation+40 [-35.25,606.25] is insufficient.
-  Final B2 remains0 [-1.25,.25]. All1350 best updates are retained; no production
-  best-return repair. Preserve missing original heads as patch-fallback status,
-  not invented complete snapshots. Keep private validation evidence out of H/C.
-- [x] Address D1's weakened counterfactual claim with optional independently
-  rescored trial-set comparisons, positive/redundant/negative controls and five
-  mutation/feasibility regressions. No positive-gain requirement for exact caches,
-  no formal gate or production/core change.132 focused tests and full optional
-  example on repository/isolated C3 pass; collected candidate tests unchanged.
-- [x] Subsequent October26 request authorizes next optimization/design/launch and
-  Git publication. Prepare [R25](docs/experiments/v0.4/v04-cvrp-r25-counterfactual-evidence-autonomous-preregistration-20261026.md):
-  same complete C3,22 whole histories, all360 R24 screening cells, unchanged
-  observations/whole R24 question, no private results. Same scientific/resource
-  bounds, prospective seeds above310000; H/C choose algorithms and tests.
-- [x] Launch R25 after preflight at October26 16:03:24 UTC /October27 00:03:24
-  Beijing, tmux PID1361573. Actual100-file champion, saved input/resources and
-  first successful H question/217-history/30-source indexes match. Runtime,
-  support and science frozen; only read-only startup checks/lifecycle docs and
-  requested Git publication afterward. Git records the publication result.
-- [x] Analyze R25 after terminal evidence, separating research fidelity,
-  exact-evaluator versus added-capability claims, real-path gain and stable
-  complete-solver advantage. C3 remains the local comparator, not R23 A or B0.
-  Original-B0 retained improvement stays open; never resume terminals or pool
-  incomparable or overlapping contrasts.
-
-### P23 — Matched diagnostic scope and net whole-solver benefit
-
-- [x] October28 user authorizes analysis, optimization and a fresh experiment,
-  not Git publication. [R25 terminal audit](docs/experiments/v0.4/v04-cvrp-r25-counterfactual-evidence-autonomous-postrun-20261028.md):
-  valid12/12 screening stages, ten candidates,296 pairs,137 successful calls;
-  all aggregate medians0, no held-out/promotion. All592 progress rows/815 best
-  updates retained. Source/metric/gate audit passes; no production return repair.
-- [x] Preserve stronger real reference tests while addressing scope and claim gaps:
-  C2's multi-route oracle omits active eligibility; C3's final caller test collects
-  but does not assert cache publication/hits. Optional synthetic same-scope
-  worksheet, three regressions and non-vacuous/net-cost guidance; no gate or
-  production/core change.35 focused support tests pass in23.43seconds.
-- [x] Preregister [R26](docs/experiments/v0.4/v04-cvrp-r26-scope-and-net-benefit-autonomous-preregistration-20261028.md)
-  from unchanged complete R22 C3, all23 whole histories and all296 public R25
-  cells. Preserve whole R25 question/five observations, unchanged gates/model/
-  caps, fresh seeds above320000. H/C choose algorithms/tests, no sibling merge.
-- [x] Finish focused regression, full optional sandbox example, source/data/closure,
-  exact H/C projection and provider/fresh-output/no-overlap checks; freeze before
-  launch. Record provenance as1d9845db plus this uncommitted change set.
-  142 regressions pass in39.38seconds; full example passes repository/isolated C3,
-  collected tests unchanged.100 sources/25 cases/229 history/30 source indexes
-  and exact46,995-character question match; provider health succeeds20:32:36 Beijing.
-- [x] Launch once into fresh R26 output and verify actual source/input/resources
-  and first H. Only read-only checks/lifecycle docs after launch, no competing
-  solver/tests/maintenance or edits to scientific/runtime/support files.
-  Started October28 20:33:40 Beijing /12:33:40 UTC, PID1451899. Actual100-file
-  baseline, saved resources/input and successful first H's exact229-history/
-  30-source indexes and46,995-character question match; three H successes at
-  startup, no errors/zero evaluated stages. No Git action in that launch turn.
-- [x] Subsequent October28 user request authorizes commit/push of the frozen
-  12-file R25 analysis/support/R26 set. Documentation Maintenance profile and
-  read-only Git/diff/carrier/status checks match; R26 remains live at first
-  Code research/zero evaluated stages. No tests, provider/solver rerun or
-  runtime/support/input edit. Git records publication without changing the
-  uncommitted-at-launch provenance or the executed Protocol's older label.
-- [ ] After terminal, audit all cases/seeds and actual same-scope references,
-  real reuse/completed transitions and net final quality. No posthoc extension,
-  terminal resume, relaxed gate or original-B0 superiority claim.
-
-### v0.4 closeout
-
-- [ ] Publish a compact cross-problem report separating framework correctness,
-  research efficiency, algorithm quality, and retained improvement.
-- [ ] Mark v0.4 complete only after CVRP also satisfies retained improvement;
-  otherwise keep the exact next falsifiable rung open.
-
-## Verification snapshot
-
-- R26 prelaunch:142 focused input/support/diagnostic/dependency/Contract tests
-  pass in39.38seconds; full28,780-character optional example passes repository
-  and isolated C3, collected checks AST-unchanged. Ruff F/E9/diff/CLI help pass.
-  100 sources/48 Python/25 cases,23 whole histories/229 safe history indexes,
-  30 source indexes and all296 appended cells match. One health inference and
-  actual first-H/source/resources checks pass. No full-suite rerun claim.
-- R25 prelaunch:139 focused input/support/diagnostic/public-dependency/Contract
-  tests pass in39.08seconds. Full updated optional example passes on repository
-  and isolated C3 in the existing10-second sandbox; collected candidate checks
-  AST-unchanged. Targeted Ruff F/E9 and CLI help pass. No full-suite claim.
-- R24 prelaunch:148 focused input/support/diagnostic/dependency/Contract tests
-  pass in37.86seconds; targeted Ruff/diff and CLI help pass. Full optional
-  example passes on an isolated complete-C3 copy in the existing10-second
-  sandbox. All100 source files equal R22 C3;48 Python files parse. All25 cases
-  parse, public/formal closure and21 whole histories pass. H projection keeps
-  the exact32,048-character question,201 safe records and five observations
-  (206 history/30 source indexes); C has19 read-only and11 matching editable
-  source bodies, with no overlap/private-case leakage. No full-suite claim.
-- P22:129 focused support/diagnostic/public-dependency/Contract/R23-input tests
-  pass in36.31seconds after R23 terminal. Optional example and collected suite
-  executable AST unchanged; synthetic arithmetic, targeted Ruff/diff pass.
-  All48 R23 cells/96 sides/order/limits/statistics and both100-file sources pass
-  read-only audit. No provider call, formal solver rerun or new full-suite claim.
-- R23:67 input/fixed-driver/paired-execution regressions pass in1.24seconds;
-  source scope/AST/data/closure/read-only prep/Ruff/diff pass. One fresh fixed
-  run launched October18 11:12:54 Beijing; exact startup source/resource/real
-  canary-to-screening checks pass. No model/provider or full-suite run.
-- P21:245 focused tests pass in41.40 seconds, including27 optional-support
-  regressions. Full optional example passes on repository and unchanged R22
-  starting source within the existing10-second sandbox. Targeted Ruff/diff pass;
-  no full-suite, provider or formal-candidate rerun. Production source unchanged.
-- P16: full suite2678 passed / one skip in451.05 seconds;197 focused plus42
-  context/import checks overlap.24 R16–R19 input regressions pass; Ruff/diff,
-  source/data/public-formal closure and exact safe question/history checks pass.
-  Single gpt-6.1-sol high tool inference succeeds18:25:59 Beijing,3.524 seconds.
-  Freeze ordinary uncommitted runtime/inputs before fresh control dispatch.
-- P15 / R19 preparation:2659 passed / one skip in453.27 seconds; focused200 and92
-  groups overlap. Complete optional probe passes on both repository and selected
-  R12-A-fixed source. All preflight/source/input checks pass. After the invalid
-  service control terminates, five prospective input/label tests pass again.
-  No scientific validation of P15 benefits yet; no CVRP R19 launch or commit/push.
-- P14 / R18 prelaunch: full suite 2622 passed / one skip in 446.02 s;
-  focused groups 132 / 113 / 51 (overlapping), 17 prompt/input checks and
-  independent cross-review pass. Initial full run's two old-schema fixture
-  failures were corrected without production edits or weakened assertions;
-  the entire suite was rerun. Read-only input/source/history/public-formal
-  projection passes for both fresh designs. Pushed runtime/inputs `1596347c`:
-  Warehouse completed2/2 valid ties at12:00:17 Beijing with48 successful calls;
-  readonly/source/feedback/science audits pass with remaining C guidance and
-  repeated-query limits documented. CVRP R18 started at12:04:15 Beijing and
-  actual initial source/H inputs pass startup audit; no improvement claim yet.
-- P13 / R17: 2554 passed, 1 skipped in 434.47 s; 163 focused provider/quota
-  tests and ten R16/R17 input tests pass. Independent Warehouse completes 2/2
-  valid negative stages with 70 successful calls, correct source continuation
-  and no observed execution/scientific blocker. R17 completes 12/12, with 178
-  valid pairs and negative validation. Query context and research-test limits
-  are detailed in the October 4 postrun. Frozen runtime is now committed/pushed
-  as `7e1fd7dc`. No tests/provider/solver rerun or runtime change in this audit.
-- Branch: `v0.4-dev`. P1 and the handoff were committed as `a112e60c`;
-  P1b and prospective R6 inputs were committed as `e405bfd2` before launch.
-- P1b full suite: `2397 passed, 1 skipped, 0 failed` in 436.38 seconds, with no
-  live provider or formal campaign. The earlier P1 suite passed 2393 tests.
-  Focused P1b tests: 103 observation/evidence/boundary tests and 48 campaign/
-  held-out regression tests. Arbitrary counter values do not alter Decision.
-- Targeted Ruff (`F,E9`, excluding existing `F403,F405` star-import rules) and
-  `git diff --check` passed. Three older fixtures now separate source/output
-  directories; calibration projection tests use explicit fresh/stale dates.
-- R6 and the independent Warehouse A/A control passed read-only `--check`.
-  R6 gates/stage counts match R4; its source and data copies were compared
-  directly, and all 11 seeds are disjoint from R3–R5 ledgers.
-- [Warehouse wiring controls](docs/experiments/v0.4/v04-p1b-warehouse-aa-control-postrun-20260921.md):
-  preserve the first incomplete shared-infeasible result; the second completed
-  4/4 valid ties and deterministic `CONTINUE_EXPLORE` on the same runtime.
-- R6 completed normally at expanded screening; terminal, all 24 raw pairs,
-  case medians, feasibility/fleet equality, AB/BA order and both 100-file source
-  snapshots have been checked. Performance contamination is disclosed above.
-- R7 preparation: 143 existing focused tests plus 2 prospective-input tests
-  pass (`145 passed` in 2.39 s combined). All 24 cases parse, scientific gates match R6, source selection and
-  fresh output validate, and all prior observations project to H in order.
-  No runtime implementation changed; no new full-suite or Warehouse run needed.
-- R7 is completed without promotion. All 139 H/C traces, 12 metric files,
-  90 complete pairs and three final complete source trees were checked read-only;
-  earlier source continuation matched visible C inputs and the surviving trees.
-- R8 inputs and fixed-funnel/R7 tests passed 27 tests before launch; R8 is now
-  terminal. Both 100-file snapshots match their originals; all 48 formal arms,
-  raw deltas, case medians and 12 AB/12 BA orders have been checked read-only.
-- R9 preparation: 138 focused continuation/source-CLI/history/redteam/input/
-  fixed-funnel tests passed in 2.25 s. All 24 formal cases plus canary parse,
-  four observations project losslessly, and 101 prior rows yield 78 scientific
-  H-only records. Runtime is unchanged. R9 is now terminal; all 92 traces,
-  12 metric files / 144 pairs, final source trees and C branch continuation
-  were checked read-only. Its initial 100-file champion equals R8's candidate.
-- R10 preparation: 106 fixed-funnel/source-continuation/source-CLI/Code-session/
-  R7–R10 input tests passed in 1.83 s. Ruff F/E9 and formatting pass. Read-only
-  `--check` validates all 37 case inputs, exact three-file source difference,
-  equal doubled formal limits and the 170-subprocess maximum without creating
-  output or invoking a solver/provider. R10 subsequently launched once with
-  runtime/inputs frozen; startup source and actual solver-limit checks passed.
-  R8–R10 docs/input/test-only changes were committed and pushed as `841de42b`
-  before R10 postrun analysis and R11 preparation. No implementation changed.
-- R11 preparation: 208 focused tests passed in 2.75 s; all 25 case inputs
-  parse, 113 ordered prior rows yield 90 H-visible records, and the four
-  observations/new question project correctly. Startup source and actual H
-  contexts are checked. R11 is now terminal; all 108 raw pairs, 101 traces,
-  284 visible C source entries and three final 100-file trees were checked.
-- R12 preparation: 211 focused tests passed in 2.81 s; all 25 case inputs
-  parse, 125 ordered rows yield 102 scientific H-visible records; the question,
-  four unchanged observations and held-out exclusion checks pass. Ruff F/E9,
-  formatting, CLI help and diff checks pass. Startup source/actual H contexts
-  are verified. New R10–R12 analysis/preparation work was uncommitted at launch.
-- R13 independent repair: 136 CVRP/fixed-funnel/input tests passed in 71.21 s;
-  four complete-solver checks on the exposed failing case pass active-algorithm,
-  zero-error, coverage/capacity/fleet and independent objective/runtime-audit
-  checks. Both 100-file copies have the identical minimal four-file repair;
-  all 37 inputs and the unchanged 170-subprocess envelope pass `--check`.
-  No source/Protocol/Decision gates weakened. R13 launched once; startup source
-  and actual solver-limit checks pass. Code/inputs are frozen for measurement.
-- R4 and R5 tmux panes are dead with exit status zero; their terminal JSON files
-  report `NOT_CONFIRMED` and `DIAGNOSTIC_COMPLETE`, respectively.
-
-Documentation does not replace code verification. Use
-`/home/clawd/miniconda3/envs/claw/bin/python` for later focused/full tests, with
-`PYTHONPATH=scion:.` from the repository root so imports use this checkout.
-
-## Working discipline
-
-Latest R14 preparation: 225 focused tests passed in 3.07 seconds, Ruff F/E9,
-formatting/CLI/diff checks pass; all 25 cases parse and source/input/history
-projection checks pass. No core/adapter/algorithm implementation changed.
-R14 is terminal without promotion. The subsequent user explicitly authorized
-team repair and a fresh experiment; P11 records that scope. R15 read-only
-preparation passes (100 source files, 25 cases, 147 raw / 124 H-visible rows,
-five observations). Shared-runtime repair verification/control is complete:
-2471 passed / 1 skipped, independent Warehouse r2 valid negative, no framework
-blocker. Its first input startup failure is preserved; input-only correction
-has seven passing regressions. R15 started at 13:54:37 UTC, PID 289227;
-source and actual H startup checks pass. Runtime/inputs are frozen. Work
-was uncommitted at launch; the subsequent September 27 user request authorizes
-committing and pushing this frozen change set. Git records the resulting
-revision; the launch-time checkout description remains historical evidence.
-The set was committed/pushed as `f73e89e7`. R15 subsequently completed at
-22:04:54 UTC without promotion. September 28 analysis checks all 136 raw pairs,
-125 traces, 374 visible C source values and three final complete trees; no
-solver/provider/test rerun or runtime/input mutation. P11 and its postrun
-record the remaining research issues. The subsequent user approval authorizes
-P12 implementation, fresh control/CVRP experiments, commit and push.
-
-- Read V3 before changing runtime ownership; prefer subtraction and ordinary
-  values over registries, identities, gates, manifests, or proof lifecycles.
-- Keep problem semantics in problem packages and generic research capability in
-  Scion core.
-- Use fresh experiment roots and never overwrite, resume, or rewrite terminal
-  evidence.
-- Freeze code and scientific inputs before spending provider/solver budget.
-- Distinguish framework correctness, process health, scientific validity, and
-  algorithm improvement. None implies the next.
-- Never infer promotion from a positive screen, interrupted run, diagnostic
-  ablation, natural-language summary, or reconstructed candidate.
+# Scion v0.5 Continuous Algorithm Research Design
+
+*Working branch: `v0.4-dev` · Current as of: 2026-11-15*
+
+Follow [`../AGENTS.md`](../AGENTS.md) and
+[`current-state.md`](docs/status/current-state.md) before acting.
+[Architecture V3](design/scion-architecture-v3.md) is the sole architecture
+source; the [direct-runtime addendum](design/scion-architecture-v3-v0.4-direct-runtime-addendum.md)
+describes current implementation. The
+[stage review](docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md)
+records the accepted v0.4 stage closeout and its evidence. The
+[v0.5 design](design/v0.5/README.md) specifies the next mechanism and acceptance
+draft; it is not an implemented runtime or second architecture authority.
+
+## Objective and priority
+
+Scion should enable its own agent to conduct sustained combinatorial algorithm
+research and produce independently retained complete-solver improvements.
+This includes acquiring evidence, testing explanations, revising conclusions and
+continuing research; formal acceptance remains deterministic and independent.
+
+The November 14 user request prioritizes a stage retrospective and deep mechanism
+review over continuing the support-patch / experiment / analysis cycle. On
+November 15 the user explicitly accepts this direction:
+
+> 让 agent 围绕一个持续的算法问题，自主观察、实验、修正解释，再提交正式 H/C。
+
+The November 15 requests accept the stage-closeout standard, retain the CVRP
+scientific objective and begin detailed v0.5 mechanism/acceptance design. The
+latest request explicitly authorizes committing the documentation, tagging
+`v0.4`, integrating into the default branch and pushing, then entering v0.5.
+The remote default is `master` (there is no `main` or `mian`); the next development
+branch is `codex/v0.5-dev`. The specific interfaces remain a design draft.
+This Git handoff does not launch R27 or change runtime/scientific inputs.
+
+Keep two statuses separate:
+
+- **Scientific objective:** Warehouse retained improvement is accepted; CVRP
+  retained improvement remains unconfirmed. Original v0.4 scientific acceptance
+  is not complete or relabeled as passed.
+- **Framework evolution:** assess the current mechanism and design the next
+  version without waiting indefinitely for a positive CVRP result. v0.5 must
+  represent a reviewable capability change and evaluation, not a claim that
+  the old unmet target has been satisfied.
+
+## Accepted v0.4 stage closeout
+
+The milestone accepted from section 8 of the
+[stage review](docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md)
+is a cross-problem research foundation demonstrated through substantive algorithm
+work, continuous verified source, trustworthy scientific decisions and an explicit
+account of its effectiveness and limits. It has five evidence conditions:
+generic trusted execution; real sustained algorithm work; resolved scientific
+outcome reporting; usable source/input/evidence handoff; and a distinct testable
+next-version question. The evidence mapping is kept in that report.
+
+**v0.4 mechanism stage is closed; original scientific success acceptance is
+partially met.** Warehouse retained improvement is accepted; CVRP retained
+improvement is unconfirmed and carried forward. The user explicitly accepted
+this stage decision; the original scientific criterion has not been rewritten.
+No further R27 is required for closure. v0.5 is in detailed design, not implemented
+or empirically accepted. The annotated `v0.4` tag records the mechanism-stage
+closeout and the unmet CVRP goal. Integration and the new development branch do
+not themselves change the existing v0.4 direct-v3 runtime.
+
+## Completed stage review
+
+- [x] Read canonical entry, V3/addendum and relevant design/source evidence;
+  verify live checkout and carrier state.
+- [x] Audit [R26 terminal evidence](docs/experiments/v0.4/v04-cvrp-r26-scope-and-net-benefit-autonomous-postrun-20261114.md):
+  completed October 29 14:30:25 Beijing, 12 screening stages, nine evaluated
+  candidates, 324 valid pairs, 162 successful calls, no held-out/promotion.
+  All aggregate stage medians are zero; preserve one additional Code abandonment.
+- [x] Preserve positive research findings: nonempty real cache reuse and real
+  changed-path gain/retention witnesses now exist; these do not prove net gain.
+  No observed source-delivery/provider/best-return defect explains R26.
+- [x] Publish the cross-problem stage review separating execution correctness,
+  research capability/efficiency and retained algorithm improvement. Warehouse
+  status is inherited from accepted reports, not reaudited historical raw runs.
+- [x] Identify source-supported gaps: H cannot acquire new runtime observations;
+  C execution mainly yields pass/fail; research materials have weaker continuity
+  than source; cumulative formal comparisons do not isolate each patch's cause.
+- [x] Define a minimal v0.5 proposal and falsifiable assessment without changing
+  production code or scientific gates.
+- [x] Replace accumulated status/task chronology with current facts and priorities.
+  Historical P0–P23 work remains in Git at `c82b77ef` and dated experiment docs.
+- [x] Record the November 15 accepted research direction and finite milestones,
+  then the user's explicit v0.4 stage-closeout decision, preserving the unmet
+  original scientific success criterion.
+- [x] Write the [detailed mechanism](design/v0.5/v0.5-continuous-algorithm-research-design.md):
+  question/branch/attempt/campaign roles, isolated subject/analysis observations,
+  current-attempt H→C handoff, persistent ordinary materials, source retention,
+  limits/failures and prospective architecture changes.
+- [x] Write [acceptance and comparison design](design/v0.5/v0.5-research-mechanism-acceptance.md):
+  engineering, real research process, mechanism effect and independent algorithm
+  benefit; A/B/C contrasts and all parameters to freeze before launch.
+- [x] Route active design to v0.5 and mark the June Evidence Uplift roadmap
+  superseded; do not restore its old closeout prerequisites or governance plans.
+
+## Next falsifiable framework question
+
+**Does safe public measurement before submission improve the agent's ability to
+diagnose an algorithm, reject incorrect explanations and choose useful research
+actions under comparable resources?**
+
+The research direction and v0.4 closeout are accepted. Detailed contracts are
+now written for review; they are not yet accepted architecture changes or an
+instruction to spend provider/solver budget. The next work is:
+
+1. Review/adopt the concrete capability and exposure changes in the v0.5 design,
+   then synchronize V3/addendum before implementation. The draft keeps one H/C,
+   C's bounded handoff and the exact failed-falsifier rule; it adds no question
+   controller, history authority or research-quality gate.
+2. Implement the smallest observation slice O: fixed subject execution separated
+   from agent analysis, public source/input boundaries, current-attempt materials,
+   H→C handoff, actual source/input/script audit copies, charged resources and
+   explicit incomplete/error outcomes.
+3. Add slice M separately: cross-attempt ordinary materials, actual source copies
+   for longer-lived verified parents before cleanup, correction without erasure
+   and explicit fresh-campaign import.
+   Materials never select an executable head or resume a terminal campaign.
+4. Pass boundary checks and obtain real autonomous investigation/correction/reuse
+   traces. These prove capability existence, not mechanism superiority.
+5. Use public pilots and stated budgets to freeze the full preregistration:
+   task population, repeats, effect/precision requirements, resource limits,
+   candidate nomination, held-out use and stopping rules.
+6. Compare A/B/C (existing capability / observation / observation + continuity),
+   separately estimating B−A and C−B. Complete the declared matrix and independent
+   algorithm assessment; report supported, unsupported and inconclusive results.
+
+Slice E and scientific success are separate. A valid completed negative or
+uncertain matrix can support stage closure; it cannot satisfy a positive
+mechanism-effect or retained-improvement claim. Missing launch parameter values
+are explicitly tracked in the acceptance design, not silently defaulted.
+
+Do not bundle a new model, more branches, larger budgets, multiple agents and
+new tools into one comparison and attribute success to a single mechanism.
+Research-quality assessment is framework-development evaluation, not a new
+production candidate gate. Useful negative research does not by itself satisfy
+the retained-improvement objective.
+
+## Scientific work remaining open
+
+- [ ] Establish CVRP complete-solver advantage under its declared Protocol,
+  including independent retention against the explicitly named baseline.
+  Distinguish unchanged B0, constructor-repaired B0-fixed and local C3 contrasts.
+- [ ] Assess framework research effectiveness with repeated campaigns and
+  resource/uncertainty reporting. One promotion, better self-tests or a long
+  transcript does not prove a general mechanism's superiority.
+
+R24–R26 compare against complete R22 C3. Known screening cases are adaptive;
+expanded stages rerun initial cells; ordinary evaluation is champion-first.
+Do not pool repeats, remove losses, extend after seeing outcomes or turn private
+later-stage evidence into public input. All prior terminals stay terminal.
+No fresh autonomous run or fixed confirmation is prepared by this task.
+
+## Boundaries for subsequent work
+
+- Core remains problem-neutral. Algorithms, objective/feasibility semantics,
+  public development inputs, surfaces and telemetry stay problem-owned.
+  Do not extend generic `OperatorConfig`/operator-pool schema debt.
+- LLM observations, plans, notes, H/C remain tainted; they cannot write Protocol
+  results, Safe Features, branch/champion state or promotion decisions.
+- Preserve Contract, Verification, paired Protocol, held-out isolation,
+  feasibility/objective checks and deterministic Decision. Novelty, preferred
+  mechanisms, prose quality and telemetry completeness are not extra gates.
+- Preserve complete verified source continuation and exact candidate reuse.
+  Parent/ablation comparisons require actual saved complete source copies;
+  no executable reconstruction from historical patches or automatic sibling merge.
+- Public observations need safety preflight and isolation. Negative measurement
+  does not affect Decision and cannot clear an exact-patch failed-falsifier veto.
+  Exported H/C cannot be repaired, replayed or silently rebound.
+- Ordinary completed materials can carry research across fresh attempts;
+  they do not resume old mutable branch/provider/stage state. Complete safe
+  evidence stays retrievable, without silent truncation, top-k or summary replacement.
+- Explicit operational limits and charged typed transient redispatch remain
+  separate from scientific quality. Usage-quota exhaustion remains terminal.
+- No Trust/Hash authority, identity, leases, signing, registration, receipts,
+  duplicate closure, distribution, deployment, packaging, build or service work.
+
+## Verification and handoff
+
+November 14 entry: clean `c82b77ef`, equal to local `origin/v0.4-dev`.
+November 15 publication entry: same HEAD, with the preceding sixteen documentation
+files modified/untracked; all are preserved. Publication adds current README and
+handoff updates. The user explicitly authorizes commit, tag, merge and push.
+November 14 artifact/source calculations, November 15 source/design reviews and
+document-link/diff checks support the review and design. No new runtime suite,
+provider call, solver run or scientific experiment is claimed. Git publication
+is a subsequent handoff action, separate from the earlier read-only review.
+R26 audit limits include no fresh bootstrap rerun or full public/private context
+projection audit; consult its postrun before extending any claim.
+
+Last recorded shared-runtime full suite: P16 at `6380a59e`, 2678 passed /
+1 skipped. R26 prelaunch: 142 focused regressions plus optional-example checks.
+For later tests use `env PYTHONPATH=scion:. /home/clawd/miniconda3/envs/claw/bin/python`
+from the repository root. Shared-boundary changes need suitable focused/full
+regression and a prospective independent problem control; ordinary CVRP-only
+research does not make Warehouse a permanent prerequisite.
+
+Evidence: [current state](docs/status/current-state.md),
+[stage review](docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md),
+[v0.5 design and acceptance](design/v0.5/README.md),
+[R26 audit](docs/experiments/v0.4/v04-cvrp-r26-scope-and-net-benefit-autonomous-postrun-20261114.md),
+[experiment index](docs/experiments/v0.4/README.md).

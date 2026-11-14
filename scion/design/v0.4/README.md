@@ -1,6 +1,11 @@
 # Scion v0.4 Design Index
 
-*Last reviewed: 2026-09-05*
+*Last reviewed: 2026-11-15*
+
+The v0.4 mechanism stage is closed under the accepted
+[stage criteria](../../docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md).
+Original scientific acceptance is partially met; CVRP retained improvement
+continues as an open goal. Active next-version design is under [v0.5](../v0.5/README.md).
 
 These are historical and problem-design sources from the v0.4 development
 line. They are not a second architecture authority. Current implementation
