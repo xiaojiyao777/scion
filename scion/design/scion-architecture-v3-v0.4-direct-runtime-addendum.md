@@ -2,9 +2,20 @@
 
 *Status: implementation note for v0.4; it cannot override
 `scion-architecture-v3.md`*
-*Updated: 2026-09-20*
+*Updated: 2026-11-21 (version-scope extensions; v0.4 rules retained)*
 
 ## Purpose and precedence
+
+V3 now explicitly adopts the v0.5 public-research extension (2026-11-15).
+This addendum continues to describe v0.4, including its smaller H/C tool and
+exposure set. It does not veto the adopted extension or imply that v0.5 tools
+are already connected; implementation status remains in TASK/current-state.
+
+On 2026-11-21 V3 also adopts P5c C's explicit investigation lifecycle. The
+v0.4 formal-target tables below remain applicable to the default mode. In the
+opt-in investigation mode only, an open H may conclude research without H/C
+export or formal credit; its typed operational terminal is separate from scientific
+validity. It does not loosen veto, ready, held-out or completed-Decision boundaries.
 
 V3 is the sole architecture authority for component ownership and control
 boundaries. This addendum records the smaller v0.4 runtime selected after the

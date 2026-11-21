@@ -8,13 +8,14 @@ from typing import Any, Callable, Optional
 from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.run_validity import classify_run_validity
 from scion.core.step_result import StepResult
+from scion.core.research_lifecycle import validate_run_intent
 
 
 @dataclass(frozen=True)
 class CampaignRunResult:
     """One in-process terminal value for a campaign invocation."""
 
-    requested_rounds: int
+    requested_rounds: int | None
     evaluated_rounds: int
     scheduled_calls: int
     stop_reason: str
@@ -25,22 +26,30 @@ class CampaignRunResult:
     unknown_outcome_count: int
     last_execution_outcome: dict[str, Any] | None
     terminal_exception: dict[str, str] | None = None
+    run_intent: str = "formal_target"
+    formal_stage_limit: int | None = None
+    conclusion_ref: str | None = None
+    unexecuted_work: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def completed(self) -> bool:
+        if self.run_intent == "investigation":
+            return self.stop_reason in {"research_concluded", "formal_stage_limit_reached"}
         return self.evaluated_rounds >= self.requested_rounds
 
     @classmethod
-    def empty(cls, requested_rounds: int) -> "CampaignRunResult":
+    def empty(cls, requested_rounds: int | None, *, run_intent="formal_target", formal_stage_limit=None) -> "CampaignRunResult":
         return cls(
-            requested_rounds=max(1, int(requested_rounds)),
+            requested_rounds=max(1, int(requested_rounds)) if run_intent == "formal_target" else None,
+            run_intent=run_intent, formal_stage_limit=formal_stage_limit,
             evaluated_rounds=0,
             scheduled_calls=0,
             stop_reason="",
             failure_categories={},
             protocol_stage_counts={"screening": 0, "validation": 0, "frozen": 0},
             formal_screened_candidates=0,
-            execution_outcome_counts={outcome.value: 0 for outcome in ExecutionOutcome},
+            execution_outcome_counts={outcome.value: 0 for outcome in ExecutionOutcome
+                if run_intent == "investigation" or outcome is not ExecutionOutcome.RESEARCH_CONCLUDED},
             unknown_outcome_count=0,
             last_execution_outcome=None,
         )
@@ -115,12 +124,15 @@ class CampaignRunResult:
             ),
             "run_validity": classify_run_validity(
                 terminal=terminal,
-                completed=self.completed,
+                completed=self.completed if self.run_intent == "formal_target" else False,
                 execution_outcome_counts=self.execution_outcome_counts,
             ),
         }
         if self.stop_reason:
             value["stop_reason"] = self.stop_reason
+        if self.run_intent == "investigation":
+            value.update(run_intent=self.run_intent, formal_stage_limit=self.formal_stage_limit,
+                         conclusion_ref=self.conclusion_ref, unexecuted_work=list(self.unexecuted_work))
         if self.terminal_exception is not None:
             value["terminal_exception"] = dict(self.terminal_exception)
         return value
@@ -128,7 +140,7 @@ class CampaignRunResult:
 
 @dataclass
 class CampaignLoop:
-    """Run one scheduled call at a time until formal evaluated rounds complete."""
+    """Run scheduled calls under the operator's explicit invocation intent."""
 
     write_status: Callable[..., None]
     drain_weight_opt_events: Callable[[], None]
@@ -139,13 +151,20 @@ class CampaignLoop:
     write_terminal_artifacts: Callable[[CampaignRunResult], None]
     get_final_wait_timeout: Callable[[], float]
     wait_weight_opt_all: Callable[[float], None]
+    get_termination_outcome: Callable[[], Any] = lambda: None
+    get_conclusion_ref: Callable[[], str | None] = lambda: None
+    get_unexecuted_work: Callable[[], list[dict[str, Any]]] = lambda: []
     current_result: CampaignRunResult | None = field(init=False, default=None)
     call_in_progress: bool = field(init=False, default=False)
 
-    def run(self, requested_rounds: int) -> CampaignRunResult:
-        """Target formal evaluated rounds without retrying a provider outcome."""
+    def run(self, requested_rounds: int | None = None, *, run_intent="formal_target", formal_stage_limit=None) -> CampaignRunResult:
+        """Apply the formal target or investigation ceiling and typed conclusion."""
 
-        requested_rounds = max(1, int(requested_rounds))
+        validate_run_intent(run_intent, formal_stage_limit)
+        investigation = run_intent == "investigation"
+        if investigation and requested_rounds is not None:
+            raise ValueError("investigation does not accept requested_rounds")
+        requested_rounds = None if investigation else max(1, int(requested_rounds))
         self.current_result = None
         self.call_in_progress = False
         evaluated_rounds = 0
@@ -153,14 +172,19 @@ class CampaignLoop:
         formal_screened_candidates = 0
         protocol_stage_counts = {"screening": 0, "validation": 0, "frozen": 0}
         failure_category_counts: dict[str, int] = {}
-        execution_outcome_counts = {outcome.value: 0 for outcome in ExecutionOutcome}
+        execution_outcome_counts = {outcome.value: 0 for outcome in ExecutionOutcome
+            if investigation or outcome is not ExecutionOutcome.RESEARCH_CONCLUDED}
         unknown_outcome_count = 0
         last_execution_outcome: dict[str, Any] | None = None
         final_reason: str | None = None
+        conclusion_ref: str | None = None
 
         def snapshot(*, stop_reason: str = "") -> CampaignRunResult:
             value = CampaignRunResult(
                 requested_rounds=requested_rounds,
+                run_intent=run_intent, formal_stage_limit=formal_stage_limit,
+                conclusion_ref=(self.get_conclusion_ref() or conclusion_ref) if investigation else None,
+                unexecuted_work=self.get_unexecuted_work() if investigation and stop_reason else [],
                 evaluated_rounds=evaluated_rounds,
                 scheduled_calls=scheduled_calls,
                 stop_reason=stop_reason,
@@ -179,8 +203,23 @@ class CampaignLoop:
             return value
 
         self.write_status(run_result=snapshot())
-        while evaluated_rounds < requested_rounds:
+        def terminal_fault():
+            nonlocal last_execution_outcome
+            record = self.get_termination_outcome() if investigation else None
+            if record is not None:
+                execution_outcome_counts[record.outcome.value] += 1
+                last_execution_outcome = {"outcome": record.outcome.value, "reason_code": record.reason_code,
+                                          "stage": "campaign"}
+                return f"execution_{record.outcome.value}"
+            return None
+
+        while (investigation and (formal_stage_limit == 0 or evaluated_rounds < formal_stage_limit)) or (
+                not investigation and evaluated_rounds < requested_rounds):
             self.drain_weight_opt_events()
+            fault = terminal_fault()
+            if fault:
+                final_reason = fault
+                break
             if self.should_stop():
                 final_reason = (
                     self.get_last_stop_reason() or "termination condition met"
@@ -212,7 +251,7 @@ class CampaignLoop:
                 continue
 
             scheduled_calls += 1
-            execution_outcome_counts[outcome_record.outcome.value] += 1
+            execution_outcome_counts[outcome_record.outcome.value] = execution_outcome_counts.get(outcome_record.outcome.value, 0) + 1
             last_execution_outcome = {
                 "outcome": outcome_record.outcome.value,
                 "reason_code": outcome_record.reason_code,
@@ -233,6 +272,14 @@ class CampaignLoop:
                     run_result=snapshot(),
                 )
                 continue
+
+            if outcome is ExecutionOutcome.RESEARCH_CONCLUDED:
+                ref = outcome_record.provenance.get("conclusion_ref")
+                conclusion_ref = ref if isinstance(ref, str) else None
+                final_reason = ("research_concluded" if investigation and isinstance(ref, str) and ref
+                    and outcome_record.provenance.get("stage") == "proposal_hypothesis"
+                    else "unexpected_research_conclusion")
+                break
 
             if _is_cleaned_stale_explore_attempt(result):
                 self.write_status(
@@ -276,10 +323,13 @@ class CampaignLoop:
                 break
 
         if final_reason is None:
-            final_reason = "requested_rounds_completed"
+            final_reason = "formal_stage_limit_reached" if investigation else "requested_rounds_completed"
         self.set_last_stop_reason(final_reason)
         self.wait_weight_opt_all(self.get_final_wait_timeout())
         self.drain_weight_opt_events()
+        if investigation and final_reason in {"research_concluded", "formal_stage_limit_reached"}:
+            final_reason = terminal_fault() or final_reason
+            self.set_last_stop_reason(final_reason)
         terminal = snapshot(stop_reason=final_reason)
         self.write_terminal_artifacts(terminal)
         return terminal

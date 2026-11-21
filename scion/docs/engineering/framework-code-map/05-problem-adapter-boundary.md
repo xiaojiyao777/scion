@@ -1,5 +1,58 @@
 # Problem Adapter Boundary
 
+## v0.5 public observation backend (current source locator)
+
+`scion/scion/problem/public_observation.py` defines `PublicObservationSpec`, the
+optional provider protocol and an explicit opt-in resolver. Disabled resolution
+does not inspect the adapter. `ProblemAdapter` itself has no new required member.
+`scion/scion/problem/public_input.py` decodes bounded strict JSON and supplies
+problem-neutral scalar checks. The two `problems/{cvrp,warehouse_delivery}/public_observation.py`
+modules own domain input and argument validation; their adapters expose lazy
+factories. They do not load candidate solvers or execute observations.
+
+Both packages now have fixed `public_runner.py`/`public_checker.py` entrypoints.
+`scion/scion/observation/source.py` creates exact public copies and rejects path/
+inode aliases; `sandbox.py` + the copied `bootstrap.py` use bubblewrap, seccomp,
+single-process resource limits and per-run wait4 accounting. `service.py` binds
+actual source/config, reserves checker resources, runs independent stages and
+persists raw output plus host facts. `materials.py` supplies append/read/search
+with caller-provided visibility. It does not decide H/C exposure or branch state.
+
+P3 composition now calls this backend on explicit opt-in. `observation/controller.py`
+selects sources and applies existing draft preflight/H binding; `exclusions.py`
+uses actual Protocol/canary paths; `session.py` handles scoped materials, safe
+projections and handoff. `config.py` defines strict opt-in and typed failures. One backend is shared per fresh campaign;
+its counters cannot be reset per attempt. Tests are
+`test_public_observation_contracts.py`, `test_observation_execution.py` and
+`test_observation_materials.py` under `scion/scion/tests`; design and acceptance
+contracts are [P0](../../../design/v0.5/v0.5-p0-interface-and-boundary-contract.md)
+and [P1](../../../design/v0.5/v0.5-p1-public-problem-execution.md), with actual
+isolation scope/limitations in [P2](../../../design/v0.5/v0.5-p2-isolated-observation-execution.md).
+
+P1b/P2 validation mapping (engineering behavior only):
+
+|Design case|Executable coverage in the observation tests|
+|---|---|
+|S01 / P1-05,08|Real CVRP and Warehouse subject/checker runs; reloadable instance path, 12/14 distance and 800-cost references|
+|S02 / P1-06,09|Frozen checker rejects duplicate/missing/unknown routes, bad assignment/type and split locked groups; undefined objectives stay null|
+|S03 / P1-07,10|Active exception/None cannot fall back; selected marker registry and copied pool-size configuration actually run|
+|S04 / P1-11|Changing original source after preparation does not affect execution; missing required registry fails before launch|
+|S05 / C08|Private sentinel/env, network, fork, exec, framework import and read-only source/root/site writes are inaccessible|
+|S06 / C04, P1-12|Subject model monkeypatch does not change frozen checker; forged host-status fields are rejected as data|
+|S07 / C07|Real wall/CPU/output limits, AS allocation failure and tmpfs ENOSPC; raw prefixes/costs retained; unknown SIGKILL/137 stays PROCESS_KILLED|
+|S08 / C06|Checker reservation, insufficient balance and shared run cap across a fresh session; failed execution and rejected input validation are charged|
+|S09 / P1-02|Symlink, hardlink, explicit formal-file alias and FIFO rejected before target starts|
+|S10 / C08,12|Missing/failed launcher, mid-run interruption and initial/final persistence faults cannot produce a successful record|
+|S11 / P1-14|Independent analysis input/memory state cannot contaminate repeated same-source subject/checker runs|
+|S12 / C07|Unicode byte reconstruction, overlapping search across pages/files, hidden refs and atomic material-write failure|
+
+P1-13 also covers checker exception and malformed output. P3 H/C role, handoff,
+exact-falsifier and actual context tests now live in `test_public_research_sessions.py`
+and `test_public_research_outer.py`; their mapping is in [02](02-proposal-context.md).
+Backend or scripted-provider tests do not establish E2/E3/E4 outcomes.
+
+The remaining sections retain their historical snapshot scope.
+
 ## Scope / Sources
 
 Sources read: `scion/scion/problem/spec.py`, `contracts.py`, `bridge.py`, `loader.py`, `objectives.py`, `scion/scion/config/problem.py`, CLI loading in `scion/scion/cli/main.py`, adapter-backed verification in `scion/scion/verification/`, `ExperimentProtocol` metric handling in `scion/scion/protocol/experiment.py`, runner contract in `scion/scion/runtime/runner.py`, and `LocalSubprocessRunner` in `scion/scion/runtime/subprocess_runner.py`.

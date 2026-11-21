@@ -237,12 +237,14 @@ class CodeResearchSession:
         creative: Any,
         limits: CodeResearchLimits,
         *,
+        observation_session: Any | None = None,
         test_patch: Callable[
             [PatchProposal, float, Mapping[str, str], str | None],
             Mapping[str, Any],
         ]
         | None = None,
     ) -> None:
+        self._observation = observation_session
         self._creative = creative
         self._limits = limits
         self._budget = BoundedResearchBudget(
@@ -254,6 +256,7 @@ class CodeResearchSession:
         self._test_calls = 0
         self._test_result_chars = 0
         self._test_elapsed_sec = 0.0
+        self._test_material: dict[str, Any] | None = None
 
     @property
     def provider_calls_used(self) -> int:
@@ -340,6 +343,8 @@ class CodeResearchSession:
                     "field."
                 ),
             )
+            if self._observation is not None:
+                snapshot = self._observation.augment(snapshot)
             raw = self._call_provider(
                 snapshot,
                 lambda snapshot=snapshot: self._creative.call_code_research_turn(
@@ -347,6 +352,12 @@ class CodeResearchSession:
                 ),
             )
             self._record_action(raw)
+            if self._observation is not None:
+                from scion.observation.session import ACTIONS
+                if type(raw.get("action")) is str and raw["action"] in ACTIONS:
+                    result = self._observation.execute(raw, draft=draft_patch, draft_revision=draft_revision)
+                    self._observation.record_result(self._budget, result)
+                    continue
             try:
                 command = _parse_research_command(raw)
             except ProposalValidationError as exc:
@@ -440,6 +451,9 @@ class CodeResearchSession:
                 else:
                     ready_patch = None
                     ready_raw = None
+                # The original veto/ready calculation must precede fallible
+                # material publication. Publication failure stops this session.
+                self._finish_test_material(result)
             else:
                 if draft_patch is None:
                     result = _tool_error("ready", "draft_required")
@@ -486,6 +500,8 @@ class CodeResearchSession:
                 "You cannot supply or alter a patch in this turn."
             ),
         )
+        if self._observation is not None:
+            final_snapshot = self._observation.augment(final_snapshot, actions=False)
         final_raw = self._call_provider(
             final_snapshot,
             lambda: self._creative.call_code_research_finalize(final_snapshot),
@@ -615,6 +631,7 @@ class CodeResearchSession:
         corpus: Mapping[str, str],
         falsifier_source: Any,
     ) -> dict[str, Any]:
+        self._test_material = None
         if patch is None:
             return _tool_error("test_patch", "draft_required")
         if falsifier_source is not None:
@@ -637,7 +654,54 @@ class CodeResearchSession:
         )
         if remaining_timeout <= 0:
             return _tool_error("test_patch", "test_total_timeout_exhausted")
+        if self._observation is not None:
+            request_ref = self._observation.begin_development_test(
+                draft_revision=draft_revision,
+                public_draft_files=[{
+                    "file_path": change.file_path, "action": change.action,
+                    "code_content": change.code_content,
+                } for change in patch.iter_file_changes()],
+                falsifier_source=falsifier_source,
+                max_result_chars=self._limits.max_test_result_chars - self._test_result_chars,
+            )
+            self._test_material = {"request_ref": request_ref,
+                                   "execution_state": "not_started",
+                                   "callback_wall_seconds": 0.0}
         self._test_calls += 1
+        try:
+            return self._execute_test_patch(patch, draft_revision=draft_revision,
+                corpus=corpus, falsifier_source=falsifier_source,
+                remaining_timeout=remaining_timeout)
+        except (Exception, KeyboardInterrupt) as error:
+            if self._test_material is not None:
+                if isinstance(error, KeyboardInterrupt):
+                    self._test_material["execution_state"] = "interrupted"
+                elif self._test_material["execution_state"] == "callback_entered":
+                    self._test_material["execution_state"] = "unknown"
+                # Preserve the primary error. No unsafe/oversized callback
+                # payload is saved, nor may a failed write cause another test.
+                try:
+                    self._finish_test_material(None)
+                except (Exception, KeyboardInterrupt):
+                    pass
+            raise
+
+    def _finish_test_material(self, result: dict[str, Any] | None) -> None:
+        if self._test_material is None:
+            return
+        assert self._observation is not None
+        pending = self._test_material
+        result_ref = self._observation.finish_development_test(
+            **pending, bounded_result=result)
+        self._test_material = None
+        if result is not None:
+            result.update(request_ref=pending["request_ref"], result_ref=result_ref)
+
+    def _execute_test_patch(
+        self, patch: PatchProposal, *, draft_revision: int,
+        corpus: Mapping[str, str], falsifier_source: str | None,
+        remaining_timeout: float,
+    ) -> dict[str, Any]:
         if self._test_patch is None:
             projection: Mapping[str, Any] = {
                 "outcome": "unavailable",
@@ -646,6 +710,8 @@ class CodeResearchSession:
             }
         else:
             started = time.monotonic()
+            if self._test_material is not None:
+                self._test_material["execution_state"] = "callback_entered"
             try:
                 projection = self._test_patch(
                     deepcopy(patch),
@@ -653,9 +719,13 @@ class CodeResearchSession:
                     deepcopy(dict(corpus)),
                     falsifier_source,
                 )
+                if self._test_material is not None:
+                    self._test_material["execution_state"] = "returned"
             finally:
                 elapsed = max(0.0, time.monotonic() - started)
                 self._test_elapsed_sec += elapsed
+                if self._test_material is not None:
+                    self._test_material["callback_wall_seconds"] = elapsed
             if elapsed >= remaining_timeout and projection.get("outcome") == "passed":
                 projection = {
                     "outcome": "timeout",

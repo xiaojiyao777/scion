@@ -288,7 +288,7 @@ def _paired_effect_cells_payload(protocol_result: Any) -> dict[str, Any]:
 
 def _redacted_proposal_stage(step: StepRecord) -> str | None:
     record = getattr(step, "execution_outcome", None)
-    if record is None or record.outcome is ExecutionOutcome.EVALUATED:
+    if record is None or record.outcome in {ExecutionOutcome.EVALUATED, ExecutionOutcome.RESEARCH_CONCLUDED}:
         return None
     failure_stage = step.failure_stage
     provenance_stage = record.provenance.get("stage")

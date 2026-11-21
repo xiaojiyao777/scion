@@ -1,0 +1,10 @@
+{
+  "resource_envelope": {
+    "provider_call_cap": 48,
+    "outer_hardwall_sec": 1800,
+    "provider_transient_retries": 0
+  },
+  "rounds": 1,
+  "time_limit_sec": 1,
+  "external_confirmation_looks": 0
+}

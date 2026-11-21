@@ -78,6 +78,11 @@ class CvrpAdapter:
 
         return CvrpSolverDesignProvider()
 
+    def public_observation_provider(self) -> Any:
+        from scion.problems.cvrp.public_observation import CvrpPublicObservationProvider
+
+        return CvrpPublicObservationProvider()
+
     def proposal_mechanism_evidence_provider(self) -> Any:
         from scion.problems.cvrp.proposal_mechanism_evidence import (
             CvrpProposalMechanismEvidenceProvider,

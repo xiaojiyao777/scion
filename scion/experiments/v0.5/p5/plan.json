@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "purpose": "P5 feasibility only, not E3/E4",
+  "runs": [
+    {
+      "run_id": "cvrp-01",
+      "problem": "cvrp",
+      "kind": "diagnostic",
+      "continuity_required": false,
+      "import_from": null
+    },
+    {
+      "run_id": "warehouse-01",
+      "problem": "warehouse",
+      "kind": "diagnostic",
+      "continuity_required": false,
+      "import_from": null
+    },
+    {
+      "run_id": "cvrp-02",
+      "problem": "cvrp",
+      "kind": "diagnostic",
+      "continuity_required": false,
+      "import_from": null
+    },
+    {
+      "run_id": "warehouse-02",
+      "problem": "warehouse",
+      "kind": "diagnostic",
+      "continuity_required": false,
+      "import_from": null
+    },
+    {
+      "run_id": "cvrp-03",
+      "problem": "cvrp",
+      "kind": "diagnostic",
+      "continuity_required": true,
+      "import_from": "cvrp-01"
+    },
+    {
+      "run_id": "warehouse-03",
+      "problem": "warehouse",
+      "kind": "diagnostic",
+      "continuity_required": true,
+      "import_from": "warehouse-01"
+    },
+    {
+      "run_id": "open-cvrp",
+      "problem": "cvrp",
+      "kind": "open",
+      "continuity_required": true,
+      "import_from": null
+    },
+    {
+      "run_id": "open-warehouse",
+      "problem": "warehouse",
+      "kind": "open",
+      "continuity_required": true,
+      "import_from": null
+    }
+  ]
+}

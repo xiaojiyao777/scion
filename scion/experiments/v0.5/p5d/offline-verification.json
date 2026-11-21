@@ -1,0 +1,188 @@
+{
+  "status": "frozen_not_started",
+  "verified_at_utc": "2026-11-21T05:09:47.793768+00:00",
+  "source_files_compared": 1029,
+  "formal_files": {
+    "cvrp": 25,
+    "warehouse": 47
+  },
+  "study_provider_calls": 0,
+  "study_campaigns_started": 0,
+  "cli_closure_checks": {
+    "cvrp-01": {
+      "cli_parsed": true,
+      "intent": "investigation",
+      "formal_ceiling": 0,
+      "formal_files": 25,
+      "public_files_copied": 41,
+      "source_config": {},
+      "public_input_valid": true,
+      "solver_seconds": 1,
+      "material_import": []
+    },
+    "warehouse-01": {
+      "cli_parsed": true,
+      "intent": "investigation",
+      "formal_ceiling": 0,
+      "formal_files": 47,
+      "public_files_copied": 25,
+      "source_config": {
+        "operator_selection": "registry"
+      },
+      "public_input_valid": true,
+      "solver_seconds": 1,
+      "material_import": []
+    },
+    "cvrp-02": {
+      "cli_parsed": true,
+      "intent": "investigation",
+      "formal_ceiling": 1,
+      "formal_files": 25,
+      "public_files_copied": 41,
+      "source_config": {},
+      "public_input_valid": true,
+      "solver_seconds": 1,
+      "material_import": []
+    },
+    "warehouse-02": {
+      "cli_parsed": true,
+      "intent": "investigation",
+      "formal_ceiling": 1,
+      "formal_files": 47,
+      "public_files_copied": 25,
+      "source_config": {
+        "operator_selection": "registry"
+      },
+      "public_input_valid": true,
+      "solver_seconds": 1,
+      "material_import": []
+    },
+    "cvrp-03": {
+      "cli_parsed": true,
+      "intent": "investigation",
+      "formal_ceiling": 1,
+      "formal_files": 25,
+      "public_files_copied": 41,
+      "source_config": {},
+      "public_input_valid": true,
+      "solver_seconds": 1,
+      "material_import": [
+        "/home/clawd/research/scion-experiments/v05-p5d-e2-20261121/runs/cvrp-01/public_research/continuity"
+      ]
+    },
+    "warehouse-03": {
+      "cli_parsed": true,
+      "intent": "investigation",
+      "formal_ceiling": 1,
+      "formal_files": 47,
+      "public_files_copied": 25,
+      "source_config": {
+        "operator_selection": "registry"
+      },
+      "public_input_valid": true,
+      "solver_seconds": 1,
+      "material_import": [
+        "/home/clawd/research/scion-experiments/v05-p5d-e2-20261121/runs/warehouse-01/public_research/continuity"
+      ]
+    },
+    "open-cvrp": {
+      "cli_parsed": true,
+      "intent": "investigation",
+      "formal_ceiling": 3,
+      "formal_files": 25,
+      "public_files_copied": 41,
+      "source_config": {},
+      "public_input_valid": true,
+      "solver_seconds": 5,
+      "material_import": []
+    },
+    "open-warehouse": {
+      "cli_parsed": true,
+      "intent": "investigation",
+      "formal_ceiling": 3,
+      "formal_files": 47,
+      "public_files_copied": 25,
+      "source_config": {
+        "operator_selection": "registry"
+      },
+      "public_input_valid": true,
+      "solver_seconds": 5,
+      "material_import": []
+    }
+  },
+  "disposable_scripted_context_checks": {
+    "cvrp-01": {
+      "question_exact": true,
+      "observe": true,
+      "formal_ceiling": 0,
+      "imported_fixture_note_read": false,
+      "scripted": true
+    },
+    "warehouse-01": {
+      "question_exact": true,
+      "observe": true,
+      "formal_ceiling": 0,
+      "imported_fixture_note_read": false,
+      "scripted": true
+    },
+    "cvrp-02": {
+      "question_exact": true,
+      "observe": true,
+      "formal_ceiling": 1,
+      "imported_fixture_note_read": false,
+      "scripted": true
+    },
+    "warehouse-02": {
+      "question_exact": true,
+      "observe": true,
+      "formal_ceiling": 1,
+      "imported_fixture_note_read": false,
+      "scripted": true
+    },
+    "cvrp-03": {
+      "question_exact": true,
+      "observe": true,
+      "formal_ceiling": 1,
+      "imported_fixture_note_read": true,
+      "scripted": true
+    },
+    "warehouse-03": {
+      "question_exact": true,
+      "observe": true,
+      "formal_ceiling": 1,
+      "imported_fixture_note_read": true,
+      "scripted": true
+    },
+    "open-cvrp": {
+      "question_exact": true,
+      "observe": true,
+      "formal_ceiling": 3,
+      "imported_fixture_note_read": false,
+      "scripted": true
+    },
+    "open-warehouse": {
+      "question_exact": true,
+      "observe": true,
+      "formal_ceiling": 3,
+      "imported_fixture_note_read": false,
+      "scripted": true
+    }
+  },
+  "reference_calculations": [
+    "cvrp-01",
+    "warehouse-01",
+    "cvrp-02",
+    "warehouse-02",
+    "cvrp-03",
+    "warehouse-03"
+  ],
+  "budgets_sum_checked": {
+    "provider_calls": 672,
+    "outer_wall_seconds": 25200,
+    "public_cpu_seconds": 3480,
+    "public_wall_seconds": 5400,
+    "public_storage_bytes": 7516192768,
+    "formal_stage_ceiling": 10,
+    "external_confirmations": 0
+  }
+}

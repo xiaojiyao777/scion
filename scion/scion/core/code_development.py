@@ -63,6 +63,7 @@ class CodeDevelopmentEvaluator:
         selected_surface: str | None,
         total_timeout_sec: float,
         falsifier_source: str | None = None,
+        capture_source: Any = None,
     ) -> DevelopmentCheckRun:
         started = time.monotonic()
         if not self.suites or not source_corpus:
@@ -113,6 +114,24 @@ class CodeDevelopmentEvaluator:
             falsifier_outcome = None
             falsifier_diagnostic = None
             falsifier_reason_code = None
+
+            def capture(stage):
+                if capture_source is not None:
+                    spec = getattr(self.problem_spec, "spec_v1", self.problem_spec)
+                    capture_source(
+                        stage=stage, workspace=candidate,
+                        problem_runtime_root=str(prepared.problems_root / str(
+                            getattr(spec, "id", None) or getattr(spec, "name", ""))),
+                        problem_root=str(spec.root_dir),
+                        algorithm_paths=tuple(sorted((set(source_corpus) | {
+                            change.file_path for change in patch.iter_file_changes()
+                            if change.action != "delete"}) - {
+                            change.file_path for change in patch.iter_file_changes()
+                            if change.action == "delete"})),
+                        workspace_paths=self.workspace_paths,
+                        problem_package_paths=self.problem_package_paths,
+                    )
+
             if falsifier_source is not None:
                 probe_bytes = len(falsifier_source.encode("utf-8"))
                 if remaining_files < 1 or probe_bytes > remaining_bytes:
@@ -126,6 +145,7 @@ class CodeDevelopmentEvaluator:
                     )
                     remaining_files -= 1
                     remaining_bytes -= probe_bytes
+                    capture("probe")
                     probe_timeout = min(
                         float(MAX_CODE_RESEARCH_PROBE_TIMEOUT_SEC),
                         total_timeout_sec - (time.monotonic() - started),
@@ -157,6 +177,7 @@ class CodeDevelopmentEvaluator:
                     }
                 ),
             )
+            capture("host_checks")
             remaining_timeout = total_timeout_sec - (time.monotonic() - started)
             if remaining_timeout <= 0:
                 return DevelopmentCheckRun(

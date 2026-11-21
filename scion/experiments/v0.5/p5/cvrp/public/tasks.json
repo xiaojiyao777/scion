@@ -1,0 +1,187 @@
+[
+  {
+    "task_id": "cvrp-01",
+    "research_input": {
+      "current_question": "研究当前完整求解算法在这些公开条件下还有什么可检验的改进空间。附带的两份解只是未经核验的示例，不是当前 solver 的运行记录。请自主调查，界定能够支持的结论及下一步；无需为了提交而修改算法。",
+      "observations": [
+        {
+          "instance": {
+            "name": "p5_public_triangle",
+            "capacity": 2,
+            "depot": 0,
+            "allowed_routes": 2,
+            "use_integer_cost": true,
+            "nodes": [
+              {
+                "id": 0,
+                "x": 0,
+                "y": 0,
+                "demand": 0
+              },
+              {
+                "id": 1,
+                "x": 3,
+                "y": 0,
+                "demand": 1
+              },
+              {
+                "id": 2,
+                "x": 0,
+                "y": 4,
+                "demand": 1
+              }
+            ]
+          },
+          "sample_solutions": [
+            {
+              "routes": [
+                [
+                  1
+                ],
+                [
+                  2
+                ]
+              ]
+            },
+            {
+              "routes": [
+                [
+                  1,
+                  2
+                ]
+              ]
+            }
+          ],
+          "origin": "constructed_public_examples_not_solver_measurements"
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "cvrp-02",
+    "research_input": {
+      "current_question": "研究当前完整求解算法在这些公开条件下还有什么可检验的改进空间。附带的两份解只是未经核验的示例，不是当前 solver 的运行记录。请自主调查，界定能够支持的结论及下一步；无需为了提交而修改算法。 附有一个与样本解分开定义的简化计数模型，它不是实际运行计时；也请判断它支持什么、不能支持什么。",
+      "observations": [
+        {
+          "instance": {
+            "name": "p5_public_triangle",
+            "capacity": 2,
+            "depot": 0,
+            "allowed_routes": 2,
+            "use_integer_cost": true,
+            "nodes": [
+              {
+                "id": 0,
+                "x": 0,
+                "y": 0,
+                "demand": 0
+              },
+              {
+                "id": 1,
+                "x": 3,
+                "y": 0,
+                "demand": 1
+              },
+              {
+                "id": 2,
+                "x": 0,
+                "y": 4,
+                "demand": 1
+              }
+            ]
+          },
+          "sample_solutions": [
+            {
+              "routes": [
+                [
+                  1,
+                  2
+                ]
+              ]
+            },
+            {
+              "routes": [
+                [
+                  2,
+                  1
+                ]
+              ]
+            }
+          ],
+          "origin": "constructed_public_examples_not_solver_measurements",
+          "work_model": {
+            "origin": "constructed_additive_unit_cost_model_not_solver_timing",
+            "unit": "one abstract cost unit per counted operation; all components counted once",
+            "baseline_components": {
+              "route_evaluation": 100,
+              "setup": 20
+            },
+            "candidate_components": {
+              "route_evaluation": 40,
+              "setup": 20,
+              "lookup_and_key": 70
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "cvrp-03",
+    "research_input": {
+      "current_question": "研究当前完整求解算法在这些公开条件下还有什么可检验的改进空间。附带的两份解只是未经核验的示例，不是当前 solver 的运行记录。请自主调查，界定能够支持的结论及下一步；无需为了提交而修改算法。 公开条件已经改变，之前运行实际留下的公开研究材料（如有）可供参考。",
+      "observations": [
+        {
+          "instance": {
+            "name": "p5_public_triangle",
+            "capacity": 1,
+            "depot": 0,
+            "allowed_routes": 2,
+            "use_integer_cost": true,
+            "nodes": [
+              {
+                "id": 0,
+                "x": 0,
+                "y": 0,
+                "demand": 0
+              },
+              {
+                "id": 1,
+                "x": 3,
+                "y": 0,
+                "demand": 1
+              },
+              {
+                "id": 2,
+                "x": 0,
+                "y": 4,
+                "demand": 1
+              }
+            ]
+          },
+          "sample_solutions": [
+            {
+              "routes": [
+                [
+                  1
+                ],
+                [
+                  2
+                ]
+              ]
+            },
+            {
+              "routes": [
+                [
+                  1,
+                  2
+                ]
+              ]
+            }
+          ],
+          "origin": "constructed_public_examples_not_solver_measurements"
+        }
+      ]
+    }
+  }
+]

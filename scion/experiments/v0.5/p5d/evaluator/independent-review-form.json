@@ -1,0 +1,328 @@
+{
+  "study": "p5d-e2",
+  "reviewer": null,
+  "independence_and_blinding": null,
+  "instructions": "Each reviewer completes a private copy independently. Cite paths relative to the evidence root, UTF-8 byte offsets [start,end), and exact quotes. For binary output cite the retained bytes and the decoding/extraction used. Use the preregistered dimension rules.",
+  "runs": [
+    {
+      "run_id": "cvrp-01",
+      "terminal": null,
+      "scientific_intervention": null,
+      "formal_stages": null,
+      "expected_vs_observed_diagnostic": null,
+      "o_trace": null,
+      "previous_attempt": null,
+      "current_attempt": null,
+      "reuse_opportunity": null,
+      "material_read_and_consequent_action": null,
+      "conclusion_class": null,
+      "dimensions": {
+        "investigation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "interpretation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "revision": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "conclusion": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "continuity": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        }
+      }
+    },
+    {
+      "run_id": "warehouse-01",
+      "terminal": null,
+      "scientific_intervention": null,
+      "formal_stages": null,
+      "expected_vs_observed_diagnostic": null,
+      "o_trace": null,
+      "previous_attempt": null,
+      "current_attempt": null,
+      "reuse_opportunity": null,
+      "material_read_and_consequent_action": null,
+      "conclusion_class": null,
+      "dimensions": {
+        "investigation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "interpretation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "revision": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "conclusion": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "continuity": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        }
+      }
+    },
+    {
+      "run_id": "cvrp-02",
+      "terminal": null,
+      "scientific_intervention": null,
+      "formal_stages": null,
+      "expected_vs_observed_diagnostic": null,
+      "o_trace": null,
+      "previous_attempt": null,
+      "current_attempt": null,
+      "reuse_opportunity": null,
+      "material_read_and_consequent_action": null,
+      "conclusion_class": null,
+      "dimensions": {
+        "investigation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "interpretation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "revision": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "conclusion": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "continuity": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        }
+      }
+    },
+    {
+      "run_id": "warehouse-02",
+      "terminal": null,
+      "scientific_intervention": null,
+      "formal_stages": null,
+      "expected_vs_observed_diagnostic": null,
+      "o_trace": null,
+      "previous_attempt": null,
+      "current_attempt": null,
+      "reuse_opportunity": null,
+      "material_read_and_consequent_action": null,
+      "conclusion_class": null,
+      "dimensions": {
+        "investigation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "interpretation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "revision": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "conclusion": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "continuity": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        }
+      }
+    },
+    {
+      "run_id": "cvrp-03",
+      "terminal": null,
+      "scientific_intervention": null,
+      "formal_stages": null,
+      "expected_vs_observed_diagnostic": null,
+      "o_trace": null,
+      "previous_attempt": null,
+      "current_attempt": null,
+      "reuse_opportunity": null,
+      "material_read_and_consequent_action": null,
+      "conclusion_class": null,
+      "dimensions": {
+        "investigation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "interpretation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "revision": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "conclusion": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "continuity": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        }
+      }
+    },
+    {
+      "run_id": "warehouse-03",
+      "terminal": null,
+      "scientific_intervention": null,
+      "formal_stages": null,
+      "expected_vs_observed_diagnostic": null,
+      "o_trace": null,
+      "previous_attempt": null,
+      "current_attempt": null,
+      "reuse_opportunity": null,
+      "material_read_and_consequent_action": null,
+      "conclusion_class": null,
+      "dimensions": {
+        "investigation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "interpretation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "revision": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "conclusion": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "continuity": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        }
+      }
+    },
+    {
+      "run_id": "open-cvrp",
+      "terminal": null,
+      "scientific_intervention": null,
+      "formal_stages": null,
+      "expected_vs_observed_diagnostic": null,
+      "o_trace": null,
+      "previous_attempt": null,
+      "current_attempt": null,
+      "reuse_opportunity": null,
+      "material_read_and_consequent_action": null,
+      "conclusion_class": null,
+      "dimensions": {
+        "investigation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "interpretation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "revision": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "conclusion": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "continuity": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        }
+      }
+    },
+    {
+      "run_id": "open-warehouse",
+      "terminal": null,
+      "scientific_intervention": null,
+      "formal_stages": null,
+      "expected_vs_observed_diagnostic": null,
+      "o_trace": null,
+      "previous_attempt": null,
+      "current_attempt": null,
+      "reuse_opportunity": null,
+      "material_read_and_consequent_action": null,
+      "conclusion_class": null,
+      "dimensions": {
+        "investigation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "interpretation": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "revision": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "conclusion": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        },
+        "continuity": {
+          "rating": null,
+          "reason": null,
+          "citations": []
+        }
+      }
+    }
+  ]
+}

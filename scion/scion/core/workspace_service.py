@@ -69,6 +69,7 @@ class WorkspaceService:
     branch_workspaces: MutableMapping[str, str]
     champion_lock: Any
     get_champion: Callable[[], ChampionState]
+    retain_source: Callable[[str, str, str], bool] | None = None
 
     def setup_workspace(
         self,
@@ -209,7 +210,12 @@ class WorkspaceService:
             if candidate.workspace != previous:
                 self._cleanup_candidate_best_effort(candidate.workspace)
             raise
-        if previous and previous != candidate.workspace:
+        retained = True
+        if self.retain_source is not None:
+            retained = self.retain_source(candidate.workspace, bid, "accepted_head")
+            if previous and previous != candidate.workspace:
+                retained = self.retain_source(previous, bid, "previous_head") and retained
+        if previous and previous != candidate.workspace and retained:
             try:
                 self.materializer.cleanup(previous)
             except Exception as exc:
@@ -246,6 +252,8 @@ class WorkspaceService:
         if not workspace:
             self.materializer.cleanup_branch_workspace(branch_id)
             return
+        if self.retain_source is not None and not self.retain_source(workspace, branch_id, "discarded_branch_tree"):
+            return  # Preserve bytes; a material fault cannot reverse Decision.
         self.materializer.cleanup(workspace)
         if self.branch_workspaces.get(branch_id) == workspace:
             self.branch_workspaces.pop(branch_id, None)

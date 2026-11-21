@@ -1,6 +1,6 @@
 # Scion v0.4 direct-v3 Onboarding
 
-*Last updated: 2026-09-21*
+*Last updated: 2026-11-21*
 
 本文是维护者进入当前 Scion 的稳定源码导览，不是当前状态或历史实验汇总。
 v0.4 的目标是让同一套 problem-neutral 精简 V3 runtime 接入不同问题包，为 agent
@@ -82,6 +82,33 @@ trace 不是 receipt 或 call identity，写失败不能改变有效 provider �
 错误）走现有 balance/resource terminal lane，不进入 transient redispatch 或
 fresh H；普通 requests/tokens-per-minute 限流仍是 transient。额度恢复只能开始
 新 campaign，不能续跑已终止记录。
+
+## v0.5 可选公开研究入口
+
+默认控制链继续使用下述 direct-v3 规则。显式配置公开研究后，现有有限 H/C 会话
+还可 observe、write/read/search_research：H 仅观察当前 source，C 仅观察 approved H
+绑定的 base/draft。H 明确选择的材料在导出时冻结，Contract 通过后才交给 C；
+C 没有通用历史浏览权。观察不建立 ready、不清除失败 falsifier、不计正式 round。
+
+源码入口为 `scion/scion/observation/{config,controller,exclusions,session}.py`，执行
+后端为同目录 service/source/sandbox。接口和失败映射见
+[P3 合同](../design/v0.5/v0.5-p3-session-permissions-and-handoff.md)。原始输出始终是
+工具数据，不能成为 Protocol/Decision writer。当前可用范围与验证只查 current-state；
+显式 M 另通过 `observation/continuity.py` 提供关闭会话的 H-only 材料、清理前完整
+源码保存与 `--research-materials` fresh import；完整保存树不对 agent 开放。
+M-only 可读写材料，不能 observe。接口/失败边界见 [P4](../design/v0.5/v0.5-p4-material-continuity.md)。
+这些工程入口不能代替真实研究过程与算法效果验收。
+
+显式 `run_intent=investigation` 另允许开放 H 通过 `conclude_research` 结束本次
+调查，不导出 H/C。持续问题沿用普通 `research_input.current_question`，解释和
+不确定性沿用普通笔记；没有问题完成评分器。该模式必须声明正式阶段上限
+`formal_stage_limit`（可为 0）及共同 provider/wall/研究资源。默认 `formal_target`
+仍按 `--rounds` 追求正式阶段数；abstain 仍只拒绝当前 attempt。
+结论先保存，材料关闭发布后才接纳；资源、保存故障和中断优先。它不计科学评价、
+不变更分支/head/champion，也不能让 C 取消 ready 后的检查。fresh import 只带
+普通材料，无 terminal resume。V3 已显式采纳；接口见
+[P5c §5](../design/v0.5/v0.5-p5c-question-session-and-materials.md)，源码入口为
+`core/research_lifecycle.py`、`observation/conclusion.py` 与原 campaign loop。
 
 ## 不可变边界
 

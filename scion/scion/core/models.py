@@ -643,6 +643,9 @@ class StepRecord:
         record = self.execution_outcome
         if record is not None and not isinstance(record, ExecutionOutcomeRecord):
             raise TypeError("execution_outcome must be an ExecutionOutcomeRecord")
+        if (record is not None and record.outcome is ExecutionOutcome.RESEARCH_CONCLUDED
+                and self.hypothesis is not None):
+            raise ValueError("a research conclusion cannot carry a hypothesis")
         if self.hypothesis is None:
             if self.selected_hypothesis_research_basis is not None:
                 raise ValueError(
@@ -657,7 +660,10 @@ class StepRecord:
                 raise ValueError(
                     "a hypothesis-free step cannot be evaluated"
                 )
-            if self.failure_stage != "proposal_hypothesis":
+            concluded = record.outcome is ExecutionOutcome.RESEARCH_CONCLUDED
+            if concluded and (self.failure_stage is not None or self.failure_detail is not None):
+                raise ValueError("a research conclusion cannot carry failure fields")
+            if not concluded and self.failure_stage != "proposal_hypothesis":
                 raise ValueError(
                     "a hypothesis-free step must fail at proposal_hypothesis"
                 )
@@ -694,7 +700,7 @@ class StepRecord:
                     "a hypothesis-free step cannot carry decision or "
                     "Contract diagnostics"
                 )
-            if self.failure_detail != record.reason_code:
+            if not concluded and self.failure_detail != record.reason_code:
                 raise ValueError(
                     "a hypothesis-free step failure detail must be its reason code"
                 )
@@ -702,7 +708,13 @@ class StepRecord:
                 raise ValueError(
                     "a hypothesis-free step execution detail must be redacted"
                 )
-            if record.provenance != {"stage": "proposal_hypothesis"}:
+            if concluded:
+                if (set(record.provenance) != {"stage", "conclusion_ref"}
+                        or record.provenance["stage"] != "proposal_hypothesis"
+                        or not isinstance(record.provenance["conclusion_ref"], str)
+                        or not record.provenance["conclusion_ref"].strip()):
+                    raise ValueError("a research conclusion requires its H stage and material ref")
+            elif record.provenance != {"stage": "proposal_hypothesis"}:
                 raise ValueError(
                     "a hypothesis-free step provenance must contain only its stage"
                 )

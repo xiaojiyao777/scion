@@ -1,0 +1,245 @@
+{
+  "cvrp-01": {
+    "sample_output": {
+      "routes": [
+        [
+          1,
+          2,
+          3,
+          4
+        ]
+      ]
+    },
+    "checks": {
+      "sample": {
+        "schema_version": 1,
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "fleet_violation": 0,
+          "total_distance": 8.0,
+          "routes": 1
+        },
+        "reason_codes": []
+      }
+    }
+  },
+  "warehouse-01": {
+    "sample_output": {
+      "vehicles": {
+        "V0": {
+          "vehicle_id": "V0",
+          "vehicle_type": "T3",
+          "region": "Dongguan",
+          "order_ids": [
+            "QUAY1",
+            "QUAY2"
+          ]
+        },
+        "V1": {
+          "vehicle_id": "V1",
+          "vehicle_type": "T3",
+          "region": "Dongguan",
+          "order_ids": [
+            "QUAY3",
+            "QUAY4"
+          ]
+        }
+      },
+      "assignment": {
+        "QUAY1": "V0",
+        "QUAY2": "V0",
+        "QUAY3": "V1",
+        "QUAY4": "V1"
+      }
+    },
+    "checks": {
+      "sample": {
+        "schema_version": 1,
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 0,
+          "total_cost": 1600
+        },
+        "reason_codes": []
+      }
+    }
+  },
+  "cvrp-02": {
+    "sample_output": {
+      "routes": [
+        [
+          2,
+          3,
+          4
+        ]
+      ]
+    },
+    "checks": {
+      "before": {
+        "schema_version": 1,
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "fleet_violation": 0,
+          "total_distance": 12.0,
+          "routes": 2
+        },
+        "reason_codes": []
+      },
+      "sample": {
+        "schema_version": 1,
+        "consistency": "fail",
+        "feasibility": "not_evaluated",
+        "recomputed_objective": null,
+        "reason_codes": [
+          "ROUTES_INVALID"
+        ]
+      }
+    }
+  },
+  "warehouse-02": {
+    "sample_output": {
+      "vehicles": {
+        "V0": {
+          "vehicle_id": "V0",
+          "vehicle_type": "T3",
+          "region": "Dongguan",
+          "order_ids": [
+            "QUAY1"
+          ]
+        },
+        "V1": {
+          "vehicle_id": "V1",
+          "vehicle_type": "T3",
+          "region": "Dongguan",
+          "order_ids": [
+            "QUAY2",
+            "QUAY3",
+            "QUAY4"
+          ]
+        }
+      },
+      "assignment": {
+        "QUAY1": "V0",
+        "QUAY2": "V0",
+        "QUAY3": "V1",
+        "QUAY4": "V1"
+      }
+    },
+    "checks": {
+      "before": {
+        "schema_version": 1,
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 0,
+          "total_cost": 1600
+        },
+        "reason_codes": []
+      },
+      "sample": {
+        "schema_version": 1,
+        "consistency": "fail",
+        "feasibility": "not_evaluated",
+        "recomputed_objective": null,
+        "reason_codes": [
+          "SOLUTION_INVALID"
+        ]
+      }
+    }
+  },
+  "cvrp-03": {
+    "sample_output": {
+      "routes": [
+        [
+          1
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          4
+        ]
+      ]
+    },
+    "checks": {
+      "sample": {
+        "schema_version": 1,
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "fleet_violation": 1,
+          "total_distance": 16.0,
+          "routes": 3
+        },
+        "reason_codes": []
+      },
+      "comparison": {
+        "schema_version": 1,
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "fleet_violation": 0,
+          "total_distance": 14.0,
+          "routes": 2
+        },
+        "reason_codes": []
+      }
+    }
+  },
+  "warehouse-03": {
+    "sample_output": {
+      "vehicles": {
+        "V0": {
+          "vehicle_id": "V0",
+          "vehicle_type": "T3",
+          "region": "Dongguan",
+          "order_ids": [
+            "QUAY1",
+            "QUAY3"
+          ]
+        },
+        "V1": {
+          "vehicle_id": "V1",
+          "vehicle_type": "T3",
+          "region": "Dongguan",
+          "order_ids": [
+            "QUAY2",
+            "QUAY4"
+          ]
+        }
+      },
+      "assignment": {
+        "QUAY1": "V0",
+        "QUAY3": "V0",
+        "QUAY2": "V1",
+        "QUAY4": "V1"
+      }
+    },
+    "checks": {
+      "sample": {
+        "schema_version": 1,
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 2,
+          "total_cost": 1600
+        },
+        "reason_codes": []
+      },
+      "comparison": {
+        "schema_version": 1,
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 0,
+          "total_cost": 1600
+        },
+        "reason_codes": []
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 # Scion v0.5 Continuous Algorithm Research Design
 
-*Working branch: `codex/v0.5-dev` · Current as of: 2026-11-15*
+*Working branch: `codex/v0.5-dev` · Current as of: 2026-11-21*
 
 Follow [`../AGENTS.md`](../AGENTS.md) and
 [`current-state.md`](docs/status/current-state.md) before acting.
@@ -9,8 +9,8 @@ source; the [direct-runtime addendum](design/scion-architecture-v3-v0.4-direct-r
 describes current implementation. The
 [stage review](docs/planning/v0.4/v04-stage-review-and-v05-research-mechanism-proposal-20261114.md)
 records the accepted v0.4 stage closeout and its evidence. The
-[v0.5 design](design/v0.5/README.md) specifies the next mechanism and acceptance
-draft; it is not an implemented runtime or second architecture authority.
+[v0.5 design](design/v0.5/README.md) specifies the mechanism and acceptance
+contracts; implementation progress is below, and it is not a second authority.
 
 ## Objective and priority
 
@@ -27,14 +27,27 @@ November 15 the user explicitly accepts this direction:
 
 The November 15 requests accept the stage-closeout standard, retain the CVRP
 scientific objective and begin detailed v0.5 mechanism/acceptance design. The
-latest request explicitly authorizes committing the documentation, tagging
+earlier publication request explicitly authorized committing the documentation, tagging
 `v0.4`, integrating into the default branch and pushing, then entering v0.5.
 The closeout commit `eb339d32`, annotated tag `v0.4` and `master` merge `6befa390`
 are now published to origin. The remote default is `master` (there is no `main`
 or `mian`). Active development has moved to `codex/v0.5-dev`, created from that
 merge. v0.5 is formally the active design/development stage; its specific new
-interfaces remain a design draft. This handoff does not launch R27 or change
-runtime/scientific inputs.
+interfaces are being implemented module by module. The preceding November 15 request
+explicitly authorizes P5b: freeze actual source/model/formal data/run configuration,
+check the declared budgets/stops, then launch the fixed eight-slot real-provider
+matrix and retain all failures, no-candidate and no-benefit outcomes. This supersedes
+the preceding engineering-only launch restriction for this P5b matrix; it does not
+authorize R27, extra repeats or E3/E4 confirmation.
+The subsequent “继续推进吧” led to [P5c](design/v0.5/v0.5-p5c-question-session-and-materials.md).
+A/B implemented test-material readback and actual test-source retention with their
+failed regression records preserved. The preceding November 21 request explicitly
+authorized P5c C: first specify continuing-question context, stop semantics,
+interfaces/permissions/failure routes and adopt the necessary V3 lifecycle extension;
+then implement and validate Q11–Q15 without changing veto, ready or scientific
+boundaries. That extension was written into V3 before implementation. A later
+request froze P5d, followed by explicit authorization to run the eight slots
+under the registered stop rules. The terminal record appears below.
 
 Keep two statuses separate:
 
@@ -61,8 +74,8 @@ next-version question. The evidence mapping is kept in that report.
 partially met.** Warehouse retained improvement is accepted; CVRP retained
 improvement is unconfirmed and carried forward. The user explicitly accepted
 this stage decision; the original scientific criterion has not been rewritten.
-No further R27 is required for closure. v0.5 is in detailed design, not implemented
-or empirically accepted. The annotated `v0.4` tag records the mechanism-stage
+No further R27 is required for closure. v0.5 is in staged implementation, without
+empirical research-effect acceptance. The annotated `v0.4` tag records the mechanism-stage
 closeout and the unmet CVRP goal. Integration and the new development branch do
 not themselves change the existing v0.4 direct-v3 runtime.
 
@@ -105,34 +118,144 @@ not themselves change the existing v0.4 direct-v3 runtime.
 
 ## Next falsifiable framework question
 
+The latest request requires design-first progression, module-by-module
+implementation/validation, and an explicit check against the original V3 blueprint.
+The [V3 alignment and module plan](design/v0.5/v0.5-v3-alignment-and-module-plan.md)
+finds the research goal and decision boundaries aligned, but identified gaps in
+execution/exposure contracts, failure routing and evaluation specifications.
+P0/P1 now detail the first two; later empirical specifications remain open. The
+original D/O/M/E outline has been expanded into concrete module contracts.
+
+Active module progress (definitions and dependencies are in that design; this is
+the sole execution checklist):
+
+- [x] Review V3/addendum and v0.5 design completeness; map boundary changes and
+  strengthen acceptance, including the actual bundled B−A estimand.
+- [x] P0 design: specify concrete schemas, permissions, H→C export timing,
+  resource/error routing, C01–C12 cases and exact proposed V3 extension text in
+  the [interface contract](design/v0.5/v0.5-p0-interface-and-boundary-contract.md).
+- [x] P1 design: specify optional provider and isolated runner/checker protocols,
+  CVRP/Warehouse input/argument schemas, actual-source/config binding and
+  P1-01–14 cases in the [problem execution contract](design/v0.5/v0.5-p1-public-problem-execution.md).
+- [x] P0 boundary adoption: synchronize the explicitly requested extension in V3
+  and clarify the v0.4-only scope of the addendum. No scientific gate changes.
+- [x] P1a: implement pure provider/descriptor contracts, optional adapter factories,
+  bounded strict JSON and problem-owned CVRP/Warehouse validators. The resolver is
+  not connected to campaign execution at that stage; real closure and observe-envelope
+  checks were deferred to P1b/P2/P3 below. Stage focused checks: 93 passed; non-slow regression:
+  2805 passed / 1 skipped (collection preceded final descriptor refinements,
+  which the focused checks cover).
+- [x] P1b: real CVRP/Warehouse runner/checker entrypoints, selected source/config
+  binding, independent frozen recomputation and no fallback substitution, tested
+  through P2 isolation. H/C dispatch integration is implemented in P3 below.
+- [x] P2 backend: concrete isolation design, exact public closure, single-process
+  execution, aggregate reservation/actual accounting, captured materials and byte
+  paging/search; S01–S12 execution cases and 100 final focused checks pass. Full regression
+  result is tracked in current-state. This does not mark the whole O slice complete.
+- [x] P3: write the [session/permission contract](design/v0.5/v0.5-p3-session-permissions-and-handoff.md),
+  integrate optional H/C observation, actual Protocol file exclusions, safe material
+  projections, explicit immutable H handoff after Contract, C draft preflight/config
+  binding and typed outer failures. Both problem packages pass scripted-provider
+  real outer-chain tests, including H Contract rejection and unchanged falsifier
+  veto. O is engineering-integrated behind explicit opt-in; empirical E2–E4 remain open.
+  Focused/full verification scope is recorded in current-state.
+- [x] P4: [design contract](design/v0.5/v0.5-p4-material-continuity.md) and V3 extension
+  written before implementation. Independent O/M switches, H-only closed-session
+  corpus, atomic public export/import, complete private source retention and safe
+  projections are implemented. Cleanup faults preserve Decision and old bytes.
+  Non-slow regression: 2941 passed / 1 skipped; final focused checks: 253 passed,
+  including a final imported-script encoding refinement after full-suite collection.
+  M engineering acceptance does not satisfy E2 material-use or E3/E4 effect/algorithm acceptance.
+- [x] P5a: write the [process-assessment contract](design/v0.5/v0.5-p5-process-assessment.md)
+  before implementation; six problem-owned public diagnoses and separate evaluator
+  answers, two open-solver slots, explicit resources/stops, two-reviewer rubric,
+  complete-run reporting and V3 alignment. Implement public-only export and offline
+  citation/coverage review; real isolated checkers verify all 12 reference solutions,
+  and both actual solvers execute diagnostic inputs. Focused checks: 74 passed
+  (61 P5 cases plus 13 existing research-input cases). No production assessment gate.
+- [x] P5b execution/report: freeze the actual source/model/data/configuration in
+  the [preregistration](docs/experiments/v0.5/v05-p5b-process-study-preregistration-20261115.md)
+  and dispose of all eight authorized slots: seven completed their formal targets;
+  warehouse-02 stopped at 48 calls before evaluation. Total 298 calls, 214 valid
+  pair rows / no failed pairs, all champions v1. CVRP open failed screening;
+  Warehouse open passed validation but failed frozen with unclear evidence.
+  The [process/results report](docs/experiments/v0.5/v05-p5b-process-study-postrun-20261115.md)
+  retains failures, costs, original byte citations and one non-blinded review per slot.
+- [ ] P5b/E2 capability acceptance: this batch does not satisfy E2. No observe
+  calls and no cross-attempt material reads occurred. Legacy formal-history use
+  supports one bounded revision trajectory; it is not a new O/M witness. Independent
+  second reviews are pending. P5c specifies the observed material/session gaps;
+  it does not supply a second independent review or new E2 evidence.
+- [x] P5c design: specify automatic C test-material readback, exact safe feedback,
+  draft versus actual test-source capture, phase/import permissions, persistence
+  failures, resource accounting and Q01–Q15. Keep the current falsifier veto;
+  separately draft a typed investigation conclusion with explicit V3 differences.
+- [x] P5c A: implement request/script/draft/bounded-result readback; Q01–Q07 and
+  related focused checks pass (203 tests), as do 128 development/diagnostic/material
+  regressions. Veto/ready order is preserved; historical A capture remains request_only.
+  Full non-slow result is 3036 passed / 1 skipped / 1 failed: an unchanged timed
+  CVRP public-example assertion, passing alone and in the 128-test follow-up.
+  Preserve that qualification; full regression was not all green. Details are in
+  [current state](docs/status/current-state.md), not an implicit exemption or E2 pass.
+- [x] P5c B implementation: retain the actual prepared scratch before probe and
+  host-check stages; separate private copies from safe public projections and
+  publish through existing P4 continuity. Q08–Q10: 17 cases pass; Q15 both real
+  problem outer chains pass. Failed-falsifier veto and ready remain unchanged.
+  Full non-slow regression: 3054 passed / 1 skipped (641.30 s). Prior failures
+  and fixture corrections remain documented in current-state; E2 stays open.
+- [x] P5c C design/adoption: freeze the explicit investigation intent, H-only
+  conclusion, zero-formal mode, shared limits, material permissions and terminal
+  fault precedence in P5c §5–7 and V3 before implementation.
+- [x] P5c C implementation: continuing-question context, bounded conclusion notes,
+  typed zero-formal outcome, CLI/API intent and formal ceiling, preserved heads/
+  Decisions/pending work, no resume. Q11–Q15 focused checks cover both real problem
+  runtimes; default formal mode, veto/ready and scientific boundaries are unchanged.
+  Final non-slow regression: 3114 passed / 1 skipped (784.60 s), including all
+  52 C cases. Development failures and deliberately interrupted earlier test runs
+  remain recorded in current-state alongside the existing A/B failure evidence.
+- [x] P5d E2 prospective design and offline freeze. Eight sets of CLI/closure checks,
+  six verified diagnostic references and two disposable fresh-import readbacks.
+- [x] P5d batch closed under the frozen authentication stop. One real H request reached the proxy. All eight slots have dispositions.
+- [x] Two independent AI reviews cover all eight P5d slots. The five ratings on the
+  started slot agree, and all 91 cited byte ranges match their originals.
+- [ ] E2 empirical research capability remains unestablished. Neither open investigation started.
+- [ ] P6: use public pilots to freeze and run the repeated mechanism comparison.
+- [ ] P7: independently assess full-solver outcomes and report stage conclusions.
+
+P5 task/rubric design and offline tooling are now concrete. The
+[task/config package](experiments/v0.5/p5/README.md) freezes a bounded feasibility
+matrix, not an E3 sample size; its actual P5b execution is separately recorded above.
+The first authorized P5d invocation used the frozen source, model policy and inputs.
+Its first H request received HTTP 401 before any agent action. The batch stopped
+with one provider failure and seven unstarted slots, including both 01→03 imports
+and both open questions. There is no autonomous O, M, revision or conclusion
+trajectory to score positively. A fresh study would need a working credential
+for the generation endpoint and a separate prospective batch decision. The next
+scientific rung remains E2. [P5d postrun](docs/experiments/v0.5/v05-p5d-e2-postrun-20261121.md)
+
+Scientific CVRP retained superiority remains open, and the P5 external confirmation
+allowance is zero.
+P3 uses one shared backend per fresh campaign. `--public-research` supplies the
+strict opt-in/budget JSON alongside `--code-research-limits`; disabled behavior is
+unchanged. M adds H-only material continuity and `--research-materials` fresh import;
+M-only permits material actions but disables observe. The authorized P5b matrix is
+now terminal; O tests do not count as retained solver improvement.
+P0/P1 design examples were
+checked against frozen models/oracle (CVRP distances 12/14; Warehouse cost 800),
+without a solver/provider run; these reference checks do not validate execution.
+
 **Does safe public measurement before submission improve the agent's ability to
 diagnose an algorithm, reject incorrect explanations and choose useful research
 actions under comparable resources?**
 
-The research direction and v0.4 closeout are accepted. Detailed contracts are
-now written for review; they are not yet accepted architecture changes or an
-instruction to spend provider/solver budget. The next work is:
-
-1. Review/adopt the concrete capability and exposure changes in the v0.5 design,
-   then synchronize V3/addendum before implementation. The draft keeps one H/C,
-   C's bounded handoff and the exact failed-falsifier rule; it adds no question
-   controller, history authority or research-quality gate.
-2. Implement the smallest observation slice O: fixed subject execution separated
-   from agent analysis, public source/input boundaries, current-attempt materials,
-   H→C handoff, actual source/input/script audit copies, charged resources and
-   explicit incomplete/error outcomes.
-3. Add slice M separately: cross-attempt ordinary materials, actual source copies
-   for longer-lived verified parents before cleanup, correction without erasure
-   and explicit fresh-campaign import.
-   Materials never select an executable head or resume a terminal campaign.
-4. Pass boundary checks and obtain real autonomous investigation/correction/reuse
-   traces. These prove capability existence, not mechanism superiority.
-5. Use public pilots and stated budgets to freeze the full preregistration:
-   task population, repeats, effect/precision requirements, resource limits,
-   candidate nomination, held-out use and stopping rules.
-6. Compare A/B/C (existing capability / observation / observation + continuity),
-   separately estimating B−A and C−B. Complete the declared matrix and independent
-   algorithm assessment; report supported, unsupported and inconclusive results.
+The research direction, v0.4 closeout and explicit V3 public-research extension
+are accepted. P1b/P2/P3/P4/P5a engineering checks use public fixtures and existing outer-chain test inputs;
+the subsequent explicit P5b request authorizes this fixed real-provider budget.
+The P0–P7 sequence above replaces
+the earlier coarse implementation list. O includes observation, current-attempt
+materials and H→C handoff; B−A measures that bundle. C−B isolates the additional
+cross-attempt material exposure. Neither contrast changes scientific gates,
+chooses an executable head through notes or restores a terminal campaign.
 
 Slice E and scientific success are separate. A valid completed negative or
 uncertain matrix can support stage closure; it cannot satisfy a positive
@@ -158,7 +281,8 @@ R24–R26 compare against complete R22 C3. Known screening cases are adaptive;
 expanded stages rerun initial cells; ordinary evaluation is champion-first.
 Do not pool repeats, remove losses, extend after seeing outcomes or turn private
 later-stage evidence into public input. All prior terminals stay terminal.
-No fresh autonomous run or fixed confirmation is prepared by this task.
+The explicitly authorized P5b matrix is now terminal; no fixed confirmation
+or additional autonomous matrix is authorized by this step.
 
 ## Boundaries for subsequent work
 
@@ -200,8 +324,9 @@ is a subsequent handoff action, separate from the earlier read-only review.
 R26 audit limits include no fresh bootstrap rerun or full public/private context
 projection audit; consult its postrun before extending any claim.
 
-Last recorded shared-runtime full suite: P16 at `6380a59e`, 2678 passed /
+Historical v0.4 shared-runtime full suite: P16 at `6380a59e`, 2678 passed /
 1 skipped. R26 prelaunch: 142 focused regressions plus optional-example checks.
+Current v0.5 focused/full results are recorded in [current state](docs/status/current-state.md).
 For later tests use `env PYTHONPATH=scion:. /home/clawd/miniconda3/envs/claw/bin/python`
 from the repository root. Shared-boundary changes need suitable focused/full
 regression and a prospective independent problem control; ordinary CVRP-only

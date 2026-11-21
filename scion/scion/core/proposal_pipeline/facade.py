@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from scion.core.code_research_limits import CodeResearchLimits
+from scion.core.research_lifecycle import ResearchConclusion
+from scion.observation.config import PublicResearchStop
 from scion.core.execution_outcome import (
     PROVIDER_TRANSIENT_RETRIES_EXHAUSTED,
     ExecutionOutcome,
@@ -101,6 +103,9 @@ class ProposalPipeline:
     mark_balance_exhausted: Callable[[], None]
     code_research_limits: CodeResearchLimits | None = None
     code_development_evaluator: Any | None = None
+    public_research: Any | None = None
+    research_context: Callable[[], dict[str, Any]] | None = None
+    check_research_stop: Callable[[str], None] | None = None
     record_hypothesis_candidate_completed: Callable[[], None] | None = None
     record_hypothesis_candidate_selected: Callable[[], None] | None = None
     _hypothesis_rejection_counts: dict[str, int] = field(
@@ -118,8 +123,10 @@ class ProposalPipeline:
         self,
         branch: Branch,
     ) -> ProposalAttempt[HypothesisProposal]:
+        observation = None
         selected_research_basis: dict[str, Any] | None = None
         research_session: HypothesisResearchSession | None = None
+        conclusion = None
         research_limits = self.code_research_limits
         try:
             champion = self._champion_snapshot()
@@ -165,12 +172,19 @@ class ProposalPipeline:
             )
 
         try:
+            if self.public_research is not None:
+                root = self.branch_workspaces.get(branch.branch_id) or champion.code_snapshot_path
+                observation = self.public_research.open_session(phase="hypothesis", source_root=root, branch=branch.branch_id,
+                    initial_source=str(root) == str(self.public_research.source_roots[-1]))
+                observation.research_context = self.research_context
+                observation.check_research_stop = self.check_research_stop
             if research_limits is None:
                 hypothesis = self.creative.generate_direct_hypothesis(prompt_snapshot)
             else:
                 research_session = HypothesisResearchSession(
                     self.creative,
                     research_limits,
+                    observation_session=observation,
                     record_candidate_completed=(
                         self.record_hypothesis_candidate_completed
                     ),
@@ -192,15 +206,20 @@ class ProposalPipeline:
                             detail=research_result.reason,
                         )
                     )
-                if not isinstance(research_result, HypothesisResearchFinalized):
+                if isinstance(research_result, ResearchConclusion):
+                    conclusion = research_result
+                elif not isinstance(research_result, HypothesisResearchFinalized):
                     raise TypeError("hypothesis research returned an invalid result")
-                hypothesis = research_result.hypothesis
-                selected_research_basis = research_result.research_basis.to_primitive()
+                else:
+                    hypothesis = research_result.hypothesis
+                    selected_research_basis = research_result.research_basis.to_primitive()
                 history_review = research_session.selected_history_frontier_review
-                if history_review:
+                if history_review and selected_research_basis is not None:
                     selected_research_basis["history_review"] = [
                         item.to_primitive() for item in history_review
                     ]
+        except PublicResearchStop as exc:
+            return self._hypothesis_failure(exc.record)
         except HypothesisResearchContextError as exc:
             return self._hypothesis_failure(
                 self._record_local_failure(
@@ -220,6 +239,11 @@ class ProposalPipeline:
                 self._handle_provider_failure(branch, "hypothesis", exc, balance=True)
             )
         except _KNOWN_PROVIDER_ERRORS as exc:
+            if (observation is not None and research_session is not None
+                    and research_session.provider_calls_used == 0
+                    and isinstance(exc, ProposalValidationError)
+                    and "max_transcript_chars" in str(exc)):
+                return self._hypothesis_failure(PublicResearchStop("INITIAL_CONTEXT_LIMIT", phase="hypothesis").record)
             return self._hypothesis_failure(
                 self._handle_provider_failure(
                     branch,
@@ -236,8 +260,23 @@ class ProposalPipeline:
             return self._hypothesis_failure(
                 self._record_unexpected_call_failure("hypothesis", exc)
             )
+        finally:
+            if observation is not None:
+                observation.close()
+        if observation is not None and self.public_research.failure_reason:
+            return self._hypothesis_failure(PublicResearchStop(self.public_research.failure_reason, phase="hypothesis").record)
+        if conclusion is not None:
+            try:
+                if self.check_research_stop is not None:
+                    self.check_research_stop("hypothesis")
+            except PublicResearchStop as exc:
+                return ProposalAttempt.failure(exc.record)
+            return ProposalAttempt.failure(ExecutionOutcomeRecord(
+                outcome=ExecutionOutcome.RESEARCH_CONCLUDED, reason_code="RESEARCH_CONCLUDED",
+                provenance={"stage": "proposal_hypothesis", "conclusion_ref": conclusion.ref}))
         return ProposalAttempt.success(
             hypothesis,
+            research_handoff=observation.handoff if observation is not None else None,
             selected_hypothesis_research_basis=selected_research_basis,
         )
 
@@ -245,7 +284,11 @@ class ProposalPipeline:
         self,
         branch: Branch,
         hypothesis: HypothesisProposal,
+        *,
+        research_handoff=None,
     ) -> ProposalAttempt[PatchProposal]:
+        observation = None
+        code_session = None
         branch_id = branch.branch_id
         try:
             champion = self._champion_snapshot()
@@ -281,6 +324,15 @@ class ProposalPipeline:
             )
 
         try:
+            if self.public_research is not None:
+                if research_handoff is None:
+                    raise PublicResearchStop("H_BINDING_REJECTED", phase="code")
+                root = self.branch_workspaces.get(branch_id) or champion.code_snapshot_path
+                observation = self.public_research.open_session(phase="code", source_root=root, branch=branch_id,
+                    initial_source=str(root) == str(self.public_research.source_roots[-1]),
+                    approved_hypothesis=hypothesis, handoff=research_handoff)
+                observation.research_context = self.research_context
+                observation.check_research_stop = self.check_research_stop
             if self.code_research_limits is None:
                 patch = self.creative.generate_direct_code(prompt_snapshot)
             else:
@@ -300,14 +352,18 @@ class ProposalPipeline:
                             selected_surface=selected_surface,
                             total_timeout_sec=remaining_timeout_sec,
                             falsifier_source=falsifier_source,
+                            **({"capture_source": observation.capture_development_source}
+                               if observation is not None else {}),
                         )
                         return run.provider_projection()
 
-                research_result = CodeResearchSession(
+                code_session = CodeResearchSession(
                     self.creative,
                     self.code_research_limits,
                     test_patch=test_patch,
-                ).run(prompt_snapshot)
+                    observation_session=observation,
+                )
+                research_result = code_session.run(prompt_snapshot)
                 if isinstance(research_result, CodeResearchAbandon):
                     return ProposalAttempt.failure(
                         self._record_local_failure(
@@ -318,6 +374,8 @@ class ProposalPipeline:
                         )
                     )
                 patch = research_result
+        except PublicResearchStop as exc:
+            return ProposalAttempt.failure(exc.record)
         except ProviderCallCapExhausted as exc:
             return ProposalAttempt.failure(
                 self._handle_provider_failure(branch, "code", exc)
@@ -332,6 +390,11 @@ class ProposalPipeline:
                 )
             )
         except _KNOWN_PROVIDER_ERRORS as exc:
+            if (observation is not None and code_session is not None
+                    and code_session.provider_calls_used == 0
+                    and isinstance(exc, ProposalValidationError)
+                    and "max_transcript_chars" in str(exc)):
+                return ProposalAttempt.failure(PublicResearchStop("INITIAL_CONTEXT_LIMIT", phase="code").record)
             return ProposalAttempt.failure(
                 self._handle_provider_failure(
                     branch,
@@ -347,6 +410,12 @@ class ProposalPipeline:
                 )
             )
 
+        finally:
+            if observation is not None:
+                observation.close()
+
+        if observation is not None and self.public_research.failure_reason:
+            return ProposalAttempt.failure(PublicResearchStop(self.public_research.failure_reason, phase="code").record)
         return ProposalAttempt.success(patch)
 
     def _hypothesis_snapshots(

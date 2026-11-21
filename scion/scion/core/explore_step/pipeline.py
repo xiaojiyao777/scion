@@ -152,6 +152,16 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
                 raise RuntimeError(
                     "hypothesis attempt missing proposal and execution outcome"
                 )
+            if proposal_outcome.outcome is ExecutionOutcome.RESEARCH_CONCLUDED:
+                self._record_execution_outcome(branch, proposal_outcome,
+                    event_kind="research_concluded", selected_hypothesis_research_basis=None)
+                self.record_step(StepRecord(round_num=rnum, branch_id=bid, hypothesis=None,
+                    patch=None, contract_passed=None, verification_passed=None,
+                    protocol_result=None, decision=None, execution_outcome=proposal_outcome,
+                    failure_stage=None, failure_detail=None,
+                    **source_fields()))
+                return self._finish_status_progress(StepResult(action="explore", branch_id=bid,
+                    stopped=True, reason="research_concluded", execution_outcome=proposal_outcome))
             failure_detail = (
                 proposal_outcome.detail or "hypothesis generation failed"
             )
@@ -272,9 +282,11 @@ class ExploreStepPipeline(VerificationMixin, ExploreStepEventMixin):
             round_num=rnum,
             hypothesis=hypothesis,
         )
+        handoff = getattr(hypothesis_attempt, "research_handoff", None)
         code_attempt = self.generate_code(
             branch,
             hypothesis,
+            **({"research_handoff": handoff} if handoff is not None else {}),
         )
         patch = code_attempt.proposal
         if patch is not None:

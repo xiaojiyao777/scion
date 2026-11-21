@@ -55,6 +55,8 @@ _HYPOTHESIS_KEYS = frozenset(
         "hypothesis_rejection_summary",
         "seed",
         "experiment_history",
+        "public_observation",
+        "research_material_index",
         RENDERER_INPUTS_KEY,
     }
 )
@@ -79,6 +81,9 @@ _CODE_KEYS = frozenset(
         "active_subject_code_constraints",
         "problem_id",
         "approved_hypothesis",
+        "public_observation",
+        "research_material_index",
+        "research_handoff",
         "editable_source_context",
         "branch_id",
         "editable_patterns",
@@ -147,6 +152,7 @@ class ProposalContextSnapshot:
                     context[key], path=f"$.unknown.{key}", active_ids=set()
                 )
             raise ValueError(f"unsupported proposal context field: {key}")
+        validate_public_research_projection(context, phase=phase)
         frozen = _freeze_and_validate(context, path="$", active_ids=set())
         if not isinstance(frozen, _FrozenJson) or frozen.kind != "object":
             raise TypeError("proposal context must be a mapping")
@@ -175,6 +181,53 @@ def freeze_proposal_context(
     """Validate and freeze the single context value used for one H or C call."""
 
     return ProposalContextSnapshot.create(phase=phase, context=context)
+
+
+def validate_public_research_projection(context, *, phase):
+    keys = {"public_observation", "research_material_index", "research_handoff"} & set(context)
+    if not keys:
+        return
+    expected = {"public_observation", "research_material_index"}
+    if phase == "code":
+        expected.add("research_handoff")
+    if keys != expected:
+        raise ValueError("incomplete public research projection")
+    capability = context["public_observation"]
+    if type(capability) is not dict or set(capability) - {"research_run"} != {
+        "schema_version", "phase", "input_description", "args_description", "limits",
+        "usage", "remaining_actions", "tool_results", "observation_enabled", "materials_enabled",
+    } or capability["phase"] != phase or capability["schema_version"] != 1:
+        raise ValueError("invalid public observation projection")
+    if any(type(capability[key]) is not bool for key in ("observation_enabled", "materials_enabled")):
+        raise ValueError("invalid research capability flags")
+    if "research_run" in capability:
+        run = capability["research_run"]
+        if (type(run) is not dict or set(run) != {"run_intent", "formal_stage_limit", "formal_stages_used",
+                "formal_submission_allowed", "current_question", "provider_calls", "outer_wall_remaining_sec"}
+                or run["run_intent"] not in {"formal_target", "investigation"}
+                or type(run["formal_submission_allowed"]) is not bool
+                or type(run["formal_stages_used"]) is not int or run["formal_stages_used"] < 0
+                or (run["current_question"] is not None and type(run["current_question"]) is not str)):
+            raise ValueError("invalid research run context")
+    entries = context["research_material_index"]
+    if type(entries) is not list:
+        raise ValueError("invalid research material index")
+    refs = set()
+    for entry in entries:
+        required = {"ref", "kind", "bytes", "phase", "source_condition"}
+        if type(entry) is not dict or not required <= set(entry) or set(entry) - required - {"supersedes_ref", "origin_ref", "origin_scope", "branch", "session", "dependencies", "availability", "source_path", "missing_dependencies", "source_availability", "reference_origins"}:
+            raise ValueError("invalid research material entry")
+        from scion.observation.continuity import validate_entry
+        validate_entry(entry)
+        ref = entry["ref"]
+        if (type(ref) is not str or any(p in {"", ".", ".."} for p in ref.split("/"))
+                or "\\" in ref or ref in refs or type(entry["bytes"]) is not int or entry["bytes"] < 0):
+            raise ValueError("invalid research material reference")
+        refs.add(ref)
+    if phase == "code":
+        handoff = context["research_handoff"]
+        if type(handoff) is not list or any(type(ref) is not str or ref not in refs for ref in handoff):
+            raise ValueError("invalid research handoff projection")
 
 
 def _freeze_and_validate(value: Any, *, path: str, active_ids: set[int]) -> FrozenNode:

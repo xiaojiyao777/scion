@@ -127,6 +127,11 @@ def compose_campaign_services(
     research_history: Any = (),
     resource_envelope: Any | None = None,
     code_research_limits: Any | None = None,
+    public_research: Any | None = None,
+    formal_configuration_files: Any = (),
+    research_material_imports: Any = (),
+    run_intent: str = "formal_target",
+    formal_stage_limit: int | None = None,
 ) -> None:
     """Install CampaignManager services and state on *owner*."""
     validate_fresh_campaign_output(campaign_dir)
@@ -152,6 +157,14 @@ def compose_campaign_services(
         if normalized_code_research_limits is None
         else declared_development_suites(problem_spec)
     )
+    from scion.core.research_lifecycle import validate_investigation
+    validate_investigation(run_intent=run_intent, formal_stage_limit=formal_stage_limit,
+        public_research=public_research, research_input=research_input,
+        code_research_limits=normalized_code_research_limits, resource_envelope=normalized_resource_envelope)
+    owner._run_intent = run_intent
+    owner._formal_stage_limit = formal_stage_limit
+    owner._investigation_started_at = None
+    owner._investigation_terminal = False
     development_workspace_paths = (
         ()
         if normalized_code_research_limits is None
@@ -322,6 +335,10 @@ def compose_campaign_services(
             owner._problem_runtime.research_input,
         )
     write_resource_envelope(campaign_dir, owner._resource_envelope)
+    if run_intent == "investigation":
+        import json
+        with (Path(campaign_dir) / "investigation.json").open("x") as stream:
+            json.dump({"run_intent": run_intent, "formal_stage_limit": formal_stage_limit}, stream)
     owner._branch_workspaces = {}
     owner._branch_patches = {}
     owner._step_history = []
@@ -340,6 +357,22 @@ def compose_campaign_services(
         champion_lock=owner._champion_lock,
         get_champion=lambda: owner._champion,
     )
+    from scion.observation.controller import compose_public_research
+
+    owner._public_research = compose_public_research(
+        configuration=public_research, adapter=adapter, problem_spec=problem_spec,
+        split_manifest=split_manifest, source_root=owner._champion.code_snapshot_path,
+        initial_source_root=owner._initial_source_tree,
+        output_root=Path(campaign_dir) / "public_research",
+        code_research_limits=owner._code_research_limits,
+        configuration_files=formal_configuration_files,
+        materializer=owner._materializer,
+        sync_configuration=owner._workspace_service.sync_pool_registry,
+        experiment_protocol=owner._experiment_protocol,
+        research_material_imports=research_material_imports,
+    )
+    if owner._public_research is not None and owner._public_research.continuity is not None:
+        owner._workspace_service.retain_source = owner._public_research.retain_before_cleanup
     owner._proposal_pipeline = ProposalPipeline(
         creative=owner._creative,
         problem_runtime=owner._problem_runtime,
@@ -350,6 +383,9 @@ def compose_campaign_services(
         mark_balance_exhausted=lambda: _mark_balance_exhausted(owner),
         code_research_limits=owner._code_research_limits,
         code_development_evaluator=owner._code_development_evaluator,
+        public_research=owner._public_research,
+        research_context=owner._research_run_context if owner._public_research is not None else None,
+        check_research_stop=owner._check_research_stop if run_intent == "investigation" else None,
         record_hypothesis_candidate_completed=(
             owner._proposal_runtime_telemetry.record_hypothesis_candidate_completed
             if owner._proposal_runtime_telemetry is not None
@@ -486,6 +522,9 @@ def compose_campaign_services(
         ),
     )
     owner._campaign_loop = CampaignLoop(
+        get_termination_outcome=owner._investigation_stop,
+        get_conclusion_ref=owner._research_conclusion_ref,
+        get_unexecuted_work=owner._unexecuted_research_work,
         write_status=lambda **kwargs: owner._write_status(**kwargs),
         drain_weight_opt_events=lambda: owner._drain_weight_opt_events(),
         should_stop=lambda: owner.should_stop(),

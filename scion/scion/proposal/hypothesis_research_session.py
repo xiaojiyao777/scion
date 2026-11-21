@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from scion.core.code_research_limits import CodeResearchLimits
+from scion.core.research_lifecycle import ResearchConclusion
 from scion.proposal.bounded_research import (
     BoundedMatchCollector,
     BoundedResearchBudget,
@@ -85,7 +86,7 @@ class HistoryFrontierDisposition:
         return value
 
 
-HypothesisResearchResult = HypothesisResearchFinalized | HypothesisResearchAbstain
+HypothesisResearchResult = HypothesisResearchFinalized | HypothesisResearchAbstain | ResearchConclusion
 
 
 class HypothesisResearchContextError(ValueError):
@@ -318,9 +319,12 @@ class HypothesisResearchSession:
         creative: Any,
         limits: CodeResearchLimits,
         *,
+        observation_session: Any | None = None,
         record_candidate_completed: Callable[[], None] | None = None,
         record_candidate_selected: Callable[[], None] | None = None,
     ) -> None:
+        self._observation = observation_session
+        self._started = False
         self._creative = creative
         self._limits = limits
         self._record_candidate_completed = (
@@ -366,6 +370,10 @@ class HypothesisResearchSession:
         public_sources: Sequence[Mapping[str, Any]] = (),
         qualified_prefixes: tuple[str, ...] = (),
     ) -> HypothesisResearchResult:
+        if self._started:
+            raise ValueError("a hypothesis session cannot be resumed")
+        self._started = True
+        investigation = self._observation is not None and self._observation.investigation
         if full_snapshot.render_kind != "hypothesis":
             raise ValueError("hypothesis research requires a hypothesis snapshot")
         original = full_snapshot.structured_context
@@ -383,20 +391,20 @@ class HypothesisResearchSession:
         readable_sources = [entry for entry in sources if entry.get("body") is not None]
         frontier_review: tuple[HistoryFrontierDisposition, ...] = ()
         required_read_kinds = int(bool(readable_sources))
-        if self._limits.max_read_calls < required_read_kinds:
+        if not investigation and self._limits.max_read_calls < required_read_kinds:
             raise HypothesisResearchContextError(
                 "hypothesis research max_read_calls cannot satisfy mandatory reads"
             )
         candidate_mode = self._limits.max_hypothesis_candidates == 2
         required_frontier_review = int(bool(frontier_refs))
-        if candidate_mode and self._limits.max_turns < (
+        if not investigation and candidate_mode and self._limits.max_turns < (
             required_read_kinds + (2 * required_frontier_review) + 3
         ):
             raise HypothesisResearchContextError(
                 "hypothesis research max_turns cannot satisfy mandatory reads, "
                 "failure-frontier review, two candidate slots, and selection"
             )
-        if not candidate_mode and self._limits.max_turns < (
+        if not investigation and not candidate_mode and self._limits.max_turns < (
             required_read_kinds + required_frontier_review + 1
         ):
             raise HypothesisResearchContextError(
@@ -454,6 +462,8 @@ class HypothesisResearchSession:
                 ),
                 allowed_loci=full_snapshot.allowed_change_loci,
             )
+            if self._observation is not None:
+                snapshot = self._observation.augment(snapshot)
             raw = self._budget.call_provider(
                 snapshot,
                 lambda snapshot=snapshot: self._creative.call_hypothesis_research_turn(
@@ -461,6 +471,29 @@ class HypothesisResearchSession:
                 ),
             )
             self._budget.record_action(raw)
+            if raw.get("action") == "conclude_research":
+                if not investigation:
+                    self._budget.record_result(tool_error("conclude_research", "action_not_available"))
+                    continue
+                conclusion = self._observation.conclude_research(raw)
+                if isinstance(conclusion, ResearchConclusion):
+                    return conclusion
+                self._budget.record_result(conclusion)
+                continue
+            if (self._observation is not None and not self._observation.formal_submission_allowed
+                    and raw.get("action") in {"finalize_hypothesis", "stage_hypothesis_candidate", "select_hypothesis_candidate"}):
+                self._budget.record_result(tool_error(raw["action"], "formal_submission_unavailable"))
+                continue
+            handoff_refs = []
+            if self._observation is not None:
+                from scion.observation.session import ACTIONS
+                if type(raw.get("action")) is str and raw["action"] in ACTIONS:
+                    result = self._observation.execute(raw)
+                    self._observation.record_result(self._budget, result)
+                    continue
+                if type(raw.get("action")) is str and raw["action"] in {"finalize_hypothesis", "select_hypothesis_candidate"}:
+                    raw = dict(raw)
+                    handoff_refs = raw.pop("handoff_refs", [])
             ordinal_error = _prevalidate_candidate_ordinal(
                 raw,
                 candidate_bank=candidate_bank,
@@ -522,6 +555,14 @@ class HypothesisResearchSession:
                 self._budget.record_result(resolution)
                 continue
             if isinstance(resolution, HypothesisResearchFinalized):
+                if self._observation is not None:
+                    from scion.observation.source import ObservationError
+                    try:
+                        self._observation.freeze_handoff(resolution.hypothesis, handoff_refs)
+                    except ObservationError as error:
+                        self._budget.record_result({"action": action, "ok": False,
+                                                    "reason_code": error.reason_code})
+                        continue
                 if action == "finalize_hypothesis":
                     self._record_candidate_completed()
                 self._record_candidate_selected()

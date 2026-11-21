@@ -243,7 +243,7 @@ def _campaign_signal_handlers(
 def _run_campaign_with_signal_finalization(
     manager: Any,
     *,
-    requested_rounds: int,
+    requested_rounds: int | None,
     hardwall: _CampaignOuterHardwall,
 ) -> Any:
     """Keep terminal handlers installed until a caught stop is durable."""
@@ -317,8 +317,8 @@ def register_run_command(app: typer.Typer) -> None:
             "--mock-llm",
             help="Use MockLLMClient (no real API calls)",
         ),
-        rounds: int = typer.Option(
-            10,
+        rounds: Optional[int] = typer.Option(
+            None,
             "--rounds",
             help="Target number of typed formal protocol evaluated rounds",
         ),
@@ -327,6 +327,10 @@ def register_run_command(app: typer.Typer) -> None:
             "--campaign-dir",
             help="Fresh output directory for this campaign",
         ),
+        run_intent: str = typer.Option("formal_target", "--run-intent",
+            help="formal_target (default 10 rounds) or explicit investigation"),
+        formal_stage_limit: Optional[int] = typer.Option(None, "--formal-stage-limit", min=0,
+            help="Investigation formal-stage ceiling; zero permits only public investigation"),
         problem: str = typer.Option(
             ...,
             "--problem",
@@ -363,6 +367,12 @@ def register_run_command(app: typer.Typer) -> None:
                 "Path to strict JSON limits enabling bounded read/search/ready "
                 "turns before the independent code final decision"
             ),
+        ),
+        public_research: Optional[str] = typer.Option(
+            None, "--public-research", help="Strict JSON opt-in and resource limits for isolated public research",
+        ),
+        research_materials: list[str] = typer.Option(
+            [], "--research-materials", help="Explicit public material directory for fresh H-only import; repeat in order; requires M",
         ),
         provider_call_cap: int | None = typer.Option(
             None,
@@ -414,6 +424,15 @@ def register_run_command(app: typer.Typer) -> None:
 
         Use --mock-llm for local testing (no API key required).
         """
+        from scion.core.research_lifecycle import validate_run_intent, validate_investigation
+        try:
+            validate_run_intent(run_intent, formal_stage_limit)
+            if run_intent == "investigation" and rounds is not None:
+                raise ValueError("--rounds and investigation are mutually exclusive")
+            rounds = (10 if rounds is None else rounds) if run_intent == "formal_target" else None
+        except (TypeError, ValueError) as exc:
+            typer.echo(f"ERROR: {exc}", err=True)
+            raise typer.Exit(code=1)
         campaign_path = Path(campaign_dir).resolve()
 
         problem_yaml = Path(problem).resolve()
@@ -438,6 +457,17 @@ def register_run_command(app: typer.Typer) -> None:
             except (TypeError, ValueError) as exc:
                 typer.echo(f"ERROR: {exc}", err=True)
                 raise typer.Exit(code=1)
+        from scion.observation.config import load_public_research, PublicResearchStop
+        public_research_value = None
+        if public_research is not None:
+            try:
+                public_research_value = load_public_research(Path(public_research))
+            except PublicResearchStop as exc:
+                typer.echo(f"ERROR: {exc.record.outcome.value}: {exc.record.reason_code}", err=True)
+                raise typer.Exit(code=1)
+        if research_materials and (public_research_value is None or not public_research_value.research_materials_enabled):
+            typer.echo("ERROR: OBS_CONFIG_INVALID: material import requires M", err=True)
+            raise typer.Exit(code=1)
         from scion.core.resource_envelope import ResourceEnvelope
 
         try:
@@ -446,7 +476,10 @@ def register_run_command(app: typer.Typer) -> None:
                 outer_hardwall_sec=outer_hardwall_sec,
                 provider_transient_retries=provider_transient_retries,
             )
-        except (TypeError, ValueError) as exc:
+            validate_investigation(run_intent=run_intent, formal_stage_limit=formal_stage_limit,
+                public_research=public_research_value, research_input=research_input_value,
+                code_research_limits=code_research_limits_value, resource_envelope=resource_envelope)
+        except (TypeError, ValueError, PublicResearchStop) as exc:
             typer.echo(f"ERROR: {exc}", err=True)
             raise typer.Exit(code=1)
         from scion.config.problem import (
@@ -557,7 +590,7 @@ def register_run_command(app: typer.Typer) -> None:
             validate_requested_screening_expansion(
                 config=proto_cfg,
                 split_manifest=split_manifest,
-                requested_rounds=rounds,
+                requested_rounds=rounds if run_intent == "formal_target" else formal_stage_limit,
             )
         except ValueError as exc:
             typer.echo(f"ERROR: {exc}", err=True)
@@ -636,10 +669,21 @@ def register_run_command(app: typer.Typer) -> None:
                 research_history=research_history_value,
                 resource_envelope=resource_envelope,
                 code_research_limits=code_research_limits_value,
+                **({"run_intent": run_intent, "formal_stage_limit": formal_stage_limit}
+                   if run_intent == "investigation" else {}),
+                **({"research_material_imports": tuple(research_materials)} if research_materials else {}),
+                **({"public_research": public_research_value,
+                    "formal_configuration_files": tuple(str(p) for p in (
+                        protocol_path,
+                        Path(split) if split else problem_dir / "split_manifest.yaml",
+                        Path(seeds) if seeds else problem_dir / "seed_ledger.yaml",
+                    ) if p is not None and p.exists())} if public_research_value is not None else {}),
             )
 
             requested_rounds = rounds
             typer.echo(
+                f"Starting investigation (formal_stage_limit={formal_stage_limit}, mock_llm={mock_llm})"
+                if run_intent == "investigation" else
                 _campaign_start_message(
                     problem_name=(
                         getattr(spec, "display_name", None)
@@ -671,6 +715,9 @@ def register_run_command(app: typer.Typer) -> None:
             typer.echo(f"  experiments  : {state_data['n_experiments']}")
             typer.echo(f"  champion ver : {state_data['champion_version']}")
             typer.echo(f"  active branches: {state_data['n_active_branches']}")
+        except PublicResearchStop as exc:
+            typer.echo(f"ERROR: {exc.record.outcome.value}: {exc.record.reason_code}", err=True)
+            raise typer.Exit(code=1)
         finally:
             _close_llm_client(llm_client)
 

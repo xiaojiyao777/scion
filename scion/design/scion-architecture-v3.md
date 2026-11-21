@@ -38,6 +38,74 @@ identity、hash 或 receipt 的数量。凡是可以由隔离执行和问题 Pro
 
 ## 1. 设计原则
 
+### v0.5 公开研究能力扩展（2026-11-15 采纳）
+
+本次用户明确要求同步 P0 的扩展条款；以下条款扩展 §4、§5、§11–16 的
+研究能力和暴露范围，不改 §8–10 的科学链。它们是架构约束，具体实现进度
+仍由 TASK/current-state 记录，不能由本文推断功能已经开放。
+
+- **§4 / §14：**公开研究笔记、脚本和观察输出均为 proposal-only 数据。
+  agent 只能追加当前阶段研究文件；观察执行组件记录实际执行事实。两者不能
+  写正式 metrics、Safe Features、Decision 或 branch/champion。保存及读取材料
+  不构成科学认证。原始输出仍为 tainted，干净参考检查也不替代正式 Protocol。
+- **§5 / §15：**正式 H 导出前，可在受限公开环境调查当前完整算法；approved H
+  后，C 可调查绑定 base/draft。H 可在导出时附带本次 H 产生的明确公开材料集合，
+  经引用和暴露检查冻结，只有 H Contract 通过才交给 C。C 可读自己的当前研究
+  输出，仍无通用历史浏览权。一个 attempt 最多导出一个 H 和一个绑定 C，导出后
+  不可修复。原 exact-falsifier veto 不可被观察结果清除。
+- **§11 / §12：**持续问题是普通研究内容，可关联多个 attempt/branch；它不替代
+  分支状态、源码基线或调度。agent 在已获配会话内选择实验，不能自行增加共同
+  预算或依据解释文本改变调度。观察不增加 formal evaluated round；完整源码
+  连续性、stale reconcile 与正式阶段复用规则保持原边界。
+- **§16：**完整算法主体与 agent 分析脚本在不同进程执行，仅接受声明公开输入
+  和精确依赖闭包。独立参考检查不加载候选代码。所有执行资源显式计数，不提供
+  任意宿主路径、网络、shell 或控制树访问；隔离不可用时不降级为宿主执行。
+  资源的实际保障范围和计量精度必须记录，不能以声明替代实际验证。
+- **§11 / §14 / §15（P4 细化）：**显式 M 开关允许后续 H 读取已关闭会话及明确
+  导入的完整公开研究材料；C 仍只读当前 H 冻结选集和自身材料。历史完整树在清理前
+  普通保存，公开源码投影与私有保存分离；材料不选择 executable head。缺依赖明确
+  unavailable，不重建历史 patch。fresh import 不恢复任何终态、队列或预算；保存
+  故障不能倒改已经完成的 Decision。O 执行与 M 暴露分别控制，不新增研究质量门槛。
+
+派生实施合同为 [P0](v0.5/v0.5-p0-interface-and-boundary-contract.md)、
+[P1](v0.5/v0.5-p1-public-problem-execution.md)和
+[P2](v0.5/v0.5-p2-isolated-observation-execution.md)及
+[P3](v0.5/v0.5-p3-session-permissions-and-handoff.md)。P3 将角色权限、正式输入排除、
+材料安全投影和 Contract 后交接落实在现有会话调用链；实现不授予 C 通用历史访问。
+跨 attempt 延续、清理前保存与 fresh import 由 [P4](v0.5/v0.5-p4-material-continuity.md)细化。
+研究能力的诊断任务、评审及有界开放研究由 [P5](v0.5/v0.5-p5-process-assessment.md)细化。
+P5 参考答案和 rubric 只供离线框架评价，不进入 provider 公开材料、Contract、
+Safe Features、Decision 或 Scheduler；诊断正例也不替代正式完整 solver 证据。
+它们不得新增研究质量门槛、
+host 机制选择、身份/签发/登记/receipt 或独立 authority。
+
+### v0.5 investigation 生命周期扩展（2026-11-21 采纳）
+
+用户明确要求推进 P5c C 并采纳必要的生命周期扩展。本条扩展 §4/5、§11–15；
+不改变 §8–10 的科学判据，也不解除 Post-R3 exact-falsifier veto 或 ready 条件。
+
+- operator 可显式选择 `run_intent=investigation`，声明共同 provider/wall/公开
+  研究资源与 `formal_stage_limit`（非负上限，0 表示仅公开调查）。默认
+  `formal_target` 和 `--rounds` 的既有正式目标/拒绝后 fresh H 规则不变。
+- 持续问题沿用普通 `research_input.current_question`；解释修订保存为普通材料。
+  不新增问题完成评分、QuestionController、强制实验顺序、必读材料或机制调度。
+  H 可调查或导出一个正式 H；C 仍只实现 approved H，材料可见权限不扩大。
+- 仅 investigation 中实际获配且未导出 H 的开放 H，可用类型化
+  `conclude_research` 主动结束整个 campaign。它与导出 H 互斥，产生
+  `RESEARCH_CONCLUDED` operational outcome，formal delta=0，不进入科学链。
+  普通笔记、H abstain、C abandon、局部额度耗尽不等于该动作。零正式额度不开放
+  H finalize/候选 staging/selection；直接合法 H/C 不需先做观察或写材料。
+- 结论理由和引用仍 tainted；host 只校验形状、当前 H 所有权和资源，不判定
+  研究充分性。结论正文先保存，会话材料关闭发布成功后才接受正常结束；故障、
+  资源耗尽及中断优先，已保存结论仍保留但不覆盖停止原因。
+- 结束不抢占已导出候选检查、不回滚 Decision、不改 source/head/champion，
+  不将待评工作改为 fail/abandon/promoted。既有后台任务只按 terminal drain 收尾；
+  不派发新研究。报告区分 invocation 完成、实际科学评价及未执行工作。无终态
+  resume；fresh import 只带普通材料，不恢复结束动作、调度状态或预算。
+
+接口、停止优先级、失败路由和 Q11–Q15 由
+[P5c §5–7](v0.5/v0.5-p5c-question-session-and-materials.md) 细化，实施状态查 TASK/current-state。
+
 ### 1.1 方法论是内核，agent 是执行器
 
 框架的价值不在"用了几个 LLM"，在于：

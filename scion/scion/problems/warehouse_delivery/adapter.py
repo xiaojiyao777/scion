@@ -92,6 +92,13 @@ class WarehouseDeliveryAdapter:
     def spec(self) -> ProblemSpecV1:
         return self._spec
 
+    def public_observation_provider(self) -> Any:
+        from scion.problems.warehouse_delivery.public_observation import (
+            WarehousePublicObservationProvider,
+        )
+
+        return WarehousePublicObservationProvider()
+
     # --- lazy import of surrogate modules ---
 
     def _ensure_modules(self) -> None:

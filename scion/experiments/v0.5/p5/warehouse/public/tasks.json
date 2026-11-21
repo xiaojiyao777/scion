@@ -1,0 +1,323 @@
+[
+  {
+    "task_id": "warehouse-01",
+    "research_input": {
+      "current_question": "研究当前完整求解算法在这些公开条件下还有什么可检验的改进空间。附带的两份解只是未经核验的示例，不是当前 solver 的运行记录。请自主调查，界定能够支持的结论及下一步；无需为了提交而修改算法。",
+      "observations": [
+        {
+          "instance": {
+            "orders": [
+              {
+                "order_id": "DEV_A",
+                "vehicle_category": 0,
+                "vehicle_subcategory": 1,
+                "urgent": false,
+                "hazard_flag": false,
+                "hazard_quantity": 0,
+                "pickup_name": "DEV_WH",
+                "pickup_province": "Guangdong",
+                "pickup_city": "Dongguan",
+                "declaration_amount": 100000.0,
+                "lsp": "DEV_LSP",
+                "ship_method": "SEA",
+                "destination_country": "Germany",
+                "spu_list": [
+                  {
+                    "packing_type": "FULL_PLT",
+                    "quantity": 1
+                  }
+                ],
+                "locked_vehicle_id": null
+              },
+              {
+                "order_id": "DEV_B",
+                "vehicle_category": 0,
+                "vehicle_subcategory": 1,
+                "urgent": false,
+                "hazard_flag": false,
+                "hazard_quantity": 0,
+                "pickup_name": "DEV_WH",
+                "pickup_province": "Guangdong",
+                "pickup_city": "Dongguan",
+                "declaration_amount": 120000.0,
+                "lsp": "DEV_LSP",
+                "ship_method": "SEA",
+                "destination_country": "Germany",
+                "spu_list": [
+                  {
+                    "packing_type": "FULL_PLT",
+                    "quantity": 1
+                  }
+                ],
+                "locked_vehicle_id": null
+              }
+            ],
+            "amount_limits": {
+              "Germany,SEA": 1000000.0
+            }
+          },
+          "sample_solutions": [
+            {
+              "vehicles": {
+                "vA": {
+                  "vehicle_id": "vA",
+                  "vehicle_type": "T3",
+                  "region": "Dongguan",
+                  "order_ids": [
+                    "DEV_A"
+                  ]
+                },
+                "vB": {
+                  "vehicle_id": "vB",
+                  "vehicle_type": "T3",
+                  "region": "Dongguan",
+                  "order_ids": [
+                    "DEV_B"
+                  ]
+                }
+              },
+              "assignment": {
+                "DEV_A": "vA",
+                "DEV_B": "vB"
+              }
+            },
+            {
+              "vehicles": {
+                "vA": {
+                  "vehicle_id": "vA",
+                  "vehicle_type": "T3",
+                  "region": "Dongguan",
+                  "order_ids": [
+                    "DEV_A",
+                    "DEV_B"
+                  ]
+                }
+              },
+              "assignment": {
+                "DEV_A": "vA",
+                "DEV_B": "vA"
+              }
+            }
+          ],
+          "origin": "constructed_public_examples_not_solver_measurements"
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "warehouse-02",
+    "research_input": {
+      "current_question": "研究当前完整求解算法在这些公开条件下还有什么可检验的改进空间。附带的两份解只是未经核验的示例，不是当前 solver 的运行记录。请自主调查，界定能够支持的结论及下一步；无需为了提交而修改算法。 附有一个与样本解分开定义的简化计数模型，它不是实际运行计时；也请判断它支持什么、不能支持什么。",
+      "observations": [
+        {
+          "instance": {
+            "orders": [
+              {
+                "order_id": "DEV_A",
+                "vehicle_category": 0,
+                "vehicle_subcategory": 1,
+                "urgent": false,
+                "hazard_flag": false,
+                "hazard_quantity": 0,
+                "pickup_name": "DEV_WH",
+                "pickup_province": "Guangdong",
+                "pickup_city": "Dongguan",
+                "declaration_amount": 100000.0,
+                "lsp": "DEV_LSP",
+                "ship_method": "SEA",
+                "destination_country": "Germany",
+                "spu_list": [
+                  {
+                    "packing_type": "FULL_PLT",
+                    "quantity": 1
+                  }
+                ],
+                "locked_vehicle_id": null
+              },
+              {
+                "order_id": "DEV_B",
+                "vehicle_category": 0,
+                "vehicle_subcategory": 1,
+                "urgent": false,
+                "hazard_flag": false,
+                "hazard_quantity": 0,
+                "pickup_name": "DEV_WH",
+                "pickup_province": "Guangdong",
+                "pickup_city": "Dongguan",
+                "declaration_amount": 120000.0,
+                "lsp": "DEV_LSP",
+                "ship_method": "SEA",
+                "destination_country": "Germany",
+                "spu_list": [
+                  {
+                    "packing_type": "FULL_PLT",
+                    "quantity": 1
+                  }
+                ],
+                "locked_vehicle_id": null
+              }
+            ],
+            "amount_limits": {
+              "Germany,SEA": 1000000.0
+            }
+          },
+          "sample_solutions": [
+            {
+              "vehicles": {
+                "vA": {
+                  "vehicle_id": "vA",
+                  "vehicle_type": "T3",
+                  "region": "Dongguan",
+                  "order_ids": [
+                    "DEV_A",
+                    "DEV_B"
+                  ]
+                }
+              },
+              "assignment": {
+                "DEV_A": "vA",
+                "DEV_B": "vA"
+              }
+            },
+            {
+              "vehicles": {
+                "vB": {
+                  "vehicle_id": "vB",
+                  "vehicle_type": "T3",
+                  "region": "Dongguan",
+                  "order_ids": [
+                    "DEV_B",
+                    "DEV_A"
+                  ]
+                }
+              },
+              "assignment": {
+                "DEV_B": "vB",
+                "DEV_A": "vB"
+              }
+            }
+          ],
+          "origin": "constructed_public_examples_not_solver_measurements",
+          "work_model": {
+            "origin": "constructed_additive_unit_cost_model_not_solver_timing",
+            "unit": "one abstract cost unit per counted operation; all components counted once",
+            "baseline_components": {
+              "price_lookup": 60,
+              "packing_check": 40
+            },
+            "candidate_components": {
+              "price_lookup": 20,
+              "packing_check": 80,
+              "grouping": 10
+            }
+          }
+        }
+      ]
+    }
+  },
+  {
+    "task_id": "warehouse-03",
+    "research_input": {
+      "current_question": "研究当前完整求解算法在这些公开条件下还有什么可检验的改进空间。附带的两份解只是未经核验的示例，不是当前 solver 的运行记录。请自主调查，界定能够支持的结论及下一步；无需为了提交而修改算法。 公开条件已经改变，之前运行实际留下的公开研究材料（如有）可供参考。",
+      "observations": [
+        {
+          "instance": {
+            "orders": [
+              {
+                "order_id": "DEV_A",
+                "vehicle_category": 0,
+                "vehicle_subcategory": 1,
+                "urgent": false,
+                "hazard_flag": false,
+                "hazard_quantity": 0,
+                "pickup_name": "DEV_WH",
+                "pickup_province": "Guangdong",
+                "pickup_city": "Dongguan",
+                "declaration_amount": 100000.0,
+                "lsp": "DEV_LSP",
+                "ship_method": "SEA",
+                "destination_country": "Germany",
+                "spu_list": [
+                  {
+                    "packing_type": "FULL_PLT",
+                    "quantity": 2
+                  }
+                ],
+                "locked_vehicle_id": null
+              },
+              {
+                "order_id": "DEV_B",
+                "vehicle_category": 0,
+                "vehicle_subcategory": 1,
+                "urgent": false,
+                "hazard_flag": false,
+                "hazard_quantity": 0,
+                "pickup_name": "DEV_WH",
+                "pickup_province": "Guangdong",
+                "pickup_city": "Dongguan",
+                "declaration_amount": 120000.0,
+                "lsp": "DEV_LSP",
+                "ship_method": "SEA",
+                "destination_country": "Germany",
+                "spu_list": [
+                  {
+                    "packing_type": "FULL_PLT",
+                    "quantity": 2
+                  }
+                ],
+                "locked_vehicle_id": null
+              }
+            ],
+            "amount_limits": {
+              "Germany,SEA": 1000000.0
+            }
+          },
+          "sample_solutions": [
+            {
+              "vehicles": {
+                "vA": {
+                  "vehicle_id": "vA",
+                  "vehicle_type": "T3",
+                  "region": "Dongguan",
+                  "order_ids": [
+                    "DEV_A"
+                  ]
+                },
+                "vB": {
+                  "vehicle_id": "vB",
+                  "vehicle_type": "T3",
+                  "region": "Dongguan",
+                  "order_ids": [
+                    "DEV_B"
+                  ]
+                }
+              },
+              "assignment": {
+                "DEV_A": "vA",
+                "DEV_B": "vB"
+              }
+            },
+            {
+              "vehicles": {
+                "vA": {
+                  "vehicle_id": "vA",
+                  "vehicle_type": "T3",
+                  "region": "Dongguan",
+                  "order_ids": [
+                    "DEV_A",
+                    "DEV_B"
+                  ]
+                }
+              },
+              "assignment": {
+                "DEV_A": "vA",
+                "DEV_B": "vA"
+              }
+            }
+          ],
+          "origin": "constructed_public_examples_not_solver_measurements"
+        }
+      ]
+    }
+  }
+]

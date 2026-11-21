@@ -154,16 +154,18 @@ def test_scientific_step_requires_explicit_source_facts() -> None:
 
 
 @pytest.mark.parametrize("outcome", list(ExecutionOutcome))
-def test_six_state_roundtrip_event_query_step_result_and_step_record(
+def test_outcome_roundtrip_event_query_step_result_and_step_record(
     tmp_path: Path,
     outcome: ExecutionOutcome,
 ) -> None:
     registry = LineageRegistry(str(tmp_path / "lineage.db"))
+    concluded = outcome is ExecutionOutcome.RESEARCH_CONCLUDED
     record = ExecutionOutcomeRecord(
         outcome=outcome,
         reason_code=f"TEST_{outcome.value.upper()}",
-        detail="typed outcome fixture",
-        provenance={"source": "unit", "nested": [1, True]},
+        detail="" if concluded else "typed outcome fixture",
+        provenance=({"stage": "proposal_hypothesis", "conclusion_ref": "materials/conclusion.note"}
+            if concluded else {"source": "unit", "nested": [1, True]}),
     )
     branch_id = f"branch-{outcome.value}"
 
@@ -171,7 +173,7 @@ def test_six_state_roundtrip_event_query_step_result_and_step_record(
         campaign_id="campaign-1",
         branch_id=branch_id,
         record=record,
-        stage="screening",
+        stage="proposal_hypothesis" if concluded else "screening",
     )
     query_results = registry.query_execution_outcomes(
         campaign_id="campaign-1",
@@ -195,7 +197,8 @@ def test_six_state_roundtrip_event_query_step_result_and_step_record(
         protocol_result=protocol,
         execution_outcome=projected_outcome,
     )
-    step_record = _step(
+    step_record = _hypothesis_free_step(failure_stage=None, failure_detail=None,
+        execution_outcome=projected_outcome) if concluded else _step(
         outcome,
         decision=decision,
         protocol_result=protocol,
@@ -598,3 +601,17 @@ def test_summary_sanitizes_proposal_failure_from_either_stage_fact(
         "provenance": {"stage": "proposal_code"},
     }
     assert sentinel not in str(summary)
+
+
+@pytest.mark.parametrize("override", [
+    {"hypothesis": _hypothesis()}, {"failure_stage": "proposal_hypothesis"},
+    {"failure_detail": "RESEARCH_CONCLUDED"}, {"contract_passed": True},
+    {"verification_passed": True}, {"decision": Decision.CONTINUE_EXPLORE},
+    {"protocol_result": _protocol()},
+])
+def test_research_conclusion_cannot_carry_proposal_failure_or_scientific_results(override):
+    values = dict(failure_stage=None, failure_detail=None,
+        execution_outcome=ExecutionOutcomeRecord(ExecutionOutcome.RESEARCH_CONCLUDED,
+            "RESEARCH_CONCLUDED", provenance={"stage": "proposal_hypothesis", "conclusion_ref": "materials/conclusion.note"}))
+    values.update(override)
+    with pytest.raises(ValueError): _hypothesis_free_step(**values)

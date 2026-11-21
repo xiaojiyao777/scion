@@ -1,0 +1,79 @@
+[
+  {
+    "task_id": "warehouse-01",
+    "category": "local_benefit",
+    "checks": [
+      {
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 1,
+          "total_cost": 1600
+        }
+      },
+      {
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 0,
+          "total_cost": 800
+        }
+      }
+    ],
+    "scope": "Only supplied solutions on the supplied input; no complete-solver superiority or timing evidence.",
+    "counterexample": "A solution comparison does not establish the behavior or runtime of an algorithm."
+  },
+  {
+    "task_id": "warehouse-02",
+    "category": "no_observed_benefit",
+    "checks": [
+      {
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 0,
+          "total_cost": 800
+        }
+      },
+      {
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 0,
+          "total_cost": 800
+        }
+      }
+    ],
+    "scope": "Only supplied solutions on the supplied input; no complete-solver superiority or timing evidence.",
+    "counterexample": "A solution comparison does not establish the behavior or runtime of an algorithm.",
+    "work_model_reference": {
+      "baseline_total": 100,
+      "candidate_total": 110,
+      "conclusion": "Local work drops but total modeled cost rises by 10; this is not real solver timing or a causal mechanism comparison."
+    }
+  },
+  {
+    "task_id": "warehouse-03",
+    "category": "insufficient_transfer",
+    "checks": [
+      {
+        "consistency": "pass",
+        "feasibility": "pass",
+        "recomputed_objective": {
+          "subcategory_splits": 1,
+          "total_cost": 1600
+        }
+      },
+      {
+        "consistency": "pass",
+        "feasibility": "fail",
+        "recomputed_objective": {
+          "subcategory_splits": 0,
+          "total_cost": 800
+        }
+      }
+    ],
+    "scope": "Only supplied solutions on the supplied input; no complete-solver superiority or timing evidence.",
+    "counterexample": "Changed capacity invalidates combined solution."
+  }
+]

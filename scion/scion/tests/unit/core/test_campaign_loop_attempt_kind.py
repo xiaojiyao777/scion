@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from inspect import Parameter, signature
+from inspect import signature
 from types import SimpleNamespace
 from typing import Any
 
@@ -111,11 +111,11 @@ def _rejected() -> StepResult:
     )
 
 
-def test_round_target_is_required_and_named_requested_rounds() -> None:
+def test_round_target_keeps_its_name_and_allows_explicit_investigation() -> None:
     for run_method in (CampaignLoop.run, CampaignManager.run):
         parameters = signature(run_method).parameters
         assert "max_rounds" not in parameters
-        assert parameters["requested_rounds"].default is Parameter.empty
+        assert parameters["requested_rounds"].default is None
 
 
 @pytest.mark.parametrize(

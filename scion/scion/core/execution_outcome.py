@@ -16,6 +16,7 @@ from scion.core.selected_hypothesis_basis import (
 class ExecutionOutcome(Enum):
     EVALUATED = "evaluated"
     RESEARCH_REJECTED = "research_rejected"
+    RESEARCH_CONCLUDED = "research_concluded"
     NOT_EVALUATED = "not_evaluated"
     BLOCKED_INFRA = "blocked_infra"
     RESOURCE_EXHAUSTED = "resource_exhausted"

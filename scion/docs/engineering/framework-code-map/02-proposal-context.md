@@ -1,5 +1,150 @@
 # Proposal Context
 
+## v0.5 P5c C continuing question and H-only conclusion
+
+[`observation/session.py`](../../../scion/observation/session.py) appends the ordinary
+current question, invocation intent, formal capacity and shared resource usage to
+the existing bounded public projection. Question revisions remain ordinary notes;
+they are not system instructions or a separate state machine. Formal H export still
+requires the existing research basis and frontier checks, without mandatory O/note.
+
+Only an open investigation H advertises `conclude_research`; zero formal capacity
+hides and rejects H export/staging/selection. `HypothesisResearchSession` returns
+[`ResearchConclusion`](../../../scion/core/research_lifecycle.py) separately from H.
+[`observation/conclusion.py`](../../../scion/observation/conclusion.py) checks bounded
+reason/current-H note refs and saves ordinary note bytes/dependencies. Pipeline
+closure/publication and resource checks precede accepting `RESEARCH_CONCLUDED`.
+An indexed ref or prose never substitutes for those checks. C retains approved-H
+binding, exact-falsifier veto and immediate ready export; it cannot conclude.
+
+ExploreStep records a hypothesis-free, non-failure operational step with no scientific
+results. The existing campaign loop owns stopping. See
+[P5c §5–7](../../../design/v0.5/v0.5-p5c-question-session-and-materials.md) for limits,
+failure routes and Q11–Q15; actual validation is recorded in current-state.
+
+## v0.5 P5c A/B development-test readback and actual source retention
+
+[`proposal/code_research_session.py`](../../../scion/proposal/code_research_session.py)
+checks the existing draft/script/test limits, then calls the current public session's
+host-only `begin_development_test`. After the unchanged bounded result and
+veto/ready calculation, it calls `finish_development_test`; either material fault
+stops further dispatch/export. Request/result refs join the existing bounded tool
+feedback and are charged to its tool/transcript limits. Both O/M off retain the
+old path. A callback exception preserves its primary error and attempts a bounded
+result with null feedback; it never retries the test.
+
+[`observation/development_materials.py`](../../../scion/observation/development_materials.py)
+writes exact script bytes and all requested draft file bodies, request metadata,
+and only the existing safe result projection. It never executes a candidate or
+reads raw evaluator logs. Sequence paths are ordinary locations; draft paths are
+metadata, not write destinations. The sequential preflight reserves request,
+bounded result and both index writes under existing shared storage limits.
+Automatic writes do not consume another provider turn/public action; their host
+CPU/wall/storage are charged to material limits. B's capture runs inside the existing
+callback deadline, so material time and callback wall overlap; do not sum them. Child CPU is unknown,
+not zero or parent CPU. Persistence/global-resource failures remain typed.
+
+Files join existing own-C read/search and, with M, closed-session H-only export
+and fresh import. All drafts remain `projection_only`. Historical A and callbacks
+without actual capture keep `request_only` and empty `tested_source_refs`.
+No material changes ready, veto, executable head or formal counts.
+
+[`core/code_development.py`](../../../scion/core/code_development.py) invokes an
+optional host callback on its actual prepared scratch after preflight, before
+probe execution and again after copying host suites, before host checks.
+The pipeline wires it only when O/M provides a current public session.
+[`observation/development_sources.py`](../../../scion/observation/development_sources.py)
+saves each complete prepared tree privately, then exposes only C-readable algorithm
+and declared dependency bytes through the existing no-link copier and formal
+exclusions (including original absolute paths remapped into scratch). Stage records
+say `development_draft` / `public_test_source` / `captured_before_execution`; a saved
+stage does not prove process launch or a complete ordinary algorithm workspace.
+Private suite/layout/path records stay unindexed. Result dependencies point to at
+most two stage records, whose dependencies locate exact files through P4 imports.
+Source/combined-copy/storage limits and result/index reservation precede execution;
+capture faults use the material stop route and cannot become ordinary test failure.
+Preflight rejection has no snapshot; missing files are never reconstructed.
+Tests: `test_development_test_materials.py` maps Q01–Q07 in the
+[P5c contract](../../../design/v0.5/v0.5-p5c-question-session-and-materials.md);
+`test_development_source_materials.py` maps Q08–Q10; `test_public_research_outer.py`
+checks actual source bytes and finite feedback before ready for both problem
+packages (Q15). These scripted checks do not establish E2.
+
+## v0.5 P5 offline process assessment
+
+[`tools/p5_assessment.py`](../../../tools/p5_assessment.py) is outside production
+composition. Its [problem-owned task files](../../../experiments/v0.5/p5/README.md)
+keep public inputs and evaluator answers separate. Export serializes synthetic task
+examples into `current_question`, with empty `observations`; it does not extend the
+existing problem-specific prior-observation projection. The operator review tool
+checks all planned slots and exact evidence bytes, preserves missing costs and
+reviewer disagreements, and cannot grade research semantics or write Decision.
+See [P5](../../../design/v0.5/v0.5-p5-process-assessment.md) and
+`test_p5_assessment.py`; real-provider E2 acceptance remains separate.
+
+## v0.5 P3/P4 current source map
+
+Optional `public_research` is composed once per fresh campaign. The default path
+keeps its existing tool/context values. `observation/config.py` loads explicit
+independent O/M configuration and explicit resources; `controller.py` validates public closure,
+selects host source roots and reuses draft materialization/preflight/config updates.
+`exclusions.py` reads current SplitManifest and actual Protocol SplitManager paths.
+`session.py` owns phase-scoped append/read/search/observe, safe metadata, raw-byte
+files and explicit frozen H handoff. Its inputs have no provider filesystem paths.
+
+`ProposalPipeline` passes one observation session to the existing bounded H/C
+loops. `HypothesisResearchSession` freezes selected files on successful finalize
+or K2 select; `ProposalAttempt.research_handoff` carries that ordinary companion
+value. `ExploreStepPipeline` supplies it to C only after H Contract passes. Code
+observations do not modify draft/tested/ready/veto state. Both sessions close in
+pipeline finally blocks; terminal attempts cannot reuse the session. Context
+projection adds only three declared fields, retains recursive key validation and
+places new result/body data in a user data block. Formal outcomes are still owned
+by the existing pipeline and scientific chain.
+
+Design: [P3](../../../design/v0.5/v0.5-p3-session-permissions-and-handoff.md).
+Executable coverage under `scion/scion/tests`:
+
+|Cases|Evidence|
+|---|---|
+|T01|`test_public_research_sessions.py`: strict/off/missing capability; existing H/C/CLI compatibility regressions|
+|T02/T04|Real H current, C base/draft, revision-specific output; wrong role/target/API/syntax rejected before target starts|
+|T03|All four formal splits, actual SplitManager and safe roots, canary/config path and hardlink exclusions|
+|T05/T07|Opaque tainted output, raw bytes in user data, immutable earlier projection, current C/scoped handoff visibility|
+|T06|Invalid ref remains feedback; persistence fault exports no H; wrong H/source cannot bind; outer H Contract rejection invokes no C|
+|T08|Failed exact falsifier → successful public observation → ready still rejected|
+|T09|Session→ProposalPipeline typed local/global/infra/internal/interrupt routes and pre-dispatch context exhaustion|
+|T10/T11|`test_public_research_outer.py`: both real problem runtimes, H observation→H Contract→handoff→C base/draft→ready→Contract/Verification/Protocol/Decision|
+|T12|Fresh-session visibility resets while run counts persist; existing abstain/abandon and scheduler-forward regression|
+
+Configuration and counts are operational evidence. These tests use scripted
+Creative turns and do not satisfy P5's real-agent research assessment. Cross-attempt
+material visibility/import is implemented by `observation/continuity.py` under
+[P4](../../../design/v0.5/v0.5-p4-material-continuity.md):
+
+- Closed sessions atomically publish all completed public files, including negative
+  outputs. Later H gets the complete index; C still gets only current-H handoff and
+  its own files. Revisions append; original bytes and reference origins survive.
+- `--research-materials` / `research_material_imports` copy only indexed public
+  files, under separate local namespaces. Missing files/dependencies are explicit;
+  imported source is a public projection, never a restored executable head.
+- `retain_source` saves actual complete private trees and separately copies declared
+  source projections. WorkspaceService invokes the optional callback before old-head
+  cleanup. A retention failure preserves the old tree and completed Decision; the
+  controller records a typed failure and blocks subsequent research dispatch.
+- M-only excludes observe from tool schema and runtime dispatch. Both switches off
+  keep the legacy path. Shared CPU/wall/storage counters include material work.
+
+`test_research_continuity.py` covers M01–M10: all switch combinations, closed H/C
+visibility, immutable projections, byte-exact import and origin preservation,
+missing files/source, hostile paths/aliases/metadata, actual Decision cleanup and
+persistence/resource/interrupt routes. Its real bounded-H test reads a prior
+abstained attempt's note. `test_public_research_outer.py` covers M11/M12 with O-only
+and O+M for both problem packages, untrusted fresh imports, H rejection and the
+unchanged formal chain. Existing exact-falsifier and shared core tests remain
+required. The sections below are historical locators.
+
+
 ## Current direct-runtime research guidance (2026-10-05)
 
 `contract/checks/security.py::effective_import_whitelist` is the same C8 policy

@@ -1,0 +1,36 @@
+{
+  "public_observation_enabled": true,
+  "research_materials_enabled": true,
+  "budget": {
+    "per_action": {
+      "wall_seconds": 15,
+      "cpu_seconds": 10,
+      "memory_bytes": 536870912,
+      "output_bytes": 1048576,
+      "scratch_bytes": 16777216
+    },
+    "checker": {
+      "wall_seconds": 3,
+      "cpu_seconds": 2,
+      "memory_bytes": 268435456,
+      "output_bytes": 65536,
+      "scratch_bytes": 1048576
+    },
+    "preparation_wall_seconds": 2,
+    "max_subject_runs": 24,
+    "max_analysis_runs": 24,
+    "max_checker_runs": 24,
+    "total_wall_seconds": 300,
+    "total_cpu_seconds": 180,
+    "max_storage_bytes": 536870912,
+    "max_source_bytes": 67108864,
+    "max_files_per_action": 4000,
+    "max_input_bytes": 262144,
+    "max_json_depth": 30,
+    "max_collection_items": 20000,
+    "max_actions_per_session": 128,
+    "max_read_bytes": 65536,
+    "max_search_matches": 100,
+    "max_search_scan_bytes": 1048576
+  }
+}

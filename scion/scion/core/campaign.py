@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -13,9 +14,14 @@ from scion.config.problem import (
     SplitManifest,
 )
 from scion.core.branch import StateTransitionError
-from scion.core.campaign_loop import CampaignRunResult
+from scion.core.campaign_loop import (
+    CampaignRunResult,
+    _is_cleaned_stale_explore_attempt,
+    _is_non_attempt_reconcile_housekeeping,
+)
 from scion.core.code_research_limits import CodeResearchLimits
 from scion.core.evaluation_orchestrator import EvaluationExecutionResult
+from scion.core.execution_outcome import ExecutionOutcome
 from scion.core.evidence_recording.common import reduced_measurement_readiness_payload
 from scion.core.evidence_recording.status import project_last_result
 from scion.core.models import (
@@ -84,6 +90,11 @@ class CampaignManager:
         research_history: Sequence[Mapping[str, Any]] = (),
         resource_envelope: ResourceEnvelope | dict[str, Any] | None = None,
         code_research_limits: CodeResearchLimits | dict[str, Any] | None = None,
+        public_research: Any | None = None,
+        formal_configuration_files: Sequence[str] = (),
+        research_material_imports: Sequence[str] = (),
+        run_intent: str = "formal_target",
+        formal_stage_limit: int | None = None,
     ) -> None:
         from scion.core.campaign_composition import compose_campaign_services
 
@@ -102,6 +113,10 @@ class CampaignManager:
             research_history=research_history,
             resource_envelope=resource_envelope,
             code_research_limits=code_research_limits,
+            public_research=public_research,
+            formal_configuration_files=formal_configuration_files,
+            research_material_imports=research_material_imports,
+            run_intent=run_intent, formal_stage_limit=formal_stage_limit,
         )
 
     # ------------------------------------------------------------------
@@ -112,22 +127,39 @@ class CampaignManager:
         """Append one durable step fact to the campaign history."""
         self._evidence_recorder.record_step(step, self._step_history)
 
-    def _terminal_run_result(self, requested_rounds: int) -> CampaignRunResult:
+    def _terminal_run_result(self, requested_rounds: int | None) -> CampaignRunResult:
         """Return the latest in-process result before terminalization."""
 
-        return self._campaign_loop.current_result or self._empty_run_result(
+        current = self._campaign_loop.current_result or self._empty_run_result(
             requested_rounds
         )
+        if getattr(self, "_run_intent", "formal_target") == "investigation":
+            current = replace(current,
+                conclusion_ref=self._research_conclusion_ref() or current.conclusion_ref,
+                unexecuted_work=self._unexecuted_research_work())
+        return current
 
-    def _empty_run_result(self, requested_rounds: int) -> CampaignRunResult:
-        return CampaignRunResult.empty(requested_rounds)
+    def _empty_run_result(self, requested_rounds: int | None) -> CampaignRunResult:
+        return CampaignRunResult.empty(requested_rounds,
+            run_intent=getattr(self, "_run_intent", "formal_target"),
+            formal_stage_limit=getattr(self, "_formal_stage_limit", None))
 
-    def run(self, requested_rounds: int):
-        """Run toward the operator-selected number of formal evaluated rounds."""
-        self._requested_rounds = max(1, int(requested_rounds))
+    def run(self, requested_rounds: int | None = None):
+        """Run the explicit formal target or bounded investigation invocation."""
+        investigation = getattr(self, "_run_intent", "formal_target") == "investigation"
+        if investigation:
+            if requested_rounds is not None:
+                raise ValueError("investigation does not accept requested_rounds")
+            if self._investigation_started_at is not None:
+                raise RuntimeError("investigation cannot resume; start a fresh campaign")
+            import time
+            self._investigation_started_at = time.monotonic()
+        self._requested_rounds = None if investigation else max(1, int(requested_rounds))
         try:
             self._run_research_environment_preflight()
-            return self._campaign_loop.run(requested_rounds=self._requested_rounds)
+            return self._campaign_loop.run(requested_rounds=self._requested_rounds,
+                **({"run_intent": "investigation", "formal_stage_limit": self._formal_stage_limit}
+                   if investigation else {}))
         except Exception as exc:
             self._seal_proposal_runtime("unresolved")
             reason = (
@@ -145,6 +177,9 @@ class CampaignManager:
             self._campaign_loop.call_in_progress = False
             self._finalize_unhandled_run_exception(run_result=terminal)
             raise
+        finally:
+            if investigation:
+                self._investigation_terminal = True
 
     def request_stop(self, reason: str = "external_stop_requested") -> None:
         """Request graceful campaign stop before starting more work."""
@@ -219,8 +254,72 @@ class CampaignManager:
 
     def run_one_step(self) -> StepResult:
         """Execute one campaign step and return a StepResult."""
+        if getattr(self, "_investigation_terminal", False):
+            raise RuntimeError("terminal investigation cannot dispatch new work")
+        if getattr(self, "_run_intent", "formal_target") == "investigation":
+            import time
+            if self._investigation_started_at is None:
+                self._investigation_started_at = time.monotonic()
+            if self._formal_stage_limit and self._n_experiments >= self._formal_stage_limit:
+                raise RuntimeError("formal stage limit reached; no new work is allowed")
         self._run_research_environment_preflight()
-        return self._run_scheduled_step()
+        result = self._run_scheduled_step()
+        if (getattr(self, "_run_intent", "formal_target") == "investigation"
+                and result.execution_outcome is not None
+                and result.execution_outcome.outcome not in {ExecutionOutcome.EVALUATED, ExecutionOutcome.RESEARCH_REJECTED}
+                and not _is_non_attempt_reconcile_housekeeping(result)
+                and not _is_cleaned_stale_explore_attempt(result)):
+            self._investigation_terminal = True
+        return result
+
+    def _research_run_context(self):
+        import time
+        used = self._n_experiments
+        started = self._investigation_started_at
+        limit = self._formal_stage_limit
+        question = self._problem_runtime.research_input
+        return {"run_intent": self._run_intent, "formal_stage_limit": limit,
+            "formal_stages_used": used,
+            "formal_submission_allowed": self._run_intent == "formal_target" or (limit > 0 and used < limit),
+            "current_question": question["current_question"] if question is not None else None,
+            "provider_calls": self._provider_call_budget.snapshot().to_primitive(),
+            "outer_wall_remaining_sec": max(0.0, self._resource_envelope.outer_hardwall_sec - (time.monotonic() - started))
+                if started is not None and self._resource_envelope.outer_hardwall_sec is not None else None}
+
+    def _research_conclusion_ref(self):
+        session = getattr(self._public_research, "active", None)
+        conclusion = getattr(session, "conclusion", None)
+        return conclusion.ref if conclusion is not None else None
+
+    def _investigation_stop(self):
+        if self._run_intent != "investigation":
+            return None
+        from scion.observation.config import PublicResearchStop
+        import time
+        reason = None
+        if getattr(self, "_external_stop_requested", False):
+            reason = "EXTERNAL_STOP_REQUESTED"
+        elif self._investigation_started_at is not None and time.monotonic() - self._investigation_started_at >= self._resource_envelope.outer_hardwall_sec:
+            reason = "OUTER_HARDWALL_EXCEEDED"
+        elif self._public_research.failure_reason:
+            reason = self._public_research.failure_reason
+        elif self._public_research.service.stopped:
+            reason = "GLOBAL_RESEARCH_LIMIT"
+        elif self._provider_call_budget.used >= self._provider_call_budget.cap:
+            reason = "PROVIDER_CALL_CAP_EXHAUSTED"
+        return PublicResearchStop(reason).record if reason else None
+
+    def _check_research_stop(self, phase):
+        from scion.observation.config import PublicResearchStop
+        record = self._investigation_stop()
+        if record is not None:
+            raise PublicResearchStop(record.reason_code, phase=phase)
+
+    def _unexecuted_research_work(self):
+        return [{"branch_id": b.branch_id, "state": b.state.value, "disposition": "not_executed",
+                 "source_tree": self._branch_workspaces.get(b.branch_id)}
+                for b in self._branch_ctrl.get_reportable_branches()
+                if b.state.value not in {"abandoned", "promoted"}]
 
     def _run_scheduled_step(self) -> StepResult:
         """Execute one step after the owning outer loop has established policy."""
@@ -440,10 +539,13 @@ class CampaignManager:
         self,
         branch: Branch,
         hypothesis: HypothesisProposal,
+        *,
+        research_handoff=None,
     ) -> ProposalAttempt[PatchProposal]:
         return self._proposal_pipeline.generate_code(
             branch,
             hypothesis,
+            **({"research_handoff": research_handoff} if research_handoff is not None else {}),
         )
 
     # ------------------------------------------------------------------

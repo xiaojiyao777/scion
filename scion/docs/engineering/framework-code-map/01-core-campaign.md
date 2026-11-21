@@ -1,5 +1,28 @@
 # Core Campaign
 
+## v0.5 explicit investigation lifecycle (2026-11-21)
+
+[`core/research_lifecycle.py`](../../../scion/core/research_lifecycle.py) validates
+the explicit invocation intent and formal-stage ceiling before dispatch. Default
+`formal_target` retains the old round target. `investigation` requires a continuing
+question, bounded H/C sessions, O/M and shared provider/wall resources; zero formal
+capacity allows public investigation with no H export.
+
+[`campaign.py`](../../../scion/core/campaign.py) supplies the safe question/resource
+context and checks common stop conditions at session and loop boundaries. The CLI
+keeps its existing signal hardwall; these Python API checks do not preempt a call.
+[`campaign_loop.py`](../../../scion/core/campaign_loop.py) accepts an H-origin
+`RESEARCH_CONCLUDED` without counting a formal stage, preserves scientific results,
+drains existing work, rechecks faults, then emits one `CampaignRunResult`. Completion
+describes the invocation; zero Protocol stages remain scientifically unevaluated.
+Pending branches are reported as `not_executed` without changing their states or
+heads. No terminal resume or note-based scheduler policy is introduced.
+
+An exception/signal between saving the conclusion and returning its typed outcome
+retains the saved material ref and pending work in terminal reporting. Faults keep
+their original meaning. See [P5c](../../../design/v0.5/v0.5-p5c-question-session-and-materials.md)
+for the V3-adopted stop contract and Q11–Q15 evidence mapping.
+
 > Current boundary update (2026-09-21): the source-continuation, observation and reconcile
 > sections below describe current direct-v3 code. Other sections retain the
 > historical map's scope and must be checked against current source.

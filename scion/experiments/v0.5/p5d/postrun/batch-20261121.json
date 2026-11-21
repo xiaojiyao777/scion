@@ -1,0 +1,567 @@
+{
+  "study": "p5d-e2",
+  "frozen_root": "/home/clawd/research/scion-experiments/v05-p5d-e2-20261121",
+  "terminal_stop": "execution_blocked_infra",
+  "batch_stop_condition": "provider_authentication_failure",
+  "provider_error": {
+    "request_kind": "hypothesis_research_turn",
+    "started_at": "2026-11-21T05:24:48.104249",
+    "finished_at": "2026-11-21T05:24:48.997122",
+    "attempt_index": 0,
+    "ok": false,
+    "error_type": "LLMAuthError",
+    "error": "API authentication failed: Error code: 401 - {'error': {'message': 'Invalid proxy API key', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}}"
+  },
+  "provider_trace": "runs/cvrp-01/llm_traces/20261121T052448997067_hypothesis_research_turn_af64907a.json",
+  "process": {
+    "run_id": "cvrp-01",
+    "start_utc": "2026-11-21T05:24:46.835375+00:00",
+    "start_monotonic_ns": 8898039522284804,
+    "end_utc": "2026-11-21T05:24:49.220405+00:00",
+    "end_monotonic_ns": 8898041907311464,
+    "elapsed_seconds": 2.38502666,
+    "exit_code": 20
+  },
+  "dispositions": [
+    {
+      "run_id": "cvrp-01",
+      "status": "provider_failure",
+      "cause": "HTTP 401 / LLMAuthError in the first H request",
+      "campaign_directory_present": true,
+      "scientific_interventions": [],
+      "formal_stage_limit": 0,
+      "source_attempt_import": null
+    },
+    {
+      "run_id": "warehouse-01",
+      "status": "not_run",
+      "cause": "preregistered batch stop after cvrp-01 provider authentication failure",
+      "campaign_directory_present": false,
+      "scientific_interventions": [],
+      "formal_stage_limit": 0,
+      "source_attempt_import": null
+    },
+    {
+      "run_id": "cvrp-02",
+      "status": "not_run",
+      "cause": "preregistered batch stop after cvrp-01 provider authentication failure",
+      "campaign_directory_present": false,
+      "scientific_interventions": [],
+      "formal_stage_limit": 1,
+      "source_attempt_import": null
+    },
+    {
+      "run_id": "warehouse-02",
+      "status": "not_run",
+      "cause": "preregistered batch stop after cvrp-01 provider authentication failure",
+      "campaign_directory_present": false,
+      "scientific_interventions": [],
+      "formal_stage_limit": 1,
+      "source_attempt_import": null
+    },
+    {
+      "run_id": "cvrp-03",
+      "status": "not_run",
+      "cause": "preregistered batch stop after cvrp-01 provider authentication failure",
+      "campaign_directory_present": false,
+      "scientific_interventions": [],
+      "formal_stage_limit": 1,
+      "source_attempt_import": "cvrp-01"
+    },
+    {
+      "run_id": "warehouse-03",
+      "status": "not_run",
+      "cause": "preregistered batch stop after cvrp-01 provider authentication failure",
+      "campaign_directory_present": false,
+      "scientific_interventions": [],
+      "formal_stage_limit": 1,
+      "source_attempt_import": "warehouse-01"
+    },
+    {
+      "run_id": "open-cvrp",
+      "status": "not_run",
+      "cause": "preregistered batch stop after cvrp-01 provider authentication failure",
+      "campaign_directory_present": false,
+      "scientific_interventions": [],
+      "formal_stage_limit": 3,
+      "source_attempt_import": null
+    },
+    {
+      "run_id": "open-warehouse",
+      "status": "not_run",
+      "cause": "preregistered batch stop after cvrp-01 provider authentication failure",
+      "campaign_directory_present": false,
+      "scientific_interventions": [],
+      "formal_stage_limit": 3,
+      "source_attempt_import": null
+    }
+  ],
+  "accounting": {
+    "research_invocations_only": true,
+    "prelaunch": {
+      "source_inventory_files_compared": 1029,
+      "working_tree_byte_differences": 0,
+      "plan_copies_compared": 3,
+      "endpoint_metadata_get_v1_models_http": 200,
+      "requested_model_listed": true,
+      "credential_source": "inherited SCION_API_KEY",
+      "generation_permission_verified_before_run": false
+    },
+    "planned_batch_limits": {
+      "provider_calls": 672,
+      "outer_wall_seconds": 25200,
+      "public_cpu_seconds": 3480,
+      "public_wall_seconds": 5400,
+      "public_storage_bytes": 7516192768,
+      "formal_stage_ceiling": 10,
+      "external_confirmations": 0
+    },
+    "rows": [
+      {
+        "run_id": "cvrp-01",
+        "disposition": "provider_failure",
+        "reason": "HTTP 401 / LLMAuthError in the first H request",
+        "planned": {
+          "dispatch_cap": 48,
+          "outer_wall_sec": 1800,
+          "formal_stage_limit": 0
+        },
+        "admitted": 1,
+        "generation_dispatches": 1,
+        "successful_responses": 0,
+        "input_tokens": null,
+        "output_tokens": null,
+        "reasoning_tokens": null,
+        "cache_tokens": null,
+        "currency_cost": null,
+        "response_model_revision": null,
+        "process_wall_seconds": 2.38502666,
+        "development_tests": 0,
+        "development_test_wall_seconds": 0,
+        "formal_stage_count": 0,
+        "formal_execution_wall_seconds": 0,
+        "formal_disposition": "not_executed",
+        "final_public_storage_bytes": 706424,
+        "public_action_starts": {
+          "subject": 0,
+          "analysis": 0,
+          "checker": 0
+        },
+        "final_public_host_and_action_wall_seconds": null,
+        "final_public_host_and_action_cpu_seconds": null,
+        "formal_H_exports": 0,
+        "ready_C_exports": 0,
+        "host_accepted_conclusions": 0,
+        "terminal": {
+          "conclusion_ref": null,
+          "evaluated_rounds": 0,
+          "execution_outcome_counts": {
+            "blocked_infra": 1,
+            "evaluated": 0,
+            "interrupted": 0,
+            "not_evaluated": 0,
+            "research_concluded": 0,
+            "research_rejected": 0,
+            "resource_exhausted": 0
+          },
+          "failure_categories": {
+            "blocked_infra": 1
+          },
+          "formal_screened_candidates": 0,
+          "formal_stage_limit": 0,
+          "last_execution_outcome": {
+            "outcome": "blocked_infra",
+            "reason_code": "PROVIDER_CALL_BLOCKED_INFRA",
+            "stage": "proposal_hypothesis"
+          },
+          "protocol_stage_counts": {
+            "frozen": 0,
+            "screening": 0,
+            "validation": 0
+          },
+          "requested_rounds": null,
+          "run_intent": "investigation",
+          "run_validity": {
+            "reason": "invalid_no_evaluated_outcome",
+            "status": "invalid",
+            "valid": false
+          },
+          "scheduled_calls": 1,
+          "status": "stopped",
+          "stop_reason": "execution_blocked_infra",
+          "unexecuted_work": [
+            {
+              "branch_id": "ed930645-ca3f-462a-a931-7e23ff177362",
+              "disposition": "not_executed",
+              "source_tree": null,
+              "state": "blocked_infra"
+            }
+          ],
+          "unknown_outcome_count": 0
+        },
+        "attempt_accounting": [
+          {
+            "accounting_state": "closed",
+            "code_candidates_ready": 0,
+            "hypotheses_exported": 0,
+            "hypothesis_candidates_completed": 0,
+            "hypothesis_candidates_selected": 0,
+            "patches_completed": 0,
+            "provider_calls": {
+              "budget_admitted": 1,
+              "by_request_kind": {
+                "code": 0,
+                "code_research_finalize": 0,
+                "code_research_turn": 0,
+                "hypothesis": 0,
+                "hypothesis_research_turn": 1,
+                "other": 0
+              }
+            },
+            "round_num": 1
+          }
+        ],
+        "provider_trace": "runs/cvrp-01/llm_traces/20261121T052448997067_hypothesis_research_turn_af64907a.json",
+        "last_visible_public_usage": {
+          "started_subjects": 0,
+          "started_analyses": 0,
+          "started_checkers": 0,
+          "wall_seconds": 0.43278850615024567,
+          "cpu_seconds": 0.43197875200000013,
+          "stored_bytes": 705658
+        },
+        "session_index_usage": {
+          "started_subjects": 0,
+          "started_analyses": 0,
+          "started_checkers": 0,
+          "wall_seconds": 0.428946977481246,
+          "cpu_seconds": 0.428137941
+        },
+        "published_material_kinds": {
+          "source": 13,
+          "input": 1
+        },
+        "null_reason": "401 returned no model usage, model revision or price. Last visible public cumulative times precede session close. No final cumulative time was persisted."
+      },
+      {
+        "run_id": "warehouse-01",
+        "disposition": "not_run",
+        "reason": "preregistered batch stop after cvrp-01 provider authentication failure",
+        "planned": {
+          "dispatch_cap": 48,
+          "outer_wall_sec": 1800,
+          "formal_stage_limit": 0
+        },
+        "admitted": 0,
+        "generation_dispatches": 0,
+        "successful_responses": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_tokens": 0,
+        "currency_cost": 0,
+        "response_model_revision": null,
+        "process_wall_seconds": 0,
+        "development_tests": 0,
+        "development_test_wall_seconds": 0,
+        "formal_stage_count": 0,
+        "formal_execution_wall_seconds": 0,
+        "formal_disposition": "not_executed",
+        "final_public_storage_bytes": 0,
+        "public_action_starts": {
+          "subject": 0,
+          "analysis": 0,
+          "checker": 0
+        },
+        "final_public_host_and_action_wall_seconds": 0,
+        "final_public_host_and_action_cpu_seconds": 0,
+        "formal_H_exports": 0,
+        "ready_C_exports": 0,
+        "host_accepted_conclusions": 0
+      },
+      {
+        "run_id": "cvrp-02",
+        "disposition": "not_run",
+        "reason": "preregistered batch stop after cvrp-01 provider authentication failure",
+        "planned": {
+          "dispatch_cap": 48,
+          "outer_wall_sec": 1800,
+          "formal_stage_limit": 1
+        },
+        "admitted": 0,
+        "generation_dispatches": 0,
+        "successful_responses": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_tokens": 0,
+        "currency_cost": 0,
+        "response_model_revision": null,
+        "process_wall_seconds": 0,
+        "development_tests": 0,
+        "development_test_wall_seconds": 0,
+        "formal_stage_count": 0,
+        "formal_execution_wall_seconds": 0,
+        "formal_disposition": "not_executed",
+        "final_public_storage_bytes": 0,
+        "public_action_starts": {
+          "subject": 0,
+          "analysis": 0,
+          "checker": 0
+        },
+        "final_public_host_and_action_wall_seconds": 0,
+        "final_public_host_and_action_cpu_seconds": 0,
+        "formal_H_exports": 0,
+        "ready_C_exports": 0,
+        "host_accepted_conclusions": 0
+      },
+      {
+        "run_id": "warehouse-02",
+        "disposition": "not_run",
+        "reason": "preregistered batch stop after cvrp-01 provider authentication failure",
+        "planned": {
+          "dispatch_cap": 48,
+          "outer_wall_sec": 1800,
+          "formal_stage_limit": 1
+        },
+        "admitted": 0,
+        "generation_dispatches": 0,
+        "successful_responses": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_tokens": 0,
+        "currency_cost": 0,
+        "response_model_revision": null,
+        "process_wall_seconds": 0,
+        "development_tests": 0,
+        "development_test_wall_seconds": 0,
+        "formal_stage_count": 0,
+        "formal_execution_wall_seconds": 0,
+        "formal_disposition": "not_executed",
+        "final_public_storage_bytes": 0,
+        "public_action_starts": {
+          "subject": 0,
+          "analysis": 0,
+          "checker": 0
+        },
+        "final_public_host_and_action_wall_seconds": 0,
+        "final_public_host_and_action_cpu_seconds": 0,
+        "formal_H_exports": 0,
+        "ready_C_exports": 0,
+        "host_accepted_conclusions": 0
+      },
+      {
+        "run_id": "cvrp-03",
+        "disposition": "not_run",
+        "reason": "preregistered batch stop after cvrp-01 provider authentication failure",
+        "planned": {
+          "dispatch_cap": 48,
+          "outer_wall_sec": 1800,
+          "formal_stage_limit": 1
+        },
+        "admitted": 0,
+        "generation_dispatches": 0,
+        "successful_responses": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_tokens": 0,
+        "currency_cost": 0,
+        "response_model_revision": null,
+        "process_wall_seconds": 0,
+        "development_tests": 0,
+        "development_test_wall_seconds": 0,
+        "formal_stage_count": 0,
+        "formal_execution_wall_seconds": 0,
+        "formal_disposition": "not_executed",
+        "final_public_storage_bytes": 0,
+        "public_action_starts": {
+          "subject": 0,
+          "analysis": 0,
+          "checker": 0
+        },
+        "final_public_host_and_action_wall_seconds": 0,
+        "final_public_host_and_action_cpu_seconds": 0,
+        "formal_H_exports": 0,
+        "ready_C_exports": 0,
+        "host_accepted_conclusions": 0
+      },
+      {
+        "run_id": "warehouse-03",
+        "disposition": "not_run",
+        "reason": "preregistered batch stop after cvrp-01 provider authentication failure",
+        "planned": {
+          "dispatch_cap": 48,
+          "outer_wall_sec": 1800,
+          "formal_stage_limit": 1
+        },
+        "admitted": 0,
+        "generation_dispatches": 0,
+        "successful_responses": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_tokens": 0,
+        "currency_cost": 0,
+        "response_model_revision": null,
+        "process_wall_seconds": 0,
+        "development_tests": 0,
+        "development_test_wall_seconds": 0,
+        "formal_stage_count": 0,
+        "formal_execution_wall_seconds": 0,
+        "formal_disposition": "not_executed",
+        "final_public_storage_bytes": 0,
+        "public_action_starts": {
+          "subject": 0,
+          "analysis": 0,
+          "checker": 0
+        },
+        "final_public_host_and_action_wall_seconds": 0,
+        "final_public_host_and_action_cpu_seconds": 0,
+        "formal_H_exports": 0,
+        "ready_C_exports": 0,
+        "host_accepted_conclusions": 0
+      },
+      {
+        "run_id": "open-cvrp",
+        "disposition": "not_run",
+        "reason": "preregistered batch stop after cvrp-01 provider authentication failure",
+        "planned": {
+          "dispatch_cap": 192,
+          "outer_wall_sec": 7200,
+          "formal_stage_limit": 3
+        },
+        "admitted": 0,
+        "generation_dispatches": 0,
+        "successful_responses": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_tokens": 0,
+        "currency_cost": 0,
+        "response_model_revision": null,
+        "process_wall_seconds": 0,
+        "development_tests": 0,
+        "development_test_wall_seconds": 0,
+        "formal_stage_count": 0,
+        "formal_execution_wall_seconds": 0,
+        "formal_disposition": "not_executed",
+        "final_public_storage_bytes": 0,
+        "public_action_starts": {
+          "subject": 0,
+          "analysis": 0,
+          "checker": 0
+        },
+        "final_public_host_and_action_wall_seconds": 0,
+        "final_public_host_and_action_cpu_seconds": 0,
+        "formal_H_exports": 0,
+        "ready_C_exports": 0,
+        "host_accepted_conclusions": 0
+      },
+      {
+        "run_id": "open-warehouse",
+        "disposition": "not_run",
+        "reason": "preregistered batch stop after cvrp-01 provider authentication failure",
+        "planned": {
+          "dispatch_cap": 192,
+          "outer_wall_sec": 7200,
+          "formal_stage_limit": 3
+        },
+        "admitted": 0,
+        "generation_dispatches": 0,
+        "successful_responses": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "reasoning_tokens": 0,
+        "cache_tokens": 0,
+        "currency_cost": 0,
+        "response_model_revision": null,
+        "process_wall_seconds": 0,
+        "development_tests": 0,
+        "development_test_wall_seconds": 0,
+        "formal_stage_count": 0,
+        "formal_execution_wall_seconds": 0,
+        "formal_disposition": "not_executed",
+        "final_public_storage_bytes": 0,
+        "public_action_starts": {
+          "subject": 0,
+          "analysis": 0,
+          "checker": 0
+        },
+        "final_public_host_and_action_wall_seconds": 0,
+        "final_public_host_and_action_cpu_seconds": 0,
+        "formal_H_exports": 0,
+        "ready_C_exports": 0,
+        "host_accepted_conclusions": 0
+      }
+    ],
+    "accounting_notes": [
+      "For an unstarted process, zero means no consumption by that slot. There is no terminal or research outcome.",
+      "Published storage is the sum of regular-file byte lengths under public_research at termination, the same scope as ResearchMaterials.used_bytes. It is not peak storage.",
+      "The last visible public usage and the session index are different checkpoints. Do not add either to the process clock.",
+      "A /v1/models metadata read is not a research generation. The closed row counts one H request that reached the proxy. Upstream inference or billing was not reported."
+    ]
+  },
+  "independent_ai_review_comparison": {
+    "original_forms": [
+      {
+        "review_id": "a",
+        "initial": "initial-a.json",
+        "citation_occurrences": 50,
+        "distinct_ranges": 32,
+        "failed_checks": [],
+        "checked_against_original": 50
+      },
+      {
+        "review_id": "b",
+        "initial": "initial-b.json",
+        "citation_occurrences": 41,
+        "distinct_ranges": 30,
+        "failed_checks": [],
+        "checked_against_original": 41
+      }
+    ],
+    "scope": "cvrp-01 five rated dimensions; seven not_run dispositions excluded from the rating denominator",
+    "run_count": 8,
+    "rated_cells": 5,
+    "unrated_not_run_cells": 35,
+    "paired_by_dimension": {
+      "investigation": {
+        "a": "insufficient",
+        "b": "insufficient",
+        "agreements": 1,
+        "disagreements": 0
+      },
+      "interpretation": {
+        "a": "insufficient",
+        "b": "insufficient",
+        "agreements": 1,
+        "disagreements": 0
+      },
+      "revision": {
+        "a": "insufficient",
+        "b": "insufficient",
+        "agreements": 1,
+        "disagreements": 0
+      },
+      "conclusion": {
+        "a": "insufficient",
+        "b": "insufficient",
+        "agreements": 1,
+        "disagreements": 0
+      },
+      "continuity": {
+        "a": "not_applicable",
+        "b": "not_applicable",
+        "agreements": 1,
+        "disagreements": 0
+      }
+    },
+    "both_supported": 0,
+    "agreements": 5,
+    "disagreements": 0,
+    "citation_occurrences_verified": 91,
+    "distinct_original_ranges": 43
+  }
+}

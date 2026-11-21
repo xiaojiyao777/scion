@@ -20,6 +20,7 @@ class ProposalAttempt(Generic[ProposalT]):
     proposal: ProposalT | None = None
     execution_outcome: ExecutionOutcomeRecord | None = None
     selected_hypothesis_research_basis: dict[str, Any] | None = None
+    research_handoff: Any | None = None
 
     def __post_init__(self) -> None:
         if (self.proposal is None) == (self.execution_outcome is None):
@@ -27,6 +28,8 @@ class ProposalAttempt(Generic[ProposalT]):
                 "proposal attempt must contain exactly one of proposal or "
                 "execution_outcome"
             )
+        if self.research_handoff is not None and not isinstance(self.proposal, HypothesisProposal):
+            raise TypeError("only a hypothesis may carry a research handoff")
         if self.selected_hypothesis_research_basis is not None:
             if self.proposal is None:
                 raise ValueError(
@@ -53,9 +56,11 @@ class ProposalAttempt(Generic[ProposalT]):
         proposal: ProposalT,
         *,
         selected_hypothesis_research_basis: dict[str, Any] | None = None,
+        research_handoff: Any | None = None,
     ) -> ProposalAttempt[ProposalT]:
         return cls(
             proposal=proposal,
+            research_handoff=research_handoff,
             selected_hypothesis_research_basis=(
                 selected_hypothesis_research_basis
             ),
